@@ -27,7 +27,17 @@ import { SKILLS_HEADING } from "../src/pages/Skills";
 import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
 import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
-import { ANSWER_EVERY_EXAMPLE, BEHAVED, DID_NOT_BEHAVE, PACKAGE_FORMAT, RECORD_REHEARSAL } from "../src/pages/skills/SkillForms";
+import {
+  ADD_EXAMPLE,
+  ANSWER_EVERY_EXAMPLE,
+  BEHAVED,
+  DID_NOT_BEHAVE,
+  EXAMPLE_EXPECTED_LABEL,
+  EXAMPLE_TASK_LABEL,
+  PACKAGE_FORMAT,
+  RECORD_REHEARSAL,
+  SAVE_VERSION,
+} from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, EXPORT, REHEARSE, REJECT } from "../src/pages/skills/SkillProfile";
 import { queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
 import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
@@ -564,6 +574,60 @@ describe("one skill's page", () => {
     );
     expect(rehearsed.container.textContent).toContain("Rehearsed by Rex Reviewer: every example behaved as expected.");
     expect([...rehearsed.container.querySelectorAll("button")].some((one) => one.textContent === APPROVE)).toBe(true);
+  });
+
+  test("an edit opens with the version's examples, and one added is sent with the SKILL.md", async () => {
+    // What breaks if this is deleted: an edit that drops the examples it did not show, or a
+    // pasted skill that no edit can ever give an example to (M12.3.4).
+    const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([waitingWithExamples({ editable: true })], [], {
+      [`POST ${API}/skills/${DIGEST}/versions`]: { status: 201, body: waitingWithExamples({ digest: OLDER, version: "1.2.0" }) },
+    }));
+
+    pressed(`Edit ${NAME}`, container);
+    const form = container.querySelector<HTMLFormElement>(`form[aria-label^="Edit"]`) as HTMLFormElement;
+    const tasks = () => [...form.querySelectorAll<HTMLInputElement>('input[name="examples.task"]')];
+    expect(tasks().map((one) => one.value)).toEqual(["A client asks when their domain expires", "A client asks twice"]);
+    pressed(ADD_EXAMPLE, form);
+    const save = [...form.querySelectorAll("button")].find((one) => one.textContent === SAVE_VERSION) as HTMLButtonElement;
+    fireEvent.change(within(form).getByLabelText(`${EXAMPLE_TASK_LABEL} 3`), { target: { value: "  A client asks in French  " } });
+    expect(save.disabled).toBe(true);
+    expect(form.textContent).toContain("Example 3 needs both a task and what is expected");
+    const expected = within(form).getAllByLabelText(EXAMPLE_EXPECTED_LABEL)[2] as HTMLInputElement;
+    fireEvent.change(expected, { target: { value: "Answers in French" } });
+    expect(save.disabled).toBe(false);
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect((sent.find((one) => one.method === "POST")?.body as { examples: unknown }).examples).toEqual([
+        { task: "A client asks when their domain expires", expected: "Names the expiry date" },
+        { task: "A client asks twice", expected: "Answers the same way twice" },
+        { task: "A client asks in French", expected: "Answers in French" },
+      ]);
+    });
+    expect(declaredPropertyNames(declaredRequestBodySchema(`${API}/skills/{digest}/versions`, "post")).sort()).toEqual(["content", "examples"]);
+  });
+
+  test("a pasted SKILL.md is sent with the example tasks typed beside it, and a blank row is not", async () => {
+    // What breaks if this is deleted: the Add form's examples never reaching the route, so a
+    // pasted skill lands with none and can never be approved (M12.3.4).
+    const { container, sent } = await consoleAt("/skills", {
+      [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) },
+      [`POST ${API}/skills`]: { status: 201, body: version({ review: "pending" }) },
+    });
+    pressed("Add a skill", container);
+    await waitFor(() => {
+      expect(document.getElementById("skills-paste")).not.toBeNull();
+    });
+    fireEvent.change(document.getElementById("skills-paste") as HTMLTextAreaElement, { target: { value: "---\nname: x\n---\n" } });
+    fireEvent.change(document.getElementById("skills-add-examples-task-0") as HTMLInputElement, { target: { value: "Asks when it renews" } });
+    fireEvent.change(document.getElementById("skills-add-examples-expected-0") as HTMLInputElement, { target: { value: "Names the date" } });
+    pressed(ADD_EXAMPLE, document.body);
+    fireEvent.click([...document.querySelectorAll<HTMLButtonElement>("button")].find((one) => one.textContent === "Add to the library") as HTMLButtonElement);
+    await waitFor(() => {
+      expect((sent.find((one) => one.method === "POST")?.body as { examples: unknown }).examples).toEqual([
+        { task: "Asks when it renews", expected: "Names the date" },
+      ]);
+    });
+    expect(declaredPropertyNames(declaredRequestBodySchema(`${API}/skills`, "post"))).toContain("examples");
   });
 
   test("a version with no example tasks draws what it is missing and no Approve or Rehearse", async () => {

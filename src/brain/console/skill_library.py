@@ -153,6 +153,7 @@ from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, pending
 from brain.tools.skills import (
     DIGEST_RE,
+    EXAMPLE_CHARS,
     MAX_EXAMPLES,
     SKILL_FILE,
     ImportedSkill,
@@ -684,7 +685,10 @@ def _manifest_digest(raw: bytes, skill: Skill, refuse: Refusal) -> str:
 
 
 def _packaged(
-    text: str, files: Mapping[str, bytes], refuse: Refusal = _refused
+    text: str,
+    files: Mapping[str, bytes],
+    refuse: Refusal = _refused,
+    typed: Sequence[SkillExample] = (),
 ) -> tuple[Skill, dict[str, bytes], str | None]:
     """The skill a package holds with its scripts' sha256 and its examples, the scripts' bytes,
     and the digest its manifest named, or a refusal. See
@@ -692,7 +696,9 @@ def _packaged(
 
     Every file beside the `SKILL.md` is a declared script, the examples or the manifest, and
     every declared script is there. The manifest is checked last, against the skill as built from
-    everything else, because it is a claim about all of it.
+    everything else, because it is a claim about all of it. `typed` is the example tasks a person
+    typed on the form beside a pasted `SKILL.md`, which take the place of an `examples.json` and
+    are the same `SkillExample` values one would have been read as.
     """
     skill = _skill_of(text, refuse)
     scripts = {path: raw for path, raw in files.items() if path not in PACKAGE_FILES}
@@ -710,7 +716,13 @@ def _packaged(
             f"{A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS}"
         )
     examples_raw = files.get(EXAMPLES_FILE)
-    examples = () if examples_raw is None else examples_from(examples_raw, refuse)
+    if typed and examples_raw is not None:
+        raise refuse(
+            f"it carries an {EXAMPLES_FILE} and example tasks typed on the form; a .zip carries "
+            f"its examples in its {EXAMPLES_FILE}, so keep them there or paste the {SKILL_FILE} "
+            "and type them here"
+        )
+    examples = tuple(typed) if examples_raw is None else examples_from(examples_raw, refuse)
     try:
         built = Skill.model_validate(
             {
@@ -729,12 +741,19 @@ def _packaged(
     return built, scripts, exported_as
 
 
-def read_package(file_name: str, content: bytes) -> Package:
+def read_package(
+    file_name: str, content: bytes, *, examples: Sequence[tuple[str, str]] = ()
+) -> Package:
     """Parse a package into a skill and its source, or refuse it in words to act on (M12.2.4).
 
     See `ADDING_A_SKILL_READS_IT_AND_RUNS_NOTHING` and `A_PACKAGE_REFUSAL_SAYS_WHAT_TO_CHANGE`.
     The source is an upload whatever the browser did, a paste included, because the bytes arrived
     in a request and the digest over them is the only thing a later fetch could be compared with.
+
+    `examples` is the example tasks typed on the Add form, each a task and the behaviour
+    expected, held to `examples_typed` (M12.3.4). They become the skill's examples exactly as an
+    `examples.json` would, so the digest, the review and the rehearsal cannot tell which way they
+    arrived; a zip carries its own and is refused typed ones beside it.
     """
     if not content:
         raise _refused("the package is empty; paste the SKILL.md or choose the file again")
@@ -759,12 +778,49 @@ def read_package(file_name: str, content: bytes) -> Package:
         location=file_name,
         content_digest=hashlib.sha256(content).hexdigest(),
     )
-    return _package(unpacked, source)
+    return _package(unpacked, source, examples_typed(examples))
 
 
-def _package(unpacked: Unpacked, source: SkillSource) -> Package:
-    skill, scripts, exported_as = _packaged(unpacked.markdown, unpacked.files)
+def _package(
+    unpacked: Unpacked, source: SkillSource, typed: Sequence[SkillExample] = ()
+) -> Package:
+    skill, scripts, exported_as = _packaged(unpacked.markdown, unpacked.files, _refused, typed)
     return Package(skill=skill, source=source, scripts=scripts, exported_as=exported_as)
+
+
+def examples_typed(
+    typed: Sequence[tuple[str, str]], refuse: Refusal = _refused
+) -> tuple[SkillExample, ...]:
+    """The example tasks a person typed on the Add or Edit form, or a refusal in their words.
+
+    Each a task and the behaviour expected of the skill on it, in the order typed, at most
+    `MAX_EXAMPLES`. They are the `SkillExample` values an `examples.json` holding the same two
+    strings is read as, so a version's digest and its rehearsal treat both alike (M12.3.4). Taken
+    as typed rather than trimmed, for that reason: the console trims before it sends. An empty
+    task, an empty expectation and one too long are each refused naming the example by its place.
+    """
+    if len(typed) > MAX_EXAMPLES:
+        raise refuse(f"{len(typed)} example tasks were typed, over the {MAX_EXAMPLES} limit")
+    examples: list[SkillExample] = []
+    for number, (task, expected) in enumerate(typed, start=1):
+        if not task.strip():
+            raise refuse(
+                f"example {number} has no task; write the task somebody would bring to this skill, "
+                "or remove the example"
+            )
+        if not expected.strip():
+            raise refuse(
+                f"example {number} does not say what is expected; write the behaviour expected of "
+                "the skill on it, or remove the example"
+            )
+        try:
+            examples.append(SkillExample(task=task, expected=expected))
+        except ValueError:
+            raise refuse(
+                f"example {number} is longer than {EXAMPLE_CHARS} characters in its task or in "
+                "what is expected; shorten it"
+            ) from None
+    return tuple(examples)
 
 
 # ------------------------------------------------------------------- from a URL (M12.2.3)
@@ -978,6 +1034,7 @@ def edited(
     at: datetime,
     library: Iterable[LibrarySkill],
     scripts: Mapping[str, bytes] | None = None,
+    examples: Sequence[tuple[str, str]] | None = None,
 ) -> LibrarySkill:
     """The edited `SKILL.md` as a new version of `one`, undecided, or a refusal saying why.
 
@@ -992,6 +1049,10 @@ def edited(
     and each is held to the sha256 that version was approved or added as before it is copied, so
     an edit can never be the way a changed script enters the library. An edit declaring other
     scripts is refused: a script is changed by adding a package, whose bytes a reviewer is shown.
+
+    `examples`, when given, are the example tasks typed on the Edit form, held to `examples_typed`,
+    and they take the place of the version's own; None carries them over. So a version pasted with
+    none can be given some by an edit, and go through its rehearsal to an approval (M12.3.4).
     """
     if not by.strip():
         raise SkillLibraryError("a skill is edited by a named person, never by an empty string")
@@ -1013,11 +1074,12 @@ def edited(
             "to change a script, add the skill again as a package holding it"
         )
     carried = _carried_scripts(one, scripts or {})
+    kept = before.examples if examples is None else examples_typed(examples, _not_saved)
     skill = Skill.model_validate(
         {
             **parsed.model_dump(),
             "script_files": [item.model_dump() for item in before.script_files],
-            "examples": [item.model_dump() for item in before.examples],
+            "examples": [item.model_dump() for item in kept],
         }
     )
     try:

@@ -130,6 +130,9 @@ as expected, asked of whoever may add or review, and `POST /skills/{digest}/revi
 newest rehearsal of those bytes to `decided`, which refuses to approve a version with no example
 tasks or one whose examples have not all behaved; the row says which in `approval_needs`, the same
 sentence the refusal carries (`brain.console.skill_library.approval_needs`).
+The Add and Edit forms carry example tasks too, typed as a task and the behaviour expected, which
+`read_package` and `edited` take as `examples` and hold to `examples_typed`: they become the same
+examples an `examples.json` in a zip would, so a pasted `SKILL.md` or an edit can reach approval.
 `POST /skills/{digest}/exports` answers the approved version as a zip another install adds through
 `POST /skills`, where it lands undecided. **An export is a POST and writes nothing**: it is an act
 one person takes on one version, asked of the skill authority before the digest is looked up as
@@ -562,8 +565,32 @@ CategoryTyped = Annotated[str, Field(max_length=60)]
 MAX_CATEGORIES_TYPED: Final = 2 * MAX_CATEGORIES
 
 
+#: The longest task or expectation a request may carry, as typed. A resource bound only: the
+#: domain refuses anything past `brain.tools.skills.EXAMPLE_CHARS` in words that say which example.
+EXAMPLE_CHARS_TYPED: Final = 2000
+
+#: The most example tasks a request may carry. Twice what a skill may hold, so a person who typed
+#: one too many is told in words by `brain.console.skill_library.examples_typed`.
+MAX_EXAMPLES_TYPED: Final = 2 * MAX_EXAMPLES
+
+
+class ExampleAsked(BaseModel):
+    """One example task typed on the Add or Edit form, and the behaviour expected (M12.3.4).
+
+    Not held to a minimum here: an empty task is refused by `examples_typed` in words naming the
+    example, which is what a person at the form can act on."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    task: str = Field(max_length=EXAMPLE_CHARS_TYPED)
+    expected: str = Field(max_length=EXAMPLE_CHARS_TYPED)
+
+
 class SkillPackageAsked(BaseModel):
-    """A package: its file name, and its bytes as text or as base64. Nothing that could say who."""
+    """A package: its file name, and its bytes as text or as base64. Nothing that could say who.
+
+    `examples` is the example tasks typed beside a pasted or chosen `SKILL.md`; a zip carries its
+    own in its `examples.json` and is refused typed ones beside it (M12.3.4)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -571,6 +598,7 @@ class SkillPackageAsked(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_PACKAGE_CHARS)
     encoding: Literal["text", "base64"]
     categories: tuple[CategoryTyped, ...] = Field(default=(), max_length=MAX_CATEGORIES_TYPED)
+    examples: tuple[ExampleAsked, ...] = Field(default=(), max_length=MAX_EXAMPLES_TYPED)
 
 
 class SkillImportAsked(BaseModel):
@@ -596,11 +624,20 @@ class SkillImportAsked(BaseModel):
 
 
 class SkillEditAsked(BaseModel):
-    """The edited `SKILL.md`. The skill it is a version of is the one in the path (M12.3.2)."""
+    """The edited `SKILL.md`. The skill it is a version of is the one in the path (M12.3.2).
+
+    `examples`, when sent, is the new version's example tasks as the Edit form holds them, in
+    place of the version's own; left out, the version's own are carried over (M12.3.4)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     content: str = Field(min_length=1, max_length=MAX_PACKAGE_CHARS)
+    examples: tuple[ExampleAsked, ...] | None = Field(default=None, max_length=MAX_EXAMPLES_TYPED)
+
+
+def _typed(examples: Sequence[ExampleAsked]) -> tuple[tuple[str, str], ...]:
+    """The typed examples as the domain takes them: each a task and what is expected."""
+    return tuple((one.task, one.expected) for one in examples)
 
 
 class CategoriesAsked(BaseModel):
@@ -1613,7 +1650,7 @@ async def add_skill(request: Request, body: SkillPackageAsked, asked: Asked) -> 
         raise _not_answerable()
     categories = _categories_or_refused(body.categories)
     try:
-        package = read_package(body.file_name, _package_bytes(body))
+        package = read_package(body.file_name, _package_bytes(body), examples=_typed(body.examples))
     except SkillLibraryError as refused:
         raise _refused_because(str(refused)) from None
     return await _added(request, asked, _adding(package, asked), categories)
@@ -1708,6 +1745,7 @@ async def edit_skill(
             at=asked.now,
             library=held,
             scripts=scripts,
+            examples=None if body.examples is None else _typed(body.examples),
         ),
         (),
     )

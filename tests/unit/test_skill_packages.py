@@ -1158,3 +1158,149 @@ def test_an_edit_through_the_route_carries_the_stored_scripts_over(
     new = answered.json()
     assert new["edited_from"] == digest and new["awaits_rehearsal"] is True
     assert stored.library.script_bytes[new["digest"]] == {SCRIPT_PATH: SCRIPT}
+
+
+# ================================================================ examples typed on a form
+def test_examples_typed_beside_a_pasted_skill_are_the_examples_an_examples_file_would_be() -> None:
+    """**M12.3.4 through the form.** A `SKILL.md` pasted with example tasks typed beside it is the
+    same skill, digest and all, as a zip holding it and an `examples.json` with the same words, so
+    the rehearsal and the approval treat both alike; a zip is refused typed examples beside its own.
+
+    Delete this and the form's examples can be stored some other way, and a version added by paste
+    digests differently from the same version added as a zip."""
+    typed = [(one["task"], one["expected"]) for one in EXAMPLES]
+    pasted = read_package("SKILL.md", skill_md(scripts=False).encode("utf-8"), examples=typed)
+    zipped = read_package(
+        "hosting-expiry.zip",
+        a_zip(
+            {
+                "SKILL.md": skill_md(scripts=False).encode("utf-8"),
+                EXAMPLES_FILE: json.dumps(list(EXAMPLES)).encode("utf-8"),
+            }
+        ),
+    )
+
+    assert pasted.skill == zipped.skill
+    assert pasted.skill.digest() == zipped.skill.digest()
+    with pytest.raises(SkillLibraryError, match=r"a \.zip carries its examples"):
+        read_package("hosting-expiry.zip", a_package_zip(script=None), examples=typed)
+
+
+@pytest.mark.parametrize(
+    ("typed", "said"),
+    [
+        ([("", "Names the date")], "example 1 has no task"),
+        ([("Asks", "Names it"), ("   ", "Names it")], "example 2 has no task"),
+        ([("Asks when it renews", " ")], "example 1 does not say what is expected"),
+        ([("x" * 501, "y")], "longer than 500 characters"),
+        ([("Asks", "Names it")] * 21, "over the 20 limit"),
+    ],
+)
+def test_a_typed_example_with_no_task_or_no_expectation_is_refused_in_words(
+    typed: list[tuple[str, str]], said: str
+) -> None:
+    """Each example is named by its place and told what to write, on the Add form and the Edit
+    form alike. Delete this and an empty task is stored as an example nobody could rehearse, or is
+    refused by a validator whose sentence names a field the person never saw."""
+    with pytest.raises(SkillLibraryError, match=said) as refused:
+        read_package("SKILL.md", skill_md(scripts=False).encode("utf-8"), examples=typed)
+    assert str(refused.value).startswith("this skill was not added:")
+    approved = an_approved_package(script=None)
+    with pytest.raises(SkillLibraryError, match=said) as not_saved:
+        edited(
+            approved,
+            skill_md(version="1.1.0", scripts=False),
+            by=IMPORTER,
+            at=NOW,
+            library=(approved,),
+            examples=typed,
+        )
+    assert str(not_saved.value).startswith("nothing was saved:")
+
+
+def test_an_edit_given_examples_replaces_them_and_one_given_none_carries_them() -> None:
+    """Delete this and an edit sent from the form drops the examples it did not mention, or keeps
+    ones the person removed."""
+    one = an_approved_package(script=None)
+    text = skill_md(version="1.1.0", scripts=False, body="Read the question twice.")
+
+    carried = edited(one, text, by=IMPORTER, at=NOW, library=(one,))
+    replaced = edited(
+        one, text, by=IMPORTER, at=NOW, library=(one,), examples=[("Asks once", "Answers once")]
+    )
+
+    assert carried.imported.skill.examples == one.imported.skill.examples
+    assert [(e.task, e.expected) for e in replaced.imported.skill.examples] == [
+        ("Asks once", "Answers once")
+    ]
+
+
+def test_a_pasted_skill_is_given_examples_by_an_edit_and_approved_after_its_rehearsal(
+    client: TestClient, stored: Stored
+) -> None:
+    """**The gap the form closes, end to end.** A `SKILL.md` pasted with no examples waits and
+    cannot be approved; an edit that keeps it without examples cannot be approved either; an edit
+    adding an example through the form is a new version that is approved once its rehearsal passed.
+    Delete this and a skill pasted in the console can reach no approval at all."""
+    pasted = post(
+        client,
+        "u_admin",
+        SKILLS,
+        {"file_name": "SKILL.md", "content": skill_md(scripts=False), "encoding": "text"},
+    ).json()["digest"]
+    still_bare = post(
+        client,
+        "u_admin",
+        f"{SKILLS}/{pasted}/versions",
+        {"content": skill_md(version="1.1.0", scripts=False)},
+    ).json()
+    with_one = post(
+        client,
+        "u_admin",
+        f"{SKILLS}/{pasted}/versions",
+        {
+            "content": skill_md(version="1.2.0", scripts=False),
+            "examples": [{"task": "Asks when it renews", "expected": "Names the renewal date"}],
+        },
+    )
+
+    assert with_one.status_code == 201, with_one.text
+    assert still_bare["examples"] == [] and still_bare["approval_needs"] is not None
+    refused = post(
+        client, "u_wide", f"{SKILLS}/{still_bare['digest']}/review", {"decision": "approve"}
+    )
+    assert A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED in refused.json()["message"]
+    new = with_one.json()
+    assert new["examples"] == [
+        {"task": "Asks when it renews", "expected": "Names the renewal date"}
+    ]
+    assert new["rehearsable"] is True and new["edited_from"] == pasted
+    early = post(client, "u_wide", f"{SKILLS}/{new['digest']}/review", {"decision": "approve"})
+    assert early.status_code == 404 and "rehearsed" in early.json()["message"]
+    post(client, "u_wide", f"{SKILLS}/{new['digest']}/rehearsals", {"behaved": [True]})
+    approved = post(client, "u_wide", f"{SKILLS}/{new['digest']}/review", {"decision": "approve"})
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["review"] == "approved"
+
+
+def test_the_add_route_takes_typed_examples_and_refuses_an_empty_task_in_words(
+    client: TestClient, stored: Stored
+) -> None:
+    """The Add form's examples reach the version, and an empty task is refused by the route with a
+    sentence naming the example, before anything is written. Delete this and the route can drop the
+    field, or store an example with no task."""
+    body = {"file_name": "SKILL.md", "content": skill_md(scripts=False), "encoding": "text"}
+
+    empty = post(
+        client, "u_admin", SKILLS, {**body, "examples": [{"task": " ", "expected": "Names it"}]}
+    )
+    kept = post(
+        client, "u_admin", SKILLS, {**body, "examples": [{"task": "Asks", "expected": "Names it"}]}
+    )
+
+    assert empty.status_code == 404
+    assert empty.json()["message"].startswith("this skill was not added: example 1 has no task")
+    assert kept.status_code == 201, kept.text
+    assert kept.json()["examples"] == [{"task": "Asks", "expected": "Names it"}]
+    assert kept.json()["rehearsable"] is True
+    assert [one for one in stored.library.calls if one == "add"] == ["add"]

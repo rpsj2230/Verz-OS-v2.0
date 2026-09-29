@@ -79,6 +79,8 @@ export type SkillRehearsal = components["schemas"]["SkillRehearsalView"];
 export type RehearsalBody = components["schemas"]["RehearsalAsked"];
 /** An exported package, as `SkillPackageView` sends it (M12.3.1). */
 export type ExportedPackage = components["schemas"]["SkillPackageView"];
+/** One example task typed on the Add or Edit form, as `ExampleAsked` declares it (M12.3.4). */
+export type ExampleBody = components["schemas"]["ExampleAsked"];
 
 /** Where the API keeps this screen, and its writes. */
 export const SKILLS_API_PATH = "/skills";
@@ -299,9 +301,41 @@ export function categoriesTyped(text: string): string[] {
     .filter((one) => one !== "");
 }
 
-/** A pasted `SKILL.md`, as the add route takes it. */
-export function pasted(text: string, categories: readonly string[] = []): PackageBody {
-  return { file_name: "SKILL.md", content: text, encoding: "text", categories: [...categories] };
+/** One example row as a person is typing it: both halves free text until it is sent. */
+export interface ExampleRow {
+  readonly task: string;
+  readonly expected: string;
+}
+
+/** The empty row a new example starts as. */
+export const NO_EXAMPLE: ExampleRow = Object.freeze({ task: "", expected: "" });
+
+/** What the Add and Edit forms say about example tasks before anything is pressed (M12.3.4). */
+export const EXAMPLES_FORMAT =
+  "One or more short tasks somebody would bring to this skill, each with the behaviour expected. A " +
+  "skill is approved only once it has at least one and a rehearsal in which every one behaved.";
+
+/** The rows as the routes take them: each half trimmed, and a row left wholly blank dropped. */
+export function examplesTyped(rows: readonly ExampleRow[]): ExampleBody[] {
+  return rows
+    .map((one) => ({ task: one.task.trim(), expected: one.expected.trim() }))
+    .filter((one) => one.task !== "" || one.expected !== "");
+}
+
+/**
+ * Why the examples cannot be sent yet, or null. A row with one half filled in is the one shape the
+ * form knows is wrong; the API judges everything else and says so in words.
+ */
+export function examplesProblem(rows: readonly ExampleRow[]): string | null {
+  const half = examplesTyped(rows).findIndex((one) => one.task === "" || one.expected === "");
+  return half === -1
+    ? null
+    : `Example ${String(half + 1)} needs both a task and what is expected; fill in both or remove it.`;
+}
+
+/** A pasted `SKILL.md`, as the add route takes it, with any example tasks typed beside it. */
+export function pasted(text: string, categories: readonly string[] = [], examples: readonly ExampleRow[] = []): PackageBody {
+  return { file_name: "SKILL.md", content: text, encoding: "text", categories: [...categories], examples: examplesTyped(examples) };
 }
 
 /** Bytes as base64, without a library: a zip is sent this way and a `SKILL.md` as text. */
@@ -313,21 +347,36 @@ export function base64Of(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/** A chosen file, as the add route takes it: a zip as base64 and anything else as text. */
+/** Whether a chosen file is a zip, which carries its example tasks in its own examples.json. */
+export function isArchive(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith(".zip");
+}
+
+/**
+ * A chosen file, as the add route takes it: a zip as base64, with no typed examples because it
+ * carries its own, and anything else as text with the examples typed beside it.
+ */
 export function chosen(
   fileName: string,
   bytes: Uint8Array,
   categories: readonly string[] = [],
+  examples: readonly ExampleRow[] = [],
 ): PackageBody {
-  if (fileName.toLowerCase().endsWith(".zip")) {
-    return { file_name: fileName, content: base64Of(bytes), encoding: "base64", categories: [...categories] };
+  if (isArchive(fileName)) {
+    return { file_name: fileName, content: base64Of(bytes), encoding: "base64", categories: [...categories], examples: [] };
   }
   return {
     file_name: fileName,
     content: new TextDecoder().decode(bytes),
     encoding: "text",
     categories: [...categories],
+    examples: examplesTyped(examples),
   };
+}
+
+/** An edit as the versions route takes it: the whole SKILL.md and the example tasks as the form holds them. */
+export function editBody(text: string, examples: readonly ExampleRow[]): EditBody {
+  return { content: text, examples: examplesTyped(examples) };
 }
 
 /** A repository import at one commit, as the import route takes it. */

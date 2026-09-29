@@ -16,6 +16,12 @@
  * **Assigning replaces the version an agent runs, so its submit opens a `ConfirmDialog`** naming the
  * agent, and only the dialog's confirm sends it.
  *
+ * **Add and Edit carry example tasks** (M12.3.4): one or more rows, each a task and the behaviour
+ * expected, which the API stores exactly as it stores a zip's `examples.json`, so a pasted
+ * `SKILL.md` or an edit can be rehearsed and approved. A row left wholly blank is dropped and a
+ * row with one half filled in is said beside the button before anything is sent; the API refuses
+ * an empty task in words. A chosen zip carries its own and the field is not drawn for it.
+ *
  * **A rehearsal asks one question per example and sends nothing until each is answered** (M12.3.4):
  * behaved as expected, or did not. None is chosen to begin with, because a verdict filled in for a
  * person is a rehearsal nobody did, and the form says above its questions that the verdict is theirs
@@ -45,7 +51,13 @@ import {
   categoriesTyped,
   categorisedSentence,
   chosen,
+  editBody,
   editedSentence,
+  EXAMPLES_FORMAT,
+  examplesProblem,
+  examplesTyped,
+  isArchive,
+  NO_EXAMPLE,
   IMPORT_PATH,
   importProblem,
   MAX_PACKAGE_BYTES,
@@ -61,6 +73,7 @@ import {
   type AgentChoice,
   type Assigned,
   type Categorised,
+  type ExampleRow,
   type LibrarySkill,
   type PackageBody,
 } from "../skillsQuery";
@@ -87,6 +100,12 @@ export const ADDRESS_LABEL = "Address";
 export const EDIT_LABEL = "The SKILL.md, edited";
 export const SAVE_VERSION = "Save as a new version";
 export const SET_CATEGORIES = "Save categories";
+export const EXAMPLES_LABEL = "Example tasks";
+export const EXAMPLE_TASK_LABEL = "Task";
+export const EXAMPLE_EXPECTED_LABEL = "Behaviour expected";
+export const ADD_EXAMPLE = "Add an example";
+export const REMOVE_EXAMPLE = "Remove example";
+export const ZIP_CARRIES_EXAMPLES = "A .zip carries its example tasks in its examples.json.";
 export const RECORD_REHEARSAL = "Record the rehearsal";
 export const BEHAVED = "Behaved as expected";
 export const DID_NOT_BEHAVE = "Did not";
@@ -98,8 +117,8 @@ export const DO_NOT_ASSIGN = "Do not assign";
 /** The format lines, said before a person submits. */
 export const PACKAGE_FORMAT =
   `A SKILL.md with a name, a description that opens "Use when", a version such as 1.0.0 and the tools ` +
-  "it uses; or a .zip holding that file with the scripts it declares and, if it has example tasks, an " +
-  `examples.json listing each task and what is expected. At most ${String(MAX_PACKAGE_BYTES / 1024)} KB. ` +
+  "it uses, with its example tasks typed below; or a .zip holding that file with the scripts it declares " +
+  `and an examples.json listing each task and what is expected. At most ${String(MAX_PACKAGE_BYTES / 1024)} KB. ` +
   "A package exported from another install is added the same way and waits for review here.";
 export const CATEGORIES_FORMAT =
   "Optional. Lower-case words or hyphenated words, separated by commas, at most eight: hosting, client-billing.";
@@ -109,7 +128,8 @@ export const REPOSITORY_FORMAT =
   "examples.json are taken, and nothing else in the folder.";
 export const ADDRESS_FORMAT = "An https:// address on GitHub answering with a SKILL.md or a .zip holding one.";
 export const EDIT_FORMAT =
-  "The whole SKILL.md. Keep the name, and give a later version number than this one; the edit waits for review.";
+  "The whole SKILL.md. Keep the name, and give a later version number than this one; the edit waits for review. " +
+  "Its example tasks are below, and a new version is rehearsed against them before it can be approved.";
 
 const PACKAGE_FORM = "skills-add";
 const PACKAGE_FIELDS: readonly string[] = ["content", "file_name", "encoding", "categories"];
@@ -158,16 +178,105 @@ function Problem({ text }: { readonly text: string | null }) {
   );
 }
 
-/** Add by paste or upload (M42.6.4). */
+/** One or more example tasks, each a task and the behaviour expected, typed in rows (M12.3.4). */
+export function ExamplesField({
+  id,
+  rows,
+  onChange,
+}: {
+  readonly id: string;
+  readonly rows: readonly ExampleRow[];
+  readonly onChange: (rows: readonly ExampleRow[]) => void;
+}) {
+  function set(index: number, next: Partial<ExampleRow>) {
+    onChange(rows.map((row, at) => (at === index ? { ...row, ...next } : row)));
+  }
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+      <legend className="mb-1 text-sm font-medium text-ink">{EXAMPLES_LABEL}</legend>
+      <p className="m-0 text-[12px] leading-snug text-dim">{EXAMPLES_FORMAT}</p>
+      <ol className="m-0 flex list-none flex-col gap-3 p-0">
+        {rows.map((row, index) => {
+          const taskId = `${id}-task-${String(index)}`;
+          const expectedId = `${id}-expected-${String(index)}`;
+          return (
+            <li key={`${id}-${String(index)}`} className="flex min-w-0 flex-col gap-2 rounded-md border border-line p-3">
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <Label htmlFor={taskId}>
+                  {EXAMPLE_TASK_LABEL} {String(index + 1)}
+                </Label>
+                <Input
+                  id={taskId}
+                  name="examples.task"
+                  value={row.task}
+                  onChange={(event) => {
+                    set(index, { task: event.target.value });
+                  }}
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <Label htmlFor={expectedId}>{EXAMPLE_EXPECTED_LABEL}</Label>
+                <Input
+                  id={expectedId}
+                  name="examples.expected"
+                  value={row.expected}
+                  onChange={(event) => {
+                    set(index, { expected: event.target.value });
+                  }}
+                />
+              </div>
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 sm:min-h-8"
+                  aria-label={`${REMOVE_EXAMPLE} ${String(index + 1)}`}
+                  onClick={() => {
+                    onChange(rows.filter((_, at) => at !== index));
+                  }}
+                >
+                  {REMOVE_EXAMPLE}
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-11 sm:min-h-8"
+          onClick={() => {
+            onChange([...rows, NO_EXAMPLE]);
+          }}
+        >
+          {ADD_EXAMPLE}
+        </Button>
+      </div>
+    </fieldset>
+  );
+}
+
+/** Add by paste or upload (M42.6.4), with example tasks typed beside a SKILL.md (M12.3.4). */
 export function AddSkillForm({ onTold }: { readonly onTold: Tell }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<PackageBody | null>(null);
   const [filed, setFiled] = useState("");
+  const [examples, setExamples] = useState<readonly ExampleRow[]>([NO_EXAMPLE]);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const categories = categoriesTyped(filed);
-  const body = file === null ? (text.trim() === "" ? null : pasted(text, categories)) : { ...file, categories };
-  const problem = packageProblem(body);
+  const archive = file !== null && isArchive(file.file_name);
+  const body =
+    file === null
+      ? text.trim() === ""
+        ? null
+        : pasted(text, categories, examples)
+      : { ...file, categories, examples: archive ? [] : examplesTyped(examples) };
+  const problem = packageProblem(body) ?? (archive ? null : examplesProblem(examples));
   const problems = failure?.problems ?? [];
 
   async function onChoose(event: ChangeEvent<HTMLInputElement>) {
@@ -197,6 +306,7 @@ export function AddSkillForm({ onTold }: { readonly onTold: Tell }) {
       setText("");
       setFile(null);
       setFiled("");
+      setExamples([NO_EXAMPLE]);
       onTold({ ok: true, sentence: addedSentence(result.data) });
     } else {
       setFailure(result.failure);
@@ -234,6 +344,7 @@ export function AddSkillForm({ onTold }: { readonly onTold: Tell }) {
         />
         <FieldProblems problems={problems} form={PACKAGE_FORM} names={PACKAGE_FILE_NAMES} />
       </Field>
+      {archive ? <Note>{ZIP_CARRIES_EXAMPLES}</Note> : <ExamplesField id="skills-add-examples" rows={examples} onChange={setExamples} />}
       <Field id="skills-categories" label={CATEGORIES_LABEL} hint={CATEGORIES_FORMAT}>
         <Input
           id="skills-categories"
@@ -369,15 +480,22 @@ export function EditVersionForm({
   readonly onDone: () => void;
 }) {
   const [text, setText] = useState(one.markdown ?? "");
+  const [examples, setExamples] = useState<readonly ExampleRow[]>(
+    (one.examples ?? []).length === 0 ? [NO_EXAMPLE] : (one.examples ?? []).map((item) => ({ task: item.task, expected: item.expected })),
+  );
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const fieldId = `edit-${one.digest}`;
+  const problem = text.trim() === "" ? "Write the SKILL.md before saving it." : examplesProblem(examples);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (problem !== null) {
+      return;
+    }
     setBusy(true);
     setFailure(null);
-    const result = await request<LibrarySkill>(versionsPath(one.digest), { method: "POST", body: { content: text } });
+    const result = await request<LibrarySkill>(versionsPath(one.digest), { method: "POST", body: editBody(text, examples) });
     setBusy(false);
     if (result.ok) {
       onDone();
@@ -389,7 +507,7 @@ export function EditVersionForm({
 
   return (
     <form className="flex min-w-0 flex-col gap-3" aria-label={`Edit ${one.name} ${one.version}`} onSubmit={(event) => void save(event)}>
-      {failure === null ? null : <FailureNotice failure={failure} fields={["content"]} />}
+      {failure === null ? null : <FailureNotice failure={failure} fields={["content", "examples"]} />}
       <Field id={fieldId} label={EDIT_LABEL} hint={EDIT_FORMAT}>
         <Textarea
           id={fieldId}
@@ -402,9 +520,10 @@ export function EditVersionForm({
           }}
         />
       </Field>
-      <Problem text={text.trim() === "" ? "Write the SKILL.md before saving it." : null} />
+      <ExamplesField id={`${fieldId}-examples`} rows={examples} onChange={setExamples} />
+      <Problem text={problem} />
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={busy || text.trim() === ""}>
+        <Button type="submit" disabled={busy || problem !== null}>
           {SAVE_VERSION}
         </Button>
         <Button type="button" variant="outline" onClick={onDone}>

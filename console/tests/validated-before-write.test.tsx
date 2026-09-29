@@ -187,9 +187,11 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "new version, Rehearse examples, or the Profile's assign and categories cards. Each says what it " +
     "accepts above its fields, and a blank one cannot be sent: Add stays disabled until packageProblem " +
     "accepts a package, Import until importProblem accepts the repository and commit or the address, " +
-    "Save until the edit has text, and Record the rehearsal until every example has an answer, which " +
-    "tests/skills-page.test.tsx holds for Add and for the rehearsal. The assign form only opens a " +
-    "confirmation naming an agent the API listed.",
+    "Save until the edit has text, Add and Save while an example task has only one half filled in " +
+    "(examplesProblem; a wholly blank example row is dropped, and the API refuses an empty task in " +
+    "words), and Record the rehearsal until every example has an answer, which " +
+    "tests/skills-page.test.tsx holds for Add, the examples and the rehearsal. The assign form only " +
+    "opens a confirmation naming an agent the API listed.",
   "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
