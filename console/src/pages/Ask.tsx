@@ -91,7 +91,14 @@
  * list `KIND_WORDS` holds, the same words the library shows, and its first choice searches every
  * kind, which is what an unnarrowed question has always done.
  *
+ * **A question continues a conversation, and a person's conversations are listed and searched
+ * here (M9.1.1, M9.1.2, M9.1.3).** The route names the thread an answer was kept in and the next
+ * question sends it back; the panel lists this person's conversations wherever each was asked,
+ * searches their own questions, and reopens one at the reach they hold now. A person with no
+ * conversations sees no panel.
+ *
  * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
+ * Task ids: M9.1.1, M9.1.2, M9.1.3
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -114,6 +121,17 @@ import {
   type CitationView,
 } from "./askQuery";
 import { KIND_WORDS } from "./knowledgeQuery";
+import {
+  channelWords,
+  readThread,
+  readThreads,
+  speaker,
+  threadPath,
+  threadSearchPath,
+  THREADS_API_PATH,
+  type ThreadShown,
+  type ThreadSummary,
+} from "./threadsQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
 
@@ -177,6 +195,17 @@ export const ANY_AGENT = "Whichever agent suits the question";
 /** The id tying the picker to its label. */
 const AGENT_FIELD_ID = "ask-agent";
 
+/** The conversations panel: its heading, its search, and the control starting a new one (M9.1). */
+export const CONVERSATIONS_HEADING = "Your conversations";
+export const SEARCH_CONVERSATIONS = "Search your questions";
+export const SEARCH_LABEL = "Search";
+export const NEW_CONVERSATION = "Start a new conversation";
+export const CONTINUING = "Your next question continues this conversation.";
+export const NOTHING_FOUND_IN_CONVERSATIONS = "None of your questions holds those words.";
+
+/** The id tying the search to its label. */
+const SEARCH_FIELD_ID = "ask-search";
+
 /** The kind picker's label, and its first choice, which searches every kind (M7.6.1). */
 export const KIND_LABEL = "Search only";
 export const ANY_KIND = "Every kind of knowledge";
@@ -236,6 +265,23 @@ export function Ask() {
   const [agents, setAgents] = useState<readonly RosterEntryView[]>([]);
   const [agent, setAgent] = useState("");
   const [kind, setKind] = useState("");
+  // The conversation the next question continues, and this person's conversations (M9.1).
+  const [thread, setThread] = useState("");
+  const [threads, setThreads] = useState<readonly ThreadSummary[] | null>(null);
+  const [searching, setSearching] = useState("");
+  const [found, setFound] = useState<readonly ThreadSummary[] | null>(null);
+  const [reopened, setReopened] = useState<ThreadShown | null>(null);
+
+  // This person's conversations. A list that did not come back is no panel rather than an error:
+  // the question can still be asked, and it starts a conversation of its own.
+  const listThreads = useCallback(async () => {
+    const listed = await request<unknown>(THREADS_API_PATH);
+    const read = listed.ok ? readThreads(listed.data) : null;
+    setThreads(read);
+  }, []);
+  useEffect(() => {
+    void listThreads();
+  }, [listThreads]);
 
   // The agents this person may see, for the picker. A roster that did not come back is no
   // picker rather than an error: the question can still be asked, and the router chooses.
@@ -275,7 +321,7 @@ export function Ask() {
   const ask = useCallback(
     (submitted: FormEvent<HTMLFormElement>) => {
       submitted.preventDefault();
-      const body = askBody(question, agent, kind);
+      const body = askBody(question, agent, kind, thread);
       if (body === null) {
         // Not a question the route would take. Doing nothing is the answer: a request known
         // to be refused is a round trip spent to be told what this console already knew.
@@ -300,6 +346,9 @@ export function Ask() {
           return;
         }
         setAsking((one) => ({ ...one, traceId: opened.traceId }));
+        if (opened.threadId !== "") {
+          setThread(opened.threadId);
+        }
         for await (const event of opened.events) {
           if (controller.signal.aborted) {
             return;
@@ -308,10 +357,11 @@ export function Ask() {
         }
         if (!controller.signal.aborted) {
           setAsking((one) => ({ ...one, busy: false }));
+          void listThreads();
         }
       })();
     },
-    [question, agent, kind],
+    [question, agent, kind, thread, listThreads],
   );
 
   const { view, busy, failure, traceId } = asking;
@@ -464,6 +514,97 @@ export function Ask() {
       {failure ? <FailureNotice failure={failure} fields={[QUESTION_NAME]} /> : null}
 
       {!busy && !asked && failure === null ? <p className="note">{NOTHING_ASKED_YET}</p> : null}
+
+      {thread !== "" ? (
+        <div className="ask__thread">
+          <p className="note">{CONTINUING}</p>
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              setThread("");
+              setReopened(null);
+            }}
+          >
+            {NEW_CONVERSATION}
+          </button>
+        </div>
+      ) : null}
+
+      {reopened !== null ? (
+        <section className="card ask__reopened" aria-label={reopened.title}>
+          <h2>{reopened.title}</h2>
+          <ol className="ask__messages">
+            {reopened.messages.map((one, at) => (
+              <li key={`${at}-${one.at}`}>
+                <strong>{speaker(one.role)}</strong> {channelWords(one.channel)}: {one.body}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {threads !== null && threads.length > 0 ? (
+        <section className="card ask__conversations">
+          <h2>{CONVERSATIONS_HEADING}</h2>
+          <form
+            className="ask__search"
+            role="search"
+            onSubmit={(submitted) => {
+              submitted.preventDefault();
+              const path = threadSearchPath(searching);
+              if (path === null) {
+                setFound(null);
+                return;
+              }
+              void (async () => {
+                const asked = await request<unknown>(path);
+                setFound(asked.ok ? readThreads(asked.data) : null);
+              })();
+            }}
+          >
+            <label className="ask__label" htmlFor={SEARCH_FIELD_ID}>
+              {SEARCH_CONVERSATIONS}
+            </label>
+            <input
+              id={SEARCH_FIELD_ID}
+              className="form-control"
+              type="search"
+              value={searching}
+              onChange={(changed) => setSearching(changed.target.value)}
+            />
+            <button type="submit" className="button">
+              {SEARCH_LABEL}
+            </button>
+          </form>
+          {found !== null && found.length === 0 ? (
+            <p className="note">{NOTHING_FOUND_IN_CONVERSATIONS}</p>
+          ) : null}
+          <ul className="ask__threads">
+            {(found ?? threads).map((one) => (
+              <li key={one.threadId}>
+                <button
+                  type="button"
+                  className="button button--link"
+                  onClick={() => {
+                    void (async () => {
+                      const opened = await request<unknown>(threadPath(one.threadId));
+                      const read = opened.ok ? readThread(opened.data) : null;
+                      if (read !== null) {
+                        setReopened(read);
+                        setThread(read.threadId);
+                      }
+                    })();
+                  }}
+                >
+                  {one.title}
+                </button>{" "}
+                <span className="note">{channelWords(one.lastChannel)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </article>
   );
 }

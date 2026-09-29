@@ -392,6 +392,10 @@ class Answered:
     #: What stands behind the answer, as its citation frames carried it, present only beside
     #: `composed`. For a channel that draws its own citations rather than writing the frames.
     provenance: Provenance | None = None
+    #: True when the sensitive-topic interception answered with its referral, which is recorded
+    #: by that path without the question's words and must be written down nowhere else, a
+    #: person's thread included (M24.2.2, M9.1.1).
+    referred: bool = False
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -795,7 +799,8 @@ def _referred(referral: str) -> Answered:
             stream.step(Progress.READING),
             stream.text(referral),
             stream.done(),
-        )
+        ),
+        referred=True,
     )
 
 

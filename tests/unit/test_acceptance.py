@@ -105,10 +105,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in five, the connector framework's eight, retrieval's seven and
-    ingestion's seven, the modules in `CHECK_MODULES` order rather than the order a process
-    imported them. Delete this and a check can drop out of the suite with the page simply listing
-    one fewer row, or the page can lead with whichever module was imported first."""
+    an answer's evidence in five, the connector framework's eight, retrieval's seven,
+    ingestion's seven and threads' two, the modules in `CHECK_MODULES` order rather than the
+    order a process imported them. Delete this and a check can drop out of the suite with the
+    page simply listing one fewer row, or the page can lead with whichever module was imported
+    first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -199,6 +200,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_queued_file_is_kept_in_the_store_and_read_by_the_worker",
         "the_embedding_width_is_the_installs_and_held_under_vectors",
         "a_price_list_sent_as_a_document_is_offered_to_classification",
+    ]
+    # A person's threads; `tests/unit/test_acceptance_threads.py`.
+    assert by_module["brain.ops.acceptance_threads"] == [
+        "a_question_is_kept_in_its_askers_thread_and_searched_by_them",
+        "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -684,9 +690,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 46
+    assert len(outcomes) == 48
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 148
+    assert runs == [(2,)] and len(recorded) == 152
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
