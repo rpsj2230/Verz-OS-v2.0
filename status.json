@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T17:50:05.948214+00:00",
-  "commit": "08bdef2c",
-  "commit_subject": "Making staff accounts work on the owner's install goes on his page: the sign-in email settings, and three server steps on his word (#282)",
+  "generated_at": "2026-09-29T18:05:27.931246+00:00",
+  "commit": "969ce216",
+  "commit_subject": "The acceptance suite's totals are derived from the registered checks, so parallel packages stop colliding in one test (#224)",
   "total": 1576,
   "done": 469,
   "percent": 29.8,
