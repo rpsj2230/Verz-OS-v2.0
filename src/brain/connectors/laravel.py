@@ -163,6 +163,7 @@ from brain.core.projection import ProjectionRefusedError
 from brain.core.scope import Scope
 from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.knowledge.rows import assert_takes_no_sql
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.secrets import SecretRef
 
 # ------------------------------------------------------------------ written-down reasons
@@ -1584,14 +1585,78 @@ LARAVEL_THE_CREDENTIAL_IS_READ_ONLY: Final = (
 )
 
 
+#: Why this screen cannot connect it, said by the declaration and by the guide's last step.
+NOT_FROM_THE_CONSOLE_SAYS: Final = (
+    "It reads database views, each kept under a visibility rule written by whoever "
+    "read the view's definition. This screen has no way to write those rules yet, so "
+    "it is connected at the server."
+)
+#: The screens that prepare your own database for this system, ending where the server takes
+#: over: the visibility rules this source needs cannot be written on a screen yet.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="views",
+            title="Write a view for each thing to read",
+            text=(
+                "In your application's database, create one view for each thing this system should "
+                "read, holding only the columns it may see. A view is your own statement of what "
+                "may be read, and it changes only when you change it."
+            ),
+            sketch=Sketch(
+                place="Your database",
+                heading="Views",
+                lines=(
+                    SketchLine(LineKind.ITEM, "One view per thing to read", mark=True),
+                    SketchLine(LineKind.TEXT, "Only the columns it may see"),
+                ),
+            ),
+        ),
+        GuideStep(
+            key="user",
+            title="Create a read-only database user",
+            text=(
+                "Create a database user with SELECT on those views only: not on tables, and no "
+                "write. A table can gain a column in the next migration, and a grant on it would "
+                "read that column the same day."
+            ),
+            sketch=Sketch(
+                place="Your database",
+                heading="Users",
+                lines=(
+                    SketchLine(LineKind.ITEM, "SELECT on the views", mark=True),
+                    SketchLine(LineKind.ITEM, "No grant on any table"),
+                    SketchLine(LineKind.ITEM, "No write"),
+                ),
+            ),
+        ),
+        GuideStep(
+            key="at_the_server",
+            title="Connect it at the server",
+            text=(
+                "This screen cannot finish this one. "
+                + NOT_FROM_THE_CONSOLE_SAYS
+                + " Hand whoever runs this install's server the read-only user's name and password "
+                "and the list of views."
+            ),
+            sketch=Sketch(
+                place="Your server",
+                heading="Connected at the server",
+                lines=(
+                    SketchLine(LineKind.ITEM, "The read-only user", mark=True),
+                    SketchLine(LineKind.ITEM, "The list of views", mark=True),
+                ),
+            ),
+        ),
+    )
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=CONNECTOR_NAME,
     label="Laravel database views",
-    not_from_the_console=(
-        "It reads database views, each kept under a visibility rule written by whoever "
-        "read the view's definition. This screen has no way to write those rules yet, so "
-        "it is connected at the server."
-    ),
+    guide=GUIDE,
+    not_from_the_console=NOT_FROM_THE_CONSOLE_SAYS,
     read_back=ReadBack(
         reading=classified_reading,
         recorded=(

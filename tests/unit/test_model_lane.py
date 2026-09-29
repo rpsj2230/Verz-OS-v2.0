@@ -50,6 +50,8 @@ from brain.gate.finish import Finished, Origin
 from brain.gate.model_lane import (
     A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES,
     A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES,
+    EARLIER_CHARS,
+    EARLIER_SHOWN,
     HINTS_HEADING,
     MAX_HINTS_SHOWN,
     PASSAGE_POLICY,
@@ -206,6 +208,7 @@ def ask(
     *,
     search: Passages | None = None,
     reply: Completion | BaseException | None = None,
+    script: Sequence[Completion | BaseException] = (),
     with_model: bool = True,
     entitlement: EntitlementSet = CALLER,
     rules: Sequence[FastPathRule] = (HOURS,),
@@ -213,7 +216,7 @@ def ask(
     hints: tuple[str, ...] = (),
 ) -> Run:
     """The lane, with a model step whose model is a real executor over a recording transport."""
-    transport = Scripted(completion() if reply is None else reply)
+    transport = Scripted(*script) if script else Scripted(completion() if reply is None else reply)
     calls, attempts = executor(Ladder((rung("anthropic"),)), {"anthropic": transport})
     found = search if search is not None else Passages(VISIBLE, WITHHELD)
     sink = Sink()
@@ -604,10 +607,11 @@ def test_a_model_that_cannot_be_reached_is_degraded_and_the_request_is_still_rec
 
 
 def test_the_largest_prompt_the_lane_can_build_fits_the_answer_tier_by_its_bytes() -> None:
-    """**Measured, not estimated.** The largest question the answer route admits and the most
-    passages the lane shows, every character of each four bytes wide, give a prompt whose UTF-8
-    length fits inside the answer tier's escalation headroom, so `classify_tier` keeps it on that
-    tier and no tokeniser can find it too long.
+    """**Measured, not estimated.** The largest question the answer route admits, the most
+    passages the lane shows, the most of a follow-up's earlier questions it repeats (M9.2.3) and
+    the most of the asker's hints it shows (M16.6.3), every character of each four bytes wide,
+    give a prompt whose UTF-8 length fits inside the answer tier's escalation headroom, so
+    `classify_tier` keeps it on that tier and no tokeniser can find it too long.
 
     Delete this and a cap can be raised until a legitimate question is refused by the provider as
     too long, which the chain reads as a 400 and stops on."""
@@ -618,11 +622,31 @@ def test_the_largest_prompt_the_lane_can_build_fits_the_answer_tier_by_its_bytes
         **dict.fromkeys(SHOWN_FIELDS, wide * 10_000),
     }
     payload = ChannelPayload(records=tuple(dict(passage) for _ in range(PASSAGES_SHOWN * 2)))
-    messages = messages_of(prompt_for(wide * (MAX_QUESTION_CHARS * 2), shown(payload)))
+    earlier = [wide * (EARLIER_CHARS * 2)] * (EARLIER_SHOWN * 2)
+    hints = tuple(wide * 4_000 for _ in range(MAX_HINTS_SHOWN * 3))
+    messages = messages_of(
+        prompt_for(wide * (MAX_QUESTION_CHARS * 2), shown(payload), (), hints, earlier=earlier)
+    )
     tier = classify_tier(RoutingRequest(lane=Lane.ANSWER)).tier
 
     assert prompt_bytes(messages) <= ESCALATION_HEADROOM * TIER_CONTEXT_WINDOW[tier]
     assert tier_for(messages) is tier is DEFAULT_TIER
+
+
+def test_a_follow_up_s_prompt_repeats_the_newest_earlier_questions_each_cut_to_its_length() -> None:
+    """The prompt names the person's newest `EARLIER_SHOWN` earlier questions, oldest first, each
+    cut to `EARLIER_CHARS`, before the question; a question on its own names none (M9.2.3).
+
+    Delete this and the cap the byte bound above is measured with can stop being the cap the
+    prompt applies, or a follow-up can lose the words that say what "it" was."""
+    earlier = [f"question {number} " + "x" * (EARLIER_CHARS * 2) for number in range(5)]
+    text = "\n\n".join(prompt_for("and who signs it", ChannelPayload(), earlier=earlier).variable)
+    listed = text.split("Earlier in this conversation the person asked:\n", 1)[1]
+    lines = listed.split("\n\n", 1)[0].split("\n")
+    assert lines == [f"- {one[:EARLIER_CHARS]}" for one in earlier[-EARLIER_SHOWN:]]
+    assert text.index("Earlier in this conversation") < text.index("Question:")
+    alone = "\n\n".join(prompt_for("and who signs it", ChannelPayload()).variable)
+    assert "Earlier in this conversation" not in alone
 
 
 def test_the_largest_prompt_with_every_hint_shown_still_fits_the_answer_tier() -> None:
@@ -944,6 +968,92 @@ def test_a_refusal_the_provider_reports_as_an_error_is_the_refused_abstention() 
     assert run.answered.abstention.reason is AbstentionReason.REFUSED
     assert len(run.sent) == 1
     assert run.attempts.outcomes() == [("main-0", 0, "refused")]
+
+
+# --- M15.4.1 -----------------------------------------------------------------------------------
+
+
+def _many(count: int) -> Passages:
+    return Passages(
+        *(VISIBLE.model_copy(update={"id": f"c_handbook_{number}"}) for number in range(count))
+    )
+
+
+def test_a_prompt_too_long_for_every_model_is_asked_again_with_fewer_passages_and_says_so() -> None:
+    """The largest model refuses the prompt as too long twice: the lane asks again with half the
+    passages, then half again, and answers from the one it could send, citing that one alone and
+    saying it drew on one of the six found (M15.4.1).
+
+    Delete this and a question whose passages are longer than a model reads is answered with the
+    provider's failure, or from fewer passages with nothing said, which is the silent truncation
+    `A_REQUEST_TOO_LONG_FOR_EVERY_MODEL_IS_ANSWERED_FROM_FEWER_PASSAGES_AND_SAYS_SO` forbids."""
+    from brain.gate.model_lane import TRIMMED_TEXT
+    from brain.models.adapter import ContextWindowExceededError
+
+    too_long = ContextWindowExceededError("context_length_exceeded")
+    run = ask(search=_many(PASSAGES_SHOWN), script=(too_long, too_long, completion()))
+
+    assert run.raised is None
+    assert run.answered is not None and run.answered.composed is not None
+    shown_per_request = [
+        "\n".join(message.content for message in request.messages).count("Passage ")
+        for request in run.sent
+    ]
+    assert shown_per_request == [PASSAGES_SHOWN, PASSAGES_SHOWN // 2, 1]
+    assert {one.record_id for one in run.answered.composed.citations} == {"c_handbook_0"}
+    said = TRIMMED_TEXT.format(shown=1, found=PASSAGES_SHOWN)
+    assert run.answered.text is not None and said in run.answered.text
+
+
+def test_the_passages_counted_as_found_are_only_those_the_reader_could_read() -> None:
+    """Four readable passages and two the reader's grants withhold, refused as too long once: the
+    answer says it drew on two of the four found, never of six. DENIED and ABSENT read the same,
+    and a count that included the withheld two would tell the reader two things exist that they
+    may not see. Delete this and the sentence can count what the search found rather than what
+    survived redaction, which is a count of hidden items by subtraction."""
+    from brain.gate.model_lane import TRIMMED_TEXT
+    from brain.models.adapter import ContextWindowExceededError
+
+    readable = tuple(
+        VISIBLE.model_copy(update={"id": f"c_handbook_{number}"}) for number in range(4)
+    )
+    withheld = tuple(
+        WITHHELD.model_copy(update={"id": f"c_withheldrecordid_{number}"}) for number in range(2)
+    )
+    run = ask(
+        search=Passages(*withheld, *readable),
+        script=(ContextWindowExceededError("context_length_exceeded"), completion()),
+    )
+
+    assert run.answered is not None and run.answered.text is not None
+    assert TRIMMED_TEXT.format(shown=2, found=4) in run.answered.text
+    assert "of the 6 passages" not in run.answered.text
+
+
+def test_an_answer_that_fit_says_nothing_about_fewer_passages() -> None:
+    """The positive sibling: a prompt the model read first time is answered from every passage
+    and the answer says nothing about drawing on fewer. Delete this and the sentence can be added
+    to every answer, which would make it mean nothing."""
+    run = ask(search=_many(3))
+
+    assert run.answered is not None and run.answered.text is not None
+    assert "passages found for you" not in run.answered.text
+    assert len(run.sent) == 1
+
+
+def test_one_passage_too_long_and_any_other_failure_are_not_asked_again() -> None:
+    """A single passage the model still cannot read, and a provider failing for any other reason,
+    are the provider's failure after one request: there is nothing fewer to send, and a failure
+    that is not about length is not cured by sending less. Delete this and the lane can loop on a
+    failure that trimming cannot fix, paying for each attempt."""
+    from brain.models.adapter import ContextWindowExceededError, TransportStatusError
+
+    alone = ask(search=_many(1), script=(ContextWindowExceededError("context_length_exceeded"),))
+    down = ask(search=_many(PASSAGES_SHOWN), script=(TransportStatusError(503),))
+
+    for run in (alone, down):
+        assert isinstance(run.raised, ProviderUnavailable)
+        assert len(run.sent) == 1
 
 
 def test_the_attempt_row_names_the_categories_of_data_the_prompt_carried() -> None:

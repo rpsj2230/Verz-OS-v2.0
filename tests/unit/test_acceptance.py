@@ -27,6 +27,7 @@ import pytest
 
 from brain.core.department import SLUG_PATTERN
 from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
     NOT_RUN,
@@ -105,10 +106,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in four, the connector framework's nine, retrieval's seven and the
-    organisation's two, the modules in `CHECK_MODULES` order rather than the order a process
-    imported them. Delete this and a check can drop out of the suite with the page simply listing
-    one fewer row, or the page can lead with whichever module was imported first."""
+    an answer's evidence in six, the connector framework's nine, retrieval's seven,
+    ingestion's seven, threads' four, a document's whole life in one and the organisation's two,
+    the modules in `CHECK_MODULES` order rather than the order a process imported them. Delete
+    this and a check can drop out of the suite with the page simply listing one fewer row, or the
+    page can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -168,6 +170,8 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_record_answer_cites_the_record_field_and_read_time",
         "four_kinds_of_nothing_are_kept_apart",
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
+        "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone",
+        "a_prompt_too_long_for_every_model_is_answered_from_fewer",
     ]
     assert by_module["brain.ops.acceptance_checks_connector_framework"] == [
         "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
@@ -189,6 +193,27 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
         "the_database_withholds_passages_the_statement_did_not_filter",
         "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]
+    # Getting a document in; `tests/unit/test_acceptance_ingest.py`.
+    assert by_module["brain.ops.acceptance_ingest"] == [
+        "a_file_carrying_script_or_macros_is_refused_before_it_is_read",
+        "the_antivirus_test_file_is_refused_as_malware",
+        "a_link_is_fetched_read_and_found_in_its_department",
+        "a_full_ingestion_queue_refuses_with_a_retry_hint",
+        "a_queued_file_is_kept_in_the_store_and_read_by_the_worker",
+        "the_embedding_width_is_the_installs_and_held_under_vectors",
+        "a_price_list_sent_as_a_document_is_offered_to_classification",
+    ]
+    # A person's threads; `tests/unit/test_acceptance_threads.py`.
+    assert by_module["brain.ops.acceptance_threads"] == [
+        "a_question_is_kept_in_its_askers_thread_and_searched_by_them",
+        "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
+        "a_follow_up_is_answered_from_what_its_thread_cited",
+        "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it",
+    ]
+    # A document's whole life, walked as one flow; `tests/unit/test_acceptance_knowledge.py`.
+    assert by_module["brain.ops.acceptance_knowledge"] == [
+        "a_document_is_added_answered_replaced_and_falls_due_for_review",
     ]
     assert by_module["brain.ops.acceptance_checks_organisation"] == [
         "departments_a_staff_source_names_are_founded_once",
@@ -638,11 +663,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     a check that commits, or one that cannot pass on a real schema, reaches the owner's server
     first."""
     from tests.fixtures.scratch_postgres import sql
+    from tests.unit.test_acceptance_ingest import offline_install
 
     with at_head("brain_acceptance_run") as url:
         before = counts(url)
         for name, value in INSTALL.items():
             monkeypatch.setenv(name, value)
+        # The link answered by a recorded page and the queue driver's count stood in, as
+        # `tests/unit/test_acceptance_ingest.py` runs them: a test never asks the network.
+        offline_install(monkeypatch)
         waited = run_on(url, {})
         bound = run_on(url, {})
         after = counts(url)
@@ -673,16 +702,32 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
+    assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
+    assert (
+        outcomes.pop("a_document_is_added_answered_replaced_and_falls_due_for_review")[0] == NOT_RUN
+    )
+    # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
+    assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
         NOT_RUN,
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
+    # The test process is not a worker container, so the checks that read the worker they run
+    # in say so; `tests/unit/test_acceptance_deployment.py` runs them in a worker's environment.
+    for worker_check in (
+        "the_worker_serves_each_traffic_class_from_its_own_slots",
+        "every_database_client_is_bounded_within_the_install_s_ceiling",
+        "the_scrub_meets_its_budget_on_this_install_s_processor",
+    ):
+        assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 49
+    assert len(outcomes) == 58
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 148
+    assert runs == [(2,)] and len(recorded) == 184
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
