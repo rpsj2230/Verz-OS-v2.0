@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T01:49:04.860171+00:00",
-  "commit": "de1f1f52",
-  "commit_subject": "Agents are made and changed through drafts: saved as versions, checked, rehearsed, and a wider publish waits for a second person (#184)",
+  "generated_at": "2026-09-29T02:27:25.364047+00:00",
+  "commit": "c9f66dde",
+  "commit_subject": "The Models screen follows the owner's matrix: twelve default steps, providers then the matrix, drawn as his screenshot (#188)",
   "total": 1576,
   "done": 370,
   "percent": 23.5,
