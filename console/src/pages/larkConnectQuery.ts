@@ -159,3 +159,42 @@ export function redoSteps(guide: LarkGuide, tested: LarkTested | null): readonly
 export function stepsFor(guide: LarkGuide, keys: readonly string[]): readonly LarkStep[] {
   return keys.flatMap((key) => guide.steps.filter((one) => one.key === key));
 }
+
+// ------------------------------------------------------------------ the wiki's spaces
+
+export type DeclaredSpaces = components["schemas"]["DeclaredSpacesView"];
+export type DeclaredSpace = components["schemas"]["DeclaredSpaceView"];
+export type SpacesDeclared = components["schemas"]["SpacesDeclaredView"];
+export type LarkSpace = components["schemas"]["LarkSpaceView"];
+
+/** The wiki spaces declared on this install, and where more are declared. */
+export const LARK_WIKI_SPACES_API_PATH = "/connectors/lark-app/wiki-spaces";
+
+/** One space the administrator is about to declare: what was chosen or pasted, and its reach. */
+export interface SpaceChoice {
+  /** The space's id, or the settings link that was pasted for it; the API reads the id out. */
+  readonly space: string;
+  /** What the row is called on the screen: Lark's name for it, or what was pasted. */
+  readonly label: string;
+  /** "company", "department", or "" for a space not being declared in this save. */
+  readonly reach: string;
+  readonly department: string;
+}
+
+/** The spaces a test saw, as rows to declare, leaving out any already declared. */
+export function spaceChoices(tested: LarkTested | null, declared: readonly DeclaredSpace[]): SpaceChoice[] {
+  const already = new Set(declared.map((one) => one.space_id));
+  const seen = tested?.uses.find((one) => one.name === "knowledge_wiki")?.spaces ?? [];
+  return seen
+    .filter((one) => !already.has(one.space_id))
+    .map((one) => ({ space: one.space_id, label: one.name === "" ? one.space_id : one.name, reach: "", department: "" }));
+}
+
+/** The rows a save sends: every row given a reach, in the order drawn. */
+export function spacesBody(choices: readonly SpaceChoice[]): { spaces: { space: string; reach: string; department: string }[] } {
+  return {
+    spaces: choices
+      .filter((one) => one.reach !== "")
+      .map((one) => ({ space: one.space, reach: one.reach, department: one.reach === "department" ? one.department : "" })),
+  };
+}

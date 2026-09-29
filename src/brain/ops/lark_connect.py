@@ -105,10 +105,10 @@ A_SCOPE_IS_ASKED_FOR_ONLY_BY_A_USE_THAT_NEEDS_IT: Final = (
 #: What the test may send, and what it may not.
 THE_TEST_ONLY_READS: Final = (
     "The test exchanges the app's identifier and secret for a tenant token, which changes nothing "
-    "in Lark, and then makes small GET requests: a page size of one, and a document's metadata "
-    "rather than its body. It writes nothing in Lark and keeps nothing it read. Here it records "
-    "only when it ran and each use's verdict in a word, so the card can say when Lark was last "
-    "tested."
+    "in Lark, and then makes small GET requests: a page size of one (the wiki's spaces are listed "
+    "so they can be named), and a document's metadata rather than its body. It writes nothing "
+    "in Lark and keeps nothing it read. Here it records only when it ran and each use's verdict "
+    "in a word, so the card can say when Lark was last tested."
 )
 
 #: Why a test where nothing was granted reads as a version not released.
@@ -172,6 +172,10 @@ _BASE_IN_LINK: Final = re.compile(r"/base/([A-Za-z0-9]{8,64})")
 
 #: A scope name as Lark writes it inside a refusal: words joined by colons.
 _SCOPE_IN_TEXT: Final = re.compile(r"[a-z]+(?::[a-z_.]+)+")
+
+#: How many of the app's wiki spaces the test lists, for the step that declares each one. A
+#: space beyond these is declared by pasting its link.
+SPACES_LISTED: Final = 50
 
 #: A chat id that names no chat, which the chat channel's test asks the members of. See `_channel`.
 MEMBERS_CHECK_CHAT: Final = "oc_brain_connect_check"
@@ -392,6 +396,8 @@ class StepKey(enum.StrEnum):
     SHARE_WIKI = "share_wiki"
     SHARE_BASE = "share_base"
     TEST = "test"
+    WIKI_SPACES = "wiki_spaces"
+    BASE_ACCESS = "base_access"
 
 
 #: The developer console's own page for each step, under an app's id, as its address bar shows
@@ -430,6 +436,7 @@ ASKS: Final[Mapping[StepKey, tuple[str, ...]]] = MappingProxyType(
         StepKey.EVENTS_ADDRESS: ("events_address",),
         StepKey.SHARE_BASE: ("base_link",),
         StepKey.TEST: ("test", "save"),
+        StepKey.WIKI_SPACES: ("spaces",),
     }
 )
 
@@ -715,10 +722,16 @@ def _share_wiki() -> GuideStep:
 
 
 def _share_base() -> GuideStep:
+    scopes = " and ".join(one.name for one in USES[Use.BASE].scopes)
     return GuideStep(
         key=StepKey.SHARE_BASE,
         title="Share the Base with the app and paste its link",
-        text=f"{USES[Use.BASE].extra[0]} {USES[Use.BASE].extra[1]}",
+        text=(
+            f"The app reads a Base with {scopes}, which the permissions you added include, and "
+            "only once a version with them is released. "
+            f"{USES[Use.BASE].extra[0]} {USES[Use.BASE].extra[1]} Knowledge from Base must be "
+            "ticked on the first step; the Base is switched on when you save on the test step."
+        ),
         sketch=Sketch(
             place="Lark Base",
             heading="More",
@@ -763,6 +776,58 @@ def _test(chosen: Sequence[Use]) -> GuideStep:
     )
 
 
+def _wiki_spaces() -> GuideStep:
+    return GuideStep(
+        key=StepKey.WIKI_SPACES,
+        title="Say who may read each wiki space",
+        text=(
+            "For each wiki space shared with the app, choose who on this install may be told "
+            "its pages: the whole company, or one department. A space nobody declares here is "
+            "never read, and you are the steward of each space you declare. The test lists the "
+            "spaces Lark shows the app; for one it does not show, paste the link of the space's "
+            "settings page, which contains /wiki/space/ and a number."
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="Wiki spaces",
+            lines=(
+                SketchLine(LineKind.FIELD, "A shared space", "The whole company", mark=True),
+                SketchLine(LineKind.FIELD, "Another space", "One department", mark=True),
+            ),
+            button="Save the spaces",
+        ),
+        asks=ASKS[StepKey.WIKI_SPACES],
+    )
+
+
+#: Where a person is granted a Base's tables, and where each table is listed by its title.
+PEOPLE_SCREEN: Final = "/people"
+CAPABILITIES_SCREEN: Final = "/capabilities"
+
+
+def _base_access() -> GuideStep:
+    return GuideStep(
+        key=StepKey.BASE_ACCESS,
+        title="Grant each table to the people who may read it",
+        text=(
+            "Within about five minutes of saving, the worker indexes the Base: the ids, names "
+            "and dates of its records, never their values. Nobody reads a table until they are "
+            "granted it. On Capabilities each table is listed by its own title, as "
+            "read:lark_<table> to find its records and read:lark_<table>.* to read their values; "
+            "grant them to a person from their page on People."
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="Capabilities",
+            lines=(
+                SketchLine(LineKind.ITEM, "read:lark_<table>", "Find records", mark=True),
+                SketchLine(LineKind.ITEM, "read:lark_<table>.*", "Read values", mark=True),
+            ),
+            button="Grant",
+        ),
+    )
+
+
 def steps_for(uses: Sequence[Use], *, platform: str, app_id: str = "") -> tuple[GuideStep, ...]:
     """The screens from nothing to a working connection, for the uses chosen, in order.
 
@@ -785,6 +850,10 @@ def steps_for(uses: Sequence[Use], *, platform: str, app_id: str = "") -> tuple[
     if Use.BASE in chosen:
         found.append(_share_base())
     found.append(_test(chosen))
+    if Use.WIKI in chosen:
+        found.append(_wiki_spaces())
+    if Use.BASE in chosen:
+        found.append(_base_access())
     return keyed(tuple(found))
 
 
@@ -959,6 +1028,8 @@ class UseResult:
     #: True when every call was answered and a field was left out, which is a scope Lark checks
     #: per field. Lark granted something, so this is never read as a version not released.
     answered: bool = False
+    #: The wiki spaces Lark showed the app, as (id, name), for the step that declares them.
+    spaces: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1091,11 +1162,18 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
 async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
     spec = USES[Use.WIKI]
     unshared = "The app is in no wiki space yet. " + spec.extra[0]
-    spaces = await _get(fetch, base, "/open-apis/wiki/v2/spaces", token, page_size="1")
+    spaces = await _get(
+        fetch, base, "/open-apis/wiki/v2/spaces", token, page_size=str(SPACES_LISTED)
+    )
     refused = _refused_or_other(spec, spaces, not_shared=unshared)
     if refused is not None:
         return refused
-    space = next((str(one.get("space_id") or "") for one in _items(spaces)), "")
+    seen = tuple(
+        (str(one.get("space_id") or ""), str(one.get("name") or ""))
+        for one in _items(spaces)
+        if one.get("space_id")
+    )
+    space = seen[0][0] if seen else ""
     if not space:
         return UseResult(spec.use, Verdict.NOT_SHARED, unshared)
     nodes = await _get(
@@ -1114,6 +1192,7 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
             spec.use,
             Verdict.WORKING,
             "Working: the app can list a wiki space, which has no page yet to check further.",
+            spaces=seen,
         )
     node_token = str(node.get("node_token") or "")
     # The call `brain.connectors.lark_wiki.read_live` makes before it answers from a page.
@@ -1147,6 +1226,7 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
         Verdict.WORKING,
         "Working: the app can list the wiki, see whether a page was restricted, and read a "
         "page's details.",
+        spaces=seen,
     )
 
 
