@@ -161,7 +161,7 @@ from brain.audit.record import DenyReason
 from brain.core.department import gaps_for_question
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
-from brain.core.errors import Absent, BrainError, Failed
+from brain.core.errors import Absent, BrainError, Degraded, Failed
 from brain.core.field_policy import FieldPolicy
 from brain.core.principal import Principal
 from brain.core.redaction import (
@@ -1463,8 +1463,18 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
     )
 
 
+#: Called when a run fails, so the asker's thread can say so. The caller knows the thread; this
+#: function knows whether the question may be written down at all.
+FailureKeeper = Callable[[], Awaitable[None]]
+
+
 async def answered_for(
-    request: Request, recorder: Recorder, asking: Answering, ask: Question
+    request: Request,
+    recorder: Recorder,
+    asking: Answering,
+    ask: Question,
+    *,
+    failed: FailureKeeper | None = None,
 ) -> Answered | StoreVerdict:
     """One question answered for one person at one reach, or the window that refused it.
 
@@ -1473,6 +1483,11 @@ async def answered_for(
     `request` is the one being served, for the process's state and its trace; the web route
     passes its own, and a chat channel passes the vendor's event request. A refusal by a
     window is returned rather than rendered, because a stream and a chat say it differently.
+
+    `recorder.agent_id` names the stored agent the front half routed to, for whoever keeps the
+    thread. A run that fails after the question was admitted calls `failed` before the error goes
+    on, unless the question was referred, which is written down nowhere (M24.2.2); see
+    `brain.chat.remember.remember_failure`.
     """
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):
@@ -1568,6 +1583,7 @@ async def answered_for(
         # A stored agent answers at the caller's reach narrowed by its ceiling, and the default
         # at the caller's own. Everything read below is read at that reach and no other.
         agent = roster.records.get(front.selection.agent_id)
+        recorder.agent_id = None if agent is None else agent.agent_id
         reach = run_entitlement(asking.reach, agent)
         sources = covered_at(
             registry, reach, asking.now, tables=[entity for _, entity in tables.readers]
@@ -1642,13 +1658,18 @@ async def answered_for(
                 department=asking.principal.primary_department,
             ),
         )
-    except BrainError:
-        # Already in the taxonomy, already has a public message, already maps to a status.
+    except BrainError as exc:
+        # Already in the taxonomy, already has a public message, already maps to a status. A run
+        # that could not answer is kept in the asker's thread as failed first.
+        if failed is not None and referral is None and isinstance(exc, Degraded | Failed):
+            await failed()
         raise
     except Exception as exc:
         # Broad for the reason the records route gives about its own: whatever a driver raises
         # would otherwise reach the response as FastAPI's default body, which is not
         # `ErrorBody`, or as a message with a connection string in it.
+        if failed is not None and referral is None:
+            await failed()
         raise Failed(f"answering: {type(exc).__name__}") from exc
 
     # The reason, never the question and never the answer. An abstention reason is the audit
@@ -1666,14 +1687,14 @@ async def answered_for(
 
 
 async def remembered(
-    request: Request, asking: Answering, ask: Question, answered: Answered
+    request: Request, asking: Answering, ask: Question, answered: Answered, recorder: Recorder
 ) -> str | None:
     """Keep this exchange in the asker's thread, and say which thread (M9.1.1).
 
     `brain.chat.remember.remember` over this process's store, with the policies the answer was
-    redacted under, which are what a stored answer's references are re-checked against. A
-    failure to keep it is logged and the answer still goes out: the person asked a question, and
-    losing its transcript is not a reason to withhold the answer.
+    redacted under, which are what a stored answer's references are re-checked against, and the
+    run the recorder names. A failure to keep it is logged and the answer still goes out: the
+    person asked a question, and losing its transcript is not a reason to withhold the answer.
     """
     from brain.chat.remember import remember, threads_of
 
@@ -1692,11 +1713,42 @@ async def remembered(
             question=ask.question,
             answered=answered,
             policies=policies,
+            agent_id=recorder.agent_id or "",
+            trace_id=recorder.trace_id,
             now=asking.now,
         )
     except Exception as exc:
         log.warning("thread.not_kept", error=type(exc).__name__)
         return None
+
+
+def failure_kept(
+    request: Request, asking: Answering, ask: Question, recorder: Recorder
+) -> FailureKeeper:
+    """What `answered_for` calls when the web route's run fails: the question, marked failed.
+
+    Into the thread the question named, as an answer would have been. A failure to keep it is
+    logged and the error still goes out, for `remembered`'s reason.
+    """
+
+    async def keep() -> None:
+        from brain.chat.remember import remember_failure, threads_of
+
+        try:
+            await remember_failure(
+                threads_of(request.app.state),
+                principal_id=asking.principal.id,
+                thread_id=ask.thread,
+                channel=asking.channel,
+                question=ask.question,
+                agent_id=recorder.agent_id or "",
+                trace_id=recorder.trace_id,
+                now=asking.now,
+            )
+        except Exception as exc:
+            log.warning("thread.failure_not_kept", error=type(exc).__name__)
+
+    return keep
 
 
 @router.post("/answer", responses=LIMITED_RESPONSES)
@@ -1724,10 +1776,13 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     Asking past a window is a 429 before the lane runs, and a refused question is never counted:
     `A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED`.
     """
-    outcome = await answered_for(request, recorder, Answering.of(asked), ask)
+    asking = Answering.of(asked)
+    outcome = await answered_for(
+        request, recorder, asking, ask, failed=failure_kept(request, asking, ask, recorder)
+    )
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
-    thread = await remembered(request, Answering.of(asked), ask, outcome)
+    thread = await remembered(request, asking, ask, outcome, recorder)
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
