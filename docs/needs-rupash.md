@@ -2,10 +2,10 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open: 115 to 118,** four decisions about Lark sign-in, Lark Base visibility and approving
-from Lark cards, each with my recommendation, **and 91,** the checks only you can do on your install; it
-waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it is, what I
-recommend, and every step.
+**4 items are open: 115, 116 and 118,** three decisions about Lark sign-in, Lark Base visibility and
+sending approval cards, each with my recommendation, **and 91,** the checks only you can do on your
+install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
+is, what I recommend, and every step.
 
 # Open
 
@@ -30,35 +30,6 @@ agent held at an approval is an agent doing nothing. The address is the least th
 send a card, and B is also the first step towards signing in with Lark (item 115, option A).
 
 **What I need from you:** reply "118: B" or "118: A". Nothing is built for this until you do.
-
-## 117. May an approval be decided by pressing a button on a Lark card?
-
-**In plain terms:** you asked that approvals be decided only in the console or on Lark cards
-(OWN-147), and that approving needs a sign-in with a second factor (DEF-06). In the console both hold.
-On a Lark card the Brain checks that the press came from the Lark account linked to the person the card
-was made for, and for the same action, but it cannot tell whether that person signed in to Lark with
-two-step verification. So a card press is only as strong as your company's Lark sign-in.
-
-**What happens meanwhile:** the approval cards ship with a setting, **Approve from Lark cards**, that
-is **off on every install**. While it is off, a card shows the request and a link to decide it in the
-console, where your second factor is asked for. Nothing can be approved from Lark until you choose.
-
-**Option A: switch the setting on.** A press on the card approves. Suitable when the company's Lark
-requires two-step verification for everyone, which a Lark administrator can require for the whole
-company.
-
-**Option B: leave it off.** Every approval is decided in the console with a second factor.
-
-**Option C: build a stricter card.** A press counts only if the approver has also signed in to the
-Brain with their second factor within the last few hours; otherwise the card sends them to the console.
-Safer than A, and more build.
-
-**My recommendation: A, once you have confirmed that Verz's Lark requires two-step verification for
-everyone.** It keeps both of your rules in practice, and it keeps approvals where your people already
-are. If Lark does not require it, B until it does.
-
-**What I need from you:** reply "117: A", "117: B" or "117: C". If A, I will tell you where the
-setting is once it is live.
 
 ## 116. Who may see the records in a Lark Base?
 
@@ -156,6 +127,33 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 117. Approving by pressing a button on a Lark card - DECIDED 2026-09-29: yes, once Lark requires two-step verification
+
+**In plain terms:** you asked that approvals be decided only in the console or on Lark cards
+(OWN-147), and that approving needs a sign-in with a second factor (DEF-06). On a Lark card the Brain
+checks that the press came from the Lark account linked to the person the card was made for, and for
+the same action, but it cannot tell whether that person signed in to Lark with two-step verification.
+**Your answer, 2026-09-29: "Yes, you can proceed with your recommendation"**, which was to switch
+approving from Lark cards on once your company's Lark requires two-step verification for everyone.
+
+What that means, and what was built:
+
+1. **Every install ships with the setting "Approve from Lark cards" off.** While it is off a card shows
+   the request and a link to decide it in the console, where the second factor is asked for.
+2. **Switching it on is an audited administrator change**, and its help text says in plain words that
+   a card press relies on the company's own Lark sign-in.
+3. **DEF-06 now records this as its decision:** a card press approves without the Brain's own second
+   factor only while that setting is on.
+
+**What you do, once, after the approval cards are live (I will tell you when):**
+
+1. In the Lark Admin console, open the security settings and find two-step verification. Check that it
+   is required for all members, not merely available. If it is not, turn the requirement on there first.
+2. Tell me "Lark two-step is required", and I switch **Approve from Lark cards** on for your install, or
+   show you where it is on the console's settings.
+
+**Reversible:** switch the setting off and every approval goes back to the console.
 
 ## 114. The vault opens itself, and every release keeps it up to date - DECIDED 2026-09-29
 
