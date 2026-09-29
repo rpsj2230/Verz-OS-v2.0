@@ -274,8 +274,7 @@ def test_the_department_memory_check_fails_when_the_screen_ignores_where_a_grant
     from brain.console import reach_view
     from brain.core.entitlement import EntitlementSet, Grant
     from brain.core.scope import Scope
-
-    real = reach_view.may_recall
+    from brain.memory.formation import may_recall as real
 
     def anywhere(formation: Any, reader: Any, **kw: Any) -> Any:
         wide = EntitlementSet(
