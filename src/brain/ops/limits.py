@@ -550,37 +550,55 @@ DEFAULT_CHANNEL_PER_MINUTE = 120
 DEFAULT_AGENT_PER_MINUTE = 60
 
 
-def principal_limit(principal_id: str, *, per_minute: int = DEFAULT_PRINCIPAL_PER_MINUTE) -> Limit:
-    """One person's questions a minute. See `DEFAULT_PRINCIPAL_PER_MINUTE`."""
+def _tuned(scope: LimitScope) -> int:
+    """The allowance a minute in force for one kind of window: saved on the Rate limits screen
+    within the product's bounds, or the default above. Imported here rather than at the top
+    because `brain.ops.tuning` reads this module's defaults. See `brain.ops.tuning`."""
+    from brain.ops.tuning import per_minute
+
+    return per_minute(scope)
+
+
+def principal_limit(principal_id: str, *, per_minute: int | None = None) -> Limit:
+    """One person's questions a minute: `per_minute`, or the value in force (M22.4.1).
+
+    See `DEFAULT_PRINCIPAL_PER_MINUTE` for the product's figure.
+    """
     return Limit(
         scope=LimitScope.PRINCIPAL,
         subject=principal_id,
         period="minute",
-        limit=per_minute,
+        limit=_tuned(LimitScope.PRINCIPAL) if per_minute is None else per_minute,
         window_seconds=MINUTE_SECONDS,
         reason="one person's questions a minute; far above any human rate, so it catches loops",
     )
 
 
-def channel_limit(channel: str, *, per_minute: int = DEFAULT_CHANNEL_PER_MINUTE) -> Limit:
-    """Everybody on one channel, a minute. See `DEFAULT_CHANNEL_PER_MINUTE`."""
+def channel_limit(channel: str, *, per_minute: int | None = None) -> Limit:
+    """Everybody on one channel, a minute: `per_minute`, or the value in force.
+
+    See `DEFAULT_CHANNEL_PER_MINUTE` for the product's figure.
+    """
     return Limit(
         scope=LimitScope.CHANNEL,
         subject=channel,
         period="minute",
-        limit=per_minute,
+        limit=_tuned(LimitScope.CHANNEL) if per_minute is None else per_minute,
         window_seconds=MINUTE_SECONDS,
         reason="everybody on one channel; contains a misbehaving integration",
     )
 
 
-def agent_limit(agent_id: str, *, per_minute: int = DEFAULT_AGENT_PER_MINUTE) -> Limit:
-    """Everybody using one agent, a minute. See `DEFAULT_AGENT_PER_MINUTE`."""
+def agent_limit(agent_id: str, *, per_minute: int | None = None) -> Limit:
+    """Everybody using one agent, a minute: `per_minute`, or the value in force.
+
+    See `DEFAULT_AGENT_PER_MINUTE` for the product's figure.
+    """
     return Limit(
         scope=LimitScope.AGENT,
         subject=agent_id,
         period="minute",
-        limit=per_minute,
+        limit=_tuned(LimitScope.AGENT) if per_minute is None else per_minute,
         window_seconds=MINUTE_SECONDS,
         reason="everybody using one agent; a looping agent is a likely accident",
     )
@@ -592,9 +610,9 @@ def request_limits(
     channel: str,
     agent_id: str | None = None,
     connector: str | None = None,
-    principal_per_minute: int = DEFAULT_PRINCIPAL_PER_MINUTE,
-    channel_per_minute: int = DEFAULT_CHANNEL_PER_MINUTE,
-    agent_per_minute: int = DEFAULT_AGENT_PER_MINUTE,
+    principal_per_minute: int | None = None,
+    channel_per_minute: int | None = None,
+    agent_per_minute: int | None = None,
 ) -> tuple[Limit, ...]:
     """Every allowance governing one request, assembled in one place.
 

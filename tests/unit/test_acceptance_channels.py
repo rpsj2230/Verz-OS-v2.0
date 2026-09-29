@@ -146,11 +146,10 @@ def test_a_delivery_is_stamped_by_the_clock_when_its_row_is_written() -> None:
     is `clock_timestamp()`, which moves inside a transaction, and not the column's default of
     `now()`, which does not. Delete this and two deliveries in one transaction share a time again,
     so a channel's health is decided by whichever has the smaller random id."""
-    from sqlalchemy.dialects import postgresql
-
     from brain.gate.context import Channel
     from brain.ops.channel_store import DeliveryEntry, StoredDeliveries
     from brain.tables.channel import DeliveryOutcome, Direction
+    from tests.unit.test_tables import DIALECT
 
     recorded = _Recorded()
     entry = DeliveryEntry(
@@ -158,7 +157,7 @@ def test_a_delivery_is_stamped_by_the_clock_when_its_row_is_written() -> None:
     )
     asyncio.run(StoredDeliveries(recorded).record(entry))  # type: ignore[arg-type]
     [statement] = recorded.statements
-    written = str(statement.compile(dialect=postgresql.dialect())).partition(" RETURNING ")[0]
+    written = str(statement.compile(dialect=DIALECT)).partition(" RETURNING ")[0]
     head, _, tail = written.partition(" VALUES (")
     names = [one.strip() for one in head[head.index("(") + 1 : head.rindex(")")].split(",")]
     values = [one.strip() for one in tail.strip().removesuffix(")").split(", ")]
