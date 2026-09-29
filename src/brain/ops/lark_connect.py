@@ -651,7 +651,7 @@ def _events_address(platform: str, app_id: str) -> GuideStep:
             tabs=EVENT_TABS,
             tab_mark="Event Configuration",
             lines=(
-                SketchLine(LineKind.FIELD, "Request URL", "https://.../lark/events", mark=True),
+                SketchLine(LineKind.FIELD, "Request URL", "Your events address", mark=True),
                 SketchLine(LineKind.ITEM, MESSAGE_EVENT),
             ),
             button="Add Events",
