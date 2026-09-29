@@ -2,30 +2,13 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**6 items are open: 121 to 125,** whose conversations an agent's page lists, where uploaded
-documents are stored, a task that names a table library, the automation canvas, and the Lark group
-for the evening digest, each with my recommendation, **and 91,** the checks only you can do on your
+**5 items are open: 121 to 124,** whose conversations an agent's page lists, where uploaded
+documents are stored, a task that names a table library, and the automation canvas, each with my
+recommendation, **and 91,** the checks only you can do on your
 install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
 is, what I recommend, and every step.
 
 # Open
-
-## 125. Which Lark group receives the evening build digest?
-
-**In plain terms:** each evening the Brain can post a short message to a Lark group: tasks closed
-that day, tasks opened, and anything overdue (M38.3.3). It needs to know which group, and the
-Brain's Lark app has to be a member of it.
-
-**My recommendation: a new group with just you in it**, so the digest never lands in a chat
-other people use for work.
-
-**What you do:**
-
-1. In Lark, create a group chat, for example "Brain daily".
-2. Open the group's settings, choose **Bots**, then **Add bot**, and pick the Brain's Lark app
-   (the same app you connected as the staff source).
-3. Reply "125: done, the group is called <its name>". The digest is still to be built; it is
-   built to post to that group, and I tell you when the first one is due.
 
 ## 124. Switch on the automation canvas?
 
@@ -152,6 +135,28 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 125. Where the evening build digest is sent - DECIDED 2026-09-30: a group with just you, on any channel
+
+**Your answer, 2026-09-30:** "I will go with your recommendation which is a new group with just you
+in it, so the digest never lands in a chat other people use for work. But you also need to consider
+that currently you connected so you are sending it to Lark but when you connect other Channels then
+where will you send the Digest?"
+
+**What that means, and how it is built:** the digest is not tied to Lark. Where it goes is one
+setting in the console, **Send the evening digest to**, which offers every channel connected at the
+time and a conversation in it: a Lark group today, and a Slack channel, a Teams channel or an email
+address once those are connected (item 126). You change it whenever you like, it is off until
+somebody chooses, and the change is recorded with your name. Every company that installs the Brain
+chooses its own in the same place.
+
+**What you do:**
+
+1. In Lark, create a group chat with just you in it, for example "Brain daily".
+2. Open the group's settings, choose **Bots**, then **Add bot**, and pick the Brain's Lark app (the
+   same app you connected as the staff source).
+3. When the digest is built I tell you, and you choose that group under **Send the evening digest
+   to** in the console. Nothing to reply with now.
 
 ## 126. Every service connectable from the console, one at a time - DECIDED 2026-09-30
 
