@@ -29,6 +29,11 @@ declined, degraded, or failed. A failed run keeps its question and a turn with n
 model output. An answer written before `0161` has no recorded state and says so rather than
 guessing.
 
+**Anybody who may see the agent is listed their own threads with it, and nothing else is asked of
+them.** Their own history is theirs without a grant, as Ask lists it; `read:question`, which the
+workspace's Conversations tab is read under, governs other people's questions and stays for option
+B. See `brain.agent_conversation_routes.A_PERSONS_OWN_THREADS_NEED_NO_GRANT`.
+
 Built on `brain.member_activity.recent_threads`, which decides which of a person's threads are
 listed and in what order, so this section and the Ask page's list cannot disagree about that.
 

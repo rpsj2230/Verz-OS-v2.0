@@ -101,7 +101,11 @@ export const EDIT_AS_DRAFT = "Edit as a draft";
 /** The settings tab's key, whose content is the Profile. */
 const SETTINGS_TAB = "settings";
 
-/** The conversations tab's key, whose content is the reader's own threads with this agent. */
+/**
+ * The Conversations section's key. Its content is the reader's own threads with this agent, which
+ * are theirs to read without any grant, so it is offered to anybody who can open the agent and not
+ * only where the workspace's tab strip lists it (`brain.agent_conversation_routes`).
+ */
 export const CONVERSATIONS_TAB = "conversations";
 
 /** Where a view of an agent is. The Dashboard is the bare address. */
@@ -123,7 +127,7 @@ export function viewFor(
   if (tab === AUTOMATIONS_TAB && sections.includes(AUTOMATIONS_TAB)) {
     return AUTOMATIONS_TAB;
   }
-  if (tab === CONVERSATIONS_TAB && sections.includes(CONVERSATIONS_TAB)) {
+  if (tab === CONVERSATIONS_TAB) {
     return CONVERSATIONS_TAB;
   }
   return "dashboard";
@@ -264,9 +268,10 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     const Icon = VIEW_ICONS[one];
     return { key: one, label: VIEW_LABELS[one], to: viewAddress(agentId, one), icon: <Icon aria-hidden /> };
   });
-  const menuSections = workspace.tabs
-    .filter((one) => one.tab === AUTOMATIONS_TAB || one.tab === CONVERSATIONS_TAB)
-    .map((one) => ({ tab: one.tab, label: one.tab === CONVERSATIONS_TAB ? CONVERSATIONS_SECTION : AUTOMATIONS_SECTION }));
+  const menuSections = [
+    { tab: CONVERSATIONS_TAB, label: CONVERSATIONS_SECTION },
+    ...workspace.tabs.filter((one) => one.tab === AUTOMATIONS_TAB).map((one) => ({ tab: one.tab, label: AUTOMATIONS_SECTION })),
+  ];
   const subline = [
     facts.ownerName === undefined ? null : `steward ${facts.ownerName}`,
     agent.lineage === undefined ? null : `from a template, version ${String(agent.lineage.version)}`,

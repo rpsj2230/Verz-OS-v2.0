@@ -358,11 +358,10 @@ async def a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it(h: Harness) ->
 @check(
     leaves=("M39.8.9",),
     sentence=(
-        "Two members of acceptance_a each have a thread with one agent, one of them a run that "
-        "failed: the agent's Conversations section lists each member their own thread and never "
-        "the other's, naming the agent, their first question and how the run ended; the failed "
-        "one says failed and reopens with no answer shown; and a member the section is not open "
-        "to is answered as for an agent that does not exist."
+        "Two members of acceptance_a have a thread each with one agent, one a failed run asked by "
+        "a member holding no grant: the Conversations section lists each their own thread only, "
+        "with the agent, their first question and how the run ended; the failed one reopens with "
+        "no answer shown; and a member of acceptance_b, who may not see the agent, gets its 404."
     ),
 )
 async def an_agents_conversations_are_its_readers_own_and_say_what_failed(h: Harness) -> None:
@@ -380,12 +379,14 @@ async def an_agents_conversations_are_its_readers_own_and_say_what_failed(h: Har
     member, colleague, outsider = (
         h.principal(A, "member"),
         h.principal(A, "colleague"),
-        h.principal(A, "outsider"),
+        h.principal(B, "member"),
     )
+    # The colleague holds what the workspace's Conversations tab is read under, and the member
+    # holds nothing: a person's own threads need no grant, and holding one shows nobody else's.
     reads = _in(A, "read:question", *(plane_capability(one).value for one in Plane))
-    await h.person(member, department=A, grants=reads)
+    await h.person(member, department=A)
     await h.person(colleague, department=A, grants=reads)
-    await h.person(outsider, department=A)
+    await h.person(outsider, department=B)
     agent_id = await _an_agent(h, member)
     app = await _web(h)
     store = StoredThreads(h.sessions)
@@ -437,4 +438,4 @@ async def an_agents_conversations_are_its_readers_own_and_say_what_failed(h: Har
     if opened is None or [one.body for one in opened.messages] != [failed_question]:
         raise CheckFailedError("a failed run reopened with something shown as its answer")
     if await listed(outsider) is not None:
-        raise CheckFailedError("the section opened to a member it is not open to")
+        raise CheckFailedError("the section opened on an agent its reader may not see")

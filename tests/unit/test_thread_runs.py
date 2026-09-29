@@ -374,23 +374,24 @@ def everywhere(*capabilities: Capability | str) -> tuple[Grant, ...]:
     )
 
 
+#: `u_admin` holds `read:question` and every plane, the workspace's Conversations tab's read;
+#: `u_narrow` holds nothing at all, and may still see a company's agent.
 CONVERSATIONS_READ = (tab(Tab.CONVERSATIONS).read.requires, *(plane_capability(p) for p in Plane))
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": everywhere(*CONVERSATIONS_READ),
-    "u_prefix": everywhere(*CONVERSATIONS_READ),
     "u_narrow": (),
 }
 
 
-def test_the_section_lists_only_the_readers_own_threads_and_is_closed_without_the_tab(
+def test_each_reader_is_listed_their_own_threads_with_or_without_read_question(
     database: str,
 ) -> None:
-    """**M39.8.9 over HTTP on PostgreSQL.** Two people asked the same agent; each is listed their
-    own thread and never the other's, with the agent named, the failed run marked failed and the
-    preview their own first question; an agent the reader may not see names nobody; a reader the
-    Conversations tab is not open to, and an agent the reader may not see, get the one 404 an agent
-    that does not exist gets. Delete this and the section can list somebody else's questions, or
-    open to a reader the tab is closed to."""
+    """**M39.8.9 over HTTP on PostgreSQL, and `A_PERSONS_OWN_THREADS_NEED_NO_GRANT`.** Two people
+    asked the same agent, one holding `read:question` and one holding nothing at all: each is listed
+    their own thread and never the other's, with the agent named, the failed run marked failed and
+    the preview their own first question. An agent the reader may not see, and one that does not
+    exist, are one 404. Delete this and the section can list somebody else's questions, or hide a
+    person's own conversations from them behind a grant that governs other people's."""
     sql(database, AGENT_ROW, "desk", "Sales desk", "company", "u_steward")
     sql(database, AGENT_ROW, "hidden", "Private desk", "personal", "u_somebody_else")
 
@@ -407,7 +408,7 @@ def test_the_section_lists_only_the_readers_own_threads_and_is_closed_without_th
                 now=AT,
             )
             await store.record(
-                "u_prefix",
+                "u_narrow",
                 thread_id=None,
                 channel=Channel.LARK,
                 exchange=Exchange(
@@ -427,31 +428,30 @@ def test_the_section_lists_only_the_readers_own_threads_and_is_closed_without_th
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://brain") as http:
                 path = f"{API_PREFIX}/agents/desk/conversations"
+                elsewhere = [
+                    (
+                        await http.get(
+                            f"{API_PREFIX}/agents/{agent}/conversations", headers=headers(who)
+                        )
+                    ).status_code
+                    for agent in ("hidden", "nobody")
+                    for who in ("u_admin", "u_narrow")
+                ]
                 return (
                     (await http.get(path, headers=headers("u_admin"))).json(),
-                    (await http.get(path, headers=headers("u_prefix"))).json(),
-                    (await http.get(path, headers=headers("u_narrow"))).status_code,
-                    (
-                        await http.get(
-                            f"{API_PREFIX}/agents/hidden/conversations", headers=headers("u_admin")
-                        )
-                    ).status_code,
-                    (
-                        await http.get(
-                            f"{API_PREFIX}/agents/nobody/conversations", headers=headers("u_admin")
-                        )
-                    ).status_code,
+                    (await http.get(path, headers=headers("u_narrow"))).json(),
+                    elsewhere,
                 )
         finally:
             await built.dispose()
 
-    mine, theirs, closed, hidden, nobody = run(go)
+    mine, theirs, elsewhere = run(go)
 
     assert [(one["title"], one["state"], one["last_channel"]) for one in mine["items"]] == [
         ("my question", "failed", "console")
     ]
     assert mine["items"][0]["agents"] == [{"agent_id": "desk", "display_name": "Sales desk"}]
-    assert [(one["title"], one["state"]) for one in theirs["items"]] == [
-        ("their question", "answered")
+    assert [(one["title"], one["state"], one["last_channel"]) for one in theirs["items"]] == [
+        ("their question", "answered", "lark")
     ]
-    assert closed == hidden == nobody == 404
+    assert elsewhere == [404, 404, 404, 404]

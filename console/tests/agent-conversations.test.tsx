@@ -36,7 +36,8 @@ beforeAll(async () => {
 function workspaceWire(): unknown {
   return {
     agent: { agent_id: AGENT, display_name: "Quote Helper", owner_id: "p_steward", created_at: "2019-03-01T09:00:00Z" },
-    tabs: [{ tab: "conversations", label: "conversations", purpose: "x" }],
+    // No tab at all: the section is the reader's own history and needs none.
+    tabs: [],
     composition: [],
     skills: [],
     connectors: { shown: [], overflow: 0 },
@@ -119,9 +120,11 @@ describe("the conversations section", () => {
     expect(section.querySelector('[data-slot="conversations-listed"]')).toBeNull();
   });
 
-  test("the section opens only where the workspace lists it, and its route and words match the API", () => {
-    expect(viewFor(CONVERSATIONS_TAB, [CONVERSATIONS_TAB])).toBe(CONVERSATIONS_TAB);
-    expect(viewFor(CONVERSATIONS_TAB, [])).toBe("dashboard");
+  test("the section opens for anybody who can open the agent, and its route and words match the API", () => {
+    // What breaks if this is deleted: a person's own conversations hidden behind a tab whose grant
+    // governs other people's questions.
+    expect(viewFor(CONVERSATIONS_TAB, [])).toBe(CONVERSATIONS_TAB);
+    expect(viewFor("automations", [])).toBe("dashboard");
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
     expect(paths).toContain("/api/v1/agents/{agent_id}/conversations");
     expect(Object.keys(STATE_WORDS).sort()).toEqual(Object.values(backendEnumMembers("src/brain/tables/chat.py", "RunState")).sort());

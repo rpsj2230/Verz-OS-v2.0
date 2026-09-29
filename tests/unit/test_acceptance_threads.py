@@ -314,15 +314,20 @@ def test_a_chat_thread_named_by_the_message_fails_the_lark_check(
 
 
 @pytest.mark.needs_db
-def test_a_section_open_to_every_member_fails_the_conversations_check(
+def test_a_section_opened_on_any_agent_fails_the_conversations_check(
     install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The section answering whoever may see the agent, the Conversations tab's read skipped.
-    Delete this and M39.8.9 closes on a check that passes over a section the tab is not open to."""
-    monkeypatch.setattr(
-        "brain.agent_conversation_routes.may_read_conversations", lambda asked: True
-    )
-    assert "not open to" in _failed(install, CONVERSATIONS)
+    """The section answering for an agent whatever its audience, the agent's own read skipped.
+    Delete this and M39.8.9 closes on a check that passes over a section that says an agent the
+    reader may not see exists."""
+    from brain import agent_routes
+
+    async def anybodys(session: Any, agent_id: str, asked: Any) -> Any:
+        row = (await session.execute(agent_routes.one_agent(agent_id))).scalar_one_or_none()
+        return agent_routes.record_of(row), None
+
+    monkeypatch.setattr("brain.agent_conversation_routes._visible_record", anybodys)
+    assert "may not see" in _failed(install, CONVERSATIONS)
 
 
 @pytest.mark.needs_db

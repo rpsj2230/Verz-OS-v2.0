@@ -4,11 +4,14 @@
 threads, and `brain.chat.thread_store.StoredThreads.threads_with_agent` reads them under row-level
 security in the reader's own name; this route decides only who may open the section.
 
-**The agent first, then the tab.** An agent the reader may not see is the 404 an agent that does not
-exist gets (`brain.agent_routes._visible_record`), and a reader the Conversations tab is not open
-to gets the same answer, because the tab strip already treats a tab the reader may not read and a
-tab with nothing in it as one absence (`brain.console.workspace.tab_strip`). The tab's own read is
-the rule, so this route adds none.
+**Anybody who may see the agent may open it, and nothing else is asked.** An agent the reader may
+not see is the 404 an agent that does not exist gets (`brain.agent_routes._visible_record`); past
+that the section lists only the reader's own threads, which are theirs whatever they hold, as
+`brain.thread_routes` lists them on Ask with no grant at all. The workspace's Conversations tab is
+not this section's gate: it is read under `read:question`, which governs reading other people's
+questions, and gating a person's own threads on it would hide their own history from them for no
+protective reason. That tab, and `read:question`, stay for anything that would ever show another
+person's threads (needs-rupash 121, option B). See `A_PERSONS_OWN_THREADS_NEED_NO_GRANT`.
 
 **Another agent in a thread is named only while the reader may still see it.** The agents that
 answered are read from the roster and kept by `brain.agents.model.visible_agent_ids`, the same
@@ -27,7 +30,6 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 
 from brain.agent_routes import (
-    _no_agent_here,
     _require_session_factory,
     _visible_record,
     every_agent,
@@ -36,18 +38,19 @@ from brain.agent_routes import (
 )
 from brain.agents.model import visible_agent_ids
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked, Asking
+from brain.api_routes import Asked
 from brain.chat.thread_store import StoredThreads
 from brain.console.agent_conversations import AgentConversation, agent_conversations
-from brain.console.reads import permitted
-from brain.console.workspace import Tab, tab
 
 CONVERSATIONS_PATH: Final = "/agents/{agent_id}/conversations"
 
-
-def may_read_conversations(asked: Asking) -> bool:
-    """Whether the Conversations tab is open to this reader. The tab's own read, and no other."""
-    return permitted(tab(Tab.CONVERSATIONS).read, asked.reach, asked.now)
+#: Why the section asks nothing of the reader but that they may see the agent.
+A_PERSONS_OWN_THREADS_NEED_NO_GRANT: Final = (
+    "The section lists the reader's own threads and nobody else's, and a person's own history is "
+    "theirs to read without a grant, as Ask lists it. read:question governs reading other people's "
+    "questions; gating the section on it would hide a person's own conversations from them and "
+    "protect nothing, so it stays for anything that would ever show somebody else's threads."
+)
 
 
 class ParticipantView(BaseModel):
@@ -110,8 +113,6 @@ async def agent_conversations_route(
     factory = _require_session_factory(request)
     async with factory() as session:
         await _visible_record(session, agent_id, asked)
-        if not may_read_conversations(asked):
-            raise _no_agent_here()
         rows = (await session.execute(every_agent())).scalars().all()
     records = [one for one in (record_of(row) for row in rows) if one is not None]
     visible = visible_agent_ids(records, viewer_of(asked))
