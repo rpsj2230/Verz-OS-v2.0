@@ -2,7 +2,9 @@
 
 The live walk runs over the install check's own recorded wiki
 (`brain.ops.acceptance_checks_lark_wiki`), so the bodies these tests read are the bodies the check
-reads; the database half is that check's own test. Dates are pinned far from any wall clock.
+reads; the database half is that check's own test. The space declarations the walk reads are
+`brain.ops.lark_wiki_spaces`'s, the one copy Connect Lark writes through, and the tests of how a
+row reads back are held against it. Dates are pinned far from any wall clock.
 
 Task ids: M11.6.4
 """
@@ -21,19 +23,21 @@ from brain.ops.acceptance_checks_connectors import _Resolver
 from brain.ops.acceptance_checks_lark_base import HOST, _AppKeys, _Issuer
 from brain.ops.acceptance_checks_lark_wiki import _NoLibrary, _Page, _RecordedWiki
 from brain.ops.lark_wiki_live import (
-    COMPANY,
-    DEPARTMENT,
     LARK_WIKI_USE,
     MAX_WORDS,
-    SPACES_NAMESPACE,
     WikiPassages,
     WithWiki,
-    declaration_of,
-    space_key,
-    space_value,
     told_to,
     wiki_host,
     words_of,
+)
+from brain.ops.lark_wiki_spaces import (
+    COMPANY,
+    DEPARTMENT,
+    SPACES_NAMESPACE,
+    declaration_of,
+    space_key,
+    space_value,
 )
 from brain.ops.setting_store import SettingState
 
@@ -107,7 +111,7 @@ def test_a_row_that_declares_no_readable_space_is_no_space(value: Any) -> None:
 
 def test_declaring_a_space_refuses_what_would_read_back_as_none() -> None:
     """Delete this and Connect Lark can save a space that is then silently never read."""
-    from brain.ops.lark_wiki_live import declare_space
+    from brain.ops.lark_wiki_spaces import declare_space
 
     with pytest.raises(ValueError, match="declares nothing"):
         asyncio.run(declare_space(None, SPACE, reach=DEPARTMENT, updated_by=STEWARD))  # type: ignore[arg-type]

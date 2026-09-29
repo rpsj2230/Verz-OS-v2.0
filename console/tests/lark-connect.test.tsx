@@ -190,6 +190,9 @@ function guide(chosen: readonly string[], over: Partial<LarkGuide> = {}, appId =
     last_test: null,
     switch_off_note: "SWITCH-OFF-NOTE",
     staff_off_note: "STAFF-OFF-NOTE",
+    // Sent only to a reader who may switch the Wiki on; null for anybody else.
+    wiki_pages_skipped: null,
+    wiki_pages_skipped_note: "",
     ...over,
   };
 }

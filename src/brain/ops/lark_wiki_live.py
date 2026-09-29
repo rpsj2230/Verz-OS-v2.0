@@ -7,14 +7,11 @@ process called it. This is the application's half: which spaces are declared on 
 the calls over one run's token, and the passage search the answer lane's model step reads, so a
 question on Ask is answered from a wiki page the asker may open and from no other.
 
-**A space is declared, and the declaration is kept as a setting.** A wiki space's reach on this
-install (the whole company, or one department) and its steward are a person's decision about the
-company's documents, and `lark_wiki.SpaceDeclaration` refuses a default for either. So each
-declared space is one row of `ops.setting` under `lark_wiki.space.`, holding the space's id and
-its reach, and the person who wrote the row is its steward: 0059's trigger records the write in
-the ledger. `declared_spaces` reads the rows back through `SpaceDeclaration`, which refuses a row
-naming no space or a department reach naming no department, so a row edited by hand into nonsense
-is a space not read rather than a space read at the widest reach. See
+**A space is declared on Connect Lark's Wiki step, and this module reads the one declaration.**
+Who on this install may be told a space's pages, and its steward, are kept by
+`brain.ops.lark_wiki_spaces`, which the Connect Lark screen writes through and whose
+`declared_spaces` this reader walks. There is one declaration of a space's reach, not a copy here
+that could read a row the screen wrote differently. See that module's
 `A_SPACE_IS_READ_ONLY_WHERE_SOMEBODY_DECLARED_ITS_REACH`.
 
 **Visibility is Lark's own, twice over, and the install's once.** A page is read only when every
@@ -44,16 +41,14 @@ from __future__ import annotations
 import asyncio
 import re
 from collections import Counter
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors import lark_wiki
-from brain.connectors.contract import ConnectorContractError
 from brain.connectors.lark_base import LarkBaseBudgetError, MinuteBudget, fair_share_budget
 from brain.connectors.lark_wiki import (
     PERMISSION_PATH,
@@ -73,11 +68,8 @@ from brain.install import value_of
 from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, KnowledgePassage
 from brain.knowledge.item import KnowledgeState
 from brain.knowledge.search import KNOWLEDGE_READ, reach_for
-from brain.knowledge.visibility import KnowledgeVisibility, VisibilityError
 from brain.ops.connectable import key_reference
 from brain.ops.lark_base_index import LarkCaller, TokenIssuer, tenant_token
-from brain.ops.setting_store import SettingState, put, read_namespace, values_under
-from brain.tables.config import SettingType
 from brain.tools.fetch import Resolver, assert_fetchable
 
 if TYPE_CHECKING:
@@ -87,14 +79,6 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 # ------------------------------------------------------------------ written-down reasons
-#: Why a space is read only where somebody declared its reach.
-A_SPACE_IS_READ_ONLY_WHERE_SOMEBODY_DECLARED_ITS_REACH: Final = (
-    "Sharing a wiki space with the Lark app lets the app read it; it does not say who at the "
-    "company may be told what it holds. That is declared per space on this install, as the whole "
-    "company or one department, by a person who is then its steward, and a space nobody declared "
-    "is never walked."
-)
-
 #: Why a page read from Lark is still judged by the declared reach.
 A_WIKI_PAGE_IS_TOLD_ONLY_TO_A_READER_ITS_REACH_ADMITS: Final = (
     "A page is read only when it and every page above it follow the space in Lark, and then it "
@@ -113,7 +97,6 @@ A_TITLE_IS_MATCHED_ON_THE_QUESTION_S_LONGER_WORDS: Final = (
 )
 
 __all__ = [
-    "A_SPACE_IS_READ_ONLY_WHERE_SOMEBODY_DECLARED_ITS_REACH",
     "A_TITLE_IS_MATCHED_ON_THE_QUESTION_S_LONGER_WORDS",
     "A_WIKI_PAGE_IS_TOLD_ONLY_TO_A_READER_ITS_REACH_ADMITS",
 ]
@@ -122,13 +105,6 @@ __all__ = [
 #: The use Connect Lark names knowledge from Wiki by. Restated from `brain.ops.lark_connect.Use`,
 #: which imports the routes' world, and held equal to it by a test.
 LARK_WIKI_USE: Final = "knowledge_wiki"
-
-#: Where each declared space is kept: `lark_wiki.space.<name>`, one row a space.
-SPACES_NAMESPACE: Final = "lark_wiki.space"
-
-#: The two reaches a space may be declared at.
-COMPANY: Final = "company"
-DEPARTMENT: Final = "department"
 
 #: How many of the question's words a title is matched on, at most.
 MAX_WORDS: Final = 8
@@ -148,90 +124,6 @@ def wiki_host(read: Callable[[str], str] = value_of) -> str | None:
     if LARK_WIKI_USE not in uses or platform not in LARK_PLATFORMS:
         return None
     return LARK_PLATFORMS[platform][1]
-
-
-def space_key(space_id: str) -> str:
-    """The setting key a space is declared under. Its id is kept in the value, whole."""
-    return f"{SPACES_NAMESPACE}.s{re.sub(r'[^a-z0-9_]', '_', space_id.lower())}"
-
-
-def space_value(space_id: str, reach: str, department: str = "") -> dict[str, str]:
-    """The value a declared space is kept as: its id, its reach and, for one, its department."""
-    return {"space_id": space_id, "reach": reach, "department": department}
-
-
-#: The sentence every declared space's row carries, which the settings screen shows beside it.
-SPACE_DESCRIPTION: Final = (
-    "A Lark Wiki space the Brain may answer from, the reach its pages are told at, and, as the "
-    "person who declared it, its steward."
-)
-
-
-async def declare_space(
-    session: AsyncSession, space_id: str, *, reach: str, department: str = "", updated_by: str
-) -> None:
-    """Declare one space in the caller's transaction, refusing what `declaration_of` would not read.
-
-    The write Connect Lark's Wiki step makes for each space it names. Checked through
-    `declaration_of` before it is written, so a row that would read back as no space is refused
-    here, in front of the person declaring it, rather than skipped with a log line later.
-    """
-    value = space_value(space_id, reach, department)
-    probe = SettingState(
-        key=space_key(space_id),
-        value_type=SettingType.JSON.value,
-        value=value,
-        updated_by=updated_by,
-        updated_at=datetime.min,
-    )
-    if declaration_of(probe) is None:
-        msg = (
-            f"space {space_id!r} at reach {reach!r} declares nothing this install can read: a "
-            "space needs its id and a reach of company, or department with a department"
-        )
-        raise ValueError(msg)
-    await put(
-        session,
-        space_key(space_id),
-        value_type=SettingType.JSON,
-        value=value,
-        description=SPACE_DESCRIPTION,
-        updated_by=updated_by,
-    )
-
-
-def declaration_of(state: SettingState) -> SpaceDeclaration | None:
-    """One kept row as a declaration, or None for a row that does not declare one."""
-    value = state.value if isinstance(state.value, Mapping) else {}
-    space_id = str(value.get("space_id", "")).strip()
-    reach = str(value.get("reach", "")).strip()
-    department = str(value.get("department", "")).strip()
-    try:
-        if reach == COMPANY:
-            visibility = KnowledgeVisibility.company(owner_id=state.updated_by)
-        elif reach == DEPARTMENT:
-            visibility = KnowledgeVisibility.of_department(department, owner_id=state.updated_by)
-        else:
-            return None
-        return SpaceDeclaration(space_id=space_id, visibility=visibility, owner_id=state.updated_by)
-    except (VisibilityError, ConnectorContractError, ValueError):
-        return None
-
-
-async def declared_spaces(
-    sessions: async_sessionmaker[AsyncSession],
-) -> tuple[SpaceDeclaration, ...]:
-    """Every space declared on this install. See the module docstring."""
-    async with sessions() as session:
-        states = await read_namespace(session, SPACES_NAMESPACE)
-    found: list[SpaceDeclaration] = []
-    for name, state in sorted(values_under(states, SPACES_NAMESPACE).items()):
-        declared = declaration_of(state)
-        if declared is None:
-            log.warning("lark_wiki.space_not_declared", key=name)
-            continue
-        found.append(declared)
-    return tuple(found)
 
 
 # --------------------------------------------------------------------------- the calls

@@ -1,7 +1,7 @@
 """The install acceptance check for a Lark Wiki answering on Ask: a declared space, its pages live.
 
 One check, on the path a question takes to a wiki page. A space made up for the run is declared
-the way Connect Lark's Wiki step declares one (`brain.ops.lark_wiki_live.declare_space`, a row of
+the way Connect Lark's Wiki step declares one (`brain.ops.lark_wiki_spaces.declare_space`, a row of
 `ops.setting` in the check's transaction), read back by `declared_spaces`, and searched by the
 passage search the answer lane's model step reads through (`WikiPassages` behind `WithWiki`),
 under a key leased and a token exchanged for the question. Every call is answered by
@@ -144,13 +144,8 @@ async def a_lark_wiki_page_is_told_only_to_a_reader_its_space_admits(h: Harness)
     from brain.core.envelope import TypedResult
     from brain.knowledge.document_tools import KnowledgePassage
     from brain.ops.acceptance_checks_tables import _console
-    from brain.ops.lark_wiki_live import (
-        DEPARTMENT,
-        WikiPassages,
-        WithWiki,
-        declare_space,
-        declared_spaces,
-    )
+    from brain.ops.lark_wiki_live import WikiPassages, WithWiki
+    from brain.ops.lark_wiki_spaces import DEPARTMENT, declare_space, declared_spaces
     from brain.tables.audit import attributed_to
 
     await h.found_departments()

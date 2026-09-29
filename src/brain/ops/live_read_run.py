@@ -75,7 +75,8 @@ from brain.ops.connector_sync_run import (
 )
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
 from brain.ops.lark_base_live import BaseSchema, with_base
-from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, declared_spaces, wiki_host
+from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, wiki_host
+from brain.ops.lark_wiki_spaces import declared_spaces
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.webhook_delivery import SystemResolver
@@ -252,7 +253,7 @@ def wiki_passages_for(
 
     Asked on each question, so a Wiki switched on or off in Connect Lark is read or not from the
     next one, and its declared spaces are read from the database on each question too
-    (`brain.ops.lark_wiki_live.declared_spaces`).
+    (`brain.ops.lark_wiki_spaces.declared_spaces`).
     """
     host = wiki_host()
     if sessions is None or host is None:
