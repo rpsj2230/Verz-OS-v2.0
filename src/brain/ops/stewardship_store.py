@@ -94,7 +94,7 @@ def self_grant_of(row: SelfGrantRow) -> SelfGrant:
 
 
 class StoredStewardship:
-    """`ops.connector_steward`, `gate.self_grant` and the stewarded rows, as the application role."""
+    """`ops.connector_steward`, `gate.self_grant` and the stewarded rows, as the app role."""
 
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
@@ -131,7 +131,7 @@ class StoredStewardship:
     async def name(
         self, connector: str, steward_id: str, *, by: str, ent_hash: str, trace_id: str
     ) -> NamedSteward:
-        """Name this source's steward, attributed to `by`, whose ledger entry the database appends."""
+        """Name this source's steward, attributed to `by`; the database appends the entry."""
         async with self._sessions() as session, session.begin():
             for statement in attributed_to(actor_id=by, ent_hash=ent_hash, trace_id=trace_id):
                 await session.execute(statement)

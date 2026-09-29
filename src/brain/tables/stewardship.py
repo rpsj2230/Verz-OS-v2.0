@@ -89,9 +89,7 @@ class SelfGrantRow(Base):
     #: Who granted it and who received it, which is the same person.
     principal_id: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
     #: The capability, or the pack's capabilities as they stood when it was assigned.
-    capabilities: Mapped[list[str]] = mapped_column(
-        ARRAY(String(CAPABILITY_CHARS)), nullable=False
-    )
+    capabilities: Mapped[list[str]] = mapped_column(ARRAY(String(CAPABILITY_CHARS)), nullable=False)
     #: The scope as granted, `brain.core.scope.Scope`'s own serialisation.
     scope: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     #: The pack's name for a pack, and nothing for a direct grant.

@@ -145,6 +145,7 @@ MIGRATION_ACCESS_REQUEST_HANDLED = (
     VERSIONS / "0146_access_request_handled_and_certification_export.py"
 )
 MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
+MIGRATION_STEWARDS = VERSIONS / "0167_stewards_and_self_grants.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -411,6 +412,8 @@ TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
     "obs.trace_step",
     "obs.trace_read",
 )
+#: And the two 0167 adds: who stewards each connected source, and every grant made to oneself.
+STEWARDS_TABLES: tuple[str, ...] = ("ops.connector_steward", "gate.self_grant")
 
 ALL_TABLES = (
     CORE_TABLES
@@ -481,6 +484,7 @@ ALL_TABLES = (
     + MANIFEST_DRAFT_TABLES
     + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
+    + STEWARDS_TABLES
 )
 
 
@@ -1305,6 +1309,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert access_request_handled.TABLES == ACCESS_REQUEST_HANDLED_TABLES
     trace_and_browser_session = migration_module(MIGRATION_TRACE_AND_BROWSER_SESSION)
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
+    stewards = migration_module(MIGRATION_STEWARDS)
+    assert stewards.TABLES == STEWARDS_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1397,6 +1403,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(manifest_draft.TABLES)
         + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
+        + tuple(stewards.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1470,6 +1477,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(manifest_draft.TABLES),
         set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
+        set(stewards.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -21,7 +21,10 @@
  * test connection (`TestConnection.tsx`), which the worker makes and the header reports: waiting,
  * then what it found. A reader who may not manage the source sees the newest test and no button.
  *
- * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M27.10.2, M27.15.8
+ * **A connected source can be handed to another steward** from Manage, by whoever may manage it
+ * (M7.7.2). The Profile names the steward; the API decides who may be named.
+ *
+ * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M27.10.2, M27.15.8, M7.7.2
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, Plus, Settings } from "lucide-react";
@@ -73,6 +76,7 @@ import {
   KeyDrawer,
   LarkDialog,
   NOT_EXPORTED,
+  StewardDrawer,
   exportRecord,
   type OpenAct,
 } from "./SourceActs";
@@ -155,6 +159,15 @@ function ManageMenu({
               {ACT_LABELS.key}
             </DropdownMenuItem>
           </>
+        ) : null}
+        {source.mayManage && detail.steward !== undefined ? (
+          <DropdownMenuItem
+            onSelect={() => {
+              onAct({ act: "steward", source: source.name });
+            }}
+          >
+            {ACT_LABELS.steward}
+          </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onSelect={onExport}>{ACT_LABELS.export}</DropdownMenuItem>
         {manages && connected?.may_disconnect === true ? (
@@ -381,6 +394,15 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
           keyBlank={page.key_blank}
           confirmation={detail.confirmKey}
           keyHeld={connected?.key_held === true}
+          onClose={close}
+          onDone={done}
+        />
+      ) : null}
+      {open?.act === "steward" ? (
+        <StewardDrawer
+          name={source.name}
+          label={source.label}
+          confirmation={detail.confirmSteward}
           onClose={close}
           onDone={done}
         />

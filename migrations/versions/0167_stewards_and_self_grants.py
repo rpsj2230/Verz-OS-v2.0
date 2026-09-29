@@ -170,14 +170,16 @@ CREATE TRIGGER connector_steward_is_audited
 """
 
 #: A direct grant whose principal is the person who made it.
-GRANT_TRIGGER_FUNCTION = f"""
+GRANT_TRIGGER_FUNCTION = """
 CREATE FUNCTION gate.record_self_grant() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.principal_id IS NULL OR NEW.deleted_at IS NOT NULL THEN
         RETURN NULL;
     END IF;
-    IF NEW.principal_id IS DISTINCT FROM COALESCE({ACTOR}, NEW.granted_by) THEN
+    IF NEW.principal_id IS DISTINCT FROM COALESCE(
+        NULLIF(current_setting('brain.actor_id', true), ''), NEW.granted_by
+    ) THEN
         RETURN NULL;
     END IF;
     INSERT INTO gate.self_grant (kind, grant_id, principal_id, capabilities, scope, pack)
@@ -195,7 +197,7 @@ CREATE TRIGGER capability_grant_self_grant_is_recorded
 """
 
 #: A pack assigned to the person who assigned it, with the pack's capabilities as they stand.
-PACK_TRIGGER_FUNCTION = f"""
+PACK_TRIGGER_FUNCTION = """
 CREATE FUNCTION gate.record_self_pack() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -205,7 +207,9 @@ BEGIN
     IF NEW.deleted_at IS NOT NULL THEN
         RETURN NULL;
     END IF;
-    IF NEW.principal_id IS DISTINCT FROM COALESCE({ACTOR}, NEW.granted_by) THEN
+    IF NEW.principal_id IS DISTINCT FROM COALESCE(
+        NULLIF(current_setting('brain.actor_id', true), ''), NEW.granted_by
+    ) THEN
         RETURN NULL;
     END IF;
     SELECT k.capabilities, k.name INTO v_capabilities, v_pack

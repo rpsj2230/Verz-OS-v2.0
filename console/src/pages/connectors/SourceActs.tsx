@@ -1,6 +1,7 @@
 /**
- * The acts on one source that change something: edit its settings, replace its key and
- * disconnect it, plus Connect Lark and the export. Connecting a source is `SourceFlow.tsx`.
+ * The acts on one source that change something: edit its settings, replace its key, hand it to
+ * another steward and disconnect it, plus Connect Lark and the export. Connecting a source is
+ * `SourceFlow.tsx`.
  *
  * **Every write is sent from a confirmation.** Connecting ends in `components/ConnectSource.tsx`,
  * which first run uses too and which confirms in the API's words; editing, replacing a key and
@@ -20,7 +21,11 @@
  * **An edit sends the settings and never a key.** The API connects the source again with them as
  * one change and leaves the key alone, which the confirmation says.
  *
- * Task ids: M27.11.9, M11.7.7, M11.2.6
+ * **A steward is named by person id, and the API decides whether they can be.** The drawer asks for
+ * the id and nothing else, and a person who cannot reach the source is refused in the API's one
+ * sentence, which is the same for somebody who is not here (M7.7.2).
+ *
+ * Task ids: M27.11.9, M11.7.7, M11.2.6, M7.7.2
  */
 
 import { useState, type FormEvent } from "react";
@@ -34,7 +39,14 @@ import { SecretField, useSecret } from "../../components/ui/secret-field";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../../ui/FieldProblems";
 import { disconnectApiPath, readTold, type Connectable } from "../connectorsQuery";
-import { editApiPath, exportApiPath, exportFileName, keyApiPath, type SettingValue } from "./connectorSources";
+import {
+  editApiPath,
+  exportApiPath,
+  exportFileName,
+  keyApiPath,
+  stewardApiPath,
+  type SettingValue,
+} from "./connectorSources";
 import { ACT_LABELS } from "./connectorActions";
 import { LarkFlow, type LarkStart } from "./LarkFlow";
 
@@ -52,6 +64,13 @@ export const KEEP_CONNECTED = "Keep it connected";
 export const REVIEW_EDIT = "Review the change";
 export const REVIEW_KEY = "Review the key";
 export const KEY_SUPPLIED = "Supplied, and never shown again";
+export const STEWARD_DESCRIPTION = "Name who answers for this source from now on.";
+export const STEWARD_FIELD_LABEL = "New steward's person id";
+export const STEWARD_FIELD_HINT = "Somebody who can govern this source or read what it declares.";
+export const STEWARD_BLANK = "Enter the person id of the new steward.";
+export const NOT_HANDED = "The steward was not changed";
+export const REVIEW_STEWARD = "Review the change";
+export const KEEP_STEWARD = "Keep the current steward";
 
 /** Every name a setting's input answers to: its own, and its place in the body. */
 function settingNames(name: string): readonly string[] {
@@ -65,6 +84,7 @@ export type OpenAct =
   | { readonly act: "lark"; readonly start?: LarkStart | undefined }
   | { readonly act: "edit"; readonly source: string }
   | { readonly act: "key"; readonly source: string }
+  | { readonly act: "steward"; readonly source: string }
   | { readonly act: "disconnect"; readonly source: string; readonly label: string };
 
 // --------------------------------------------------------------------------------- lark
@@ -327,6 +347,116 @@ export function KeyDrawer({
         }
         confirmLabel={KEY_TITLE}
         cancelLabel={KEEP_AS_IS}
+        busy={busy}
+        onConfirm={() => {
+          send();
+        }}
+        onCancel={() => {
+          setPending(false);
+        }}
+      />
+    </Drawer>
+  );
+}
+
+// ------------------------------------------------------------------------------ steward
+
+/** Hand the source to another steward, confirmed first in the API's words (M7.7.2). */
+export function StewardDrawer({
+  name,
+  label,
+  confirmation,
+  onClose,
+  onDone,
+}: {
+  readonly name: string;
+  readonly label: string;
+  /** The API's sentence for what naming a steward agrees to. */
+  readonly confirmation: string;
+  readonly onClose: () => void;
+  readonly onDone: (told: string) => void;
+}) {
+  const [to, setTo] = useState("");
+  const [blank, setBlank] = useState<FieldProblem[]>([]);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [pending, setPending] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const problems: readonly FieldProblem[] = [...blank, ...(failure?.problems ?? [])];
+  const prefix = `steward-${name}`;
+  const inputId = `${prefix}-steward_id`;
+
+  function ask(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setFailure(null);
+    const found = to.trim() === "" ? [{ field: "steward_id", code: "blank", message: STEWARD_BLANK }] : [];
+    setBlank(found);
+    if (found.length === 0) {
+      setPending(true);
+    }
+  }
+
+  function send(): void {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(stewardApiPath(name), { method: "POST", body: { steward_id: to.trim() } });
+      setBusy(false);
+      setPending(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      onDone(readTold(result.data));
+    })();
+  }
+
+  return (
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) {
+          onClose();
+        }
+      }}
+      title={`${ACT_LABELS.steward}: ${label}`}
+      description={STEWARD_DESCRIPTION}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            {KEEP_STEWARD}
+          </Button>
+          <Button type="submit" form={prefix} disabled={busy}>
+            {REVIEW_STEWARD}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex min-w-0 flex-col gap-3">
+        {failure === null ? null : <FailureNotice failure={failure} title={NOT_HANDED} fields={["steward_id"]} />}
+        <form id={prefix} className="flex flex-col gap-2" noValidate autoComplete="off" onSubmit={ask}>
+          <Label htmlFor={inputId}>{STEWARD_FIELD_LABEL}</Label>
+          <Input
+            id={inputId}
+            name="steward_id"
+            type="text"
+            className="h-11 sm:h-9"
+            maxLength={128}
+            value={to}
+            disabled={busy}
+            {...problemAttributes(problems, prefix, "steward_id")}
+            onChange={(event) => {
+              setTo(event.target.value);
+            }}
+          />
+          <p className="m-0 text-[12.5px] leading-snug text-dim">{STEWARD_FIELD_HINT}</p>
+          <FieldProblems problems={problems} form={prefix} names="steward_id" />
+        </form>
+      </div>
+      <ConfirmDialog
+        open={pending}
+        question={`Hand ${label} to ${to.trim()}?`}
+        consequence={confirmation}
+        confirmLabel={ACT_LABELS.steward}
+        cancelLabel={KEEP_STEWARD}
         busy={busy}
         onConfirm={() => {
           send();

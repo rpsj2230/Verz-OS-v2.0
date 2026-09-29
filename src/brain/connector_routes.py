@@ -88,14 +88,15 @@ module calling them with values of its own would be this repository holding a cl
 configuration. The identifiers arrive from the person connecting the source, and are kept in that
 install's database.
 
-**A source names its steward, set and changed here (M7.7.2).** `POST /connectors/{connector}/steward`
-names the person who answers for a source from now on, asked of the authority a connection asks.
+**A source names its steward, set and changed here (M7.7.2).** `POST
+/connectors/{connector}/steward` names the person who answers for a source from now on, asked of the
+authority a connection asks.
 The person named must be here and able to reach the source, by governing it or by reading what it
 declares, for the rule the document hand-over applies: a steward nobody could act on the source for
 is a name on a page. See `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`. A source nobody named
 anybody for is stewarded by the data steward, or by whoever connected it, which is
-`brain.ops.stewardship_store.A_SOURCE_IS_STEWARDED_FROM_THE_MOMENT_IT_IS_CONNECTED`, and the source's
-page shows whoever that is.
+`brain.ops.stewardship_store.A_SOURCE_IS_STEWARDED_FROM_THE_MOMENT_IT_IS_CONNECTED`, and the
+source's page shows whoever that is.
 
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
 Task ids: M7.7.2
@@ -278,7 +279,16 @@ STEWARD_REFUSED: Final = (
 ALREADY_STEWARD: Final = "That person already stewards this source."
 
 #: What the route says once a steward is named.
-STEWARD_NAMED: Final = "The new steward answers for this source from now on, and is told of access to it."
+STEWARD_NAMED: Final = (
+    "The new steward answers for this source from now on, and is told of access to it."
+)
+
+#: What naming a steward agrees to, which the page's confirmation says in these words.
+NAMING_A_STEWARD: Final = (
+    "The person you name answers for this source from now on, in place of its current steward, "
+    "and is the one told when anybody grants themselves access to what it holds. The change is "
+    "recorded in the audit trail."
+)
 
 #: The Install setting Connect Lark saves its switched-on uses under.
 LARK_USES_SETTING: Final = "INSTALL_LARK_USES"
@@ -691,6 +701,8 @@ class ConnectorSourceView(BaseModel):
     #: Who answers for the source (M7.7.2), a principal id whose name is in `people`; empty while
     #: it is not connected, or for a reader who may not be told it is.
     steward: str = ""
+    #: What naming a steward agrees to, for the page's confirmation (M7.7.2).
+    confirm_steward: str = NAMING_A_STEWARD
 
 
 class ConnectorExportedConnectionView(BaseModel):
@@ -1399,12 +1411,13 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
     if declared is None:
         raise _not_answerable("connector source")
     one = await _one_source(request, connector, asked)
+    steward = await steward_of(request, one.live) if one.live is not None and one.told_of else ""
     actors = {
         actor
         for entry in one.history
         for actor in (entry.connected_by, entry.disconnected_by)
         if actor
-    }
+    } | ({steward} if steward else set())
     return ConnectorSourceView(
         source=row_view(one.row),
         elsewhere=declared.not_from_the_console,
@@ -1423,6 +1436,7 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
         skills=await _skills_from(request, connector, asked) if one.told_of else [],
         confirm_edit=EDITING_A_SOURCE,
         confirm_key=REPLACING_A_KEY,
+        steward=steward,
     )
 
 
@@ -1486,6 +1500,89 @@ async def _live_connection(request: Request, connector: str) -> Connection | Non
     if records is None:
         raise Failed("no database on this process")
     return next((one for one in await records.connected() if one.connector == connector), None)
+
+
+def stewardship_of(request: Request) -> StoredStewardship | None:
+    """`app.state.stewardship` when something put one there, or the database, or None."""
+    found = getattr(request.app.state, "stewardship", None)
+    if isinstance(found, StoredStewardship):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredStewardship(sessions)
+
+
+async def steward_of(request: Request, live: Connection) -> str:
+    """Who stewards this connected source now. See `brain.ops.stewardship_store.source_steward`."""
+    store = stewardship_of(request)
+    if store is None:
+        return live.connected_by
+    return source_steward(
+        live.connector,
+        named=await store.named_stewards(),
+        data_steward=await store.data_steward(),
+        connected_by=live.connected_by,
+    )
+
+
+async def may_steward(request: Request, principal_id: str, live: Connection, now: datetime) -> bool:
+    """Whether this person may steward this source. See
+    `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`."""
+    from brain.knowledge_lifecycle_routes import entitlement_of
+
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    if await StoredPrincipals(sessions).live_principal(principal_id) is None:
+        return False
+    async with sessions() as session, session.begin():
+        theirs = await entitlement_of(session, principal_id, now)
+    if may_connect_source(theirs, live.connector, now):
+        return True
+    manifest = manifest_or_none(live)
+    declared = () if manifest is None else declared_capabilities(manifest)
+    return any(theirs.holds(Capability(value=one), now) for one in declared)
+
+
+@router.post(STEWARD_PATH, response_model=SourceStewardView, responses=_WRITE_RESPONSES)
+async def name_steward(
+    request: Request, connector: str, body: SourceStewardAsked, asked: Asked
+) -> JSONResponse:
+    """Name who answers for a connected source from now on (M7.7.2), or say why not.
+
+    Asked of the authority a connection asks, before anything is read. A source that is not
+    connected is the router's one refusal, as for an edit.
+    """
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("naming a steward not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("steward")
+    store = stewardship_of(request)
+    if store is None:
+        raise Failed("no database on this process")
+    live = await _live_connection(request, connector)
+    if live is None:
+        raise _not_answerable("steward")
+    if body.steward_id == await steward_of(request, live):
+        return _problems(
+            (SettingProblem(field="steward_id", code="unchanged", message=ALREADY_STEWARD),)
+        )
+    if not await may_steward(request, body.steward_id, live, asked.now):
+        return _problems(
+            (SettingProblem(field="steward_id", code="not_a_steward", message=STEWARD_REFUSED),)
+        )
+    actor = asked.reach.principal_id
+    named: NamedSteward = await store.name(
+        connector, body.steward_id, by=actor, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id()
+    )
+    log.info("source steward named", connector=connector, principal=actor)
+    names = await _people(request, (named.steward_id,))
+    answered = SourceStewardView(
+        connector=connector,
+        steward_id=named.steward_id,
+        steward_name=names.get(named.steward_id, ""),
+        named_at=named.named_at,
+        told=STEWARD_NAMED,
+    )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 
 
 @router.post(EDIT_PATH, response_model=ConnectorEditedView, responses=_WRITE_RESPONSES)

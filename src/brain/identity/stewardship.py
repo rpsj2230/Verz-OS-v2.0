@@ -138,7 +138,7 @@ class SelfGrant:
 
 @dataclass(frozen=True)
 class StewardNotice:
-    """What one steward is told of one self-grant: the grant, and the things of theirs it reaches."""
+    """What one steward is told of one self-grant: the grant and the things of theirs it reaches."""
 
     grant: SelfGrant
     reached: tuple[Stewarded, ...] = field(default_factory=tuple)
@@ -171,7 +171,10 @@ def admits(scope: Scope, thing: Stewarded) -> bool:
 
 
 def reaches(grant: SelfGrant, thing: Stewarded) -> bool:
-    """Whether this grant reaches this thing. See `A_GRANT_REACHES_WHAT_THE_PRODUCT_WOULD_LET_IT_READ`."""
+    """Whether this grant reaches this thing.
+
+    See `A_GRANT_REACHES_WHAT_THE_PRODUCT_WOULD_LET_IT_READ`.
+    """
     touched = any(touches(one, base) for one in grant.capabilities for base in thing.reached_by)
     return touched and admits(grant.scope, thing)
 
