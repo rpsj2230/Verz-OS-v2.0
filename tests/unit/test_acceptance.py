@@ -27,6 +27,7 @@ import pytest
 
 from brain.core.department import SLUG_PATTERN
 from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
     NOT_RUN,
@@ -189,6 +190,13 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
         "the_database_withholds_passages_the_statement_did_not_filter",
         "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]
+    # What the install is made of; `tests/unit/test_acceptance_deployment.py`.
+    assert by_module["brain.ops.acceptance_checks_deployment"] == [
+        "the_worker_serves_each_traffic_class_from_its_own_slots",
+        "every_database_client_is_bounded_within_the_install_s_ceiling",
+        "a_run_s_trace_is_stored_masked_and_read_only_after_its_row",
+        "the_scrub_meets_its_budget_on_this_install_s_processor",
     ]
     # What channels declare, carry and bind, keys and WhatsApp; `test_acceptance_channels.py`.
     assert by_module["brain.ops.acceptance_checks_channels"] == [
@@ -690,10 +698,18 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
+    # The test process is not a worker container, so the checks that read the worker they run
+    # in say so; `tests/unit/test_acceptance_deployment.py` runs them in a worker's environment.
+    for worker_check in (
+        "the_worker_serves_each_traffic_class_from_its_own_slots",
+        "every_database_client_is_bounded_within_the_install_s_ceiling",
+        "the_scrub_meets_its_budget_on_this_install_s_processor",
+    ):
+        assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 54
+    assert len(outcomes) == 55
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 158
+    assert runs == [(2,)] and len(recorded) == 166
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

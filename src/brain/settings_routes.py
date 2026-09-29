@@ -40,8 +40,9 @@ settings the screen changes, and refused with `setting_problem`'s sentence for a
 
 **The starter set is shown with the one thing it does not furnish, stated exactly.** Roles, the
 starter pack and the company scope are furnished at every start by `brain.ops.starter_store`. The
-standard agents are not installed, because an agent is an install of a signed template and
-furnishing does not yet sign the built-in ones with the key M13.8.10 mints; the sentence is
+standard agents are not installed, because an agent is an install of a signed template somebody
+chooses; the built-in templates are signed with the key M13.8.10 mints at every start that holds
+it (`brain.ops.builtin_templates`) and offered; the sentence is
 `brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN`.
 
 **Leaving is on the same screen, because it is the same authority.** The handover of this install
@@ -113,12 +114,12 @@ NOTHING_SAVED_HERE: Final = (
     "Nothing is saved for this setting on this screen, so it already reads its default."
 )
 
-#: Why the standard agents are not on a freshly furnished install. M13.8.10 mints the key they
-#: need and furnishing does not yet sign them with it.
+#: Why the standard agents are not on a freshly furnished install: they are offered, signed with
+#: the key M13.8.10 mints, and installed only when somebody chooses one.
 STANDARD_AGENTS_WAIT_FOR_THE_SIGNING_KEY: Final = (
-    "The standard agents are not installed. An agent is an install of a signed template, and "
-    "furnishing signs no built-in template yet. "
-    + NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN
+    "The standard agents are not installed. An agent is an install of a signed template that "
+    "somebody chooses; the built-in templates are signed with this install's key at start and "
+    "offered in the gallery. " + NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN
 )
 
 
