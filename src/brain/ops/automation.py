@@ -39,10 +39,12 @@ it is the bug: `"notapi.lark.com".endswith("api.lark.com")` is true, so a suffix
 allowlist admits any host somebody can register whose name ends in the right characters. A
 genuine subdomain is written out as its own entry.
 
-Not claimed here: the custom piece itself (M32.6.1.3) is TypeScript in the Activepieces
-plugin format and does not exist, and the container (M32.6.1.1) has a memory budget in
-`brain.ops.wiring` and no compose service. What is here is the boundary the piece will have
-to obey and the checks that say whether it does.
+Not claimed here, and the reasons have moved. The custom piece (M32.6.1.3) is TypeScript in
+`ops/automation/piece`, built and loaded by `tests/unit/test_automation_piece_package.py`, and
+the route it calls is `brain.automation_routes`, which the install's acceptance check
+`brain.ops.acceptance_checks_automation` posts steps to. The container (M32.6.1.1) is
+`docker-compose.automation.yml`, which an install runs only when its owner adds that file. What
+is here is the boundary the piece obeys and the checks that say whether it does.
 
 Task ids: M32.6.1.2, M32.6.1.4, M32.6.2.1, M32.6.2.2
 """

@@ -68,6 +68,7 @@ from brain.api_routes import Asked, Asking, capacity_ledger_of
 from brain.attribution import trace_of_request
 from brain.core.department import SLUG_RE
 from brain.core.errors import Absent, Failed
+from brain.knowledge.app_parse_budget import app_parse_budget_bytes
 from brain.knowledge.chunk_store import ChunkStoreError
 from brain.knowledge.ingest import (
     IngestRefused,
@@ -286,6 +287,9 @@ def _read_link(
             placement=placement,
             owner_id=asked.caller.principal.id,
             taken_on=asked.now.date(),
+            # Read in the application container, so against its budget: see
+            # `brain.knowledge.app_parse_budget`.
+            budget_bytes=app_parse_budget_bytes(),
         )
 
 

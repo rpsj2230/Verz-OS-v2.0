@@ -40,6 +40,8 @@ import { CHECK_AGAIN, NOT_NOW } from "../src/pages/connectors/TestConnection";
 import { connectorAddress, readSourceRows } from "../src/pages/connectors/connectorSources";
 import { CONNECT_A_SOURCE, CONNECTORS_HEADING, NOT_AVAILABLE } from "../src/pages/connectors/ConnectorsPage";
 import { KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY } from "../src/pages/connectors/SourceActs";
+import { ACCEPT, BEFORE, DRIFT_HEADING, NOW_DOES } from "../src/pages/connectors/DeclarationDrift";
+import { DECLARATION_CHANGED_WORDS } from "../src/pages/connectors/pills";
 import { AT_THE_SERVER, FROM_HERE, START } from "../src/pages/connectors/SourceFlow";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredNavigation } from "./support/navigation";
@@ -263,6 +265,28 @@ const XERO_DETAIL = {
   confirm_key: sentinel("confirm-key"),
 };
 
+/** What changed in Xero's declaration, as `brain.connector_routes.DeclarationDriftView` sends it. */
+function aDrift(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    connector: "xero",
+    changed: true,
+    known: true,
+    lines: [
+      { kind: "added", what: "Now also keeps in its index: an invoice's due date", was: "" },
+      { kind: "changed", what: sentinel("now-does"), was: sentinel("did-before") },
+    ],
+    now_does: [],
+    was_version: "0.9.0",
+    now_version: "1.0.0",
+    agreed_digest: "a".repeat(64),
+    current_digest: "c".repeat(64),
+    may_accept: true,
+    told: sentinel("drift-told"),
+    confirm: sentinel("drift-confirm"),
+    ...over,
+  };
+}
+
 /** A connection test's answer, as `brain.connector_routes.ConnectorProbeView` sends it. */
 function aProbe(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -294,6 +318,7 @@ const ANSWERS: Readonly<Record<string, Answer>> = {
   },
   "/api/v1/console/connectors/xero/export": { body: { connector: "xero", credential: sentinel("no-key"), history: [] } },
   "/api/v1/console/connectors/xero/probe": { body: aProbe() },
+  "/api/v1/console/connectors/xero/drift": { body: aDrift() },
 };
 
 interface Mounted {
@@ -681,7 +706,8 @@ describe("one source's page", () => {
     expect(text).toContain("Books helper");
     expect(text).toContain("invoice-chaser");
     expect(text).not.toContain(NO_AGENT);
-    const advanced = container.querySelector('[data-slot="advanced"]');
+    // The profile's own Advanced, beside the drift card's, which holds the two digests.
+    const advanced = [...container.querySelectorAll('[data-slot="advanced"]')].find((one) => one.textContent?.includes("u_admin"));
     expect(advanced?.textContent).toContain("u_admin");
     const outside = text.replace(advanced?.textContent ?? "", "");
     expect(outside).not.toContain("u_admin");
@@ -887,5 +913,65 @@ describe("testing a connection", () => {
     // which is clutter the owner asked to be rid of.
     const { container } = await consoleAt(connectorAddress("xero"));
     expect(container.querySelector('[data-slot="connection-test"]')).toBeNull();
+  });
+});
+
+describe("a changed declaration", () => {
+  test("what changed is shown before the accept, and accepting is confirmed and names the digest shown", async () => {
+    // What breaks if this is deleted: the pill says a source stopped being read and a person
+    // accepts the change without being shown it, or accepts one they did not read.
+    const { idp } = await consoleAt(connectorAddress("xero"));
+    const card = await screen.findByRole("region", { name: DRIFT_HEADING });
+    expect(card.textContent).toContain("Now also keeps in its index: an invoice's due date");
+    expect(card.textContent).toContain(`${BEFORE}: ${sentinel("did-before")}`);
+    expect(card.textContent).toContain("Version 0.9.0 to 1.0.0");
+    await act(async () => {
+      fireEvent.click(within(card).getByRole("button", { name: ACCEPT }));
+    });
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm.textContent).toContain(sentinel("drift-confirm"));
+    expect(confirm.textContent).toContain("an invoice's due date");
+    expect(posts(idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole("button", { name: ACCEPT }));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toEqual([{ path: "/api/v1/connectors/xero/accept", body: { digest: "c".repeat(64) } }]);
+    });
+  });
+
+  test("a reader who may not accept is shown the change and offered no accept", async () => {
+    // What breaks if this is deleted: anybody who can read the screen is offered a button that
+    // agrees a source to a new declaration, or the change is hidden from the people who watch it.
+    await consoleAt(connectorAddress("xero"), {
+      ...ANSWERS,
+      "/api/v1/console/connectors/xero/drift": { body: aDrift({ may_accept: false }) },
+    });
+    const card = await screen.findByRole("region", { name: DRIFT_HEADING });
+    expect(card.textContent).toContain("an invoice's due date");
+    expect(within(card).queryByRole("button", { name: ACCEPT })).toBeNull();
+  });
+
+  test("a declaration that was not kept lists everything the source does now", async () => {
+    // What breaks if this is deleted: a connection agreed before the declaration was kept shows
+    // an empty list, which reads as nothing having changed.
+    await consoleAt(connectorAddress("xero"), {
+      ...ANSWERS,
+      "/api/v1/console/connectors/xero/drift": {
+        body: aDrift({ known: false, lines: [], now_does: [sentinel("reads-invoices"), sentinel("keeps-status")] }),
+      },
+    });
+    const now = await screen.findByRole("region", { name: NOW_DOES });
+    expect(now.textContent).toContain(sentinel("reads-invoices"));
+    expect(now.textContent).toContain(sentinel("keeps-status"));
+  });
+
+  test("an unchanged source shows no pill and asks for no diff", async () => {
+    // What breaks if this is deleted: every source shows a change to accept, which teaches people
+    // to accept without reading.
+    const { idp } = await consoleAt(connectorAddress("hubspot"));
+    expect(document.body.textContent).not.toContain(DECLARATION_CHANGED_WORDS);
+    expect(screen.queryByRole("region", { name: DRIFT_HEADING })).toBeNull();
+    expect(asked(idp, "/api/v1/console/connectors/hubspot/drift")).toBe(0);
   });
 });
