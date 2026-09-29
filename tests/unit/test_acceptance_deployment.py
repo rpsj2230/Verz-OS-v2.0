@@ -17,7 +17,6 @@ import asyncio
 import json
 import re
 import sys
-import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -98,6 +97,24 @@ def not_in_a_worker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("QUEUE_URL", raising=False)
 
 
+def ticking(milliseconds: float) -> Any:
+    """A clock that moves `milliseconds` each time it is read, so a timing is the same on every
+    machine: a scrub timed with it costs exactly that per sample, whatever the scrub did."""
+    now = [0.0]
+
+    def read() -> float:
+        now[0] += milliseconds / 1000.0
+        return now[0]
+
+    return read
+
+
+@pytest.fixture
+def steady(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One millisecond a sample over sixteen kibibytes, well inside the budget on any machine."""
+    monkeypatch.setattr(deployment, "SCRUB_CLOCK", ticking(1.0))
+
+
 def without_a_database() -> Harness:
     # The layout and the scrub read nothing: each is handed a harness with no connection on purpose.
     return Harness(run="0a1b2c3d", now=LONG_AGO, settings=settings_from({}), connection=None)  # type: ignore[arg-type]
@@ -132,16 +149,18 @@ def test_a_process_that_is_not_a_worker_is_told_so_rather_than_judged(name: str)
     assert ran(name) == (NOT_RUN, deployment.NOT_IN_A_WORKER)
 
 
-@pytest.mark.usefixtures("in_a_worker")
+@pytest.mark.usefixtures("in_a_worker", "steady")
 @pytest.mark.parametrize("name", (LAYOUT, SCRUB))
 def test_in_the_worker_s_own_environment_the_layout_and_the_scrub_pass(name: str) -> None:
     """The general worker as the product ships it: its start-up checks refuse nothing, it drains
-    human_async, automation and system each at its declared concurrency within 384 MiB, and the
-    scrub on this machine is inside its budget. Delete this and a check that cannot pass on the
-    shipped container reaches the owner's server first."""
+    human_async, automation and system each at its declared concurrency within 384 MiB, and a scrub
+    timed inside its budget passes. The clock is steady so the answer does not depend on how busy
+    the machine running the suite is; the install's own processor is what the check times. Delete
+    this and a check that cannot pass on the shipped container reaches the owner's server first."""
     assert ran(name) == (PASSED, "")
 
 
+@pytest.mark.usefixtures("steady")
 def test_the_scrub_s_figure_goes_to_the_log_with_nothing_from_the_environment(
     in_a_worker: dict[str, str],
 ) -> None:
@@ -208,17 +227,10 @@ def test_the_layout_check_fails_where_the_worker_is_wrong(
 def test_the_scrub_check_fails_when_the_scrub_is_slower_than_its_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A scrub taking fifty milliseconds over sixteen kibibytes is three per kibibyte against a
+    """A scrub timed at fifty milliseconds over sixteen kibibytes is three per kibibyte against a
     budget of two, and the check fails with its sentence. Delete this and a check that passes for
     every timing would be read as a measurement."""
-    from brain.ops import pii
-
-    def slow(text: str, detections: Sequence[Any] | None = None) -> str:
-        del detections
-        time.sleep(0.05)
-        return text
-
-    monkeypatch.setattr(pii, "scrub", slow)
+    monkeypatch.setattr(deployment, "SCRUB_CLOCK", ticking(50.0))
     assert ran(SCRUB) == (
         FAILED,
         "the scrub cost more per kibibyte on this install's processor than its budget allows",
@@ -255,7 +267,7 @@ def trace_rows(url: str) -> tuple[int, int]:
 
 
 @pytest.mark.needs_db
-@pytest.mark.usefixtures("in_a_worker")
+@pytest.mark.usefixtures("in_a_worker", "steady")
 def test_on_a_real_database_every_check_passes_and_leaves_nothing_behind() -> None:
     """**The four as the worker runs them, against PostgreSQL at head.** Each passes, and every
     table a check writes to, the trace step and the trace read among them, holds what it held

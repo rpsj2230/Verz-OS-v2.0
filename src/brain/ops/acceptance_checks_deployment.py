@@ -47,7 +47,7 @@ import asyncio
 import os
 import platform
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Final
 
@@ -93,6 +93,11 @@ SCRUB_SAMPLE_CHARS: Final = 16384
 #: How many timings the ninety-fifth percentile is taken over. Three times the fewest
 #: `brain.ops.pii.MINIMUM_TIMED_SAMPLES` allows, so one slow sample is not the figure.
 SCRUB_SAMPLES: Final = 60
+
+#: The clock a scrub's timings are read from. A name of its own so the suite can hand the check a
+#: clock that ticks the same whatever else the machine running it is doing; on an install it is
+#: the processor's own.
+SCRUB_CLOCK: Callable[[], float] = time.perf_counter
 
 #: Why a check reads a trace, as `brain.ops.tracing.PayloadRead` requires a reason.
 TRACE_READ_REASON: Final = "An install acceptance check reading its own run's trace"
@@ -286,7 +291,7 @@ async def the_scrub_meets_its_budget_on_this_install_s_processor(h: Harness) -> 
         partial(
             measure_scrub,
             benchmark_text(SCRUB_SAMPLE_CHARS),
-            clock=time.perf_counter,
+            clock=SCRUB_CLOCK,
             hardware=_this_processor(),
             basis=(
                 "measure_scrub over benchmark_text(16384) by the install's acceptance check, "
