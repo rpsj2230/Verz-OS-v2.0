@@ -16,6 +16,10 @@
  * is answered by the API exactly as one nobody connected, and is drawn the same. A 404 is not
  * explained: a name nothing ships and a name the reader may not open are one answer.
  *
+ * **A changed declaration is shown before it is accepted.** When the pill says the declaration
+ * changed, every view opens on what changed, read from the API, with "Accept these changes" for a
+ * reader who may make it (`DeclarationDrift.tsx`).
+ *
  * **Every act works.** Connect, Connect Lark, edit settings, replace the key, export the record and
  * disconnect, each confirmed in the API's words where it changes something (`SourceActs.tsx`), and
  * test connection (`TestConnection.tsx`), which the worker makes and the header reports: waiting,
@@ -55,6 +59,7 @@ import { worthShowing } from "./connectorProbe";
 import { ConnectorAbout } from "./ConnectorAbout";
 import { ConnectorDashboard } from "./ConnectorDashboard";
 import { ConnectorProfile } from "./ConnectorProfile";
+import { DeclarationDriftCard } from "./DeclarationDrift";
 import {
   CONNECTORS_ADDRESS,
   CONNECT_FROM_WORDS,
@@ -345,6 +350,9 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
         header={header}
         switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view} />}
       >
+        {source.declarationChanged ? (
+          <DeclarationDriftCard name={source.name} label={source.label} version={version} onDone={done} />
+        ) : null}
         {view === "dashboard" ? (
           <ConnectorDashboard
             detail={detail}

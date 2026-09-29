@@ -18525,7 +18525,7 @@
    "proof": [
     "M1.6.18"
    ],
-   "decision": "needs-rupash 126: a staff list anybody with its link can edit (a spreadsheet or a Google Sheet) makes no accounts until the owner says otherwise"
+   "decision": "needs-rupash 130: a staff list anybody with its link can edit (a spreadsheet or a Google Sheet) makes no accounts until the owner says otherwise"
   },
   {
    "id": "DEC-62",

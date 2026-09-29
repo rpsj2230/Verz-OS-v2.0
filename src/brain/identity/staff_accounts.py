@@ -32,7 +32,7 @@ promise to be complete keeps their account, on `dry_run`'s rule. See
 **A list anybody can edit makes no account.** Only a source trusted to say which department
 somebody is in, which is a directory an administrator controls, gives accounts; a spreadsheet or a
 Google Sheet, which whoever holds the link can edit, plans nothing. See
-`A_LIST_ANYBODY_CAN_EDIT_MAKES_NO_ACCOUNT`, and needs-rupash 126, which asks the owner to confirm
+`A_LIST_ANYBODY_CAN_EDIT_MAKES_NO_ACCOUNT`, and needs-rupash 130, which asks the owner to confirm
 it.
 
 Rejected: an invitation email (Keycloak's execute-actions email) when an account is made, which was
@@ -91,7 +91,7 @@ A_LIST_ANYBODY_CAN_EDIT_MAKES_NO_ACCOUNT: Final = (
     "An account is a way in, so it is made only from a source an administrator controls: one "
     "trusted to say which department somebody is in, which the directories are and a spreadsheet "
     "is not. A row anybody with a sheet's link adds would otherwise be an account for an address "
-    "whoever added it can read (needs-rupash 126)."
+    "whoever added it can read (needs-rupash 130)."
 )
 
 #: The sentence a run from such a source leaves.
