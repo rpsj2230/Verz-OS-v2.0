@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-29T03:13:25.704538+00:00",
-  "commit": "20fb7141",
-  "commit_subject": "The install mints its template signing key once into a write-once vault slot, so agents can be published and installed (#187)",
+  "generated_at": "2026-09-29T03:17:24.604104+00:00",
+  "commit": "b061becd",
+  "commit_subject": "Seven tasks close: a replaced key is used without a restart, and six console build guarantees are held by CI (#195)",
   "total": 1576,
-  "done": 373,
-  "percent": 23.7,
+  "done": 380,
+  "percent": 24.1,
   "acts": 47,
   "decided": 131,
   "current_wave": 0,
@@ -13,11 +13,11 @@
       "wave": 0,
       "name": "Foundation",
       "total": 128,
-      "done": 123,
-      "percent": 96.1,
+      "done": 124,
+      "percent": 96.9,
       "in_progress": 0,
       "ready_for_testing": 1,
-      "blocked": 4,
+      "blocked": 3,
       "open": 0,
       "acts": 3,
       "decided": 7
@@ -52,12 +52,12 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 575,
-      "done": 23,
-      "percent": 4.0,
+      "done": 29,
+      "percent": 5.0,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 551,
+      "open": 545,
       "acts": 1,
       "decided": 56
     },
@@ -350,7 +350,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 15,
+      "done": 21,
       "acts": 0,
       "decided": 22
     },
@@ -386,7 +386,7 @@
       "name": "Application scaffold and runtime",
       "wave": 0,
       "total": 38,
-      "done": 35,
+      "done": 36,
       "acts": 0,
       "decided": 2
     },
@@ -632,12 +632,18 @@
     "M27.1.1",
     "M27.1.2",
     "M27.10.4",
+    "M27.15.73",
+    "M27.15.74",
+    "M27.15.76",
+    "M27.15.77",
+    "M27.15.80",
     "M27.2.3",
     "M27.3.18",
     "M27.3.4",
     "M27.5.1",
     "M27.5.4",
     "M27.5.7",
+    "M27.7.1",
     "M27.7.6",
     "M27.8.1",
     "M27.8.2",
@@ -730,6 +736,7 @@
     "M31.3.1.4",
     "M31.3.2.1",
     "M31.3.2.2",
+    "M31.3.2.5",
     "M31.3.2.6",
     "M31.4.1",
     "M31.4.2",
@@ -1159,11 +1166,6 @@
       "why": "live since d6290cb; the proof is the lease revoked at the end of a connector sync on the install, which waits for the first connection (needs-rupash 91)",
       "updated": "2026-09-28"
     },
-    "M31.3.2.5": {
-      "status": "BLOCKED",
-      "why": "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, once the worker fix of 2026-09-28 deploys (needs-rupash 98)",
-      "updated": "2026-09-28"
-    },
     "M38.2.1.1": {
       "status": "READY FOR TESTING",
       "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
@@ -1181,15 +1183,20 @@
     }
   },
   "wave_records": {},
-  "closed_today": 3,
+  "closed_today": 10,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
-    "M31.3.2.5",
     "M38.2.1.1",
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "b061bec",
+      "at": "2026-09-29T03:16:19+00:00",
+      "subject": "Seven tasks close: a replaced key is used without a restart, and six console build guarantees are held by CI (#195)",
+      "closed": "M27.15.73,M27.15.74,M27.15.76,M27.15.77,M27.15.80,M27.7.1,M31.3.2.5"
+    },
     {
       "sha": "b1d139e",
       "at": "2026-09-29T02:57:30+00:00",
@@ -1303,12 +1310,6 @@
       "at": "2026-09-21T16:04:33+00:00",
       "subject": "Deny, leash change, merge, publish and break-glass write their entries, sensitive questions are routed, and breach cases and the register have a screen",
       "closed": "M24.1.3,M24.2.2,M24.2.3,M24.2.4"
-    },
-    {
-      "sha": "422ad04",
-      "at": "2026-09-21T15:24:52+00:00",
-      "subject": "Eleven foundation tasks close again, with their evidence in a file so the commit is not dropped as empty",
-      "closed": "M0.2.5,M0.4.1,M31.1.2.2,M31.1.3.4,M31.1.4.1,M31.1.4.4,M31.2.2.3,M38.1.1.1,M41.1.4,M41.1.5,M41.1.7"
     }
   ]
 }
