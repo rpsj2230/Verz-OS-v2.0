@@ -20,26 +20,13 @@ projection that grows past the cap is not a fuller projection, it is a second co
 source system with its own retention, its own staleness and its own breach surface, and
 nobody ever decides to build that. It arrives one useful field at a time.
 
-**One live row per `(source, entity, source_id)`, and each of the three is load-bearing.** That
-triple is the entire content of "which record in which system", and a unique index over the live
-rows holds it: two live rows for one record is not a duplicate-row problem here, because a
-refresh updates one of them, the other goes on serving the value it was written with, and the
-fast lane filters, sorts and counts across both. The count is then wrong with nothing anywhere
-reporting it, which is the same argument `auth.directory_role_grant` makes about its own natural
-key.
-
-**The index covers live rows only, since `0152`, because a record the source returns is a new
-live row and the retired one stays as it was retired.** A read that no longer returns a record
-retires its row with when that was noticed (`brain.ops.connector_sync.
-WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`), and a retirement is final under
-`0045`'s update policy. Until `0152` the triple was the primary key over every row, retired ones
-included, so a record the source listed again could be neither written beside its retired row
-nor revived, and a record a sweep retired wrongly (a page the source skipped) would have been
-absent from every answer for good. So the primary key is now `id`, a value minted by the
-database that nothing reads as a record's identity, and the triple is unique among live rows.
-Rejected: a generation number beside the triple as a four-part natural key. The application's
-role cannot see a retired row, so it could not compute the next generation, and a key an
-acceptance check cannot write under is a key the install cannot prove.
+**The key is `(source, entity, source_id)`, and each of the three is load-bearing.** That
+triple is the entire content of "which record in which system", so it is the natural key and
+there is no surrogate. A `uuid` id would let one source record be projected twice, and two
+rows for one record is not a duplicate-row problem here: a refresh updates one of them, the
+other goes on serving the value it was written with, and the fast lane filters, sorts and
+counts across both. The count is then wrong with nothing anywhere reporting it, which is the
+same argument `auth.directory_role_grant` makes about its own natural key.
 
 `source` is in the key because record ids are the source's own namespace: Freshdesk company
 42 and Xero contact 42 are different companies, and a key without the source merges them by
@@ -83,6 +70,16 @@ which is a second copy of the projection paid for on every insert of a job whose
 property is that it inserts in a loop. The fast lane's filters are per entity kind, so the
 index worth having is a per-entity expression index added when there is a measured query to
 add it for, rather than a blanket one added on the day the table is created.
+
+**A record a complete read no longer returns is retired here and remembered in
+`proj.record_retired`, since `0152`** (M11.8.11). The retiring statement stamps the live row's
+`deleted_at`, which hides it from every read at the application's role, and writes a snapshot of the
+row as it stood, with when its absence was noticed, into `proj.record_retired` in the same
+statement. A record the source returns afterwards is served again from the same row: the worker's
+upsert clears `deleted_at` on a row a sync retired, and on no other, and the snapshot is never
+touched again, so the retirement is kept as it was. The key stays the natural triple, which is what
+the previous release's own upserts name: `RetiredRecordRow` argues the design and what was
+rejected.
 
 **A source's epoch lives beside its rows, in `proj.source_epoch`.** One counter per source,
 advanced in the same transaction as the write that changed the source's rows, so an epoch can
@@ -138,13 +135,8 @@ FIELDS_WITHIN_THE_CAP = f"{FIELD_COUNT_SQL} <= {MAX_PROJECTED_FIELDS}"
 #: error and yields nothing, so a scalar would sail through a cap that counts zero keys.
 FIELDS_IS_AN_OBJECT = "jsonb_typeof(fields) = 'object'"
 
-#: What makes a row live. The predicate of the unique index below and of the upsert that names it
-#: as its conflict target, written once so the two cannot come to disagree: an `ON CONFLICT` whose
-#: predicate differs from the index's infers no index at all, and every write fails.
+#: What makes a row live, written once for the statements that read, retire and revive a row.
 LIVE: Final = "deleted_at IS NULL"
-
-#: The unique index over live rows, named by `0152` and by the tests that hold the two equal.
-LIVE_RECORD_INDEX: Final = "ux_record_live"
 
 
 class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
@@ -165,15 +157,15 @@ class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "record"
 
     #: The connector this came from, as `ConnectorManifest.name` spells it.
-    source: Mapped[str] = mapped_column(String(SOURCE_CHARS), nullable=False)
+    source: Mapped[str] = mapped_column(String(SOURCE_CHARS), primary_key=True)
 
     #: The entity kind, as the manifest's `ProjectedEntity.entity` spells it. The redactor
     #: and the field policy are both looked up by this string.
-    entity: Mapped[str] = mapped_column(String(ENTITY_CHARS), nullable=False)
+    entity: Mapped[str] = mapped_column(String(ENTITY_CHARS), primary_key=True)
 
     #: The source's own identifier, passed through and never parsed. Its shape is the
     #: source's business, and reading one here would make us wrong the day they change it.
-    source_id: Mapped[str] = mapped_column(String(SOURCE_ID_CHARS), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(SOURCE_ID_CHARS), primary_key=True)
 
     #: The entity registry's id, once resolution has produced one. Null until then, which is
     #: the ordinary state of a row a backfill has just written. See the module docstring for
@@ -190,13 +182,6 @@ class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
     #: `brain.connectors.projection` computes an age from, and the only evidence that the
     #: change signal is still delivering.
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-    #: The row's own name, minted by the database. Added by `0152`, last, as `ALTER TABLE` adds
-    #: a column, so the model declares it where the database holds it. Nothing reads it as a
-    #: record's identity: see the module docstring for why the key over live rows is the triple.
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
 
     __table_args__ = (
         # Text plus check constraints rather than any narrower column type, matching every
@@ -224,17 +209,62 @@ class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
             "local_id",
             postgresql_where=text("deleted_at IS NULL"),
         ),
-        # One live row per record, and a retired row beside it for every time the source
-        # stopped returning it and then returned it. The upsert names this index, with its
-        # predicate, as its conflict target. See the module docstring.
-        Index(
-            LIVE_RECORD_INDEX,
-            "source",
-            "entity",
-            "source_id",
-            unique=True,
-            postgresql_where=text(LIVE),
-        ),
+        {"schema": "proj"},
+    )
+
+
+class RetiredRecordRow(Base):
+    """`proj.record_retired`. A projected row as it stood when its source stopped returning it.
+
+    **One row per retirement, written by the retiring statement and never again** (M11.8.11).
+    `brain.ops.connector_sync_store.retire_unseen` stamps a live `proj.record` row's `deleted_at`
+    with `statement_timestamp()` and copies the row, fields and last reading included, here with
+    that same instant as `noticed_at`, in one statement: the two commit together or not at all. The
+    application's role may read and insert these rows and nothing else, so a retirement is final as
+    `0045` makes every retirement final, and a record retired twice leaves two rows.
+
+    **A returned record is served from its own row again, and this is what keeps the retirement.**
+    The worker's upsert clears `deleted_at` on a `proj.record` row whose `deleted_at` is the
+    `noticed_at` of a row here, and only on such a row, so a record an erasure or a person retired
+    stays retired whatever the source says (see `brain.ops.connector_sync_store.
+    A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS`).
+
+    Rejected, measured by the previous release's own CI job on 2026-09-29: a minted key on
+    `proj.record` with the triple unique over live rows only, so a returned record could be a second
+    row beside the retired one. The previous release's upserts name `ON CONFLICT (source, entity,
+    source_id)`, which then matches no index, so during a deploy every write that release made was
+    refused. `brain.deployment.compatibility` refuses an escape hatch for that and asks for a change
+    the previous release survives, which this is: `proj.record` is unchanged in shape. Rejected as
+    well: moving the row here and deleting it, which gives the application a DELETE on the table
+    whose design is that rows are retired and never removed.
+
+    Nobody's: a projected row keeps a source's pointers and no principal, as `proj.record` does.
+    """
+
+    __tablename__ = "record_retired"
+
+    #: The retirement's own name, minted by the database.
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    source: Mapped[str] = mapped_column(String(SOURCE_CHARS), nullable=False)
+    entity: Mapped[str] = mapped_column(String(ENTITY_CHARS), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(SOURCE_ID_CHARS), nullable=False)
+    local_id: Mapped[str | None] = mapped_column(String(LOCAL_ID_CHARS), nullable=True)
+    #: The fields as the live row held them, within the same cap.
+    fields: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    #: When the source last returned the record before it stopped.
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: When a complete read noticed the record was gone: the live row's `deleted_at`.
+    noticed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(f"source ~ '{OBJECT_NAME_PATTERN}'", name="source_is_a_name"),
+        CheckConstraint(f"entity ~ '{OBJECT_NAME_PATTERN}'", name="entity_is_a_name"),
+        CheckConstraint(FIELDS_IS_AN_OBJECT, name="fields_is_an_object"),
+        CheckConstraint(FIELDS_WITHIN_THE_CAP, name="fields_within_the_cap"),
+        # How a returned record's revival finds the retirement it may undo.
+        Index("ix_record_retired_record", "source", "entity", "source_id", "noticed_at"),
         {"schema": "proj"},
     )
 

@@ -10,16 +10,20 @@ screen lists and the one the worker reads could then disagree about a source dis
 ago. The id is added because an attempt names the connection it read with; see
 `brain.tables.connector_sync`.
 
-**A record is written by one upsert that never revives a retired row and never moves a reading
-backwards.** Its conflict target is the unique index over live rows (`0152`), so a record with only
-a retired row is written as a new live row beside it, and the retired row keeps the fields, the
-last reading and the retirement it had, which is `0045`'s rule that a retirement is final. The
-update applies only when this reading is not older than the one stored, so a slower reading cannot
-overwrite a faster one's. See `A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW`.
+**A record is written by one upsert that revives only what a sync retired, and never moves a reading
+backwards.** Its conflict target is `proj.record`'s key, the one the previous release names too. It
+updates a live row, or a row a complete read retired (one whose `deleted_at` is a retirement's
+`noticed_at` in `proj.record_retired`), clearing `deleted_at` so a record the source returns serves
+again; a row an erasure or a person retired stays retired whatever the source says, which is
+`0045`'s rule. The update applies only when this reading is not older than the one stored, so a
+slower reading cannot overwrite a faster one's. See
+`A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS` and
+`A_RETURNED_RECORD_SERVES_AGAIN_AND_ITS_RETIREMENT_IS_KEPT`.
 
 **A retirement and an epoch are statements here and decisions in `brain.ops.connector_sync`.**
 `retire_unseen` stamps `statement_timestamp()`, the one instant `0045`'s policy lets the application
-write, and `advance_epoch` counts a change in `proj.source_epoch`; the worker runs each in the
+write, and copies each row it retires into `proj.record_retired` in the same statement, and
+`advance_epoch` counts a change in `proj.source_epoch`; the worker runs each in the
 transaction of the write it describes. `StoredSourceEpochs` is the answer path's read of them.
 
 **The worker writes as the login its URL names**, which on an install is the database's owner, as
@@ -54,9 +58,9 @@ from sqlalchemy import (
     RowMapping,
     Select,
     Table,
-    Update,
     and_,
     func,
+    or_,
     select,
     text,
     update,
@@ -81,16 +85,23 @@ from brain.ops.setting_store import read_namespace, values_under
 from brain.tables.audit import attributed_to
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
-from brain.tables.projection import LIVE, ProjectedRecordRow, SourceEpochRow
+from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
 
-#: Why the upsert's conflict target is the live rows, and its update conditional.
-A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW: Final = (
-    "A projected row is retired when a complete read of everything no longer returns its record, "
-    "and 0045 makes a retirement final. So the upsert never touches a retired row: its conflict "
-    "target is the unique index over live rows, and a record the source returns after it was "
-    "retired is inserted as a new live row, while the retired one keeps the fields, the last "
-    "reading and the instant it was retired with. The update applies only when this reading is "
-    "not older than the one stored, so a slower reading cannot overwrite a faster one's."
+#: Why the upsert's update is conditional.
+A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS: Final = (
+    "A projected record is retired by an erasure or by a person, and 0045 makes a retirement "
+    "final. A sync that revived such a record because the source still lists it would undo an "
+    "erasure on the next run, silently, as the worker. So the conflict update applies to a live "
+    "row or to a row a complete read retired, and only when this reading is not older than the "
+    "one stored."
+)
+
+#: Why a returned record revives its row and the retirement survives it.
+A_RETURNED_RECORD_SERVES_AGAIN_AND_ITS_RETIREMENT_IS_KEPT: Final = (
+    "A complete read that no longer returns a record retires its row and copies it, as it stood, "
+    "into proj.record_retired with when the absence was noticed. When the source returns the "
+    "record, its row serves again, and the copy is never touched, so which records went and when "
+    "stays on file however often they come back."
 )
 
 
@@ -173,8 +184,8 @@ def latest_attempts() -> Select[Any]:
 
 
 def record_upsert(record: ProjectedRecord, fields: Mapping[str, StoredValue]) -> Insert:
-    """Write one projected record, or refresh its live row. See
-    `A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW`."""
+    """Write one projected record, refresh its live row, or revive a row a sync retired. See
+    `A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS`."""
     statement = insert(ProjectedRecordRow).values(
         source=record.source,
         entity=record.entity,
@@ -183,16 +194,29 @@ def record_upsert(record: ProjectedRecord, fields: Mapping[str, StoredValue]) ->
         last_seen_at=record.last_seen_at,
     )
     table = ProjectedRecordRow.__table__
+    # A retirement a sync made, and no other: its `noticed_at` is the row's `deleted_at`. Written
+    # as SQL naming both tables in full, because SQLAlchemy renders a subquery inside a conflict
+    # clause with the outer table in its FROM list and no schema, which PostgreSQL cannot resolve;
+    # it holds no value from anywhere, so nothing is interpolated into it.
+    by_a_read = text(
+        "EXISTS (SELECT 1 FROM proj.record_retired AS retired"
+        " WHERE retired.source = proj.record.source"
+        " AND retired.entity = proj.record.entity"
+        " AND retired.source_id = proj.record.source_id"
+        " AND retired.noticed_at = proj.record.deleted_at)"
+    )
     return statement.on_conflict_do_update(
         index_elements=[table.c.source, table.c.entity, table.c.source_id],
-        # The live-row index's own predicate, or PostgreSQL infers no index and every write fails.
-        index_where=text(LIVE),
         set_={
             "fields": statement.excluded.fields,
             "last_seen_at": statement.excluded.last_seen_at,
             "updated_at": func.now(),
+            "deleted_at": None,
         },
-        where=table.c.last_seen_at <= statement.excluded.last_seen_at,
+        where=and_(
+            or_(table.c.deleted_at.is_(None), by_a_read),
+            table.c.last_seen_at <= statement.excluded.last_seen_at,
+        ),
     )
 
 
@@ -206,19 +230,23 @@ def live_fields(source: str, entity: str, source_ids: Sequence[str]) -> Select[A
     )
 
 
-def retire_unseen(source: str, entity: str, before: datetime) -> Update:
-    """Retire every live row of one entity the read that began at `before` did not see.
+def retire_unseen(source: str, entity: str, before: datetime) -> Insert:
+    """Retire every live row of one entity the read that began at `before` did not see, and keep
+    each as it stood in `proj.record_retired`, in one statement.
 
     A row the read saw carries a `last_seen_at` of that read, which is never before it began; a
     row it did not see keeps an older one. Stamped with `statement_timestamp()`, which is when the
-    absence was noticed and the one instant `0045`'s policy lets the application write. See
+    absence was noticed and the one instant `0045`'s policy lets the application write, and the
+    copy carries the same instant as its `noticed_at`, which is how a returned record's upsert
+    knows a sync retired it. See
     `brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
     """
     # A cast at the ORM's boundary: a declarative class's `__table__` is typed as the `FromClause`
-    # it is declared as, and this one is a `Table`. The table rather than the class, so the update
-    # is plain SQL with no session bookkeeping to evaluate a server-side instant in Python.
+    # it is declared as, and these are `Table`s. Tables rather than classes, so the statement is
+    # plain SQL with no session bookkeeping to evaluate a server-side instant in Python.
     table = cast(Table, ProjectedRecordRow.__table__)
-    return (
+    retired = cast(Table, RetiredRecordRow.__table__)
+    gone = (
         update(table)
         .where(
             table.c.source == source,
@@ -227,6 +255,34 @@ def retire_unseen(source: str, entity: str, before: datetime) -> Update:
             table.c.last_seen_at < before,
         )
         .values(deleted_at=func.statement_timestamp())
+        .returning(
+            table.c.source,
+            table.c.entity,
+            table.c.source_id,
+            table.c.local_id,
+            table.c.fields,
+            table.c.last_seen_at,
+            table.c.deleted_at,
+        )
+        .cte("gone")
+    )
+    # Returning each retirement's id, because the driver reports no row count for an INSERT fed by
+    # a data-modifying CTE (-1, measured), and the caller counts what was retired.
+    return (
+        insert(retired)
+        .returning(retired.c.id)
+        .from_select(
+            ["source", "entity", "source_id", "local_id", "fields", "last_seen_at", "noticed_at"],
+            select(
+                gone.c.source,
+                gone.c.entity,
+                gone.c.source_id,
+                gone.c.local_id,
+                gone.c.fields,
+                gone.c.last_seen_at,
+                gone.c.deleted_at,
+            ),
+        )
     )
 
 

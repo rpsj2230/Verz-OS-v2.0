@@ -72,7 +72,7 @@ import ssl
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final, Protocol, cast
+from typing import TYPE_CHECKING, Any, Final, Protocol
 from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -145,7 +145,7 @@ from brain.ops.webhook_delivery import HTTPS_PORT, SystemResolver, _PinnedHTTPSC
 from brain.tools.fetch import Resolver, UnsafeAddressError
 
 if TYPE_CHECKING:
-    from sqlalchemy.engine import CursorResult
+    pass
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -591,13 +591,8 @@ async def _retire(
     retired = 0
     async with sessions() as session, session.begin():
         for entity in entities:
-            # A cast at the driver's boundary: an UPDATE's result is a cursor result, which is
-            # what carries the count, and `execute` is typed as the base result it returns for
-            # every statement.
-            done = cast(
-                "CursorResult[Any]", await session.execute(retire_unseen(source, entity, before))
-            )
-            retired += done.rowcount
+            # One row back per row retired: see `retire_unseen` for why it is not a row count.
+            retired += len((await session.execute(retire_unseen(source, entity, before))).all())
         if retired:
             await session.execute(advance_epoch(source))
     return retired

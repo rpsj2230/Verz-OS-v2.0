@@ -110,6 +110,7 @@ SYNC_TABLES: Final = (
     "ops.connector_connection",
     "ops.connector_sync",
     "proj.record",
+    "proj.record_retired",
     "proj.source_epoch",
 )
 
@@ -652,14 +653,12 @@ def test_a_source_nothing_may_read_is_counted_as_such_and_never_called() -> None
 
 
 @pytest.mark.needs_db
-def test_a_retired_record_the_source_returns_is_a_new_live_row_and_the_retired_one_stays() -> None:
-    """**M11.8.11's last clause.** A record retired a day ago, and the source lists it again. The
-    next read writes it as a new live row carrying this reading, which a reader in its tenant is
-    handed, and the retired row keeps the fields, the last reading and the retirement it had.
+def test_a_record_somebody_retired_stays_retired_whatever_the_source_still_says() -> None:
+    """An erasure retires a projected record, and the source still lists it. The next sync leaves it
+    retired, with the fields it was retired with, and reads the rest of the page as usual.
 
-    Delete this and a sync can revive a retired row, rewriting when it was noticed gone, or leave a
-    record the source returned out of every answer for good, which is the one thing
-    `A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW` exists to refuse."""
+    Delete this and a sync undoes an erasure on its next run, silently, as the worker, which is the
+    one thing `A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS` exists to refuse."""
     with a_database("brain_connector_sync_retired") as url:
         connect(url)
         sql(
@@ -675,16 +674,57 @@ def test_a_retired_record_the_source_returns_is_a_new_live_row_and_the_retired_o
         after = read_as(url, ENTITLED)
 
     assert ran.read == 1
-    retired = [row for row in rows if row[5] is not None]
-    live = [row for row in rows if row[5] is None]
-    ((_, _, _, fields, last_seen_at, deleted_at),) = retired
+    ((_, _, _, fields, last_seen_at, deleted_at),) = rows
     assert fields == {}
     assert last_seen_at == NOW - timedelta(days=30)
     assert deleted_at == NOW - timedelta(days=1)
-    ((_, _, source_id, kept, seen, _),) = live
-    assert source_id == INVOICE_ID
-    assert kept["tenant_id"] == TENANT
+    assert after["records"] == []
+
+
+@pytest.mark.needs_db
+def test_a_record_a_read_retired_serves_again_when_returned_and_its_retirement_is_kept() -> None:
+    """**M11.8.11's last clause.** A record a complete read retired a day ago, kept in
+    `proj.record_retired` with that instant, and the source lists it again. The next read serves it
+    again from its row, carrying this reading, which a reader in its tenant is handed, and the
+    retirement stays exactly as it was kept.
+
+    Delete this and a returned record can stay out of every answer for good, or its return can
+    rewrite the record of when it went, which is what
+    `A_RETURNED_RECORD_SERVES_AGAIN_AND_ITS_RETIREMENT_IS_KEPT` refuses."""
+    noticed = NOW - timedelta(days=1)
+    with a_database("brain_connector_sync_returned") as url:
+        connect(url)
+        sql(
+            url,
+            "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at, deleted_at) "
+            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            INVOICE_ID,
+            NOW - timedelta(days=30),
+            noticed,
+        )
+        sql(
+            url,
+            "INSERT INTO proj.record_retired "
+            "(source, entity, source_id, fields, last_seen_at, noticed_at) "
+            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            INVOICE_ID,
+            NOW - timedelta(days=30),
+            noticed,
+        )
+        ran = sync(url, Replay([answer_for("XERO-200-invoices"), NO_CONTACTS]))
+        rows = projected(url)
+        kept = sql(
+            url,
+            "SELECT source_id, fields, last_seen_at, noticed_at FROM proj.record_retired",
+        )
+        after = read_as(url, ENTITLED)
+
+    assert ran.read == 1
+    ((_, _, source_id, fields, seen, deleted_at),) = rows
+    assert (source_id, deleted_at) == (INVOICE_ID, None)
+    assert fields["tenant_id"] == TENANT
     assert seen >= NOW
+    assert kept == [(INVOICE_ID, {}, NOW - timedelta(days=30), noticed)]
     assert [one["id"] for one in after["records"]] == [INVOICE_ID]
 
 

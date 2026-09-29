@@ -41,6 +41,7 @@ LEAVES = {
 #: Every table the checks write to, which must hold afterwards what it held before.
 WRITTEN_BY_THE_CHECKS = (
     "proj.record",
+    "proj.record_retired",
     "proj.source_epoch",
     "ops.connector_connection",
     "ops.connector_sync",
@@ -200,6 +201,51 @@ def test_each_check_fails_with_its_own_sentence_when_its_leaf_is_broken(
         after = written(url)
 
     assert outcomes == {name: (FAILED, said) for name, (_, _, said) in breaks.items()}
+    assert after == before
+
+
+def never_reviving(record: Any, fields: Any) -> Any:
+    """`record_upsert` as the release before this one wrote it: a retired row is never written."""
+    from sqlalchemy import and_
+    from sqlalchemy.dialects.postgresql import insert
+
+    from brain.tables.projection import ProjectedRecordRow
+
+    statement = insert(ProjectedRecordRow).values(
+        source=record.source,
+        entity=record.entity,
+        source_id=record.source_id,
+        fields=dict(fields),
+        last_seen_at=record.last_seen_at,
+    )
+    table = ProjectedRecordRow.__table__
+    return statement.on_conflict_do_update(
+        index_elements=[table.c.source, table.c.entity, table.c.source_id],
+        set_={"fields": statement.excluded.fields, "last_seen_at": statement.excluded.last_seen_at},
+        where=and_(
+            table.c.deleted_at.is_(None),
+            table.c.last_seen_at <= statement.excluded.last_seen_at,
+        ),
+    )
+
+
+@pytest.mark.needs_db
+def test_the_retirement_check_fails_where_a_returned_record_is_not_served_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The retirement check's second half, broken the way the release before this one behaves: an
+    upsert that never writes over a retired row. The check fails with the sentence it wrote for a
+    returned record not served. Delete this and the check can pass with a returned record hidden for
+    good, which is the half of M11.8.11 that retiring alone does not prove."""
+    import brain.ops.connector_sync_run as sync_run
+
+    name = "a_dropped_record_is_retired_withheld_and_returned_as_a_new_row"
+    monkeypatch.setattr(sync_run, "record_upsert", never_reviving)
+    with at_head("brain_acceptance_change_signals_returned") as url:
+        before = written(url)
+        outcome = run_checks(url, (mine()[name],))
+        after = written(url)
+    assert outcome[name] == (FAILED, "a record the source returned again was not served again")
     assert after == before
 
 

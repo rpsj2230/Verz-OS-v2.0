@@ -586,6 +586,7 @@ WRITTEN_BY_CHECKS = (
     "ops.sensitive_read",
     "er.canonical",
     "proj.record",
+    "proj.record_retired",
     "proj.source_epoch",
     "ops.connector_connection",
     "ops.connector_sync",

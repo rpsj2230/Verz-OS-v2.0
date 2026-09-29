@@ -413,7 +413,7 @@ TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
     "obs.trace_read",
 )
 #: And the one 0152 adds: how many times each connected source's rows have changed.
-RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.source_epoch",)
+RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.record_retired", "proj.source_epoch")
 
 ALL_TABLES = (
     CORE_TABLES

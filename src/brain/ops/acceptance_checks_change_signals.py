@@ -29,10 +29,13 @@ stores into and looks up in is a dictionary of the check's own behind the produc
 the key is built by `brain.gate.cache_key.key_for` from `brain.api_routes.caching_of`, which is what
 the answer route builds it from.
 
-**A retired row is read as the worker's login**, because the application's role cannot see one
-(`0045`), for the reason `brain.ops.acceptance_checks_connectors.
-A_SEARCH_THAT_CANNOT_SEE_EVERY_ROW_IS_NOT_RUN` gives; a run by a login that cannot see it says the
-check was not run.
+**The retirement check reads and writes as the worker's login**, as the worker's run does on an
+install (`brain.ops.connector_sync_store`), because the application's role can neither see a retired
+row nor write over one (`0045`): the third read, which serves a returned record again, is the
+worker's write and not the application's. A run by a login that cannot see a retired row says the
+check was not run, for the reason `brain.ops.acceptance_checks_connectors.
+A_SEARCH_THAT_CANNOT_SEE_EVERY_ROW_IS_NOT_RUN` gives. The retirement itself is read from
+`proj.record_retired`, which the application may read.
 
 **A read of everything retires, inside the check's transaction, every live row of its source and
 entity the read did not see**, which on an install with rows of that source includes rows the
@@ -54,8 +57,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qs, urlsplit
 
-from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import Connection, event, func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Session, SessionTransaction
 
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_checks_connectors import (
@@ -239,7 +243,13 @@ async def _state(h: Harness, connected: LiveConnection) -> SyncState | None:
         return (await read_states(session)).get(connected.id)
 
 
-async def _read(h: Harness, connected: LiveConnection, caller: Any) -> Attempt:
+async def _read(
+    h: Harness,
+    connected: LiveConnection,
+    caller: Any,
+    *,
+    sessions: async_sessionmaker[AsyncSession] | None = None,
+) -> Attempt:
     """One worker attempt planned from the stored sync state, and its row written as the worker's.
 
     The plan is asked with no previous attempt, so it is due whatever the last one said about
@@ -257,7 +267,7 @@ async def _read(h: Harness, connected: LiveConnection, caller: Any) -> Attempt:
         connected,
         plan,
         previous=await _state(h, connected),
-        sessions=h.sessions,
+        sessions=h.sessions if sessions is None else sessions,
         keys=_Keys(),
         caller=caller,
         resolver=_Resolver(),
@@ -334,24 +344,31 @@ async def _now(h: Harness) -> datetime:
     return stamped
 
 
-@dataclass(frozen=True)
-class _Row:
-    """One `proj.record` row of the check's own, as the worker's login sees it."""
-
-    id: str
-    source_id: str
-    last_seen_at: datetime
-    deleted_at: datetime | None
+class _LoginSession(Session):
+    """A session whose transactions run as the check's database login, as the worker's do."""
 
 
-async def _every_row(h: Harness, source_ids: Sequence[str]) -> list[_Row]:
-    """These records' rows, retired ones included, read as the worker's login.
+@event.listens_for(_LoginSession, "after_begin")
+def _as_login(session: Session, transaction: SessionTransaction, connection: Connection) -> None:
+    """The first statement of every transaction: drop the application role the harness set."""
+    del session, transaction
+    connection.exec_driver_sql("RESET ROLE")
 
-    See `RETIRED_ROWS_ARE_OUT_OF_SIGHT`. The role is reset for these statements only, inside the
-    check's transaction, as `acceptance_checks_connectors._search` resets it.
+
+async def _worker_sessions(h: Harness) -> async_sessionmaker[AsyncSession]:
+    """Sessions in the check's transaction as the worker's login, or not run where it cannot see.
+
+    See `RETIRED_ROWS_ARE_OUT_OF_SIGHT`: the next harness session sets the application role again
+    when it begins, as `acceptance_checks_connectors._search` relies on.
     """
-    async with AsyncSession(bind=h.connection, join_transaction_mode="create_savepoint") as session:
-        await session.execute(text("RESET ROLE"))
+    sessions = async_sessionmaker(
+        bind=h.connection,
+        join_transaction_mode="create_savepoint",
+        expire_on_commit=False,
+        autoflush=False,
+        sync_session_class=_LoginSession,
+    )
+    async with sessions() as session:
         sees = (
             await session.execute(
                 text(
@@ -362,20 +379,68 @@ async def _every_row(h: Harness, source_ids: Sequence[str]) -> list[_Row]:
                 )
             )
         ).scalar_one()
-        if not sees:
-            raise CheckNotRunError(RETIRED_ROWS_ARE_OUT_OF_SIGHT)
+        await session.commit()
+    if not sees:
+        raise CheckNotRunError(RETIRED_ROWS_ARE_OUT_OF_SIGHT)
+    return sessions
+
+
+@dataclass(frozen=True)
+class _Row:
+    """One `proj.record` row of the check's own, as the worker's login sees it."""
+
+    source_id: str
+    last_seen_at: datetime
+    deleted_at: datetime | None
+
+
+@dataclass(frozen=True)
+class _Retired:
+    """One `proj.record_retired` row of the check's own."""
+
+    source_id: str
+    fields: Mapping[str, Any]
+    last_seen_at: datetime
+    noticed_at: datetime
+
+
+async def _every_row(
+    sessions: async_sessionmaker[AsyncSession], source_ids: Sequence[str]
+) -> list[_Row]:
+    """These records' rows, retired ones included, read as the worker's login."""
+    async with sessions() as session:
         found = (
             await session.execute(
                 text(
-                    "SELECT id::text, source_id, last_seen_at, deleted_at FROM proj.record"
-                    " WHERE source = :source AND source_id = ANY(:ids)"
-                    " ORDER BY source_id, deleted_at NULLS LAST"
+                    "SELECT source_id, last_seen_at, deleted_at FROM proj.record"
+                    " WHERE source = :source AND source_id = ANY(:ids) ORDER BY source_id"
                 ).bindparams(source=LEDGER, ids=list(source_ids))
             )
         ).all()
         await session.commit()
     return [
-        _Row(id=str(one), source_id=str(two), last_seen_at=three, deleted_at=four)
+        _Row(source_id=str(one), last_seen_at=two, deleted_at=three) for one, two, three in found
+    ]
+
+
+async def _retirements(h: Harness, source_ids: Sequence[str]) -> list[_Retired]:
+    """These records' retirements, as the application reads them."""
+    from brain.tables.projection import RetiredRecordRow
+
+    found = (
+        await h.execute(
+            select(
+                RetiredRecordRow.source_id,
+                RetiredRecordRow.fields,
+                RetiredRecordRow.last_seen_at,
+                RetiredRecordRow.noticed_at,
+            )
+            .where(RetiredRecordRow.source == LEDGER, RetiredRecordRow.source_id.in_(source_ids))
+            .order_by(RetiredRecordRow.noticed_at)
+        )
+    ).all()
+    return [
+        _Retired(source_id=str(one), fields=dict(two), last_seen_at=three, noticed_at=four)
         for one, two, three, four in found
     ]
 
@@ -383,19 +448,21 @@ async def _every_row(h: Harness, source_ids: Sequence[str]) -> list[_Row]:
 async def _handed(h: Harness, tenant: str) -> set[str]:
     """The invoices a reader in the tenant is handed through the row plane the answers read."""
     from brain.connectors import xero
-    from brain.core.entitlement import Capability, EntitlementSet, Grant
+    from brain.core.entitlement import EntitlementSet, Grant
     from brain.core.field_policy import Classification
     from brain.core.scope import Scope
     from brain.knowledge.columns import ColumnRule, TableClassification
     from brain.knowledge.row_store import SessionRowSource
-    from brain.knowledge.rows import RowRequest, RowTool, read_rows
+    from brain.knowledge.rows import RowRequest, RowTool, entity_capability, read_rows
 
     tool = RowTool(
         source=LEDGER,
         classification=TableClassification(
             entity=xero.ENTITY_INVOICE,
             rules=(
-                ColumnRule("tenant_id", Capability(value="read:invoice"), Classification.INTERNAL),
+                ColumnRule(
+                    "tenant_id", entity_capability(xero.ENTITY_INVOICE), Classification.INTERNAL
+                ),
             ),
         ),
         description="Invoices this install keeps from Xero.",
@@ -403,7 +470,7 @@ async def _handed(h: Harness, tenant: str) -> set[str]:
     scope = Scope(clauses=xero.XeroConnection(tenant_id=tenant).visibility().clauses)
     reader = EntitlementSet(
         principal_id=f"{RESERVED_DEPARTMENTS[0]}.reader",
-        grants=(Grant(capability=Capability(value="read:invoice"), scope=scope),),
+        grants=(Grant(capability=entity_capability(xero.ENTITY_INVOICE), scope=scope),),
     )
     result = await read_rows(
         tool, RowRequest(), entitlement=reader, records=SessionRowSource(h.sessions), now=h.now
@@ -548,9 +615,9 @@ async def a_changed_read_moves_the_epoch_and_the_cached_answer_goes(
     leaves=("M11.8.11",),
     sentence=(
         "Recorded Xero reads of everything in the check: an invoice the second read no longer "
-        "returns is retired with the instant it was noticed and handed to no reader of its tenant, "
-        "and when the third read returns it again it is a new live row handed to the reader while "
-        "the retired row keeps its retirement."
+        "returns is kept in the retired records with the instant it was noticed and handed to no "
+        "reader of its tenant, and when the third read returns it again it is handed to the reader "
+        "while its retirement stays exactly as it was kept."
     ),
 )
 async def a_dropped_record_is_retired_withheld_and_returned_as_a_new_row(
@@ -559,34 +626,37 @@ async def a_dropped_record_is_retired_withheld_and_returned_as_a_new_row(
     from brain.ops.acceptance_checks_connectors import _settings
     from brain.ops.connector_sync import READ_TO_THE_END, SyncOutcome
 
+    worker = await _worker_sessions(h)
     settings = _settings()
     tenant = settings["tenant_id"]
     connected = await _connected(h, LEDGER, settings)
     kept, dropped = str(uuid.uuid4()), str(uuid.uuid4())
     for held in ((kept, dropped), (kept,)):
         started = await _now(h)
-        done = await _read(h, connected, _Ledger([_invoice(one) for one in held]))
+        done = await _read(h, connected, _Ledger([_invoice(one) for one in held]), sessions=worker)
         if done.outcome is not SyncOutcome.SYNCED or done.detail != READ_TO_THE_END:
             raise CheckFailedError("a read of everything was not read to the end")
     noticed_by = await _now(h)
-    rows = await _every_row(h, (kept, dropped))
-    gone = [one for one in rows if one.source_id == dropped]
-    if len(gone) != 1 or gone[0].deleted_at is None:
+
+    # Retired: a retirement kept with when it was noticed, and the live row hidden.
+    kept_retirements = await _retirements(h, (kept, dropped))
+    if [one.source_id for one in kept_retirements] != [dropped]:
         raise CheckFailedError("a record a read of everything no longer returned was not retired")
-    retired = gone[0]
-    if retired.deleted_at is None or not started <= retired.deleted_at <= noticed_by:
+    [retirement] = kept_retirements
+    if not started <= retirement.noticed_at <= noticed_by:
         raise CheckFailedError("a retired record was not stamped with when it was noticed gone")
-    if any(one.deleted_at is not None for one in rows if one.source_id == kept):
-        raise CheckFailedError("a record the read returned was retired")
+    rows = {one.source_id: one for one in await _every_row(worker, (kept, dropped))}
+    if rows[dropped].deleted_at != retirement.noticed_at or rows[kept].deleted_at is not None:
+        raise CheckFailedError("a retired record's row was not hidden, or a returned one was")
     if await _handed(h, tenant) != {kept}:
         raise CheckFailedError("a retired record was still handed to a reader of its source")
 
-    await _read(h, connected, _Ledger([_invoice(kept), _invoice(dropped)]))
-    again = [one for one in await _every_row(h, (dropped,)) if one.source_id == dropped]
-    if len(again) != 2 or retired not in again:
-        raise CheckFailedError("a record the source returned again rewrote its retired row")
-    returned = [one for one in again if one.deleted_at is None]
-    if len(returned) != 1 or returned[0].id == retired.id:
-        raise CheckFailedError("a record the source returned again was not a new live row")
+    # Returned: served again, and the retirement exactly as it was kept.
+    await _read(h, connected, _Ledger([_invoice(kept), _invoice(dropped)]), sessions=worker)
+    if await _retirements(h, (kept, dropped)) != [retirement]:
+        raise CheckFailedError("a record the source returned again rewrote its retirement")
+    again = {one.source_id: one for one in await _every_row(worker, (dropped,))}
+    if again[dropped].deleted_at is not None:
+        raise CheckFailedError("a record the source returned again was not served again")
     if await _handed(h, tenant) != {kept, dropped}:
         raise CheckFailedError("a record the source returned again was not handed to the reader")
