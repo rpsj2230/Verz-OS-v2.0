@@ -33,11 +33,19 @@ const ACCESS_REVIEW = {
   shows: UNBROKEN,
   keeping: UNBROKEN,
   removing: UNBROKEN,
+  people: { [UNBROKEN]: UNBROKEN },
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
   "/access_review": {
     address: "/access_review",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/access-review": ACCESS_REVIEW },
+  },
+  // One holding's page asks the same list for it by id.
+  "/access_review/:kind/:rowId": {
+    address: "/access_review/pack/11111111-2222-3333-4444-555555555555",
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/govern/access-review": ACCESS_REVIEW },

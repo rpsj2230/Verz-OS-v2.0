@@ -2374,8 +2374,20 @@ def test_0101_builds_the_access_request_table_exactly_as_the_model_declares_it()
     """The request table's DDL, from the model, appears in 0101's rendered upgrade, the
     one-subject check included, and the downgrade takes it away again.
 
-    Delete this and the model and the migration can disagree about what a request names."""
+    Delete this and the model and the migration can disagree about what a request names. The
+    model carries `0146`'s handled columns and their two checks, which 0101 did not build and
+    `tests/unit/test_access_request_handled.py` holds against 0146, so they are taken out of the
+    model's DDL before it is compared with 0101's."""
     expected = squash(str(CreateTable(table("gate.access_request")).compile(dialect=DIALECT)))
+    for added_by_0146 in (
+        " handled_at TIMESTAMP WITH TIME ZONE, handled_by VARCHAR(128),",
+        ", CONSTRAINT ck_access_request_handled_whole CHECK "
+        "((handled_at IS NULL) = (handled_by IS NULL))",
+        ", CONSTRAINT ck_access_request_handled_by_its_owner CHECK "
+        "(handled_by IS NULL OR handled_by = owner_id)",
+    ):
+        assert added_by_0146 in expected
+        expected = expected.replace(added_by_0146, "")
     up = squash(rendered("upgrade", MIGRATION_ACCESS_REQUEST))
     assert expected in up
     assert "CREATE INDEX ix_gate_access_request_owner_id" in up

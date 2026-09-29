@@ -1,26 +1,27 @@
 /**
- * The Referred to me screen: the caller's own referrals, whether each is handled, and marking one.
+ * Referred to me on the page kit: what has been referred to the reader, named by who asked, and the
+ * one act of marking each handled, sent only from its confirmation.
  *
- * Mounted directly on a memory router at its own address, for the reason
- * `tests/sessions-page.test.tsx` gives. The failures worth testing are the ones that look like the
- * screen working: a referral marked handled on the first press, a handled one still offering the
- * button, and an empty list drawn as a blank table rather than said.
- *
- * Task ids: M24.2.2
+ * Task ids: M24.2.2, M27.16.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { HANDLED_LABEL, HANDLING, NOTHING_REFERRED, READING_REFERRALS } from "../src/pages/Referrals";
-import { handledApiPath, referralState, type Referral } from "../src/pages/referralsQuery";
+import { handledApiPath, type Referral } from "../src/pages/referralsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
+import { installRadixStubs } from "./support/radix";
+import { chooseInMenu, confirmWith } from "./support/rowMenu";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const REFERRALS_OPERATION = "/api/v1/me/referrals";
 const OPEN_ID = "11111111-1111-4111-8111-111111111111";
+const ASKER = "u_asker_5d1e";
+const PEOPLE = { [ASKER]: "Aisha Asker", u_me: "Me Myself" };
 
 beforeAll(async () => {
+  installRadixStubs();
   await import("../src/pages/Referrals");
 }, 60_000);
 
@@ -29,7 +30,7 @@ function referral(overrides: Partial<Referral> = {}): Referral {
     referral_id: OPEN_ID,
     topic: "grievance",
     label: "Grievances",
-    asked_by: "u_asker",
+    asked_by: ASKER,
     asked_at: "2019-03-04T09:00:00Z",
     handled_at: null,
     handled_by: null,
@@ -42,14 +43,16 @@ function json(body: unknown, status = 200): Response {
 }
 
 async function mount(referrals: Referral[]): Promise<{ container: HTMLElement; idp: FakeIdp }> {
+  let handled = false;
   const idp = fakeIdentityProvider({
     api(url, init) {
       const path = new URL(url, CONSOLE_ORIGIN).pathname;
       if (init?.method === "POST") {
-        return json({ referrals: referrals.map((one) => ({ ...one, handled_at: "2019-03-05T10:00:00Z", handled_by: "u_me" })) });
+        handled = true;
       }
-      if (path === REFERRALS_OPERATION) {
-        return json({ referrals });
+      if (path === REFERRALS_OPERATION || init?.method === "POST") {
+        const now = handled ? referrals.map((one) => ({ ...one, handled_at: "2019-03-05T10:00:00Z", handled_by: "u_me" })) : referrals;
+        return json({ referrals: now, people: PEOPLE });
       }
       return null;
     },
@@ -57,12 +60,10 @@ async function mount(referrals: Referral[]): Promise<{ container: HTMLElement; i
   const loaded = await loadConsole({ idp });
   await signIn(loaded);
   const { Referrals } = await import("../src/pages/Referrals");
-  const router = createMemoryRouter([{ path: "/referrals", element: <Referrals /> }], {
-    initialEntries: ["/referrals"],
-  });
+  const router = createMemoryRouter([{ path: "/referrals", element: <Referrals /> }], { initialEntries: ["/referrals"] });
   const { container } = render(<RouterProvider router={router} />);
   await waitFor(() => {
-    if (container.textContent?.includes(READING_REFERRALS) || !container.querySelector(".card")) {
+    if ((container.textContent ?? "").includes(READING_REFERRALS) || container.querySelector("h1") === null) {
       throw new Error("still reading");
     }
   });
@@ -77,53 +78,39 @@ function posts(idp: FakeIdp): string[] {
 
 describe("what has been referred to me", () => {
   test("nothing referred is said in a sentence, not drawn as an empty table", async () => {
-    // What breaks if this is deleted: a person named for a topic sees a blank panel and cannot tell
-    // an empty list from one still loading.
+    // What breaks if this is deleted: an empty table that reads as a list somebody emptied.
     const { container } = await mount([]);
     expect(container.textContent).toContain(NOTHING_REFERRED);
     expect(container.querySelector("table")).toBeNull();
   });
 
-  test("each referral names its topic, who asked and when, and nothing of what was asked", async () => {
-    // What breaks if this is deleted: a column added for the question, which does not exist and
-    // would read as something withheld.
-    const { container } = await mount([referral(), referral({ referral_id: "r-2", handled_at: "2019-03-04T12:00:00Z", handled_by: "u_me" })]);
-    const rows = [...container.querySelectorAll("table[aria-label='Questions referred to you'] tbody tr")];
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain("Grievances");
-    expect(rows[0]?.textContent).toContain("u_asker");
-    expect(rows[0]?.textContent).toContain("Not handled yet.");
-    expect(rows[1]?.textContent).toContain("by u_me");
-    expect(rows[1]?.querySelector("button")).toBeNull();
-    const headings = [...container.querySelectorAll("thead th")].map((one) => one.textContent);
-    expect(headings).toEqual(["Topic", "Asked by", "Asked", "Where it stands", "Control"]);
+  test("each referral names its topic, who asked by name and when, and nothing of what was asked", async () => {
+    // What breaks if this is deleted: a principal id where the reader needs a person to contact, or
+    // a column for the question, which was never kept.
+    const { container } = await mount([referral(), referral({ referral_id: "r2", handled_at: "2019-03-05T10:00:00Z", handled_by: "u_me" })]);
+    const table = container.querySelector("table") as HTMLElement;
+    expect(within(table).getAllByText("Aisha Asker")).toHaveLength(2);
+    expect(table.textContent).not.toContain(ASKER);
+    expect(table.textContent).toContain("Me Myself");
+    const headings = [...table.querySelectorAll("thead th")].map((one) => one.textContent);
+    expect(headings.join(" ")).not.toMatch(/question|said|wrote/i);
+    expect(screen.getAllByRole("button", { name: /^Actions for the Grievances referral/ })).toHaveLength(1);
   });
 
-  test("marking one handled is confirmed, then sent to that referral, and the list is read again", async () => {
-    // What breaks if this is deleted: a referral marked handled on the first press, which cannot be
-    // reopened, or the mark sent for a different referral than the row pressed.
+  test("marking one handled is confirmed, then sent to that referral, and the list says so", async () => {
+    // What breaks if this is deleted: a mark sent from the menu with no confirmation, or sent to
+    // another referral.
     const { container, idp } = await mount([referral()]);
-    fireEvent.click(container.querySelector("tbody button") as HTMLButtonElement);
-    const confirmation = container.querySelector(".confirm")?.textContent ?? "";
-    expect(confirmation).toContain("Mark the Grievances referral from u_asker");
-    expect(confirmation).toContain(HANDLING);
+    await chooseInMenu(screen.getByRole("button", { name: /^Actions for the Grievances referral/ }), HANDLED_LABEL);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Mark the Grievances referral from Aisha Asker");
+    expect(dialog.textContent).toContain(HANDLING);
     expect(posts(idp)).toEqual([]);
+    await confirmWith(HANDLED_LABEL);
 
-    fireEvent.click(
-      [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === HANDLED_LABEL) as HTMLButtonElement,
-    );
-    await waitFor(() => {
-      expect(posts(idp)).toEqual([`/api/v1${handledApiPath(OPEN_ID)}`]);
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("is marked handled.");
     });
-  });
-
-  test("a handled referral says who handled it and when", () => {
-    expect(referralState(referral({ handled_at: "2019-03-04T12:00:00Z", handled_by: "u_me" }), () => "THEN")).toBe(
-      "Handled at THEN by u_me.",
-    );
-    expect(referralState(referral(), () => "THEN")).toBe("Not handled yet.");
+    expect(posts(idp)).toEqual([`/api/v1${handledApiPath(OPEN_ID)}`]);
   });
 });

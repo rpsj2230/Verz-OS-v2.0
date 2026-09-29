@@ -631,3 +631,63 @@ def test_a_row_with_an_action_nobody_declared_is_not_an_entry() -> None:
 
     assert entry_from(row) is None
     assert entry_from(stored(chain_of(PLAN)[0])) is not None
+
+
+# ------------------------------------------------------- one subject, and the people named
+
+
+@dataclass
+class Names:
+    """A `brain.people_names.PeopleNames` that knows everybody, and records what it was asked."""
+
+    asked: list[set[str]] = field(default_factory=list)
+
+    async def names(self, principal_ids: Any) -> dict[str, str]:
+        wanted = set(principal_ids)
+        self.asked.append(wanted)
+        # One stranger answered whatever was asked, so a route that passed it on would show it.
+        return {**{one: f"Name of {one}" for one in wanted}, "u_stranger": "Somebody else"}
+
+
+def test_the_ledger_narrowed_to_one_subject_reads_and_shows_only_that_subjects_entries(
+    client: TestClient, ledger: Ledger
+) -> None:
+    """A subject's own page in the console. Delete this and `subject_id` can be accepted and
+    ignored, so the page titled with one person lists everybody's entries, or narrowed only after
+    reading the whole window rather than in the statement."""
+    answer = get(client, "u_admin", subject_kind="principal", subject_id="u_wide")
+
+    assert answer.status_code == 200, answer.text
+    assert [one[2] for one in seen(answer)] == ["principal:u_wide", "principal:u_wide"]
+    assert {one["subject"] for one in ledger.calls} == {"principal:u_wide"}
+
+
+def test_a_subject_id_without_its_kind_is_refused_and_the_ledger_is_not_read(
+    client: TestClient, ledger: Ledger
+) -> None:
+    """Delete this and an id alone is silently dropped, which reads as a subject with the whole
+    ledger for its history."""
+    answer = get(client, "u_admin", subject_id="u_wide")
+
+    assert answer.status_code == 422
+    assert ledger.calls == []
+
+
+def test_the_answer_names_the_people_on_its_own_rows_and_nobody_else(
+    client: TestClient,
+) -> None:
+    """`brain.people_names`' rule, served. Delete this and the names can be looked up for rows the
+    reader is not shown, or a store's extra answer reaches the page as a directory entry."""
+    names = Names()
+    client.app.state.people_names = names  # type: ignore[attr-defined]
+
+    narrow = get(client, "u_narrow").json()
+    shown = {one["actor_id"] for one in narrow["items"]} | {
+        one["subject_id"] for one in narrow["items"] if one["subject_kind"] == "principal"
+    }
+    history = get(client, "u_admin", HISTORY, subject_kind="principal", subject_id="u_wide").json()
+
+    assert narrow["people"] == {one: f"Name of {one}" for one in shown}
+    assert "u_elsewhere" not in names.asked[0]
+    assert history["people"]["u_wide"] == "Name of u_wide"
+    assert "u_stranger" not in history["people"]

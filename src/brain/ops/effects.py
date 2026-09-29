@@ -378,6 +378,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
         "brain.ops.data_export_store:ExportRecords.taken_by": Repeat.READS,
+        # The access certification report's record: one insert into this system's own table,
+        # whose trigger appends to the ledger, taken again as a second record of a second report.
+        "brain.ops.data_export_store:ReportRecords.record_report": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        # The names of the people a governance answer already carries by id: a read.
+        "brain.people_names:PeopleNames.names": Repeat.READS,
         # The Retention screen's export log: a read of the same table, every person's rows.
         "brain.ops.data_export_store:ExportLog.recent": Repeat.READS,
         # The Retention screen's erasure queue: one insert into this system's own table, whose

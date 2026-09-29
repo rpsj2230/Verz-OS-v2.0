@@ -101,7 +101,7 @@ from typing import Annotated, Final, Protocol, Self, runtime_checkable
 
 import structlog
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked
@@ -112,6 +112,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.gate.leash import SuspendedAction
 from brain.listing import Column, ListAsked, Listing, Plan
+from brain.people_names import names_for
 
 log = structlog.get_logger()
 
@@ -277,6 +278,18 @@ class ApprovalQueue(Page[ApprovalCardView]):
 
     #: There are more approvals this caller may decide than this answer carries. Never how many.
     truncated: bool = False
+    #: The names of the people the cards above run as, by principal id (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
+
+
+class ApprovalPageView(ApprovalCardView):
+    """One approval on its own page: its card, and the name of the person it runs as.
+
+    A subclass rather than a field on `ApprovalCardView`, because that model is `Card` field for
+    field and a test holds the two equal; the name is the page's, not the card's.
+    """
+
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class DecisionAsked(BaseModel):
@@ -490,13 +503,15 @@ async def approvals(request: Request, asked: Asked, listed: QueueQuery) -> Appro
     """One page of the approvals this caller may decide, at their admitted reach."""
     plan = QUEUE.plan(listed, reader=asked.caller.principal.id)
     source = _require_source(request, asked.reach, asked.now)
-    return queue(await source.open_suspensions(), asked.reach, asked.now, plan)
+    answered = queue(await source.open_suspensions(), asked.reach, asked.now, plan)
+    named = await names_for(request, {one.runs_as for one in answered.items})
+    return answered.model_copy(update={"people": named})
 
 
 @router.get(
-    "/approvals/{suspension_id}", response_model=ApprovalCardView, responses=COMMON_RESPONSES
+    "/approvals/{suspension_id}", response_model=ApprovalPageView, responses=COMMON_RESPONSES
 )
-async def approval(request: Request, suspension_id: str, asked: Asked) -> ApprovalCardView:
+async def approval(request: Request, suspension_id: str, asked: Asked) -> ApprovalPageView:
     """One approval's card, or the answer an approval that does not exist gets."""
     source = _require_source(request, asked.reach, asked.now)
     found = await source.suspension(suspension_id)
@@ -504,7 +519,8 @@ async def approval(request: Request, suspension_id: str, asked: Asked) -> Approv
     if shown is None:
         log.info("approval not answerable", principal=asked.caller.principal.id)
         raise _no_approval_here()
-    return card_view(shown)
+    card = card_view(shown)
+    return ApprovalPageView(**card.model_dump(), people=await names_for(request, {card.runs_as}))
 
 
 @router.post(

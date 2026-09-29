@@ -25,31 +25,40 @@ An install with no steward stores nothing, logged as an operations fault and inv
 requests addressed to the caller and nobody else, newest first, with the question in the asker's
 words; no grant opens it and none is needed, because it holds only what was sent to the reader.
 
-Task ids: M4.3.4, M2.2.4
+**`POST /access-requests/{id}/handled` is the owner saying they dealt with one** (needs-rupash gap
+(a)). It marks a request addressed to the caller and not handled yet, once, and the list then says
+it was handled and when; one refusal, the same 404, for a request that is somebody else's, handled
+already or missing. It grants nothing and removes nothing: the decision is a grant on the People or
+Roles screens, which is recorded there. Each row carries its asker's name (`brain.people_names`),
+so the owner reads who asked rather than an id.
+
+Task ids: M4.3.4, M2.2.4, M27.16.1
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import Annotated, Final
 
 import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, Asking
 from brain.core.access_route import CapabilityOwner, OwnerDirectory, route_access_request
 from brain.core.department import SLUG_PATTERN, admits_department
-from brain.core.errors import Failed
+from brain.core.errors import Absent, Failed
 from brain.core.redaction import ASKER_ACKNOWLEDGEMENT, LockedField
 from brain.identity.data_steward import steward_in
 from brain.knowledge.rows import row_scope_for
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.access_request_store import Request as Stored
-from brain.ops.access_request_store import addressed_to, record
+from brain.ops.access_request_store import addressed_to, mark_handled, record
+from brain.people_names import names_for
 from brain.routing_routes import sessions_of
 from brain.tables.access_request import NAME_PATTERN, QUESTION_CHARS
 from brain.tools.startup import classification_for
@@ -112,6 +121,17 @@ class AccessRequestView(BaseModel):
     question: str
     requested_capability: str
     requested_at: datetime
+    #: When the owner marked it handled, or None while it is open.
+    handled_at: datetime | None = None
+
+
+class AccessRequestHandled(BaseModel):
+    """The request marked, and when."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    request_id: str
+    handled_at: datetime
 
 
 class AccessRequestsPage(Page[AccessRequestView]):
@@ -122,6 +142,8 @@ class AccessRequestsPage(Page[AccessRequestView]):
     """
 
     truncated: bool = False
+    #: The names of the people who asked, by principal id (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 #: What the owner's list may search, filter and order by: the fields a row shows.
@@ -133,6 +155,7 @@ REQUESTS: Final[Listing[AccessRequestView]] = Listing(
         Column("subject", lambda row: row.subject, search=True, filter=True, sort=True),
         Column("requested_capability", lambda row: row.requested_capability, filter=True),
         Column("question", lambda row: row.question, search=True),
+        Column("state", lambda row: "open" if row.handled_at is None else "handled", filter=True),
     ),
     key=lambda row: row.request_id,
     order="-requested_at",
@@ -242,10 +265,37 @@ async def access_requests(
             question=row.question,
             requested_capability=row.requested_capability,
             requested_at=row.requested_at,
+            handled_at=row.handled_at,
         )
         for row in rows
     ]
     page = plan.page(views)
     return AccessRequestsPage(
-        items=list(page.items), next_cursor=page.next_cursor, truncated=page.next_cursor is not None
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        truncated=page.next_cursor is not None,
+        people=await names_for(request, {one.asker_id for one in page.items}),
     )
+
+
+@router.post(
+    ACCESS_REQUESTS_PATH + "/{request_id}/handled",
+    response_model=AccessRequestHandled,
+    responses=COMMON_RESPONSES,
+)
+async def mark_request_handled(
+    request: Request, request_id: uuid.UUID, asked: Asked
+) -> AccessRequestHandled:
+    """Mark one request addressed to the caller handled. One refusal for any it may not mark."""
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    async with sessions() as session:
+        done = await mark_handled(
+            session, request_id, owner_id=asked.caller.principal.id, at=asked.now
+        )
+        if not done:
+            raise Absent("that request is not open for this caller")
+        await session.commit()
+    log.info("access_request.handled", owner_id=asked.caller.principal.id)
+    return AccessRequestHandled(request_id=str(request_id), handled_at=asked.now)

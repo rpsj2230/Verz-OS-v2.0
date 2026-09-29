@@ -290,7 +290,7 @@ describe("what the Overview draws", () => {
     const page = await overviewWith();
     const activity = section(page.root, ACTIVITY);
     expect(activity?.textContent).toContain("Granted a capability to a person");
-    expect(activity?.querySelector("a[href^='/audit?']")).not.toBeNull();
+    expect(activity?.querySelector("a[href^='/audit/subject/']")).not.toBeNull();
     expect(textOutsideAdvanced(page.root)).not.toContain("f".repeat(64));
     const advanced = page.root.querySelector("[data-slot='advanced']");
     expect(advanced?.textContent).toContain("f".repeat(64));

@@ -590,3 +590,31 @@ def test_a_records_refusal_for_a_served_entity_is_a_deny_and_an_unknown_one_is_n
         DenyReason.NO_GRANT,
     )
     assert written.capability == Capability(value="read:price_list")
+
+
+class Names:
+    """A `PeopleNames` that knows everybody, and one stranger it was not asked about."""
+
+    async def names(self, principal_ids: Any) -> dict[str, str]:
+        return {**{one: f"Name of {one}" for one in principal_ids}, "u_stranger": "Somebody else"}
+
+
+def test_the_referrals_and_the_cases_name_the_people_on_their_rows_and_nobody_else(
+    client: TestClient, referrals: Referrals
+) -> None:
+    """The Compliance and Referred to me pages print names, not ids. Delete this and the names can
+    be missing, or name people who are on no row the reader was shown."""
+    client.app.state.people_names = Names()  # type: ignore[attr-defined]
+    asyncio.run(
+        referrals.refer(asked_by="u_asker", topic=SensitiveTopic.MEDICAL, ent_hash="", trace_id="t")
+    )
+    referrals.named_people[SensitiveTopic.MEDICAL] = "u_none"
+    opened(client)
+
+    mine = client.get(MINE, headers=auth("u_none")).json()
+    cases = client.get(BREACHES, headers=auth("u_admin")).json()
+    nobody = client.get(MINE, headers=auth("u_prefix")).json()
+
+    assert mine["people"] == {"u_asker": "Name of u_asker"}
+    assert cases["people"] == {"u_admin": "Name of u_admin"}
+    assert nobody["people"] == {}

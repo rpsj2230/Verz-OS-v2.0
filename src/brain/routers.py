@@ -101,6 +101,10 @@ from brain.automations_routes import router as automations_router
 # `brain.binding_routes`.
 from brain.binding_routes import router as binding_router
 
+# The access certification report, taken from the Access review screen and recorded on the
+# Exports log before it is handed over. See `brain.certification_export_routes`.
+from brain.certification_export_routes import router as certification_export_router
+
 # Channels: the one address every vendor posts a message to, which takes no caller and proves
 # the signature, and each channel's record, switch, test message and deliveries behind the
 # connector authority over `<channel>_channel`. See `brain.channel_routes`.

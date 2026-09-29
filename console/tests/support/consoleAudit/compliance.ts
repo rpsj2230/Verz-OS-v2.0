@@ -7,8 +7,17 @@
  * Task ids: none
  */
 
-import { BREACHES_API_PATH, breachStepApiPath, topicApiPath } from "../../../src/pages/complianceQuery";
-import { at, COMPLIANCE_CASE, type Proofs, t, type WriteRoute } from "../auditClaims";
+import { BREACHES_API_PATH, breachStepApiPath, REGISTER_API_PATH, topicApiPath } from "../../../src/pages/complianceQuery";
+import { at, COMPLIANCE_CASE, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
+
+export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
+  // The processing register is read when a person opens its view; the view's page case opens Topics.
+  "GET /api/v1/govern/compliance/register": {
+    screen: "/compliance/:view",
+    spelled: "REGISTER_API_PATH",
+    built: REGISTER_API_PATH,
+  },
+};
 
 const A_PERSON_NAMED_FOR_A_TOPIC = t(
   "test_compliance_store",
@@ -30,10 +39,10 @@ const BREACH_STEP: Proofs = {
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Compliance.tsx topicApiPath(asked.topic)": [
+  "src/pages/compliance/ComplianceActs.tsx topicApiPath(topic.topic)": [
     at("PUT /api/v1/govern/compliance/topics/{topic}", "topicApiPath", topicApiPath("grievance")),
   ],
-  "src/pages/Compliance.tsx path": [
+  "src/pages/compliance/ComplianceActs.tsx path": [
     at("POST /api/v1/govern/compliance/breaches", "BREACHES_API_PATH", BREACHES_API_PATH),
     at(
       "POST /api/v1/govern/compliance/breaches/{case_id}/assessment",

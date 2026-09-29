@@ -68,7 +68,12 @@ cursor means what it meant before: the reading stopped at its ceiling.
 the stored ledger from entry nought through `brain.audit.chain_check.check_ledger`, optionally
 against the head the outside anchor store last published, for anybody the screen opens for.
 
-Task ids: M27.7.13, M27.8.6, M24.1.2, M24.3.3
+**One subject's entries, and the people named.** `subject_id` with its kind narrows the window to
+that subject in the statement, which is the subject's own page in the console. Each answer carries
+the display names of the people on its own rows (`brain.people_names`), read after the view has
+decided which rows those are, so a name is never looked up for an entry the reader is not shown.
+
+Task ids: M27.7.13, M27.8.6, M24.1.2, M24.3.3, M27.16.1
 """
 
 from __future__ import annotations
@@ -117,6 +122,7 @@ from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
 from brain.listing import MAX_SEARCH_CHARS, says_every_word, search_words
+from brain.people_names import names_for
 from brain.routing_routes import sessions_of
 from brain.tables.audit import AuditEntryRow
 
@@ -156,6 +162,9 @@ A_READING_CEILING_SAYS_WHERE_IT_STOPPED_AND_NEVER_HOW_MUCH_IT_PASSED: Final = (
 
 #: The screen whose read decides whether this ledger opens at all.
 AUDIT_SCREEN: Final = "audit"
+
+#: The subject kind whose id is a person's principal id, and so has a name to show.
+PERSON_KIND: Final = "principal"
 
 #: How many rows one statement loads. A resource bound, not a permission one.
 LOAD_CHUNK: Final = 500
@@ -206,6 +215,9 @@ class AuditLedgerPage(BaseModel):
     subject_kinds: list[str]
     #: The actors on the rows above, in the order they first appear, and no others.
     actors: list[str]
+    #: The display names of the people on the rows above, as actor or as subject, by principal id.
+    #: See `brain.people_names.A_NAME_IS_LOOKED_UP_ONLY_FOR_AN_ID_THE_ROW_ALREADY_CARRIES`.
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class PermissionEventView(BaseModel):
@@ -229,6 +241,8 @@ class PermissionHistoryView(BaseModel):
     events: list[PermissionEventView]
     #: The history filled a whole page of what this reader may see. A fact about their own view.
     full: bool
+    #: The display names of the subject, when a person, and of the actors on the events above.
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------- the statements
@@ -382,6 +396,7 @@ async def read_page(
     cursor: str | None,
     newest_first: bool,
     shows: Callable[[AuditRow], bool] | None = None,
+    subject: str | None = None,
 ) -> AuditPage:
     """One page of what this reader may see, read in chunks up to `READ_CEILING`.
 
@@ -396,7 +411,11 @@ async def read_page(
     read = 0
     while True:
         rows = await ledger.window(
-            criteria, position=position, newest_first=newest_first, limit=LOAD_CHUNK
+            criteria,
+            subject=subject,
+            position=position,
+            newest_first=newest_first,
+            limit=LOAD_CHUNK,
         )
         read += len(rows)
         loaded.extend(entry for entry in (entry_from(row) for row in rows) if entry is not None)
@@ -444,6 +463,13 @@ def said_by(row: AuditRow) -> tuple[str, ...]:
     return (row.action.value, row.actor_id, row.subject_kind, row.subject_id, *row.details.values())
 
 
+def people_on(rows: Sequence[AuditRow]) -> set[str]:
+    """The principal ids these rows name, as their actor or as a person they are about."""
+    return {row.actor_id for row in rows} | {
+        row.subject_id for row in rows if row.subject_kind == PERSON_KIND
+    }
+
+
 def actors_on(rows: Sequence[AuditRow]) -> list[str]:
     """The actors on these rows, first appearance first, each once. Never read from the table."""
     seen: dict[str, None] = {}
@@ -468,16 +494,22 @@ async def audit_page(
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     q: Annotated[str, Query(max_length=MAX_SEARCH_CHARS)] = "",
+    subject_id: Annotated[str | None, Query(pattern=IDENTIFIER)] = None,
 ) -> AuditLedgerPage:
     """One page of the ledger this reader may see, narrowed by exact filters.
 
     The screen's question first, then the filter the view would refuse, then the database. A
     subject kind outside `SUBJECT_KINDS`, a naive or inverted date range and a malformed cursor
     are the 422 a malformed parameter always is.
+
+    `subject_id` narrows the window to one subject's entries, which is the subject's own page in
+    the console, and needs its kind beside it: an id alone names nothing in the ledger's grammar.
     """
     if not permitted(screen(AUDIT_SCREEN).read, asked.reach, asked.now):
         log.info("audit screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
+    if subject_id is not None and subject_kind is None:
+        raise _refused_input("subject_id", "name the subject's kind as well as its id")
 
     try:
         criteria = AuditFilter(
@@ -506,6 +538,7 @@ async def audit_page(
         cursor=cursor,
         newest_first=newest_first,
         shows=(lambda row: says_every_word(said_by(row), words)) if words else None,
+        subject=None if subject_id is None else f"{subject_kind}:{subject_id}",
     )
     return AuditLedgerPage(
         items=[row_view(row) for row in page.rows],
@@ -514,6 +547,7 @@ async def audit_page(
         actions=list(AuditAction),
         subject_kinds=sorted(SUBJECT_KINDS),
         actors=actors_on(page.rows),
+        people=await names_for(request, people_on(page.rows)),
     )
 
 
@@ -575,6 +609,11 @@ async def audit_history(
             for one in events
         ],
         full=len(events) >= MAX_PAGE_SIZE,
+        people=await names_for(
+            request,
+            {one.actor_id for one in events}
+            | ({subject_id} if subject_kind == PERSON_KIND else set()),
+        ),
     )
 
 

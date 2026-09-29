@@ -11,7 +11,7 @@ import { markApiPath, markReviewApiPath, reviewApiPath, tableApiPath } from "../
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Classification.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)": [
+  "src/pages/classification/ClassificationPage.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)": [
     at("POST /api/v1/classifications/{entity}/columns/{column}/review", "reviewApiPath", reviewApiPath("price_list", "cost")),
     at(
       "POST /api/v1/classifications/{entity}/columns/{column}/marks/review",
@@ -19,10 +19,10 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       markReviewApiPath("prices", "margin"),
     ),
   ],
-  "src/pages/Classification.tsx markApiPath(entity, row.column)": [
+  "src/pages/classification/ClassificationPage.tsx markApiPath(entity, row.column)": [
     at("PUT /api/v1/classifications/{entity}/columns/{column}/marks", "markApiPath", markApiPath("prices", "margin")),
   ],
-  "src/pages/Classification.tsx tableApiPath(named)": [
+  "src/pages/classification/ClassificationPage.tsx tableApiPath(named)": [
     at("PUT /api/v1/classifications/{entity}/table", "tableApiPath", tableApiPath("prices")),
   ],
 };

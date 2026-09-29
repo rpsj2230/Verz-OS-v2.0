@@ -1314,3 +1314,39 @@ def test_a_caller_without_the_review_authority_is_refused_the_bulk_decision_befo
     assert empty.status_code == deferred.status_code == 422
     assert wired.review.calls == []
     assert not keys_in(several.json()) & NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
+
+
+# ------------------------------------------------------------ one row's own page, by its id
+
+
+def test_one_request_and_one_holding_are_found_by_id_only_among_what_the_reader_is_shown(
+    wired: Wired,
+) -> None:
+    """A request's and a holding's own pages ask for one row by id through the list. Delete this and
+    the id filter can reach a row `requests_shown` or `reviewable` withheld, so a page opened on a
+    guessed id says whether it exists; or the filter is dropped and the page shows another row."""
+    soon = datetime.now(UTC) + timedelta(hours=1)
+    wired.elevations.stored = [
+        a_request("u_2", "web"),
+        a_request(
+            "u_3", "finance", decision=ElevationDecision.APPROVED, lapses_at=soon, grant_live=True
+        ),
+    ]
+    finance_request = wired.elevations.stored[1].request_id
+    web = a_pack_holding("u_5", "web")
+    finance = GrantHolding(
+        row=a_grant_row("u_3", "read:client.name"), display_name="G", department="finance"
+    )
+    wired.review.held = [web, finance]
+
+    request_shown = listed(wired, ELEVATION, "u_admin", filter=f"request_id:{finance_request}")
+    request_withheld = listed(
+        wired, ELEVATION, "u_elsewhere", filter=f"request_id:{finance_request}"
+    )
+    holding_shown = listed(wired, REVIEW, "u_admin", filter=f"row_id:{finance.row.id}")
+    holding_withheld = listed(wired, REVIEW, "u_elsewhere", filter=f"row_id:{finance.row.id}")
+
+    assert [one["principal_id"] for one in request_shown["items"]] == ["u_3"]
+    assert request_withheld["items"] == [] and request_withheld["next_cursor"] is None
+    assert [one["row_id"] for one in holding_shown["items"]] == [str(finance.row.id)]
+    assert holding_withheld["items"] == [] and holding_withheld["next_cursor"] is None
