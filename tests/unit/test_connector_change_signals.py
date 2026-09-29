@@ -199,8 +199,9 @@ def test_a_ledger_read_whole_retires_the_invoice_it_no_longer_returns_and_hands_
     None
 ):
     """**M11.8.11 in the worker.** Every Xero read is whole, so the run after the invoice stopped
-    being listed retires its row, stamped between the run's start and now, and the reader who was
-    handed it is handed nothing. Delete this and a deleted invoice is answered from for ever."""
+    being listed retires its row, stamped between the run's start and now, keeps the retirement in
+    `proj.record_retired` with that instant, and the reader who was handed it is handed nothing.
+    Delete this and a deleted invoice is answered from for ever, or its going is not kept."""
     with a_database("brain_change_signals_retired") as url:
         connect_ledger(url)
         sync(url, Replay([answer_for("XERO-200-invoices"), NO_CONTACTS]))
@@ -210,6 +211,7 @@ def test_a_ledger_read_whole_retires_the_invoice_it_no_longer_returns_and_hands_
         sync(url, Replay([NO_INVOICES, NO_CONTACTS]), at=NOW + timedelta(days=2))
         (finished,) = sql(url, "SELECT clock_timestamp()")
         rows = projected(url)
+        kept = sql(url, "SELECT source_id, noticed_at FROM proj.record_retired")
         after = read_as(url, ENTITLED)
         moved = epochs(url)
 
@@ -217,6 +219,7 @@ def test_a_ledger_read_whole_retires_the_invoice_it_no_longer_returns_and_hands_
     ((_, _, source_id, _, _, deleted_at),) = rows
     assert source_id == INVOICE_ID
     assert deleted_at is not None and started[0] <= deleted_at <= finished[0]
+    assert kept == [(INVOICE_ID, deleted_at)]
     assert after["records"] == []
     assert moved["xero"] == before["xero"] + 1
 

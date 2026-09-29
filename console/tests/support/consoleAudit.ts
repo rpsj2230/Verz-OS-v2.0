@@ -453,6 +453,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.connector_connection",
       "ops.connector_sync",
       "proj.record",
+      "proj.record_retired",
+      "proj.source_epoch",
       "er.alias",
       "er.canonical",
       "er.identifier",
