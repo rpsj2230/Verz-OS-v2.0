@@ -396,9 +396,15 @@ def test_the_ledger_records_a_refusal_that_the_asker_cannot_see() -> None:
         result=TypedResult(records=()),
     )
     scope = scope_of_reach(("laravel",))
+    # A reader holding the field's grant, so only the redactor's lock can make it a refusal.
+    policy, reader = CLIENTS.policy(), ents(*SEES_HOURS)
 
-    refused = answer_module._withheld_or_absent(found, locked, scope)
-    missing = answer_module._withheld_or_absent(found, absent, scope)
+    refused = answer_module._withheld_or_absent(
+        found, locked, scope, policy=policy, entitlement=reader, now=NOW
+    )
+    missing = answer_module._withheld_or_absent(
+        found, absent, scope, policy=policy, entitlement=reader, now=NOW
+    )
 
     assert refused.reason is AbstentionReason.NOT_ENTITLED
     assert missing.reason is AbstentionReason.NOTHING_RETRIEVED
@@ -430,29 +436,56 @@ def test_a_lock_on_another_field_is_not_a_refusal_of_the_one_that_was_asked_for(
         result=TypedResult(records=()),
     )
 
-    recorded = answer_module._withheld_or_absent(found, other, scope_of_reach(("laravel",)))
+    recorded = answer_module._withheld_or_absent(
+        found,
+        other,
+        scope_of_reach(("laravel",)),
+        policy=CLIENTS.policy(),
+        entitlement=ents(*SEES_HOURS),
+        now=NOW,
+    )
 
     assert recorded.reason is AbstentionReason.NOTHING_RETRIEVED
     assert recorded.detail.endswith("absent")
 
 
-def test_a_column_the_caller_cannot_read_is_refused_before_it_is_ever_fetched() -> None:
-    """**The reason the branch above cannot fire through this lane, asserted so nobody
-    mistakes it for a bug in the ledger.**
+def test_a_column_the_caller_holds_no_grant_for_is_recorded_as_refused_though_never_fetched() -> (
+    None
+):
+    """**The projection's refusal reaches the administrator's trace (M8.2.1).**
 
-    `compile_projection` builds the SELECT list from the columns this caller reaches, so a
-    column they may not read is never fetched, so the redactor never sees it and records no
-    lock. The refusal happened one layer down and left nothing here to record, which means
-    this lane logs an absence where a refusal occurred. That is a real gap in the audit trail
-    and it is stated rather than implied.
+    `compile_projection` builds the SELECT list from the columns this caller holds a grant for,
+    so a column they may not read is never fetched and the redactor records no lock. Until
+    2026-09-29 that meant this lane logged an absence wherever a refusal had happened, which is
+    every refusal of a column on Ask. The field's own rule and the caller's reach say which it
+    was, so the abstention is `not entitled`, naming the entity and field for the administrator,
+    while the asker is told exactly what an absent record tells them.
 
-    Delete this and somebody reading `_withheld_or_absent` concludes the ledger distinguishes
-    the two, and writes a report that counts refusals at zero."""
+    Delete this and the lane goes back to recording an absence for every refusal, and the audit
+    trail reads as though nobody on the install was ever refused a column."""
     withheld = run(entitlement=ents(*SEES_NAME_ONLY))
+    absent = run("hours left on Nobody", rows=Rows())
 
     assert withheld.abstention is not None
-    assert withheld.abstention.reason is AbstentionReason.NOTHING_RETRIEVED
-    assert withheld.abstention.detail.endswith("absent")
+    assert withheld.abstention.reason is AbstentionReason.NOT_ENTITLED
+    assert withheld.abstention.for_administrator() == {
+        "reason": "not_entitled",
+        "entity": "client",
+        "field": "hours_remaining",
+    }
+    assert withheld.frames == absent.frames
+
+
+def test_a_field_the_caller_may_read_and_the_record_lacks_is_still_an_absence() -> None:
+    """The sibling of the test above: the new branch keys on the caller's grant for the field,
+    so a reader who holds it and finds the field empty on the record is told of an absence and
+    recorded as one. Delete this and the branch can be widened to every missing field, and the
+    ledger records refusals nobody made."""
+    empty = {key: value for key, value in ACME.items() if key != "hours_remaining"}
+    recorded = run(entitlement=ents(*SEES_HOURS), rows=Rows(empty))
+
+    assert recorded.abstention is not None
+    assert recorded.abstention.reason is AbstentionReason.NOTHING_RETRIEVED
 
 
 # --- the shape of the stream ---------------------------------------------------------------
