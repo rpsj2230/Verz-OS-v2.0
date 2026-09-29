@@ -12,9 +12,10 @@
  * application the company registered with it, and the words for what to register, and the return
  * address to register, are drawn from the server's own text before anything is asked for.
  *
- * **Nothing here is an answer to the wizard.** The client id, the client secret and the file stay
- * in this component's state, so none of them is in the review or in the appointment, and the secret
- * is sent once, in the read. A check is not required to finish setup either: the wizard's own
+ * **Nothing here is an answer to the wizard.** The client id and the file stay in this
+ * component's state and the client secret in the kit's masked secret field, so none of them is in
+ * the review or in the appointment, and the secret is taken out of its field at the press and sent
+ * once, in the read. A check is not required to finish setup either: the wizard's own
  * questions are what is written, and a company whose application is not registered yet can finish
  * and read its list from the console later.
  *
@@ -55,6 +56,7 @@ import {
 import { readTrial, wasRead, type TrialAnswer, type TrialRun } from "../pages/staffSourcesQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
+import { SecretField, useSecret } from "./ui/secret-field";
 import { Notice } from "../ui/Notice";
 
 export const CHECK_TITLE = "Check your staff list";
@@ -111,7 +113,8 @@ function refusal(failure: ApiFailure, sentence?: string): Shown {
 export function StaffListCheck({ setupCode, source, location }: Props) {
   const [registrations, setRegistrations] = useState<Registrations | null>(null);
   const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
+  const secret = useSecret();
+  const [secretTyped, setSecretTyped] = useState(false);
   const [sheet, setSheet] = useState<File | null>(null);
   const [busy, setBusy] = useState("");
   const [shown, setShown] = useState<Shown>(null);
@@ -164,6 +167,8 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
   }
 
   async function signInAndRead(): Promise<void> {
+    // Out of its field at the press, and held only by this attempt until the read sends it.
+    const clientSecret = secret.take();
     // Opened before anything is awaited, inside the press, which is what a pop-up blocker allows.
     const popup = window.open("about:blank", SIGN_IN_WINDOW, "popup,width=520,height=680");
     if (popup === null) {
@@ -291,19 +296,13 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
             <FieldProblems problems={problems} form={CHECK_FORM} names="client_id" />
           </div>
           <div className="rjsf-field">
-            <label className="control-label" htmlFor="first-run-staff-list-client-secret">
-              {CLIENT_SECRET_LABEL}
-            </label>
-            <input
+            <SecretField
               id="first-run-staff-list-client-secret"
-              type="text"
-              className="form-control"
-              name="client_secret"
-              value={clientSecret}
-              autoComplete="off"
-              spellCheck={false}
-              {...problemAttributes(problems, CHECK_FORM, "client_secret")}
-              onChange={(event) => setClientSecret(event.target.value)}
+              secret={secret}
+              label={CLIENT_SECRET_LABEL}
+              stored={false}
+              invalid={problemAttributes(problems, CHECK_FORM, "client_secret")["aria-invalid"] === true}
+              onPresenceChange={setSecretTyped}
             />
             <FieldProblems problems={problems} form={CHECK_FORM} names="client_secret" />
           </div>
@@ -312,7 +311,7 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
             <button
               type="button"
               className="button"
-              disabled={clientId.trim() === "" || clientSecret.trim() === "" || busy !== ""}
+              disabled={clientId.trim() === "" || !secretTyped || busy !== ""}
               onClick={() => void signInAndRead()}
             >
               {SIGN_IN_AND_READ}

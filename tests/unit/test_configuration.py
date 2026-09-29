@@ -212,6 +212,18 @@ def test_the_profile_sentence_follows_the_router_rule_on_where_text_may_go() -> 
     assert "no text leaves this install" not in hosted and "may be sent text" in hosted
 
 
+def test_the_model_setting_is_named_by_its_own_words_and_never_as_the_profile() -> None:
+    """Found on the owner's install on 2026-09-29: Settings said "The profile is 'hosted'" about
+    where answers are made while Capacity called the install's size its profile, one word for two
+    things on two Platform screens. Delete this and the sentence can say "the profile" again."""
+    hosted = profile_told({"INSTALL_MODEL_PROFILE": HOSTED_PROFILE}, {})
+    local = profile_told({}, {})
+
+    for said in (hosted, local):
+        assert said.startswith(f"{LABELS['INSTALL_MODEL_PROFILE']} is ")
+        assert "profile" not in said.lower()
+
+
 @pytest.mark.parametrize(
     ("name", "value"),
     [

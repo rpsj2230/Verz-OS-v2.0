@@ -15,6 +15,12 @@
  * **It decides nothing.** Confirming sends the request; the API accepts or refuses it whatever this
  * dialog believed about the row, and the page renders the API's answer.
  *
+ * **The confirm button is the danger variant unless the act is not a danger.** `danger={false}` is
+ * for an act that adds or restores rather than removes or stops, such as switching a feature on or
+ * resuming a job. Until 2026-09-29 every confirmation was red, so the owner's install asked him to
+ * switch a feature on with the button it uses for removing one. Not called `tone`, which is the
+ * status primitives' word for a colour chosen from a table (`tests/status-primitives.test.tsx`).
+ *
  * Task ids: M27.10.2
  */
 
@@ -46,6 +52,8 @@ export interface ConfirmDialogProps {
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
   readonly returnFocusTo?: HTMLElement | null | undefined;
+  /** True (the default) for an act that removes, stops or cannot be undone; false otherwise. */
+  readonly danger?: boolean | undefined;
 }
 
 export function ConfirmDialog({
@@ -59,6 +67,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   returnFocusTo,
+  danger = true,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog
@@ -78,7 +87,7 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
+            variant={danger ? "destructive" : "default"}
             disabled={busy}
             onClick={(event) => {
               // The dialog stays open until the page says the act is done or refused, so a

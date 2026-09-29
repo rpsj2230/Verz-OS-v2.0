@@ -157,7 +157,7 @@ export function CredentialProfile({
         }
       >
         <div className="flex min-w-0 flex-col gap-3">
-          {saved === null ? null : <Note kind="works">{saved}</Note>}
+          {saved === null ? null : <Note kind="done">{saved}</Note>}
           {row.writable ? <SetValueForm detail={detail} onSaved={onSaved} /> : <Note>{row.writeTold}</Note>}
         </div>
       </SectionCard>

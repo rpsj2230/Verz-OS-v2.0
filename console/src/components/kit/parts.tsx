@@ -138,11 +138,19 @@ export function Chip({
   );
 }
 
-/** What each kind of note leads with. The owner asked for these words and no package codes. */
+/**
+ * What each kind of note leads with. The owner asked for these words and no package codes.
+ *
+ * `works` says what a feature does today; `done` says that an act a person just took was done,
+ * and leads with nothing. Until 2026-09-29 the confirmation after an act was a `works` note, so the
+ * owner's install read "Works today: ... is now switched off" and "Works today:" over a Models test
+ * that had failed.
+ */
 export const NOTE_LEADS = Object.freeze({
   soon: "Coming soon: ",
   "not-yet": "Not available yet: ",
   works: "Works today: ",
+  done: "",
   info: "",
 });
 
@@ -153,7 +161,7 @@ export type NoteKind = keyof typeof NOTE_LEADS;
  * never a package code, a route or an internal name: those are for whoever builds the thing.
  */
 export function Note({ children, kind = "info" }: { readonly children: ReactNode; readonly kind?: NoteKind | undefined }) {
-  const Icon = kind === "soon" || kind === "not-yet" ? CircleDashed : kind === "works" ? CircleCheck : Info;
+  const Icon = kind === "soon" || kind === "not-yet" ? CircleDashed : kind === "works" || kind === "done" ? CircleCheck : Info;
   const lead = NOTE_LEADS[kind];
   return (
     <p
@@ -161,7 +169,7 @@ export function Note({ children, kind = "info" }: { readonly children: ReactNode
       data-kind={kind}
       className={cn(
         "m-0 flex items-start gap-1.5 text-[12px] leading-relaxed",
-        kind === "soon" || kind === "not-yet" ? "text-warn" : kind === "works" ? "text-ok" : "text-dim",
+        kind === "soon" || kind === "not-yet" ? "text-warn" : kind === "works" || kind === "done" ? "text-ok" : "text-dim",
       )}
     >
       <Icon aria-hidden className="mt-[3px] size-3.5 shrink-0" />

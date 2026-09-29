@@ -36,7 +36,7 @@ from brain.ops.limits import (
     principal_limit,
 )
 from brain.ops.volume_store import PrincipalVolume
-from tests.unit.test_install_routes import LIMITS_PATH, _app, _wiring, get
+from tests.unit.test_install_routes import LIMITS_PATH, ConnectedOnly, _app, _wiring, get
 from tests.unit.test_limit_store import FakeClient
 
 
@@ -45,6 +45,7 @@ def screen_with(
     valkey: FakeClient | None = None,
     volumes: Sequence[PrincipalVolume] | None = None,
     volume_error: Exception | None = None,
+    connected: Sequence[str] = (),
 ) -> tuple[dict[str, object], dict[str, object]]:
     """The Limits screen as an unrestricted reader and as a department-scoped one."""
     app = _app()
@@ -53,6 +54,8 @@ def screen_with(
         # The same on every machine: CI sets DATABASE_URL and the Mac does not, so the ledger
         # is detached here and a test that wants one attaches its own source below.
         app.state.db_sessions = None
+        if connected:
+            app.state.connector_records = ConnectedOnly(*connected)
         if valkey is not None:
             app.state.limit_store = ValkeyWindowStore(client=valkey)
         if volumes is not None or volume_error is not None:
@@ -77,13 +80,22 @@ def test_the_screen_lists_every_window_the_request_path_counts() -> None:
     default rather than a number typed here, so the screen and the route cannot drift.
 
     Delete this and the screen can go on listing only the three source ceilings, which say
-    nothing about the thirty-a-minute window a person actually runs into."""
-    body, _ = screen_with()
+    nothing about the thirty-a-minute window a person actually runs into.
+
+    A source's windows are listed once it is connected, by its name (since 2026-09-29, when the
+    owner's install listed every shipped source's windows by code with none connected)."""
+    body, _ = screen_with(connected=("xero",))
 
     windows = body["windows"]
     assert isinstance(windows, list)
     assert [(one["scope"], one["applies_to"]) for one in windows] == [
-        (str(one.scope), one.applies_to) for one in declared_windows()
+        (str(one.scope), one.applies_to) for one in declared_windows({"xero": "Xero"})
+    ]
+    unconnected, _ = screen_with()
+    shown = unconnected["windows"]
+    assert isinstance(shown, list)
+    assert [(one["scope"], one["applies_to"]) for one in shown] == [
+        (str(one.scope), one.applies_to) for one in declared_windows({})
     ]
     person = next(one for one in windows if one["scope"] == LimitScope.PRINCIPAL.value)
     assert person["limit"] == DEFAULT_PRINCIPAL_PER_MINUTE

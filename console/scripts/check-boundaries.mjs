@@ -87,7 +87,7 @@ const RULES = [
   },
   {
     name: "no implicit flow and no password grant",
-    pattern: /response_type=token|id_token token|grant_type=password|type="password"/,
+    pattern: /response_type=token|id_token token|grant_type=password/,
     allow: [],
     why:
       "The realm has implicitFlowEnabled false and directAccessGrantsEnabled false on " +
@@ -95,6 +95,16 @@ const RULES = [
       "browser history and referrer headers; the password grant skips the browser flow " +
       "and therefore the second factor the realm makes mandatory. A password field here " +
       "would collect a credential this page cannot verify it is entitled to see.",
+  },
+  {
+    name: "a masked field is the write-once secret field",
+    pattern: /type="password"/,
+    allow: ["src/components/ui/secret-field.tsx"],
+    why:
+      "A credential typed into the console goes through the secret field, which never holds it " +
+      "in React, never prefills it and never echoes it, and is masked so a pasted key is not " +
+      "shown. A password input anywhere else would be a credential typed past those rules, or a " +
+      "sign-in form collecting a password the realm refuses to accept that way.",
   },
   {
     name: "no raw HTML from a payload",

@@ -257,16 +257,27 @@ class SessionDepthAlerts:
         written still reaches whatever reads the log. It names a tier, a depth and a deployment,
         never a question.
         """
-        emit = log.error if alert.level.value == "critical" else log.warning
-        emit(
-            "models.chain_depth",
-            level=alert.level.value,
-            tier=alert.tier.value,
-            depth=alert.depth,
-            served_by=alert.served_by,
-            reason=alert.reason,
-            trace_id=trace_id,
-        )
+        # Two literal calls rather than one through a name bound to either method: the Logs
+        # screen keeps an event's name only when it can read it at a `log.<method>` call, and
+        # until 2026-09-29 the critical alert reached that screen as "Name not kept".
+        if alert.level.value == "critical":
+            log.error(
+                "models.chain_depth",
+                tier=alert.tier.value,
+                depth=alert.depth,
+                served_by=alert.served_by,
+                reason=alert.reason,
+                trace_id=trace_id,
+            )
+        else:
+            log.warning(
+                "models.chain_depth",
+                tier=alert.tier.value,
+                depth=alert.depth,
+                served_by=alert.served_by,
+                reason=alert.reason,
+                trace_id=trace_id,
+            )
         if self.sessions is None:
             return
         try:

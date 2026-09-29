@@ -270,7 +270,9 @@ export function ProvidersPage() {
   const [asked, setAsked] = useState<Ask | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
-  const [told, setTold] = useState<string | null>(null);
+  // What the last act said, and whether it was done: a test the provider did not answer is said
+  // as it is, without the tick a done act carries.
+  const [told, setTold] = useState<{ readonly sentence: string; readonly done: boolean } | null>(null);
   const [adding, setAdding] = useState(false);
 
   const send = useCallback((pending: Ask) => {
@@ -290,12 +292,12 @@ export function ProvidersPage() {
       }
       setFailure(null);
       if (pending.kind === "switch") {
-        setTold(switchedSentence(pending.name, pending.on));
+        setTold({ sentence: switchedSentence(pending.name, pending.on), done: true });
       } else if (pending.kind === "check") {
         const check = readCheck(result.data);
-        setTold(check === null ? null : `${pending.name}: ${check.told}`);
+        setTold(check === null ? null : { sentence: `${pending.name}: ${check.told}`, done: check.answered });
       } else {
-        setTold(profileChosenSentence(pending.profile));
+        setTold({ sentence: profileChosenSentence(pending.profile), done: true });
       }
       setVersion((count) => count + 1);
     })();
@@ -400,7 +402,7 @@ export function ProvidersPage() {
         <AddProvider
           onAdded={(name) => {
             setAdding(false);
-            setTold(`${name} was added. Add a step for one of its models on the Routing page to use it.`);
+            setTold({ sentence: `${name} was added. Add a step for one of its models on the Routing page to use it.`, done: true });
             setVersion((count) => count + 1);
           }}
           onClose={() => {
@@ -410,7 +412,7 @@ export function ProvidersPage() {
       ) : null}
       {told === null ? null : (
         <div role="status">
-          <Note kind="works">{told}</Note>
+          <Note kind={told.done ? "done" : "info"}>{told.sentence}</Note>
         </div>
       )}
       {failure === null ? null : <FailureState failure={failure} />}

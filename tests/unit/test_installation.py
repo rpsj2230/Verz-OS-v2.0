@@ -35,7 +35,10 @@ from pathlib import Path
 
 import pytest
 
+from brain.console.configuration import LABELS
 from brain.console.installation import (
+    BUILT_FROM_FACT,
+    DATABASE_VERSION_FACT,
     NAMEABLE_SURFACES,
     RECOVERY_NEEDS,
     ConnectionCapacity,
@@ -56,6 +59,7 @@ from brain.console.installation import (
 )
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
+from brain.console.version_view import running_release
 from brain.console.workspace import intersections_in
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
@@ -169,21 +173,53 @@ def test_the_release_is_unknown_outside_a_built_image_rather_than_something_plau
     facts = install_facts(profile="lite", manifest=None, revisions=a_chain("0001"), env=NOTHING_SET)
 
     release = next(one for one in facts if one.name == "release")
+    built = next(one for one in facts if one.name == BUILT_FROM_FACT)
     assert release.source is Source.UNKNOWN
     assert release.value == ""
-    assert "manifest" in release.because
+    assert built.source is Source.UNKNOWN
+    assert "manifest" in built.because
 
 
-def test_the_release_is_the_commit_stamped_into_the_image_when_there_is_one():
-    """Deleting this leaves a guard satisfied by a screen that never shows a release at all.
-    Every refusal test needs a sibling proving the thing still works."""
+def test_a_built_commit_on_an_unpinned_install_is_not_shown_as_its_release():
+    """Found on the owner's install on 2026-09-29: this screen showed the build's commit under
+    "release" while Version and updates said the install names no release, about one install
+    running `:latest`. The release is `running_release`'s answer on both screens now.
+
+    Deleting this puts the commit back under the heading a client reads as their version, one
+    screen away from the one that says there is none."""
     facts = install_facts(
-        profile="lite", manifest=a_manifest(), revisions=a_chain("0001"), env=NOTHING_SET
+        profile="lite",
+        manifest=a_manifest(),
+        revisions=a_chain("0001"),
+        env=NOTHING_SET,
+        pinned_image="registry.invalid/brain:latest",
     )
-
     release = next(one for one in facts if one.name == "release")
-    assert release.source is Source.MEASURED
-    assert release.value == "a" * 40
+    unpinned = running_release(pinned_image="registry.invalid/brain:latest", built_commit="a" * 40)
+
+    assert release.source is Source.UNKNOWN
+    assert release.value == ""
+    assert release.because == unpinned.cannot_say
+    assert all(one.value != "a" * 40 for one in facts if one.name == "release")
+
+
+def test_a_pinned_install_names_its_release_and_the_commit_under_its_own_name():
+    """The sibling: a pinned release is named, and the measured commit is still shown, labelled
+    as what it is. Deleting this leaves the refusal above satisfied by a screen that never
+    names a release at all."""
+    facts = install_facts(
+        profile="lite",
+        manifest=a_manifest(),
+        revisions=a_chain("0001"),
+        env=NOTHING_SET,
+        pinned_image="registry.invalid/brain:v1.4.0",
+    )
+    named = {one.name: one for one in facts}
+
+    assert named["release"].value == "v1.4.0"
+    assert named["release"].source is Source.DECLARED
+    assert named[BUILT_FROM_FACT].value == "a" * 40
+    assert named[BUILT_FROM_FACT].source is Source.MEASURED
 
 
 def test_the_migration_level_is_declared_until_somebody_has_asked_the_database():
@@ -222,7 +258,7 @@ def test_a_fresh_database_with_every_migration_waiting_is_described_rather_than_
         env=NOTHING_SET,
     )
 
-    level = next(one for one in facts if one.name == "migration level")
+    level = next(one for one in facts if one.name == DATABASE_VERSION_FACT)
     assert level.source is Source.MEASURED
     assert level.value == "no migration applied, 2 waiting"
 
@@ -285,7 +321,7 @@ def test_a_branched_history_reaches_the_install_screen_as_an_unknown_that_says_w
 
     facts = install_facts(profile="lite", manifest=None, revisions=branched, env=NOTHING_SET)
 
-    level = next(one for one in facts if one.name == "migration level")
+    level = next(one for one in facts if one.name == DATABASE_VERSION_FACT)
     assert level.source is Source.UNKNOWN
     assert level.value == ""
     assert "more than one head" in level.because
@@ -312,12 +348,12 @@ def test_a_single_line_history_reaches_the_install_screen_labelled_by_what_measu
         env=NOTHING_SET,
     )
 
-    on_declared = next(one for one in declared if one.name == "migration level")
+    on_declared = next(one for one in declared if one.name == DATABASE_VERSION_FACT)
     assert on_declared.source is Source.DECLARED
     assert on_declared.value == "0002"
     assert on_declared.because
 
-    on_measured = next(one for one in measured if one.name == "migration level")
+    on_measured = next(one for one in measured if one.name == DATABASE_VERSION_FACT)
     assert on_measured.source is Source.MEASURED
     assert on_measured.value == "0001"
 
@@ -353,8 +389,20 @@ def test_the_install_values_come_from_the_one_reader_and_not_from_the_environmen
 
     named = {one.name: one.value for one in neutral}
     changed = {one.name: one.value for one in theirs}
-    assert named["INSTALL_COMPANY_NAME"] != changed["INSTALL_COMPANY_NAME"]
-    assert changed["INSTALL_COMPANY_NAME"] == "A Different Client"
+    assert named["Company name"] != changed["Company name"]
+    assert changed["Company name"] == "A Different Client"
+
+
+def test_a_setting_is_named_in_words_and_never_by_its_variable():
+    """Found on the owner's install on 2026-09-29: this screen listed raw `INSTALL_*` names.
+    Deleting this puts the variables back where an administrator reads the facts; the Settings
+    screen still shows each variable, small, beside the same words."""
+    facts = install_facts(profile="lite", manifest=None, revisions=a_chain("0001"), env=NOTHING_SET)
+
+    assert not [one.name for one in facts if one.name.startswith("INSTALL_")]
+    currency = next(one for one in facts if one.name == LABELS["INSTALL_CURRENCY"])
+    # The variable travels beside the words, for the Advanced section a supporter reads.
+    assert currency.setting == "INSTALL_CURRENCY"
 
 
 def test_a_fact_appearing_twice_is_reported():

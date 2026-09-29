@@ -169,7 +169,7 @@ function TrialResult({ trial }: { readonly trial: ReturnType<typeof useTrial> })
   }
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {plan.changes_nothing ? <Note kind="works">{CHANGES_NOTHING}</Note> : null}
+      {plan.changes_nothing ? <Note>{CHANGES_NOTHING}</Note> : null}
       <Names label={REFUSALS_LABEL} names={plan.refusals} />
       <Names label={GAPS_LABEL} names={plan.gaps} />
       <Names
@@ -410,7 +410,7 @@ export function StaffSourcesPage() {
       <PageHeader crumbs={[{ label: STAFF_SOURCES_HEADING }]} title={STAFF_SOURCES_HEADING} lede={STAFF_SOURCES_LEDE} primary={primary} />
       {told === "" ? null : (
         <div role="status">
-          <Note kind="works">{told}</Note>
+          <Note kind="done">{told}</Note>
         </div>
       )}
       {content}

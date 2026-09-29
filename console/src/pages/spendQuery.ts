@@ -170,6 +170,24 @@ export function instantWords(iso: string, timeZone: string): string {
   }
 }
 
+/**
+ * How old a spend report is, in words for the one refresh a day it has. The API grades the report
+ * on `brain.gate.provenance`'s scale, where `live` means younger than one refresh, and for a report
+ * refreshed daily that is up to a day old. Found on the owner's install on 2026-09-29: a figure
+ * fourteen hours old said "live". So the Spend page says what the grade means for this report, and
+ * a word it does not know is shown as sent.
+ */
+export const FRESHNESS_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  live: "Refreshed within the last day",
+  ageing: "Due its daily refresh",
+  stale: "Out of date: its daily refresh has not run",
+  unstated: "How old these figures are is not known",
+});
+
+export function freshnessWords(freshness: string): string {
+  return FRESHNESS_WORDS[freshness.toLowerCase()] ?? freshness;
+}
+
 /** How old the figures are, with the instant in the install's zone. See `freshnessLine`. */
 export function freshnessInZone(report: SpendReportBody): string {
   if (report.as_of === null) {

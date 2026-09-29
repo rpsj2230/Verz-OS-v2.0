@@ -25,6 +25,7 @@ from brain.console.screens import screen
 from brain.console.usage_screen import (
     AUTOMATION_IS_COUNTED,
     MEASURED_BY,
+    NO_DEPARTMENT,
     NO_SINGLE_MODEL,
     READ_BEHIND,
     SCREEN_KEY,
@@ -43,13 +44,14 @@ from brain.console.usage_view import Axis
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
-from brain.gate.context import Channel
+from brain.gate.context import Channel, TrafficClass
 from brain.ops.spend import NO_AGENT
 from brain.ops.telemetry import (
     FILLED_BY_A_MODEL_CALL,
     REQUEST_FIELDS,
     UNFILLABLE_TODAY,
     MeteredRequest,
+    UnplacedQuestion,
 )
 
 #: The grants, written out rather than read from the modules under test, so a capability moved
@@ -610,3 +612,79 @@ def test_a_measure_with_no_field_or_no_axis_is_reported() -> None:
 
     assert len(usage_screen_gaps(measured_by=no_field)) == 1
     assert len(usage_screen_gaps(read_behind=no_axis)) == 1
+
+
+# ------------------------------------------------- a question from somebody with no department
+def unplaced(trace: str, *, person: str = "u_owner", hours: int = 2) -> UnplacedQuestion:
+    """A question the request ledger holds and the question ledger does not."""
+    return UnplacedQuestion(
+        trace_id=trace,
+        principal=person,
+        traffic=TrafficClass.HUMAN_INTERACTIVE,
+        at=NOW - timedelta(hours=hours),
+    )
+
+
+def test_a_company_wide_reader_counts_questions_from_somebody_with_no_department() -> None:
+    """Found on the owner's install on 2026-09-29: Usage said nought while the Dashboard counted
+    four answered, because the administrator asking had no department and the question ledger
+    keeps none without one.
+
+    What breaks if this is deleted: the screen goes back to counting fewer questions than the
+    Dashboard, with nothing on either page saying why.
+    """
+    shown = usage_for_reader(
+        questions(),
+        DIRECTORY,
+        reader(),
+        start=START,
+        end=NOW,
+        now=NOW,
+        unplaced=(unplaced("t9"), unplaced("t10"), unplaced("t11", hours=24 * 30)),
+    )
+
+    assert shown.questions == 6
+    assert shown.departments is not None
+    assert shown.departments[-1] == DepartmentAdoption(NO_DEPARTMENT, 2, 1)
+    assert shown.people is not None
+    assert PersonLine("u_owner", 2) in shown.people
+
+
+def test_a_department_reader_is_shown_nothing_from_somebody_with_no_department() -> None:
+    """The sibling: a department's administrator's screen is what it was without them.
+
+    What breaks if this is deleted: a department-scoped reader is shown questions from no
+    department of theirs, and the difference between two readers' totals becomes a count.
+    """
+    with_them = usage_for_reader(
+        questions(),
+        DIRECTORY,
+        reader("support"),
+        start=START,
+        end=NOW,
+        now=NOW,
+        unplaced=(unplaced("t9"),),
+    )
+
+    assert with_them == screen_for(reader("support"))
+
+
+def test_a_question_with_no_department_brings_its_tokens_under_the_same_line() -> None:
+    """The token tables count the same population as the question tables.
+
+    What breaks if this is deleted: Usage counts the administrator's question and says no
+    question called a model, which is the second half of what the owner's install showed.
+    """
+    shown = usage_for_reader(
+        questions(),
+        DIRECTORY,
+        reader(),
+        start=START,
+        end=NOW,
+        now=NOW,
+        metered=(MeteredRequest("t9", "u_owner", "a-model", None, 40, 4),),
+        unplaced=(unplaced("t9"),),
+    )
+
+    by_department = next(one for one in shown.tokens if one.axis is Axis.DEPARTMENT)
+    assert [(line.key, line.tokens_in) for line in by_department.lines] == [(NO_DEPARTMENT, 40)]
