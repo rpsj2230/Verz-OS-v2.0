@@ -306,6 +306,12 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
         "agent.manifest_act": Through(
             parent="agent.manifest_draft", key="draft_id", parent_key="id"
         ),
+        # A request's handled mark is the asker's through the request it marks (`0146`): the owner
+        # who marked it is an actor, not an owner. `0146` grants no way for a row to leave, so an
+        # erasure keeps these and reports them kept, as it keeps the request.
+        "gate.access_request_handled": Through(
+            parent="gate.access_request", key="request_id", parent_key="id"
+        ),
         # A key is a person's through the account it speaks for. `0095`.
         "auth.api_key": Through(
             parent="auth.service_account", key="client_id", parent_key="client_id"

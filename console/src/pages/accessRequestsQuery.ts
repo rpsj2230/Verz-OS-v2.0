@@ -22,24 +22,35 @@ export type AccessRequestRow = components["schemas"]["AccessRequestView"];
 export const ACCESS_REQUESTS_API_PATH = "/access-requests";
 export const ACCESS_REQUESTS_PATH = "/access-requests";
 export const ACCESS_REQUESTS_LABEL = "Access requests";
-export const ACCESS_REQUESTS_CRUMB = "Use › Access requests";
-export const ACCESS_REQUESTS_LEDE =
-  "Ask for a field you were shown locked, or a department an answer said is outside your scopes. " +
-  "Requests other people sent to you are listed below.";
+export const ACCESS_REQUESTS_LEDE = "Requests other people sent you to decide, and a way to ask for access yourself.";
 
 export const ASK_HEADING = "Ask for access";
 export const ASK_LABEL = "Send the request";
-export const SENT_HEADING = "Requests sent to you";
-export const SENT_CAPTION = "Requests addressed to you, newest first";
-export const NOTHING_SENT = "Nobody has sent you a request.";
-export const NONE_MATCH = "No request sent to you matches what you asked for.";
+export const ASK_DESCRIPTION = "For a field you were shown locked, or a department an answer said is outside your reach.";
+export const SENT_CAPTION = "Requests sent to you";
+export const NOTHING_SENT = "Nobody has sent you a request";
+export const NOTHING_SENT_MORE = "A request appears here when somebody asks for access you can decide.";
 export const FILTERS_LABEL = "Narrow the requests sent to you";
 export const READING_REQUESTS = "Reading the requests sent to you.";
-export const UNREADABLE_ANSWER =
-  "The API answered in a shape this console does not read, so no request is listed. The console " +
-  "and the API are probably from different releases.";
-export const FULL_LIST =
-  "There are more requests sent to you than this page shows. Show more, or narrow the list.";
+
+/** Where one request is marked handled by its owner (`brain.access_request_routes`). */
+export function handledApiPath(requestId: string): string {
+  return `${ACCESS_REQUESTS_API_PATH}/${encodeURIComponent(requestId)}/handled`;
+}
+
+/** Where a request stands, in words. */
+export const STATE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  open: "Open",
+  handled: "Handled",
+});
+
+/** What each field of the ask takes, said before anything is sent. */
+export const ASK_HINTS = Object.freeze({
+  department: "The department's short name, as the answer named it, for example finance.",
+  entity: "The kind of record the locked field was on, in lower case, for example client.",
+  field: "The field shown locked, in lower case with underscores, for example contract_value.",
+  question: "What you need it for, so whoever decides can judge. Up to 2,000 characters.",
+});
 
 /** What the owner's list may be narrowed by, as `brain.access_request_routes.REQUESTS` declares. */
 export const REQUEST_FILTERS: readonly FilterChoice<AccessRequestRow>[] = [
@@ -60,6 +71,13 @@ export const REQUEST_FILTERS: readonly FilterChoice<AccessRequestRow>[] = [
     label: "Would need",
     everything: "Any capability",
     read: (row) => row.requested_capability,
+  },
+  {
+    column: "state",
+    label: "Where it stands",
+    everything: "Open and handled",
+    read: (row) => (row.handled_at === null || row.handled_at === undefined ? "open" : "handled"),
+    describe: (value) => STATE_WORDS[value] ?? value,
   },
 ];
 

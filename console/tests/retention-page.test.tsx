@@ -1,43 +1,48 @@
 /**
- * The Retention and erasure screen: the report, the release and its withdrawal, legal holds placed
- * and lifted, the export log, and erasure requests filed and drawn as they finished.
+ * Retention, legal holds and erasure on the page kit: the four views, the release and its
+ * withdrawal, legal holds placed and lifted, the export log, and erasure requests filed and drawn as
+ * they finished, each on a page of its own.
  *
- * Mounted directly on a memory router at its own address, for the reason
- * `tests/sessions-page.test.tsx` gives. The failures worth testing are the ones that look like the
- * screen working: a write sent without its confirmation, a confirmation that does not say what the
- * sweep will then do, a control drawn for somebody the API said may not act, and a hold that fails
- * the route's own pattern only after it was sent.
+ * Mounted through the page's own route file. The failures worth testing are the ones that look like
+ * the screen working: a write sent without its confirmation, a confirmation that does not say what
+ * the sweep will then do, a control drawn for somebody the API said may not act, a form that says
+ * what it takes only after a refusal, and a hold that fails the route's own pattern only after it
+ * was sent.
  *
- * **What a hold sends is read against the route's own request body**, so a key or a pattern this
- * console invented is a failure here rather than a 422 in front of an administrator.
- *
- * Task ids: M27.7.24
+ * Task ids: M27.7.24, M27.16.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   DO_NOT_FILE,
-  ERASE_NOT_YOURS,
   ERASURE_FORM_LABEL,
   FILE_ERASURE_LABEL,
   HOLD_FORM_LABEL,
-  HOLD_NOT_YOURS,
-  LIFT_FORM_LABEL,
   LIFT_LABEL,
-  NO_REPORT,
   PLACE_LABEL,
-  READING_RETENTION,
   RELEASE_LABEL,
-  RELEASE_NOT_YOURS,
+  REVIEW_HOLD,
+  REVIEW_REQUEST,
   WITHDRAW_LABEL,
-} from "../src/pages/Retention";
+} from "../src/pages/retention/RetentionActs";
+import { NO_ERASURE, NO_HOLD } from "../src/pages/retention/RetentionDetail";
+import {
+  erasureAddress,
+  ERASE_NOT_YOURS,
+  FILE_ERASURE,
+  holdAddress,
+  HOLD_NOT_YOURS,
+  NO_REPORT,
+  PLACE_HOLD,
+  READING_RETENTION,
+  viewAddress,
+} from "../src/pages/retention/RetentionPage";
 import {
   REFERENCE_PATTERN,
   erasureBody,
   erasureProblems,
-  storeLines,
   type ErasureQueue,
   type ErasureRequest,
   type ExportLog,
@@ -53,6 +58,8 @@ import {
 } from "../src/pages/retentionQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredPropertySchema, declaredRequestBodySchema } from "./support/openapi";
+import { installRadixStubs } from "./support/radix";
+import { chooseInMenu, confirmWith } from "./support/rowMenu";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const REPORT_OPERATION = "/api/v1/govern/retention";
@@ -65,6 +72,7 @@ const ERASURES_OPERATION = "/api/v1/govern/erasures";
 const EXPORT_LOG_OPERATION = "/api/v1/govern/retention/exports";
 
 beforeAll(async () => {
+  installRadixStubs();
   await import("../src/pages/Retention");
 }, 60_000);
 
@@ -139,11 +147,9 @@ function report(overrides: Partial<Report> = {}): Report {
   };
 }
 
+
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
 interface Stand {
@@ -153,97 +159,58 @@ interface Stand {
   exports?: ExportLog;
 }
 
-async function mount(stand: Stand): Promise<{ container: HTMLElement; idp: FakeIdp }> {
+async function mount(stand: Stand, path = "/retention"): Promise<{ container: HTMLElement; idp: FakeIdp }> {
   const idp = fakeIdentityProvider({
     api(url, init) {
-      const path = new URL(url, CONSOLE_ORIGIN).pathname;
+      const at = new URL(url, CONSOLE_ORIGIN).pathname;
       if (init?.method === "POST") {
-        if (path === RELEASE_OPERATION) {
-          return json({
-            release_id: "22222222-2222-4222-8222-222222222222",
-            after_report: stand.report?.report_id,
-            released_at: "2019-03-05T10:00:00Z",
-          });
-        }
-        if (path === WITHDRAWAL_OPERATION) {
-          return json({ withdrawn_at: "2019-03-05T10:00:00Z" });
-        }
-        if (path === HOLD_OPERATION) {
-          return json({ hold_id: "matter-9", placed_at: "2019-03-05T10:00:00Z" });
-        }
-        if (path === LIFT_OPERATION) {
-          return json({ hold_id: "matter-7", lifted_at: "2019-03-05T10:00:00Z" });
-        }
-        if (path === ERASURES_OPERATION) {
-          return json({ request_id: "r-new", subject_id: "u_1", requested_at: "2019-03-05T10:00:00Z" });
-        }
-        return null;
+        const answers: Record<string, unknown> = {
+          [RELEASE_OPERATION]: { release_id: "22222222-2222-4222-8222-222222222222", after_report: stand.report?.report_id, released_at: "2019-03-05T10:00:00Z" },
+          [WITHDRAWAL_OPERATION]: { withdrawn_at: "2019-03-05T10:00:00Z" },
+          [HOLD_OPERATION]: { hold_id: "matter-9", placed_at: "2019-03-05T10:00:00Z" },
+          [LIFT_OPERATION]: { hold_id: "matter-7", lifted_at: "2019-03-05T10:00:00Z" },
+          [ERASURES_OPERATION]: { request_id: "r-new", subject_id: "u_1", requested_at: "2019-03-05T10:00:00Z" },
+        };
+        return at in answers ? json(answers[at]) : null;
       }
-      if (path === REPORT_OPERATION) {
-        return json({ report: stand.report });
-      }
-      if (path === CONTROLS_OPERATION) {
-        return json(stand.controls);
-      }
-      if (path === ERASURES_OPERATION) {
-        return json(stand.queue ?? { requests: [] });
-      }
-      if (path === EXPORT_LOG_OPERATION) {
-        return json(stand.exports ?? { exports: [] });
-      }
-      return null;
+      const reads: Record<string, unknown> = {
+        [REPORT_OPERATION]: { report: stand.report },
+        [CONTROLS_OPERATION]: stand.controls,
+        [ERASURES_OPERATION]: stand.queue ?? { requests: [], people: {} },
+        [EXPORT_LOG_OPERATION]: stand.exports ?? { exports: [], people: {} },
+      };
+      return at in reads ? json(reads[at]) : null;
     },
   });
   const loaded = await loadConsole({ idp });
   await signIn(loaded);
-  const { Retention } = await import("../src/pages/Retention");
-  const router = createMemoryRouter([{ path: "/retention", element: <Retention /> }], {
-    initialEntries: ["/retention"],
-  });
+  const { routes } = await import("../src/pages/Retention.route");
+  const router = createMemoryRouter(routes.map((one) => ({ path: `/${one.path}`, element: one.element })), { initialEntries: [path] });
   const { container } = render(<RouterProvider router={router} />);
-  await settled(container);
-  return { container, idp };
-}
-
-async function settled(container: HTMLElement): Promise<void> {
   await waitFor(() => {
-    if (container.textContent?.includes(READING_RETENTION) || !container.querySelector("h2")) {
+    if ((container.textContent ?? "").includes(READING_RETENTION) || container.querySelector("h1") === null) {
       throw new Error("still reading");
     }
   });
+  return { container, idp };
 }
 
 function posts(idp: FakeIdp): { path: string; body: unknown }[] {
   return idp.calls
-    .filter(
-      (call) =>
-        call.init?.method === "POST" &&
-        new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"),
-    )
-    .map((call) => ({
-      path: new URL(call.url, CONSOLE_ORIGIN).pathname,
-      body:
-        call.init?.body === undefined
-          ? undefined
-          : (JSON.parse(String(call.init.body)) as unknown),
-    }));
+    .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"))
+    .map((call) => ({ path: new URL(call.url, CONSOLE_ORIGIN).pathname, body: call.init?.body === undefined ? undefined : (JSON.parse(String(call.init.body)) as unknown) }));
 }
 
-function button(container: HTMLElement, name: string): HTMLButtonElement | null {
-  return (
-    ([...container.querySelectorAll("button")].find((one) => one.textContent === name) as
-      | HTMLButtonElement
-      | undefined) ?? null
-  );
+function asked(idp: FakeIdp, operation: string): number {
+  return idp.urls.filter((url) => new URL(url, CONSOLE_ORIGIN).pathname === operation).length;
 }
 
-function field(form: Element, label: string): HTMLInputElement | HTMLTextAreaElement {
-  const found = [...form.querySelectorAll("label")].find((one) => one.textContent?.startsWith(label));
-  const control = found?.querySelector("input, textarea");
-  if (control === null || control === undefined) {
-    throw new Error(`no field labelled ${label}`);
-  }
-  return control as HTMLInputElement;
+async function drawerForm(label: string): Promise<HTMLFormElement> {
+  return (await screen.findByRole("form", { name: label })) as HTMLFormElement;
+}
+
+function type(form: HTMLElement, name: string, value: string): void {
+  fireEvent.change(form.querySelector(`[name="${name}"]`) as HTMLInputElement, { target: { value } });
 }
 
 describe("what the retention screen agrees with the API about", () => {
@@ -279,253 +246,156 @@ describe("what the retention screen agrees with the API about", () => {
 
 describe("releasing and withdrawing the sweep", () => {
   test("a release is confirmed with the report's counts and the API's sentence, then sent", async () => {
-    // What breaks if this is deleted: a release is sent on the first click, or confirmed without
-    // saying what the sweep will then remove, which is a deletion somebody agreed to unread.
+    // What breaks if this is deleted: the sweep is released on the first press, or the confirmation
+    // does not say what the next run removes.
     const { container, idp } = await mount({ report: report(), controls: controls() });
-
-    fireEvent.click(button(container, RELEASE_LABEL) as HTMLButtonElement);
+    fireEvent.click(screen.getByRole("button", { name: RELEASE_LABEL }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("7 items were past their window in ledger");
+    expect(dialog.textContent).toContain("RELEASING-SENTENCE");
     expect(posts(idp)).toEqual([]);
-    const confirmation = container.querySelector(".confirm")?.textContent ?? "";
-    expect(confirmation).toContain("7 items were past their window in ledger");
-    expect(confirmation).toContain("3 were queued");
-    expect(confirmation).toContain("2 were held");
-    expect(confirmation).not.toContain("recording");
-    expect(confirmation).toContain("RELEASING-SENTENCE");
+    await confirmWith(RELEASE_LABEL);
 
-    fireEvent.click(
-      [...container.querySelectorAll(".confirm button")].find(
-        (one) => one.textContent === RELEASE_LABEL,
-      ) as HTMLButtonElement,
-    );
-    await waitFor(() => {
-      expect(posts(idp)).toEqual([
-        { path: RELEASE_OPERATION, body: { after_report: report().report_id } },
-      ]);
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("The sweep was released at");
     });
+    expect(posts(idp)).toEqual([{ path: RELEASE_OPERATION, body: { after_report: report().report_id } }]);
+    expect(releaseCounts(report(), "then")).not.toContain("recording");
   });
 
-  test("a reader the API says may not release is drawn no control and told why", async () => {
-    // What breaks if this is deleted: the button is drawn for everybody the report is shown to,
-    // and the route refuses the confirmed write with a sentence that reads like a fault.
-    const { container } = await mount({
-      report: report(),
-      controls: controls({ may_release: false, may_hold: false }),
-    });
+  test("a reader the API says may not release is drawn no release, and a released sweep offers only the withdrawal", async () => {
+    // What breaks if this is deleted: a control drawn for somebody the API said may not act, or a
+    // second release offered on a released sweep.
+    await mount({ report: report(), controls: controls({ may_release: false }) });
+    expect(screen.queryByRole("button", { name: RELEASE_LABEL })).toBeNull();
 
-    expect(button(container, RELEASE_LABEL)).toBeNull();
-    expect(container.textContent).toContain(RELEASE_NOT_YOURS);
-    expect(container.querySelector(`form[aria-label="${HOLD_FORM_LABEL}"]`)).toBeNull();
-    expect(container.textContent).toContain(HOLD_NOT_YOURS);
-  });
-
-  test("a released sweep offers the withdrawal and not a second release", async () => {
-    // What breaks if this is deleted: a second release is offered and refused as already
-    // released, and the one control that stops the sweep acting is missing.
-    const { container, idp } = await mount({
-      report: report({ released: true }),
-      controls: controls(),
-    });
-
-    expect(button(container, RELEASE_LABEL)).toBeNull();
-    fireEvent.click(button(container, WITHDRAW_LABEL) as HTMLButtonElement);
-    expect(container.querySelector(".confirm")?.textContent).toContain("WITHDRAWING-SENTENCE");
-    fireEvent.click(
-      [...container.querySelectorAll(".confirm button")].find(
-        (one) => one.textContent === WITHDRAW_LABEL,
-      ) as HTMLButtonElement,
-    );
+    const released = await mount({ report: report({ released: true }), controls: controls() });
+    expect(within(released.container).queryByRole("button", { name: RELEASE_LABEL })).toBeNull();
+    fireEvent.click(within(released.container).getByRole("button", { name: WITHDRAW_LABEL }));
+    await confirmWith(WITHDRAW_LABEL);
     await waitFor(() => {
-      expect(posts(idp).map((one) => one.path)).toEqual([WITHDRAWAL_OPERATION]);
+      expect(posts(released.idp)).toEqual([{ path: WITHDRAWAL_OPERATION, body: undefined }]);
     });
   });
 
-  test("no report draws no release and says either reason in one sentence", async () => {
-    // What breaks if this is deleted: a release offered with no report to name, or a sentence
-    // telling a department reader that a report exists and is about more than they may see.
+  test("no report is one sentence, and the windows are still drawn as the API sent them", async () => {
     const { container } = await mount({ report: null, controls: controls() });
-
     expect(container.textContent).toContain(NO_REPORT);
-    expect(button(container, RELEASE_LABEL)).toBeNull();
-  });
-
-  test("the counts name only the stores the sweep reaches", () => {
-    // What breaks if this is deleted: a store the sweep cannot reach is named beside a removal.
-    expect(releaseCounts(report(), "then")).toBe(
-      "As of then, 7 items were past their window in ledger; 3 were queued for the rule that " +
-        "removes them and 2 were held.",
-    );
+    expect(container.textContent).toContain("PAYLOAD-BECAUSE");
+    expect(screen.queryByRole("button", { name: RELEASE_LABEL })).toBeNull();
   });
 });
 
 describe("legal holds", () => {
-  test("a hold with problems says what to change and sends nothing", async () => {
-    const { container, idp } = await mount({ report: report(), controls: controls() });
-    const form = container.querySelector(`form[aria-label="${HOLD_FORM_LABEL}"]`) as HTMLFormElement;
-
-    fireEvent.submit(form);
-
-    expect(container.querySelector("[role='alert']")?.textContent).toContain("reason code");
-    expect(container.querySelector(".confirm")).toBeNull();
+  test("a hold says what each field takes, and one with problems says what to change and sends nothing", async () => {
+    // What breaks if this is deleted: validation only on the server, after the confirmation, or a
+    // form that says what it accepts only after a refusal.
+    const { idp } = await mount({ report: report(), controls: controls() }, viewAddress("holds"));
+    fireEvent.click(screen.getByRole("button", { name: PLACE_HOLD }));
+    const form = await drawerForm(HOLD_FORM_LABEL);
+    expect(form.textContent).toContain("such as the matter number it is for");
+    fireEvent.click(screen.getByRole("button", { name: REVIEW_HOLD }));
+    await waitFor(() => {
+      expect(form.textContent).toContain("A hold that names nobody holds nothing.");
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(posts(idp)).toEqual([]);
   });
 
-  test("a valid hold is confirmed with who it covers and the API's sentence, then sent", async () => {
-    // What breaks if this is deleted: a hold is placed on the first click, or its confirmation
-    // does not say that the sweep stops removing anything about the people named.
-    const { container, idp } = await mount({ report: report(), controls: controls() });
-    const form = container.querySelector(`form[aria-label="${HOLD_FORM_LABEL}"]`) as HTMLFormElement;
-    fireEvent.change(field(form, "Reference"), { target: { value: "matter-9" } });
-    fireEvent.change(field(form, "Reason code"), { target: { value: "litigation" } });
-    fireEvent.change(field(form, "People it covers"), { target: { value: "u_1, u_2" } });
-
+  test("a valid hold is confirmed with who it covers and the API's sentence, then sent as the route declares", async () => {
+    const { idp } = await mount({ report: report(), controls: controls() }, viewAddress("holds"));
+    fireEvent.click(screen.getByRole("button", { name: PLACE_HOLD }));
+    const form = await drawerForm(HOLD_FORM_LABEL);
+    type(form, "hold_id", "matter-9");
+    type(form, "reason_code", "litigation");
+    type(form, "subjects", "u_1, u_2");
     fireEvent.submit(form);
-    const confirmation = container.querySelector(".confirm")?.textContent ?? "";
-    expect(confirmation).toContain("Place legal hold matter-9 over 2 named people?");
-    expect(confirmation).toContain("HOLDING-SENTENCE");
-    expect(posts(idp)).toEqual([]);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Place legal hold matter-9 over 2 named people?");
+    expect(dialog.textContent).toContain("HOLDING-SENTENCE");
+    await confirmWith(PLACE_LABEL);
 
-    fireEvent.click(
-      [...container.querySelectorAll(".confirm button")].find(
-        (one) => one.textContent === PLACE_LABEL,
-      ) as HTMLButtonElement,
-    );
     await waitFor(() => {
-      expect(posts(idp)).toEqual([
-        {
-          path: HOLD_OPERATION,
-          body: {
-            hold_id: "matter-9",
-            reason_code: "litigation",
-            subjects: ["u_1", "u_2"],
-            actors: [],
-            all_subjects: false,
-          },
-        },
-      ]);
+      expect(posts(idp)).toHaveLength(1);
+    });
+    expect(posts(idp)[0]).toEqual({
+      path: HOLD_OPERATION,
+      body: { hold_id: "matter-9", reason_code: "litigation", subjects: ["u_1", "u_2"], actors: [], all_subjects: false },
     });
   });
 
-  test("lifting a hold is confirmed with the API's sentence, then sent by reference", async () => {
-    const { container, idp } = await mount({ report: report(), controls: controls() });
-    const form = container.querySelector(`form[aria-label="${LIFT_FORM_LABEL}"]`) as HTMLFormElement;
-    fireEvent.change(field(form, "Reference of the hold"), { target: { value: "matter-7" } });
-
-    fireEvent.submit(form);
-    expect(container.querySelector(".confirm")?.textContent).toContain("LIFTING-SENTENCE");
-    fireEvent.click(
-      [...container.querySelectorAll(".confirm button")].find(
-        (one) => one.textContent === LIFT_LABEL,
-      ) as HTMLButtonElement,
-    );
+  test("lifting a hold from its row is confirmed with the API's sentence, then sent by reference", async () => {
+    const { idp } = await mount({ report: report(), controls: controls() }, viewAddress("holds"));
+    await chooseInMenu(screen.getByRole("button", { name: "Actions for legal hold matter-7" }), LIFT_LABEL);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("LIFTING-SENTENCE");
+    expect(posts(idp)).toEqual([]);
+    await confirmWith(LIFT_LABEL);
     await waitFor(() => {
       expect(posts(idp)).toEqual([{ path: LIFT_OPERATION, body: { hold_id: "matter-7" } }]);
     });
   });
-});
 
-describe("what is kept, what left and what was asked to be erased", () => {
-  test("the windows and the two lists' sentences are drawn as the API sent them", async () => {
-    // What breaks if this is deleted: the page drops the sentence saying what the export log or the
-    // erasure queue cannot show, and an empty list reads as nothing having happened.
-    const { container } = await mount({ report: null, controls: controls() });
+  test("a hold has its own page, and one the report does not cite is one sentence", async () => {
+    // What breaks if this is deleted: a hold's page reaches past what the report cites, or says
+    // whether a guessed reference exists.
+    const shown = await mount({ report: report(), controls: controls() }, holdAddress("matter-7"));
+    expect(shown.container.querySelector("h1")?.textContent).toBe("Legal hold matter-7");
+    expect(shown.container.textContent).toContain("HOLDING-SENTENCE");
 
-    expect(container.textContent).toContain("PAYLOAD-BECAUSE");
-    expect(container.textContent).toContain("EXPORTS-SENTENCE");
-    expect(container.textContent).toContain("ERASURES-SENTENCE");
+    const absent = await mount({ report: report(), controls: controls() }, holdAddress("matter-99"));
+    expect(absent.container.querySelector("h1")?.textContent).toBe(NO_HOLD);
   });
 
-  test("a reader who may not read exports is told so, and the log is never asked for", async () => {
-    // What breaks if this is deleted: the log is asked for and drawn empty for a reader without the
-    // grant, which reads as nothing having left the building.
-    const { container, idp } = await mount({
-      report: null,
-      controls: controls({ may_read_exports: false }),
-    });
+  test("a reader the API says may not hold is drawn no control and told why", async () => {
+    const { container } = await mount({ report: report(), controls: controls({ may_hold: false }) }, viewAddress("holds"));
+    expect(container.textContent).toContain(HOLD_NOT_YOURS);
+    expect(screen.queryByRole("button", { name: PLACE_HOLD })).toBeNull();
+  });
+});
 
+describe("exports", () => {
+  test("a reader who may not read exports is told so in the API's sentence, and the log is never asked for", async () => {
+    const { container, idp } = await mount({ report: report(), controls: controls({ may_read_exports: false }) }, viewAddress("exports"));
     expect(container.textContent).toContain("EXPORTS-NOT-YOURS");
-    expect(
-      idp.calls.some((call) => new URL(call.url, CONSOLE_ORIGIN).pathname === EXPORT_LOG_OPERATION),
-    ).toBe(false);
+    expect(asked(idp, EXPORT_LOG_OPERATION)).toBe(0);
   });
 
-  test("an export is drawn with who took it, why, and the digest of what left", async () => {
-    // What breaks if this is deleted: the log can drop the column a recipient checks a file against.
-    const { container } = await mount({
-      report: null,
-      controls: controls(),
-      exports: {
-        exports: [
-          {
-            export_id: "e-1",
-            data_set: "audit_trail",
-            requested_by: "u_exporter",
-            reason: "regulatory_request",
-            reason_reference: "MATTER-1",
-            produced_at: "2019-03-04T09:00:00Z",
-            form: "chain",
-            first_seq: 3,
-            last_seq: 4,
-            entries: 2,
-            verified: true,
-            document_digest: "d".repeat(64),
-          },
-          {
-            export_id: "e-2",
-            data_set: "audit_trail",
-            requested_by: "u_partial",
-            reason: "regulatory_request",
-            reason_reference: "MATTER-2",
-            produced_at: "2019-03-04T08:00:00Z",
-            form: "readable",
-            first_seq: null,
-            last_seq: null,
-            entries: 3,
-            verified: null,
-            document_digest: "e".repeat(64),
-          },
-        ],
+  test("an export is drawn with who took it by name, why, and what it holds", async () => {
+    const { container } = await mount(
+      {
+        report: report(),
+        controls: controls(),
+        exports: {
+          exports: [
+            {
+              export_id: "e-1",
+              data_set: "access_certification",
+              requested_by: "u_exporter_19",
+              reason: "regulatory_request",
+              reason_reference: "AUDIT-1",
+              produced_at: "2019-03-05T10:00:00Z",
+              form: "readable",
+              first_seq: null,
+              last_seq: null,
+              entries: 4,
+              verified: null,
+              document_digest: "d".repeat(64),
+            },
+          ],
+          people: { u_exporter_19: "Ezra Exporter" },
+        } as ExportLog,
       },
-    });
-
+      viewAddress("exports"),
+    );
     await waitFor(() => {
-      expect(container.querySelector("table[aria-label='Exports taken from this install']")).not.toBeNull();
+      expect(container.textContent).toContain("Ezra Exporter");
     });
-    const [row, readable] = container.querySelectorAll("table[aria-label='Exports taken from this install'] tbody tr");
-    expect(row?.textContent).toContain("u_exporter");
-    expect(row?.textContent).toContain("MATTER-1");
-    expect(row?.textContent).toContain("2, from 3 to 4");
-    expect(row?.textContent).toContain("d".repeat(64));
-    // An export of the entries its exporter could read has no window and no verdict: it is drawn
-    // as such, never as an export of nothing or a chain that failed to verify.
-    expect(readable?.textContent).toContain("3, those its exporter could read");
-    expect(readable?.textContent).toContain("Not a chain");
-    expect(readable?.textContent).not.toContain("none");
+    expect(container.textContent).toContain("AUDIT-1");
+    expect(container.textContent).toContain("access certification");
+    expect(container.textContent).not.toContain("u_exporter_19");
   });
 });
-
-function finished(overrides: Partial<ErasureRequest> = {}): ErasureRequest {
-  return {
-    request_id: "r-1",
-    subject_id: "u_leaver",
-    reason_reference: "DSAR-7",
-    requested_by: "u_admin",
-    requested_at: "2019-03-04T09:00:00Z",
-    finished_at: "2019-03-04T09:15:00Z",
-    outcome: "incomplete",
-    stores: [
-      { store: "rows", disposition: "erase", reached: true, removed: 1, retired: 3, kept: 1, because: "NO-DELETE" },
-      { store: "agents", disposition: "erase", reached: true, removed: 0, retired: 0, kept: 0, because: "" },
-      { store: "recording", disposition: "erase", reached: false, removed: 0, retired: 0, kept: 0, because: "NO-ERASER" },
-      { store: "backup", disposition: "rotates_out", reached: true, removed: 0, retired: 0, kept: 0, because: "" },
-      { store: "audit", disposition: "retained", reached: true, removed: 0, retired: 0, kept: 0, because: "" },
-    ],
-    holds: [],
-    ...overrides,
-  };
-}
 
 describe("erasure requests", () => {
   test("a request is checked against the patterns the route itself declares", () => {
@@ -545,74 +415,71 @@ describe("erasure requests", () => {
     expect(erasureProblems({ subject: " u_leaver ", reference: "DSAR-7" })).toEqual([]);
   });
 
+});
+
+describe("erasure requests on the page", () => {
   test("a request with problems says what to change and sends nothing", async () => {
-    const { container, idp } = await mount({ report: null, controls: controls() });
-    const form = container.querySelector(`form[aria-label="${ERASURE_FORM_LABEL}"]`) as HTMLFormElement;
-
-    fireEvent.submit(form);
-
-    expect(container.querySelector("[role='alert']")?.textContent).toContain("matter or ticket reference");
-    expect(container.querySelector(".confirm")).toBeNull();
+    const { idp } = await mount({ report: null, controls: controls() }, viewAddress("erasures"));
+    fireEvent.click(screen.getByRole("button", { name: FILE_ERASURE }));
+    const form = await drawerForm(ERASURE_FORM_LABEL);
+    expect(form.textContent).toContain("such as DSAR-2019/004");
+    fireEvent.click(screen.getByRole("button", { name: REVIEW_REQUEST }));
+    await waitFor(() => {
+      expect(form.textContent).toContain("matter or ticket reference");
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(posts(idp)).toEqual([]);
   });
 
-  test("a valid request is confirmed with the person, the reference and the API's sentence, then sent", async () => {
-    // What breaks if this is deleted: an erasure is filed on the first click, or confirmed on a
-    // sentence that does not say what stays stored and what is never reached.
-    const { container, idp } = await mount({ report: null, controls: controls() });
-    const form = container.querySelector(`form[aria-label="${ERASURE_FORM_LABEL}"]`) as HTMLFormElement;
-    fireEvent.change(field(form, "Person, by reference"), { target: { value: "u_1" } });
-    fireEvent.change(field(form, "Matter or ticket reference"), { target: { value: "DSAR-7" } });
-
+  test("a valid request is confirmed with the person and the API's sentence, then sent", async () => {
+    // What breaks if this is deleted: an erasure is filed on the first click.
+    const { idp } = await mount({ report: null, controls: controls() }, viewAddress("erasures"));
+    fireEvent.click(screen.getByRole("button", { name: FILE_ERASURE }));
+    const form = await drawerForm(ERASURE_FORM_LABEL);
+    type(form, "subject_id", " u_leaver ");
+    type(form, "reason_reference", "DSAR-7");
     fireEvent.submit(form);
-    const confirmation = container.querySelector(".confirm")?.textContent ?? "";
-    expect(confirmation).toContain("Erase the data this install holds about u_1, under DSAR-7?");
-    expect(confirmation).toContain("ERASING-SENTENCE");
-    expect(button(container, DO_NOT_FILE)).not.toBeNull();
-    expect(posts(idp)).toEqual([]);
-
-    fireEvent.click(
-      [...container.querySelectorAll(".confirm button")].find(
-        (one) => one.textContent === FILE_ERASURE_LABEL,
-      ) as HTMLButtonElement,
-    );
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("u_leaver");
+    expect(dialog.textContent).toContain("ERASING-SENTENCE");
+    expect(within(dialog).getByRole("button", { name: DO_NOT_FILE })).toBeTruthy();
+    await confirmWith(FILE_ERASURE_LABEL);
     await waitFor(() => {
-      expect(posts(idp)).toEqual([
-        { path: ERASURES_OPERATION, body: { subject_id: "u_1", reason_reference: "DSAR-7" } },
-      ]);
-    });
-    await waitFor(() => {
-      expect(container.textContent).toContain("The request to erase the data held about u_1 was filed at");
+      expect(posts(idp)).toEqual([{ path: ERASURES_OPERATION, body: { subject_id: "u_leaver", reason_reference: "DSAR-7" } }]);
     });
   });
 
-  test("a reader the API says may not erase is drawn no form and told why", async () => {
-    // What breaks if this is deleted: the form is drawn for everybody who may read the queue, and
-    // the route refuses the confirmed erasure with a sentence that reads like a fault.
-    const { container } = await mount({ report: null, controls: controls({ may_erase: false }) });
-
-    expect(container.querySelector(`form[aria-label="${ERASURE_FORM_LABEL}"]`)).toBeNull();
+  test("a reader the API says may not erase is drawn no control and told why", async () => {
+    const { container } = await mount({ report: null, controls: controls({ may_erase: false }) }, viewAddress("erasures"));
     expect(container.textContent).toContain(ERASE_NOT_YOURS);
+    expect(screen.queryByRole("button", { name: FILE_ERASURE })).toBeNull();
   });
 
-  test("a finished request says store by store what was removed, retired, kept and not reached", async () => {
-    // What breaks if this is deleted: an incomplete erasure is drawn as a state and no detail, and
-    // the stores still holding the person's data are nowhere on the page.
-    expect(storeLines(finished())).toEqual([
-      "rows: 1 removed; 3 retired and still stored; 1 kept, because NO-DELETE",
-      "recording: not reached, because NO-ERASER",
-      "Not reached by any erasure: backup, audit.",
-    ]);
+  test("a finished request's own page says store by store what was removed, retired, kept and not reached", async () => {
+    // What breaks if this is deleted: a request that finished incomplete reads as erased, with
+    // nothing saying which store still holds the person's data.
+    const finished: ErasureRequest = {
+      request_id: "r-1",
+      subject_id: "u_leaver",
+      reason_reference: "DSAR-7",
+      requested_by: "u_filer_3",
+      requested_at: "2019-03-04T09:00:00Z",
+      finished_at: "2019-03-04T10:00:00Z",
+      outcome: "incomplete",
+      stores: [
+        { store: "memory", disposition: "retire", reached: true, removed: 0, retired: 3, kept: 0, because: "" },
+        { store: "ledger", disposition: "retained", reached: true, removed: 0, retired: 0, kept: 0, because: "" },
+        { store: "cache", disposition: "remove", reached: false, removed: 0, retired: 0, kept: 0, because: "UNREACHED" },
+      ],
+      holds: [],
+    } as ErasureRequest;
+    const { container } = await mount({ report: null, controls: controls(), queue: { requests: [finished], people: { u_filer_3: "Fiona Filer" } } as ErasureQueue }, erasureAddress("r-1"));
+    expect(container.textContent).toContain("memory: 3 retired and still stored");
+    expect(container.textContent).toContain("cache: not reached, because UNREACHED");
+    expect(container.textContent).toContain("Not reached by any erasure: ledger.");
+    expect(container.textContent).toContain("Fiona Filer");
 
-    const { container } = await mount({
-      report: null,
-      controls: controls(),
-      queue: { requests: [finished(), finished({ request_id: "r-2", outcome: "held", holds: ["hold-9"], stores: [] })] },
-    });
-    const rows = [...container.querySelectorAll("table[aria-label=\"Requests to erase somebody's data\"] tbody tr")];
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain("Incomplete at");
-    expect(rows[0]?.textContent).toContain("3 retired and still stored");
-    expect(rows[1]?.textContent).toContain("by hold-9. Nothing was touched.");
+    const absent = await mount({ report: null, controls: controls() }, erasureAddress("r-9"));
+    expect(absent.container.querySelector("h1")?.textContent).toBe(NO_ERASURE);
   });
 });

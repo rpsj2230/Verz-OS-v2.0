@@ -188,6 +188,15 @@ class DataSet:
     told: str
 
 
+#: Where the certification report is taken, and why not from the audit trail's form.
+A_CERTIFICATION_REPORT_IS_TAKEN_FROM_THE_REVIEW: Final = (
+    "Taken from the Access review screen, whose rows it holds, so the report is always the list "
+    "the reviewer was deciding from. It is recorded here with the other exports."
+)
+
+#: Data sets that run, and are taken from their own screen rather than this screen's form.
+TAKEN_ELSEWHERE: Final = frozenset({ExportDataSet.ACCESS_CERTIFICATION.value})
+
 #: Everything the code knows how to bring in or take out, in the order the screen lists them.
 CATALOGUE: Final[tuple[DataSet, ...]] = (
     DataSet(
@@ -200,6 +209,17 @@ CATALOGUE: Final[tuple[DataSet, ...]] = (
         ),
         runs=True,
         told=AN_AUDIT_TRAIL_EXPORT_TAKES_THE_FORM_ITS_EXPORTER_MAY_READ,
+    ),
+    DataSet(
+        key=ExportDataSet.ACCESS_CERTIFICATION.value,
+        label="Access certification report",
+        direction=Direction.EXPORT,
+        carries=(
+            "Every grant and pack you may review, who holds it, who granted it, when it lapses "
+            "and its last review."
+        ),
+        runs=True,
+        told=A_CERTIFICATION_REPORT_IS_TAKEN_FROM_THE_REVIEW,
     ),
     DataSet(
         key="knowledge",
@@ -436,7 +456,11 @@ def request_problems(
 ) -> tuple[ExportProblem, ...]:
     """Every problem with an export request, in field order. Empty means it may be taken."""
     found: list[ExportProblem] = []
-    runnable = {one.key for one in CATALOGUE if one.runs and one.direction is Direction.EXPORT}
+    runnable = {
+        one.key
+        for one in CATALOGUE
+        if one.runs and one.direction is Direction.EXPORT and one.key not in TAKEN_ELSEWHERE
+    }
     if data_set not in runnable:
         found.append(
             ExportProblem(

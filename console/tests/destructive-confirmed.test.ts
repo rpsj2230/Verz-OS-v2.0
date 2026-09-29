@@ -39,15 +39,15 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
-  "src/pages/Approvals.tsx approvalDecisionApiPath(suspensionId)":
+  "src/pages/approvals/ApprovalCard.tsx approvalDecisionApiPath(suspensionId)":
     "Deciding an approval is the answer to a question the card has already asked. The artefact and " +
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +
     "card is the statement of what will happen and to what, and a second step would ask the approver " +
     "to confirm a confirmation. A rejection's button stays disabled until a reason is chosen.",
-  "src/pages/AccessRequests.tsx ACCESS_REQUESTS_API_PATH":
+  "src/pages/access-requests/AccessRequestsPage.tsx ACCESS_REQUESTS_API_PATH":
     "Sending a request for access ends and replaces nothing: it is addressed to whoever can decide " +
     "it, and the decision is a grant written on the Roles screen, which is where anything changes.",
-  "src/pages/Audit.tsx VERIFICATION_API_PATH":
+  "src/pages/audit/VerifyPage.tsx VERIFICATION_API_PATH":
     "Walking the ledger reads every entry and writes nothing: brain.audit_routes.verify_ledger stores no " +
     "report, which tests/unit/test_chain_check.py holds, so there is nothing for a press to destroy.",
   "src/pages/requirement-checks/RecordDrawer.tsx CHECKS_API_PATH":
@@ -88,16 +88,16 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
-  "src/pages/Classification.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)":
+  "src/pages/classification/ClassificationPage.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)":
     "A review of a rule or of a mark is a dry run. brain.classification_routes stores nothing on " +
     "either, which tests/unit/test_classification_routes.py and tests/unit/test_classified_tables.py " +
     "prove, so there is nothing for the review to destroy.",
-  "src/pages/Classification.tsx markApiPath(entity, row.column)":
+  "src/pages/classification/ClassificationPage.tsx markApiPath(entity, row.column)":
     "Applying a mark replaces one column's rule, and the press comes after a review of exactly that " +
     "mark whose verdict, widening included, is on the screen above the button. The rule before is " +
     "in the ledger entry 0116's trigger writes and can be marked back the same way, so nothing is " +
     "ended that cannot be restored by the same control.",
-  "src/pages/Classification.tsx tableApiPath(named)":
+  "src/pages/classification/ClassificationPage.tsx tableApiPath(named)":
     "Uploading a table writes its rows under a new version and keeps every earlier version's rows, " +
     "so nothing is deleted, and the marks that stand are kept. The upload is ledgered by 0116's " +
     "trigger under the person who sent it.",

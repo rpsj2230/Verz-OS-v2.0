@@ -326,6 +326,20 @@ def test_a_request_wrong_in_every_field_is_told_every_problem() -> None:
     assert [(one.field.value, one.code) for one in naive] == [("window", "no_timezone")]
 
 
+def test_the_certification_report_is_not_taken_through_the_audit_trails_form() -> None:
+    """The report runs, and is taken from Access review with the rows it holds. Delete this and a
+    request naming it here is accepted and answered with an audit trail export under its name."""
+    found = request_problems(
+        data_set=ExportDataSet.ACCESS_CERTIFICATION.value,
+        reason=ExportReason.REGULATORY_REQUEST.value,
+        reason_reference="MATTER-2019/004",
+        since=LONG_AGO,
+        until=LONG_AGO + timedelta(days=1),
+    )
+    assert [(one.field.value, one.code) for one in found] == [("data_set", "not_available")]
+    assert ExportDataSet.ACCESS_CERTIFICATION.value in {one.key for one in CATALOGUE if one.runs}
+
+
 def test_a_well_formed_request_has_no_problems() -> None:
     """The sibling every refusal above needs."""
     assert (
