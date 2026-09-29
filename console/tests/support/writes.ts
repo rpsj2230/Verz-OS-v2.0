@@ -155,8 +155,8 @@ function tagOf(attribute: ts.JsxAttribute, source: ts.SourceFile): string {
 /**
  * The places a function returned from a hook is called, when `use` is it being handed out.
  *
- * `pages/Retention.tsx` keeps its one write in `useWrite`, which returns `{ busy, failure, send }`,
- * and every control calls `write.send(...)`. Following `send` outwards from the return statement
+ * `pages/retention/RetentionActs.tsx` keeps its one write in `useRetentionWrite`, which returns
+ * `{ busy, failure, send }`, and every control calls `write.send(...)`. Following `send` outwards from the return statement
  * would reach the hook's callers rather than the calls, so a use that is a property of a returned
  * object is followed to `x.send` on every `const x = useWrite(...)` instead. Null when `use` is
  * anything else.

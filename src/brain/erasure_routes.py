@@ -43,7 +43,11 @@ empty table that reads as nothing having left the building.
 **The screen's question is asked first**, with `brain.console.reads.permitted`, before any
 authority and before the database, so a caller who may not open the screen learns nothing.
 
-Task ids: M27.7.24
+**Who filed and who took each is named** (`brain.people_names`), for the rows already admitted.
+The person a request is about is never looked up: that is the reference the request was filed
+under, and a name for somebody being erased is the one value this screen should not add.
+
+Task ids: M27.7.24, M27.16.1
 """
 
 from __future__ import annotations
@@ -81,6 +85,7 @@ from brain.ops.erasure_store import (
 )
 from brain.ops.export import ExportAudit
 from brain.ops.retention import HORIZONS, Horizon, Store
+from brain.people_names import names_for
 from brain.retention_routes import may_hold, may_release
 from brain.routing_routes import sessions_of
 from brain.tables.data_export import REFERENCE_PATTERN
@@ -273,6 +278,8 @@ class ErasureQueueView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     requests: list[ErasureRequestView]
+    #: The names of who filed each request (`brain.people_names`). Never the person to be erased.
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class ErasureBody(BaseModel):
@@ -319,6 +326,8 @@ class ExportLogView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     exports: list[ExportLogEntryView]
+    #: The names of who took each export (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 def kept_view(one: Horizon) -> KeptView:
@@ -496,8 +505,9 @@ async def erasure_queue(request: Request, asked: Asked) -> ErasureQueueView:
     records = await erasure_records_of(request).requests(limit=QUEUE_SHOWN)
     placed = [(record, queued(record)) for record in records]
     shown = {id(row) for row in deletion_rows([one for _, one in placed], asked.reach, asked.now)}
+    views = [request_view(record) for record, one in placed if id(one.record) in shown]
     return ErasureQueueView(
-        requests=[request_view(record) for record, one in placed if id(one.record) in shown]
+        requests=views, people=await names_for(request, {one.requested_by for one in views})
     )
 
 
@@ -545,4 +555,7 @@ async def exports_taken(request: Request, asked: Asked) -> ExportLogView:
     admitted = {
         one.export_id for one in export_log([logged(one) for one in taken], asked.reach, asked.now)
     }
-    return ExportLogView(exports=[export_view(one) for one in taken if one.export_id in admitted])
+    views = [export_view(one) for one in taken if one.export_id in admitted]
+    return ExportLogView(
+        exports=views, people=await names_for(request, {one.requested_by for one in views})
+    )

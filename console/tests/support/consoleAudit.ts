@@ -659,7 +659,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Backup and recovery": {
-    screens: ["/recovery", "/retention", "/compliance", "/referrals"],
+    screens: [
+      "/recovery",
+      "/retention",
+      "/retention/:view",
+      "/retention/holds/:holdId",
+      "/retention/erasures/:requestId",
+      "/compliance",
+      "/referrals",
+    ],
     routes: [
       "/api/v1/install/recovery",
       "/api/v1/govern/retention*",

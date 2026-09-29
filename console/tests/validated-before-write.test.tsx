@@ -89,11 +89,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   // the list once it is opened and so sits after the list's search.
   "src/pages/prompts/PromptsPage.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
   "src/pages/RequirementChecks.tsx": [{ pattern: "/requirement-checks", index: 0, writes: true }],
-  "src/pages/Retention.tsx": [
-    { pattern: "/retention", index: 0, writes: true },
-    { pattern: "/retention", index: 1, writes: true },
-    { pattern: "/retention", index: 2, writes: true },
-  ],
   // The connect form is in a drawer, judged below; the credential form is the one form on the page.
   "src/pages/staff-sources/SyncCredential.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
   // The naming form, then the four forms of the one open case, then the form that opens a case.
@@ -118,6 +113,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/retention/RetentionActs.tsx":
+    "The hold, lift and erasure forms are inside drawers opened from the Legal holds and Erasure " +
+    "requests views, outside the main landmark these cases read. Each says what its fields take before " +
+    "anything is sent, and tests/retention-page.test.tsx submits the hold and the erasure blank and " +
+    "holds that no confirmation opens, nothing is sent and what to change is said beside the fields.",
   "src/pages/review/ElevationActs.tsx":
     "The ask form is inside the Ask for access drawer opened from the page header, outside the main " +
     "landmark these cases read. It says what each field takes before anything is sent, and " +

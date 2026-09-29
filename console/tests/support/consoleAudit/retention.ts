@@ -19,7 +19,7 @@ import { at, audited, type Proofs, t, type WriteRoute } from "../auditClaims";
 const HOLDS_SWEPT = audited("test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them");
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Retention.tsx path": [
+  "src/pages/retention/RetentionActs.tsx path": [
     at("POST /api/v1/govern/retention/release", "RELEASE_API_PATH", RELEASE_API_PATH),
     at("POST /api/v1/govern/retention/withdrawal", "WITHDRAWAL_API_PATH", WITHDRAWAL_API_PATH),
     at("POST /api/v1/govern/legal-holds", "HOLD_API_PATH", HOLD_API_PATH),
