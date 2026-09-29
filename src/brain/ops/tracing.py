@@ -69,7 +69,7 @@ nest - an observation may not outlive the trace that is the only way to reach it
 blob may not outlive the observation that points at it. An orphaned observation is not a
 risk anybody weighed, it is storage nobody can navigate to and everybody keeps paying for.
 
-Task ids: M32.1.1.3, M32.1.2.1, M32.1.2.2, M32.1.2.3, M32.1.2.4, M32.1.2.5
+Task ids: M32.1.1.3, M32.1.2.1, M32.1.2.2, M32.1.2.3, M32.1.2.4, M32.1.2.5, M24.3.4
 """
 
 from __future__ import annotations
@@ -131,6 +131,13 @@ VALUE_TOKEN_RE: Final = re.compile(r"^[a-z0-9][a-z0-9._:/-]*$")
 #: large one; nobody needs to know a masked string was exactly nine characters, which is
 #: the length of an NRIC and of nothing else anybody types into a support ticket.
 _SIZE_CLASSES: Final[tuple[tuple[int, str], ...]] = ((0, "empty"), (64, "small"), (1024, "medium"))
+
+#: Every value `mask` can leave in a payload field: a string's size class and nothing else. The
+#: payload store's check constraint admits these four and no other text (`0150`), so a payload
+#: that did not pass through `mask` is refused by the database as well as never built here.
+MASKED_PAYLOADS: Final[tuple[str, ...]] = tuple(
+    f"[masked:str/{name}]" for name in (*(name for _, name in _SIZE_CLASSES), "large")
+)
 
 #: The Keycloak realm role that may read stored payloads. Deliberately not a member of
 #: `brain.identity.roles.Role`: that enum is the six things a person can *be* in this
@@ -283,6 +290,23 @@ class TraceRecord(enum.StrEnum):
     OBSERVATION = "observation"
     #: Anything too large to inline, in the S3-compatible store.
     BLOB = "blob"
+
+
+class StepKind(enum.StrEnum):
+    """What one step of a run's trace graph is (M24.3.4). The observations under a trace.
+
+    The three the leaf names and the request they hang from. Closed, because the trace store's
+    check constraint is rendered from it and a step of an unknown kind is a graph nobody can read.
+    """
+
+    #: The run itself: the lane it ran in, how it ended, and what it handed its caller.
+    REQUEST = "request"
+    #: One try at a model, answered or not, in the order the executor made them.
+    MODEL_ATTEMPT = "model_attempt"
+    #: One tool call the lane started.
+    TOOL_CALL = "tool_call"
+    #: A source a tool call read.
+    RETRIEVAL = "retrieval"
 
 
 @dataclass(frozen=True)

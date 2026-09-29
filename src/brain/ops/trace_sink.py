@@ -23,9 +23,17 @@ the same names the Classification screen shows, and never a value; no record ids
 
 **A reference therefore names a log line and not a readable trace**, and that is the gap.
 `brain.ops.tracing.TraceRecord` describes the retention a real trace store would have and
-`brain.ops.retention` pins a window against it, so the store is designed and unbuilt.
-Quoting a reference at somebody today gets them a line saying a trace of that shape existed.
-`A_TRACE_NOBODY_CAN_OPEN_IS_A_TRACE_THAT_EXISTS` says which half of the promise is kept.
+`brain.ops.retention` pins a window against it. Quoting a reference at somebody today gets them a
+line saying a trace of that shape existed. `A_TRACE_NOBODY_CAN_OPEN_IS_A_TRACE_THAT_EXISTS` says
+which half of the promise is kept.
+
+**The store has been built beside this, not behind it** (2026-09-29, M24.3.4).
+`brain.ops.trace_store` keeps a run's graph, masked, under the trace id, written by a recorder
+from the one place a request finishes and read only under its own role. This sink is not wired to
+it: the reference `compose` mints is not the trace id, so a payload written from here could not be
+joined to the run, and `compose` runs on the answer path alone, so a store fed from here would
+hold answers and no refusals. What `THE_LOG_IS_NOT_A_TRACE_STORE` says of this sink's payload is
+still true of it.
 
 Task ids: M4.4.4
 """

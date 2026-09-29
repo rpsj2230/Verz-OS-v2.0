@@ -54,12 +54,20 @@ a run's cost while `brain.console.agent_profile.RUN_SPEND_IS_RECORDED` is false,
 `cost_minor` is null. A channel's answers are served as messages sent, and `unrecorded` says why.
 A skill's runs and a source's live reads are recorded and counted, so neither is listed there.
 
+**A source's calls are the live reads' own figures, at the basis that may see everybody's usage**
+(M11.3.4). `calls_of` reads `brain.connectors.throttle.measure` off the process's live reader, the
+one the answer path calls, so requests a second and a minute, the calls in flight, the 429 and error
+shares and the latency are what questions did and not a copy. They are everybody's questions'
+calls, so a reader who may see only their own usage is told why there are none, which is
+`live_reads`' rule. Per process, and said so beside them: the answer path holds its reader in
+process and the worker counts its own reads as attempts.
+
 Rejected: a stats route for knowledge documents in this commit. `know.item` admits a reader
 through `brain.knowledge.search.reach_for` over each item's visibility, and a per-document
 figure (retrievals, citations) has no table recording it, so the page would be a 404 rule and
 nothing to show.
 
-Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33
+Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33, M11.3.4
 """
 
 from __future__ import annotations
@@ -274,6 +282,90 @@ class ConnectorPeriodView(BaseModel):
     live_reads: int
 
 
+class ConnectorCallsView(BaseModel):
+    """The calls this process made to one source for questions, over the last window (M11.3.4).
+
+    `brain.connectors.throttle.measure` over the live reads' own records, with no figure computed
+    in this module. Requests a second and a minute, the calls in flight now, the share the source
+    refused as over its limit (a 429) and the share that failed, and the median and 95th
+    percentile latency.
+    `quiet` says there were too few calls for the two shares to mean anything.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    window_seconds: float
+    requests: int
+    per_second: float
+    per_minute: float
+    concurrency: int
+    quota_ratio: float
+    error_ratio: float
+    latency_p50_ms: float
+    latency_p95_ms: float
+    quiet: bool
+
+
+#: What the call figures are, in words, beside them on the page.
+CALLS_ARE_THIS_PROCESS_S: Final = (
+    "Calls this application process made to the source for questions over the last minute. Each "
+    "process keeps its own count, and the worker's reads are counted in its attempts above."
+)
+
+#: Why there are no call figures for a reader who may see only their own usage.
+CALLS_ARE_EVERYBODY_S: Final = (
+    "These calls were made for everybody's questions, so they are shown to a reader who may see "
+    "everybody's usage."
+)
+
+#: Why there are no call figures on a process whose questions have read no source live yet: the
+#: answer path builds its live reader at the first question that needs one.
+NO_LIVE_READER_HERE: Final = (
+    "No question on this application process has read a source live yet, so there are no calls "
+    "to count."
+)
+
+
+def calls_of(state: object, connector: str, now: datetime) -> ConnectorCallsView | None:
+    """The live reads' figures for one source on this process, or None where none are kept.
+
+    Read off `app.state.live_records`, the one `brain.api_routes.live_records_of` builds for the
+    answer path, so these are the calls questions made and no copy of them.
+    """
+    from brain.ops.live_records import SourceRecords
+
+    found = getattr(state, "live_records", None)
+    if not isinstance(found, SourceRecords):
+        return None
+    figures = found.throttle.metrics(connector, now=now)
+    return ConnectorCallsView(
+        window_seconds=figures.window_seconds,
+        requests=figures.requests,
+        per_second=figures.per_second,
+        per_minute=figures.per_minute,
+        concurrency=figures.concurrency,
+        quota_ratio=figures.quota_ratio,
+        error_ratio=figures.error_ratio,
+        latency_p50_ms=figures.latency_p50_ms,
+        latency_p95_ms=figures.latency_p95_ms,
+        quiet=figures.is_quiet,
+    )
+
+
+def connector_calls(
+    state: object, connector: str, basis: Basis, now: datetime
+) -> tuple[ConnectorCallsView | None, str]:
+    """The call figures a reader at `basis` is shown for one source, and the sentence beside them.
+
+    Everybody's questions made these calls, so they are told only at the basis that may see
+    everybody's usage, which is `live_reads`' own rule; otherwise none, with the reason.
+    """
+    if basis is not Basis.EVERYONE:
+        return None, CALLS_ARE_EVERYBODY_S
+    calls = calls_of(state, connector, now)
+    return calls, NO_LIVE_READER_HERE if calls is None else CALLS_ARE_THIS_PROCESS_S
+
+
 class ConnectorStatsView(BaseModel):
     """One connected source: its health, when it was last read, its attempts and its index.
 
@@ -298,6 +390,10 @@ class ConnectorStatsView(BaseModel):
     at_least: bool
     periods: list[ConnectorPeriodView]
     unrecorded: list[UnrecordedView]
+    #: The calls this process made to the source for questions, or None with `calls_told` saying
+    #: why (M11.3.4).
+    calls: ConnectorCallsView | None = None
+    calls_told: str = ""
 
 
 class ChannelPeriodView(BaseModel):
@@ -700,6 +796,7 @@ async def connector_stats(request: Request, connector: Named, asked: Asked) -> C
         if outcome in {member.value for member in SyncOutcome}
     ]
     reads = [LiveRead(principal_id=who, at=at) for who, at in read_rows]
+    calls, calls_told = connector_calls(request.app.state, one.connector, basis, asked.now)
     return ConnectorStatsView(
         connector=one.connector,
         health=None if state is None else state.health.value,
@@ -725,6 +822,8 @@ async def connector_stats(request: Request, connector: Named, asked: Asked) -> C
             for period, start, end in periods(asked.now)
         ],
         unrecorded=[],
+        calls=calls,
+        calls_told=calls_told,
     )
 
 
