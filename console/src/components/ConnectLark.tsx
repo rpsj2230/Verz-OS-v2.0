@@ -22,6 +22,10 @@
  * Secret and cleared with it; the card shows the events address to paste as Lark's Request URL and
  * the API's sentence about the last event, so the owner sees Lark reach the install without a log.
  *
+ * **All three are the kit's secret field** (`ui/secret-field.tsx`), masked and held only in the
+ * element: a test sends what is typed and leaves it there, and the save takes it out of the field
+ * in the call that sends it. Until 2026-09-29 they were plain text inputs held in state.
+ *
  * Task ids: M11.9.4, M10.2.1
  */
 
@@ -46,6 +50,7 @@ import {
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { ConfirmAction } from "./ConfirmAction";
+import { SecretField, useSecret } from "./ui/secret-field";
 
 export const CONNECT_LARK = "Connect Lark";
 export const WHAT_FOR = "What the Lark app is for";
@@ -154,15 +159,23 @@ function Results({ tested }: { readonly tested: LarkTested }) {
   );
 }
 
+/** A secret field's problem, in the two props the kit's field takes for it. */
+function secretProblems(problems: Parameters<typeof problemAttributes>[0], field: string): { invalid: boolean; describedBy?: string } {
+  const attributes = problemAttributes(problems, FORM, field);
+  const describedBy = attributes["aria-describedby"];
+  return describedBy === undefined ? { invalid: attributes["aria-invalid"] === true } : { invalid: attributes["aria-invalid"] === true, describedBy };
+}
+
 function Wizard({ guide, onChoose, onSaved }: {
   readonly guide: LarkGuide;
   readonly onChoose: (uses: string[], platform: string) => void;
   readonly onSaved: (told: string) => void;
 }) {
   const [appId, setAppId] = useState("");
-  const [secret, setSecret] = useState("");
-  const [encryptKey, setEncryptKey] = useState("");
-  const [verificationToken, setVerificationToken] = useState("");
+  const secret = useSecret();
+  const encryptKey = useSecret();
+  const verificationToken = useSecret();
+  const [secretTyped, setSecretTyped] = useState(false);
   const [baseLink, setBaseLink] = useState(guide.base);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
@@ -171,11 +184,11 @@ function Wizard({ guide, onChoose, onSaved }: {
   const [saved, setSaved] = useState<LarkSaved | null>(null);
   const chosen = guide.chosen;
   const chat = chosen.includes("chat_channel");
-  const keys = { encryptKey, verificationToken };
   const mayAll = chosen.length > 0 && guide.uses.filter((one) => chosen.includes(one.name)).every((one) => one.may_switch_on);
   const problems = failure?.problems ?? [];
   // Nothing is sent from a blank form: both buttons wait for an App ID and an App Secret.
-  const typed = appId.trim() !== "" && secret.trim() !== "";
+  const typed = appId.trim() !== "" && secretTyped;
+  const held = guide.uses.some((one) => one.switched_on);
 
   function test(event: FormEvent<HTMLFormElement>): void {
     // Never a native submission: a GET with the secret in the query string.
@@ -186,7 +199,10 @@ function Wizard({ guide, onChoose, onSaved }: {
     void (async () => {
       const result = await request<LarkTested>(LARK_TEST_API_PATH, {
         method: "POST",
-        body: larkBody(appId, secret, chosen, guide.platform, baseLink, keys),
+        body: larkBody(appId, secret.peek(), chosen, guide.platform, baseLink, {
+          encryptKey: encryptKey.peek(),
+          verificationToken: verificationToken.peek(),
+        }),
       });
       setBusy(false);
       if (!result.ok) {
@@ -198,12 +214,13 @@ function Wizard({ guide, onChoose, onSaved }: {
   }
 
   function save(): void {
-    const body = larkBody(appId, secret, chosen, guide.platform, baseLink, keys);
+    // The secrets leave their fields in the call that reads them, before the request is sent.
+    // See `THE_SECRET_STAYS_IN_ITS_FIELD`.
+    const body = larkBody(appId, secret.take(), chosen, guide.platform, baseLink, {
+      encryptKey: encryptKey.take(),
+      verificationToken: verificationToken.take(),
+    });
     setBusy(true);
-    // The secrets leave their fields before the request does. See `THE_SECRET_STAYS_IN_ITS_FIELD`.
-    setSecret("");
-    setEncryptKey("");
-    setVerificationToken("");
     void (async () => {
       const result = await request<LarkSaved>(LARK_API_PATH, { method: "POST", body });
       setBusy(false);
@@ -324,72 +341,42 @@ function Wizard({ guide, onChoose, onSaved }: {
           <FieldProblems problems={problems} form={FORM} names="app_id" />
         </div>
         <div className="rjsf-field">
-          <label className="control-label" htmlFor={`${FORM}-app_secret`}>
-            App Secret
-          </label>
-          <input
+          <SecretField
             id={`${FORM}-app_secret`}
-            className="form-control"
-            type="text"
-            name="app_secret"
-            value={secret}
-            autoComplete="off"
-            spellCheck={false}
-            {...problemAttributes(problems, FORM, "app_secret")}
+            secret={secret}
+            label="App Secret"
+            stored={held}
+            description="Kept in the vault when you save, and never shown again."
             disabled={busy}
-            onChange={(event) => {
-              setSecret(event.target.value);
-            }}
+            {...secretProblems(problems, "app_secret")}
+            onPresenceChange={setSecretTyped}
           />
-          <p className="field-description">Kept in the vault when you save, and never shown again.</p>
           <FieldProblems problems={problems} form={FORM} names="app_secret" />
         </div>
         {chat ? (
           <>
             <div className="rjsf-field">
-              <label className="control-label" htmlFor={`${FORM}-encrypt_key`}>
-                Encrypt Key
-              </label>
-              <input
+              <SecretField
                 id={`${FORM}-encrypt_key`}
-                className="form-control"
-                type="text"
-                name="encrypt_key"
-                value={encryptKey}
-                autoComplete="off"
-                spellCheck={false}
-                {...problemAttributes(problems, FORM, "encrypt_key")}
+                secret={encryptKey}
+                label="Encrypt Key"
+                stored={held}
+                description="From Events & Callbacks, Encryption Strategy. Kept in the vault and never shown again."
                 disabled={busy}
-                onChange={(event) => {
-                  setEncryptKey(event.target.value);
-                }}
+                {...secretProblems(problems, "encrypt_key")}
               />
-              <p className="field-description">
-                From Events &amp; Callbacks, Encryption Strategy. Kept in the vault and never shown again.
-              </p>
               <FieldProblems problems={problems} form={FORM} names="encrypt_key" />
             </div>
             <div className="rjsf-field">
-              <label className="control-label" htmlFor={`${FORM}-verification_token`}>
-                Verification Token
-              </label>
-              <input
+              <SecretField
                 id={`${FORM}-verification_token`}
-                className="form-control"
-                type="text"
-                name="verification_token"
-                value={verificationToken}
-                autoComplete="off"
-                spellCheck={false}
-                {...problemAttributes(problems, FORM, "verification_token")}
+                secret={verificationToken}
+                label="Verification Token"
+                stored={held}
+                description="From the same tab. Kept in the vault with the Encrypt Key and never shown again."
                 disabled={busy}
-                onChange={(event) => {
-                  setVerificationToken(event.target.value);
-                }}
+                {...secretProblems(problems, "verification_token")}
               />
-              <p className="field-description">
-                From the same tab. Kept in the vault with the Encrypt Key and never shown again.
-              </p>
               <FieldProblems problems={problems} form={FORM} names="verification_token" />
             </div>
           </>

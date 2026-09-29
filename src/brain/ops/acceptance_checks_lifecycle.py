@@ -137,6 +137,21 @@ THE_DATABASE_REFUSED_AN_APPROVAL_THE_SCREEN_OFFERED: Final = (
     "as a fault"
 )
 
+#: Why the check approves a card whose document it moved first.
+A_CARD_WHOSE_DOCUMENT_MOVED_IS_ANSWERED_AND_CLOSED: Final = (
+    "0120's trigger refuses the approval of a promotion whose document moved after it was asked "
+    "for, and until 2026-09-29 the Approvals route answered that as a fault and left the card to "
+    "fail the next approver the same way. So the check asks for a second document, adds a newer "
+    "version of it, and approves the card through the route's own decision: it must be answered "
+    "that the request no longer applies, closed as rejected, and absent to a second press."
+)
+
+#: What the promotion check says when that card is not answered and closed.
+A_MOVED_DOCUMENT_S_CARD_WAS_NOT_ANSWERED_AND_CLOSED: Final = (
+    "approving a card whose document had a newer version since it was asked for was not answered "
+    "that the request no longer applies and closed as rejected"
+)
+
 # ------------------------------------------------------------------------ the figures
 #: How far ahead every review date the checks set lies, as a steward would set one. Past the
 #: sweep's lead time, so a review this far ahead is one the worker's run does not ask about yet.
@@ -598,51 +613,73 @@ async def _offered(h: Harness, person: _Person, suspension_id: str) -> bool:
     return any(one.suspension_id == suspension_id for one in shown.items)
 
 
-async def _approve(h: Harness, person: _Person, suspension_id: str) -> bool:
-    """The Approvals decision route approving the card as this person: whether it was written.
+async def _decided(h: Harness, person: _Person, suspension_id: str) -> str:
+    """The Approvals decision route approving the card as this person, through the route's own
+    `take_decision`: empty when it was written, else the words the route refused it in.
 
-    False for every reason the route writes nothing. The database refusing the approval by raising
-    is a fault on the route, and fails the check: see
+    The database refusing the approval in a way the route answers as a fault fails the check: see
     `AN_APPROVAL_THE_DATABASE_REFUSES_IS_A_FAULT_ON_THE_SCREEN`.
     """
-    from sqlalchemy.exc import IntegrityError
-
-    from brain.approval_routes import DecidableVerdict, DecisionAsked, decide_once
-    from brain.audit.ledger import AuditChain
-    from brain.audit.record import AuditRecorder
+    from brain.approval_routes import DecidableVerdict, DecisionAsked, take_decision
+    from brain.core.errors import Absent, Failed
     from brain.gate.suspension_store import StoredSuspensions
 
-    now = h.now
-    recorder = AuditRecorder(
-        AuditChain(),
-        actor_id=person.reach.principal_id,
-        ent_hash=person.reach.ent_hash(),
-        trace_id=h.trace_id,
-        clock=lambda: now,
-    )
     try:
-        async with StoredSuspensions(h.sessions).holding(person.reach, now) as held:
-            decided = await decide_once(
-                held,
-                suspension_id,
-                person.reach,
-                recorder,
-                asked=DecisionAsked(verdict=DecidableVerdict.APPROVED),
-                now=now,
-            )
-    except IntegrityError:
+        await take_decision(
+            StoredSuspensions(h.sessions),
+            suspension_id,
+            person.reach,
+            DecisionAsked(verdict=DecidableVerdict.APPROVED),
+            trace_id=h.trace_id,
+            now=h.now,
+        )
+    except Absent as refused:
+        return refused.public_message
+    except Failed:
         raise CheckFailedError(THE_DATABASE_REFUSED_AN_APPROVAL_THE_SCREEN_OFFERED) from None
-    return decided is not None
+    return ""
+
+
+async def _approve(h: Harness, person: _Person, suspension_id: str) -> bool:
+    """Whether the decision route wrote this person's approval of the card."""
+    return await _decided(h, person, suspension_id) == ""
+
+
+async def _moved_card_is_answered_and_closed(
+    h: Harness, asking: _Person, approving: _Person, steward: str
+) -> None:
+    """See `A_CARD_WHOSE_DOCUMENT_MOVED_IS_ANSWERED_AND_CLOSED`."""
+    from brain.approval_routes import A_REQUEST_THAT_NO_LONGER_APPLIES
+    from brain.core.errors import Absent
+    from brain.knowledge.promotion import PromotionStatus
+
+    moving = await _added(h, steward, h.word())
+    if await _verify(h, asking, moving, review_by=h.now + REVIEW_AHEAD) is None:
+        raise CheckFailedError("the steward could not verify their own document")
+    card = await _propose(h, asking, moving)
+    if card is None:
+        raise CheckFailedError("a steward's verified document could not be asked for company-wide")
+    newer = await _new_version(
+        h, asking, moving, body=_body(h.word()), review_by=h.now + REVIEW_AHEAD
+    )
+    if newer is None:
+        raise CheckFailedError("the steward could not add a newer version of their own document")
+    if (
+        await _decided(h, approving, card) != A_REQUEST_THAT_NO_LONGER_APPLIES
+        or await _decided(h, approving, card) != Absent.public_message
+        or await _status(h, asking, moving) is not PromotionStatus.REJECTED
+    ):
+        raise CheckFailedError(A_MOVED_DOCUMENT_S_CARD_WAS_NOT_ANSWERED_AND_CLOSED)
 
 
 @check(
     leaves=("M7.4.4",),
     sentence=(
         "A steward in acceptance_a asks for their verified document to be company-wide: it waits "
-        "on the Approvals screen of a holder of approve:knowledge.visibility there and nobody "
-        "else's, the asker's included though they hold it too; it stays in its department while "
-        "their own approval is refused, and is readable from acceptance_b once the other holder "
-        "approves; unverified, it is not asked."
+        "on the Approvals screen of another holder of approve:knowledge.visibility there, never "
+        "the asker's; it stays in its department until that holder approves, then is readable "
+        "from acceptance_b. Unverified, it is not asked; given a newer version once asked, its "
+        "approval is answered that it no longer applies."
     ),
 )
 async def a_company_wide_request_waits_until_another_approver_approves_it(h: Harness) -> None:
@@ -734,6 +771,7 @@ async def a_company_wide_request_waits_until_another_approver_approves_it(h: Har
     ]
     if decisions != [(approver, "approved")] or applied != [approver]:
         raise CheckFailedError("the approval and the widening were not in the ledger by approver")
+    await _moved_card_is_answered_and_closed(h, asking, approving, steward)
 
 
 # ------------------------------------------------- 3. a review falling due (M7.4.6)

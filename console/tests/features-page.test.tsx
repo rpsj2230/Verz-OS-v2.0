@@ -141,6 +141,9 @@ describe("switching a feature", () => {
 
     fireEvent.click(button(container, SWITCH_ON));
     const again = await screen.findByRole("alertdialog");
+    // Switching on adds rather than removes, so its button is not the danger one (found on the
+    // owner's install on 2026-09-29, where every confirmation was red).
+    expect(within(again).getByRole("button", { name: SWITCH_ON }).getAttribute("data-variant")).toBe("default");
     await act(async () => {
       fireEvent.click(within(again).getByRole("button", { name: SWITCH_ON }));
     });
@@ -148,6 +151,8 @@ describe("switching a feature", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("is now switched on");
     });
+    // The confirmation of an act is not a statement about what works today.
+    expect(container.textContent).not.toContain("Works today");
     await settled(container);
     expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([{ on: true }]);
     expect(sent.filter((one) => one.method === "GET").length).toBeGreaterThanOrEqual(2);

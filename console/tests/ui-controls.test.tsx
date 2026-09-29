@@ -8,7 +8,7 @@
  * shipped, not a model of it. What jsdom cannot check, a focus ring being drawn, is held against the
  * compiled stylesheet in `tests/ui-structure.test.tsx`.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M27.15.78
  */
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -234,6 +234,8 @@ describe("the write-once secret field", () => {
       "describedBy",
       "onPresenceChange",
       "className",
+      // The field's address, for a form that names its fields: a string that cannot carry a value.
+      "id",
     ]);
   });
 
@@ -246,7 +248,8 @@ describe("the write-once secret field", () => {
     const { container } = render(<Form stored={false} onPresence={presence} />);
     const field = screen.getByLabelText("Signing secret") as HTMLInputElement;
 
-    expect(field.type).toBe("text");
+    // Masked since 2026-09-29: a pasted key showed in clear on the owner's install.
+    expect(field.type).toBe("password");
     expect(field.getAttribute("autocomplete")).toBe("off");
     expect(field.getAttribute("spellcheck")).toBe("false");
     field.focus();

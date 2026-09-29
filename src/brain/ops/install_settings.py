@@ -71,7 +71,9 @@ Task ids: M42.5.10, M42.5.14, M31.3.1.4, M27.12.7
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+import asyncio
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from datetime import timedelta
 from typing import Any, Final
 
 import structlog
@@ -101,16 +103,21 @@ A_SAVED_ANSWER_OUTRANKS_THE_TEMPLATE_THE_INSTALLER_COPIED: Final = (
 
 #: What a saved setting reaches, and what it does not.
 A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER: Final = (
-    "The saved values are held per process and loaded in three places: the lifespan, once, "
-    "for every application process as it starts; the appointment route, from what it has just "
-    "written, for the process that wrote it; and the queue worker's schedule, before every "
-    "tick, because the worker has no lifespan (see refresh_changed). brain.serve starts "
-    "brain.runtime.detect_profile's number of uvicorn workers, so an install serving more "
-    "than one carries the environment's answer in the siblings until they are restarted. "
-    "Polling for a value that changes once per install is what brain.ops.provider_keys "
-    "refuses for a key that rotates twice a year, and the same argument is made here for the "
-    "same cost, with the gap written down rather than implied."
+    "The saved values are held per process and loaded in four places: the lifespan, once, "
+    "for every application process as it starts; the route that saved them, from what it has "
+    "just written, for the process that wrote it; every application process again every "
+    "HOLD_EVERY (keep_holding); and the queue worker's schedule, before every tick, because the "
+    "worker has no lifespan (see refresh_changed). brain.serve starts "
+    "brain.runtime.detect_profile's number of uvicorn workers, and until 2026-09-29 a sibling "
+    "carried the old answer until it was restarted: the owner's install changed its currency on "
+    "the Settings screen and the spend report went on saying XXX from the processes that had "
+    "not saved it. A value that changed once per install could wait for a restart; one the "
+    "Settings screen changes cannot, so every process reads the table once a minute, one "
+    "indexed query over a handful of rows."
 )
+
+#: How often an application process re-reads the saved settings. The provider keys' own figure.
+HOLD_EVERY: Final = timedelta(minutes=1)
 
 #: Why the provider key goes to the vault and never to this table, vault or no vault.
 THE_ONE_ANSWER_THIS_TABLE_WILL_NEVER_KEEP: Final = (
@@ -317,3 +324,34 @@ async def refresh_changed(sessions: async_sessionmaker[AsyncSession]) -> tuple[s
     before = hold_saved(found)
     held = saved_values()
     return tuple(sorted(n for n in set(before) | set(held) if before.get(n) != held.get(n)))
+
+
+async def keep_holding(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    every: timedelta = HOLD_EVERY,
+    sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+    rounds: int | None = None,
+    refresh: Callable[[async_sessionmaker[AsyncSession]], Awaitable[Sequence[str]]] | None = None,
+) -> None:
+    """An application process's re-read of the saved values: every `every`, until cancelled.
+
+    The lifespan has just loaded them, so this waits first. A round the database refuses is
+    logged by the exception's type and asked again next time, for
+    `brain.ops.credentials.keep_refreshing`'s reason: a table that did not answer once is not a
+    reason to stop following it. Names what changed and never a value. `rounds` bounds the loop
+    and `refresh` stands in for the database, both for a test. See
+    `A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
+    """
+    reread = refresh_changed if refresh is None else refresh
+    done = 0
+    while rounds is None or done < rounds:
+        await sleep(every.total_seconds())
+        try:
+            changed = await reread(sessions)
+        except Exception as exc:
+            log.warning("installation settings not re-read", error=type(exc).__name__)
+        else:
+            if changed:
+                log.info("installation settings changed", settings=sorted(changed))
+        done += 1

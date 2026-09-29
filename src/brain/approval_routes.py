@@ -64,6 +64,18 @@ a reason and an approval has none. `DecisionAsked` refuses the same two shapes o
 so the refusal is the same for every id rather than arriving only for one the caller may see,
 and a test holds the two to agree.
 
+**An approval whose own effect is refused because what it names has moved is answered in a
+sentence and closed, not faulted.** A promotion is applied by `0120`'s trigger in the statement
+that approves it, and one whose document moved after it was asked for is refused there. Until
+2026-09-29 that refusal reached the approver as a 500, and the card stayed on the screen to fail the
+next approver in the same way. The store now raises
+`brain.gate.suspension_store.NoLongerAppliesError` for it, the approval's transaction rolls back,
+and a second one closes the card as rejected under the approver's name with `NO_LONGER_APPLIES`,
+a reason the route records and no approver is offered.
+The approver is told `A_REQUEST_THAT_NO_LONGER_APPLIES`, and only an approver who could decide the
+card reaches that sentence: everybody else still gets the invented id's answer, and so does this
+approver pressing again. See `A_REQUEST_THAT_NO_LONGER_APPLIES_IS_CLOSED_AND_SAID_SO`.
+
 **Where suspensions come from is read off `app.state.suspensions`,** in the shape
 `brain.api_routes.wiring_of` reads the gate. Either a `SuspensionStore`, which reads at the
 caller's reach so row-level security has something to narrow on and which can hold a row to
@@ -88,7 +100,7 @@ approver on the same day.
 reach decided, soonest to lapse first unless asked otherwise. Approvals are never decided several
 at once: see `AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD`.
 
-Task ids: M35.3.1.2, M35.3.1.1, M27.8.6, M27.9.3
+Task ids: M35.3.1.2, M35.3.1.1, M27.8.6, M27.9.3, M7.4.4
 """
 
 from __future__ import annotations
@@ -111,6 +123,7 @@ from brain.console.approvals import ApprovalError, Card, Decided, card, decide
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.gate.leash import SuspendedAction
+from brain.gate.suspension_store import NoLongerAppliesError
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.people_names import names_for
 
@@ -126,6 +139,27 @@ AN_APPROVAL_YOU_MAY_NOT_DECIDE_AND_ONE_THAT_IS_NOT_THERE_ARE_ONE_ANSWER: Final =
     "them differently, on a read or on a decision, would let a caller trying ids learn which "
     "pending actions exist, so all four raise the one refusal, with one status and one body."
 )
+
+#: Why an approval the database refuses as moved is closed and said, rather than faulted.
+A_REQUEST_THAT_NO_LONGER_APPLIES_IS_CLOSED_AND_SAID_SO: Final = (
+    "An approval whose effect is refused because what it names moved after it was raised is not a "
+    "fault: nothing the approver did was wrong and nothing the process holds is broken. Answered "
+    "as a 500 it left the card on every approver's screen to fail again. So the approver, who may "
+    "decide the card and so may be told about it, hears that the request no longer applies, and "
+    "the card is closed as rejected with a reason no approver chooses, which tells whoever asked "
+    "to ask again for the thing as it is now."
+)
+
+#: What the approver is told. Said only to somebody who could decide the card, so it names nothing
+#: they could not already read on it.
+A_REQUEST_THAT_NO_LONGER_APPLIES: Final = (
+    "This request no longer applies: what it asked for has changed since it was raised, so "
+    "nothing was done. It has been closed, and can be asked for again as things stand now."
+)
+
+#: The reason a request that no longer applies is closed with. Recorded by this route and never
+#: offered to an approver, which is why it is not a `RejectionReason`.
+NO_LONGER_APPLIES: Final = "no_longer_applies"
 
 #: Why the queue's bound is applied to the cards and not to the store's rows.
 APPROVALS_ARE_FILTERED_BEFORE_THEY_ARE_BOUNDED: Final = (
@@ -225,7 +259,8 @@ class HeldSuspensions(Protocol):
 
         The entry kept for it, or None when no pending row at that digest changed, in which case
         nothing is written. One transaction, so the decision and its entry are kept together or
-        not at all.
+        not at all. Raises `brain.gate.suspension_store.NoLongerAppliesError` when the database
+        refuses an approval because what it names has moved, before anything is written.
         """
         ...
 
@@ -403,17 +438,57 @@ async def decide_once(
     store locked and then would not write is a process fault, raised so the transaction rolls
     back.
     """
-    found = await held.lock(suspension_id)
-    if found is None or shown_card(found, reach, now) is None:
-        return None
-    drafted = decide(
-        found,
+    return await _decided_once(
+        held,
+        suspension_id,
         reach,
         recorder,
         verdict=ApprovalVerdict(asked.verdict.value),
-        now=now,
         reason_code=asked.reason_code.value if asked.reason_code is not None else "",
+        now=now,
     )
+
+
+async def close_as_no_longer_applying(
+    held: HeldSuspensions,
+    suspension_id: str,
+    reach: EntitlementSet,
+    recorder: AuditRecorder,
+    *,
+    now: datetime,
+) -> Decided | None:
+    """Reject one held suspension whose approval the database refused as moved, or None.
+
+    `decide_once`'s order with the one reason no approver is offered, under this reach, because
+    it is this approver's request that found the card no longer applies. None when the card has
+    gone from this reach meanwhile, decided by somebody else, which is answered as every other
+    card that is not theirs. See `A_REQUEST_THAT_NO_LONGER_APPLIES_IS_CLOSED_AND_SAID_SO`.
+    """
+    return await _decided_once(
+        held,
+        suspension_id,
+        reach,
+        recorder,
+        verdict=ApprovalVerdict.REJECTED,
+        reason_code=NO_LONGER_APPLIES,
+        now=now,
+    )
+
+
+async def _decided_once(
+    held: HeldSuspensions,
+    suspension_id: str,
+    reach: EntitlementSet,
+    recorder: AuditRecorder,
+    *,
+    verdict: ApprovalVerdict,
+    reason_code: str,
+    now: datetime,
+) -> Decided | None:
+    found = await held.lock(suspension_id)
+    if found is None or shown_card(found, reach, now) is None:
+        return None
+    drafted = decide(found, reach, recorder, verdict=verdict, now=now, reason_code=reason_code)
     kept = await held.record(drafted.suspension, drafted.entry)
     if kept is None:
         msg = f"suspension {suspension_id!r} was held and its decision was not written"
@@ -536,21 +611,51 @@ async def decide_approval(
     # The id the trace middleware vouched for or minted, read from the log context for the
     # reason `brain.api_routes.answer` gives: the header is what the caller proposed.
     trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
-    now = asked.now
-    # A chain of this request's own, which drafts the entry and is then discarded: the store
-    # keeps the entry. See the module note on the entry a decision returns.
-    recorder = AuditRecorder(
-        AuditChain(),
-        actor_id=asked.reach.principal_id,
-        ent_hash=asked.reach.ent_hash(),
-        trace_id=trace_id,
-        clock=lambda: now,
+    decided = await take_decision(
+        store, suspension_id, asked.reach, decision, trace_id=trace_id, now=asked.now
     )
+    return ApprovalDecisionView(suspension_id=decided.suspension.id, verdict=decision.verdict)
+
+
+async def take_decision(
+    store: SuspensionStore,
+    suspension_id: str,
+    reach: EntitlementSet,
+    decision: DecisionAsked,
+    *,
+    trace_id: str,
+    now: datetime,
+) -> Decided:
+    """The decision route's work once it has a store: the decision taken, or the route's answer.
+
+    Raises `_no_approval_here` for every reason there is no card, the answer
+    `A_REQUEST_THAT_NO_LONGER_APPLIES` for an approval the database refused as moved, after closing
+    the card in a transaction of its own, and `Failed` for anything else a driver raises. A
+    function of its own so the install acceptance check can take a decision exactly as the route
+    takes one, over the install's own store, without signing anybody in.
+    """
     try:
-        async with store.holding(asked.reach, now) as held:
-            decided = await decide_once(
-                held, suspension_id, asked.reach, recorder, asked=decision, now=now
-            )
+        try:
+            async with store.holding(reach, now) as held:
+                decided = await decide_once(
+                    held,
+                    suspension_id,
+                    reach,
+                    _drafting(reach, trace_id, now),
+                    asked=decision,
+                    now=now,
+                )
+        except NoLongerAppliesError:
+            # The approval's transaction has rolled back; this one closes the card. See
+            # A_REQUEST_THAT_NO_LONGER_APPLIES_IS_CLOSED_AND_SAID_SO.
+            async with store.holding(reach, now) as held:
+                closed = await close_as_no_longer_applying(
+                    held, suspension_id, reach, _drafting(reach, trace_id, now), now=now
+                )
+            if closed is None:
+                raise _no_approval_here() from None
+            log.info("approval no longer applies", suspension=suspension_id)
+            raise _no_longer_applies() from None
     except BrainError:
         raise
     except Exception as exc:
@@ -558,6 +663,29 @@ async def decide_approval(
         # otherwise reach the response as a body that is not `ErrorBody`.
         raise Failed(f"deciding: {type(exc).__name__}") from exc
     if decided is None:
-        log.info("approval not decidable", principal=asked.caller.principal.id)
+        log.info("approval not decidable", principal=reach.principal_id)
         raise _no_approval_here()
-    return ApprovalDecisionView(suspension_id=decided.suspension.id, verdict=decision.verdict)
+    return decided
+
+
+def _no_longer_applies() -> Absent:
+    """The answer to an approval the database refused as moved. See
+    `A_REQUEST_THAT_NO_LONGER_APPLIES_IS_CLOSED_AND_SAID_SO`; this string reaches a log."""
+    return Absent(
+        "the approval no longer applies and was closed",
+        public_message=A_REQUEST_THAT_NO_LONGER_APPLIES,
+    )
+
+
+def _drafting(reach: EntitlementSet, trace_id: str, now: datetime) -> AuditRecorder:
+    """A chain of this request's own, which drafts one decision's entry and is then discarded: the
+    store keeps the entry. One per transaction, so a closing drafted after a refused approval is
+    not a second link on the refused one's chain. See the module note on the entry a decision
+    returns."""
+    return AuditRecorder(
+        AuditChain(),
+        actor_id=reach.principal_id,
+        ent_hash=reach.ent_hash(),
+        trace_id=trace_id,
+        clock=lambda: now,
+    )

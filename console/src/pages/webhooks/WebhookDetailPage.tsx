@@ -332,7 +332,7 @@ function SubscriberAnswer({ id, tab }: { readonly id: string; readonly tab: stri
           <StatCard label="Told about" value={row.kinds.length.toLocaleString("en-GB")} sub={row.kinds.length === 1 ? "kind" : "kinds"} />
         </KpiStrip>
       }
-      footnote={told === null || told === "" ? undefined : <Note kind="works">{told}</Note>}
+      footnote={told === null || told === "" ? undefined : <Note kind="done">{told}</Note>}
     />
   );
   return (

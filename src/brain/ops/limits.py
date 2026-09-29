@@ -1084,7 +1084,7 @@ def _declared(applies_to: str, limit: Limit) -> DeclaredWindow:
     )
 
 
-def declared_windows() -> tuple[DeclaredWindow, ...]:
+def declared_windows(sources: Mapping[str, str] | None = None) -> tuple[DeclaredWindow, ...]:
     """Every window this install counts, built by the constructors the request path calls.
 
     The subjects handed to the constructors are placeholders and are dropped: only the figures
@@ -1092,6 +1092,10 @@ def declared_windows() -> tuple[DeclaredWindow, ...]:
     of the same function. A table typed out here instead would be a second statement of the
     limits, and the screen would go on showing thirty a minute the day the request path was
     changed to twenty.
+
+    `sources`, when given, is the connected sources by name with the words each is called by:
+    only their windows are listed, under those words, because a window on a source nobody
+    connected counts nothing on this install. `None` lists every source by its name.
     """
     found = [
         _declared("each person", principal_limit("each person")),
@@ -1100,11 +1104,14 @@ def declared_windows() -> tuple[DeclaredWindow, ...]:
         _declared("each website with a chat widget", widget_mint_limit("each website")),
     ]
     for ceiling in SOURCE_CEILINGS:
+        if sources is not None and ceiling.name not in sources:
+            continue
+        called = ceiling.name if sources is None else sources[ceiling.name]
         for one in source_limits(ceiling.name, principal_id="each person"):
             if one.scope is LimitScope.PRINCIPAL_CONNECTOR:
-                found.append(_declared(f"each person's share of {ceiling.name}", one))
+                found.append(_declared(f"each person's share of {called}", one))
             else:
-                found.append(_declared(ceiling.name, one))
+                found.append(_declared(called, one))
     return tuple(found)
 
 

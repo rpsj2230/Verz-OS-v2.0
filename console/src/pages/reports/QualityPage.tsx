@@ -29,7 +29,13 @@ import { capitalised } from "../overview/overviewQuery";
 import { DEFAULT_PERIOD, Quiet, REPORTS_CRUMB, ReportHeader, periodWords, sheetOf, type ReportPeriod } from "./reportParts";
 
 export const QUALITY_HEADING = "Quality and canaries";
-export const QUALITY_LEDE = "The permission canaries ask questions whose right answer is a refusal; a pass means every one was refused.";
+/**
+ * What a pass proved, and no more. Until 2026-09-29 this said "a pass means every one was refused",
+ * while each run's own report on the owner's install said it passed on the tools each person is
+ * offered alone, because no answer rule was loaded and so no refusal was compared.
+ */
+export const QUALITY_LEDE =
+  "The permission canaries check that each person is offered only the tools their access allows and, once answer rules are loaded, that a refusal reads the same for everyone. A pass means what was checked held; each run's report on its job page says which checks it made.";
 export const QUALITY_CRUMBS = [REPORTS_CRUMB, { label: QUALITY_HEADING }];
 
 export const LOADING_QUALITY = "Loading the canary runs.";

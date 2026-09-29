@@ -59,7 +59,12 @@ export const SOURCES_API_PATH = "/connectors";
 
 /** How many audit entries the activity card shows. */
 export const ACTIVITY_ROWS = 6;
-export const ACTIVITY_API_PATH = `/audit?limit=${String(ACTIVITY_ROWS)}`;
+/**
+ * The newest changes only (`brain.audit_routes.RECENT_ACTIVITY_IS_CHANGES_AND_NOT_READS`). Until
+ * 2026-09-29 the card asked for every entry, and on the owner's install all six read "Answered a
+ * call about a credential", the vault's own record of the application reading its keys.
+ */
+export const ACTIVITY_API_PATH = `/audit?limit=${String(ACTIVITY_ROWS)}&changes_only=true`;
 
 /** Where the whole audit log is. */
 export const AUDIT_PATH = "/audit";

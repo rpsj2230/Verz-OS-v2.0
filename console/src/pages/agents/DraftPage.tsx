@@ -81,6 +81,8 @@ import {
   SAVE_QUESTION,
   STEPS,
   STEP_LABELS,
+  TOOLS_LIST_LABEL,
+  TOOLS_SECTION_HEADING,
   draftActApiPath,
   draftAddress,
   draftApiPath,
@@ -110,7 +112,11 @@ export const PROCEDURE_HEADING = "Draw a procedure";
 export const PROCEDURE_LEDE =
   "Optional. Draw the steps the agent follows, calling only the tools this draft is allowed here, and the server writes it as a skill document.";
 export const NO_TOOLS_TO_DRAW =
-  "This draft is allowed no tool on this install yet, so a procedure has nothing to call. Allow a tool under Permissions first.";
+  `This draft is allowed no tool on this install yet, so a procedure has nothing to call. In the Write step, add one under ${TOOLS_LIST_LABEL} in the ${TOOLS_SECTION_HEADING} section, and save it.`;
+export const OPEN_WRITE_STEP = "Open the Write step";
+export const ENTER_SKILL_NAME = "Enter the skill name.";
+export const ENTER_WHEN_TO_USE = "Enter when to use it.";
+export const DRAW_A_STEP_FIRST = "Add a step to the procedure first.";
 export const PROCEDURE_NAME = "Skill name";
 export const PROCEDURE_DESCRIPTION = "When to use it";
 export const DRAW_LABEL = "Write the skill document";
@@ -152,7 +158,7 @@ export const SAVE_LABEL = "Save";
 
 /** One act a person asked for, waiting for its confirmation. */
 type Pending =
-  | { readonly verb: "revisions"; readonly section: string; readonly data: unknown }
+  | { readonly verb: "revisions"; readonly section: string; readonly heading: string; readonly data: unknown }
   | { readonly verb: "check" | "rehearse" | "publish" | "approve" | "decline" }
   | { readonly verb: "procedure"; readonly drawing: DrawingPayload; readonly name: string; readonly description: string };
 
@@ -165,7 +171,7 @@ interface Refused {
 function questionFor(pending: Pending, draft: Draft): { question: string; consequence: string; label: string } {
   switch (pending.verb) {
     case "revisions":
-      return { question: SAVE_QUESTION(pending.section), consequence: SAVE_CONSEQUENCE, label: SAVE_LABEL };
+      return { question: SAVE_QUESTION(pending.heading), consequence: SAVE_CONSEQUENCE, label: SAVE_LABEL };
     case "check":
       return { question: CHECK_QUESTION, consequence: CHECK_CONSEQUENCE, label: CHECK_LABEL };
     case "rehearse":
@@ -192,6 +198,46 @@ function bodyFor(pending: Pending, draft: Draft, forDepartment: boolean): Record
     default:
       return { revision: draft.revision };
   }
+}
+
+/** One box of the skill's two, with its format said first and a missing answer said under it. */
+function SkillField({
+  id,
+  label,
+  hint,
+  value,
+  problem,
+  onChange,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly hint: string;
+  readonly value: string;
+  readonly problem: string | null;
+  readonly onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <p id={`${id}-hint`} className="m-0 text-[12px] text-dim">
+        {hint}
+      </p>
+      <Input
+        id={id}
+        value={value}
+        aria-invalid={problem === null ? undefined : true}
+        aria-describedby={problem === null ? `${id}-hint` : `${id}-hint ${id}-problem`}
+        onChange={(event) => {
+          onChange(event.target.value);
+        }}
+      />
+      {problem === null ? null : (
+        <p id={`${id}-problem`} className="m-0 text-[12.5px] font-medium text-ink">
+          {problem}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function Words({ items }: { readonly items: readonly string[] }) {
@@ -338,6 +384,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
   const [drawing, setDrawing] = useState<DrawingPayload | null>(null);
   const [skillName, setSkillName] = useState("");
   const [skillWhen, setSkillWhen] = useState("");
+  const [tried, setTried] = useState(false);
   const [forDepartment, setForDepartment] = useState(false);
   const nameId = useId();
   const whenId = useId();
@@ -415,29 +462,33 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
       <Summary draft={draft} />
     ) : (
       <SectionCard title={WRITE_HEADING} action={<PenLine aria-hidden className="size-4 text-dim" />}>
-        <Note>{NOTHING_IS_LIVE}</Note>
-        <Note>{FORM_HINT}</Note>
-        {draft.problems.length === 0 ? null : (
+        <div className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <p className="m-0 text-sm font-semibold text-ink">{PROBLEMS_HEADING}</p>
-            <Words items={draft.problems} />
+            <Note>{NOTHING_IS_LIVE}</Note>
+            <Note>{FORM_HINT}</Note>
           </div>
-        )}
-        {form.failure !== null ? (
-          <FailureState failure={form.failure} />
-        ) : form.busy ? (
-          <LoadingState label={LOADING_FORM} />
-        ) : (
-          <ManifestForm
-            caption={draft.name}
-            sections={sections}
-            draft={draft.document}
-            busy={sending}
-            onSubmit={(section, data) => {
-              ask({ verb: "revisions", section, data });
-            }}
-          />
-        )}
+          {draft.problems.length === 0 ? null : (
+            <div className="flex flex-col gap-1">
+              <p className="m-0 text-sm font-semibold text-ink">{PROBLEMS_HEADING}</p>
+              <Words items={draft.problems} />
+            </div>
+          )}
+          {form.failure !== null ? (
+            <FailureState failure={form.failure} />
+          ) : form.busy ? (
+            <LoadingState label={LOADING_FORM} />
+          ) : (
+            <ManifestForm
+              caption={draft.name}
+              sections={sections}
+              draft={draft.document}
+              busy={sending}
+              onSubmit={(section, data, heading) => {
+                ask({ verb: "revisions", section, heading, data });
+              }}
+            />
+          )}
+        </div>
       </SectionCard>
     );
   } else if (step === "procedure") {
@@ -446,7 +497,12 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
     ) : (
       <SectionCard title={PROCEDURE_HEADING} lede={PROCEDURE_LEDE} action={<Workflow aria-hidden className="size-4 text-dim" />}>
         {draft.drawableTools.length === 0 ? (
-          <Note>{NO_TOOLS_TO_DRAW}</Note>
+          <div className="flex flex-col gap-2">
+            <Note>{NO_TOOLS_TO_DRAW}</Note>
+            <Link to={draftAddress(draftId, "write")} className="w-fit text-[12.5px] text-acc-text underline-offset-4 hover:underline">
+              {OPEN_WRITE_STEP}
+            </Link>
+          </div>
         ) : (
           <>
             <ProcedureCanvas
@@ -456,46 +512,45 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
               skill={skill}
             />
             <div className="[display:grid] min-w-0 gap-3 sm:grid-cols-2">
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <Label htmlFor={nameId}>{PROCEDURE_NAME}</Label>
-                <Input
-                  id={nameId}
-                  value={skillName}
-                  aria-describedby={`${nameId}-hint`}
-                  onChange={(event) => {
-                    setSkillName(event.target.value);
-                  }}
-                />
-                <p id={`${nameId}-hint`} className="m-0 text-[12px] text-dim">
-                  {PROCEDURE_NAME_HINT}
-                </p>
-              </div>
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <Label htmlFor={whenId}>{PROCEDURE_DESCRIPTION}</Label>
-                <Input
-                  id={whenId}
-                  value={skillWhen}
-                  aria-describedby={`${whenId}-hint`}
-                  onChange={(event) => {
-                    setSkillWhen(event.target.value);
-                  }}
-                />
-                <p id={`${whenId}-hint`} className="m-0 text-[12px] text-dim">
-                  {PROCEDURE_DESCRIPTION_HINT}
-                </p>
-              </div>
+              <SkillField
+                id={nameId}
+                label={PROCEDURE_NAME}
+                hint={PROCEDURE_NAME_HINT}
+                value={skillName}
+                problem={tried && skillName.trim() === "" ? ENTER_SKILL_NAME : null}
+                onChange={setSkillName}
+              />
+              <SkillField
+                id={whenId}
+                label={PROCEDURE_DESCRIPTION}
+                hint={PROCEDURE_DESCRIPTION_HINT}
+                value={skillWhen}
+                problem={tried && skillWhen.trim() === "" ? ENTER_WHEN_TO_USE : null}
+                onChange={setSkillWhen}
+              />
             </div>
-            <Button
-              className="min-h-11 w-fit sm:min-h-9"
-              disabled={sending || drawing === null || skillName.trim() === "" || skillWhen.trim() === ""}
-              onClick={() => {
-                if (drawing !== null) {
-                  ask({ verb: "procedure", drawing, name: skillName, description: skillWhen });
-                }
-              }}
-            >
-              {DRAW_LABEL}
-            </Button>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <Button
+                className="min-h-11 w-fit sm:min-h-9"
+                disabled={sending}
+                aria-describedby={tried && drawing === null ? `${nameId}-draw` : undefined}
+                onClick={() => {
+                  // Said beside each box rather than a button that will not press: a disabled button
+                  // tells nobody which of three things it is waiting for.
+                  setTried(true);
+                  if (drawing !== null && skillName.trim() !== "" && skillWhen.trim() !== "") {
+                    ask({ verb: "procedure", drawing, name: skillName, description: skillWhen });
+                  }
+                }}
+              >
+                {DRAW_LABEL}
+              </Button>
+              {tried && drawing === null ? (
+                <p id={`${nameId}-draw`} className="m-0 text-[12.5px] font-medium text-ink">
+                  {DRAW_A_STEP_FIRST}
+                </p>
+              ) : null}
+            </div>
             {skill === null ? null : (
               <div className="flex flex-col gap-1">
                 <p className="m-0 text-sm font-semibold text-ink">{SKILL_HEADING}</p>

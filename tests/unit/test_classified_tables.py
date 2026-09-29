@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import dataclasses
 import io
 import uuid
 import zipfile
@@ -38,7 +39,12 @@ from sqlalchemy.pool import NullPool
 
 from brain.api_routes import policy_epoch_of
 from brain.app import Settings, create_app
-from brain.classification_routes import CLASSIFICATION_READ, CLASSIFICATION_WRITE, ColumnMark
+from brain.classification_routes import (
+    CLASSIFICATION_READ,
+    CLASSIFICATION_WRITE,
+    ColumnMark,
+    table_within_reach,
+)
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import TypedResult
 from brain.core.errors import Absent
@@ -75,7 +81,7 @@ from brain.knowledge.columns import (
     marked,
     table_capability,
 )
-from brain.knowledge.rows import RowQuery, RowRecord, RowRequest, entity_capability
+from brain.knowledge.rows import RowQuery, RowRecord, RowRequest, RowSource, entity_capability
 from brain.knowledge.table_file import TableFileError, is_a_table_file, read_table_file
 from brain.ops.classification_store import (
     ClassifiedTables,
@@ -548,10 +554,17 @@ def test_a_second_upload_dropping_a_derivations_input_is_refused_rather_than_rep
 
 
 def ask(
-    question: str, reach: EntitlementSet, tables: Sequence[StoredTable] | None = None
+    question: str,
+    reach: EntitlementSet,
+    tables: Sequence[StoredTable] | None = None,
+    *,
+    records: RowSource | None = None,
 ) -> Answered:
     """One question through the answer lane, over the lane the uploaded tables make."""
-    lane = lane_for(tables if tables is not None else [table()], TableRows(ROWS))
+    lane = lane_for(
+        tables if tables is not None else [table()],
+        records if records is not None else TableRows(ROWS),
+    )
     return asyncio.run(
         answer_lane(
             question,
@@ -644,6 +657,112 @@ def test_changing_a_derivation_changes_what_ask_answers_on_the_next_question() -
     assert "400" in (answered.text or "")
 
 
+# ------------------------------------------------- two price lists (found on staging)
+
+#: A second price list with the same columns, one service of its own and one the first list
+#: also names, as a second upload on the owner's install had.
+RATES = "rates"
+RATE_ROWS: tuple[dict[str, str], ...] = (
+    {
+        "sku": "RATE-DEV-1",
+        "name": "Development Day",
+        "sell_price": "950",
+        "cost": "500",
+        "margin": "450",
+    },
+    {"sku": "RATE-HOST-1", "name": "Hosting", "sell_price": "340", "cost": "150", "margin": "190"},
+)
+
+#: Readers of both lists: the tables alone, and the tables with the second list's cost grants.
+SALES_BOTH = ents("read:prices", "read:rates")
+RATES_FINANCE = ents("read:prices", "read:rates", "read:rates.cost", "read:rates.margin")
+
+
+class ByTable:
+    """A `RowSource` over several uploaded tables, each honouring the statement as `TableRows`
+    does, chosen by the entity the statement is pinned to."""
+
+    def __init__(self, held: Mapping[str, Sequence[Mapping[str, str]]]) -> None:
+        self.tables = {entity: TableRows(rows) for entity, rows in held.items()}
+
+    async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+        source = self.tables.get(query.entity)
+        return () if source is None else await source.rows(query)
+
+
+def rates() -> StoredTable:
+    """The second list, classified as a first upload classifies it."""
+    return StoredTable(
+        classification=first_classification(RATES, ("sku", "name", "sell_price", "cost", "margin")),
+        title="Day rates",
+        key_column="name",
+        version=1,
+    )
+
+
+def ask_both(question: str, reach: EntitlementSet) -> Answered:
+    """One question over the lane both uploaded lists make, each read from its own rows."""
+    return ask(
+        question,
+        reach,
+        [table(), rates()],
+        records=ByTable({ENTITY: ROWS, RATES: RATE_ROWS}),
+    )
+
+
+def test_two_price_lists_with_a_sell_price_each_answer_for_their_own_services() -> None:
+    """**Found on the owner's install on 2026-09-29.** A second uploaded table with a sell price
+    column made Ask answer nobody about either, because both are asked in the same words and the
+    fast lane refused the pair as two rules matching. Each list now answers for its own services.
+    Delete this and uploading a second price list silences the first."""
+    first = ask_both("What is the sell price of Website Care?", SALES_BOTH)
+    second = ask_both("What is the sell price of Development Day?", SALES_BOTH)
+
+    assert first.text is not None and "1200" in first.text
+    assert second.text is not None and "950" in second.text
+
+
+def test_each_of_two_price_lists_still_withholds_what_the_reader_may_not_see() -> None:
+    """The sibling: answering from two lists withholds exactly what one list withholds. A reader
+    with neither cost grant asking a service's cost is answered as for a service that does not
+    exist; a reader holding the second list's cost grant is told its cost and not the first's.
+    Delete this and the second list's rows can be answered past the first list's classification."""
+    withheld = ask_both("What is the cost of Development Day?", SALES_BOTH)
+    absent = ask_both("What is the cost of Nothing Real?", SALES_BOTH)
+    theirs = ask_both("What is the cost of Development Day?", RATES_FINANCE)
+    not_theirs = ask_both("What is the cost of Website Care?", RATES_FINANCE)
+
+    assert withheld.text is None
+    assert withheld.frames == absent.frames
+    assert "500" not in frames(withheld.frames)
+    assert theirs.text is not None and "500" in theirs.text
+    assert not_theirs.text is None
+    assert not_theirs.frames == absent.frames
+
+
+def test_a_service_both_lists_name_is_answered_by_neither_to_a_reader_of_both() -> None:
+    """Two lists naming one service is the ambiguous name it would be inside one list, and it is
+    told in the words an absent service is. Delete this and whichever list was uploaded first
+    quotes its price for a service the other list prices differently."""
+    ambiguous = ask_both("What is the sell price of Hosting?", SALES_BOTH)
+    absent = ask_both("What is the sell price of Nothing Real?", SALES_BOTH)
+
+    assert ambiguous.text is None
+    assert ambiguous.frames == absent.frames
+
+
+def test_a_list_the_reader_may_not_read_answers_as_if_it_had_never_been_uploaded() -> None:
+    """**DENIED and ABSENT across tables.** A reader of the first list alone, asking about a service
+    both lists name, is answered from the first list, byte for byte as on an install where the
+    second was never uploaded. Delete this and a list somebody cannot read changes what they are
+    told, which tells them it exists and names the service."""
+    both = ask_both("What is the sell price of Hosting?", SALES)
+    alone = ask("What is the sell price of Hosting?", SALES)
+
+    assert both.text is not None and "300" in both.text
+    assert both.frames == alone.frames
+
+
 # ---------------------------------------------------------------- the routes
 
 
@@ -687,6 +806,9 @@ class MemoryTables(ClassifiedTables):
         self.tables[entity] = stored
         self.writers.append(writer)
         return stored
+
+    async def rows_of(self, table: StoredTable) -> tuple[Mapping[str, str], ...]:
+        return tuple(self.rows.get((table.entity, table.version), ()))
 
     def records(self) -> TableRows:
         live = self.tables[ENTITY]
@@ -938,6 +1060,192 @@ def test_a_process_with_no_store_has_an_empty_lane() -> None:
         pass
 
     assert asyncio.run(classified_lane_of(Nothing())).readers == {}
+
+
+# ------------------------------------- a department's administrator (found on staging)
+
+
+def both_grants(scope: Scope) -> tuple[Grant, ...]:
+    """The two classification grants, held within one scope."""
+    return tuple(
+        Grant(capability=one, scope=scope) for one in (CLASSIFICATION_READ, CLASSIFICATION_WRITE)
+    )
+
+
+#: Web's administrator, Finance's administrator and the install's, under three of the people
+#: `tests.unit.test_api_routes` mints tokens for.
+WEB_ADMIN, FINANCE_ADMIN, INSTALL_ADMIN = "u_prefix", "u_elsewhere", "u_admin"
+SCOPED_GRANTS: Mapping[str, tuple[Grant, ...]] = {
+    WEB_ADMIN: both_grants(Scope.department("web")),
+    FINANCE_ADMIN: both_grants(Scope.department("finance")),
+    INSTALL_ADMIN: both_grants(Scope.unrestricted()),
+}
+
+
+class ScopedStore:
+    """A `brain.gate.resolve.EntitlementStore` over `SCOPED_GRANTS`."""
+
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
+        return EntitlementSet(principal_id=principal_id, grants=SCOPED_GRANTS.get(principal_id, ()))
+
+
+@pytest.fixture
+def departments(memory: MemoryTables) -> Iterator[TestClient]:
+    """The real application, with three administrators of different reach, tables in memory."""
+    app: FastAPI = create_app(Settings(env="development"))
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = dataclasses.replace(_wiring(), store=ScopedStore())
+        app.state.classified_tables = memory
+        yield c
+
+
+def placed(department: str) -> bytes:
+    """A price list whose every row is placed in one department."""
+    return (
+        f"Name,Department,Sell Price,Cost\n"
+        f"Website Care,{department},1200,400\nHosting,{department},300,120\n"
+    ).encode()
+
+
+def upload_as(c: TestClient, pid: str, entity: str, content: bytes) -> Response:
+    body = {
+        "title": "Price list",
+        "filename": f"{entity}.csv",
+        "content_base64": base64.b64encode(content).decode(),
+        "key_column": "Name",
+    }
+    return call(c, "PUT", f"/{entity}/table", pid, body)
+
+
+def mark_as(c: TestClient, pid: str, entity: str, *, apply: bool) -> Response:
+    """Mark a table's cost plain restricted, a change every one of these price lists can take."""
+    body = {"access": "restricted", "derived_from": []}
+    if apply:
+        return call(c, "PUT", f"/{entity}/columns/cost/marks", pid, body)
+    return call(c, "POST", f"/{entity}/columns/cost/marks/review", pid, body)
+
+
+def review_as(c: TestClient, pid: str, entity: str) -> Response:
+    """The rule review, which answers for an uploaded table as well as a built-in one."""
+    body = {"required_capability": f"read:{entity}.cost", "classification": "confidential"}
+    return call(c, "POST", f"/{entity}/columns/cost/review", pid, {**body, "derived_from": []})
+
+
+def test_a_table_is_within_reach_only_when_both_grants_admit_every_row_it_holds() -> None:
+    """`A_TABLE_IS_CHANGED_BY_SOMEBODY_WHOSE_GRANTS_ADMIT_EVERY_ROW_IT_HOLDS` at its edges: one row
+    in another department puts the whole table out of reach, a row placed nowhere is the whole
+    company's, a table with no rows is only the install-wide administrator's, and the read grant
+    held elsewhere is as good as not held. Delete this and a table with a single finance row among
+    web's, or an empty one, is a web administrator's to classify."""
+    web = EntitlementSet(principal_id="p_web", grants=both_grants(Scope.department("web")))
+    install = EntitlementSet(principal_id="p_all", grants=both_grants(Scope.unrestricted()))
+    split = EntitlementSet(
+        principal_id="p_split",
+        grants=(
+            Grant(capability=CLASSIFICATION_WRITE, scope=Scope.department("web")),
+            Grant(capability=CLASSIFICATION_READ, scope=Scope.department("finance")),
+        ),
+    )
+    in_web, in_finance, nowhere = {"department": "web"}, {"department": "finance"}, {"name": "x"}
+
+    assert table_within_reach(web, (in_web, in_web), NOW)
+    assert not table_within_reach(web, (in_web, in_finance), NOW)
+    assert not table_within_reach(web, (in_web, nowhere), NOW)
+    assert not table_within_reach(web, (), NOW)
+    assert not table_within_reach(split, (in_web,), NOW)
+    for rows in ((in_web, in_finance, nowhere), ()):
+        assert table_within_reach(install, rows, NOW)
+
+
+def test_a_department_administrator_changes_a_table_whose_rows_are_their_department_s(
+    departments: TestClient, memory: MemoryTables
+) -> None:
+    """**The positive half of the scope, found on the owner's install on 2026-09-29.** Web's
+    administrator uploads a price list placed in web, reviews a mark and applies it. Delete this and
+    the refusal below is satisfied by a route that lets no department administrator change
+    anything."""
+    uploaded = upload_as(departments, WEB_ADMIN, "web_prices", placed("web"))
+    reviewed = mark_as(departments, WEB_ADMIN, "web_prices", apply=False)
+    applied = mark_as(departments, WEB_ADMIN, "web_prices", apply=True)
+    ruled = review_as(departments, WEB_ADMIN, "web_prices")
+    shown = call(departments, "GET", "/web_prices", WEB_ADMIN)
+
+    assert uploaded.status_code == 200 and uploaded.json()["refused"] == "", uploaded.text
+    assert reviewed.status_code == 200, reviewed.text
+    assert applied.status_code == 200 and applied.json()["applied"] is True, applied.text
+    assert ruled.status_code == 200, ruled.text
+    assert shown.json()["editable"] is True
+    assert [one.actor_id for one in memory.writers] == [WEB_ADMIN, WEB_ADMIN]
+
+
+def test_another_department_s_table_is_refused_to_them_exactly_as_a_missing_one(
+    departments: TestClient, memory: MemoryTables
+) -> None:
+    """**The defect: the editor ignored the grant's scope.** Finance's table, uploaded by the
+    install's administrator, is refused to web's administrator on every route that changes or
+    reviews a table, in the very body a table that does not exist gets, and nothing is written.
+    Delete this and a department administrator can retune what another department may see of its
+    own price list."""
+    upload_as(departments, INSTALL_ADMIN, "finance_prices", placed("finance"))
+    stored = memory.tables["finance_prices"]
+
+    theirs = [
+        mark_as(departments, WEB_ADMIN, "finance_prices", apply=False),
+        mark_as(departments, WEB_ADMIN, "finance_prices", apply=True),
+        review_as(departments, WEB_ADMIN, "finance_prices"),
+        upload_as(departments, WEB_ADMIN, "finance_prices", placed("web")),
+    ]
+    missing = [
+        mark_as(departments, WEB_ADMIN, "no_such_prices", apply=False),
+        mark_as(departments, WEB_ADMIN, "no_such_prices", apply=True),
+        review_as(departments, WEB_ADMIN, "no_such_prices"),
+    ]
+
+    assert {one.status_code for one in theirs + missing} == {404}
+    assert {str(refusal(one)) for one in theirs} == {str(refusal(missing[0]))}
+    assert {str(refusal(one)) for one in missing} == {str(refusal(missing[0]))}
+    assert memory.tables["finance_prices"] is stored
+    assert [one.actor_id for one in memory.writers] == [INSTALL_ADMIN]
+    assert call(departments, "GET", "/finance_prices", WEB_ADMIN).json()["editable"] is False
+
+
+def test_a_department_administrator_may_not_upload_rows_outside_their_department(
+    departments: TestClient, memory: MemoryTables
+) -> None:
+    """An upload is a table's classification over the rows it brings, so rows placed in another
+    department, or in none, are refused as a table out of reach is. Delete this and a department
+    administrator uploads a company-wide price list under a new name and classifies it alone."""
+    elsewhere = upload_as(departments, WEB_ADMIN, "their_prices", placed("finance"))
+    nowhere = upload_as(departments, WEB_ADMIN, "all_prices", CSV)
+    missing = mark_as(departments, WEB_ADMIN, "no_such_prices", apply=True)
+
+    assert elsewhere.status_code == 404 and nowhere.status_code == 404
+    assert refusal(elsewhere) == refusal(missing) == refusal(nowhere)
+    assert memory.tables == {}
+
+
+def test_an_install_wide_administrator_changes_any_department_s_table(
+    departments: TestClient, memory: MemoryTables
+) -> None:
+    """The unrestricted grant admits every row, placed or not. Delete this and the scope check can
+    refuse the one administrator who is meant to reach every table."""
+    upload_as(departments, WEB_ADMIN, "web_prices", placed("web"))
+    upload_as(departments, FINANCE_ADMIN, "finance_prices", placed("finance"))
+    company = upload_as(departments, INSTALL_ADMIN, "all_prices", CSV)
+
+    for entity in ("web_prices", "finance_prices", "all_prices"):
+        applied = mark_as(departments, INSTALL_ADMIN, entity, apply=True)
+        assert applied.status_code == 200 and applied.json()["applied"] is True, entity
+
+    assert company.json()["refused"] == ""
+    assert [one.actor_id for one in memory.writers] == [
+        WEB_ADMIN,
+        FINANCE_ADMIN,
+        INSTALL_ADMIN,
+        INSTALL_ADMIN,
+        INSTALL_ADMIN,
+        INSTALL_ADMIN,
+    ]
 
 
 #: What each asker holds on the answer route: a salesperson, and Finance.

@@ -26,6 +26,7 @@ import {
   SPEND_DIMENSIONS,
   costNotRecorded,
   currencyNotSetHint,
+  freshnessWords,
   instantWords,
   moneyWords,
   readSpendReport,
@@ -108,7 +109,7 @@ function Recorded({ report }: { readonly report: SpendReportBody }) {
       key="as-of"
       label={AS_OF_LABEL}
       value={report.as_of === null ? undefined : instantWords(report.as_of, report.time_zone)}
-      sub={report.freshness}
+      sub={freshnessWords(report.freshness)}
     />,
   ];
   return (
