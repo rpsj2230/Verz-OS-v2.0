@@ -1,6 +1,6 @@
 """The connector framework's acceptance checks: registered, passing, and able to fail.
 
-The pure half holds the eight checks to the suite and to the leaves they were scoped to, runs the
+The pure half holds the nine checks to the suite and to the leaves they were scoped to, runs the
 six that need no database against the install's own code, and then breaks the product one way per
 rule and watches the check that proves the rule fail with its own sentence: an address check that
 admits anything, an adapter that drops an argument it does not know instead of refusing it, a
@@ -10,7 +10,7 @@ not coalesced, a bucket that admits every call, a plan against an invented ceili
 counts quota refusals, and a retry with no jitter. A check that cannot fail proves nothing, and
 each of these is that check shown able to.
 
-The database half builds PostgreSQL to head and runs all eight as the worker would: they pass, and
+The database half builds PostgreSQL to head and runs all nine as the worker would: they pass, and
 every table they write to holds afterwards what it held before. Then the connecting check is run
 against a worker that forgets which failure a 401 is, against a keeper that writes the key into a
 settings row as well as the vault, and against an install with the source connected, which is not
@@ -18,7 +18,7 @@ run; and the notice check against a notice that names every source it failed.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1
+Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1, M11.3.4
 Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5
 """
 
@@ -57,6 +57,7 @@ LEAVES = {
     "a_burst_is_paced_by_the_source_s_documented_ceiling": ("M11.3.1", "M11.3.5"),
     "failures_open_the_breaker_and_a_refusal_is_retried_in_budget": ("M11.3.2", "M11.3.3"),
     "an_unreached_source_is_named_only_to_an_asker_who_could_see_it": ("M11.5.5",),
+    "a_source_s_live_calls_are_measured_on_its_page": ("M11.3.4",),
 }
 
 #: The checks that read and write no table, which the pure half runs with no database.
@@ -67,6 +68,7 @@ PURE = (
     "a_live_read_uses_the_service_key_ends_on_time_and_is_made_once",
     "a_burst_is_paced_by_the_source_s_documented_ceiling",
     "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
+    "a_source_s_live_calls_are_measured_on_its_page",
 )
 
 #: Tables the framework checks write that `test_acceptance.WRITTEN_BY_CHECKS` does not list.
@@ -495,3 +497,36 @@ def test_the_notice_check_fails_when_the_notice_names_every_source_it_failed(
         "an asker who could not see the source was told more than unavailable",
     )
     assert after == before
+
+
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("uncounted", "the source's page did not count each call questions made once"),
+        ("everyone", "a reader of their own usage was shown everybody's calls"),
+        ("nothing", "the source's page was not sent the calls questions made to it"),
+    ],
+)
+def test_the_calls_check_fails_when_the_page_misreads_the_calls(
+    monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """M11.3.4 broken three ways: the throttle stops recording the calls it makes, the page shows
+    everybody's calls to a reader of their own usage, and the page reads no live reader at all.
+    Each fails the check with its own sentence. Delete this and the page can show nought calls, or
+    everybody's, with the check green."""
+    import brain.connectors.live_read as live_read
+    import brain.console_stats_routes as stats
+    from brain.console.workspace import Basis
+
+    if broken == "uncounted":
+        monkeypatch.setattr(live_read.LiveThrottle, "record", lambda self, *a, **k: None)
+    elif broken == "everyone":
+        original = stats.connector_calls
+        monkeypatch.setattr(
+            stats,
+            "connector_calls",
+            lambda state, connector, basis, now: original(state, connector, Basis.EVERYONE, now),
+        )
+    else:
+        monkeypatch.setattr(stats, "calls_of", lambda state, connector, now: None)
+    assert ran("a_source_s_live_calls_are_measured_on_its_page") == (FAILED, reason)
