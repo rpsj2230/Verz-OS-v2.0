@@ -39,6 +39,11 @@ module.exports = {
     // The template signing key itself is pulled forward so agents can be published from the
     // console: owner, 2026-09-29, item 82.
     "M13.8.10":2,
+    // "Every <area> requirement is demonstrated on an install" closes only when every row of the
+    // area has its proof, and most of those proofs are later waves' work (measured 2026-09-29: 69 of
+    // 80 permissions rows are proved in Wave 3). Each moves to the wave of its area's last proof:
+    // owner, 2026-09-29, item 112.
+    "M5.6.5":3, "M1.8.8":4, "M2.3.2":4, "M24.3.6":5,
     // The full profile needs presidio, which the redactor (M4) uses: owner, 2026-09-21, item 77.
     "M0.4.2":1,
     // Ignoring a duplicate chat delivery needs Wave 2's inbound chat route: owner, 2026-09-22, item 95.
