@@ -872,8 +872,12 @@ def steps_for(uses: Sequence[Use], *, platform: str, app_id: str = "") -> tuple[
     return keyed(tuple(found))
 
 
-def _origin(redirect_uris: str) -> str:
-    """This install's public origin, from the first redirect URI, or empty when it names none."""
+def install_origin(redirect_uris: str) -> str:
+    """This install's public origin, from the first redirect URI, or empty when it names none.
+
+    Public because every address a vendor is told to post to is built on it: Lark's here, and
+    every other channel's in `brain.channel_routes`.
+    """
     first = next((one.strip() for one in redirect_uris.split(",") if one.strip()), "")
     parts = urlsplit(first)
     if parts.scheme not in ("https", "http") or not parts.netloc:
@@ -887,7 +891,7 @@ def events_address(redirect_uris: str) -> str:
     Built from `INSTALL_OIDC_REDIRECT_URIS`, the one installation setting that already names this
     install's public address, so no second setting can disagree with it. Empty when it names none.
     """
-    origin = _origin(redirect_uris)
+    origin = install_origin(redirect_uris)
     return f"{origin}{LARK_EVENTS_PATH}" if origin else ""
 
 
@@ -897,7 +901,7 @@ def ask_address(redirect_uris: str) -> str:
     From the same setting as `events_address`, for its reason. The page carries no answer and no
     question, so following it runs the gate again for whoever follows it (M10.4.3).
     """
-    origin = _origin(redirect_uris)
+    origin = install_origin(redirect_uris)
     return f"{origin}{ASK_PATH}" if origin else ""
 
 

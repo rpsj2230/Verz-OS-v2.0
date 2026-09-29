@@ -1024,6 +1024,12 @@ class LarkWire:
     def tenant_fields(self) -> tuple[str, ...]:
         return LARK_TENANT_FIELDS
 
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """None asked by a record's form: Lark's three values are kept together by Connect Lark's
+        own screens (`brain.lark_connect_routes`), as `LarkSecret`, and read whole here."""
+        return ()
+
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
         """`verify_event`, and the request back with its body opened."""
         try:

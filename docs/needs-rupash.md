@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**12 items are open: 130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**13 items are open: 132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,38 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 132. Connect the email channel (ready now if your domain is on Cloudflare)
+
+**In plain terms:** people can now email the Brain and get an answer back by email (item 126's
+order: the first of the channels). Answers go out through the install's own mail relay; mail comes
+in, today, through Cloudflare. **If your company's domain is not on Cloudflare, wait:** a version
+that reads an ordinary mailbox (Google, Microsoft 365, Lark Mail or any other provider) is being
+built next, and I will tell you when it is ready.
+
+**What you do,** in the console under **Channels**, **Email**, **Connect Email**, which shows each
+step:
+
+1. **Set up the mail relay first.** Open **Notifications**, fill in **Email relay** with your mail
+   provider's sending details (host, port, sender address, user name and password) and send its
+   test message. These can be the same details item 131 asks for.
+2. **Give the Brain an address of its own.** In Cloudflare open your domain, then **Email Routing**.
+   Use a subdomain such as ask.yourdomain, never the domain your staff's mailboxes use: open
+   **Settings** and add the subdomain under **Subdomains**. If Cloudflare asks to turn Email Routing
+   on for the whole domain, stop and ask whoever runs your company's mail.
+3. **Create the Worker that hands mail to the Brain.** Open **Workers & Pages**, create a Worker from
+   the Hello World start named company-brain-mail, replace its code with the script the console
+   gives you, and deploy. Under the Worker's **Settings**, **Variables and Secrets**, add
+   BRAIN_EVENTS_URL (the address the console shows), BRAIN_DOMAINS (your staff's email domains) and
+   BRAIN_SECRET, as a secret, a long random value you make up now.
+4. **Send the address's mail to the Worker.** In **Email Routing**, **Routing rules**, create an
+   address on your subdomain such as ask@ask.yourdomain, choose **Send to a Worker**, pick
+   company-brain-mail and save.
+5. **Save it in the console.** Type that address, paste the BRAIN_SECRET value, tick **Switched on**
+   and press **Save set-up**. Then write to the address from your own mailbox: the first answer asks
+   you to link your address to your account.
+
+Tell me "connected email" afterwards and I prove it on your install.
 
 ## 130. Does a staff list anybody with its link can edit give people sign-in accounts?
 

@@ -645,7 +645,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=stale_after(),
         cadence_from="brain.ops.heartbeat:stale_after",
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        # Started by the worker's schedule since 2026-09-30, through
+        # `brain.ops.recovery_run.sweep_queue`, which calls `redrive` and makes the move it allows.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="side_effect_resume",
@@ -666,7 +668,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=stale_after(),
         cadence_from="brain.ops.heartbeat:stale_after",
         severity=Severity.WOKEN,
-        invoked_by=Invocation.NOTHING,
+        # Started by the worker's schedule since 2026-09-30, through
+        # `brain.ops.recovery_run.resume_side_effects`, which calls `resume` and `verify_once`.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="audit_anchor",
