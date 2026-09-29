@@ -55,14 +55,16 @@ from brain.ops.storage import Backend, ObjectKind, StorageError, bucket_for, con
 from brain.tables import artifact as table_module
 from brain.tables.artifact import ArtifactRow
 from brain.tables.identity import one_of
+from brain.tables.resolution import ENTITY_ID_CHARS
 from tests.fixtures.fake_s3 import FakeS3
 from tests.fixtures.scratch_postgres import run
 from tests.unit.test_agent_routes import agent_row
 from tests.unit.test_artifact_routes import AGENTS, StubSession, _wiring, get
-from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
+from tests.unit.test_tables import VERSIONS, as_amended, migration_module, rendered, squash
 
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 MIGRATION = VERSIONS / "0058_artifact_store.py"
+MIGRATION_0153 = VERSIONS / "0153_artifact_change_and_client.py"
 
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
 AT = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
@@ -122,11 +124,12 @@ def test_the_migration_builds_the_table_and_its_index_exactly_as_the_model_decla
     """Compared as rendered DDL. Delete this and the model can gain a column or lose a check with
     the database built the old way."""
     table = metadata.tables["agent.artifact"]
-    emitted = squash(rendered("upgrade", MIGRATION))
+    emitted = as_amended(rendered("upgrade", MIGRATION))
+    indexed = emitted + squash(rendered("upgrade", MIGRATION_0153))
 
     assert squash(str(CreateTable(table).compile(dialect=DIALECT))) in emitted
     for index in table.indexes:
-        assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in emitted
+        assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in indexed
 
 
 def test_the_application_reads_every_row_and_records_only_in_the_callers_name() -> None:
@@ -148,6 +151,62 @@ def test_the_application_reads_every_row_and_records_only_in_the_callers_name() 
         "CREATE POLICY artifact_readable ON agent.artifact FOR SELECT TO brain_app USING (true)"
     ) in emitted
     assert "DROP TABLE agent.artifact" in squash(rendered("downgrade", MIGRATION))
+
+
+def test_0153_holds_the_widths_and_vocabularies_it_copied_and_emits_its_amendments() -> None:
+    """`0153` copies the widths, the ledger's hash pattern and the change states, and declares how
+    `0058`'s CREATE TABLE reads today. Delete this and a width or a state can drift from the model,
+    or the amendment the comparison above trusts can claim a column the upgrade never adds."""
+    migration = migration_module(MIGRATION_0153)
+    emitted = squash(rendered("upgrade", MIGRATION_0153))
+    model = {
+        str(one.name): str(one.sqltext)
+        for one in metadata.tables["agent.artifact"].constraints
+        if hasattr(one, "sqltext")
+    }
+
+    assert migration.TABLES == ("agent.artifact_change",)
+    assert migration.ARTIFACT_ID_CHARS == table_module.ARTIFACT_ID_CHARS
+    assert migration.ENTITY_ID_CHARS == ENTITY_ID_CHARS
+    assert migration.TRACE_ID_CHARS == table_module.TRACE_ID_CHARS
+    assert migration.ENT_HASH_PATTERN == table_module.ENT_HASH_PATTERN
+    assert one_of("state", table_module.CHANGED_STATES) == migration.STATES
+    assert migration.SUCCESSOR_IFF_SUPERSEDED == table_module.SUCCESSOR_IFF_SUPERSEDED
+    assert f"ALTER TABLE agent.artifact ADD COLUMN client_id VARCHAR({ENTITY_ID_CHARS});" in emitted
+    assert (
+        "ALTER TABLE agent.artifact ADD COLUMN drew_on JSONB DEFAULT '[]'::jsonb NOT NULL;"
+    ) in emitted
+    for name, check in (migration.DREW_ON_CHECK, migration.CLIENT_CHECK):
+        assert model[f"ck_artifact_{name}"] == check
+        assert f"ALTER TABLE agent.artifact ADD CONSTRAINT ck_artifact_{name} CHECK ({check})" in (
+            emitted
+        )
+    change = squash(
+        str(CreateTable(metadata.tables["agent.artifact_change"]).compile(dialect=DIALECT))
+    )
+    assert change in emitted
+
+
+def test_a_change_is_written_in_the_sessions_name_and_never_edited_or_removed() -> None:
+    """Row-level security on the change table, SELECT and INSERT only, the insert admitted only in
+    the changer's own name, and a downgrade that takes the table and both columns away. Delete
+    this and an UPDATE grant lets the record of a supersession be rewritten, or a change can be
+    written as somebody else's."""
+    emitted = squash(rendered("upgrade", MIGRATION_0153))
+    principal = "current_setting('app.principal_id', true)"
+
+    assert "ALTER TABLE agent.artifact_change ENABLE ROW LEVEL SECURITY" in emitted
+    assert "GRANT SELECT, INSERT ON agent.artifact_change TO brain_app" in emitted
+    assert "UPDATE ON agent.artifact" not in emitted
+    assert "DELETE ON agent.artifact" not in emitted
+    assert (
+        "CREATE POLICY artifact_change_made_in_the_sessions_name ON agent.artifact_change "
+        f"FOR INSERT TO brain_app WITH CHECK (changed_by = {principal})"
+    ) in emitted
+    down = squash(rendered("downgrade", MIGRATION_0153))
+    assert "DROP TABLE agent.artifact_change" in down
+    assert "ALTER TABLE agent.artifact DROP COLUMN client_id" in down
+    assert "ALTER TABLE agent.artifact DROP COLUMN drew_on" in down
 
 
 def test_no_column_could_hold_the_produced_bytes() -> None:
@@ -204,13 +263,13 @@ class _Transaction:
 
 
 class _Result:
-    def __init__(self, rows: list[ArtifactRow]) -> None:
+    def __init__(self, rows: list[Any]) -> None:
         self.rows = rows
 
     def scalars(self) -> _Result:
         return self
 
-    def all(self) -> list[ArtifactRow]:
+    def all(self) -> list[Any]:
         return self.rows
 
 
@@ -238,6 +297,8 @@ class _Session:
             self.log.append(f"set {params['name']}={params['value']}")
         else:
             self.log.append(" ".join(text.split(" ")[:2]))
+        if "FROM agent.artifact_change" in text:
+            return _Result([])
         return _Result(self.rows)
 
     def add(self, row: ArtifactRow) -> None:

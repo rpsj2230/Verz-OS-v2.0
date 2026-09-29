@@ -91,6 +91,7 @@ from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, hidden_count_fields
 from brain.tables.agent import AgentRow
 from brain.tables.identity import PrincipalRow
+from brain.tables.leash import LeashChangeRow, SupervisionPinRow
 from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.registry import ToolRegistry
@@ -409,6 +410,9 @@ class StubSession(AsyncSession):
             return StubResult(list(_STORED.spend))
         if entity is TemplateVersionRow:
             return StubResult(list(_STORED.versions))
+        if entity in (LeashChangeRow, SupervisionPinRow):
+            # Nothing moved and nobody pinned: the install's own leash, as the tests above expect.
+            return StubResult([])
         if statement.whereclause is None:
             return StubResult([_STORED.agents[key] for key in sorted(_STORED.agents)])
         row = _STORED.agents.get(_asked_for(statement))
@@ -837,7 +841,14 @@ def test_the_install_of_an_agent_the_caller_may_not_see_is_never_read(
 
     stored.statements.clear()
     assert workspace_of(client, "u_wide", "their_notes").status_code == 200
-    assert tables() == ["AgentRow", "TemplateVersionRow", "SpendActualRow", "PrincipalRow"]
+    assert tables() == [
+        "AgentRow",
+        "TemplateVersionRow",
+        "SpendActualRow",
+        "PrincipalRow",
+        "LeashChangeRow",
+        "SupervisionPinRow",
+    ]
 
 
 def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it(
@@ -867,6 +878,8 @@ def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it
         "created_at": "2019-03-01T09:00:00Z",
         "state": None,
         "leash_up_to": None,
+        "department": None,
+        "template_name": "Pricing desk",
     }
 
 
@@ -914,9 +927,10 @@ def test_a_reader_holding_every_tabs_grant_is_shown_only_the_tab_this_route_fill
     client: TestClient, stored: Stored
 ) -> None:
     """`u_elsewhere` holds every tab's capability and every plane, so every tab is permitted to
-    them, and their strip is still Automations and Settings alone because those are the only
-    tabs populated: the gallery and the agent's own record. The strip test above is the sibling
-    for the readers who may not read even that.
+    them, and their strip is still Automations, Memory, Artifacts and Settings alone because those
+    are the only tabs populated: the gallery, the learning tiers, the artifact filters and rule,
+    and the agent's own record. The strip test above is the sibling for the readers who may not
+    read even that.
 
     Delete this and the route can mark a tab populated that it holds nothing for, which draws a
     heading over an empty panel for exactly the readers trusted with the most."""
@@ -924,7 +938,7 @@ def test_a_reader_holding_every_tabs_grant_is_shown_only_the_tab_this_route_fill
 
     tabs = workspace_of(client, "u_elsewhere", "quote_helper").json()["tabs"]
 
-    assert [one["tab"] for one in tabs] == ["automations", "settings"]
+    assert [one["tab"] for one in tabs] == ["automations", "memory", "artifacts", "settings"]
 
 
 def test_a_blank_summary_is_sent_as_no_summary_and_the_lineage_still_arrives(
@@ -968,10 +982,13 @@ def test_the_roster_is_ordered_by_name_and_then_by_id_whatever_order_the_table_h
 
 
 def test_a_tab_is_populated_here_only_when_this_route_holds_what_it_reads() -> None:
-    """Settings and Automations and nothing else, held against the strip itself: every tab is
-    permitted for a reader holding every tab's grant, and still only those two are drawn. The
-    Automations tab is filled by the product's gallery, which is held non-empty in
-    `tests/unit/test_automation_gallery.py`.
+    """Settings, Automations, Memory and Artifacts and nothing else, held against the strip
+    itself: every tab is permitted for a reader holding every tab's grant, and still only those
+    four are drawn. The Automations tab is filled by the product's gallery, which is held
+    non-empty in `tests/unit/test_automation_gallery.py`; the Memory tab by the learning tiers,
+    which `tests/unit/test_agent_memory_routes.py` holds are sent for an agent with no memory at
+    all; and the Artifacts tab by its filters and retention rule, which
+    `tests/unit/test_agent_artifact_routes.py` holds are sent with no store at all.
 
     Delete this and `POPULATED_HERE` can grow a tab no route fills, which is a heading over an
     empty panel and a count of hidden things in words."""
@@ -988,9 +1005,11 @@ def test_a_tab_is_populated_here_only_when_this_route_holds_what_it_reads() -> N
     from brain.console.workspace import tab_strip
 
     assert len(tab_strip(everything, populated=tuple(Tab))) == len(TABS)
-    assert frozenset({Tab.SETTINGS, Tab.AUTOMATIONS}) == POPULATED_HERE
+    assert frozenset({Tab.SETTINGS, Tab.AUTOMATIONS, Tab.MEMORY, Tab.ARTIFACTS}) == POPULATED_HERE
     assert [one.tab for one in tab_strip(everything, populated=POPULATED_HERE)] == [
         Tab.AUTOMATIONS,
+        Tab.MEMORY,
+        Tab.ARTIFACTS,
         Tab.SETTINGS,
     ]
 
@@ -1097,6 +1116,8 @@ def test_an_install_that_does_not_construct_is_an_agent_with_no_lineage_and_no_c
         "created_at": None,
         "state": "enabled",
         "leash_up_to": None,
+        "department": None,
+        "template_name": None,
     }
     assert spoiled.json()["composition"] == []
     # And every block the install supplies goes with it, rather than half a workspace drawn

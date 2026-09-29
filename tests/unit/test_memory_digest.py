@@ -685,6 +685,16 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     `test_an_undo_locks_the_memory_reads_its_marks_and_the_clock_then_writes_one_correction` in
     `tests/unit/test_memory_store.py`.
 
+    **`brain.agent_memory_routes` arrived on 2026-09-29**, for M39.4.1, one agent's Memory
+    section. It builds no listing of its own: what the agent learnt is `reach_view.split_memory`
+    and `revisions` at `E_run(reader, agent)` through `reach_view.run_reach`, which is the agent
+    tab's reach and `agent_memory`'s; what it keeps about the reader is `split_memory` at the
+    reader's own reach, which is `separate_memory`'s per-person argument. It imports `Learning`
+    to hand a stored one to the store's edit. Its sibling is
+    `test_a_memory_offered_to_every_reader_fails_the_memory_check` in
+    `tests/unit/test_acceptance_workspace.py`, which reads the agent's memory at a reach wider
+    than the reader's and watches a colleague be shown somebody else's memory.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
     assert _callers_of("brain.memory.review") == [
@@ -693,6 +703,7 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
         "brain.ops.memory_store",
     ]
     assert _callers_of("brain.memory.digest") == [
+        "brain.agent_memory_routes",
         "brain.console.govern_estate",
         "brain.console.own_things",
         "brain.console.reach_view",
