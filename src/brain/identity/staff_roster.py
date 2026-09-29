@@ -45,7 +45,12 @@ from typing import Final
 from brain.gate.context import Channel
 from brain.gate.ingress import identity_hash
 from brain.identity.staff_address import address_changes
-from brain.identity.staff_source import Roster, departments_from
+from brain.identity.staff_source import (
+    EmploymentStatus,
+    EmploymentType,
+    Roster,
+    departments_from,
+)
 from brain.identity.staff_sync import DryRun, dry_run
 
 # ------------------------------------------------------------------ written-down reasons
@@ -151,6 +156,10 @@ class MemberWrite:
     stable_id: str | None = None
     left_because: LeftBecause | None = None
     was_hash: str | None = None
+    #: Where the source says they stand and what kind of employment it records (`0156`). Written
+    #: on an addition, a refresh and a rename; a mark changes neither.
+    status: EmploymentStatus = EmploymentStatus.ACTIVE
+    employment_type: EmploymentType | None = None
 
 
 @dataclass(frozen=True)
@@ -236,6 +245,8 @@ def application_for(
                     department=departments.get(address) or None,
                     stable_id=change.stable_id,
                     was_hash=change.was if change.was not in listed else digest_of(change.was),
+                    status=person.standing,
+                    employment_type=person.employment_type,
                 )
             )
             renamed.append(person.display_name)
@@ -247,6 +258,8 @@ def application_for(
                 display_name=person.display_name,
                 department=departments.get(address) or None,
                 stable_id=stable_ids.get(address),
+                status=person.standing,
+                employment_type=person.employment_type,
             )
         )
         added.append(person.display_name)
@@ -261,6 +274,8 @@ def application_for(
                 display_name=person.display_name,
                 department=departments.get(address) or None,
                 stable_id=stable_ids.get(address),
+                status=person.standing,
+                employment_type=person.employment_type,
             )
         )
 
@@ -277,7 +292,13 @@ def application_for(
         name = listed[gone].display_name if gone in listed else names[digest]
         writes.append(
             MemberWrite(
-                write=Write.MARK_LEFT, address_hash=digest, display_name=name, left_because=why
+                write=Write.MARK_LEFT,
+                address_hash=digest,
+                display_name=name,
+                left_because=why,
+                # Suspended stays suspended on the People list: the source said so, and "left"
+                # would be a different fact. Somebody a complete list stopped naming has left.
+                status=listed[gone].standing if gone in listed else EmploymentStatus.LEFT,
             )
         )
         marked.append(name)

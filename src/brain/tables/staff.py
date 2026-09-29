@@ -87,6 +87,20 @@ RUN_OUTCOMES: Final[tuple[str, ...]] = (
 #: One sentence for whoever reads the Staff sources screen.
 DETAIL_CHARS: Final = 500
 
+#: Where somebody stands and what kind of employment they have, as the source says. See
+#: `brain.identity.staff_source.EmploymentStatus` and `EmploymentType`, which a test holds equal.
+EMPLOYMENT_STATUSES: Final[tuple[str, ...]] = ("active", "left", "not_activated", "suspended")
+EMPLOYMENT_TYPES: Final[tuple[str, ...]] = (
+    "consultant",
+    "contractor",
+    "intern",
+    "labour_dispatch",
+    "other",
+    "outsourced",
+    "regular",
+)
+EMPLOYMENT_CHARS: Final = 24
+
 
 class StaffMemberRow(TimestampMixin, Base):
     """`auth.staff_member`. One person one source has listed, by the digest of their address."""
@@ -107,6 +121,22 @@ class StaffMemberRow(TimestampMixin, Base):
     last_listed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     left_because: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: Where the source says they stand, which decides whether they may sign in and ask (`0156`).
+    status: Mapped[str] = mapped_column(
+        String(EMPLOYMENT_CHARS),
+        CheckConstraint(one_of("status", EMPLOYMENT_STATUSES), name="status"),
+        nullable=False,
+        server_default=text("'active'"),
+    )
+    #: What kind of employment the source records, or null where it records none (`0156`).
+    employment_type: Mapped[str | None] = mapped_column(
+        String(EMPLOYMENT_CHARS),
+        CheckConstraint(
+            f"employment_type IS NULL OR {one_of('employment_type', EMPLOYMENT_TYPES)}",
+            name="employment_type",
+        ),
+        nullable=True,
+    )
 
     __table_args__ = (
         CheckConstraint(f"source ~ '{SOURCE_PATTERN}'", name="source_shape"),

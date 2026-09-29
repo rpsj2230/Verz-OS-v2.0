@@ -46,12 +46,15 @@ from brain.identity.staff_adapters import (
     SpreadsheetSource,
     Unplaced,
     choices_and_adapters_that_do_not_match,
+    employment_type_from,
     source_strings_the_trust_table_does_not_know,
 )
 from brain.identity.staff_source import (
     DEFAULT_TRUST,
     STAFF_SOURCE_SETTING,
     Asserts,
+    EmploymentStatus,
+    EmploymentType,
     GroupRule,
     Roster,
     StaffRecord,
@@ -1337,3 +1340,154 @@ def test_a_true_report_is_accepted_and_counts_one_of_each_in_the_singular() -> N
         "Read 1 department, 1 with a name, and 2 people; 1 placed in a department. "
         "Skipped 1 entry that was not a person. Not placed: 1 with no department."
     )
+
+
+# ------------------------------------------------------- where somebody stands, and their type
+def test_lark_s_four_flags_are_four_standings_and_its_employee_type_a_type() -> None:
+    """Lark's flags, from the user object's documentation, read as where somebody stands, and its
+    numbered employee types as types, a company's own number as `OTHER`. Delete this and a
+    suspended person reads as having left, or an outsourced one as a regular employee, which is the
+    difference the owner asked the People list to show and the gate to act on."""
+    base = recorded.LARK_USERS_PAGE_ONE["data"]["items"][0]
+
+    def one(address: str, status: dict[str, bool], kind: object = None) -> dict[str, object]:
+        person: dict[str, object] = {
+            **base,
+            "union_id": f"on_{address}",
+            "enterprise_email": f"{address}@example.com",
+            "leader_user_id": "",
+            "status": status,
+        }
+        if kind is not None:
+            person["employee_type"] = kind
+        return person
+
+    page = {
+        "code": 0,
+        "data": {
+            "has_more": False,
+            "items": [
+                one("here", {"is_activated": True}, 1),
+                one("paused", {"is_frozen": True, "is_activated": True}, 3),
+                one("gone", {"is_resigned": True, "is_frozen": True}, 2),
+                one("quit", {"is_exited": True}, 5),
+                one("never", {"is_activated": False}, 4),
+                one("unjoined", {"is_activated": True, "is_unjoin": True}, 9),
+            ],
+        },
+    }
+    roster = LarkSource(pages=[page], department_names=recorded.LARK_DEPARTMENT_NAMES).roster()
+    found = {
+        one.work_address.split("@")[0]: (one.standing, one.employment_type, one.active)
+        for one in roster.people
+    }
+
+    assert found == {
+        "here": (EmploymentStatus.ACTIVE, EmploymentType.REGULAR, True),
+        "paused": (EmploymentStatus.SUSPENDED, EmploymentType.OUTSOURCED, False),
+        "gone": (EmploymentStatus.LEFT, EmploymentType.INTERN, False),
+        "quit": (EmploymentStatus.LEFT, EmploymentType.CONSULTANT, False),
+        "never": (EmploymentStatus.NOT_ACTIVATED, EmploymentType.LABOUR_DISPATCH, False),
+        "unjoined": (EmploymentStatus.NOT_ACTIVATED, EmploymentType.OTHER, False),
+    }
+    untyped = LarkSource(
+        pages=[recorded.LARK_USERS_PAGE_TWO], department_names=recorded.LARK_DEPARTMENT_NAMES
+    ).roster()
+    assert {one.employment_type for one in untyped.people} == {None}
+
+
+def test_every_directory_says_where_somebody_stands_and_its_free_text_type_is_read() -> None:
+    """Workspace's archived is left and suspended is suspended, with the employee type the Admin
+    console keeps as an organisation's description; Entra's disabled account is suspended, with
+    its `employeeType`; a sheet's type column is read. Delete this and only Lark's people have a
+    standing and a type, and the setting refuses nobody on the other three."""
+    workspace = GoogleWorkspaceSource(
+        pages=[
+            {
+                "users": [
+                    {
+                        "primaryEmail": "arch@example.com",
+                        "name": {"fullName": "Arch"},
+                        "archived": True,
+                        "organizations": [{"description": "Full-time"}],
+                    },
+                    {
+                        "primaryEmail": "sus@example.com",
+                        "name": {"fullName": "Sus"},
+                        "suspended": True,
+                        "organizations": [
+                            {"description": "Intern"},
+                            {"description": "Outsourced (agency)", "primary": True},
+                        ],
+                    },
+                ]
+            }
+        ]
+    ).roster()
+    entra = MicrosoftEntraSource(
+        pages=[
+            {
+                "value": [
+                    {
+                        "userPrincipalName": "off@example.com",
+                        "displayName": "Off",
+                        "accountEnabled": False,
+                        "employeeType": "Contractor",
+                    },
+                    {
+                        "userPrincipalName": "on@example.com",
+                        "displayName": "On",
+                        "accountEnabled": True,
+                        "employeeType": "Employee",
+                    },
+                ]
+            }
+        ]
+    ).roster()
+    sheet = SpreadsheetSource(
+        rows=(
+            ("Work Email", "Full Name", "Employment type", "Left?"),
+            ("ada@example.com", "Ada", "Outsourced", ""),
+            ("bo@example.com", "Bo", "Something else", "yes"),
+            ("cy@example.com", "Cy", "", ""),
+        )
+    ).roster()
+
+    def read(roster: Roster) -> dict[str, tuple[EmploymentStatus, EmploymentType | None]]:
+        return {one.work_address: (one.standing, one.employment_type) for one in roster.people}
+
+    assert read(workspace) == {
+        "arch@example.com": (EmploymentStatus.LEFT, EmploymentType.REGULAR),
+        "sus@example.com": (EmploymentStatus.SUSPENDED, EmploymentType.OUTSOURCED),
+    }
+    assert read(entra) == {
+        "off@example.com": (EmploymentStatus.SUSPENDED, EmploymentType.CONTRACTOR),
+        "on@example.com": (EmploymentStatus.ACTIVE, EmploymentType.REGULAR),
+    }
+    assert read(sheet) == {
+        "ada@example.com": (EmploymentStatus.ACTIVE, EmploymentType.OUTSOURCED),
+        "bo@example.com": (EmploymentStatus.LEFT, EmploymentType.OTHER),
+        "cy@example.com": (EmploymentStatus.ACTIVE, None),
+    }
+
+
+def test_free_text_is_read_by_its_words_and_empty_text_is_no_type() -> None:
+    """Written out here rather than read off the word table. Delete this and "Outsourced
+    contractor" is a contractor the setting lets in, or empty text is `OTHER`."""
+    assert employment_type_from("Outsourced contractor") is EmploymentType.OUTSOURCED
+    assert employment_type_from(" labour  dispatch ") is EmploymentType.LABOUR_DISPATCH
+    assert employment_type_from("Permanent") is EmploymentType.REGULAR
+    assert employment_type_from("Board member") is EmploymentType.OTHER
+    assert employment_type_from("") is None
+    assert employment_type_from(None) is None
+
+
+def test_a_record_that_says_both_here_and_suspended_is_refused_and_one_that_agrees_is_kept() -> (
+    None
+):
+    """Delete this and one reading removes somebody another keeps."""
+    with pytest.raises(ValueError, match="says one thing"):
+        StaffRecord("a@example.com", "A", active=True, status=EmploymentStatus.SUSPENDED)
+    kept = StaffRecord("a@example.com", "A", active=False, status=EmploymentStatus.SUSPENDED)
+    assert kept.standing is EmploymentStatus.SUSPENDED
+    assert StaffRecord("b@example.com", "B", active=False).standing is EmploymentStatus.LEFT

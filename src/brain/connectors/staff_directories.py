@@ -171,7 +171,7 @@ GOOGLE_OWN_ACCOUNT: Final = "my_customer"
 #: The fields a Directory read asks for, as Google's `fields` parameter, and nothing more.
 GOOGLE_USER_FIELDS: Final = (
     "nextPageToken,users(id,primaryEmail,name/fullName,suspended,archived,orgUnitPath,aliases,"
-    "relations)"
+    "relations,organizations(description,primary))"
 )
 GOOGLE_GROUP_FIELDS: Final = "nextPageToken,groups(id,email)"
 GOOGLE_MEMBER_FIELDS: Final = "nextPageToken,members(email,type)"
@@ -192,7 +192,7 @@ MICROSOFT_GROUPS_PERMISSION: Final = "GroupMember.Read.All"
 
 #: What a Graph read of people selects, and the manager it expands to. Nothing else is asked for.
 MICROSOFT_USER_FIELDS: Final = (
-    "id,userPrincipalName,displayName,department,accountEnabled,proxyAddresses"
+    "id,userPrincipalName,displayName,department,accountEnabled,proxyAddresses,employeeType"
 )
 MICROSOFT_MANAGER_EXPAND: Final = "manager($select=id,userPrincipalName)"
 

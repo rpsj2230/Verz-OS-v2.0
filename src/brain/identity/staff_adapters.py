@@ -113,6 +113,8 @@ from brain.identity.staff_source import (
     DEFAULT_TRUST,
     SELECTABLE,
     Asserts,
+    EmploymentStatus,
+    EmploymentType,
     Roster,
     StaffRecord,
     trust_for,
@@ -231,6 +233,78 @@ LARK_PERSON_DEPARTMENT_SCOPE: Final = "contact:user.department:readonly"
 #: Lark's root department, which is the company itself rather than a department in it: its
 #: documentation gives the root the identifier `0` in either identifier type.
 LARK_ROOT_DEPARTMENT: Final = "0"
+
+#: Lark's `employee_type`, from the user object's documentation (read 2026-09-29): 1 regular, 2
+#: intern, 3 outsourced, 4 labour dispatch, 5 consultant. A company's own custom types have other
+#: numbers and are `OTHER`. Shown to `contact:user.employee:readonly`, which the product asks for.
+LARK_EMPLOYEE_TYPES: Final[Mapping[int, EmploymentType]] = {
+    1: EmploymentType.REGULAR,
+    2: EmploymentType.INTERN,
+    3: EmploymentType.OUTSOURCED,
+    4: EmploymentType.LABOUR_DISPATCH,
+    5: EmploymentType.CONSULTANT,
+}
+
+#: Words a directory writes for an employment type in free text (Entra's `employeeType`, LDAP's
+#: `employeeType`, Workspace's organisation description, a sheet's column), matched in this order
+#: against the folded text. Outsourced first, so "outsourced contractor" is outsourced.
+EMPLOYMENT_TYPE_WORDS: Final[tuple[tuple[str, EmploymentType], ...]] = (
+    ("outsourc", EmploymentType.OUTSOURCED),
+    ("vendor", EmploymentType.OUTSOURCED),
+    ("agency", EmploymentType.OUTSOURCED),
+    ("intern", EmploymentType.INTERN),
+    ("dispatch", EmploymentType.LABOUR_DISPATCH),
+    ("labour", EmploymentType.LABOUR_DISPATCH),
+    ("labor", EmploymentType.LABOUR_DISPATCH),
+    ("consult", EmploymentType.CONSULTANT),
+    ("contract", EmploymentType.CONTRACTOR),
+    ("freelanc", EmploymentType.CONTRACTOR),
+    ("regular", EmploymentType.REGULAR),
+    ("employee", EmploymentType.REGULAR),
+    ("staff", EmploymentType.REGULAR),
+    ("full", EmploymentType.REGULAR),
+    ("permanent", EmploymentType.REGULAR),
+    ("part", EmploymentType.REGULAR),
+)
+
+
+def employment_type_from(text: object) -> EmploymentType | None:
+    """The employment type a directory's free text names, `OTHER` for text naming none of them,
+    and None where the source wrote nothing.
+
+    Free text is what three of the sources hold, so matching is by word and never by equality:
+    Entra writes `Employee` and `Contractor`, a sheet writes `Full-time` and `Outsourced (agency)`.
+    """
+    folded = " ".join(str(text or "").split()).casefold()
+    if not folded:
+        return None
+    for word, kind in EMPLOYMENT_TYPE_WORDS:
+        if word in folded:
+            return kind
+    return EmploymentType.OTHER
+
+
+def lark_standing(status: Mapping[str, Any]) -> EmploymentStatus:
+    """Where Lark's four flags say somebody stands. Left wins over suspended over not activated."""
+    if status.get("is_resigned", False) or status.get("is_exited", False):
+        return EmploymentStatus.LEFT
+    if status.get("is_frozen", False):
+        return EmploymentStatus.SUSPENDED
+    if not status.get("is_activated", True) or status.get("is_unjoin", False):
+        return EmploymentStatus.NOT_ACTIVATED
+    return EmploymentStatus.ACTIVE
+
+
+def lark_employment_type(person: Mapping[str, Any]) -> EmploymentType | None:
+    """Lark's `employee_type` as a type, `OTHER` for a custom one, None where it is absent."""
+    raw = person.get("employee_type")
+    if raw is None or raw == "":
+        return None
+    try:
+        return LARK_EMPLOYEE_TYPES.get(int(raw), EmploymentType.OTHER)
+    except (TypeError, ValueError):
+        return EmploymentType.OTHER
+
 
 #: The LDAP result code for a search the server's own administrative limit cut short. It is
 #: a partial answer rather than a failure: the entries returned are real.
@@ -507,6 +581,8 @@ def _record(
     department: str = "",
     groups: tuple[str, ...] = (),
     active: bool = True,
+    status: EmploymentStatus | None = None,
+    employment_type: EmploymentType | None = None,
 ) -> StaffRecord | str:
     """A record, or the reason this row is not one.
 
@@ -522,6 +598,8 @@ def _record(
             department=department.strip(),
             groups=groups,
             active=active,
+            status=status,
+            employment_type=employment_type,
         )
     except ValueError as why:
         label = address.strip() or name.strip() or "a row with neither an address nor a name"
@@ -561,6 +639,7 @@ NAME_COLUMNS: Final[tuple[str, ...]] = ("full name", "name", "display name")
 DEPARTMENT_COLUMNS: Final[tuple[str, ...]] = ("department", "dept", "team")
 GROUP_COLUMNS: Final[tuple[str, ...]] = ("groups", "group")
 DEPARTED_COLUMNS: Final[tuple[str, ...]] = ("left?", "left", "departed", "inactive")
+TYPE_COLUMNS: Final[tuple[str, ...]] = ("employment type", "employee type", "type", "contract")
 
 #: What a departure column has to say for somebody to be marked as having left. Anything else,
 #: including an empty cell, means they are here: a truthiness test would make the word "no"
@@ -592,6 +671,7 @@ def _tabular_people(rows: Sequence[Sequence[str]]) -> tuple[list[StaffRecord], l
     department_at = _first_present(columns, DEPARTMENT_COLUMNS)
     group_at = _first_present(columns, GROUP_COLUMNS)
     departed_at = _first_present(columns, DEPARTED_COLUMNS)
+    type_at = _first_present(columns, TYPE_COLUMNS)
 
     people: list[StaffRecord] = []
     dropped: list[str] = []
@@ -609,6 +689,7 @@ def _tabular_people(rows: Sequence[Sequence[str]]) -> tuple[list[StaffRecord], l
             department=_cell(row, columns, department_at),
             groups=groups,
             active=_cell(row, columns, departed_at).casefold() not in DEPARTED_VALUES,
+            employment_type=employment_type_from(_cell(row, columns, type_at)),
         )
         if isinstance(built, str):
             dropped.append(f"row {at}: {built}")
@@ -773,6 +854,8 @@ class GoogleWorkspaceSource:
                     department=str(one.get("orgUnitPath") or "").strip().lstrip("/"),
                     groups=tuple(groups_for.get(folded, ())),
                     active=not one.get("suspended", False) and not one.get("archived", False),
+                    status=_workspace_standing(one),
+                    employment_type=_workspace_type(one.get("organizations") or ()),
                 )
                 if isinstance(built, str):
                     dropped.append(built)
@@ -798,6 +881,31 @@ class GoogleWorkspaceSource:
             managers=_in_read(named, (one.work_address.casefold() for one in people)),
             groups_complete=self.groups_complete,
         )
+
+
+def _workspace_standing(user: Mapping[str, Any]) -> EmploymentStatus:
+    """Archived is a former employee Google no longer charges for; suspended is paused."""
+    if user.get("archived", False):
+        return EmploymentStatus.LEFT
+    if user.get("suspended", False):
+        return EmploymentStatus.SUSPENDED
+    return EmploymentStatus.ACTIVE
+
+
+def _workspace_type(organizations: Sequence[Any]) -> EmploymentType | None:
+    """The Admin console's employee type, which Google keeps as an organisation's description.
+
+    The primary organisation's, else the first that has one.
+    """
+    ordered = sorted(
+        (one for one in organizations if isinstance(one, Mapping)),
+        key=lambda one: not one.get("primary", False),
+    )
+    for one in ordered:
+        found = employment_type_from(one.get("description"))
+        if found is not None:
+            return found
+    return None
 
 
 def _workspace_manager(relations: Sequence[Any]) -> str:
@@ -876,6 +984,12 @@ class MicrosoftEntraSource:
                     department=str(one.get("department") or ""),
                     groups=tuple(groups_for.get(folded, ())),
                     active=bool(one.get("accountEnabled", False)),
+                    status=(
+                        EmploymentStatus.ACTIVE
+                        if one.get("accountEnabled", False)
+                        else EmploymentStatus.SUSPENDED
+                    ),
+                    employment_type=employment_type_from(one.get("employeeType")),
                 )
                 if isinstance(built, str):
                     dropped.append(built)
@@ -1011,12 +1125,9 @@ class LarkSource:
                     str(one.get("name") or ""),
                     department=department,
                     groups=tuple(groups_for.get(folded, ())),
-                    active=(
-                        not status.get("is_frozen", False)
-                        and not status.get("is_resigned", False)
-                        and not status.get("is_exited", False)
-                        and bool(status.get("is_activated", True))
-                    ),
+                    active=lark_standing(status) is EmploymentStatus.ACTIVE,
+                    status=lark_standing(status),
+                    employment_type=lark_employment_type(one),
                 )
                 if isinstance(built, str):
                     dropped.append(built)
@@ -1238,6 +1349,12 @@ class LdapSource:
                 department=_attribute(attributes, "department") or _attribute(attributes, "ou"),
                 groups=_attributes(attributes, "memberOf"),
                 active=_still_employed(attributes),
+                status=(
+                    EmploymentStatus.ACTIVE
+                    if _still_employed(attributes)
+                    else EmploymentStatus.SUSPENDED
+                ),
+                employment_type=employment_type_from(_attribute(attributes, "employeeType")),
             )
             if isinstance(built, str):
                 dropped.append(f"{name}: {built}")

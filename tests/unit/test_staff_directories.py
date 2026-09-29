@@ -695,8 +695,9 @@ def test_a_group_page_linking_off_graph_is_refused_and_the_token_never_goes_ther
 
 
 def test_each_read_asks_only_for_the_fields_the_roster_needs() -> None:
-    """The staff sync reads people, their department, manager, whether they are still here, and
-    groups, and nothing else: Google's `fields` and Graph's `$select` say which, and each Lark
+    """The staff sync reads people, their department, manager, whether they are still here, their
+    employment type and groups, and nothing else: Google's `fields` and Graph's `$select` say
+    which, and each Lark
     people request asks for union ids so the manager is named by the id the roster keeps.
 
     The expected sets are written here rather than imported, so the test cannot pass by comparing
@@ -711,9 +712,10 @@ def test_each_read_asks_only_for_the_fields_the_roster_needs() -> None:
         lark = Stand(pages_by_url(lark_pages()))
         await pull(lark, LARK, token=TOKEN, location="larksuite.com")
 
+        # The organisation's description is where the Admin console keeps the employee type.
         assert query(google.sent[0].url)["fields"] == (
             "nextPageToken,users(id,primaryEmail,name/fullName,suspended,archived,orgUnitPath,"
-            "aliases,relations)"
+            "aliases,relations,organizations(description,primary))"
         )
         first = query(graph.sent[0].url)
         assert set(first["$select"].split(",")) == {
@@ -723,6 +725,7 @@ def test_each_read_asks_only_for_the_fields_the_roster_needs() -> None:
             "department",
             "accountEnabled",
             "proxyAddresses",
+            "employeeType",
         }
         assert first["$expand"] == "manager($select=id,userPrincipalName)"
         people = [query(one.url) for one in lark.sent if "find_by_department" in one.url]

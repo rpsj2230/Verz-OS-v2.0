@@ -151,6 +151,10 @@ def stop_leavers_agents(now: datetime) -> Update:
     )
 
 
+def _kind(one: MemberWrite) -> str | None:
+    return None if one.employment_type is None else one.employment_type.value
+
+
 def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
     """The statement one decided write becomes."""
     if one.write is Write.MARK_LEFT:
@@ -161,7 +165,7 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
                 StaffMemberRow.address_hash == one.address_hash,
                 StaffMemberRow.left_at.is_(None),
             )
-            .values(left_at=now, left_because=one.left_because)
+            .values(left_at=now, left_because=one.left_because, status=one.status.value)
         )
     if one.write is Write.RENAME:
         return (
@@ -173,6 +177,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
                 department=one.department,
                 stable_id=one.stable_id,
                 last_listed_at=now,
+                status=one.status.value,
+                employment_type=_kind(one),
             )
         )
     if one.write is Write.REFRESH:
@@ -187,6 +193,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
                 department=one.department,
                 stable_id=one.stable_id,
                 last_listed_at=now,
+                status=one.status.value,
+                employment_type=_kind(one),
             )
         )
     # An addition is an upsert, so a person who had left and is listed again is the same row
@@ -199,6 +207,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
         stable_id=one.stable_id,
         first_listed_at=now,
         last_listed_at=now,
+        status=one.status.value,
+        employment_type=_kind(one),
     )
     return statement.on_conflict_do_update(
         index_elements=[StaffMemberRow.source, StaffMemberRow.address_hash],
@@ -207,6 +217,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
             "department": one.department,
             "stable_id": one.stable_id,
             "last_listed_at": now,
+            "status": one.status.value,
+            "employment_type": _kind(one),
             "left_at": None,
             "left_because": None,
         },
