@@ -689,12 +689,17 @@ def test_an_unmeasured_sentence_is_the_ledgers_own_and_leaves_when_the_ledger_fi
 
 
 def test_a_model_call_in_flight_is_written_by_the_executors_store_and_read_by_no_screen() -> None:
-    """`ModelAttemptRow` is named by the package registering it and by the model service that
-    writes and replays attempts, and by nothing this screen reads.
+    """`ModelAttemptRow` is named by the package registering it, by the model service that
+    writes and replays attempts, and by the trace recorder that reads a finished run's attempts
+    into its masked graph (M24.3.4), which no screen reads either; by nothing this screen reads.
 
     Delete this and `requests_in_flight_are_not_recorded` stays true on the day the live runs
     route starts reading attempts, and the page goes on saying it cannot show what it could."""
-    assert modules_using("ModelAttemptRow") == ["ops/model_service.py", "tables/__init__.py"]
+    assert modules_using("ModelAttemptRow") == [
+        "ops/model_service.py",
+        "ops/trace_store.py",
+        "tables/__init__.py",
+    ]
     assert "operate_routes.py" not in modules_using("ModelAttemptRow")
 
 

@@ -448,6 +448,10 @@ def test_a_process_with_a_database_installs_the_usage_recorder_on_the_answer_pat
     from brain.app import request_recorders_for
 
     sessions: async_sessionmaker[AsyncSession] = async_sessionmaker()
-    found = [one for one in request_recorders_for(sessions) if isinstance(one, UsageRecorder)]
+    found = [
+        one
+        for one in request_recorders_for(sessions, environment="development")
+        if isinstance(one, UsageRecorder)
+    ]
     assert len(found) == 1
     assert found[0].sessions is sessions
