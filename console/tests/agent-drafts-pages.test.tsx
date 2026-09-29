@@ -18,6 +18,9 @@ import { UNAVAILABLE_MARK } from "../src/components/kit";
 import {
   APPROVE_QUESTION,
   CHECK_QUESTION,
+  DRAW_QUESTION,
+  TOOLS_LIST_LABEL,
+  TOOLS_SECTION_HEADING,
   DRAFTS_ADDRESS,
   EDIT_QUESTION,
   NEW_AGENT_ADDRESS,
@@ -29,7 +32,21 @@ import {
   withSection,
 } from "../src/pages/agents/agentDraftsQuery";
 import { NO_DRAFTS, WAITING_HEADING } from "../src/pages/agents/DraftsPage";
-import { APPROVE_LABEL, CHECK_LABEL, PUBLISH_LABEL } from "../src/pages/agents/DraftPage";
+import {
+  APPROVE_LABEL,
+  CHECK_LABEL,
+  DRAW_LABEL,
+  ENTER_SKILL_NAME,
+  ENTER_WHEN_TO_USE,
+  NO_TOOLS_TO_DRAW,
+  OPEN_WRITE_STEP,
+  PROCEDURE_DESCRIPTION,
+  PROCEDURE_NAME,
+  PUBLISH_LABEL,
+} from "../src/pages/agents/DraftPage";
+import { ADD_WORDS } from "../src/components/ProcedureCanvas";
+import { ADDABLE_KINDS } from "../src/components/procedure";
+import { CHECK_THESE_ANSWERS } from "../src/components/SchemaForm";
 import { EDIT_AS_DRAFT } from "../src/pages/agents/AgentDetailPage";
 import { SCRATCH_LABEL } from "../src/pages/agents/NewAgentPage";
 import { START_LABEL } from "../src/pages/agents/DraftStart";
@@ -83,6 +100,27 @@ async function consoleAt(path: string, answers: Answers): Promise<{ container: H
     }
   });
   return { container, idp, router };
+}
+
+/** Every list's Add words the served form holds, outside a list entry (drawn with nothing in it). */
+function addWordsIn(form: unknown): string[] {
+  const found: string[] = [];
+  const walk = (ui: unknown): void => {
+    if (typeof ui !== "object" || ui === null || Array.isArray(ui)) {
+      return;
+    }
+    for (const [key, inner] of Object.entries(ui)) {
+      if (key === "ui:options" && typeof inner === "object" && inner !== null && "addLabel" in inner) {
+        found.push(String((inner as { addLabel: unknown }).addLabel));
+      } else if (key !== "items" && key !== "anyOf") {
+        walk(inner);
+      }
+    }
+  };
+  for (const one of (form as { sections: { ui: unknown }[] }).sections) {
+    walk(one.ui);
+  }
+  return found;
 }
 
 function posts(idp: FakeIdp): { readonly path: string; readonly body: unknown }[] {
@@ -218,12 +256,12 @@ describe("one draft", () => {
       "GET /api/v1/builder/form": { body: FORM },
       [`POST ${DRAFT_API}/revisions`]: { body: { revision: 3, state: "draft", problems: [] } },
     });
-    const persona = container.querySelector<HTMLElement>('section[aria-label="persona"] form');
+    const persona = container.querySelector<HTMLElement>('section[data-section="persona"] form');
     expect(persona).not.toBeNull();
     await act(async () => {
       fireEvent.submit(persona as HTMLFormElement);
     });
-    await confirmIn(SAVE_QUESTION("persona"), "Save");
+    await confirmIn(SAVE_QUESTION("Instructions"), "Save");
 
     const [sent] = posts(idp);
     expect(sent?.path).toBe(`${DRAFT_API}/revisions`);
@@ -241,14 +279,112 @@ describe("one draft", () => {
       "GET /api/v1/builder/form": { body: FORM },
       [`POST ${DRAFT_API}/revisions`]: { status: 409, body: { outcome: "moved", sentence: NOT_CHANGED_SENTENCE } },
     });
-    const persona = document.querySelector<HTMLElement>('section[aria-label="persona"] form');
+    const persona = document.querySelector<HTMLElement>('section[data-section="persona"] form');
     await act(async () => {
       fireEvent.submit(persona as HTMLFormElement);
     });
-    await confirmIn(SAVE_QUESTION("persona"), "Save");
+    await confirmIn(SAVE_QUESTION("Instructions"), "Save");
     await waitFor(() => {
       expect(document.body.textContent).toContain(NOT_CHANGED_SENTENCE);
     });
+  });
+
+  test("on the Write step every list's Add button is found by its name, and a tool added is saved with the draft", async () => {
+    // What breaks if this is deleted: the defect found on the owner's install on 2026-09-29. Every Add
+    // button on this step was Bootstrap markup the kit's reset drew at 0 by 0 pixels, so no tool could
+    // be allowed and the Procedure step could never be used. Each of the nine lists' buttons is found
+    // by the name the served form gives it, and the tool list's is pressed, typed into and saved.
+    const { idp } = await consoleAt(draftAddress(DRAFT_ID, "write"), {
+      [`GET ${DRAFT_API}`]: { body: aDraft() },
+      "GET /api/v1/builder/form": { body: FORM },
+      [`POST ${DRAFT_API}/revisions`]: { body: { revision: 3, state: "draft", problems: [] } },
+    });
+    const names = addWordsIn(FORM);
+    expect(names).toHaveLength(9);
+    for (const name of names) {
+      expect(screen.getByRole("button", { name }).getAttribute("data-slot"), name).toBe("button");
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a tool it may use" }));
+    fireEvent.change(screen.getByLabelText("Tool 1"), { target: { value: "helpdesk.read_ticket" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save tools and permissions" }));
+    await confirmIn(SAVE_QUESTION(TOOLS_SECTION_HEADING), "Save");
+
+    const [sent] = posts(idp);
+    const authority = (sent?.body as { document: Record<string, Record<string, unknown>> }).document["authority"];
+    expect(authority?.["allowed_tools"]).toEqual(["helpdesk.read_ticket"]);
+    // The knowledge section's half of the same object is kept.
+    expect(authority?.["scope"]).toEqual({ clauses: [] });
+  });
+
+  test("on the Write step a missing display name is said in plain words, beside the field, and nothing is sent", async () => {
+    // What breaks if this is deleted: "must have required property 'Display Name'", the validator's
+    // sentence the owner met, or a save sent that the API then refuses. The positive half is the test
+    // above, where the same form saves.
+    const { container, idp } = await consoleAt(draftAddress(DRAFT_ID, "write"), {
+      [`GET ${DRAFT_API}`]: { body: aDraft() },
+      "GET /api/v1/builder/form": { body: FORM },
+    });
+    fireEvent.change(screen.getByLabelText(/^Display name/), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save name and summary" }));
+
+    await waitFor(() => {
+      expect(document.getElementById("identity_identity_display_name__error")?.textContent).toBe("Enter the display name.");
+    });
+    const region = container.querySelector('section[data-section="identity"]') as HTMLElement;
+    expect(within(region).getByText(CHECK_THESE_ANSWERS)).toBeDefined();
+    expect(screen.getByLabelText(/^Display name/).getAttribute("aria-invalid")).toBe("true");
+    expect(container.textContent).not.toMatch(/required property|ManifestIdentity|Display Name|Submit/);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(posts(idp)).toEqual([]);
+  });
+
+  test("on the Procedure step with no tool allowed, the note sends the person to the section and list the Write step has", async () => {
+    // What breaks if this is deleted: the note pointing at "Permissions", which is not a step or a
+    // section anywhere, so a person with no tool allowed had nowhere to go. The words are held to the
+    // served form, so renaming the section there fails here rather than leaving the note stale.
+    const tools = (FORM as { sections: { section: string; title: string; ui: Record<string, Record<string, Record<string, unknown>>> }[] }).sections.find(
+      (one) => one.section === "tools",
+    );
+    expect(tools?.title).toBe(TOOLS_SECTION_HEADING);
+    expect(tools?.ui["authority"]?.["allowed_tools"]?.["ui:title"]).toBe(TOOLS_LIST_LABEL);
+
+    const { container } = await consoleAt(draftAddress(DRAFT_ID, "procedure"), { [`GET ${DRAFT_API}`]: { body: aDraft() } });
+    expect(container.textContent).toContain(NO_TOOLS_TO_DRAW);
+    expect(container.textContent).not.toContain("Permissions first");
+    const link = screen.getByRole("link", { name: OPEN_WRITE_STEP });
+    expect(link.getAttribute("href")).toBe(draftAddress(DRAFT_ID, "write"));
+  });
+
+  test("on the Procedure step each Add button is found by its name, a step is added, and a missing name is said in plain words", async () => {
+    // What breaks if this is deleted: a procedure that cannot be drawn, buttons named in the server's
+    // vocabulary ("Add tool_call"), or a Write button that will not press and says nothing about why.
+    // The sibling at the end is the same form answered, which is confirmed and sent.
+    const { idp } = await consoleAt(draftAddress(DRAFT_ID, "procedure"), {
+      [`GET ${DRAFT_API}`]: { body: aDraft({ drawable_tools: ["helpdesk.read_ticket"] }) },
+      [`POST ${DRAFT_API}/procedure`]: { body: { skill: "---\nname: look-up\n---\n" } },
+    });
+    for (const kind of ADDABLE_KINDS) {
+      expect(screen.getByRole("button", { name: ADD_WORDS[kind] })).toBeDefined();
+    }
+    fireEvent.click(screen.getByRole("button", { name: ADD_WORDS.tool_call }));
+    expect(screen.getByRole("button", { name: "Remove step_1" })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: DRAW_LABEL }));
+    expect(screen.getByText(ENTER_SKILL_NAME)).toBeDefined();
+    expect(screen.getByText(ENTER_WHEN_TO_USE)).toBeDefined();
+    expect(screen.getByLabelText(PROCEDURE_NAME).getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(posts(idp)).toEqual([]);
+
+    fireEvent.change(screen.getByLabelText(PROCEDURE_NAME), { target: { value: "look-up" } });
+    fireEvent.change(screen.getByLabelText(PROCEDURE_DESCRIPTION), { target: { value: "Use when somebody asks." } });
+    expect(screen.queryByText(ENTER_SKILL_NAME)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: DRAW_LABEL }));
+    await confirmIn(DRAW_QUESTION, DRAW_LABEL);
+    const [sent] = posts(idp);
+    expect(sent?.path).toBe(`${DRAFT_API}/procedure`);
+    expect(sent?.body).toMatchObject({ name: "look-up", description: "Use when somebody asks." });
   });
 
   test("a check is confirmed and draws what the API said in its words", async () => {

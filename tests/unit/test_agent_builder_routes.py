@@ -449,7 +449,8 @@ def test_an_incomplete_draft_is_kept_and_its_problems_are_said_in_the_forms_word
 
     assert response.status_code == 200
     assert response.json()["revision"] == 2
-    assert any(one.startswith("Identity, name: ") for one in response.json()["problems"])
+    problems = response.json()["problems"]
+    assert any(one.startswith("Name and summary, display name: ") for one in problems)
 
 
 # ------------------------------------------------------------------------------ checking

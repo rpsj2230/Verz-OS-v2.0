@@ -20,6 +20,7 @@ Task ids: M20.1.2
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,16 @@ import pytest
 from brain.agents.model import DISPLAY_NAME_CHARS, PERSONA_CHARS
 from brain.agents.template import MANIFEST_PATHS, TemplateManifest
 from brain.builder.compose import SECTION_OF_PATH, BuilderError, Section
-from brain.builder.form import form_document, main, section_schema
+from brain.builder.form import (
+    CHOICE_WORDS,
+    FIELD_WORDS,
+    PART_WORDS,
+    SECTION_TITLES,
+    form_document,
+    main,
+    section_schema,
+    section_ui,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 CONSOLE_FIXTURE = REPO / "console" / "tests" / "fixtures" / "manifest-form.json"
@@ -279,3 +289,161 @@ def test_the_document_is_written_to_the_one_path_it_is_given(tmp_path: Path) -> 
     assert json.loads(target.read_text(encoding="utf-8")) == form_document()
     assert b"\r\n" not in target.read_bytes()
     assert main([]) == 2
+
+
+# ------------------------------------------------------------------------ the plain words
+def definitions_reached(document: dict[str, Any]) -> set[str]:
+    """Every definition a section form reaches through a `$ref`, followed to its end."""
+    reached: set[str] = set()
+    for entry in document["sections"]:
+        schema = entry["schema"]
+        waiting = list(references_in(schema["properties"]))
+        while waiting:
+            named = waiting.pop().removeprefix("#/$defs/")
+            if named in reached:
+                continue
+            reached.add(named)
+            waiting.extend(references_in(schema["$defs"][named]))
+    return reached
+
+
+def ui_entries(value: object, key: str) -> Iterator[Any]:
+    """Every value held under one uiSchema key, anywhere in a document."""
+    if isinstance(value, dict):
+        for inner_key, inner in value.items():
+            if inner_key == key:
+                yield inner
+            yield from ui_entries(inner, key)
+    elif isinstance(value, list):
+        for inner in value:
+            yield from ui_entries(inner, key)
+
+
+def test_every_manifest_path_has_plain_words_and_every_entry_names_a_path() -> None:
+    """**M20.1.2.** The labels are keyed by the manifest's own paths, both ways round, so a path
+    the model gains is caught here rather than reaching the Write step under a Python name, and an
+    entry for a path that is gone is not left describing nothing.
+
+    Deleting this lets a new manifest field render as "Allowed Tools" or "SideEffect" again, the
+    wording the owner found on his install on 2026-09-29.
+    """
+    assert set(FIELD_WORDS) == set(MANIFEST_PATHS)
+    for path, words in FIELD_WORDS.items():
+        assert words.title.strip(), path
+
+
+def test_every_part_a_section_reaches_has_words_for_each_of_its_fields() -> None:
+    """**M20.1.2.** A part (a question, a condition, an approval setting) is reached through a
+    `$ref`, so its fields are keyed by the definition rather than by a manifest path. The set is
+    worked out by following the references out of the served document, so a part the model gains
+    is on it without anybody listing it.
+
+    Deleting this lets a field inside a list entry, such as a condition's test, render under its
+    pydantic title.
+    """
+    document = form_document()
+    defs = document["sections"][0]["schema"]["$defs"]
+    expected = {
+        (named, field)
+        for named in definitions_reached(document)
+        if defs[named].get("type") == "object"
+        for field in defs[named].get("properties", {})
+    }
+    assert expected
+    assert set(PART_WORDS) == expected
+
+
+def test_every_choice_a_section_offers_is_named_in_words() -> None:
+    """**M20.1.2.** A choice list is the model's enum, and its values are words like `eq`,
+    `prefix` and `money`. Each one reached is named, and the names are keyed by the enum's own
+    values, so a value the model gains fails here.
+
+    Deleting this puts `eq` and `0` in front of somebody choosing how a condition compares or how
+    much a person is involved.
+    """
+    document = form_document()
+    defs = document["sections"][0]["schema"]["$defs"]
+    enums = {named for named in definitions_reached(document) if "enum" in defs[named]}
+    assert enums
+    assert set(CHOICE_WORDS) == enums
+    for named in enums:
+        assert set(CHOICE_WORDS[named]) == {str(value) for value in defs[named]["enum"]}, named
+
+
+def test_every_list_says_what_its_add_button_adds_and_no_two_lists_say_the_same() -> None:
+    """**M20.1.2.** Every Add button on the Write step is found by its words, by a person and by
+    a screen reader, so every list carries its own. Two lists with one label would be two buttons
+    nobody could tell apart: the tools it may use and the tools it cannot work without are the
+    pair that would collide.
+
+    Deleting this lets a list reach the form with no words for its button, which the console then
+    has to invent, or with the same words as its neighbour.
+    """
+    lists = [words for words in FIELD_WORDS.values() if words.add]
+    lists += [words for words in PART_WORDS.values() if words.add]
+    adds = [words.add for words in lists]
+    assert len(adds) == len(set(adds))
+    for words in lists:
+        assert words.item, words.title
+    options = list(ui_entries(form_document(), "ui:options"))
+    assert options
+    for one in options:
+        assert one["addLabel"].startswith("Add "), one
+        assert one["orderable"] is False
+
+
+def test_no_heading_or_label_on_the_form_is_a_name_from_the_code() -> None:
+    """**M20.1.2.** The positive half of the table: what is served is words. No label is a model's
+    class name, and none is written like an identifier, with an underscore or a capital in the
+    middle of a word. Every section carries a heading, and it is the one `where` names a draft's
+    problems under.
+
+    Deleting this lets "ManifestIdentity" back onto the Write step, as a heading over the name.
+    """
+    document = form_document()
+    defs = set(document["sections"][0]["schema"]["$defs"])
+    titles = list(ui_entries(document, "ui:title")) + [
+        entry["title"] for entry in document["sections"]
+    ]
+    assert "Display name" in titles
+    for title in titles:
+        assert title not in defs, title
+        assert "_" not in title, title
+        assert re.search(r"[a-z][A-Z]", title) is None, title
+    assert [entry["title"] for entry in document["sections"]] == [
+        SECTION_TITLES[one] for one in Section
+    ]
+
+
+def test_a_holder_draws_no_heading_of_its_own_and_its_fields_carry_their_paths_words() -> None:
+    """**M20.1.2.** `identity`, `authority` and `guardrails` are how the manifest nests, not
+    something a person thinks in, so each is drawn without a heading and its fields sit under the
+    section's. Their words are the dotted paths', which is how a field in a holder is found.
+
+    Deleting this lets the model's class name back in as a heading, or lets a holder's field lose
+    its label because it was looked up by its bare name.
+    """
+    form = section_schema(Section.IDENTITY)
+    ui = section_ui(Section.IDENTITY, form)
+
+    assert ui["identity"]["ui:label"] is False
+    assert ui["identity"]["display_name"]["ui:title"] == FIELD_WORDS["identity.display_name"].title
+    assert set(ui["identity"]) - {"ui:label"} == set(form["properties"]["identity"]["properties"])
+
+
+def test_a_part_field_the_model_gains_still_renders_under_its_own_title() -> None:
+    """**M20.1.2.** The words are a table, and a field the table has not heard of must still be a
+    field on the form rather than a failure of the whole form: it gets no words, so the console
+    labels it with the schema's title until the tests above ask for its entry.
+
+    Deleting this lets a missing entry take the Write step down for every draft.
+    """
+    changed = manifest()
+    changed["$defs"]["Placeholder"]["properties"]["hint"] = {"type": "string", "title": "Hint"}
+
+    form = section_schema(Section.PERSONA, changed)
+    ui = section_ui(Section.PERSONA, form)
+
+    assert ui["placeholders"]["items"]["hint"] == {}
+    key = PART_WORDS[("Placeholder", "key")]
+    assert ui["placeholders"]["items"]["key"]["ui:title"] == key.title

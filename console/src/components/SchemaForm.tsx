@@ -7,8 +7,8 @@
  * person has to be a property of the assembly. `formSchema.ts` holds those properties and
  * this renders what it decided; the argument for the split, and for each rule, is there.
  *
- * **A withheld field renders `ui/Lock.tsx` through `WithheldField` below, and the field is
- * replaced whole.** Not the widget: replacing only the widget leaves the library's field
+ * **A withheld field renders `ui/Lock.tsx` through `WithheldField` (`kit/formTemplates.tsx`), and
+ * the field is replaced whole.** Not the widget: replacing only the widget leaves the library's field
  * template wrapped around it, and that template is where a description, a help block, an
  * error slot and an `aria-describedby` come from. Each of those is a place the reason a
  * field was withheld could be shown beside the lock by somebody being helpful, and the
@@ -21,14 +21,21 @@
  * all. A read-only input renders the value. The lock renders no value because it is given
  * none.
  *
- * **Rejected: a theme package.** `@rjsf/core` is the plain-HTML theme and emits `.rjsf-field`,
- * `.control-label` and `.form-control`, which `styles/app.css` paints from tokens. A
- * Bootstrap, MUI or Ant theme would bring a second design system with its own palette, its
- * own dark-mode story and its own opinion about what a validation error looks like, and this
- * console's whole theme is one file of tokens. The two templates overridden below are the
- * ones whose default markup carries an opinion this console does not share: the submit button
- * is styled `btn btn-info`, and the error list is a red panel, which is a severity variant of
- * the thing `ui/Notice.tsx` has exactly one of.
+ * **Rejected: a theme package.** A Bootstrap, MUI, Ant or shadcn theme for the library would
+ * bring a second design system with its own palette, its own dark-mode story and its own opinion
+ * about what a validation error looks like, and this console's whole theme is one file of tokens.
+ * The library is handed the kit instead: `components/kit/formTemplates.tsx` draws every field,
+ * list, choice and button from the kit's own parts. **The library's plain-HTML theme is not good
+ * enough to leave in place, and that was learned on an install.** Its list buttons are Bootstrap 3
+ * markup (`btn btn-info btn-add` around an empty glyph icon) that the kit's reset draws at 0 by 0
+ * pixels, so on 2026-09-29 the owner could not add a single item to any list on the agent builder.
+ * The error list stays here, below, because which sentences it lists is about what the API and
+ * this screen said rather than about how a control looks.
+ *
+ * **Every sentence the library would have said is this console's.** ajv's messages ("must have
+ * required property 'Display Name'") are rewritten from their keywords by `formWords.plainErrors`
+ * into what to do ("Enter the display name."), and the library's own strings ("Submit", "Add
+ * Item") by `formWords.libraryWords`. A form whose caller names no submit words says Save.
  *
  * **The validator compiles schemas with `new Function`, so it needs `unsafe-eval`.** That is
  * `@rjsf/validator-ajv8` reaching ajv, at `ajv/dist/compile/index.js:89`, and it is a real
@@ -56,26 +63,24 @@
  * rather than the library's, whose markup carries a `text-danger` class that is a severity
  * variant of the thing `ui/Notice.tsx` has exactly one of.
  *
- * Task ids: M32.5.2.2, M27.8.5
+ * Task ids: M32.5.2.2, M27.8.5, M20.1.2
  */
 
 import Form from "@rjsf/core";
-import { errorId, getSubmitButtonOptions } from "@rjsf/utils";
 import type {
   ErrorListProps,
-  FieldErrorProps,
-  FieldProps,
   RegistryFieldsType,
   RJSFSchema,
-  SubmitButtonProps,
+  RJSFValidationError,
   UiSchema,
 } from "@rjsf/utils";
 import validator from "@rjsf/validator-ajv8";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ApiFailure, FieldProblem } from "../api/errors";
-import { Lock } from "../ui/Lock";
 import { Notice } from "../ui/Notice";
 import { formShape, LOCK_FIELD, problemsOnFields, withoutWithheld } from "./formSchema";
+import { libraryWords, plainErrors } from "./formWords";
+import { FieldErrors, KIT_TEMPLATES, KIT_WIDGETS, WithheldField } from "./kit/formTemplates";
 import { FailureNotice } from "../ui/FailureNotice";
 
 /** The one heading over any failure a form reports. The API's own sentence goes underneath. */
@@ -85,58 +90,12 @@ export const SOMETHING_DID_NOT_WORK = "That did not work";
 export const CHECK_THESE_ANSWERS = "Check these answers";
 
 /**
- * A field this caller may not see.
- *
- * It renders the property's own title, which the API disclosed by sending the property, and
- * the lock, which says the same thing to everybody. It takes the whole `FieldProps` object
- * because that is the library's signature and reads two things out of it, neither of which is
- * a value: `Lock` is called with nothing, in the shape `render_lock` has on the Python side.
- *
- * The title is a `span` rather than a `label`. A label with no control is a label pointing at
- * nothing, and giving it a control to point at is the disabled input this file exists to
- * refuse.
- */
-function WithheldField({ schema, name }: FieldProps) {
-  const title = typeof schema.title === "string" && schema.title !== "" ? schema.title : name;
-  return (
-    <div className="rjsf-field form-group">
-      <span className="control-label">{title}</span>
-      <div className="form-withheld">
-        <Lock />
-      </div>
-    </div>
-  );
-}
-
-/**
  * The fields this console registers. Exactly one, and it is the lock.
  *
  * Declared at module level rather than inside the component, so the object identity is stable
  * across renders and the library is not handed a new registry every time a key is pressed.
  */
 const FIELDS: RegistryFieldsType = { [LOCK_FIELD]: WithheldField };
-
-/**
- * The submit button, in the console's own button style rather than the library's.
- *
- * The library's own version renders `btn btn-info`, which is a Bootstrap 3 class this project
- * has no stylesheet for, and it also spreads a caller-supplied props object onto the button.
- * That object can carry a `className` and a `style`, which is a route from a payload to a
- * colour on the screen, so it is read for its text and for nothing else.
- */
-function SubmitButton({ uiSchema }: SubmitButtonProps) {
-  const { submitText, norender } = getSubmitButtonOptions(uiSchema);
-  if (norender) {
-    return null;
-  }
-  return (
-    <div className="form-actions">
-      <button type="submit" className="button">
-        {submitText}
-      </button>
-    </div>
-  );
-}
 
 /**
  * The form's own validation messages, in the one notice this console has.
@@ -167,26 +126,6 @@ function ErrorList({ errors, registry }: ErrorListProps) {
   );
 }
 
-/**
- * The sentences under one field, in the one plain list every problem in this console is drawn as.
- *
- * The id is the library's own `errorId`, which is the id each widget's `aria-describedby` already
- * names, so a screen reader reads the sentence with the input without anything else wiring it.
- */
-function FieldErrors({ errors = [], fieldPathId }: FieldErrorProps) {
-  const shown = errors.filter((one) => one !== "");
-  if (shown.length === 0) {
-    return null;
-  }
-  return (
-    <ul id={errorId(fieldPathId)} className="field-description field-problems">
-      {shown.map((one, at) => (
-        <li key={at}>{one}</li>
-      ))}
-    </ul>
-  );
-}
-
 /** What this console passes the library as `formContext`: the API's problems, and nothing else. */
 interface Context {
   readonly apiProblems: readonly FieldProblem[];
@@ -200,7 +139,7 @@ function apiProblemsOf(context: unknown): readonly FieldProblem[] {
 }
 
 const TEMPLATES = {
-  ButtonTemplates: { SubmitButton },
+  ...KIT_TEMPLATES,
   ErrorListTemplate: ErrorList,
   FieldErrorTemplate: FieldErrors,
 };
@@ -208,8 +147,11 @@ const TEMPLATES = {
 const NO_PROBLEMS: readonly FieldProblem[] = Object.freeze([]);
 
 interface SchemaFormProps {
-  /** What the form is, for a screen reader and for anybody reading it. */
-  readonly caption: string;
+  /**
+   * What the form is, for a screen reader and for anybody reading it. Left out where a heading
+   * over the form already says it, as each section of the builder's form does.
+   */
+  readonly caption?: string;
   /** The schema, as the API sent it. Never assembled here. */
   readonly schema: RJSFSchema;
   /** Presentation hints from the caller. Locked fields are added to this, never taken from it. */
@@ -260,6 +202,11 @@ export function SchemaForm({
   const placed = useMemo(() => problemsOnFields(shape, problems), [shape, problems]);
   const context = useMemo<Context>(() => ({ apiProblems: problems }), [problems]);
   const form = useRef<HTMLDivElement | null>(null);
+  // The validator's sentences, rewritten against this form's own schema and words.
+  const plain = useCallback(
+    (errors: RJSFValidationError[], ui?: UiSchema) => plainErrors(errors, ui, shape.schema),
+    [shape.schema],
+  );
 
   useEffect(() => {
     // `aria-invalid` on each control whose described-by list names a drawn problem. The core
@@ -283,7 +230,7 @@ export function SchemaForm({
 
   return (
     <div className="form" ref={form}>
-      <p className="form__caption">{caption}</p>
+      {caption === undefined ? null : <p className="form__caption">{caption}</p>}
 
       <Form
         idPrefix={idPrefix}
@@ -293,6 +240,9 @@ export function SchemaForm({
         validator={validator}
         fields={FIELDS}
         templates={TEMPLATES}
+        widgets={KIT_WIDGETS}
+        transformErrors={plain}
+        translateString={libraryWords}
         extraErrors={placed.errors}
         formContext={context}
         disabled={busy}
