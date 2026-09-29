@@ -1,11 +1,11 @@
 """A connected Slack workspace on Ask: the asker's own channels, read live for each question.
 
-`brain.connectors.slack` holds every rule about reading Slack; this is the application's half.
-For each question it finds the asker's Slack account from the index by the digest of their
+`brain.connectors.slack_messages` holds every rule about reading Slack; this is the application's
+half. For each question it finds the asker's Slack account from the index by the digest of their
 verified work email, asks Slack which of the app's channels that account is in, reads those
 channels' recent messages, and hands the messages that hold the question's words to the answer
 lane's model step as passages, told to the asker alone. See
-`brain.connectors.slack.MEMBERSHIP_IS_ASKED_OF_SLACK_FOR_EVERY_QUESTION`.
+`brain.connectors.slack_messages.MEMBERSHIP_IS_ASKED_OF_SLACK_FOR_EVERY_QUESTION`.
 
 **Nothing is kept.** The messages are passages for one question: not written to a table, not
 embedded, not logged. The index it reads holds channel names and email digests, never a message.
@@ -14,7 +14,7 @@ embedded, not logged. The index it reads holds channel names and email digests, 
 department the connection answers to, which the connection's data steward grants, and must have an
 email binding whose digest matches a Slack member; either missing is answered with no passage and
 no call, which is what an asker is told when Slack holds nothing on the subject. See
-`brain.connectors.slack.A_CHANNEL_THE_ASKER_IS_NOT_IN_IS_NOT_THERE_FOR_THEM`.
+`brain.connectors.slack_messages.A_CHANNEL_THE_ASKER_IS_NOT_IN_IS_NOT_THERE_FOR_THEM`.
 
 **A passage is personal to its asker.** It is tagged with the asker as its owner at the personal
 level, so the passage policy tells it to the person whose membership admitted it and to nobody
@@ -35,7 +35,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.connectors import slack
+from brain.connectors import slack_messages as slack
 from brain.connectors.rest import MAX_RESPONSE_BYTES, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.core.entitlement import Capability

@@ -49,10 +49,14 @@ IDENTIFIERS: Final = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "slack_messages": "T0123ABCD",
 }
 
 #: The settings after the first, for a source whose form asks for more than one.
-FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {"freshdesk": {"department": "support"}}
+FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
+    "freshdesk": {"department": "support"},
+    "slack_messages": {"department": "operations"},
+}
 
 #: A source's key that carries no scopes, and the kind of key its slot row asks for and refuses.
 #: A Freshdesk key is an agent's and can do whatever that agent can.
@@ -120,7 +124,8 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
         if line.startswith(f"| `connectors/creds/{name}`")
     )
     requested, refused = row.split("|")[3], row.split("|")[4]
-    scopes = re.findall(r"`([a-z.]+)`", requested)
+    # A colon too, as Slack names its scopes (`channels:read`).
+    scopes = re.findall(r"`([a-z.:]+)`", requested)
     hint = CONNECTABLE[name].credential_hint
 
     if name in KEY_KIND_WITHOUT_SCOPES:

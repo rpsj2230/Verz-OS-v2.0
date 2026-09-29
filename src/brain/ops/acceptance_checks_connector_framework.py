@@ -174,6 +174,10 @@ FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
             "department": RESERVED_DEPARTMENTS[0],
         },
         "hubspot": lambda: {"portal_id": str(10**8 + secrets.randbelow(9 * 10**8))},
+        "slack_messages": lambda: {
+            "workspace": f"T{secrets.token_hex(5).upper()}",
+            "department": RESERVED_DEPARTMENTS[0],
+        },
         SOURCE: _settings,
     }
 )

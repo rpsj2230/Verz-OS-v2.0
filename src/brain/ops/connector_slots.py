@@ -125,6 +125,18 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
                 refuse=("docs:document edit scopes",),
             ),
             SlotScopes(
+                "slack_messages",
+                request=(
+                    "channels:read",
+                    "groups:read",
+                    "channels:history",
+                    "groups:history",
+                    "users:read",
+                    "users:read.email",
+                ),
+                refuse=("chat:write or any other write scope", "a user token"),
+            ),
+            SlotScopes(
                 STAFF_LIST,
                 request=(
                     "read on the staff directory only",

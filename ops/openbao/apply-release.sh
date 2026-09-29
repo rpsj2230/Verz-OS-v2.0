@@ -120,6 +120,12 @@ if ! slot_ok lark_wiki 'map[not_requested:docs:document edit scopes scopes:wiki:
   fi
   slot_ok lark_wiki 'map[not_requested:docs:document edit scopes scopes:wiki:wiki:readonly]' || missing "the credential slot for lark_wiki"
 fi
+if ! slot_ok slack_messages 'map[not_requested:chat:write or any other write scope; a user token scopes:channels:read; groups:read; channels:history; groups:history; users:read; users:read.email]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=channels:read; groups:read; channels:history; groups:history; users:read; users:read.email' -custom-metadata='not_requested=chat:write or any other write scope; a user token' slack_messages >/dev/null || fail "the vault would not define the credential slot for slack_messages"
+  fi
+  slot_ok slack_messages 'map[not_requested:chat:write or any other write scope; a user token scopes:channels:read; groups:read; channels:history; groups:history; users:read; users:read.email]' || missing "the credential slot for slack_messages"
+fi
 if ! slot_ok staff_source 'map[not_requested:any write; for LDAP an administrator or an account that may reset passwords or groups scopes:read on the staff directory only; for LDAP a service account that may bind and search and nothing more]'; then
   if test "$CHECK_ONLY" = no; then
     bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=read on the staff directory only; for LDAP a service account that may bind and search and nothing more' -custom-metadata='not_requested=any write; for LDAP an administrator or an account that may reset passwords or groups' staff_source >/dev/null || fail "the vault would not define the credential slot for staff_source"
@@ -140,4 +146,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, the connector-run token role and 8 credential slots"
+say "in force: 4 engines, $POLICIES policies, the connector-run token role and 9 credential slots"

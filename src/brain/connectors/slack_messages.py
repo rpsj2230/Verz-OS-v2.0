@@ -29,6 +29,11 @@ channels, their history and members; a channel the app was not invited to is not
 it is neither indexed nor read. The connection names the workspace it reads and the department
 whose people may be told what it holds.
 
+**This is Slack read as a source, and not the Slack channel.** `brain.channels.slack` answers a
+question asked in Slack; this module reads what was said there to answer a question asked
+anywhere. They are separate apps with separate tokens and scopes, so the name is
+`slack_messages`, as Lark's sources are `lark_base` and `lark_wiki` beside the `lark` channel.
+
 Rejected: Slack's own search (`search.messages`). It needs a user token, which is one person's
 whole account, and it searches as that person; a company-wide bot token has no search at all.
 Rejected: indexing messages and filtering by membership at question time. It is a bulk sync of
@@ -104,7 +109,7 @@ A_CHANNEL_THE_ASKER_IS_NOT_IN_IS_NOT_THERE_FOR_THEM: Final = (
 )
 
 # ------------------------------------------------------------------------ the figures
-CONNECTOR_NAME: Final = "slack"
+CONNECTOR_NAME: Final = "slack_messages"
 #: The entity kinds, named for Slack so their capabilities (`read:slack_message`) cannot be read as
 #: another surface's: `read:member.*` is the whole member surface of the console.
 CHANNEL: Final = "slack_channel"
@@ -351,7 +356,12 @@ class SlackReading:
         call = classify(status=status)
         if call is not CallOutcome.OK:
             return PageReply(call=call, rows=None)
-        answered(body)
+        try:
+            answered(body)
+        except SlackError:
+            # Slack answers a revoked token or a missing scope with 200 and ok false: a refusal,
+            # which the worker reads as one, and never a workspace with nothing in it.
+            return PageReply(call=CallOutcome.REJECTED, rows=None)
         return PageReply(call=call, rows=operation.records(body, fetched_at=fetched_at))
 
     def retry_after(self, headers: Mapping[str, str]) -> float | None:
@@ -410,7 +420,7 @@ def manifest(connection: SlackConnection, *, ref: SecretRef) -> ConnectorManifes
         credential=CredentialBinding(ref=ref, mode=AccessMode.READ_ONLY),
         tools=(
             ToolDeclaration(
-                name="slack.find_messages",
+                name="slack_messages.find_messages",
                 description=(
                     "Find messages on a subject in the Slack channels the asker is a member of, "
                     "read live from Slack for this question."
@@ -593,6 +603,8 @@ CONNECTOR: Final = ConnectorDeclaration(
         recorded=(
             "SLACK-200-channels",
             "SLACK-200-members",
+            "SLACK-200-membership",
+            "SLACK-200-history",
             "SLACK-200-not-ok",
             "SLACK-429",
             "SLACK-503",

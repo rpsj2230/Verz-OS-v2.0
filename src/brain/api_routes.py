@@ -231,10 +231,16 @@ from brain.ops.limits import (
     retry_after_header,
     retry_hint,
 )
-from brain.ops.live_read_run import base_schema_for, live_records_for, wiki_passages_for
+from brain.ops.live_read_run import (
+    base_schema_for,
+    live_records_for,
+    slack_passages_for,
+    wiki_passages_for,
+)
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
+from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
@@ -1136,6 +1142,10 @@ def model_lane_of(state: Any) -> ModelLane | None:
     )
     if wiki is not None:
         search = WithWiki(search, wiki)
+    # And a connected Slack workspace, the asker's own channels read live (M11.7.5).
+    slack = slack_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if slack is not None:
+        search = Alongside(search, slack)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 

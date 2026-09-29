@@ -33,6 +33,7 @@ from brain.connectors import (
     laravel,
     lark_base,
     lark_wiki,
+    slack_messages,
     throttle,
     write_verification,
     xero,
@@ -252,6 +253,14 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_drive", "DRIVE-403-user-rate-limit"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-429"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-401"): Verification.INCONCLUSIVE,
+    # Every Slack list is a listing; ok false inside a 200 is a refusal and proves nothing.
+    ("slack_messages", "SLACK-200-channels"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-members"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-membership"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-history"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-not-ok"): Verification.INCONCLUSIVE,
+    ("slack_messages", "SLACK-429"): Verification.INCONCLUSIVE,
+    ("slack_messages", "SLACK-503"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
@@ -307,6 +316,11 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             return lark_base_answer(lark_reply(recorded.cid))
         case "lark_wiki":
             return lark_wiki_answer(wiki_reply(recorded.cid))
+        case "slack_messages":
+            from tests.fixtures.cassettes.slack_messages import operation_of
+
+            said = slack_messages.Reply(status=recorded.status, body=recorded.body)
+            return verdict(reading("slack_messages")(operation_of(recorded), said))
     msg = f"no way to drive {connector!r} from a recording is written in this test"
     raise AssertionError(msg)
 

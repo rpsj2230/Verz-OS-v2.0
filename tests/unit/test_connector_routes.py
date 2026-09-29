@@ -148,10 +148,14 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "slack_messages": "T0123ABCD",
 }
 
-#: The settings after the first that a source asks for, for the one source that asks for two.
-FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {"freshdesk": {"department": "support"}}
+#: The settings after the first that a source asks for, for the sources that ask for more than one.
+FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
+    "freshdesk": {"department": "support"},
+    "slack_messages": {"department": "operations"},
+}
 
 
 def _grant(capability: Any, scope: Scope) -> Grant:
@@ -723,6 +727,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "xero": True,
         "hubspot": False,
         "freshdesk": False,
+        "slack_messages": False,
     }
 
 

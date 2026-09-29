@@ -231,6 +231,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_lark_wiki"] == [
         "a_lark_wiki_page_is_told_only_to_a_reader_its_space_admits",
     ]
+    # A connected Slack workspace on Ask; `tests/unit/test_acceptance_slack.py`.
+    assert by_module["brain.ops.acceptance_checks_slack"] == [
+        "a_slack_message_is_read_only_for_a_member_of_its_channel",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
@@ -737,9 +741,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 60
+    assert len(outcomes) == 61
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 188
+    assert runs == [(2,)] and len(recorded) == 190
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
