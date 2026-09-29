@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T18:05:27.931246+00:00",
-  "commit": "969ce216",
-  "commit_subject": "The acceptance suite's totals are derived from the registered checks, so parallel packages stop colliding in one test (#224)",
+  "generated_at": "2026-09-29T18:06:47.446552+00:00",
+  "commit": "40b98dde",
+  "commit_subject": "Two owner decisions, measured: memory on the server ranked across every service waiting for it, and how large an upload may be (#264)",
   "total": 1576,
   "done": 469,
   "percent": 29.8,
@@ -43,8 +43,8 @@
       "percent": 44.2,
       "in_progress": 13,
       "ready_for_testing": 2,
-      "blocked": 2,
-      "open": 131,
+      "blocked": 17,
+      "open": 116,
       "acts": 0,
       "decided": 20
     },
@@ -1000,6 +1000,41 @@
       "why": "moved to Wave 5 (needs-rupash 113): Anthropic and Moonshot answer on the install; OpenAI and DeepSeek are turned off until their accounts are funded",
       "updated": "2026-09-29"
     },
+    "M7.2.1": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.2.3": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.2.4": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.2.6": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.3.3": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.3.4": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.3.5": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
     "M7.6.1": {
       "status": "IN PROGRESS",
       "why": "a kind is set at upload and filters the library and the search tool (PR #106); Ask has no kind picker yet",
@@ -1014,6 +1049,26 @@
       "status": "IN PROGRESS",
       "why": "price lists uploaded on Classification convert (K6, merged c0552331); no upload path yet offers a price-list document for conversion",
       "updated": "2026-09-28"
+    },
+    "M7.7.8": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.7.9": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.7.10": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+      "updated": "2026-09-29"
+    },
+    "M7.7.11": {
+      "status": "BLOCKED",
+      "why": "waits on the owner's choice of upload limit, which sizes the model server; the model server reads 64 MB a document as sized (needs-rupash 119)",
+      "updated": "2026-09-29"
     },
     "M8.2.4": {
       "status": "IN PROGRESS",
@@ -1084,6 +1139,26 @@
       "status": "READY FOR TESTING",
       "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
       "updated": "2026-09-21"
+    },
+    "M32.1.1.1": {
+      "status": "BLOCKED",
+      "why": "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+      "updated": "2026-09-30"
+    },
+    "M32.1.1.2": {
+      "status": "BLOCKED",
+      "why": "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+      "updated": "2026-09-30"
+    },
+    "M32.2.1.1": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the personal-data detector: 1,536 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 1)",
+      "updated": "2026-09-30"
+    },
+    "M32.2.1.2": {
+      "status": "BLOCKED",
+      "why": "waits on memory for the model server that serves GLiNER: 3,840 MB wanted with its worker and file store, 248 MB unclaimed, measured 2026-09-30 (needs-rupash 120, row 2)",
+      "updated": "2026-09-30"
     },
     "M38.2.2.3": {
       "status": "IN PROGRESS",
