@@ -2,54 +2,10 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**3 items are open: 116 and 118,** two decisions about Lark Base visibility and sending approval cards,
-each with my recommendation, **and 91,** the checks only you can do on your install; it waits for the
-Knowledge upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and
-every step.
+**1 item is open: 91,** the checks only you can do on your install; it waits for the Knowledge
+upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
-
-## 118. Should an approval card reach the approver in Lark as soon as it is raised?
-
-**In plain terms:** when an agent asks for an approval, the approver in Lark does not hear about it
-until they write "approve" to the Brain's bot, and only then does the card appear. The Brain cannot
-send them the card first, because it deliberately keeps only a fingerprint of each person's Lark
-identity, not an address it could send to. The console's Needs-you list shows every waiting approval
-either way.
-
-**Option A: keep it as it is.** Approvers ask the bot, or look in the console. Nothing about anybody's
-Lark account is stored.
-
-**Option B: keep each linked person's Lark address, so the card is sent the moment the approval is
-raised.** Needs one database change. The Brain then holds one Lark identifier per linked person; it is
-treated as personal data, so it is removed when the person is erased, and it is never shown on a
-screen.
-
-**My recommendation: B.** An approval nobody is told about waits until somebody thinks to look, and an
-agent held at an approval is an agent doing nothing. The address is the least the Brain can hold to
-send a card, and B is also the first step towards signing in with Lark (item 115, option A).
-
-**What I need from you:** reply "118: B" or "118: A". Nothing is built for this until you do.
-
-## 116. Who may see the records in a Lark Base?
-
-**In plain terms:** the Lark Base connector reads your Base tables so the Brain can answer questions
-from them. Somebody has to decide which people may see which table's records through the Brain.
-
-**Option A: the Brain decides, table by table.** An administrator or data steward grants a department
-or a person access to each table on the Brain's own screens, exactly as for every other source. Works
-today and works the same for every company. The cost: a table shared with only a few people in Lark
-could be granted more widely in the Brain, by a person, on purpose, with the grant recorded.
-
-**Option B: follow Lark's own sharing.** A person sees a table's records through the Brain only if
-Lark shares that table with them. Needs every Brain user linked to their Lark account (item 115) and a
-permission check with Lark for each person at question time, so it cannot be built before 115 is
-answered.
-
-**My recommendation: A now, B later** as an option an administrator switches on per connection, once
-people are linked to their Lark accounts.
-
-**What I need from you:** reply "116: A now, B later", or tell me otherwise.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
@@ -99,6 +55,38 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 118. An approval card reaches the approver in Lark as soon as it is raised - DECIDED 2026-09-29: B
+
+**In plain terms:** the approver in Lark used to see a card only after writing "approve" to the
+Brain's bot, because the Brain kept only a fingerprint of each person's Lark identity and no address
+it could send to. **Your answer, 2026-09-29:** "B: store each linked person's Lark address so the
+card can be sent straight away."
+
+What is being built:
+
+1. **Each linked person's Lark address is kept** beside the fingerprint, treated as personal data:
+   removed when the person is erased, never shown on a screen.
+2. **The card is sent to the approver the moment the approval is raised**, in their own Lark chat.
+   Whether pressing it decides the approval is item 117's setting.
+3. The same stored address is what signing in with Lark (item 115, option A) will use later.
+
+**What you do:** nothing.
+
+## 116. Who may see the records in a Lark Base - DECIDED 2026-09-29: the Brain's own roles and permissions
+
+**In plain terms:** the Lark Base connector reads your Base tables so the Brain can answer from them,
+and somebody has to decide who may see which table's records. **Your answer, 2026-09-29:** "It should
+be based on Roles & permission that we have in the brain system in Backend Console."
+
+What that means: **option A.** A Base table is governed exactly like every other source. An
+administrator or data steward grants a department or a person access to a table, and to its columns,
+on the Brain's own screens, and every grant is recorded. Lark's own sharing is not consulted, so the
+answer never depends on how a table happens to be shared in Lark. Nobody sees a Base table's records
+until they are granted.
+
+**What you do:** after the Lark Base connection is live, grant each table on the console as you do any
+other source. I will tell you when it is ready and where.
 
 ## 115. How the people on your Lark staff list become Brain users - DECIDED 2026-09-29: B now, A next
 
