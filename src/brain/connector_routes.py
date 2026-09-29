@@ -89,6 +89,7 @@ configuration. The identifiers arrive from the person connecting the source, and
 install's database.
 
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
+Task ids: M11.8.7
 """
 
 from __future__ import annotations
@@ -97,6 +98,7 @@ import asyncio
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from types import MappingProxyType
 from typing import Annotated, Final
 
 import structlog
@@ -115,7 +117,7 @@ from brain.agent_routes import (
 )
 from brain.agents.model import visible_agent_ids
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute, Page
-from brain.api_routes import Asked, Asking
+from brain.api_routes import Asked, Asking, fields_gone_of
 from brain.audit.record import ConnectorChange
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import shipped
@@ -226,6 +228,7 @@ from brain.ops.credentials import (
     connector_key_slot,
 )
 from brain.ops.lark_connect import uses_switched_on
+from brain.ops.schema_drift import in_words
 from brain.routing_routes import sessions_of
 from brain.skill_routes import SkillLibrary
 
@@ -718,6 +721,10 @@ class ConnectorSourceView(BaseModel):
     skills: list[ConnectorSkillView]
     confirm_edit: str
     confirm_key: str
+    #: What the nightly schema check found this source no longer answers, one sentence per kind
+    #: of record (M11.8.7). Empty when nothing is gone, and for a source this reader may not be
+    #: told is connected.
+    no_longer_answers: list[str] = []
 
 
 class ConnectorExportedConnectionView(BaseModel):
@@ -1258,6 +1265,8 @@ class _Source:
     manifest: ConnectorManifest | None
     history: tuple[ConnectionRecord, ...]
     told_of: bool
+    #: What the nightly schema check found gone, by kind of record, for an admitted connection.
+    gone: Mapping[str, tuple[str, ...]] = MappingProxyType({})
 
 
 async def _one_source(request: Request, connector: str, asked: Asking) -> _Source:
@@ -1276,6 +1285,8 @@ async def _one_source(request: Request, connector: str, asked: Asking) -> _Sourc
     manifest = manifest_or_none(live)
     sync = sync_records_of(request)
     synced: Mapping[str, SyncState] = {} if sync is None or live is None else await sync.states()
+    found = {} if live is None else await fields_gone_of(request.app.state)
+    gone = {entity: fields for (source, entity), fields in found.items() if source == connector}
     [row] = [
         one
         for one in source_rows(
@@ -1285,13 +1296,21 @@ async def _one_source(request: Request, connector: str, asked: Asking) -> _Sourc
             manifests={} if manifest is None else {connector: manifest},
             reader=asked.reach,
             now=asked.now,
+            changed={connector} if gone else (),
         )
         if one.name == connector
     ]
     told_of = may_be_told_of(connector, asked.reach, asked.now)
     changes = changes_of(request)
     history = await changes.history(connector) if told_of and changes is not None else ()
-    return _Source(row=row, live=live, manifest=manifest, history=history, told_of=told_of)
+    return _Source(
+        row=row,
+        live=live,
+        manifest=manifest,
+        history=history,
+        told_of=told_of,
+        gone=MappingProxyType(gone),
+    )
 
 
 async def _people(request: Request, principal_ids: Collection[str]) -> dict[str, str]:
@@ -1383,6 +1402,7 @@ async def connector_sources(
     manifests = {
         one.connector: built for one in admitted if (built := manifest_or_none(one)) is not None
     }
+    found = {} if not admitted else await fields_gone_of(request.app.state)
     rows = source_rows(
         connections=admitted,
         synced=synced,
@@ -1390,6 +1410,7 @@ async def connector_sources(
         manifests=manifests,
         reader=asked.reach,
         now=asked.now,
+        changed={source for source, _ in found},
     )
     page = plan.page([row_view(one) for one in rows])
     return ConnectorSourcesPage(items=list(page.items), next_cursor=page.next_cursor)
@@ -1431,6 +1452,7 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
         skills=await _skills_from(request, connector, asked) if one.told_of else [],
         confirm_edit=EDITING_A_SOURCE,
         confirm_key=REPLACING_A_KEY,
+        no_longer_answers=[in_words(entity, fields) for entity, fields in sorted(one.gone.items())],
     )
 
 

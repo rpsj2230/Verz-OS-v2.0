@@ -68,6 +68,7 @@ from brain.tables.classified_table import ClassifiedRecordRow, ClassifiedTableRo
 from brain.tables.compliance import BreachCaseRow, SensitiveReferralRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
+from brain.tables.connector_schema import ConnectorSchemaCheckRow
 from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
@@ -409,6 +410,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    # 0168_connector_schema_check. Points at nothing: a finding names its connection by value, as
+    # an attempt in `ops.connector_sync` does, because a connection is never removed.
+    "ops.connector_schema_check",
 )
 
 __all__ = [
@@ -444,6 +448,7 @@ __all__ = [
     "ClassifiedRecordRow",
     "ClassifiedTableRow",
     "ConnectorConnectionRow",
+    "ConnectorSchemaCheckRow",
     "ConnectorSyncRow",
     "ControlRunRow",
     "ConversationRow",

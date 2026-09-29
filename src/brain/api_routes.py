@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.7
 """
 
 from __future__ import annotations
@@ -151,6 +151,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
@@ -226,6 +227,7 @@ from brain.ops.limits import (
 from brain.ops.live_read_run import live_records_for
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
+from brain.ops.schema_drift_store import fields_gone
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
@@ -1024,6 +1026,27 @@ def live_records_of(state: Any) -> LiveRecords | None:
     return built
 
 
+async def fields_gone_of(state: Any) -> Mapping[tuple[str, str], tuple[str, ...]]:
+    """What the nightly schema check found each connected source no longer answers (M11.8.7).
+
+    `app.state.fields_gone` when a test put a mapping there, and otherwise read from this process's
+    database for each question, so a finding the worker wrote in the night reaches the next question
+    with nothing restarted. Empty on a process with no database, and on a read that failed: the
+    findings are a reason to say less, and a failure to read them must not fail the question.
+    """
+    found = getattr(state, "fields_gone", None)
+    if isinstance(found, Mapping):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return {}
+    try:
+        return await fields_gone(sessions)
+    except SQLAlchemyError:
+        log.warning("answer.fields_gone_unread")
+        return {}
+
+
 def passage_search_for(registry: ToolRegistry) -> DocumentSearchTool | None:
     """The passage search the answer lane's model step reads through, or None without one.
 
@@ -1615,6 +1638,8 @@ async def answered_for(
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
             source_policies=source_field_policies(registry),
+            # What the nightly schema check found gone is answered as degraded (M11.8.7).
+            gone=await fields_gone_of(request.app.state),
         )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own

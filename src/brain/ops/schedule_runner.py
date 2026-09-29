@@ -31,19 +31,19 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Thirteen controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+**Fourteen controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
 `canary_run`, `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`,
 `erasure_queue`, `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`,
-since 2026-09-21 `directory_sync`, since 2026-09-22 `model_health_probes`, and since 2026-09-28
-`denial_digest` have a runner that gathers what they need, and `brain.ops.worker` starts them on
-the schedule through `start_control`. Every other control entry point is a policy function that
-takes its inputs: `retention.enforcement_report` takes a census "the executor saw",
-`recovery.alerts` takes backups and verifications. None of them gathers
-anything. So the registry's orphans are not mechanisms waiting for a timer, they are mechanisms
-whose policy is written and whose input gathering does not exist, and a scheduler alone does not
-switch them on. `runner_gaps` reports each one by name, which turns a count of mechanisms nothing
-runs into a list of named pieces of work, and no count is written here because this one went stale
-twice. See
+since 2026-09-21 `directory_sync`, since 2026-09-22 `model_health_probes`, since 2026-09-28
+`denial_digest`, and since 2026-09-30 `connector_schema_check` have a runner that gathers what
+they need, and `brain.ops.worker` starts them on the schedule through `start_control`. Every
+other control entry point is a policy function that takes its inputs:
+`retention.enforcement_report` takes a census "the executor saw", `recovery.alerts` takes backups
+and verifications. None of them gathers anything. So the registry's orphans are not mechanisms
+waiting for a timer, they are mechanisms whose policy is written and whose input gathering does
+not exist, and a scheduler alone does not switch them on. `runner_gaps` reports each one by name,
+which turns a count of mechanisms nothing runs into a list of named pieces of work, and no count
+is written here because this one went stale twice. See
 `A_SCHEDULER_WITH_NOTHING_TO_RUN_IS_HONEST_AND_A_SCHEDULER_THAT_PRETENDS_IS_NOT`.
 
 **A runner has to call its control in a way `brain.ops.controls` can see.** That registry
@@ -64,6 +64,7 @@ would fill the table with rows for runs that never happened, and "this control h
 of attempts and no successes" would then mean two different things.
 
 Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5, M1.6.12, M5.4.7
+Task ids: M11.8.7
 """
 
 from __future__ import annotations
@@ -88,6 +89,7 @@ from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
+from brain.ops.schema_drift_run import run_schema_check_now
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
@@ -444,6 +446,39 @@ def connector_sync(now: datetime, report_only: bool, database_url: str) -> str:
     return ran.summary()
 
 
+#: Why the schema check reads nothing in report-only mode.
+A_SCHEMA_CHECK_IN_REPORT_ONLY_MODE_READS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and the schema check removes nothing, "
+    "so brain.ops.schedule never asks for it. Asked anyway, it declines rather than reading every "
+    "connected source and then ignoring the mode, for A_READ_IN_REPORT_ONLY_MODE_READS_NOTHING's "
+    "reason."
+)
+
+
+def connector_schema_check(now: datetime, report_only: bool, database_url: str) -> str:
+    """Read one page of each kind of record from every connected source, and record what it found.
+
+    `brain.ops.schema_drift_run.run_schema_check_now` reads, judges each kind of record against
+    the last night's finding and appends tonight's; this is the literal call the registry reads.
+    The vault is the worker's own, for `connector_sync`'s reason. Declines in report-only mode,
+    see `A_SCHEMA_CHECK_IN_REPORT_ONLY_MODE_READS_NOTHING`.
+    """
+    if report_only:
+        said = A_SCHEMA_CHECK_IN_REPORT_ONLY_MODE_READS_NOTHING
+        return f"report only: no connected source was read. {said}"
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    ran = run_schema_check_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
+    return ran.summary()
+
+
 #: Why shipping the vault's log runs in report-only mode too.
 SHIPPING_A_LOG_IN_REPORT_ONLY_MODE_STILL_SHIPS: Final = (
     "Report-only mode exists for controls that remove data, and shipping removes nothing: it "
@@ -704,6 +739,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="vault_audit_ship", run=vault_audit_ship),
     # Wired on 2026-09-28 with `ops.acceptance_result`. See `brain.ops.acceptance_run`.
     Runner(name="acceptance_run", run=acceptance_run),
+    # Wired on 2026-09-30 with `ops.connector_schema_check`. See `brain.ops.schema_drift_run`.
+    Runner(name="connector_schema_check", run=connector_schema_check),
 )
 
 
@@ -758,6 +795,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return denial_digest(now, report_only, database_url)
         case "acceptance_run":
             return acceptance_run(now, report_only, database_url)
+        case "connector_schema_check":
+            return connector_schema_check(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

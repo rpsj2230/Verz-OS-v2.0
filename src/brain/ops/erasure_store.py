@@ -390,6 +390,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # counts, three instants and a constant sentence: `0068` keeps no principal and no value
         # from the source, so nothing in it is anybody's.
         "ops.connector_sync",
+        # A night's schema check keeps the connection's id, the source's name, a count and the
+        # names of this release's fields: `0168` keeps no principal and no value from the source.
+        "ops.connector_schema_check",
         "ops.control_run",
         "ops.credential_write",
         "ops.data_export",

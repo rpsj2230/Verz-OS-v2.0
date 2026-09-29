@@ -946,6 +946,32 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
+    Control(
+        name="connector_schema_check",
+        # Added on 2026-09-30 with `ops.connector_schema_check`, and started by the worker's
+        # schedule from the day it was registered. The run is what the schedule calls; `judged` is
+        # what decides a field is gone rather than empty, and the run calls it.
+        symbols=(
+            "brain.ops.schema_drift_run:run_schema_check_now",
+            "brain.ops.schema_drift:judged",
+        ),
+        guards=(
+            "that a field a connected source renamed or removed is found within a night, shown on "
+            "the Connectors screen as the source being degraded, and answered on Ask as a source "
+            "that could not be fully read rather than as nothing found"
+        ),
+        lost_silently=(
+            "A source that renames a field goes on being read, every question needing that field "
+            "is answered as though the company had no such record, and the Connectors screen shows "
+            "the source healthy because every read succeeds. Nothing fails, so nothing reports it."
+        ),
+        # A day, restated rather than imported: `brain.ops.schema_drift_run` imports the tables,
+        # which import this registry for the control-run name constraint.
+        every=_DAILY,
+        cadence_from="brain.ops.schema_drift:SCHEMA_CHECK_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
 )
 
 

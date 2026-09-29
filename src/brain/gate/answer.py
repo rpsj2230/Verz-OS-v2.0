@@ -151,7 +151,7 @@ own source name, `tables`, which names no connector. The skills the model step o
 
 Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3, M11.9.2, M11.5.1, M11.5.5
 Task ids: M15.4.2, M8.1.3, M8.2.1, M11.4.9
-Task ids: M27.1.5, M27.15.9
+Task ids: M27.1.5, M27.15.9, M11.8.7
 """
 
 from __future__ import annotations
@@ -200,7 +200,7 @@ from brain.gate.finish import (
     attributable,
     finish,
 )
-from brain.gate.live_records import LiveRecords, PartialRead
+from brain.gate.live_records import FieldsGone, LiveRecords, PartialRead
 from brain.gate.model_lane import ModelLane, draft
 from brain.gate.provenance import (
     SEED_HORIZONS,
@@ -470,6 +470,7 @@ async def answer_lane(
     live: LiveRecords | None = None,
     source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
     horizons: Horizons = SEED_HORIZONS,
+    gone: Mapping[tuple[str, str], Sequence[str]] | None = None,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -509,6 +510,10 @@ async def answer_lane(
 
     `horizons` judge how fresh each citation is, a row's and a document's apart; the seeds until
     an install sets its own. See `brain.gate.provenance.Horizons`.
+
+    `gone` is what the nightly schema check found each source no longer answers, by source and
+    kind of record (M11.8.7); a question needing one of those fields is answered as degraded. See
+    `brain.gate.live_records.A_FIELD_ITS_SOURCE_NO_LONGER_ANSWERS_IS_NOT_AN_ABSENCE`.
     """
     attributable(origin, entitlement.principal_id)
     calls = ToolCalls()
@@ -535,6 +540,7 @@ async def answer_lane(
             live=live,
             source_policies=source_policies,
             horizons=horizons,
+            gone=gone,
         )
         return outcome
     finally:
@@ -588,6 +594,7 @@ async def _outcome(
     live: LiveRecords | None = None,
     source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
     horizons: Horizons = SEED_HORIZONS,
+    gone: Mapping[tuple[str, str], Sequence[str]] | None = None,
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -684,6 +691,13 @@ async def _outcome(
         # other option and it is the one that ships an unclassified column.
         log.warning("answer.no_policy", entity=found.entity, rule=found.rule_id)
         return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="unclassified"))
+
+    dropped = fields_gone(found, rules, gone, policy=policy, entitlement=entitlement, now=now)
+    if dropped:
+        # Its source no longer answers a field this rule needs (M11.8.7). See
+        # brain.gate.live_records.A_FIELD_ITS_SOURCE_NO_LONGER_ANSWERS_IS_NOT_AN_ABSENCE.
+        gone_here = FieldsGone(source=found.source, entity=found.entity, fields=dropped)
+        return _unreached(stream, frames, gaps, gone_here, scope)
 
     read_live = False
     if live is not None:
@@ -928,6 +942,37 @@ def _held_no_grant_for(
     """
     rule = policy.rule_for(found.entity, found.field)
     return rule is not None and entitlement.scope_for(rule.required_capability, now) is None
+
+
+def fields_gone(
+    found: FastLaneAnswer,
+    rules: Sequence[FastPathRule],
+    gone: Mapping[tuple[str, str], Sequence[str]] | None,
+    *,
+    policy: FieldPolicy,
+    entitlement: EntitlementSet,
+    now: datetime,
+) -> tuple[str, ...]:
+    """The fields the matched rule needs that its source no longer answers and this asker holds.
+
+    A rule needs the field it matches on and the one it answers with. A field the asker holds no
+    grant for is left to the ordinary path, which tells them what an absent record tells them, so
+    a field gone and a field withheld stay one answer to a reader who may not read it. Empty when
+    nothing the rule needs is gone.
+    """
+    if not gone:
+        return ()
+    dropped = set(gone.get((found.source, found.entity), ()))
+    if not dropped:
+        return ()
+    rule = next((one for one in rules if one.rule_id == found.rule_id), None)
+    needed = {found.field} if rule is None else {rule.match_field, rule.answer_field}
+    held: set[str] = set()
+    for name in needed & dropped:
+        declared = policy.rule_for(found.entity, name)
+        if declared is not None and entitlement.scope_for(declared.required_capability, now):
+            held.add(name)
+    return tuple(sorted(held))
 
 
 #: Why a field the projection left out because of the caller's grants is recorded as a refusal.

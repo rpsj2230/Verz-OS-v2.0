@@ -38,7 +38,7 @@ connector was missing.
 
 Scope: reads values and returns values. Nothing here opens a connection or writes anything.
 
-Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.1, M11.2.4, M27.15.8
+Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.1, M11.2.4, M27.15.8, M11.8.7
 """
 
 from __future__ import annotations
@@ -50,6 +50,7 @@ from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Final
 
+from brain.connectors.contract import HealthState
 from brain.connectors.declaration import shipped
 from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.console.connector_trust import (
@@ -207,6 +208,21 @@ def department_of(manifest: ConnectorManifest | None) -> str | None:
     return next(iter(named)) if len(named) == 1 else None
 
 
+def health_of(state: SyncState | None, *, changed: bool) -> str | None:
+    """The health word a source's row shows: its last attempt's, and no better than degraded when
+    the nightly schema check found a field its tools read no longer answered (M11.8.7).
+
+    No better, rather than degraded: a source whose last read failed outright is down, and a field
+    gone does not make it any less so. See
+    `brain.ops.schema_drift.A_TOOL_WHOSE_FIELD_IS_GONE_ANSWERS_DEGRADED`.
+    """
+    if not changed:
+        return None if state is None else state.health.value
+    if state is not None and state.health is HealthState.DOWN:
+        return state.health.value
+    return HealthState.DEGRADED.value
+
+
 def source_rows(
     *,
     connections: Sequence[Connection],
@@ -215,14 +231,17 @@ def source_rows(
     manifests: Mapping[str, ConnectorManifest],
     reader: EntitlementSet,
     now: datetime,
+    changed: Collection[str] = (),
 ) -> tuple[SourceRow, ...]:
     """Every source this release ships, each with what this reader may be told of its connection.
 
     `connections` are every live connection; only those `admitted_connections` admits are looked
     at. `lark_on` names the sources Connect Lark has switched on, and each is narrowed by
     `may_be_told_of` in the same way. `manifests` are the manifests the admitted connections'
-    settings build today, by source, missing where one cannot be built. No count of anything left
-    out: see `A_SOURCE_NOBODY_CONNECTED_AND_ONE_YOU_MAY_NOT_SEE_READ_ALIKE`.
+    settings build today, by source, missing where one cannot be built. `changed` names the
+    sources the nightly schema check found no longer answering a field a tool reads, whose health
+    is then no better than degraded (`health_of`). No count of anything left out: see
+    `A_SOURCE_NOBODY_CONNECTED_AND_ONE_YOU_MAY_NOT_SEE_READ_ALIKE`.
     """
     live = {one.connector: one for one in admitted_connections(connections, reader, now)}
     rows: list[SourceRow] = []
@@ -236,7 +255,7 @@ def source_rows(
                 name=name,
                 label=declared.label,
                 status=status_of(one is not None or through_lark, state),
-                health=None if state is None else state.health.value,
+                health=health_of(state, changed=one is not None and name in changed),
                 department=department_of(manifest),
                 last_read_at=None if state is None else state.last_synced_at,
                 connected_at=None if one is None else one.connected_at,

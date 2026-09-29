@@ -447,6 +447,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.channel_delivery",
       "ops.connector_connection",
       "ops.connector_sync",
+      "ops.connector_schema_check",
       "proj.record",
       "er.alias",
       "er.canonical",

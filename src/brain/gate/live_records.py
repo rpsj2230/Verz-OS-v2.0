@@ -18,16 +18,32 @@ here, which is how this module was first written. It worked, and it put a fetchi
 seam every permission decision passes through; a protocol keeps the direction of the dependency the
 architecture's.
 
-Task ids: M11.9.2, M11.5.5
+**A field its source no longer answers is a partial read too (M11.8.7).** The nightly schema
+check (`brain.ops.schema_drift`) finds a mapped field no record answers any more, and a question
+whose rule needs it is told so through the same seam, as `FieldsGone`: nothing was found for a
+reason about the connector, so the asker is told the source could not be fully read rather than
+that nothing exists, and the request is recorded as degraded. It names the source on the same
+condition a failed read does. See `A_FIELD_ITS_SOURCE_NO_LONGER_ANSWERS_IS_NOT_AN_ABSENCE`.
+
+Task ids: M11.9.2, M11.5.5, M11.8.7
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Final, Protocol, runtime_checkable
 
 from brain.core.envelope import TypedResult
+from brain.core.errors import Degraded
 from brain.knowledge.rows import RowRecord
+
+#: Why a question needing a field its source dropped is told the source was not fully read.
+A_FIELD_ITS_SOURCE_NO_LONGER_ANSWERS_IS_NOT_AN_ABSENCE: Final = (
+    "When the nightly schema check has found that a source no longer answers a field a question "
+    "needs, reading it would find nothing, and nothing found reads as a fact about the company's "
+    "records. So the asker is told the source could not be fully read, naming it only where "
+    "their own reach already discloses it, and the request is recorded as degraded."
+)
 
 
 class PartialRead(Protocol):
@@ -78,3 +94,32 @@ class LiveRecords(Protocol):
     ) -> Refreshed | None:
         """The live records in place of `result`, or None to answer from `result` as it is."""
         ...
+
+
+@dataclass(frozen=True)
+class FieldsGone:
+    """`PartialRead` for a question needing a field its source no longer answers (M11.8.7).
+
+    See `A_FIELD_ITS_SOURCE_NO_LONGER_ANSWERS_IS_NOT_AN_ABSENCE`. The fields are for the trace;
+    the asker is told the source's name only when `disclosable` holds it, and otherwise exactly
+    the sentence every unreachable source produces, so the two cannot be told apart.
+    """
+
+    source: str
+    entity: str
+    fields: tuple[str, ...]
+
+    @property
+    def is_complete(self) -> bool:
+        return False
+
+    def notice(self, *, disclosable: frozenset[str]) -> str:
+        if self.source not in disclosable:
+            return Degraded.public_message
+        return (
+            f"{self.source} no longer answers something this question needs, so it could not be "
+            "answered from there. An administrator can see which on the Connectors screen."
+        )
+
+    def trace_lines(self) -> tuple[str, ...]:
+        return (f"{self.source}: {self.entity} no longer answers {', '.join(self.fields)}",)

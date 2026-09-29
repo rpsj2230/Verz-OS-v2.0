@@ -471,6 +471,9 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And twenty-one controls on 2026-09-28, with four orphans still.** `acceptance_run` arrived
     already wired, with `ops.acceptance_result`.
 
+    **And twenty-two controls on 2026-09-30, with four orphans still.** `connector_schema_check`
+    arrived already wired, with `ops.connector_schema_check`.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
@@ -484,7 +487,8 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
     assert "acceptance_run" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 21
+    assert "connector_schema_check" not in {one.name for one in orphans()}
+    assert len(CONTROLS) == 22
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -521,6 +525,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "model_health_probes",
         "denial_digest",
         "acceptance_run",
+        "connector_schema_check",
     }
 
 

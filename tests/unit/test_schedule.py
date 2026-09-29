@@ -186,13 +186,14 @@ def test_the_real_registry_gives_this_scheduler_twenty_of_the_twenty_one_control
     Nineteen since 2026-09-17, when `vault_token_renewal`, `automation_run` and `connector_sync`
     arrived to be started by the worker, and twenty with `vault_audit_ship` that evening.
     Twenty-one on 2026-09-28, with `acceptance_run`, which the worker starts too.
+    Twenty-two on 2026-09-30, with `connector_schema_check`, which the worker starts too.
 
     Delete this and a control moved onto an external schedule silently keeps a second caller
     inside the process."""
     mine = schedulable()
 
-    assert len(CONTROLS) == 21
-    assert len(mine) == 20
+    assert len(CONTROLS) == 22
+    assert len(mine) == 21
     assert "audit_anchor" not in {one.name for one in mine}
 
 
