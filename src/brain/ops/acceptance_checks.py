@@ -379,8 +379,10 @@ async def _upload(
     filename: str,
     declared: str,
     body: bytes,
+    department: str = A,
 ) -> Any:
-    """The upload route's own sequence, as `uploader`: placed, admitted, read, then stored."""
+    """The upload route's own sequence, as `uploader`: placed in `department`, admitted, read,
+    then stored."""
     from brain.knowledge.chunk_store import ingest_document
     from brain.knowledge.embed_policy import REVISION_SETTING, REVISION_UNSET
     from brain.knowledge.ingest import ParseFailure, admit_upload, ceiling_for
@@ -404,7 +406,7 @@ async def _upload(
     reach = await h.reach(uploader)
     placement = placement_for_upload(
         Visibility.DEPARTMENT,
-        department=A,
+        department=department,
         owner_id=uploader,
         may_add=may_add(reach, await live_departments(h.sessions), h.now),
         reads_knowledge=reads_knowledge(reach, h.now),

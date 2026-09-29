@@ -112,7 +112,10 @@ refused call still carries nothing, which is the absence `ToolCallOutcome` argue
 **The route a request's model call took rides on `Finished` beside the usage, from the same meter
 (M3.6.3).** `route` is the tier the executor classified and the step that settled it, noted on the
 meter as it was decided; with `FrontRecord`'s lane, its basis and the selected agent it is the
-whole routing decision, and the row is written from these objects rather than re-derived.
+whole routing decision, and the row is written from these objects rather than re-derived. A
+request no model call was classified for still carries the tier the front half routed it to,
+which `FrontRecord` holds as it was decided; until 2026-09-29 it held the lane alone, and every
+question answered by a rule or kept off a model reached the row with no tier at all.
 
 **Which skills a run used, and which source a question read, are the last two facts (M27.15.9,
 M27.1.5).** `skills` is each skill whose card the run offered to a model, by name and digest, as
@@ -149,6 +152,7 @@ if TYPE_CHECKING:
     # Typing only as well: the gate learns nothing from the model layer at run time, which is
     # `brain.core.lane`'s rule, and a dataclass field's annotation is not run.
     from brain.models.metering import ModelRoute, ModelUsage
+    from brain.models.routing import Tier, TierBasis
 
 #: Why a finished request carries a principal rather than the facts about one.
 A_RECORD_OF_WHO_ASKED_IS_BUILT_FROM_WHO_THE_GATE_SAID_WAS_ASKING: Final = (
@@ -279,10 +283,18 @@ class FrontRecord:
     selected_agent: str
     #: Which rule of `brain.gate.classify.classify_lane` chose `routed_lane`, as a name.
     lane_basis: LaneBasis
+    #: The tier the front half routed to at ROUTE and the step of `classify_tier` that settled
+    #: it, or both None on a cache hit, which is routed nowhere. The row's tier when no model
+    #: call was classified; see `brain.gate.answer.THE_ROW_HOLDS_THE_LAST_ROUTING_DECISION_MADE`.
+    routed_tier: Tier | None = None
+    tier_basis: TierBasis | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.risk_score <= MAX_SCORE:
             msg = f"a risk score is 0 to {MAX_SCORE}, not {self.risk_score}"
+            raise FinishError(msg)
+        if (self.routed_tier is None) != (self.tier_basis is None):
+            msg = "a tier and the step that settled it are recorded together or not at all"
             raise FinishError(msg)
 
 
@@ -333,7 +345,8 @@ class Finished:
     #: The agent the lane ran, or None for a person asking directly or an automation step.
     agent_id: str | None = None
     #: The tier the executor routed this request's model call to and why, from its meter, or
-    #: None when no call was routed (M3.6.3). Present on a call refused before any attempt.
+    #: the front half's tier when no call was classified, or None when neither routed it
+    #: (M3.6.3). Present on a call refused before any attempt.
     route: ModelRoute | None = None
     #: Each skill the run offered to a model, by digest (M27.15.9). Empty when it offered none.
     skills: tuple[SkillUse, ...] = ()
