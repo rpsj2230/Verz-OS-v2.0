@@ -22,7 +22,13 @@ sent, which is itself the rule `brain.channels.relay.A_RELAY_NOBODY_SET_UP_WAS_N
 states; but a relay's host and password were never asked, so the check is recorded not run with
 `NO_RELAY_IS_SAVED` rather than passed on half of its sentence.
 
-Task ids: M10.5.6
+**Slack: a signing secret and a bot token made by the check, and nothing needed from the install
+but its database.** The address check, a forged request and a signed direct message go to the
+events route, and the binding prompt it answers with is kept by a transport that answers as Slack
+documents a success. What only the owner's workspace proves is that Slack signs and delivers as
+documented and accepts the post.
+
+Task ids: M10.5.6, M10.5.1
 """
 
 from __future__ import annotations
@@ -197,3 +203,108 @@ async def an_email_is_taken_signed_and_answered_by_the_install_s_relay(
         raise CheckFailedError(
             "the reply was not addressed to the sender alone, threaded under the question"
         )
+
+
+# ------------------------------------------------------------------------------ slack
+@dataclass
+class _SlackKept(_Kept):
+    """The webhook check's transport, answering each send as Slack documents a success."""
+
+    def send(self, request: Any) -> Any:
+        from brain.channels.adapter import VendorAnswer
+
+        self.sent.append(request)
+        return VendorAnswer(status=200, body=b'{"ok":true}')
+
+
+@check(
+    leaves=("M10.5.1",),
+    sentence=(
+        "A Slack channel set up with a signing secret and a bot token the check made answers "
+        "Slack's address check with its challenge, refuses a request signed with another secret "
+        "before reading it, and answers a signed direct message from somebody bound to nobody "
+        "with the binding prompt, built for Slack's own host on the bot's token and kept."
+    ),
+)
+async def a_slack_message_is_taken_signed_and_answered_on_the_bot_token(h: Harness) -> None:
+    import httpx
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.adapter import BOT_ID
+    from brain.channels.slack import (
+        BOT_TOKEN,
+        SIGNATURE_HEADER,
+        SIGNING_SECRET,
+        SLACK_API_URL,
+        TIMESTAMP_HEADER,
+        sign,
+    )
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.ops.channel_store import StoredChannels
+
+    signing, token = secrets.token_hex(32), f"xoxb-{secrets.token_hex(16)}"
+    await StoredChannels(h.sessions).save(
+        Channel.SLACK,
+        enabled=True,
+        tenant={BOT_ID: f"U0BOT{h.run[:8].upper()}"},
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    kept = _SlackKept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(json.dumps({SIGNING_SECRET: signing, BOT_TOKEN: token}))
+    state.channel_transport = kept
+    state.operation_ledger = _HeldLedger()
+    sender = f"U0ACC{h.run[:8].upper()}"
+
+    async def post(payload: dict[str, Any], signed_with: str) -> Any:
+        raw = json.dumps(payload).encode("utf-8")
+        stamp = str(int(time.time()))
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="https://acceptance.invalid"
+        ) as c:
+            return await c.post(
+                f"/api/v1/channels/{Channel.SLACK.value}/events",
+                content=raw,
+                headers={TIMESTAMP_HEADER: stamp, SIGNATURE_HEADER: sign(signed_with, stamp, raw)},
+            )
+
+    checked = await post({"type": "url_verification", "challenge": h.run}, signing)
+    if checked.status_code != 200 or checked.json() != {"challenge": h.run}:
+        raise CheckFailedError("Slack's address check was not answered with its own challenge")
+    message = {
+        "type": "event_callback",
+        "event": {
+            "type": "message",
+            "channel": f"D0ACC{h.run[:8].upper()}",
+            "channel_type": "im",
+            "user": sender,
+            "text": h.word(),
+            "ts": f"{int(time.time())}.000100",
+        },
+    }
+    forged = await post(message, secrets.token_hex(32))
+    if forged.status_code == 200 or kept.sent:
+        raise CheckFailedError("a request signed with another secret was accepted")
+    accepted = await post(message, signing)
+    if accepted.status_code != 200 or accepted.json().get("status") != "accepted":
+        raise CheckFailedError("a signed direct message was not accepted")
+    if len(kept.sent) != 1:
+        raise CheckFailedError(
+            "a direct message from somebody bound to nobody was not answered once"
+        )
+    (built,) = kept.sent
+    if built.url != f"{SLACK_API_URL}/chat.postMessage":
+        raise CheckFailedError("the answer was not built for Slack's own host")
+    if built.headers.get("Authorization") != f"Bearer {token}":
+        raise CheckFailedError("the answer was not built on the bot's token")
+    body = json.loads(built.body)
+    if body != {"channel": sender, "text": Unrecognised(channel=Channel.SLACK).prompt}:
+        raise CheckFailedError("the answer was not the binding prompt, to the sender alone")

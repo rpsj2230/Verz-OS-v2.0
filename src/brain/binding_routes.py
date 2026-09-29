@@ -386,6 +386,8 @@ class ChannelRowView(BaseModel):
     #: The steps that connect it, ending in its own form; empty for a channel with none yet.
     steps: list[GuideStepView]
     tenant_fields: list[str]
+    #: The parts its secret holds, each typed on its own; empty when the secret is one value.
+    secret_parts: list[str]
     tenant: dict[str, str]
     changed_at: datetime | None
     changed_by: str | None
@@ -542,6 +544,7 @@ async def _rows(request: Request, channels: list[Channel]) -> list[ChannelRowVie
                 events_address=events_address_of(channel),
                 steps=steps_of(channel),
                 tenant_fields=list(wire.tenant_fields) if wire else [],
+                secret_parts=list(wire.secret_parts) if wire else [],
                 tenant=dict(record.tenant) if record else {},
                 changed_at=None if record is None else record.updated_at,
                 changed_by=None if record is None else record.updated_by,
