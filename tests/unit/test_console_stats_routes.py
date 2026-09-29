@@ -10,7 +10,8 @@ not agreed with. The database tests at the bottom run the same statements agains
 Every refusal is compared status to status and message to message with the answer a name that
 matches nothing gets, and every refusal has a sibling proving the reader in reach is answered.
 
-Task ids: M27.15.27, M27.15.33, M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.1.3.4
+Task ids: M27.15.27, M27.15.33, M11.3.4
+Task ids: M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.1.3.4
 """
 
 from __future__ import annotations
@@ -686,6 +687,23 @@ def test_a_reader_without_the_usage_read_is_counted_over_their_own_live_reads_in
     assert abs(body.last_live_read - (NOW - timedelta(days=2))) < timedelta(seconds=1)
     assert held.asked_reads
     assert all(_bound(one, "principal") == "u_wide" for one in held.asked_reads)
+
+
+def test_the_source_s_calls_are_told_to_a_reader_of_everybody_s_usage_and_to_nobody_else(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """M11.3.4 on the route: a process with no live reader says so to `u_admin`, and `u_wide`,
+    who reads only their own usage, is told why there are none rather than handed everybody's
+    calls. Delete this and the route can serve the calls every question made to a reader who may
+    not see anybody else's questions, or serve nought where nothing counts."""
+    from brain.console_stats_routes import CALLS_ARE_EVERYBODY_S, NO_LIVE_READER_HERE
+
+    client, _ = served
+    wide = ConnectorStatsView.model_validate(stats(client, "u_admin", "connectors", "xero").json())
+    own = ConnectorStatsView.model_validate(stats(client, "u_wide", "connectors", "xero").json())
+
+    assert (wide.calls, wide.calls_told) == (None, NO_LIVE_READER_HERE)
+    assert (own.calls, own.calls_told) == (None, CALLS_ARE_EVERYBODY_S)
 
 
 def test_a_connector_outside_the_readers_grant_is_the_404_an_unconnected_source_gets(
