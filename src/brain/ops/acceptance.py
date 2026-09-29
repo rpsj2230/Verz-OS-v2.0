@@ -200,6 +200,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_threads",
     "brain.ops.acceptance_knowledge",
     "brain.ops.acceptance_checks_organisation",
+    "brain.ops.acceptance_checks_accounts",
 )
 
 

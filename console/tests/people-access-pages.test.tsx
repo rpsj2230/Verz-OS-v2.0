@@ -24,6 +24,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { UNAVAILABLE_MARK } from "../src/components/kit";
 import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src/pages/access/formParts";
 import { phraseFor } from "../src/pages/auditQuery";
+import { ACCOUNT_READY_HEADING, COPY } from "../src/pages/people/AccountReady";
 import { UNAVAILABLE } from "../src/pages/people/peopleActions";
 import { readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -288,6 +289,22 @@ describe("the People list", () => {
     const declared = declaredPropertyNames(declaredRequestBodySchema(`${API}/govern/directory`, "post"));
     expect(Object.keys(sent?.body as object).every((key) => declared.includes(key))).toBe(true);
     await waitFor(() => expect(mounted.router.state.location.pathname).toBe("/people/p_new"));
+  });
+
+  test("with a staff list read, the sentence to pass on is under the list with a Copy button, and without one it is not", async () => {
+    // What breaks if this is deleted: the one thing the owner asked People to carry once the sync
+    // sends nobody anything, the sentence telling somebody their account is ready, can go missing,
+    // or appear on an install that makes no accounts.
+    const said = "Your account is ready. Go to the sign-in page, press Forgot password and enter your work email.";
+    const listed = await consoleAt("/people", {
+      [`${API}/govern/directory`]: { body: directory([ADA], { account_ready: said }) },
+    });
+    expect(listed.container.textContent).toContain(ACCOUNT_READY_HEADING);
+    expect(listed.container.querySelector("blockquote")?.textContent).toBe(said);
+    expect(within(listed.container).getByRole("button", { name: COPY })).toBeTruthy();
+    const none = await consoleAt("/people", { [`${API}/govern/directory`]: { body: directory([ADA]) } });
+    expect(none.container.textContent).not.toContain(ACCOUNT_READY_HEADING);
+    expect(none.container.querySelector("blockquote")).toBeNull();
   });
 
   test("selecting people offers one grant to all of them, asked first with each named, and only the confirmation sends", async () => {

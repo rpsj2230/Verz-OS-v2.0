@@ -95,6 +95,7 @@ from brain.core.scope_sql import PredicateRefusedError
 from brain.gate.admission import Assurance
 from brain.identity.organisation_store import one_department
 from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
+from brain.identity.staff_accounts import YOUR_ACCOUNT_IS_READY
 from brain.identity.staff_source import SELECTABLE, STAFF_SOURCE_SETTING
 from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
@@ -248,6 +249,8 @@ class DirectoryPage(BaseModel):
     may_add: bool
     #: What adding does, or that people arrive from the staff source.
     adding: str
+    #: With a staff list read: the sentence to pass on to somebody whose account the sync made.
+    account_ready: str | None = None
     disabling: str = A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
     staleness: StalenessBanner | None = None
 
@@ -746,6 +749,7 @@ async def directory(request: Request, asked: Asked, listed: DirectoryQuery) -> D
         adding=PEOPLE_ARRIVE_FROM_THE_STAFF_SOURCE
         if from_a_list
         else ADDING_A_PERSON_GRANTS_NOTHING,
+        account_ready=YOUR_ACCOUNT_IS_READY if from_a_list else None,
         staleness=served.banner,
     )
 

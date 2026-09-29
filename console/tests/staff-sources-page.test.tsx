@@ -19,6 +19,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { CREDENTIAL_BLANK, STAFF_SOURCES_API_PATH, TRIAL_API_PATH, TRIAL_POLL_MS } from "../src/pages/staffSourcesQuery";
 import { STAFF_SOURCES_HEADING } from "../src/pages/StaffSources";
 import {
+  ACCOUNTS_HEADING,
   CONNECT_A_SOURCE,
   HELD,
   HOW_TO_CONNECT,
@@ -303,6 +304,37 @@ describe("what the page shows", () => {
     expect(strip.textContent).toContain(NOT_HELD);
     expect(container.textContent).not.toMatch(/\b\d+\s+(people|persons?|sources?|agents?|runs?|rows?)\b/i);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(STAFF_SOURCES_HEADING);
+  });
+
+  test("it says how people first sign in, what stops them and what to fill in, and the sentence to pass on", async () => {
+    // What breaks if this is deleted: the owner's flow, nobody sent anything and a person pressing
+    // Forgot password, can leave the one page an administrator connects the list from, or the
+    // warning about the sign-in service's email settings can go, leaving an install where nobody can
+    // set a password with nothing saying why.
+    const accounts = "The staff sync gives each active person on this list a sign-in account and sends nobody anything.";
+    const email = "If the sign-in service has no email settings, nobody can set a password yet. Fill in Realm settings, then Email.";
+    const ready = "Your account is ready. Go to the sign-in page, press Forgot password and enter your work email.";
+    const { container } = await consoleAt({
+      [`GET ${BASE}`]: { body: { ...PAGE, accounts, email_settings: email, account_ready: ready } },
+    });
+    expect(screen.getByRole("heading", { name: ACCOUNTS_HEADING })).toBeTruthy();
+    expect(container.textContent).toContain(accounts);
+    expect(container.querySelector('[data-slot="note"]')?.textContent).toContain(email);
+    expect(container.querySelector("blockquote")?.textContent).toBe(ready);
+
+    const unlisted = await consoleAt({
+      [`GET ${BASE}`]: {
+        body: {
+          ...PAGE,
+          selection: { ...PAGE.selection, reads_a_list: false },
+          accounts,
+          email_settings: email,
+          account_ready: ready,
+        },
+      },
+    });
+    expect(unlisted.container.querySelector("blockquote")).toBeNull();
+    expect(unlisted.container.textContent).not.toContain(email);
   });
 
   test("identifiers appear only inside Advanced", async () => {

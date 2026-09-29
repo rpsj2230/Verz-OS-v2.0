@@ -284,7 +284,8 @@ class Outbound:
     url: str
     headers: Mapping[str, str] = field(default_factory=dict, repr=False)
     form: Mapping[str, str] | None = field(default=None, repr=False)
-    json_body: Mapping[str, str] | None = field(default=None, repr=False)
+    #: Any JSON object: an account `brain.connectors.sign_in_accounts` sends is nested.
+    json_body: Mapping[str, Any] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)

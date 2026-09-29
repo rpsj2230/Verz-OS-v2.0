@@ -31,6 +31,7 @@ from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_sync import NO_KEY
 from brain.ops.connector_sync_run import ConnectorKeyAbsentError
 from brain.ops.secrets import SecretRef, SecretsUnavailableError
+from brain.ops.staff_accounts_run import NO_ISSUER
 from brain.ops.staff_sync_run import (
     CREDENTIAL_REFUSED_PREFIX,
     NOBODY_CHANGED,
@@ -690,9 +691,10 @@ def test_a_run_that_read_puts_what_it_read_on_its_row_and_in_the_job_history(
     ((_, record),) = store.written
     assert record.report == (
         "Read 2 departments, 2 with a name, and 3 people; 3 placed in a department.",
+        NO_ISSUER,
     )
     assert ran.report == record.report
-    assert ran.summary().endswith(record.report[0])
+    assert record.report[0] in ran.summary()
 
 
 def test_a_lark_read_without_department_names_says_nobody_was_placed_and_which_scope_to_add(

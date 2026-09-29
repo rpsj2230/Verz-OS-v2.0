@@ -56,7 +56,7 @@ import hashlib
 import re
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Final
 
 from brain.core.department import DepartmentError, create_department
@@ -101,6 +101,20 @@ def department_key(name: str) -> str:
 def sync_actor(source: str) -> str:
     """The actor a placement this source's sync made carries. See `SYNC_ACTOR_PREFIX`."""
     return f"{SYNC_ACTOR_PREFIX}{source}"
+
+
+#: Why a run's trace id is written from the clock without its punctuation.
+A_RUN_S_TRACE_IS_ONE_THE_LEDGER_ACCEPTS: Final = (
+    "Every audited write a scheduled run makes carries its trace id into obs.audit_entry, whose "
+    "trace_id is letters, digits, dot, dash and underscore. An ISO time has a colon and a plus "
+    "sign, so a trace built from one is refused by the ledger's check and the whole write with "
+    "it; the run's broad catch then logs a class name and every placement is silently lost."
+)
+
+
+def sync_trace(step: str, now: datetime) -> str:
+    """The trace id a scheduled run's `step` writes under at `now`, in the ledger's own shape."""
+    return f"{step}-{now.astimezone(UTC):%Y%m%dT%H%M%SZ}"
 
 
 @dataclass(frozen=True)

@@ -134,6 +134,9 @@ const NOTHING: StaffSources = Object.freeze({
   options: [],
   selection: null,
   how_to_choose: "",
+  accounts: "",
+  email_settings: "",
+  account_ready: "",
 });
 
 /**
@@ -156,6 +159,9 @@ export function readStaffSources(payload: unknown): StaffSources {
     options?: unknown;
     selection?: unknown;
     how_to_choose?: unknown;
+    accounts?: unknown;
+    email_settings?: unknown;
+    account_ready?: unknown;
   };
   if (!Array.isArray(body.options)) {
     return NOTHING;
@@ -164,6 +170,9 @@ export function readStaffSources(payload: unknown): StaffSources {
     options: body.options as SourceOption[],
     selection: (body.selection ?? null) as Selection | null,
     how_to_choose: typeof body.how_to_choose === "string" ? body.how_to_choose : "",
+    accounts: typeof body.accounts === "string" ? body.accounts : "",
+    email_settings: typeof body.email_settings === "string" ? body.email_settings : "",
+    account_ready: typeof body.account_ready === "string" ? body.account_ready : "",
   };
 }
 
