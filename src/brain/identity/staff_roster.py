@@ -97,6 +97,9 @@ class RunOutcome(enum.StrEnum):
     UNREACHABLE = "unreachable"
     #: This kind of source has no scheduled reader. Nobody changed.
     NOT_SCHEDULABLE = "not_schedulable"
+    #: A read somebody asked for, planned as a run would and applied to nobody. Never counted as
+    #: applied, so it cannot make the next run look like a second run of a source never applied.
+    TRIED = "tried"
 
 
 #: The outcomes after which a sync counts as applied, for `last_applied`.

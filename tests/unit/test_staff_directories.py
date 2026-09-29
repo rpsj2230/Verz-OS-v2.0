@@ -13,7 +13,7 @@ Task ids: M42.5.7, M1.6.5
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -37,7 +37,7 @@ from brain.connectors.staff_directories import (
     pull,
     token_request,
 )
-from brain.identity.staff_adapters import GOOGLE_WORKSPACE, LARK, MICROSOFT_ENTRA
+from brain.identity.staff_adapters import GOOGLE_WORKSPACE, LARK, MICROSOFT_ENTRA, Unplaced
 from tests.fixtures.roster_payloads import (
     ENTRA_APPROVERS_MEMBERS,
     ENTRA_AUDITORS_MEMBERS,
@@ -722,5 +722,153 @@ def test_each_read_asks_only_for_the_fields_the_roster_needs() -> None:
         people = [query(one.url) for one in lark.sent if "find_by_department" in one.url]
         assert people
         assert {one["user_id_type"] for one in people} == {"union_id"}
+
+    asyncio.run(scenario())
+
+
+# ============================================ Lark shows a field only to the scope that names it
+#: The scopes that let an app read a whole directory, which every Lark field admits and this
+#: product never asks for.
+LARK_WHOLE_DIRECTORY: frozenset[str] = frozenset(
+    {"contact:contact:readonly_as_app", "contact:contact:access_as_app", "contact:contact:readonly"}
+)
+
+#: Lark's field permission tables for the two calls the walk makes, as its documentation printed
+#: them on 2026-09-29, narrowed to the fields the roster reads. `GET .../departments/:id/children`
+#: admits the call on `contact:department.organize:readonly` and shows a department's `name` only
+#: to `contact:department.base:readonly`; `GET .../users/find_by_department` shows each field of a
+#: person to the scope named against it. Written here from the documentation rather than imported,
+#: so the product's list of scopes is held against something outside itself.
+LARK_FIELD_SCOPES: dict[str, dict[str, frozenset[str]]] = {
+    "departments/0/children": {
+        "name": frozenset({"contact:department.base:readonly"}) | LARK_WHOLE_DIRECTORY,
+    },
+    "find_by_department": {
+        "name": frozenset({"contact:user.base:readonly"}) | LARK_WHOLE_DIRECTORY,
+        "department_ids": frozenset({"contact:user.department:readonly"}) | LARK_WHOLE_DIRECTORY,
+        "leader_user_id": frozenset({"contact:user.department:readonly"}) | LARK_WHOLE_DIRECTORY,
+        "enterprise_email": frozenset({"contact:user.employee:readonly"}) | LARK_WHOLE_DIRECTORY,
+        "status": frozenset({"contact:user.employee:readonly"}) | LARK_WHOLE_DIRECTORY,
+        "email": frozenset({"contact:user.email:readonly"}),
+    },
+}
+
+#: The scopes the product asked a company to grant until 2026-09-29, which the owner's install
+#: granted and released: every one of them, and not the one that shows a department's name.
+SCOPES_ASKED_BEFORE_2026_09_29: tuple[str, ...] = (
+    "contact:department.organize:readonly",
+    "contact:user.base:readonly",
+    "contact:user.employee:readonly",
+    "contact:user.department:readonly",
+    "contact:user.email:readonly",
+    "contact:group:readonly",
+)
+
+
+def lark_granting(granted: Sequence[str]) -> Callable[[Outbound], Answer]:
+    """A Lark that leaves out every field the granted scopes do not show, as the real one does.
+
+    The call still succeeds and the field is simply absent, which is the silence
+    `A_LARK_SCOPE_IS_CHECKED_PER_FIELD_AND_A_MISSING_ONE_IS_SILENT` names.
+    """
+    pages = pages_by_url(lark_pages())
+    held = set(granted)
+
+    def answer(outbound: Outbound) -> Answer:
+        found = pages(outbound)
+        for call, fields in LARK_FIELD_SCOPES.items():
+            if call not in outbound.url:
+                continue
+            hidden = {name for name, shown_to in fields.items() if not held & shown_to}
+            data = found.body.get("data") or {}
+            items = [
+                {key: value for key, value in one.items() if key not in hidden}
+                for one in data.get("items") or ()
+            ]
+            return Answer(found.status, {**found.body, "data": {**data, "items": items}})
+        return found
+
+    return answer
+
+
+def test_the_scopes_asked_for_before_the_fix_place_nobody_and_the_reading_says_why() -> None:
+    """The owner's install on 2026-09-29, reproduced: the app held every scope the product asked
+    for, the department walk succeeded, every department came back with no name, and 123 people
+    were added in no department. The reading now counts them and names the missing scope.
+
+    Delete this and a Lark app one scope short places a whole company nowhere with the run saying
+    only that it applied the list."""
+
+    async def scenario() -> None:
+        stand = Stand(lark_granting(SCOPES_ASKED_BEFORE_2026_09_29))
+        source = await pull(stand, LARK, token=TOKEN, location="larksuite.com")
+        reading = source.reading()
+
+        assert {one.department for one in reading.roster.people} == {""}
+        report = reading.report
+        assert (report.departments, report.named) == (2, 0)
+        assert report.placed == 0
+        assert report.unplaced == {Unplaced.UNNAMED_DEPARTMENT: 3}
+        assert "contact:department.base:readonly" in report.words()
+
+    asyncio.run(scenario())
+
+
+def test_a_lark_app_granted_every_scope_the_product_asks_for_places_everybody() -> None:
+    """The fix: the product asks for the scope that shows a department's name, so an app granted
+    exactly what the steps ask for reads every department named and places every person.
+
+    Failed before 2026-09-29, when `LARK_SYNC_SCOPES` had no `contact:department.base:readonly`
+    and this walk placed nobody. Delete this and the list of scopes can lose a field's scope again
+    with every other test green, because every other test hands the walk whole pages."""
+
+    async def scenario() -> None:
+        stand = Stand(lark_granting(staff_directories.LARK_SYNC_SCOPES.split()))
+        source = await pull(stand, LARK, token=TOKEN, location="larksuite.com")
+        reading = source.reading()
+
+        assert {one.work_address: one.department for one in reading.roster.people} == {
+            "ada@example.com": "engineering",
+            "grace@example.com": "engineering",
+            "katherine@example.com": "finance",
+        }
+        assert (reading.report.departments, reading.report.named) == (2, 2)
+        assert (reading.report.placed, reading.report.unplaced) == (3, {})
+        assert reading.report.advice == ()
+
+    asyncio.run(scenario())
+
+
+def test_every_field_the_lark_roster_reads_is_shown_by_a_scope_the_product_asks_for() -> None:
+    """Held against Lark's documented field table, not against the product's own list, so a
+    scope dropped from `LARK_SCOPES` fails here by name.
+
+    Delete this and the only evidence a scope is missing is a company placed nowhere."""
+    asked = set(staff_directories.LARK_SYNC_SCOPES.split())
+    unshown = sorted(
+        f"{call}: {name}"
+        for call, fields in LARK_FIELD_SCOPES.items()
+        for name, shown_to in fields.items()
+        if not asked & shown_to
+    )
+    assert unshown == []
+    assert "contact:department.base:readonly" in staff_directories.LARK_SCOPE_PURPOSE
+
+
+def test_a_lark_app_without_the_person_department_scope_is_told_which_scope_to_add() -> None:
+    """Lark leaves `department_ids` out for an app without `contact:user.department:readonly`, so
+    every person has no department and the pages look like a company with none. The absent field
+    is the tell, and the reading names the scope.
+
+    Delete this and that silence reads as a company nobody has put in a department."""
+
+    async def scenario() -> None:
+        granted = [one for one in staff_directories.LARK_SYNC_SCOPES.split()]
+        granted.remove("contact:user.department:readonly")
+        stand = Stand(lark_granting(granted))
+        reading = (await pull(stand, LARK, token=TOKEN, location="larksuite.com")).reading()
+
+        assert reading.report.unplaced == {Unplaced.NO_DEPARTMENT: 3}
+        assert any("contact:user.department:readonly" in one for one in reading.report.advice)
 
     asyncio.run(scenario())
