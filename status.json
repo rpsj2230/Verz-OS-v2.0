@@ -1,23 +1,23 @@
 {
-  "generated_at": "2026-09-29T10:39:51.548996+00:00",
-  "commit": "1d0d76f3",
-  "commit_subject": "The Capacity screen sizes the install for its busiest minute by Little's law and names the first limit reached at ten and a hundred times (#215)",
+  "generated_at": "2026-09-29T10:48:29.923545+00:00",
+  "commit": "aa210b4e",
+  "commit_subject": "Wave 0 is recorded at the commit the owner accepted, and the first release is cut from it (#229)",
   "total": 1576,
-  "done": 438,
-  "percent": 27.8,
+  "done": 440,
+  "percent": 27.9,
   "acts": 47,
   "decided": 131,
-  "current_wave": 0,
+  "current_wave": 1,
   "waves": [
     {
       "wave": 0,
       "name": "Foundation",
       "total": 128,
-      "done": 126,
-      "percent": 98.4,
+      "done": 128,
+      "percent": 100.0,
       "in_progress": 0,
-      "ready_for_testing": 1,
-      "blocked": 1,
+      "ready_for_testing": 0,
+      "blocked": 0,
       "open": 0,
       "acts": 3,
       "decided": 7
@@ -449,7 +449,7 @@
       "name": "Continuous delivery and live status",
       "wave": 0,
       "total": 48,
-      "done": 33,
+      "done": 34,
       "acts": 4,
       "decided": 3
     },
@@ -476,7 +476,7 @@
       "name": "Client independence, built in rather than stripped out",
       "wave": 0,
       "total": 20,
-      "done": 18,
+      "done": 19,
       "acts": 0,
       "decided": 2
     },
@@ -819,6 +819,7 @@
     "M38.1.3.5",
     "M38.1.4.1",
     "M38.1.4.4",
+    "M38.2.1.1",
     "M38.2.1.2",
     "M38.2.1.6",
     "M38.2.2.1",
@@ -871,6 +872,7 @@
     "M41.2.5",
     "M41.2.6",
     "M41.2.8",
+    "M41.3.1",
     "M41.3.3",
     "M41.3.4",
     "M41.4.1",
@@ -1074,29 +1076,32 @@
       "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
       "updated": "2026-09-21"
     },
-    "M38.2.1.1": {
-      "status": "READY FOR TESTING",
-      "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
-      "updated": "2026-09-21"
-    },
     "M38.2.2.3": {
       "status": "IN PROGRESS",
       "why": "the Lark channel is merged (L1, d426e3d3); the exit check also needs question-time live read (C2) and the binding route (CH2), neither on main yet",
       "updated": "2026-09-28"
-    },
-    "M41.3.1": {
-      "status": "BLOCKED",
-      "why": "the first release tag is cut when Wave 0 is accepted (needs-rupash 77, decided); waits for M31.3.2.3 to M31.3.2.5",
-      "updated": "2026-09-28"
     }
   },
-  "wave_records": {},
-  "closed_today": 68,
+  "wave_records": {
+    "0": {
+      "commit": "dd6a23a9bc45f5fdada93069ac88fc60b4a5bcc6",
+      "recorded": "2026-09-29",
+      "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
+    }
+  },
+  "closed_today": 70,
   "next_up": [
-    "M38.2.1.1",
-    "M41.3.1"
+    "M5.6.1",
+    "M5.6.3",
+    "M24.3.4"
   ],
   "recent": [
+    {
+      "sha": "aa210b4",
+      "at": "2026-09-29T10:33:07+00:00",
+      "subject": "Wave 0 is recorded at the commit the owner accepted, and the first release is cut from it (#229)",
+      "closed": "M38.2.1.1,M41.3.1"
+    },
     {
       "sha": "785d112",
       "at": "2026-09-29T10:01:55+00:00",
@@ -1210,12 +1215,6 @@
       "at": "2026-09-21T18:47:58+00:00",
       "subject": "Directory groups map to roles and sync at sign-in, simulate logs what it withholds, break-glass tells the Super Admins",
       "closed": "M1.2.5,M4.2.3"
-    },
-    {
-      "sha": "47f34ae",
-      "at": "2026-09-21T18:40:00+00:00",
-      "subject": "The full profile is one compose file, and the analyser it lacked is Presidio's own image",
-      "closed": "M0.4.2"
     }
   ]
 }
