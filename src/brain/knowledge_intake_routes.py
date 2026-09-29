@@ -102,10 +102,11 @@ from brain.knowledge_routes import (
     reads_knowledge,
     store_upload,
 )
-from brain.ops.admission import CapacityState, Resource, seed_budgets
+from brain.ops.admission import CapacityState, Resource
 from brain.ops.object_store import ObjectStore
 from brain.ops.queue import Job
 from brain.ops.skill_fetch import HttpsFetcher, SystemResolver
+from brain.ops.tuning import configured_budgets
 from brain.routing_routes import sessions_of
 from brain.tools.fetch import Fetcher, Resolver
 
@@ -401,7 +402,7 @@ async def queue_upload(
         return _refused("file", "queue_unavailable", THE_QUEUE_DID_NOT_ANSWER, status=503)
     admission = admit_ingestion(
         trace_id=trace_of_request(),
-        budgets=seed_budgets(),
+        budgets=configured_budgets(),
         state=CapacityState(used={(Resource.DOCUMENT_JOBS, ""): running}),
         depth=waiting,
         now=asked.now,
