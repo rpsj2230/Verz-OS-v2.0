@@ -306,9 +306,12 @@ ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED: Final = (
     "tab_strip shows a tab that is permitted and populated, and a heading over an empty panel "
     "is a count of hidden things spelled out. This route holds the agent's record and its "
     "install, which is what the Settings tab reads, and the Automations tab always holds the "
-    "product's automation gallery, which its own route serves behind the same tab's read. "
-    "Marking the other five populated would draw five headings over nothing; marking Settings "
-    "empty would withhold a tab whose content is already in the response."
+    "product's automation gallery, which its own route serves behind the same tab's read. The "
+    "Memory tab always holds how the agent learns, its tiers and which are active, which "
+    "brain.agent_memory_routes serves behind the Memory tab's read for every agent alike, so it "
+    "says nothing about whether any memory exists. Marking the other four populated would draw "
+    "four headings over nothing; marking Settings empty would withhold a tab whose content is "
+    "already in the response."
 )
 
 #: Why a malformed row is refused as though it were missing.
@@ -410,7 +413,7 @@ THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS: Final
 MAX_ROSTER_ENTRIES: Final = 500
 
 #: The tabs with something in them for every agent. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
-POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB})
+POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB, Tab.MEMORY})
 
 #: The most templates one gallery answer carries. A resource bound, as the roster's is.
 MAX_TEMPLATE_ENTRIES: Final = 500
@@ -533,6 +536,12 @@ class AgentHeaderView(BaseModel):
     #: `brain.console.agent_profile.leash_up_to` says it. Sent where the Settings tab is, and null
     #: there too for an agent with no action, because a rung governs a side effect.
     leash_up_to: str | None = None
+    #: The department the audience names, or null for a company agent. Already on the roster entry
+    #: every reader of this header is sent, so the header's role line says no more than it.
+    department: str | None = None
+    #: The template's own name at the pinned version, beside `template_id`, so the lineage reads as
+    #: a name rather than a slug. Null exactly when the lineage is.
+    template_name: str | None = None
 
 
 class TabView(BaseModel):
@@ -907,6 +916,8 @@ class Install:
     leash: Leash = field(default_factory=Leash)
     #: The tools the effective manifest declares, before this install bound them to its own.
     declared_tools: tuple[str, ...] = ()
+    #: The template's own display name at the pinned version, before any local overlay.
+    template_name: str = ""
 
 
 def install_of(
@@ -952,6 +963,7 @@ def install_of(
     return Install(
         template_id=instance.template_id,
         template_version=instance.template_version,
+        template_name=signed.manifest.identity.display_name,
         summary=effective.manifest.identity.summary,
         composition=tuple(CompositionRowView(**row.wire()) for row in rows),
         divergent=tuple(sorted(one.value for one in divergent_parts(instance))),
@@ -1516,6 +1528,8 @@ def workspace(
             created_at=created_at,
             state=record.state.value if setup is not None else None,
             leash_up_to=None if highest is None else rung_key(highest),
+            department=record.audience.department or None,
+            template_name=(install.template_name or None) if install is not None else None,
         ),
         tabs=[tab_view(one) for one in strip],
         composition=list(settings.composition) if settings is not None else [],
