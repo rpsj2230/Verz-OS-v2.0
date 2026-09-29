@@ -8,7 +8,7 @@ Each is a failed check with its own sentence. The cache half is not run without 
 own sentence, which is how the worker records it; the cache run is inside the application's
 container, where the window check in `brain.ops.acceptance_checks` runs too.
 
-Task ids: M22.1.2, M22.4.1
+Task ids: M22.1.2, M22.4.1, M22.3.1, M22.3.2, M22.3.4
 """
 
 from __future__ import annotations
@@ -36,6 +36,11 @@ MODULE = "brain.ops.acceptance_checks_capacity"
 LEAVES = {
     "budgets_and_windows_are_rows_saved_within_bounds_and_audited": ("M22.1.2", "M22.4.1"),
     "the_rate_limits_screen_lists_the_windows_refusing_now": ("M22.4.1",),
+    "capacity_is_sized_for_the_busiest_minute_and_its_first_limit": (
+        "M22.3.1",
+        "M22.3.2",
+        "M22.3.4",
+    ),
 }
 
 #: Pinned far from any wall clock, for CLAUDE.md's reason about fixtures with dates in them.
@@ -116,6 +121,7 @@ def test_on_a_real_database_the_capacity_checks_pass_or_say_why_not_and_leave_no
             NOT_RUN,
             capacity.NO_CACHE_TO_ASK,
         ),
+        "capacity_is_sized_for_the_busiest_minute_and_its_first_limit": (PASSED, ""),
     }
     assert after == before
     assert dict(tuning.held()) == held
@@ -230,3 +236,57 @@ def test_the_window_check_passes_over_a_cache_and_fails_when_the_screen_misreads
     assert found[window_check().name] == outcome
     assert held.client.sets == {}
     assert held.client.counters == {}
+
+
+# --------------------------------------------------------------------------- the sizing half
+def sized() -> tuple[str, str]:
+    """The sizing check's outcome and reason, as the run records them. It reads no database."""
+    from brain.ops.acceptance import reason_for
+    from brain.ops.acceptance_run import Harness
+
+    one = mine()["capacity_is_sized_for_the_busiest_minute_and_its_first_limit"]
+    # The check reads nothing through the harness, so it is handed one with no connection.
+    harness = Harness(run="0a1b2c3d", now=LONG_AGO, settings=settings_from({}), connection=None)  # type: ignore[arg-type]
+    try:
+        asyncio.run(one.run(harness))
+    except Exception as exc:
+        return reason_for(exc)
+    return PASSED, ""
+
+
+def test_the_sizing_check_passes_on_what_the_capacity_route_is_sent() -> None:
+    """The positive run. Delete this and the check can refuse the product's own sizings."""
+    assert sized() == (PASSED, "")
+
+
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("in_flight", "a sizing's in-flight figure is not Little's law of its inputs"),
+        ("slots", "a sizing's slots are not its in-flight figure rounded up"),
+        ("limit", "the first limit at ten and a hundred times is not named"),
+    ],
+)
+def test_the_sizing_check_fails_when_the_screen_is_sent_figures_its_arithmetic_does_not_give(
+    monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """Three breaks of what the route is sent: an in-flight figure that is not Little's law, slots
+    not rounded up from it, and a first limit that names no scale. Delete this and the screen can
+    show a sizing the admission budgets do not share with the check green."""
+    import brain.install_routes as install_routes
+
+    original = install_routes.capacity_plan
+
+    def plan() -> Any:
+        sizings, first_limit = original()
+        one = sizings[0]
+        if broken == "in_flight":
+            sizings[0] = one.model_copy(update={"in_flight_at_peak": one.in_flight_at_peak + 1})
+        elif broken == "slots":
+            sizings[0] = one.model_copy(update={"slots_needed": one.slots_needed + 1})
+        else:
+            first_limit = "a day's total"
+        return sizings, first_limit
+
+    monkeypatch.setattr(install_routes, "capacity_plan", plan)
+    assert sized() == (FAILED, reason)

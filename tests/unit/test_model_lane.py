@@ -49,6 +49,7 @@ from brain.gate.fast_lane import FastPathRule
 from brain.gate.finish import Finished, Origin
 from brain.gate.model_lane import (
     A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES,
+    A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES,
     HINTS_HEADING,
     MAX_HINTS_SHOWN,
     PASSAGE_POLICY,
@@ -60,8 +61,10 @@ from brain.gate.model_lane import (
     ModelLane,
     hints_block,
     messages_of,
+    passage_reach,
     prompt_bytes,
     prompt_for,
+    redact_passages,
     shown,
     tier_for,
 )
@@ -787,6 +790,99 @@ def test_a_field_grant_over_one_department_reads_no_passage_of_another_and_asks_
     assert run.sent == []
     assert nothing.answered is not None and nothing.answered.abstention is not None
     assert events(run.answered) == events(nothing.answered)
+
+
+def _placed(visibility: str, *, department: str | None = None, owner: str = "p_joiner") -> Any:
+    """`WEB_PASSAGE` stored at another level, as a company or personal item's passage carries it."""
+    return WEB_PASSAGE.model_copy(
+        update={"department": department, "visibility": visibility, "owner_id": owner}
+    )
+
+
+def _words_read(passage: KnowledgePassage, entitlement: EntitlementSet) -> bool:
+    """Whether `redact_passages` leaves this reader the passage's words."""
+    kept = redact_passages(
+        TypedResult[KnowledgePassage](records=(passage,), source="knowledge.search"),
+        entitlement=entitlement,
+        now=None,
+    ).payload.records
+    return bool(kept) and bool(kept[0].get("document"))
+
+
+def test_a_department_text_right_reads_company_passages_and_the_readers_own() -> None:
+    """**The owner's decision 106 (2026-09-28): company-wide means everyone, and one's own
+    personal upload is one's own.** A reader whose passage fields are granted over one department
+    is retrieved a company-wide passage and their own personal one, and until 2026-09-29 was shown
+    neither's words, because neither names a department for the grant to test.
+
+    Delete this and a department reader is found company-wide documents and told nothing from
+    them, which is the owner's install answering "I could not find that" about his own company
+    policies."""
+    reader = departmental("web")
+    assert _words_read(WEB_PASSAGE, reader)
+    assert _words_read(_placed("company"), reader)
+    assert _words_read(_placed("personal", owner="p_joiner"), reader)
+    assert A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES
+
+
+def test_the_widening_reads_no_other_department_and_nobody_elses_personal_passage() -> None:
+    """The sibling: the same reader is still withheld another department's passage and another
+    person's personal one, even handed straight to the redactor. Delete this and the widening can
+    become "any holding of the capability reads every passage", which reads every department's
+    bodies."""
+    reader = departmental("web")
+    assert not _words_read(_placed("department", department="sales"), reader)
+    assert not _words_read(_placed("personal", owner="p_someone_else"), reader)
+
+
+def test_a_mixed_result_keeps_retrievals_order_and_each_half_its_own_redaction() -> None:
+    """A result holding a department passage the reader may not read, a company-wide one and their
+    own personal one comes back in retrieval's order with the two they may read, and the trace
+    records the refusal under the reader's own reach hash. Delete this and joining the two halves
+    can reorder an answer's passages, drop a lock or name a widened reach in the audit trace."""
+    reader = departmental("web")
+    company = _placed("company").model_copy(update={"id": "c_company"})
+    mine = _placed("personal").model_copy(update={"id": "c_mine"})
+    other = _placed("department", department="sales").model_copy(update={"id": "c_sales"})
+    redacted = redact_passages(
+        TypedResult[KnowledgePassage](records=(company, other, mine), source="knowledge.search"),
+        entitlement=reader,
+        now=None,
+    )
+    kept = [(one["id"], bool(one.get("document"))) for one in redacted.payload.records]
+    assert kept == [("c_company", True), ("c_mine", True)]
+    assert redacted.trace.ent_hash == reader.ent_hash()
+    refused = {one.record_id for one in redacted.trace.redactions}
+    assert redacted.trace.dropped or "c_sales" in refused
+
+
+def test_a_grant_narrowed_by_anything_but_a_department_is_not_widened() -> None:
+    """A field grant scoped to a department and something else is not a department's right to
+    read, and the decision says nothing about it: there is nothing to widen, and an unrestricted
+    grant already reads every passage. Delete this and a grant narrowed to one kind of document
+    reads every company-wide passage of every kind."""
+    narrowed = EntitlementSet(
+        principal_id="p_joiner",
+        grants=(
+            Grant(
+                capability=Capability(value="read:knowledge.document"),
+                scope=Scope(
+                    clauses=(
+                        Clause(field="department", op=Op.EQ, value="web"),
+                        Clause(field="kind", op=Op.EQ, value="sop"),
+                    )
+                ),
+            ),
+        ),
+    )
+    everywhere = EntitlementSet(
+        principal_id="p_joiner",
+        grants=(Grant(capability=Capability(value="read:knowledge.document"), scope=Scope()),),
+    )
+    assert passage_reach(narrowed) is None
+    assert passage_reach(everywhere) is None
+    assert not _words_read(_placed("company"), narrowed)
+    assert _words_read(_placed("company"), everywhere)
 
 
 def test_the_passage_policy_asks_for_the_capabilities_a_joiner_is_already_given() -> None:

@@ -56,6 +56,7 @@ from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.sensitive_read_store import SensitiveReadRecorder
 from brain.ops.telemetry_store import TelemetryRecorder
+from brain.ops.trace_store import TraceRecorder
 from brain.ops.usage_store import UsageRecorder
 from brain.tables.adoption import QuestionAskedRow
 from brain.tools.startup import build_registry
@@ -464,8 +465,10 @@ def test_a_wired_process_records_questions_and_one_with_no_database_records_noth
     empty with every test of the store still green."""
     sessions: async_sessionmaker[AsyncSession] = async_sessionmaker()
 
-    assert request_recorders_for(None) == ()
-    questions, ledger, gaps, usage, reads = request_recorders_for(sessions)
+    assert request_recorders_for(None, environment="development") == ()
+    questions, ledger, gaps, usage, reads, traces = request_recorders_for(
+        sessions, environment="staging"
+    )
     assert isinstance(questions, QuestionRecorder)
     assert questions.sessions is sessions
     # M30.5.2: the metadata ledger's recorder, beside the question recorder and not instead.
@@ -477,9 +480,14 @@ def test_a_wired_process_records_questions_and_one_with_no_database_records_noth
     # M27.12.5, M27.15.9: the cost and skill-use recorder, before the one that raises.
     assert isinstance(usage, UsageRecorder)
     assert usage.sessions is sessions
-    # M24.3.2: the sensitive read recorder, last, because it raises on a failed write.
+    # M24.3.2: the sensitive read recorder, after the measurements, because it raises on a
+    # failed write.
     assert isinstance(reads, SensitiveReadRecorder)
     assert reads.sessions is sessions
+    # M24.3.4: the run's masked trace graph, told the environment the process was started in.
+    assert isinstance(traces, TraceRecorder)
+    assert traces.sessions is sessions
+    assert traces.environment == "staging"
 
 
 def test_the_recorder_writes_and_commits_the_question_it_was_handed() -> None:
