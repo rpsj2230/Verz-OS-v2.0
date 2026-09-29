@@ -3,8 +3,8 @@
 An agent answers only on the channels an administrator switched on for it, and never on every
 channel by default (`docs/requirements/register.json` OWN-7, ARC-A-171, OWN-56). Nothing stored a
 switch, so every stored agent answered on every channel it could be addressed on. `0159` builds
-this table, `0159b` switches the web page on for every agent that existed when it ran, and
-`brain.ops.channel_switch_store` is the one writer after that.
+this table, `0159b` switches on every channel each existing agent could be reached on when it ran,
+and `brain.ops.channel_switch_store` is the one writer after that.
 
 **One row per press, never edited.** The newest row for an agent and a channel is whether it is
 on. A channel no row names is off, which is the requirement itself: an agent nobody switched on
@@ -77,9 +77,9 @@ WEB_PAGE: Final = Channel.CONSOLE
 SWITCHED_ON_WHEN_PUBLISHED: Final = "switched_on_when_published"
 #: The web page switched on by whoever installed or duplicated an agent with it ticked.
 SWITCHED_ON_WHEN_MADE: Final = "switched_on_when_made"
-#: `0159b`'s own rows, one per agent that existed when it ran, and the actor they are written by.
-#: Held equal to the migration's.
-ANSWERED_ON_THE_WEB_BEFORE_CHANNELS_EXISTED: Final = "answered_on_the_web_before_channels_existed"
+#: `0159b`'s own rows, one per agent that existed when it ran and per channel it could be reached
+#: on then, and the actor they are written by. Held equal to the migration's.
+ANSWERED_HERE_BEFORE_CHANNELS_EXISTED: Final = "answered_here_before_channels_existed"
 BACKFILLED_BY: Final = "migration.0159b"
 
 

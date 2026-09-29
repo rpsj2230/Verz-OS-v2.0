@@ -2165,11 +2165,11 @@ async def an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them(h: Har
 @check(
     leaves=("M39.2.4.1", "M39.2.4.2"),
     sentence=(
-        "Every agent that existed when channels arrived answers on the web page, switched on by "
-        "the upgrade with its reason on the ledger. A new agent switched on nowhere is refused on "
-        "the web page as a name nobody created is; the connector administrator switches the page "
-        "on and the answer route selects it there and on no chat; switched off, it is refused "
-        "again. Each switch is a ledger entry."
+        "Every agent that existed when channels arrived answers on the web page and every chat "
+        "connected before, switched on by the upgrade with its reason on the ledger. A new agent "
+        "switched on nowhere is refused on the web page as a name nobody created is; switched on "
+        "by the connector administrator it is selected there and on no chat; switched off, it is "
+        "refused again. Each switch is a ledger entry."
     ),
 )
 async def an_agent_answers_only_on_the_channels_switched_on_for_it(h: Harness) -> None:
@@ -2184,6 +2184,7 @@ async def an_agent_answers_only_on_the_channels_switched_on_for_it(h: Harness) -
         to_switch,
     )
     from brain.api_routes import DEFAULT_AGENT, Answering, roster_of
+    from brain.channels.adapter import channel_wires
     from brain.gate.admission import Assurance, admit
     from brain.gate.context import Channel
     from brain.gate.select import SelectionStage, select_agent
@@ -2192,25 +2193,32 @@ async def an_agent_answers_only_on_the_channels_switched_on_for_it(h: Harness) -
     from brain.ops.acceptance_run import SET_UP_REACH
     from brain.ops.channel_switch_store import StoredChannelSwitches
     from brain.tables.channel_switch import (
-        ANSWERED_ON_THE_WEB_BEFORE_CHANNELS_EXISTED,
+        ANSWERED_HERE_BEFORE_CHANNELS_EXISTED,
         BACKFILLED_BY,
         WEB_PAGE,
     )
     from brain.tools.registry import ToolRegistry
 
-    # 1. The upgrade's rows: every agent made before them has one, and each is on the ledger.
+    # 1. The upgrade's rows: every agent made before them has one for the web page and one for every
+    # chat this release receives on that was connected and last changed before them, and each is
+    # on the ledger. A chat connected or switched since is the administrator's, and is not judged.
     missed = (
         await h.execute(
             text(
-                "SELECT count(*) FROM agent.agent a WHERE a.created_at < (SELECT min(s.changed_at)"
-                " FROM agent.channel_switch s WHERE s.changed_by = :by) AND NOT EXISTS"
-                " (SELECT 1 FROM agent.channel_switch s WHERE s.agent_id = a.id"
-                " AND s.changed_by = :by AND s.channel = :web AND s.switched_on"
-                " AND s.reason_code = :reason)"
+                "WITH upgraded AS (SELECT min(s.changed_at) AS at FROM agent.channel_switch s"
+                " WHERE s.changed_by = :by),"
+                " reached AS (SELECT :web AS channel UNION SELECT c.channel::text"
+                " FROM ops.channel c, upgraded u"
+                " WHERE c.channel = ANY(:wired) AND c.updated_at < u.at)"
+                " SELECT count(*) FROM agent.agent a CROSS JOIN reached r, upgraded u"
+                " WHERE a.created_at < u.at AND NOT EXISTS (SELECT 1 FROM agent.channel_switch s"
+                " WHERE s.agent_id = a.id AND s.channel = r.channel AND s.changed_by = :by"
+                " AND s.switched_on AND s.reason_code = :reason)"
             ).bindparams(
                 by=BACKFILLED_BY,
                 web=WEB_PAGE.value,
-                reason=ANSWERED_ON_THE_WEB_BEFORE_CHANNELS_EXISTED,
+                wired=sorted(one.value for one in channel_wires()),
+                reason=ANSWERED_HERE_BEFORE_CHANNELS_EXISTED,
             )
         )
     ).scalar_one()
@@ -2225,7 +2233,7 @@ async def an_agent_answers_only_on_the_channels_switched_on_for_it(h: Harness) -
         )
     ).scalar_one()
     if missed or unledgered:
-        raise CheckFailedError("an agent that existed before channels was not switched on the web")
+        raise CheckFailedError("an agent that existed before channels lost a channel it had")
 
     # 2. A new agent nobody switched on is refused as a name nobody created is.
     await h.found_departments()

@@ -11,10 +11,10 @@ the argument for each column and `brain.ops.channel_switch_store` is the one wri
 `compose_change` entry about the agent (part `channels`, the channel, on or off, and the reason),
 `AuditRecorder.compose_change`'s shape.
 
-**Nothing that answers today stops answering, and that is `0159b`'s half.** The rows switching the
-web page on for every agent that existed are data, and `brain.ops.migration_policy` keeps a schema
-change and a data change in separate migrations, so this one builds the table, its trigger and the
-act column, and `0159b`, which follows it, writes them.
+**Nothing that answers today stops answering, and that is `0159b`'s half.** The rows switching on
+every channel an existing agent could be reached on are data, and `brain.ops.migration_policy`
+keeps a schema change and a data change in separate migrations, so this one builds the table, its
+trigger and the act column, and `0159b`, which follows it, writes them.
 
 **A publish that waits for a second person carries the web choice on its request.** One column on
 `agent.manifest_act`, `on_the_web`, true for every act taken before it, because every agent made

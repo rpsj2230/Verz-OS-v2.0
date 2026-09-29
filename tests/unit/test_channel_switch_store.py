@@ -1,4 +1,5 @@
-"""`0159`, `0159b`'s backfill, and the web page switched on in the write that makes an agent.
+"""`0159`, `0159b`'s backfill of where every agent answered, and the web page switched on in the
+write that makes an agent.
 
 The migration is read as rendered SQL without a server, as `tests/unit/test_tables.py` reads every
 migration. The backfill is run for real: a database migrated to the revision before `0159`, agents
@@ -15,10 +16,12 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.schema import CreateIndex, CreateTable
 
+from brain.agent_roster import agent_channels_for, agent_roster_for
 from brain.agents.creation import install_draft
 from brain.agents.install import InstallDraft
 from brain.agents.install_store import StoredAgentInstalls, prepared
@@ -30,17 +33,24 @@ from brain.agents.template import (
     TemplateManifest,
     publish,
 )
+from brain.api_routes import DEFAULT_AGENT, Answering, roster_of
 from brain.builder.agent_drafts import Act, AgentDraft
 from brain.builder.draft_store import Attribution, StoredAgentDrafts
 from brain.builder.draft_words import DraftAct, DraftKind
 from brain.builder.drafts import FIRST_REVISION, ManifestDraft, Revision
+from brain.channels.adapter import channel_wires
+from brain.core.entitlement import EntitlementSet
+from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
 from brain.db import metadata
+from brain.gate.addressing import from_mention
 from brain.gate.context import Channel
+from brain.gate.select import SelectionStage, select_agent
 from brain.knowledge.visibility import Visibility
 from brain.session import make_session_factory
 from brain.tables import channel_switch as table_module
 from brain.tables.identity import PRINCIPAL_ID_CHARS, one_of
+from brain.tools.registry import ToolRegistry
 from tests.e2e.test_wave_three_installed_agent import SIGNING_KEY, serving
 from tests.fixtures.retirable import EXTENSIONS, has_pgvector, predecessor, retirable
 from tests.fixtures.scratch_postgres import drop, fresh, migrate, run, sql
@@ -50,7 +60,7 @@ from tests.unit.test_review_store import entries
 from tests.unit.test_tables import DIALECT, VERSIONS, as_amended, migration_module, rendered, squash
 
 MIGRATION = VERSIONS / "0159_channel_switches.py"
-BACKFILL = VERSIONS / "0159b_web_page_for_existing_agents.py"
+BACKFILL = VERSIONS / "0159b_channels_for_existing_agents.py"
 MIGRATION_0149 = VERSIONS / "0149_agent_manifest_draft.py"
 
 AGENT_COLUMNS = (
@@ -58,6 +68,22 @@ AGENT_COLUMNS = (
     " scope, capabilities, allowed_tools, required_tools, max_side_effect, created_by)"
     " VALUES (%s, %s, 'Answer briefly.', 'main', 'company', 'u_steward', NULL,"
     " '{\"clauses\": []}', '{}', '{}', '{}', 'none', 'u_steward')"
+)
+
+
+#: A chat this install connected: its record, on or off, as the channel set-up writes it.
+CONNECTED = (
+    "INSERT INTO ops.channel (channel, enabled, tenant, secret_path, secret_role, updated_by)"
+    " VALUES (%s, %s, '{}', %s, 'application', 'u_admin')"
+)
+PERSON = (
+    "INSERT INTO auth.principal (id, kind, employment, display_name)"
+    " VALUES (%s, 'human', 'staff', 'Owner')"
+)
+#: A service account, which asks `/answer` with no session and so on the API.
+SERVICE_ACCOUNT = (
+    "INSERT INTO auth.service_account (client_id, owner_principal_id, ceiling, not_after,"
+    " created_by) VALUES (%s, %s, ARRAY['read:note'], now() + interval '1 day', 'u_admin')"
 )
 
 
@@ -80,8 +106,10 @@ def test_0159_holds_the_widths_words_and_vocabulary_the_model_holds() -> None:
     backfill = migration_module(BACKFILL)
     assert backfill.down_revision == migration.revision == "0159"
     assert backfill.WEB == table_module.WEB_PAGE.value == Channel.CONSOLE.value
-    assert backfill.BACKFILL_REASON == table_module.ANSWERED_ON_THE_WEB_BEFORE_CHANNELS_EXISTED
+    assert backfill.BACKFILL_REASON == table_module.ANSWERED_HERE_BEFORE_CHANNELS_EXISTED
     assert backfill.BACKFILL_ACTOR == table_module.BACKFILLED_BY == f"migration.{backfill.revision}"
+    assert Channel.API.value == backfill.API
+    assert tuple(sorted(one.value for one in channel_wires())) == backfill.RECEIVING_CHANNELS
 
 
 def test_0159_builds_the_table_as_the_model_declares_and_the_act_column_it_claims() -> None:
@@ -143,20 +171,26 @@ def before_0159() -> Iterator[tuple[str, str]]:
         drop(name)
 
 
-def test_the_upgrade_switches_the_web_page_on_for_every_agent_that_existed_and_ledgers_each(
+def test_on_an_install_with_nothing_connected_every_existing_agent_keeps_the_web_page_alone(
     before_0159: tuple[str, str],
 ) -> None:
-    """**Nothing that answered stops answering.** Every agent written before `0159` runs, archived
-    included, gets one switch turning the web page on, by the migration and for the named reason,
-    and one `compose_change` entry about it naming the channels, the web page and the direction; an
-    agent written afterwards gets none; and every act already taken reads as on the web.
+    """**Nothing that answered stops answering.** On an install that connected no chat and whose
+    only service account is retired, every agent written before the upgrade, archived included,
+    gets one switch turning the web page on, by the migration and for the named reason, and one
+    `compose_change` entry about it naming the channels, the web page and the direction; nothing
+    else is switched on; an agent written afterwards gets none; and every act already taken reads
+    as on the web.
 
-    Delete this and an upgrade can leave every existing agent answering nowhere, switch them on
-    with nothing on the ledger, or switch on an agent made after it ran."""
+    Delete this and an upgrade can leave every existing agent answering nowhere, switch on a
+    surface nothing reached it through, switch them on with nothing on the ledger, or switch on an
+    agent made after it ran."""
     name, url = before_0159
     for agent_id in ("sales_desk", "help_desk", "old_desk"):
         sql(url, AGENT_COLUMNS, agent_id, agent_id.replace("_", " ").title())
     sql(url, "UPDATE agent.agent SET archived_at = now() WHERE id = 'old_desk'")
+    sql(url, PERSON, "u_owner")
+    sql(url, SERVICE_ACCOUNT, "svc_retired", "u_owner")
+    sql(url, "UPDATE auth.service_account SET deleted_at = now() WHERE client_id = 'svc_retired'")
 
     migrate(name, "upgrade", "head")
     sql(url, AGENT_COLUMNS, "new_desk", "New desk")
@@ -166,7 +200,7 @@ def test_the_upgrade_switches_the_web_page_on_for_every_agent_that_existed_and_l
         "SELECT agent_id, channel, switched_on, changed_by, reason_code FROM agent.channel_switch"
         " ORDER BY agent_id",
     )
-    reason = "answered_on_the_web_before_channels_existed"
+    reason = "answered_here_before_channels_existed"
     assert switches == [
         (agent_id, "console", True, "migration.0159b", reason)
         for agent_id in ("help_desk", "old_desk", "sales_desk")
@@ -186,6 +220,78 @@ def test_the_upgrade_switches_the_web_page_on_for_every_agent_that_existed_and_l
         " WHERE table_schema = 'agent' AND table_name = 'manifest_act'"
         " AND column_name = 'on_the_web'",
     ) == [("true",)]
+
+
+def test_an_agent_reached_by_a_mention_on_a_connected_chat_before_the_upgrade_is_reached_after(
+    before_0159: tuple[str, str],
+) -> None:
+    """**Nothing that answers today stops answering, on any install.** Before the upgrade a message
+    on a connected Lark opening with `@sales_desk` reached that agent, and so did the API for a
+    service account. After it, every existing agent is switched on for the web page, for every
+    connected chat this release receives on (a connected chat switched off included, because it
+    answers again the moment it is switched back on) and for the API, each with one ledger entry;
+    and the answer route's own readers, asked on Lark with the mention read by `from_mention`,
+    still select that agent. A chat nobody connected is switched on for nobody.
+
+    Delete this and the upgrade can silently stop every agent answering in the chat the owner uses,
+    which is the rule the upgrade exists to keep."""
+    name, url = before_0159
+    for agent_id in ("sales_desk", "help_desk"):
+        sql(url, AGENT_COLUMNS, agent_id, agent_id.replace("_", " ").title())
+    for channel, on in (("lark", True), ("webhook", False)):
+        sql(url, CONNECTED, channel, on, f"providers/channel_{channel}")
+    sql(url, PERSON, "u_owner")
+    sql(url, SERVICE_ACCOUNT, "svc_reporting", "u_owner")
+
+    migrate(name, "upgrade", "head")
+
+    switches = sql(
+        url,
+        "SELECT agent_id, channel, changed_by, reason_code FROM agent.channel_switch"
+        " WHERE switched_on ORDER BY agent_id, channel",
+    )
+    assert switches == [
+        (agent_id, channel, "migration.0159b", "answered_here_before_channels_existed")
+        for agent_id in ("help_desk", "sales_desk")
+        for channel in ("api", "console", "lark", "webhook")
+    ]
+    ledgered = [one for one in entries(url, "compose_change") if one.actor_id == "migration.0159b"]
+    assert len(ledgered) == len(switches)
+
+    person = Principal(
+        id="u_reader", kind=PrincipalKind.HUMAN, employment=Employment.STAFF, display_name="Reader"
+    )
+    reach = EntitlementSet(principal_id="u_reader")
+
+    async def selected(channel: Channel, text: str) -> tuple[SelectionStage, str]:
+        built = app_engine(url)
+        try:
+            sessions = make_session_factory(built)
+            state = SimpleNamespace(
+                agent_roster=agent_roster_for(sessions), agent_channels=agent_channels_for(sessions)
+            )
+            asked = Answering(principal=person, reach=reach, channel=channel, now=AT)
+            roster = await roster_of(state, asked, ToolRegistry())
+            address = from_mention(text)
+            chosen = select_agent(
+                address.question,
+                channel,
+                visible_agents=roster.visible,
+                default_agent=DEFAULT_AGENT,
+                addressed=address.agent_id,
+            )
+            return chosen.stage, chosen.agent_id
+        finally:
+            await built.dispose()
+
+    assert run(lambda: selected(Channel.LARK, "@sales_desk what is on this week")) == (
+        SelectionStage.ADDRESSED,
+        "sales_desk",
+    )
+    assert run(lambda: selected(Channel.SLACK, "@sales_desk what is on this week")) == (
+        SelectionStage.DEFAULT,
+        DEFAULT_AGENT,
+    )
 
 
 #: Far from any wall clock, for CLAUDE.md's reason.

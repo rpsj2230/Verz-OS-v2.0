@@ -17,9 +17,11 @@ is the default the requirement refuses. See `THE_WEB_PAGE_IS_A_CHANNEL_THAT_IS_S
 
 **A channel no switch names is off.** The newest switch for an agent and a channel decides, and
 nothing else: an agent nobody switched on answers nowhere, and its page says so in plain words
-(`NOT_REACHABLE`). `0159` switched the web page on for every agent that existed when it ran, and the
-create flow switches it on for a new agent unless the person creating it unticks it, so nothing that
-answered before stops answering on the page.
+(`NOT_REACHABLE`). `0159b` switched on, for every agent that existed when it ran, the web page and
+every channel it could be reached on then (each connected chat that reads a leading mention, and
+the API where a service account could ask), so nothing that answered before stops answering
+anywhere. The create flow switches the web page on for a new agent unless the person creating it
+unticks it, and nothing else.
 
 **An agent switched off for a channel is refused there in the shape of an agent the person cannot
 use.** `answering_on` drops it from the roster before `brain.gate.roster.answer_roster` sees it, so

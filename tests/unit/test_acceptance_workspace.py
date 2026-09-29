@@ -616,3 +616,42 @@ def test_a_switch_that_answers_on_every_channel_fails_the_channels_check(
         FAILED,
         "an agent switched on for the web page answered on a chat",
     )
+
+
+@pytest.mark.needs_db
+def test_an_agent_the_upgrade_left_off_a_connected_chat_fails_the_channels_check() -> None:
+    """On an install where Lark was connected before the upgrade and an agent made before it has
+    the upgrade's web page row and no Lark row, the check says the agent lost a channel. Delete
+    this and the check's first half could pass over an install whose upgrade kept only the web
+    page, which is the owner's Lark going quiet with every check green. Its own database, because
+    the rows it writes are the ones every other run must not find."""
+    from tests.fixtures.scratch_postgres import sql
+
+    with at_head("brain_acceptance_channels_kept") as url:
+        sql(
+            url,
+            "INSERT INTO agent.agent (id, display_name, persona, tier, visibility, owner_id,"
+            " department, scope, capabilities, allowed_tools, required_tools, max_side_effect,"
+            " created_by, created_at) VALUES ('pre_upgrade_desk', 'Desk', 'Answer briefly.',"
+            " 'main', 'company', 'u_steward', NULL, '{\"clauses\": []}', '{}', '{}', '{}',"
+            " 'none', 'u_steward', '2019-01-01T00:00:00Z')",
+        )
+        sql(
+            url,
+            "INSERT INTO ops.channel (channel, enabled, tenant, secret_path, secret_role,"
+            " updated_by, updated_at) VALUES ('lark', true, '{}', 'providers/channel_lark',"
+            " 'application', 'u_admin', '2019-01-02T00:00:00Z')",
+        )
+        sql(
+            url,
+            "INSERT INTO agent.channel_switch (id, agent_id, channel, switched_on, changed_by,"
+            " reason_code, entitlement_hash, trace_id, changed_at) VALUES (gen_random_uuid(),"
+            " 'pre_upgrade_desk', 'console', true, 'migration.0159b',"
+            " 'answered_here_before_channels_existed', repeat('0', 32), 'migration.0159b',"
+            " '2019-01-03T00:00:00Z')",
+        )
+
+        assert run_checks(url, (by_name(CHANNELS_CHECK),))[CHANNELS_CHECK] == (
+            FAILED,
+            "an agent that existed before channels lost a channel it had",
+        )
