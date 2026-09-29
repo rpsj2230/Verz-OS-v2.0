@@ -12,19 +12,19 @@
  * under its heading, because rendering it as the first is the reassuring direction during an
  * incident.
  *
- * **Changing a limit is coming, not here.** M22.4.1 asks for limits changed from the console within
- * bounds the product fixes; no route does it yet, so the control is `kit/UnavailableAction` with
- * the sentence `operationsActions.ts` gives, and its `retiredBy` pattern retires it the day one lands.
+ * **A limit is changed here, within bounds the product fixes** (M22.4.1). `LimitSettings` lists
+ * every budget and request window `brain.tuning_routes` serves, and draws a control on each row only
+ * for a reader the answer says may change it. Until 2026-09-29 this was `kit/UnavailableAction`
+ * saying "coming soon"; the route landed and the act went, in the same commit.
  *
  * **What was removed.** Raw `true` and `false` cells and bare seconds (words now), and the
  * paragraphs explaining why each table is a plain table.
  *
- * Task ids: M27.7.27, M23.1.1, M23.2.1, M27.16.1
+ * Task ids: M27.7.27, M23.1.1, M23.2.1, M27.16.1, M22.4.1
  */
 
-import { SlidersHorizontal } from "lucide-react";
 import { useResource } from "../../api/useResource";
-import { SectionCard, UnavailableAction, type EntityColumn } from "../../components/kit";
+import { SectionCard, type EntityColumn } from "../../components/kit";
 import {
   LIMITS_API_PATH,
   readThrottled,
@@ -36,7 +36,7 @@ import {
   type Unusual,
   type Window,
 } from "../installQuery";
-import { UNAVAILABLE } from "./operationsActions";
+import { LimitSettings } from "./LimitSettings";
 import { durationWords, Line, OpsPage, PLATFORM, WholeList } from "./parts";
 import { BandPill, Pill } from "./pills";
 
@@ -143,14 +143,6 @@ export function LimitsPage() {
       crumbs={[{ label: PLATFORM }, { label: LIMITS_HEADING }]}
       title={LIMITS_HEADING}
       lede={LIMITS_LEDE}
-      primary={
-        <UnavailableAction
-          label={UNAVAILABLE.changeLimits.label}
-          text={UNAVAILABLE.changeLimits.label}
-          icon={<SlidersHorizontal aria-hidden />}
-          reason={UNAVAILABLE.changeLimits.reason}
-        />
-      }
       loading={READING_LIMITS}
       busy={answer.busy}
       failure={answer.failure}
@@ -215,6 +207,7 @@ export function LimitsPage() {
                 <Line>{unusual.unread}</Line>
               </SectionCard>
             ) : null}
+            <LimitSettings />
           </>
         );
       }}

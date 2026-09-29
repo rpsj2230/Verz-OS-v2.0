@@ -29,6 +29,7 @@ import { UNAVAILABLE } from "../src/pages/operations/operationsActions";
 import { jobName } from "../src/pages/operations/parts";
 import { NOTHING_LOOKED as NOTHING_LOOKED_AT_COPIES } from "../src/pages/operations/RecoveryPage";
 import { NOTHING_LOOKED as NOTHING_LOOKED_AT_WINDOWS } from "../src/pages/operations/LimitsPage";
+import { CHANGE_LIMIT, KEEP_LIMIT, SAVE_LIMIT, TUNING_HEADING } from "../src/pages/tuningQuery";
 import { NOTHING_RECORDED } from "../src/pages/operations/ArtifactsPage";
 import { EXPORT_LABEL, KEEP_LABEL, NOT_A_WINDOW, NOT_EXPORTABLE } from "../src/pages/operations/DataTransferPage";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -41,6 +42,7 @@ import { readRepoFile } from "./support/repo";
 const CONSOLE_ORIGIN = "https://console.test";
 const JOBS_ROUTES = "src/brain/jobs_routes.py";
 const INSTALL_ROUTES = "src/brain/install_routes.py";
+const TUNING_ROUTES = "src/brain/tuning_routes.py";
 
 beforeAll(async () => {
   installRadixStubs();
@@ -197,15 +199,14 @@ describe("what the Operations pages agree with the API about", () => {
   });
 
   test("every act drawn as unavailable names no route the API document declares", () => {
-    // What breaks if this is deleted: a route for stopping a run, changing a limit, starting a
-    // rehearsal or importing lands and the page goes on saying "coming soon" about it.
+    // What breaks if this is deleted: a route for stopping a run, starting a rehearsal or
+    // importing lands and the page goes on saying "coming soon" about it.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
     for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
     // The positive case: each pattern does match the path it is waiting for.
     expect(UNAVAILABLE.stopRun.retiredBy.test("/api/v1/jobs/{name}/stop")).toBe(true);
-    expect(UNAVAILABLE.changeLimits.retiredBy.test("/api/v1/install/limits/{window}")).toBe(true);
     expect(UNAVAILABLE.startRehearsal.retiredBy.test("/api/v1/install/recovery/rehearsals")).toBe(true);
     expect(UNAVAILABLE.importData.retiredBy.test("/api/v1/data-transfer/imports")).toBe(true);
   });
@@ -515,9 +516,9 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(read.container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toContain(UNAVAILABLE.startRehearsal.label);
   });
 
-  test("an absent throttling list is a sentence, the windows are listed, and changing a limit is inert", async () => {
-    // What breaks if this is deleted: nothing having looked drawn as nobody being refused, or a
-    // change-limits button that reaches nothing (M22.4.1 has no route yet).
+  test("an absent throttling list is a sentence, the windows are listed, and nothing is drawn as coming soon", async () => {
+    // What breaks if this is deleted: nothing having looked drawn as nobody being refused, or the
+    // "coming soon" act left on the page after the route that changes a limit landed (M22.4.1).
     const body = {
       ceilings: [{ name: "xero", per_day: 5000, raisable: false, derived: false }],
       windows: [{ scope: "principal", applies_to: "each person", period: "minute", limit: 30, window_seconds: 60, raisable: true, when_unreachable: "REFUSES-WHEN-UNREACHABLE" }],
@@ -534,7 +535,7 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(text).toContain("30 a minute");
     expect(text).toContain("REFUSES-WHEN-UNREACHABLE");
     expect(text).not.toMatch(/\btrue\b|\bfalse\b/);
-    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toContain(UNAVAILABLE.changeLimits.label);
+    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)).toBeNull();
   });
 
   test("a reserved figure nobody read is not recorded yet, and a finding is the API's own sentence", async () => {
@@ -552,6 +553,112 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(reserved?.textContent).not.toContain("MiB");
     expect(mainText(container)).toContain("BREACH-SENTENCE");
     expect(mainText(container)).toContain("application");
+  });
+});
+
+// --------------------------------------------------------------------------- limits you can change
+
+const LIMITS_BODY = {
+  ceilings: [],
+  windows: [],
+  throttled: [],
+  unread: "",
+  unusual: null,
+  unusual_unread: "NOTHING-COUNTED",
+};
+
+function tuningBody(mayChange: boolean, value = 30, saved = false) {
+  return {
+    knobs: [
+      {
+        name: "person_per_minute",
+        kind: "rate",
+        label: "Questions one person may ask a minute",
+        unit: "a minute",
+        value,
+        default: 30,
+        lowest: 5,
+        highest: 120,
+        saved,
+        bounds_because: "BOUNDS-BECAUSE",
+      },
+    ],
+    may_change: mayChange,
+    in_force: "IN-FORCE-SENTENCE",
+  };
+}
+
+describe("Limits you can change", () => {
+  test("every field the card reads is a field the tuning route declares", () => {
+    // What breaks if this is deleted: a field renamed in `brain.tuning_routes` that the card goes
+    // on reading, which renders as an empty figure or a control drawn for nobody.
+    const body = tuningBody(true);
+    expect(Object.keys(body).sort()).toEqual(backendModelFields(TUNING_ROUTES, "TuningView").sort());
+    expect(Object.keys(body.knobs[0] ?? {}).sort()).toEqual(backendModelFields(TUNING_ROUTES, "KnobView").sort());
+    const declared = declaredRequestBodySchema("/api/v1/install/tuning/{name}", "put");
+    expect(Object.keys(declared["properties"] as object)).toEqual(["value"]);
+  });
+
+  test("a reader who may not change a limit sees what is in force and between which bounds, and no control", async () => {
+    // What breaks if this is deleted: a control drawn for a reader the write refuses, or the
+    // figures withheld from a reader of the screen.
+    const { container } = await open("/limits", {
+      "GET /api/v1/install/limits": () => ({ body: LIMITS_BODY }),
+      "GET /api/v1/install/tuning": () => ({ body: tuningBody(false) }),
+    });
+    const text = mainText(container);
+    expect(text).toContain(TUNING_HEADING);
+    expect(text).toContain("Questions one person may ask a minute");
+    expect(text).toContain("30 a minute");
+    expect(text).toContain("5 to 120");
+    expect(text).toContain("IN-FORCE-SENTENCE");
+    expect(screen.queryByRole("button", { name: new RegExp(`^${CHANGE_LIMIT}:`) })).toBeNull();
+  });
+
+  test("a figure outside the bounds is refused before anything is sent, and a figure inside is confirmed and sent", async () => {
+    // What breaks if this is deleted: a change sent without its confirmation, a figure the
+    // bounds refuse sent anyway, or the new figure not drawn from the API's answer.
+    const { container, idp } = await open("/limits", {
+      "GET /api/v1/install/limits": () => ({ body: LIMITS_BODY }),
+      "GET /api/v1/install/tuning": () => ({ body: tuningBody(true) }),
+      "PUT /api/v1/install/tuning/person_per_minute": () => ({ body: tuningBody(true, 12, true) }),
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: `${CHANGE_LIMIT}: Questions one person may ask a minute` }));
+    });
+    const form = container.querySelector('form[aria-label="Questions one person may ask a minute"]') as HTMLFormElement;
+    const input = within(form).getByRole("textbox");
+    for (const refused of ["0", "121", "2.5", ""]) {
+      fireEvent.change(input, { target: { value: refused } });
+      await act(async () => {
+        fireEvent.submit(form);
+      });
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    }
+    expect(asked(idp, "PUT")).toEqual([]);
+
+    fireEvent.change(input, { target: { value: "12" } });
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("12 a minute");
+    expect(dialog.textContent).toContain("IN-FORCE-SENTENCE");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: KEEP_LIMIT }));
+    });
+    expect(asked(idp, "PUT")).toEqual([]);
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    await act(async () => {
+      fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: SAVE_LIMIT }));
+    });
+    await screen.findByText("Questions one person may ask a minute is now 12 a minute.");
+    const sent = idp.calls.find((call) => call.init?.method === "PUT" && call.url.includes("/install/tuning/"));
+    expect(JSON.parse(String(sent?.init?.body))).toEqual({ value: 12 });
+    expect(mainText(container)).toContain("Set here");
   });
 });
 

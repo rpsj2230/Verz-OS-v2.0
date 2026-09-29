@@ -368,6 +368,10 @@ from brain.storage_routes import router as storage_router
 # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
 from brain.tool_routes import router as tool_router
 
+# Every budget and request window a person may set from the Rate limits screen, within the
+# product's bounds, and one set, behind `admin:install_setting`. See `brain.tuning_routes`.
+from brain.tuning_routes import router as tuning_router
+
 # The Secrets vault screen: the seal, every slot, each source's leases and the audit log's
 # shipping. Read only, under the credentials route's capability. See `brain.vault_routes`.
 from brain.vault_routes import router as vault_router
