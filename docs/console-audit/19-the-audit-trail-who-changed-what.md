@@ -3,7 +3,7 @@
 - **Screens:** `/audit`, `/audit/verify`, `/audit/subject/:kind/:id`, `/audit/subject/:kind/:id/:view`, `/requirement-checks`
 - **Tables:** `obs.audit_entry`, `ops.sensitive_read`, `ops.requirement_check`, `agent.browser_session`, `obs.trace_step`, `obs.trace_read`
 - **Installation values:** none
-- **Measured here:** 5 routes, 0 called by no screen; 2 write routes, 1 with all three proofs; 1 gaps.
+- **Measured here:** 6 routes, 1 called by no screen; 2 write routes, 1 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -12,8 +12,9 @@
 | `GET /api/v1/requirements/checks` | `/requirement-checks` |
 | `POST /api/v1/audit/verification` | `/audit`, `/audit/subject/:kind/:id`, `/audit/subject/:kind/:id/:view`, `/audit/verify` |
 | `POST /api/v1/requirements/checks` | `/requirement-checks` |
+| `POST /api/v1/traces/{trace_id}/read` | **no screen** |
 
-- **Gap.** A run's trace graph is stored masked and read only under its own role, and no screen reads it: TraceGraph draws a completed run and no route serves one. Open leaf `M20.2.1`.
+- **Gap.** A run's trace graph is stored masked and read only under the payload role, and no screen reads it: the read route serves one to a holder of that role, and no page calls it for TraceGraph to draw. Open leaf `M20.2.1`.
 
 **Every write to this area, followed to the system.**
 
