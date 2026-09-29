@@ -228,6 +228,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_sources"] == [
         "a_connected_source_answers_on_ask_from_its_index_and_its_source",
     ]
+    # The Google sources, connected, indexed and asked; `tests/unit/test_acceptance_google.py`.
+    assert by_module["brain.ops.acceptance_checks_google"] == [
+        "an_analytics_property_answers_its_figures_live_and_keeps_none",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)

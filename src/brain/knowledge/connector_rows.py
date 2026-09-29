@@ -25,13 +25,22 @@ from the connections live at that moment, so a source connected on the Connector
 from the next question and one disconnected does not, with nothing restarted, and a source nobody
 connected contributes no question shape that could tell a person it exists.
 
+**A connected property's figures are classified beside its index fields, and never kept (M11.7.1).**
+Google Analytics keeps the property's name and dates; its sessions, users and conversions for each
+named range are read from Google when a question asks (`google_analytics.AnalyticsReport`). They
+are classified here all the same, each behind its own field capability, because the redactor
+withholds a field nothing classifies from everybody, and a figure read live is a field of the
+property's record by the time the redactor sees it. So "what is the sessions last 28 days of
+<property>" is asked in the words every other question is, and answered only to a reader granted
+that figure in the property's department.
+
 **What each answer reads, and what it never keeps.** The fast lane finds the record in the index
 at the asker's reach, `brain.ops.live_records.SourceRecords` reads that record from its source
 while the asker waits (Xero today; Freshdesk declares no live lookup yet), the redactor removes
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1
 """
 
 from __future__ import annotations
@@ -40,7 +49,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, xero
+from brain.connectors import freshdesk, google_analytics, xero
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -68,7 +77,11 @@ A_SOURCE_NOBODY_CONNECTED_ASKS_NOTHING: Final = (
 
 #: The field each source's visibility predicate tests on every row it keeps.
 SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
-    {xero.CONNECTOR_NAME: "tenant_id", freshdesk.FRESHDESK: "department"}
+    {
+        xero.CONNECTOR_NAME: "tenant_id",
+        freshdesk.FRESHDESK: "department",
+        google_analytics.GOOGLE_ANALYTICS: "department",
+    }
 )
 
 
@@ -143,11 +156,39 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def google_analytics_classifications() -> tuple[TableClassification, ...]:
+    """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
+
+    Every field behind its own capability (`read:analytics_property.sessions_last_28_days`, ...),
+    in Freshdesk's pattern, so a reader may be told the property's name and not its traffic, or one
+    range and not another. See the module docstring.
+    """
+    entity = google_analytics.ENTITY_PROPERTY
+    kept = tuple(one.name for one in google_analytics.PROPERTY_FIELDS)
+    return (
+        TableClassification(
+            entity=entity,
+            rules=(
+                *(
+                    ColumnRule(
+                        column=name,
+                        required_capability=Capability(value=f"read:{entity}.{name}"),
+                        classification=Classification.INTERNAL,
+                    )
+                    for name in (*kept, *google_analytics.FIGURE_FIELDS)
+                ),
+                _scope_column(google_analytics.GOOGLE_ANALYTICS, entity),
+            ),
+        ),
+    )
+
+
 #: Every connected source's classifications, by the source's name.
 CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
     {
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
+        google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
     }
 )
 
@@ -157,6 +198,9 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE): "invoice_number",
         (xero.CONNECTOR_NAME, xero.ENTITY_CONTACT): "name",
         (freshdesk.FRESHDESK, freshdesk.TICKET): "subject",
+        (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
+            google_analytics.LABEL_FIELD
+        ),
     }
 )
 
@@ -174,6 +218,13 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
             freshdesk.TICKET: (
                 "Look up Freshdesk tickets by subject: status, priority, due date and when it "
                 "last changed"
+            ),
+        },
+        google_analytics.GOOGLE_ANALYTICS: {
+            google_analytics.ENTITY_PROPERTY: (
+                "Look up the connected Google Analytics property by name: its sessions, users "
+                "and conversions for yesterday or the last 7, 28 or 90 days, read live from Google "
+                "for a reader allowed them"
             ),
         },
     }

@@ -615,6 +615,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_sync_run:RunKeyReader.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.connector_sync_store:LeaseCounts.tallies": Repeat.READS,
         "brain.ops.connector_sync_run:SourceCaller.get": Repeat.READS,
+        # A POST to a source is one of two things (M11.7.1): a report asked for with a body, which
+        # changes nothing, or a Google key file exchanged for a token, of which a second exists
+        # until its hour ends and is never read. The stronger of the two is what is recorded.
+        "brain.ops.connector_sync_run:SourcePoster.post": Repeat.EXPIRES_ON_ITS_OWN,
+        "brain.connectors.declaration:ScopedReading.token_scopes": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.entities": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.identity_mode": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.request_for": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.interpret": Repeat.READS,
         # Reading a connected source while somebody waits (M11.9.2). Which records are read live,
         # under whose credentials and narrowed how are computed from what they are handed, and the
         # source handed back is a GET this connection may only read, so a repeat is a second read.

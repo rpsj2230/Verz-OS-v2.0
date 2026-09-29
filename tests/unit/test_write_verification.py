@@ -28,6 +28,7 @@ import pytest
 
 from brain.connectors import (
     freshdesk,
+    google_analytics,
     google_drive,
     hubspot,
     laravel,
@@ -64,6 +65,7 @@ from brain.ops.idempotency import (
 )
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
+from tests.fixtures.cassettes.google_analytics import PROPERTY
 
 #: Every shipped connector's read-back, as the declarations state it.
 READ_BACKS = read_backs()
@@ -253,6 +255,16 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_drive", "DRIVE-429"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-401"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-200-property"): Verification.FOUND,
+    # A report, a token and every refusal hold no property, and a property read never proves one
+    # is gone: see `google_analytics.A_PROPERTY_READ_CANNOT_PROVE_ABSENCE`.
+    ("google_analytics", "GA-200-report"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-200-token"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-400-token"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-401"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-403-property"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-429-report"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-500-report"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
@@ -301,6 +313,12 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             )
             operation = google_drive.operation_for(endpoint)
             return verdict(reading("google_drive")(operation, reply))
+        case "google_analytics":
+            answered = google_analytics.Reply(
+                status=recorded.status, headers=recorded.headers, body=recorded.body
+            )
+            property_read = google_analytics.operation_for(PROPERTY)
+            return verdict(reading("google_analytics")(property_read, answered))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
         case "lark_base":
