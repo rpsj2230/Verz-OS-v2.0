@@ -104,10 +104,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
     line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    three, the tools' three, a document's life in four, the classified tables' three and an
-    answer's evidence in four, the modules in `CHECK_MODULES` order rather than the order a process
-    imported them. Delete this and a check can drop out of the suite with the page simply listing
-    one fewer row, or the page can lead with whichever module was imported first."""
+    three, the tools' three, a document's life in four, the classified tables' three, an
+    answer's evidence in four and the channels' seven, the modules in `CHECK_MODULES` order rather
+    than the order a process imported them. Delete this and a check can drop out of the suite with
+    the page simply listing one fewer row, or the page can lead with whichever module was imported
+    first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -166,6 +167,16 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_record_answer_cites_the_record_field_and_read_time",
         "four_kinds_of_nothing_are_kept_apart",
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
+    ]
+    # What channels declare, carry and bind, keys and WhatsApp; `test_acceptance_channels.py`.
+    assert by_module["brain.ops.acceptance_checks_channels"] == [
+        "every_adapter_serves_its_declared_capabilities_and_plans_by_them",
+        "a_reply_above_a_channels_ceiling_is_refused_and_points_to_ask",
+        "each_adapter_is_listed_and_its_health_follows_its_deliveries",
+        "a_code_minted_in_an_open_sign_in_binds_one_chat_account_once",
+        "a_new_device_replaces_the_old_and_unbinding_is_recorded",
+        "an_api_key_is_answered_until_it_is_revoked",
+        "a_whatsapp_webhook_is_accepted_only_under_its_app_secret",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -513,6 +524,11 @@ WRITTEN_BY_CHECKS = (
     "ops.outbox_delivery",
     "gate.grants_version",
     "gate.policy_epoch",
+    "auth.binding_code",
+    "auth.session",
+    "auth.service_account",
+    "auth.api_key",
+    "ops.credential_write",
 )
 
 
@@ -590,9 +606,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 24
+    assert len(outcomes) == 31
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 96
+    assert runs == [(2,)] and len(recorded) == 110
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

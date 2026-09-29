@@ -33,12 +33,21 @@ rule that a reason is given exactly when nothing was delivered are the table's c
 `DeliveryEntry` makes them again so a wrong entry fails where it was built rather than as a
 database error inside a request that had otherwise finished.
 
+**A delivery is stamped by the clock when its row is written, not when its transaction began.** The
+column's default is `now()`, which is the instant the transaction started, so every delivery written
+in one transaction shared a time and `recent` then ordered them by a random id: the Channels
+screen's health, which is decided by the newest delivery, was a coin toss between them. Found by the
+install's own health check (`brain.ops.acceptance_checks_channels`), which writes a sent and then a
+refused delivery in one rolled-back transaction. `record` names `clock_timestamp()`, which moves
+inside a transaction where `now()` does not, and which needs no migration. See
+`A_DELIVERY_IS_STAMPED_WHEN_IT_IS_WRITTEN`.
+
 Rejected: the channel's own key under `connector_keys/`, which is where `brain.ops.lark_connect`
 keeps the Lark app's credential for the chat use today. The application policy grants no read
 there, deliberately, because a connector's key is read by the worker that runs the connector; a
 channel is not run by the worker, and the process that must read its secret could not.
 
-Task ids: M10.6.1, M10.6.3, M3.2.2
+Task ids: M10.6.1, M10.6.3, M3.2.2, M10.1.4
 """
 
 from __future__ import annotations
@@ -93,6 +102,14 @@ A_CHANNEL_CHANGE_IS_ATTRIBUTED_IN_ITS_OWN_TRANSACTION: Final = (
     "The ledger entry for a channel's set-up or switch is written by a trigger, which cannot know "
     "who is writing. The store sets the writer, their reach digest and the request's trace on the "
     "transaction before the write, so the entry names all three instead of placeholders."
+)
+
+#: Why a delivery's time is the clock's at the insert.
+A_DELIVERY_IS_STAMPED_WHEN_IT_IS_WRITTEN: Final = (
+    "A channel's health is decided by its newest delivery, so two deliveries must never share a "
+    "time. The row is stamped with clock_timestamp() when it is written, which moves inside a "
+    "transaction, rather than the column's default of now(), which is the transaction's start and "
+    "left the order of two deliveries in one transaction to a random id."
 )
 
 #: How many delivery rows a listing reads at most. A page, not a history.
@@ -332,6 +349,8 @@ class StoredDeliveries:
             outcome=entry.outcome.value,
             reason=None if entry.reason is None else entry.reason.value,
             vendor_status=entry.vendor_status,
+            # See A_DELIVERY_IS_STAMPED_WHEN_IT_IS_WRITTEN.
+            recorded_at=func.clock_timestamp(),
         )
         async with self._sessions() as session, session.begin():
             await session.execute(statement)
