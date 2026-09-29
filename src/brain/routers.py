@@ -358,6 +358,10 @@ from brain.skill_routes import router as skill_router
 # somebody else holds a capability. See `brain.staff_source_routes`.
 from brain.staff_source_routes import router as staff_source_router
 
+# What the signed-in person is told as a steward: grants people made to themselves that reach a
+# document, source or agent they answer for. See `brain.stewardship_routes`.
+from brain.stewardship_routes import router as stewardship_router
+
 # Storage: the buckets the product keeps, each one's retention and why, and where the store
 # is, behind `admin:storage` over everything. Never an object's name. See
 # `brain.storage_routes`.

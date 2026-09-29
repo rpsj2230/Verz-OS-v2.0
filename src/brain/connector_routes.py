@@ -88,7 +88,18 @@ module calling them with values of its own would be this repository holding a cl
 configuration. The identifiers arrive from the person connecting the source, and are kept in that
 install's database.
 
+**A source names its steward, set and changed here (M7.7.2).** `POST
+/connectors/{connector}/steward` names the person who answers for a source from now on, asked of the
+authority a connection asks.
+The person named must be here and able to reach the source, by governing it or by reading what it
+declares, for the rule the document hand-over applies: a steward nobody could act on the source for
+is a name on a page. See `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`. A source nobody named
+anybody for is stewarded by the data steward, or by whoever connected it, which is
+`brain.ops.stewardship_store.A_SOURCE_IS_STEWARDED_FROM_THE_MOMENT_IT_IS_CONNECTED`, and the
+source's page shows whoever that is.
+
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
+Task ids: M7.7.2
 """
 
 from __future__ import annotations
@@ -102,7 +113,8 @@ from typing import Annotated, Final
 import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import (
     _tool_registry,
@@ -164,6 +176,7 @@ from brain.core.errors import Absent, BrainError, Failed
 from brain.credential_routes import credentials_of
 from brain.guide_views import GuideStepView, step_view
 from brain.identity.data_steward import declared_capabilities
+from brain.identity.principal_store import StoredPrincipals
 from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.connectable import (
@@ -226,6 +239,7 @@ from brain.ops.credentials import (
     connector_key_slot,
 )
 from brain.ops.lark_connect import uses_switched_on
+from brain.ops.stewardship_store import NamedSteward, StoredStewardship
 from brain.routing_routes import sessions_of
 from brain.skill_routes import SkillLibrary
 
@@ -255,6 +269,38 @@ EXPORT_PATH: Final = SOURCE_PATH + "/export"
 PROBE_PATH: Final = CONNECTORS_PATH + "/{connector}/probe"
 PROBE_STATE_PATH: Final = SOURCE_PATH + "/probe"
 DRIFT_PATH: Final = SOURCE_PATH + "/drift"
+
+#: Where a source's steward is named (M7.7.2).
+STEWARD_PATH: Final = CONNECTORS_PATH + "/{connector}/steward"
+
+#: Why the person named must be able to reach the source.
+A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE: Final = (
+    "A steward answers for a source and is told when anybody grants themselves access to it. "
+    "Somebody who can neither govern the source nor read what it declares could do nothing about "
+    "either, so the person named must be here and hold one of the two."
+)
+
+#: What the steward form says for somebody the source cannot be handed to. One sentence for a
+#: person who is not here and one who cannot reach it, so the form does not tell who exists.
+STEWARD_REFUSED: Final = (
+    "That person cannot steward this source: name somebody who can govern it or read what it "
+    "declares."
+)
+
+#: What the steward form says when the person named already stewards it.
+ALREADY_STEWARD: Final = "That person already stewards this source."
+
+#: What the route says once a steward is named.
+STEWARD_NAMED: Final = (
+    "The new steward answers for this source from now on, and is told of access to it."
+)
+
+#: What naming a steward agrees to, which the page's confirmation says in these words.
+NAMING_A_STEWARD: Final = (
+    "The person you name answers for this source from now on, in place of its current steward, "
+    "and is the one told when anybody grants themselves access to what it holds. The change is "
+    "recorded in the audit trail."
+)
 
 #: The Install setting Connect Lark saves its switched-on uses under.
 LARK_USES_SETTING: Final = "INSTALL_LARK_USES"
@@ -718,6 +764,11 @@ class ConnectorSourceView(BaseModel):
     skills: list[ConnectorSkillView]
     confirm_edit: str
     confirm_key: str
+    #: Who answers for the source (M7.7.2), a principal id whose name is in `people`; empty while
+    #: it is not connected, or for a reader who may not be told it is.
+    steward: str = ""
+    #: What naming a steward agrees to, for the page's confirmation (M7.7.2).
+    confirm_steward: str = NAMING_A_STEWARD
 
 
 class ConnectorExportedConnectionView(BaseModel):
@@ -764,6 +815,26 @@ class ConnectorExportView(BaseModel):
     ceiling: str
     recorded: str
     history: list[ConnectorHistoryView]
+
+
+class SourceStewardAsked(BaseModel):
+    """Who is to steward the source, by their principal id."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    steward_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.@-]{1,128}$")
+
+
+class SourceStewardView(BaseModel):
+    """The steward named: who, their name where one is known, and when."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    steward_id: str
+    steward_name: str
+    named_at: datetime
+    told: str
 
 
 class ConnectorProbeView(BaseModel):
@@ -1407,12 +1478,13 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
     if declared is None:
         raise _not_answerable("connector source")
     one = await _one_source(request, connector, asked)
+    steward = await steward_of(request, one.live) if one.live is not None and one.told_of else ""
     actors = {
         actor
         for entry in one.history
         for actor in (entry.connected_by, entry.disconnected_by)
         if actor
-    }
+    } | ({steward} if steward else set())
     return ConnectorSourceView(
         source=row_view(one.row),
         elsewhere=declared.not_from_the_console,
@@ -1431,6 +1503,7 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
         skills=await _skills_from(request, connector, asked) if one.told_of else [],
         confirm_edit=EDITING_A_SOURCE,
         confirm_key=REPLACING_A_KEY,
+        steward=steward,
     )
 
 
@@ -1494,6 +1567,90 @@ async def _live_connection(request: Request, connector: str) -> Connection | Non
     if records is None:
         raise Failed("no database on this process")
     return next((one for one in await records.connected() if one.connector == connector), None)
+
+
+def stewardship_of(request: Request) -> StoredStewardship | None:
+    """`app.state.stewardship` when something put one there, or the database, or None."""
+    found = getattr(request.app.state, "stewardship", None)
+    if isinstance(found, StoredStewardship):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredStewardship(sessions)
+
+
+async def steward_of(request: Request, live: Connection) -> str:
+    """Who stewards this connected source now. See `brain.ops.stewardship_store.source_steward`."""
+    store = stewardship_of(request)
+    if store is None:
+        return live.connected_by
+    return await store.steward_of(live.connector, connected_by=live.connected_by)
+
+
+async def may_steward(
+    sessions: async_sessionmaker[AsyncSession], principal_id: str, live: Connection, now: datetime
+) -> bool:
+    """Whether this person may steward this source. See
+    `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`.
+
+    Given the sessions rather than the request, so the install acceptance check asks the route's
+    own question rather than a copy of it.
+    """
+    from brain.knowledge_lifecycle_routes import entitlement_of
+
+    if await StoredPrincipals(sessions).live_principal(principal_id) is None:
+        return False
+    async with sessions() as session, session.begin():
+        theirs = await entitlement_of(session, principal_id, now)
+    if may_connect_source(theirs, live.connector, now):
+        return True
+    manifest = manifest_or_none(live)
+    declared = () if manifest is None else declared_capabilities(manifest)
+    return any(theirs.holds(Capability(value=one), now) for one in declared)
+
+
+@router.post(STEWARD_PATH, response_model=SourceStewardView, responses=_WRITE_RESPONSES)
+async def name_steward(
+    request: Request, connector: str, body: SourceStewardAsked, asked: Asked
+) -> JSONResponse:
+    """Name who answers for a connected source from now on (M7.7.2), or say why not.
+
+    Asked of the authority a connection asks, before anything is read. A source that is not
+    connected is the router's one refusal, as for an edit.
+    """
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("naming a steward not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("steward")
+    store = stewardship_of(request)
+    if store is None:
+        raise Failed("no database on this process")
+    live = await _live_connection(request, connector)
+    if live is None:
+        raise _not_answerable("steward")
+    if body.steward_id == await steward_of(request, live):
+        return _problems(
+            (SettingProblem(field="steward_id", code="unchanged", message=ALREADY_STEWARD),)
+        )
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    if not await may_steward(sessions, body.steward_id, live, asked.now):
+        return _problems(
+            (SettingProblem(field="steward_id", code="not_a_steward", message=STEWARD_REFUSED),)
+        )
+    actor = asked.reach.principal_id
+    named: NamedSteward = await store.name(
+        connector, body.steward_id, by=actor, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id()
+    )
+    log.info("source steward named", connector=connector, principal=actor)
+    names = await _people(request, (named.steward_id,))
+    answered = SourceStewardView(
+        connector=connector,
+        steward_id=named.steward_id,
+        steward_name=names.get(named.steward_id, ""),
+        named_at=named.named_at,
+        told=STEWARD_NAMED,
+    )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 
 
 @router.post(EDIT_PATH, response_model=ConnectorEditedView, responses=_WRITE_RESPONSES)
