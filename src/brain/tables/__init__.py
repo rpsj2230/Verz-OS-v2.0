@@ -404,6 +404,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0146_access_request_handled_and_certification_export. A mark points at the request it
     # marks, which is never deleted.
     "gate.access_request_handled",
+    # 0150_trace_store_and_browser_session. A session points at the envelope its run was sealed
+    # under; a trace step and a trace read point at nothing, because a trace id is a value.
+    "agent.browser_session",
+    "obs.trace_step",
+    "obs.trace_read",
 )
 
 __all__ = [

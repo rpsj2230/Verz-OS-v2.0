@@ -37,7 +37,17 @@ duration.
 executor sent the model call and the step that settled it; migrations 0100 and 0113 add them
 nullable, because a row the front half or the executor did not decide for has none.
 
-Task ids: M30.5.2, M3.4.2, M3.6.3
+**The payload store is beside it, and it is the other of the two stores split by classification**
+(M27.1.3, M24.3.4). `obs.trace_step` is a run's trace graph, one row per step keyed by the trace
+id, and `obs.trace_read` is the row written before anybody reads one. The ledger holds names and
+counts and is read widely; the trace holds what a run did and handed back, masked, and is read by
+nobody on the application's role: `0150` grants `brain_app` INSERT on the steps and no SELECT, and
+only `brain_trace_reader` may read them. **A payload column admits the four strings `mask` can
+leave in one and nothing else**, so a payload that did not pass through
+`brain.ops.tracing.mask` is refused by the database as well as never built by
+`brain.ops.trace_store`.
+
+Task ids: M30.5.2, M3.4.2, M3.6.3, M27.1.3, M24.3.4
 """
 
 from __future__ import annotations
@@ -55,11 +65,14 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
     String,
+    Text,
     Uuid,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from brain.audit.ledger import TRACE_ID
 from brain.core.lane import Lane
 from brain.db import Base
 from brain.gate.classify import LaneBasis
@@ -68,6 +81,7 @@ from brain.gate.injection import MAX_SCORE
 from brain.gate.select import SelectionStage
 from brain.models.routing import Tier, TierBasis
 from brain.ops.telemetry import RequestStatus
+from brain.ops.tracing import MASKED_PAYLOADS, VALUE_TOKEN_RE, StepKind
 from brain.tables.adoption import TRACE_ID_CHARS
 from brain.tables.identity import one_of
 from brain.tables.spend import NAME_CHARS, PRINCIPAL_ID_CHARS
@@ -182,4 +196,86 @@ class RequestTelemetryRow(Base):
         Index("ix_request_telemetry_received_at", "received_at"),
         Index("ix_request_telemetry_trace_id", "trace_id"),
         {"schema": "obs", "postgresql_partition_by": PARTITION_BY},
+    )
+
+
+# ------------------------------------------------------------------ the payload store
+#: The width of a step's name: system vocabulary, a lane, a tool or a source.
+STEP_NAME_CHARS: Final = 64
+
+#: The width of the reason a payload read states. A reason, not an essay.
+READ_REASON_CHARS: Final = 500
+
+#: A step's name, in the grammar `brain.ops.tracing` admits unmasked under a safe key.
+STEP_NAME_CHECK: Final = f"name ~ '{VALUE_TOKEN_RE.pattern}'"
+
+
+def masked(column: str) -> str:
+    """The check that a payload column holds one of `MASKED_PAYLOADS` and no other text."""
+    return one_of(column, MASKED_PAYLOADS)
+
+
+class TraceStepRow(Base):
+    """`obs.trace_step`. One step of a run's trace graph, masked before it was built (M24.3.4).
+
+    Appended by `brain.ops.trace_store.TraceRecorder` and never updated. The graph is the parent
+    column: the request is step zero and has none, and every other step names an earlier one.
+    """
+
+    __tablename__ = "trace_step"
+
+    trace_id: Mapped[str] = mapped_column(String(TRACE_ID_CHARS), primary_key=True)
+    step: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    parent: Mapped[int | None] = mapped_column(SmallInteger)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[str] = mapped_column(String(STEP_NAME_CHARS), nullable=False)
+    #: `brain.ops.tracing.mask`'s attributes: an allowlisted name's value, or a mask token.
+    attributes: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    payload_in: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_out: Mapped[str] = mapped_column(Text, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"trace_id ~ '{TRACE_ID}'", name="trace_id_shape"),
+        CheckConstraint("step >= 0", name="step_not_negative"),
+        CheckConstraint(
+            "(parent IS NULL) = (step = 0) AND (parent IS NULL OR parent < step)",
+            name="a_step_hangs_from_an_earlier_one",
+        ),
+        CheckConstraint(one_of("kind", StepKind), name="kind"),
+        CheckConstraint("(kind = 'request') = (step = 0)", name="the_request_is_step_zero"),
+        CheckConstraint(STEP_NAME_CHECK, name="name_is_vocabulary"),
+        CheckConstraint("jsonb_typeof(attributes) = 'object'", name="attributes_object"),
+        CheckConstraint(masked("payload_in"), name="payload_in_masked"),
+        CheckConstraint(masked("payload_out"), name="payload_out_masked"),
+        {"schema": "obs"},
+    )
+
+
+class TraceReadRow(Base):
+    """`obs.trace_read`. One look at a stored trace, written before the look (M27.1.3).
+
+    `brain.ops.tracing.PayloadRead` as a row: who, when, which trace and why. Appended by
+    `brain.ops.trace_store.StoredTraces.read` in a transaction of its own that commits before the
+    trace is read, and never updated.
+    """
+
+    __tablename__ = "trace_read"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    actor: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(TRACE_ID_CHARS), nullable=False)
+    reason: Mapped[str] = mapped_column(String(READ_REASON_CHARS), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("length(btrim(actor)) > 0", name="somebody_read_it"),
+        CheckConstraint(f"trace_id ~ '{TRACE_ID}'", name="trace_id_shape"),
+        CheckConstraint("length(btrim(reason)) > 0", name="a_read_states_why"),
+        Index("ix_trace_read_trace_id", "trace_id"),
+        {"schema": "obs"},
     )
