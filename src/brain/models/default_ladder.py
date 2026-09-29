@@ -8,33 +8,48 @@ call. This module decides what the product writes there and when; `brain.ops.def
 writes it, into the same table the Routing screen edits, and `0059`'s trigger records each row
 under the `routing` ledger action like any other rung.
 
-**What the defaults are: one primary rung per tier the product routes to, for the one provider
-setup chose.** `DEFAULT_TIERS` is `main`, which is where `classify_tier` puts every answer-lane
-request, and `heavy`, which is where it puts the task lane and where an answer that overflows
-`main` escalates. `small` is left empty for the reason `routing.seed_chain` gives: it earns a
-rung when measurement shows traffic that keeps it cache-warm. Each rung's attempts, timeout and
-concurrency are the primary rung of that tier in `seed_chain`, read from it rather than restated,
-so the console's starting matrix and a fresh install's ladder are one set of numbers: `main` is
-one attempt at twelve seconds, inside `ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS`, and `heavy` is two
-at ninety, because nobody is watching a task. The install's own inference server answers one
-request at a time, so its rungs carry a concurrency of one. See
-`THE_DEFAULT_LADDER_IS_THE_SEEDS_PRIMARY_PER_TIER_FOR_THE_PROVIDER_SETUP_CHOSE`.
+**When setup chose Anthropic, the default is the owner's failover matrix** (drawn on 2026-09-03,
+restated on 2026-09-29, `OWNERS_MATRIX`): Simple, Medium and Complex each try three Anthropic
+models and then one Moonshot model, twelve steps in all. It is the design of record for the Models
+screen, and it overrules the argument this module made until 2026-09-29, that a failover is an
+administrator's decision and the product should write none. That argument had two halves and
+neither survives the code as it now stands. **"The same provider again is the same failure
+twice"** was true of `seed_chain`'s failover, which is the same model in another region; the
+owner's failovers are different models, which fail differently (one is overloaded while another
+answers). **"Another provider is one nobody chose or kept a key for"** was true before
+`brain.models.assembly`: a Moonshot step on an install holding no Moonshot key is now left out
+before the chain is planned, marked "no key" on the Models screen, and never reached, so it costs
+the person asking nothing and starts answering the moment the key is saved. See
+`THE_DEFAULT_LADDER_IS_THE_OWNERS_FAILOVER_MATRIX`.
 
-**Why no failover rung.** A second rung on the same provider is the same address and key tried
-again, which `seed_chain` refuses on the answer lane as twelve more seconds for the same outcome;
-a rung on a second provider is a provider nobody chose and whose key nobody kept, which
-`seed_chain` calls a chain that fails at the moment it is reached. A failover is an
-administrator's decision and belongs to them.
+**Every other provider's default is still one primary step in Medium and one in Complex**, the
+tiers `classify_tier` routes the answer lane and the task lane to. The owner drew a matrix for
+Anthropic and Moonshot; a failover onto a provider an OpenAI, DeepSeek or local install never
+chose is a decision nobody has made for them. See
+`ANOTHER_PROVIDERS_DEFAULT_IS_ONE_PRIMARY_PER_TIER`.
 
-**The model names are the product's and they are stated, not discovered.** The Anthropic names
-are `seed_chain`'s. The others are the providers' published names for the equivalent pair, and the
+**The numbers.** Each tier's first step is `seed_chain`'s primary for that tier, read from it
+rather than restated: Medium one attempt at twelve seconds, Complex two at ninety because nobody
+is watching a task. Simple has no seed row and a person waits on it as on Medium, so it takes
+Medium's. A failover on Complex is `seed_chain`'s own Complex failover. **A failover on a tier a
+person waits on is one attempt at four seconds**, because the answer lane's wall clock
+(`ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS`, 25) bounds the whole walk and the call path enforces no
+deadline of its own: twelve for the first step and four for each of the three after it is 24,
+inside the budget, and `check_answer_lane_budget` holds it. Rejected: a deadline inside the walk,
+which would let a failover reached after a fast failure use the whole remainder; it is the better
+behaviour and a change to the executor every call goes through, and the four seconds need no
+change there. See `A_WAITED_ON_WALK_FITS_THE_ANSWER_BUDGET`. The install's own inference server
+answers one request at a time, so its steps carry a concurrency of one.
+
+**The model names are the product's and they are stated, not discovered.** The Anthropic primaries
+of Medium and Complex are `seed_chain`'s, and a test holds the owner's matrix to them. The rest
+are the owner's names and the providers' published names for the equivalent pair, and the
 install's own server is asked for `LOCAL_COMPLETION_MODEL`, a name the product defines for the
 completion task rather than a model it chose. **Two costs are stated rather than hidden.** A name
-a provider retires stops its rung with a 4xx that the Models screen's check reports, and the
-Routing screen cannot rename a rung (`brain.routing_routes` refuses the deployment fields until
-M5.1's registry exists), so replacing one is a statement against the table. And
-`brain.ops.inference.SERVED_MODELS` declares no completion task, so a local install's rung dials a
-server that does not yet serve that name, and its check says so.
+a provider retires or refuses stops its step with a 4xx that the Models screen's Test reports,
+and the Routing screen cannot rename a step, so replacing one is a retirement and an addition.
+And `brain.ops.inference.SERVED_MODELS` declares no completion task, so a local install's step
+dials a server that does not yet serve that name, and its check says so.
 
 **When: only into a ladder nobody has held, and only once setup has chosen where text may go.**
 Two refusals, and each has a failure behind it. A ladder with a live rung is an administrator's,
@@ -46,6 +61,15 @@ And before setup, an install's profile is the template's default rather than any
 a start that wrote a local ladder before the wizard ran would sit in front of the hosted provider
 the wizard then chose, and every question would go to a server that does not answer. See
 `NO_LADDER_IS_WRITTEN_BEFORE_SETUP_HAS_CHOSEN_WHERE_TEXT_MAY_GO`.
+
+**One exception, and it is the product's own rows: an earlier default nobody touched is
+completed.** An install set up before 2026-09-29 holds `earlier_default`, one primary in Medium
+and one in Complex. When its live ladder is exactly those rows and no routing change was ever
+applied, the ladder is still what the product wrote, so a start adds the steps the default has
+since gained (`completion`). A held change changed nothing and does not count; an edited,
+reordered, emptied or extended ladder is somebody's and is left alone. Rejected: a migration
+inserting the rows, which is data in a schema change and cannot ask whether the install chose
+Anthropic. See `AN_UNTOUCHED_EARLIER_DEFAULT_IS_COMPLETED_ONCE`.
 
 **Which provider.** From the wizard, the one it recorded, when the profile is `hosted` and its key
 was kept, and the local server when the profile keeps text on the client's hardware. At a start,
@@ -62,7 +86,7 @@ from __future__ import annotations
 
 import enum
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Final, Protocol, runtime_checkable
 
@@ -82,15 +106,30 @@ from brain.ops.provider_keys import PROVIDER_SLOTS
 
 # ------------------------------------------------------------------- written-down reasons
 
-#: What the product writes, and why those numbers and names.
-THE_DEFAULT_LADDER_IS_THE_SEEDS_PRIMARY_PER_TIER_FOR_THE_PROVIDER_SETUP_CHOSE: Final = (
-    "One primary rung in main, where every answer-lane request is routed, and one in heavy, "
-    "where the task lane runs and an overflowing answer escalates, for the one provider setup "
-    "chose. Attempts, timeout and concurrency are seed_chain's primary rung for that tier, so "
-    "main fits the answer lane's wall-clock budget and heavy may retry because nobody is "
-    "waiting; the local server answers one request at a time, so its rungs admit one. No "
-    "failover: the same provider again is the same failure twice, and another provider is one "
-    "nobody chose or kept a key for."
+#: What the product writes when setup chose Anthropic, and why.
+THE_DEFAULT_LADDER_IS_THE_OWNERS_FAILOVER_MATRIX: Final = (
+    "When setup chose Anthropic, the default is the failover matrix the owner drew on 2026-09-03 "
+    "and restated on 2026-09-29: Simple, Medium and Complex each try three Anthropic models and "
+    "then one Moonshot model. The failovers are different models, which fail differently, and a "
+    "Moonshot step on an install holding no Moonshot key is left out before the chain is planned "
+    "and marked no key, so it costs the person asking nothing and answers once the key is saved."
+)
+
+#: Why every other provider's default is one primary step in each tier a lane routes to.
+ANOTHER_PROVIDERS_DEFAULT_IS_ONE_PRIMARY_PER_TIER: Final = (
+    "The owner drew a matrix for Anthropic and Moonshot. For any other provider setup chose, the "
+    "default is one primary step in Medium, where every answer-lane request is routed, and one in "
+    "Complex, where the task lane runs and an overflowing answer escalates. A failover onto a "
+    "provider that install never chose is a decision nobody has made for it."
+)
+
+#: Why a failover on a tier somebody waits on is given four seconds.
+A_WAITED_ON_WALK_FITS_THE_ANSWER_BUDGET: Final = (
+    "A person waits on Simple and Medium, and the answer lane's wall-clock budget bounds the "
+    "whole walk, not each step, because the call path has no deadline of its own. The first step "
+    "keeps the seed's twelve seconds so a legitimately slow question is not cut off, and each of "
+    "the three failovers gets one attempt at four seconds, which is 24 seconds in all. A failover "
+    "is mostly reached after a fast failure, a refused connection or an overloaded provider."
 )
 
 #: Why a ladder that ever held a rung is left alone.
@@ -100,6 +139,15 @@ A_LADDER_SOMEBODY_HELD_IS_NEVER_REFILLED_BY_THE_PRODUCT: Final = (
     "ledger does not, so the product writes its defaults only when no rung is live and no "
     "routing entry was ever recorded. Refilling an emptied ladder at a start would put back, "
     "at every restart, a decision somebody took away."
+)
+
+#: The one ladder with live rows the product still writes into, and why it is still the product's.
+AN_UNTOUCHED_EARLIER_DEFAULT_IS_COMPLETED_ONCE: Final = (
+    "A live ladder that is exactly the rows the product wrote before its default became the "
+    "owner's matrix, on an install where no routing change was ever applied, is the product's "
+    "own and nobody's decision, so a start adds the steps the default has since gained. A held "
+    "change changed nothing and does not count. Anything else live is somebody's ladder and is "
+    "left alone, and once completed the ladder is the default and the next start adds nothing."
 )
 
 #: Why a start writes nothing on an install nobody has set up.
@@ -113,8 +161,43 @@ NO_LADDER_IS_WRITTEN_BEFORE_SETUP_HAS_CHOSEN_WHERE_TEXT_MAY_GO: Final = (
 
 # ------------------------------------------------------------------------------ the figures
 
-#: The tiers a default ladder fills, in the order they are written.
+#: The tiers every provider's default has a primary step in, in the order they are written.
 DEFAULT_TIERS: Final[tuple[Tier, ...]] = (Tier.MAIN, Tier.HEAVY)
+
+#: The provider whose default is the owner's matrix.
+MATRIX_PROVIDER: Final = "anthropic"
+
+#: The owner's failover matrix (2026-09-03, restated 2026-09-29): per level, each step's provider
+#: and model in the order a question tries them. Written as he drew it; a test holds the Medium and
+#: Complex primaries to `seed_chain`'s models, so the two cannot drift.
+OWNERS_MATRIX: Final[Mapping[Tier, tuple[tuple[str, str], ...]]] = MappingProxyType(
+    {
+        Tier.SMALL: (
+            ("anthropic", "claude-haiku-4-5"),
+            ("anthropic", "claude-sonnet-5"),
+            ("anthropic", "claude-opus-5"),
+            ("moonshot", "kimi-k2.6"),
+        ),
+        Tier.MAIN: (
+            ("anthropic", "claude-sonnet-5"),
+            ("anthropic", "claude-opus-5"),
+            ("anthropic", "claude-haiku-4-5"),
+            ("moonshot", "kimi-k3"),
+        ),
+        Tier.HEAVY: (
+            ("anthropic", "claude-opus-5"),
+            ("anthropic", "claude-sonnet-5"),
+            ("anthropic", "claude-haiku-4-5"),
+            ("moonshot", "kimi-k3"),
+        ),
+    }
+)
+
+#: The tiers a person waits on: the answer lane's and the one below it. Their walks fit the budget.
+WAITED_ON: Final[frozenset[Tier]] = frozenset({Tier.SMALL, Tier.MAIN})
+
+#: One failover step's time on a tier a person waits on. See `A_WAITED_ON_WALK_FITS_THE_...`.
+WAITED_ON_FAILOVER_TIMEOUT_SECONDS: Final = 4.0
 
 #: The name the install's own inference server is asked for completion under. A task name the
 #: product defines, not a model it chose: which weights answer is the install's, and a runtime
@@ -132,9 +215,9 @@ def _seed_models() -> Mapping[Tier, str]:
     return {tier: chain.rungs_for(tier)[0].model for tier in DEFAULT_TIERS}
 
 
-#: The model each provider's default rung names, per tier. Every key slot has an entry and so does
-#: the install's own server, which a test holds, so the wizard cannot record a provider that has
-#: no ladder to write.
+#: The model each provider's primary step names, per tier every default fills. Every key slot has
+#: an entry and so does the install's own server, which a test holds, so the wizard cannot record
+#: a provider that has no ladder to write.
 DEFAULT_MODELS: Final[Mapping[str, Mapping[Tier, str]]] = MappingProxyType(
     {
         # `seed_chain`'s own names, read from it, so there is one copy.
@@ -152,11 +235,22 @@ DEFAULT_MODELS: Final[Mapping[str, Mapping[Tier, str]]] = MappingProxyType(
 )
 
 
+def _levels(provider: str) -> Mapping[Tier, tuple[tuple[str, str], ...]]:
+    """Each level's steps for one provider's default: the owner's matrix, or one primary each."""
+    if provider == MATRIX_PROVIDER:
+        return OWNERS_MATRIX
+    models = DEFAULT_MODELS[provider]
+    return {tier: ((provider, models[tier]),) for tier in DEFAULT_TIERS}
+
+
 class LadderWritten(enum.StrEnum):
     """What asking for the defaults came to. Recorded in a log line, never shown to a person."""
 
-    #: The defaults were written, one row per tier, each recorded by the routing trigger.
+    #: The defaults were written, one row per step, each recorded by the routing trigger.
     WRITTEN = "written"
+    #: The live ladder was the product's earlier default, untouched, and the missing steps were
+    #: added. See `AN_UNTOUCHED_EARLIER_DEFAULT_IS_COMPLETED_ONCE`.
+    COMPLETED = "completed"
     #: A rung is live, so the ladder is somebody's.
     HELD = "held"
     #: No rung is live and the ledger records a routing change, so somebody emptied it.
@@ -172,7 +266,9 @@ class DefaultRung:
     """One row the product writes into `ops.routing_rung`, with every column the table requires.
 
     `routing_rung` builds the policy layer's rung from it, so a default the chain would refuse is
-    refused in a test rather than by the first call that plans from it.
+    refused in a test rather than by the first call that plans from it. `role` is what
+    `RoutingChain.role_of` derives for the step in its default ladder, which is what `0097`'s
+    trigger writes over whatever is sent.
     """
 
     tier: Tier
@@ -182,16 +278,8 @@ class DefaultRung:
     attempts: int
     timeout_seconds: float
     max_concurrency: int
-
-    @property
-    def position(self) -> int:
-        """Every default is its tier's first rung: it is only ever written into an empty ladder."""
-        return 0
-
-    @property
-    def role(self) -> RungRole:
-        """What `RungRole` derives from a first position: the primary."""
-        return RungRole.PRIMARY
+    position: int = 0
+    role: RungRole = RungRole.PRIMARY
 
     def routing_rung(self) -> RoutingRung:
         """The rung as the chain holds it, through `RoutingRung`'s own checks."""
@@ -217,7 +305,76 @@ def default_ladder(provider: str) -> tuple[DefaultRung, ...]:
     """The rungs the product writes for one provider. Refuses a provider it has no names for.
 
     Refusing rather than returning nothing, because an empty tuple written into an empty ladder is
-    an install that answers nothing and says only that no rung names its provider.
+    an install that answers nothing and says only that no rung names its provider. Each step's
+    role is derived by `RoutingChain.role_of` over the whole default, the one derivation there is.
+    """
+    if provider not in DEFAULT_MODELS:
+        msg = f"{provider!r} has no default ladder; these do: {list(DEFAULT_MODELS)}"
+        raise ValueError(msg)
+    steps = tuple(
+        default_step(one, tier, position, model)
+        for tier, level in _levels(provider).items()
+        for position, (one, model) in enumerate(level)
+    )
+    chain = RoutingChain(rungs=tuple(step.routing_rung() for step in steps))
+    return tuple(replace(step, role=chain.role_of(step.routing_rung())) for step in steps)
+
+
+def default_step(provider: str, tier: Tier, position: int, model: str) -> DefaultRung:
+    """One default row at `position` of `tier`, naming `provider` and `model`, with its numbers.
+
+    The first step of a tier is `seed_chain`'s primary for it (Simple takes Medium's, having no
+    seed row) and names its deployment by provider and tier, as the product always has. A later
+    one is a failover: four seconds and one attempt on a tier a person waits on, `seed_chain`'s
+    own failover numbers otherwise, and its deployment named by provider and model, which is how
+    `brain.ops.matrix_gate.RungAddition` names a step added on the Routing screen.
+    """
+    seeded = seed_chain().rungs_for(tier if tier in DEFAULT_TIERS else Tier.MAIN)
+    if position == 0:
+        numbers = seeded[0]
+        attempts, timeout, concurrency = (
+            numbers.attempts,
+            numbers.timeout_seconds,
+            numbers.max_concurrency,
+        )
+        deployment = f"{provider}-{tier.value}"
+    else:
+        numbers = seeded[1]
+        attempts, timeout, concurrency = (
+            (1, WAITED_ON_FAILOVER_TIMEOUT_SECONDS, numbers.max_concurrency)
+            if tier in WAITED_ON
+            else (numbers.attempts, numbers.timeout_seconds, numbers.max_concurrency)
+        )
+        deployment = f"{provider}-{model}"[:120]
+    return DefaultRung(
+        tier=tier,
+        deployment_id=deployment,
+        provider=provider,
+        model=model,
+        attempts=attempts,
+        timeout_seconds=timeout,
+        max_concurrency=LOCAL_CONCURRENCY if provider == LOCAL_PROVIDER else concurrency,
+        position=position,
+    )
+
+
+def default_rung(provider: str, tier: Tier, model: str) -> DefaultRung:
+    """One primary default row: `seed_chain`'s primary numbers for `tier`, naming `provider` and
+    `model`.
+
+    Split out of `default_ladder` on 2026-09-28 so the Models screen's provider check can send
+    through a provider no step names yet with exactly the numbers a default step would carry
+    (`brain.provider_routes.unladdered_rung`), rather than a third set of numbers for one call.
+    """
+    return default_step(provider, tier, 0, model)
+
+
+def earlier_default(provider: str) -> tuple[DefaultRung, ...]:
+    """The ladder the product wrote until 2026-09-29: one primary in Medium and one in Complex.
+
+    For every provider but Anthropic this is still the whole default. Kept so a start can tell an
+    earlier default nobody touched from a ladder somebody chose. See
+    `AN_UNTOUCHED_EARLIER_DEFAULT_IS_COMPLETED_ONCE`.
     """
     models = DEFAULT_MODELS.get(provider)
     if models is None:
@@ -226,25 +383,55 @@ def default_ladder(provider: str) -> tuple[DefaultRung, ...]:
     return tuple(default_rung(provider, tier, models[tier]) for tier in DEFAULT_TIERS)
 
 
-def default_rung(provider: str, tier: Tier, model: str) -> DefaultRung:
-    """One default row: `seed_chain`'s primary numbers for `tier`, naming `provider` and `model`.
+@dataclass(frozen=True)
+class WrittenStep:
+    """One live row of `ops.routing_rung`, as the completion compares it with a default's.
 
-    Split out of `default_ladder` on 2026-09-28 so the Models screen's provider check can send
-    through a provider no step names yet with exactly the numbers a default step would carry
-    (`brain.provider_routes.unladdered_rung`), rather than a third set of numbers for one call.
+    Every column the product writes except the role, which the trigger derives and which a move
+    changes without anybody choosing it. `everywhere` is whether its scope narrows nothing, which
+    is the scope the product writes.
     """
-    primary = seed_chain().rungs_for(tier)[0]
-    return DefaultRung(
-        tier=tier,
-        deployment_id=f"{provider}-{tier.value}",
-        provider=provider,
-        model=model,
-        attempts=primary.attempts,
-        timeout_seconds=primary.timeout_seconds,
-        max_concurrency=(
-            LOCAL_CONCURRENCY if provider == LOCAL_PROVIDER else primary.max_concurrency
-        ),
-    )
+
+    tier: Tier
+    position: int
+    deployment_id: str
+    provider: str
+    model: str
+    attempts: int
+    timeout_seconds: float
+    max_concurrency: int
+    enabled: bool
+    everywhere: bool
+
+    @classmethod
+    def of(cls, step: DefaultRung) -> WrittenStep:
+        """A default row as the product writes it: in use, and applying to every question."""
+        return cls(
+            tier=step.tier,
+            position=step.position,
+            deployment_id=step.deployment_id,
+            provider=step.provider,
+            model=step.model,
+            attempts=step.attempts,
+            timeout_seconds=float(step.timeout_seconds),
+            max_concurrency=step.max_concurrency,
+            enabled=True,
+            everywhere=True,
+        )
+
+
+def completion(provider: str, live: Iterable[WrittenStep]) -> tuple[DefaultRung, ...]:
+    """The steps that make an untouched earlier default today's default, or none.
+
+    None unless the live rows are exactly `earlier_default(provider)`, every column the product
+    wrote, and nothing else. Whether a change was ever applied is the caller's to ask, under its
+    lock, because it is a read of the table rather than of these rows.
+    """
+    earlier = earlier_default(provider)
+    if frozenset(live) != frozenset(WrittenStep.of(one) for one in earlier):
+        return ()
+    held = {(one.tier, one.position) for one in earlier}
+    return tuple(one for one in default_ladder(provider) if (one.tier, one.position) not in held)
 
 
 def default_model(provider: str, registered: Sequence[str] = ()) -> str | None:
@@ -295,7 +482,8 @@ class LadderWriter(Protocol):
     """Where the defaults for one provider are written, when the ladder has never been held."""
 
     async def write(self, provider: str, *, actor: str, trace_id: str) -> LadderWritten:
-        """Write `default_ladder(provider)` into an unheld ladder, attributed to `actor`."""
+        """Write `default_ladder(provider)` into an unheld ladder, attributed to `actor`, or
+        complete an untouched earlier default."""
         ...
 
 
@@ -314,8 +502,8 @@ async def reconcile(
     counts them, and none means nothing is written: see
     `NO_LADDER_IS_WRITTEN_BEFORE_SETUP_HAS_CHOSEN_WHERE_TEXT_MAY_GO`. `profile` and `held` are the
     install's model profile and the providers whose key this process holds, read by the caller,
-    so this reads no environment. Whether the ladder was ever held is the writer's to find out,
-    under its own lock.
+    so this reads no environment. Whether the ladder was ever held, or is an earlier default
+    nobody touched, is the writer's to find out, under its own lock.
     """
     if administrators < 1:
         return LadderWritten.NOT_SET_UP

@@ -14,6 +14,9 @@ import { roleWords, type ProviderStatus, type StepMarker } from "../modelsQuery"
 
 const PILL = "inline-block rounded-[2px] px-1.5 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.03em]";
 
+/** The failover matrix's pills, rounded as the owner's screenshot draws them. */
+const ROUND = "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11.5px] leading-4 font-medium";
+
 export const ON = "On";
 export const OFF = "Off";
 
@@ -60,20 +63,29 @@ export function StatusPill({ status }: { readonly status: ProviderStatus }): Rea
   }
 }
 
-/** A step's role: the default as a pill, a later step in words, as the owner's screenshot has it. */
+/**
+ * A step's role, as the owner's screenshot has it: the default as a rounded pill in the install's
+ * accent, its border and wash, with a dot before the word; every later step in small quiet words.
+ */
 export function RolePill({ role }: { readonly role: string }): ReactElement {
   return role === "primary" ? (
-    <span data-slot="role-pill" className={`${PILL} bg-acc-wash text-acc-text`}>
+    <span data-slot="role-pill" className={`${ROUND} border-brand/60 bg-acc-wash text-acc-text`}>
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />
       {roleWords(role)}
     </span>
   ) : (
-    <span data-slot="role-pill" className="text-[12.5px] text-dim">
+    <span data-slot="role-pill" className="text-[12px] text-dim">
       {roleWords(role)}
     </span>
   );
 }
 
-/** Why a step will not answer the next call, drawn only when it will not. */
+/** A marker's words as a pill starts them: with a capital, "No key". */
+export function markerWords(marker: StepMarker): string {
+  return `${marker.label.charAt(0).toUpperCase()}${marker.label.slice(1)}`;
+}
+
+/** Why a step will not answer the next call, drawn only when it will not, beside its role. */
 export function MarkerPill({ marker }: { readonly marker: StepMarker }): ReactElement {
   switch (marker.kind) {
     case "resting":
@@ -81,16 +93,16 @@ export function MarkerPill({ marker }: { readonly marker: StepMarker }): ReactEl
     case "cannot_call":
     case "key_refused":
       return (
-        <span data-slot="marker-pill" className={`${PILL} bg-warn-wash text-warn`}>
-          {marker.label}
+        <span data-slot="marker-pill" className={`${ROUND} border-warn/30 bg-warn-wash text-warn`}>
+          {markerWords(marker)}
         </span>
       );
     case "paused":
     case "turned_off":
     case "local_only":
       return (
-        <span data-slot="marker-pill" className={`${PILL} bg-sunk text-dim`}>
-          {marker.label}
+        <span data-slot="marker-pill" className={`${ROUND} border-line bg-sunk text-dim`}>
+          {markerWords(marker)}
         </span>
       );
   }

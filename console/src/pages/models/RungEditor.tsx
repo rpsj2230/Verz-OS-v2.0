@@ -1,6 +1,7 @@
 /**
- * One step's editor, open at its own address (`/routing/{id}`): its four numbers, where it sits,
- * and retiring it, each sent from a confirmation through the matrix gate.
+ * One step's editor, open at its own address (`/routing/{id}`) in the kit's drawer, so the matrix
+ * stays in view behind it: its four numbers, where it sits, and retiring it, each sent from a
+ * confirmation through the matrix gate. Closing the drawer goes back to the matrix's own address.
  *
  * **Four numbers, and nothing else, are an edit**, for `brain.routing_routes`' reason: the attempts,
  * the time allowed, the calls at once and whether it is in use are the dials an incident is answered
@@ -15,16 +16,14 @@
  * Task ids: M5.3.3, M27.15.38, M5.6.2, M27.16.1
  */
 
-import { X } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
-import { Advanced, Chip, ConfirmDialog, Fact, FactList, FailureState, NotOffered, SectionCard } from "../../components/kit";
+import { Advanced, Chip, ConfirmDialog, Drawer, Fact, FactList, FailureState, NotOffered } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { problemAttributes } from "../../ui/FieldProblems";
 import { readChange, TIERS, type ChangeRow } from "../matrixGateQuery";
-import { MATRIX_PATH, MAX_SMALLINT, MAX_TIMEOUT_SECONDS, rungApiPath, scopeLines } from "../matrixQuery";
+import { MAX_SMALLINT, MAX_TIMEOUT_SECONDS, rungApiPath, scopeLines } from "../matrixQuery";
 import { levelName } from "../modelsQuery";
 import { FIELD_CONTROL, FormField } from "./FormField";
 import { moveStepApiPath, NOT_OFFERED, retireStepApiPath } from "./modelsActions";
@@ -52,7 +51,6 @@ export const TIMEOUT_HINT = `Seconds to wait for an answer. More than 0 and at m
 export const CONCURRENCY_HINT = `Calls it takes at once. A whole number from 1 to ${String(MAX_SMALLINT)}.`;
 export const MOVE_LEVEL_HINT = "The level it moves to: its own, or another.";
 export const MOVE_STEP_HINT = "The step number it takes in that level, from 1. A number past the last puts it last.";
-export const CLOSE_EDITOR = "Close";
 
 /** A whole number within the bounds, or null. */
 function whole(value: string, least: number): number | null {
@@ -81,12 +79,20 @@ type Pending =
   | { readonly kind: "move"; readonly tier: string; readonly step: number }
   | { readonly kind: "retire" };
 
+/** The drawer's title: the step as the matrix numbers it. */
+export function editorTitle(line: MatrixLine): string {
+  return `Step ${String(line.step ?? 0)} of the ${levelName(line.tier)} level`;
+}
+
 export function RungEditor({
   line,
   onDecided,
+  onClose,
 }: {
   readonly line: MatrixLine;
   readonly onDecided: (change: ChangeRow | null) => void;
+  /** Closes the drawer, which goes back to the matrix's own address. */
+  readonly onClose: () => void;
 }) {
   const rung = line.rung;
   const [attempts, setAttempts] = useState(String(rung?.attempts ?? ""));
@@ -169,20 +175,19 @@ export function RungEditor({
   );
 
   return (
-    <SectionCard
-      title={`Step ${String(line.step ?? 0)} of the ${levelName(line.tier)} level`}
-      lede={`${line.provider} ${line.model}`}
-      action={
-        <Button asChild variant="ghost" size="sm" className="min-h-11 text-body no-underline sm:min-h-8">
-          <Link to={MATRIX_PATH}>
-            <X aria-hidden /> {CLOSE_EDITOR}
-          </Link>
-        </Button>
-      }
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open && pending === null) {
+          onClose();
+        }
+      }}
+      title={editorTitle(line)}
+      description={`${line.provider} ${line.model}`}
     >
-      <div className="flex flex-col gap-5">
+      <div data-slot="step-editor" className="flex flex-col gap-5">
         <form aria-label={`Numbers for ${stepName(line)}`} className="flex flex-col gap-3" onSubmit={askEdit} noValidate>
-          <div className="[display:grid] grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="[display:grid] grid-cols-1 gap-3">
             {number("attempts", "Attempts", ATTEMPTS_HINT, attempts, setAttempts)}
             {number("timeout_seconds", "Seconds to wait", TIMEOUT_HINT, timeout, setTimeoutSeconds)}
             {number("max_concurrency", "Calls at once", CONCURRENCY_HINT, concurrency, setConcurrency)}
@@ -206,7 +211,7 @@ export function RungEditor({
         </form>
 
         <form aria-label={`Move ${stepName(line)}`} className="flex flex-col gap-3 border-t border-line pt-4" onSubmit={askMove} noValidate>
-          <div className="[display:grid] grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="[display:grid] grid-cols-1 gap-3">
             <FormField id={id(MOVE_FORM, "tier")} label="Level" hint={MOVE_LEVEL_HINT} form={MOVE_FORM} name="tier" problems={problems}>
               <select
                 id={id(MOVE_FORM, "tier")}
@@ -312,6 +317,6 @@ export function RungEditor({
           setPending(null);
         }}
       />
-    </SectionCard>
+    </Drawer>
   );
 }
