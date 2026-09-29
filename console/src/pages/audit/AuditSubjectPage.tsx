@@ -20,7 +20,8 @@
  */
 
 import { History, ListTree } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
@@ -44,14 +45,17 @@ import {
 import {
   AUDIT_PATH,
   DEFAULT_FILTERS,
+  filtersFrom,
   historyApiPath,
+  offeredActors,
   readHistory,
   subjectAddress,
   when,
   type AuditFilters,
+  type LedgerPage,
   type PermissionEvent,
 } from "../auditQuery";
-import { AUDIT_HEADING, READING_THE_LEDGER } from "./AuditPage";
+import { AUDIT_HEADING, narrowed, NOTHING_MATCHES, NOTHING_MATCHES_MORE, READING_THE_LEDGER, Toolbar, withChosen } from "./AuditPage";
 import { actorWords, detailLines, kindWords, subjectWords, whatWords } from "./auditWords";
 import { LedgerTable } from "./LedgerTable";
 import { useLedger } from "./useLedger";
@@ -143,11 +147,24 @@ export function AuditSubjectPage({
   readonly view: string | undefined;
 }) {
   const subject = { kind, id };
-  const ledger = useLedger(ALL_OF_IT, subject);
+  const [search] = useSearchParams();
+  const filters = filtersFrom(search, ALL_OF_IT);
+  const ledger = useLedger(filters, subject);
   const offersPermissions = PERMISSION_KINDS.has(kind);
   const current = offersPermissions && view === "permissions" ? "permissions" : "entries";
-  const name = subjectWords(kind, id, ledger.people);
+  // The last answer's offers and names are kept while a narrowed question is asked, so the toolbar
+  // and the title do not flicker, and a narrowing that matches nothing keeps the person's name.
+  const [offers, setOffers] = useState<LedgerPage | null>(null);
+  const [people, setPeople] = useState<Readonly<Record<string, string>>>({});
+  useEffect(() => {
+    if (ledger.first !== null) {
+      setOffers(ledger.first);
+      setPeople((earlier) => ({ ...earlier, ...ledger.people }));
+    }
+  }, [ledger.first, ledger.people]);
+  const name = subjectWords(kind, id, { ...people, ...ledger.people });
   const newest = ledger.rows[0];
+  const base = subjectAddress(kind, id);
 
   const views: DetailView[] = [
     { key: "entries", label: ENTRIES_VIEW, to: subjectAddress(kind, id), icon: <ListTree aria-hidden /> },
@@ -160,7 +177,11 @@ export function AuditSubjectPage({
   } else if (ledger.busy) {
     entries = <LoadingState label={READING_THE_LEDGER} />;
   } else if (ledger.rows.length === 0) {
-    entries = <EmptyState title={NOTHING_RECORDED} description={NOTHING_RECORDED_MORE} />;
+    entries = narrowed(filters, ALL_OF_IT) ? (
+      <EmptyState title={NOTHING_MATCHES} description={NOTHING_MATCHES_MORE} />
+    ) : (
+      <EmptyState title={NOTHING_RECORDED} description={NOTHING_RECORDED_MORE} />
+    );
   } else {
     entries = (
       <LedgerTable
@@ -168,10 +189,22 @@ export function AuditSubjectPage({
         caption={SUBJECT_ENTRIES_LABEL}
         exportName={`audit-${kind}`}
         showAbout={false}
-        moreLabel="Show older entries"
+        moreLabel={filters.order === "newest" ? "Show older entries" : "Show newer entries"}
       />
     );
   }
+  const toolbar = (
+    <Toolbar
+      filters={filters}
+      actions={offers?.actions ?? []}
+      kinds={null}
+      actors={offers === null ? withChosen([], filters.actor) : offeredActors(offers, filters.actor)}
+      people={{ ...people, ...ledger.people }}
+      search={search}
+      base={base}
+      defaults={ALL_OF_IT}
+    />
+  );
 
   const headingId = `audit-subject-${kind}`;
   return (
@@ -183,7 +216,7 @@ export function AuditSubjectPage({
           headingId={headingId}
           pills={<Chip>{kindWords(kind)}</Chip>}
           figures={
-            ledger.busy || ledger.failure !== null ? undefined : (
+            ledger.busy || ledger.failure !== null || narrowed(filters, ALL_OF_IT) ? undefined : (
               <KpiStrip label="What was last recorded about it" count={2}>
                 <StatCard label={LAST_RECORDED} value={newest === undefined ? undefined : when(newest.at)} />
                 <StatCard
@@ -200,7 +233,14 @@ export function AuditSubjectPage({
     >
       <div className="flex min-w-0 flex-col gap-4">
         <SectionCard title={current === "permissions" ? HISTORY_LABEL : ENTRIES_VIEW}>
-          {current === "permissions" ? <Permissions kind={kind} id={id} /> : entries}
+          {current === "permissions" ? (
+            <Permissions kind={kind} id={id} />
+          ) : (
+            <div className="flex min-w-0 flex-col gap-3">
+              {toolbar}
+              {entries}
+            </div>
+          )}
         </SectionCard>
         <Advanced>
           <FactList>

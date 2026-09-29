@@ -78,13 +78,13 @@ export const NOTHING_MATCHES_MORE = "Change a filter, or clear them to read the 
 export const ALL_TIME = "Read all time";
 
 /** Whether the reader has narrowed the ledger beyond how it opens. The order narrows nothing. */
-export function narrowed(filters: AuditFilters): boolean {
+export function narrowed(filters: AuditFilters, defaults: AuditFilters = DEFAULT_FILTERS): boolean {
   return (
     filters.search.trim() !== "" ||
     filters.action !== "" ||
     filters.kind !== "" ||
     filters.actor !== "" ||
-    filters.period !== DEFAULT_FILTERS.period
+    filters.period !== defaults.period
   );
 }
 
@@ -123,29 +123,38 @@ function Choice({
 }
 
 /** A chosen value kept offered, so a narrowed list that came back empty still says what it is set to. */
-function withChosen(values: readonly string[], chosen: string): readonly string[] {
+export function withChosen(values: readonly string[], chosen: string): readonly string[] {
   return chosen === "" || values.includes(chosen) ? values : [chosen, ...values];
 }
 
-function Toolbar({
+/**
+ * The ledger's controls: a search, what happened, what it was about, who, when and the order. On a
+ * subject's own page the subject is fixed, so the About choice is left out and every address is the
+ * subject's.
+ */
+export function Toolbar({
   filters,
   actions,
   kinds,
   actors,
   people,
   search,
+  base = AUDIT_PATH,
+  defaults = DEFAULT_FILTERS,
 }: {
   readonly filters: AuditFilters;
   readonly actions: readonly string[];
-  readonly kinds: readonly string[];
+  readonly kinds: readonly string[] | null;
   readonly actors: readonly string[];
   readonly people: Readonly<Record<string, string>>;
   readonly search: URLSearchParams;
+  readonly base?: string | undefined;
+  readonly defaults?: AuditFilters | undefined;
 }) {
   const navigate = useNavigate();
   const searchId = useId();
   const choose = (name: string) => (value: string) => {
-    navigate(withFilter(search, name, value));
+    navigate(withFilter(search, name, value, base));
   };
   return (
     <form
@@ -169,7 +178,7 @@ function Toolbar({
           value={filters.search}
           onChange={(event) => {
             // Replaced rather than pushed, so the back button undoes a filter and not a keystroke.
-            navigate(withFilter(search, ADDRESS_PARAMETERS.search, event.target.value), { replace: true });
+            navigate(withFilter(search, ADDRESS_PARAMETERS.search, event.target.value, base), { replace: true });
           }}
         />
       </span>
@@ -181,14 +190,16 @@ function Toolbar({
           </option>
         ))}
       </Choice>
-      <Choice label={ABOUT_FILTER} value={filters.kind} onChange={choose(ADDRESS_PARAMETERS.kind)}>
-        <option value="">{ALL_KINDS}</option>
-        {withChosen(kinds, filters.kind).map((one) => (
-          <option key={one} value={one}>
-            {kindWords(one)}
-          </option>
-        ))}
-      </Choice>
+      {kinds === null ? null : (
+        <Choice label={ABOUT_FILTER} value={filters.kind} onChange={choose(ADDRESS_PARAMETERS.kind)}>
+          <option value="">{ALL_KINDS}</option>
+          {withChosen(kinds, filters.kind).map((one) => (
+            <option key={one} value={one}>
+              {kindWords(one)}
+            </option>
+          ))}
+        </Choice>
+      )}
       <Choice label={WHO_FILTER} value={filters.actor} onChange={choose(ADDRESS_PARAMETERS.actor)}>
         <option value="">{EVERYONE}</option>
         {actors.map((one) => (
@@ -211,9 +222,9 @@ function Toolbar({
           </option>
         ))}
       </Choice>
-      {narrowed(filters) ? (
+      {narrowed(filters, defaults) ? (
         <Button asChild variant="ghost" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
-          <Link to={AUDIT_PATH}>
+          <Link to={base}>
             {RESET_FILTERS} <X aria-hidden />
           </Link>
         </Button>

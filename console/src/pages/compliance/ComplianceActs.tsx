@@ -98,7 +98,11 @@ export function useComplianceWrite(onDone: (told: string) => void) {
     (path: string, method: "POST" | "PUT", body: unknown, told: (payload: unknown) => string, after: () => void) => {
       setBusy(true);
       void (async () => {
-        const result = await request<unknown>(path, { method, body });
+        // Each method spelled where it is sent, so the write list read from the source sees both.
+        const result =
+          method === "PUT"
+            ? await request<unknown>(path, { method: "PUT", body })
+            : await request<unknown>(path, { method: "POST", body });
         setBusy(false);
         after();
         if (!result.ok) {

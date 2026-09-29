@@ -113,7 +113,7 @@ export const DEFAULT_FILTERS: AuditFilters = Object.freeze({
 });
 
 /** The filters a console address carries. An unrecognised period or order is the default. */
-export function filtersFrom(search: URLSearchParams): AuditFilters {
+export function filtersFrom(search: URLSearchParams, defaults: AuditFilters = DEFAULT_FILTERS): AuditFilters {
   const period = search.get(ADDRESS_PARAMETERS.period) ?? "";
   const order = search.get(ADDRESS_PARAMETERS.order) ?? "";
   return {
@@ -123,8 +123,8 @@ export function filtersFrom(search: URLSearchParams): AuditFilters {
     actor: search.get(ADDRESS_PARAMETERS.actor) ?? "",
     period: (PERIODS as readonly string[]).includes(period)
       ? (period as Period)
-      : DEFAULT_FILTERS.period,
-    order: (ORDERS as readonly string[]).includes(order) ? (order as Order) : DEFAULT_FILTERS.order,
+      : defaults.period,
+    order: (ORDERS as readonly string[]).includes(order) ? (order as Order) : defaults.order,
   };
 }
 
@@ -401,8 +401,8 @@ export function historyAddress(_search: URLSearchParams, kind: string, id: strin
   return subjectAddress(kind, id);
 }
 
-/** The address with one filter changed, or removed when the value is empty. */
-export function withFilter(search: URLSearchParams, name: string, value: string): string {
+/** The address with one filter changed, or removed when the value is empty, on the ledger or a subject's page. */
+export function withFilter(search: URLSearchParams, name: string, value: string, base: string = AUDIT_PATH): string {
   const next = new URLSearchParams(search);
   if (value === "") {
     next.delete(name);
@@ -410,7 +410,7 @@ export function withFilter(search: URLSearchParams, name: string, value: string)
     next.set(name, value);
   }
   const query = next.toString();
-  return query === "" ? AUDIT_PATH : `${AUDIT_PATH}?${query}`;
+  return query === "" ? base : `${base}?${query}`;
 }
 
 /** An instant, as the rows show it. The reader's own locale and zone, to the minute. */
