@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T02:40:35.000807+00:00",
-  "commit": "c7e3dfbb",
-  "commit_subject": "Department, Learning, Memory and Requirement checks are on the page kit, the last admin pages that were not (#191)",
+  "generated_at": "2026-09-29T02:45:45.463015+00:00",
+  "commit": "f5c1febf",
+  "commit_subject": "Install checks ask every provider, fall back past a dead step, and a request row always holds its tier (#190)",
   "total": 1576,
   "done": 370,
   "percent": 23.5,
