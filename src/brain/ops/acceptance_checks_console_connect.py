@@ -55,6 +55,7 @@ EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
     "freshdesk": ("domain", lambda: f"acceptance-{secrets.token_hex(4)}.freshdesk.com"),
     "google_drive": ("folder", lambda: f"acceptance{secrets.token_hex(8)}"),
     "google_analytics": ("property", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
+    "search_console": ("site", lambda: f"sc-domain:acceptance-{secrets.token_hex(4)}.example"),
     "laravel": ("client_rule", lambda: "status in active, pending"),
 }
 

@@ -243,6 +243,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # The Google sources, connected, indexed and asked; `tests/unit/test_acceptance_google.py`.
     assert by_module["brain.ops.acceptance_checks_google"] == [
         "an_analytics_property_answers_its_figures_live_and_keeps_none",
+        "a_search_console_site_answers_its_figures_live_and_keeps_none",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}

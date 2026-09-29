@@ -105,6 +105,7 @@ def _settings(name: str) -> dict[str, str]:
         "hubspot": {"portal_id": PORTAL},
         "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
         "google_analytics": {"property": "123456789", "department": "marketing"},
+        "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
     }[name]
 
 

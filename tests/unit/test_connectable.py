@@ -51,6 +51,7 @@ IDENTIFIERS: Final = {
     "freshdesk": "example.freshdesk.com",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
     "laravel": "portal",
 }
 
@@ -59,6 +60,7 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "freshdesk": {"department": "support"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
     "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",

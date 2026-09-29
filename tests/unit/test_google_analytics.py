@@ -249,9 +249,10 @@ def test_a_report_is_asked_of_the_data_api_for_the_connected_property_only() -> 
 
     Delete this and an index row naming another property the account can reach would be read."""
     report = AnalyticsReport()
-    call = report.request_for(ENTITY_PROPERTY, PROPERTY, settings=SETTINGS, today=NOW.date())
+    (call,) = report.request_for(ENTITY_PROPERTY, PROPERTY, settings=SETTINGS, today=NOW.date())
 
     assert call.url == f"{DATA_API_URL}/v1beta/properties/{PROPERTY}:runReport"
+    assert call.body is not None
     assert json.loads(call.body) == json.loads(json.dumps(dict(REPORT_BODY)))
     with pytest.raises(AnalyticsShapeError, match="connected"):
         report.request_for(ENTITY_PROPERTY, "987654321", settings=SETTINGS, today=NOW.date())
@@ -266,8 +267,8 @@ def test_a_recorded_report_is_one_record_of_every_figure_for_every_range_named_a
     reply = AnalyticsReport().interpret(
         ENTITY_PROPERTY,
         PROPERTY,
-        status=200,
-        body=recorded("GA-200-report").body,
+        answers=(recorded("GA-200-report").body,),
+        today=NOW.date(),
         fetched_at=FETCHED_AT,
     )
 
@@ -370,15 +371,19 @@ def test_a_range_the_report_leaves_out_contributes_nothing_rather_than_a_nought(
         ("GA-500-report", CallOutcome.UNAVAILABLE),
     ],
 )
-def test_a_refused_or_failed_report_carries_no_rows(cid: str, call: CallOutcome) -> None:
-    """Absent, refused and unreachable stay three answers: a failure is its outcome and no rows.
+def test_a_refused_or_failed_report_carries_no_rows(
+    key: rsa.RSAPrivateKey, cid: str, call: CallOutcome
+) -> None:
+    """Absent, refused and unreachable stay three answers: a recorded failure read live is its
+    outcome and no rows, and a report answered as more than one call is not read at all.
 
     Delete this and a quota refusal could be answered as a property with no traffic."""
-    one = recorded(cid)
-    reply = AnalyticsReport().interpret(
-        ENTITY_PROPERTY, PROPERTY, status=one.status, body=one.body, fetched_at=FETCHED_AT
-    )
-    assert (reply.call, reply.rows) == (call, None)
+    reply = read(connected(Google(report=cid), KeyFiles(key_file(key))))
+    assert (reply.outcome, reply.rows) == (call, None)
+    with pytest.raises(AnalyticsShapeError):
+        AnalyticsReport().interpret(
+            ENTITY_PROPERTY, PROPERTY, answers=({}, {}), today=NOW.date(), fetched_at=FETCHED_AT
+        )
 
 
 def test_a_wait_google_states_is_read_in_any_case_and_a_missing_or_bad_one_is_none() -> None:

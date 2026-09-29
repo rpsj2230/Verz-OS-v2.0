@@ -13,8 +13,9 @@ import json
 from typing import Final
 
 from brain.connectors import google_analytics, google_token
+from brain.connectors.declaration import PageReply
 from brain.connectors.manifest import ConnectorManifest
-from brain.connectors.throttle import CallOutcome
+from brain.connectors.throttle import CallOutcome, classify
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -235,13 +236,18 @@ def replay(recorded: Cassette) -> Replayed:
         return Replayed(Expect.ANSWERED)
     settings = {"property": PROPERTY, "department": "marketing"}
     if recorded.request.endswith(":runReport"):
-        reply = google_analytics.AnalyticsReport().interpret(
-            google_analytics.ENTITY_PROPERTY,
-            PROPERTY,
-            status=recorded.status,
-            body=recorded.body,
-            fetched_at=FETCHED_AT,
-        )
+        # A report's status is classified by the live read before the connector reads its body.
+        call = classify(status=recorded.status)
+        if call is not CallOutcome.OK:
+            reply = PageReply(call=call, rows=None)
+        else:
+            reply = google_analytics.AnalyticsReport().interpret(
+                google_analytics.ENTITY_PROPERTY,
+                PROPERTY,
+                answers=(recorded.body,),
+                today=SEEN_AT.date(),
+                fetched_at=FETCHED_AT,
+            )
     else:
         reading = google_analytics.AnalyticsReading()
         operation = reading.operation(

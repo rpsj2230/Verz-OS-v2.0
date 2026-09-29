@@ -258,6 +258,7 @@ WAIT_NOT_IN_RETRY_AFTER: dict[str, str] = {
     "lark_wiki": "x-ogw-ratelimit-reset",
     "google_drive": "none documented; Google asks for exponential backoff",
     "google_analytics": "none documented; Google asks for exponential backoff",
+    "search_console": "none documented; Google asks for exponential backoff",
 }
 
 

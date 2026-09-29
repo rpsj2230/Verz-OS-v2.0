@@ -150,6 +150,7 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "freshdesk": "example.freshdesk.com",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
     "laravel": "portal",
 }
 
@@ -158,6 +159,7 @@ FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
     "freshdesk": {"department": "support"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
     "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -746,6 +748,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "freshdesk": False,
         "google_drive": False,
         "google_analytics": False,
+        "search_console": False,
         "laravel": False,
     }
 

@@ -639,7 +639,7 @@ class AnalyticsReport:
 
     def request_for(
         self, entity: str, source_id: str, *, settings: Mapping[str, str], today: date
-    ) -> ReportCall:
+    ) -> tuple[ReportCall, ...]:
         """The one report, for the connected property only. See
         `A_REPORT_READS_ONLY_THE_CONNECTED_PROPERTY`. `today` is unused: Google resolves the
         relative dates in the property's own time zone."""
@@ -648,20 +648,32 @@ class AnalyticsReport:
         connected = AnalyticsConnection.from_settings(settings).property_id
         if source_id != connected:
             raise AnalyticsShapeError(A_REPORT_READS_ONLY_THE_CONNECTED_PROPERTY)
-        return ReportCall(
-            url=f"{DATA_API_URL}/v1beta/properties/{connected}:runReport",
-            body=json.dumps(dict(REPORT_BODY), separators=(",", ":")).encode("utf-8"),
+        return (
+            ReportCall(
+                url=f"{DATA_API_URL}/v1beta/properties/{connected}:runReport",
+                body=json.dumps(dict(REPORT_BODY), separators=(",", ":")).encode("utf-8"),
+            ),
         )
 
     def interpret(
-        self, entity: str, source_id: str, *, status: int, body: Any, fetched_at: str
+        self,
+        entity: str,
+        source_id: str,
+        *,
+        answers: tuple[Any, ...],
+        today: date,
+        fetched_at: str,
     ) -> PageReply:
+        """The one report's body as the property's figures. A report is one call here, and
+        `today` is unused, for `request_for`'s reason."""
+        del today
         _assert_property(entity)
-        call = classify(status=status)
-        if call is not CallOutcome.OK:
-            return PageReply(call=call, rows=None)
+        if len(answers) != 1:
+            msg = "a Google Analytics report is one call, and this was answered as several"
+            raise AnalyticsShapeError(msg)
         return PageReply(
-            call=call, rows=figures_of(body, source_id=source_id, fetched_at=fetched_at)
+            call=CallOutcome.OK,
+            rows=figures_of(answers[0], source_id=source_id, fetched_at=fetched_at),
         )
 
 

@@ -25,14 +25,15 @@ from the connections live at that moment, so a source connected on the Connector
 from the next question and one disconnected does not, with nothing restarted, and a source nobody
 connected contributes no question shape that could tell a person it exists.
 
-**A connected property's figures are classified beside its index fields, and never kept (M11.7.1).**
-Google Analytics keeps the property's name and dates; its sessions, users and conversions for each
-named range are read from Google when a question asks (`google_analytics.AnalyticsReport`). They
-are classified here all the same, each behind its own field capability, because the redactor
-withholds a field nothing classifies from everybody, and a figure read live is a field of the
-property's record by the time the redactor sees it. So "what is the sessions last 28 days of
-<property>" is asked in the words every other question is, and answered only to a reader granted
-that figure in the property's department.
+**A connected property's or site's figures are classified beside its index fields, and never
+kept (M11.7.1, M11.7.2).** Google Analytics keeps the property's name and dates, and Search Console
+the site's name and permission; their traffic and search figures for each named range are read
+from Google when a question asks (`google_analytics.AnalyticsReport`,
+`search_console.SearchConsoleReport`). They are classified here all the same, each behind its own
+field capability, because the redactor withholds a field nothing classifies from everybody, and a
+figure read live is a field of the record by the time the redactor sees it. So "what is the
+sessions last 28 days of <property>" is asked in the words every other question is, and answered
+only to a reader granted that figure in the source's department.
 
 **What each answer reads, and what it never keeps.** The fast lane finds the record in the index
 at the asker's reach, `brain.ops.live_records.SourceRecords` reads that record from its source
@@ -40,7 +41,7 @@ while the asker waits (Xero today; Freshdesk declares no live lookup yet), the r
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1, M11.7.2
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, google_analytics, xero
+from brain.connectors import freshdesk, google_analytics, search_console, xero
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -81,6 +82,7 @@ SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
         xero.CONNECTOR_NAME: "tenant_id",
         freshdesk.FRESHDESK: "department",
         google_analytics.GOOGLE_ANALYTICS: "department",
+        search_console.SEARCH_CONSOLE: "department",
     }
 )
 
@@ -156,6 +158,26 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def _kept_and_read_live(
+    source: str, entity: str, kept: tuple[str, ...], figures: tuple[str, ...]
+) -> TableClassification:
+    """A connected source's one entity: the fields its index keeps and the figures read live."""
+    return TableClassification(
+        entity=entity,
+        rules=(
+            *(
+                ColumnRule(
+                    column=name,
+                    required_capability=Capability(value=f"read:{entity}.{name}"),
+                    classification=Classification.INTERNAL,
+                )
+                for name in (*kept, *figures)
+            ),
+            _scope_column(source, entity),
+        ),
+    )
+
+
 def google_analytics_classifications() -> tuple[TableClassification, ...]:
     """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
 
@@ -163,22 +185,24 @@ def google_analytics_classifications() -> tuple[TableClassification, ...]:
     in Freshdesk's pattern, so a reader may be told the property's name and not its traffic, or one
     range and not another. See the module docstring.
     """
-    entity = google_analytics.ENTITY_PROPERTY
-    kept = tuple(one.name for one in google_analytics.PROPERTY_FIELDS)
     return (
-        TableClassification(
-            entity=entity,
-            rules=(
-                *(
-                    ColumnRule(
-                        column=name,
-                        required_capability=Capability(value=f"read:{entity}.{name}"),
-                        classification=Classification.INTERNAL,
-                    )
-                    for name in (*kept, *google_analytics.FIGURE_FIELDS)
-                ),
-                _scope_column(google_analytics.GOOGLE_ANALYTICS, entity),
-            ),
+        _kept_and_read_live(
+            google_analytics.GOOGLE_ANALYTICS,
+            google_analytics.ENTITY_PROPERTY,
+            tuple(one.name for one in google_analytics.PROPERTY_FIELDS),
+            google_analytics.FIGURE_FIELDS,
+        ),
+    )
+
+
+def search_console_classifications() -> tuple[TableClassification, ...]:
+    """The connected site, as the property is: its index fields and its figures, each INTERNAL."""
+    return (
+        _kept_and_read_live(
+            search_console.SEARCH_CONSOLE,
+            search_console.ENTITY_SITE,
+            tuple(one.name for one in search_console.SITE_FIELDS),
+            search_console.FIGURE_FIELDS,
         ),
     )
 
@@ -189,6 +213,7 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
         google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
+        search_console.SEARCH_CONSOLE: search_console_classifications(),
     }
 )
 
@@ -201,6 +226,7 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
             google_analytics.LABEL_FIELD
         ),
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): search_console.LABEL_FIELD,
     }
 )
 
@@ -225,6 +251,13 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
                 "Look up the connected Google Analytics property by name: its sessions, users "
                 "and conversions for yesterday or the last 7, 28 or 90 days, read live from Google "
                 "for a reader allowed them"
+            ),
+        },
+        search_console.SEARCH_CONSOLE: {
+            search_console.ENTITY_SITE: (
+                "Look up the connected Search Console site by name: its clicks and impressions "
+                "for the last 7, 28 or 90 days, its top query and page and its sitemaps' errors, "
+                "read live from Google for a reader allowed them"
             ),
         },
     }

@@ -34,6 +34,7 @@ from brain.connectors import (
     laravel,
     lark_base,
     lark_wiki,
+    search_console,
     throttle,
     write_verification,
     xero,
@@ -66,6 +67,7 @@ from brain.ops.idempotency import (
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
 from tests.fixtures.cassettes.google_analytics import PROPERTY
+from tests.fixtures.cassettes.search_console import SITE
 
 #: Every shipped connector's read-back, as the declarations state it.
 READ_BACKS = read_backs()
@@ -265,6 +267,16 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_analytics", "GA-403-property"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-429-report"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-500-report"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sites"): Verification.FOUND,
+    # A report's calls and every refusal hold no site list, and a list without the connected site
+    # never proves it gone: see `search_console.A_SITE_LIST_CANNOT_PROVE_ABSENCE`.
+    ("search_console", "SC-200-days"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-query"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-page"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sitemaps"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-403-site"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-429-query"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-503-query"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
@@ -319,6 +331,12 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             )
             property_read = google_analytics.operation_for(PROPERTY)
             return verdict(reading("google_analytics")(property_read, answered))
+        case "search_console":
+            listed = search_console.Reply(
+                status=recorded.status, headers=recorded.headers, body=recorded.body
+            )
+            site_list = search_console.listing_for(SITE)
+            return verdict(reading("search_console")(site_list, listed))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
         case "lark_base":
