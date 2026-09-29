@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-29T10:24:57.452194+00:00",
-  "commit": "da981bde",
-  "commit_subject": "A run's trace is stored masked behind its own role, a browser session reaches the ledger, and the audit install check asserts every clause (#197)",
+  "generated_at": "2026-09-29T10:39:51.548996+00:00",
+  "commit": "1d0d76f3",
+  "commit_subject": "The Capacity screen sizes the install for its busiest minute by Little's law and names the first limit reached at ten and a hundred times (#215)",
   "total": 1576,
-  "done": 437,
-  "percent": 27.7,
+  "done": 438,
+  "percent": 27.8,
   "acts": 47,
   "decided": 131,
   "current_wave": 0,
@@ -26,10 +26,10 @@
       "wave": 1,
       "name": "The gate",
       "total": 155,
-      "done": 151,
-      "percent": 97.4,
+      "done": 152,
+      "percent": 98.1,
       "in_progress": 0,
-      "ready_for_testing": 1,
+      "ready_for_testing": 0,
       "blocked": 3,
       "open": 0,
       "acts": 1,
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 47,
+      "done": 48,
       "acts": 0,
       "decided": 1
     },
@@ -565,6 +565,7 @@
     "M1.6.2",
     "M1.6.3",
     "M1.6.4",
+    "M1.6.5",
     "M1.6.6",
     "M1.6.7",
     "M1.6.8",
@@ -938,11 +939,6 @@
     "M9.2.1"
   ],
   "leaf_status": {
-    "M1.6.5": {
-      "status": "READY FOR TESTING",
-      "why": "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
-      "updated": "2026-09-28"
-    },
     "M1.8.5": {
       "status": "BLOCKED",
       "why": "moved to Wave 2 (needs-rupash 97): the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part needs Wave 2's Lark chat channel",
@@ -1095,12 +1091,18 @@
     }
   },
   "wave_records": {},
-  "closed_today": 67,
+  "closed_today": 68,
   "next_up": [
     "M38.2.1.1",
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "785d112",
+      "at": "2026-09-29T10:01:55+00:00",
+      "subject": "The Lark staff list places people in their departments on the owner's install (#227)",
+      "closed": "M1.6.5"
+    },
     {
       "sha": "e111bc2",
       "at": "2026-09-29T09:42:35+00:00",
@@ -1214,12 +1216,6 @@
       "at": "2026-09-21T18:40:00+00:00",
       "subject": "The full profile is one compose file, and the analyser it lacked is Presidio's own image",
       "closed": "M0.4.2"
-    },
-    {
-      "sha": "434dd92",
-      "at": "2026-09-21T18:06:54+00:00",
-      "subject": "Three model tasks close on their CI proof, and Needs you asks to move two tasks to the waves that build what they need",
-      "closed": "M5.6.2,M5.6.4,M5.7.2"
     }
   ]
 }
