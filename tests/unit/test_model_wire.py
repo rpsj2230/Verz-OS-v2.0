@@ -3,7 +3,7 @@
 Every test drives `brain.models.wire.http_transport` through `httpx.MockTransport`, so the request
 this module builds is inspected as the provider would receive it and nothing opens a socket.
 
-Task ids: M5.1.1, M5.1.2
+Task ids: M5.1.1, M5.1.2, M6.4.4
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import httpx
 import pytest
 from structlog.testing import capture_logs
 
+from brain.gate.effort import EFFORT_BY_LANE, EFFORT_PARAMETER, Effort
 from brain.models.adapter import (
     Completion,
     ContentPolicyRefusedError,
@@ -31,6 +32,8 @@ from brain.models.routing import FallbackTrigger
 from brain.models.wire import (
     ANTHROPIC_VERSION,
     DEFAULT_MAX_OUTPUT_TOKENS,
+    EFFORT_FIELD,
+    EFFORT_WORDS,
     LOCAL_PROVIDER,
     PROVIDER_WIRES,
     KeyNotHeldError,
@@ -233,6 +236,66 @@ def test_a_callers_extra_cannot_add_a_system_prompt_the_request_did_not_carry() 
         body = body_of(recorded.sent[0])
         assert "system" not in body, slug
         assert body["top_p"] == "1"
+
+
+# ------------------------------------------------------------------------- the effort
+def _posted(slug: str, model: str, effort: str | None) -> dict[str, Any]:
+    """The body one call to `model` at `slug` posts, carrying `effort` as the executor puts it."""
+    recorded = answering(ANTHROPIC_ANSWER if slug == "anthropic" else CHAT_ANSWER)
+    send = http_transport(PROVIDER_WIRES[slug], client=recorded.client(), key=lambda: KEY)
+    extra = {} if effort is None else {EFFORT_PARAMETER: effort}
+    send(a_request(model=model, extra=extra))
+    return body_of(recorded.sent[0])
+
+
+def test_a_model_that_always_thinks_is_sent_the_lanes_effort_in_its_own_words() -> None:
+    """`A_MODEL_THAT_ALWAYS_THINKS_IS_TOLD_THE_LANES_EFFORT`. Kimi's K3 takes low, high or max and
+    thinks at max when sent none, which ran past a waited-on step on 2026-09-29. The answer lane's
+    medium goes out as its low, the task lane's high as its high, and a call carrying no effort
+    sends none. Delete this and the word can go out as the product's own `medium`, which the model
+    does not take, or not at all, and the model thinks at its maximum while a person waits."""
+    assert _posted("moonshot", "kimi-k3", Effort.MEDIUM.value)[EFFORT_FIELD] == "low"
+    assert _posted("moonshot", "kimi-k3", Effort.HIGH.value)[EFFORT_FIELD] == "high"
+    assert _posted("moonshot", "kimi-k3", Effort.LOW.value)[EFFORT_FIELD] == "low"
+    assert EFFORT_FIELD not in _posted("moonshot", "kimi-k3", None)
+
+
+def test_a_model_not_known_to_take_an_effort_is_sent_none() -> None:
+    """The refusal half. Anthropic's Messages API, Moonshot's other models and DeepSeek are sent the
+    same request with the lane's effort on it and post no such field, as they posted none before;
+    a provider refuses a field it does not know with a 400, and a 400 stops the chain. Delete this
+    and the effort can be passed through to every provider, which breaks every answer on an
+    install whose primary is Anthropic."""
+    for slug, model in (
+        ("anthropic", "claude-sonnet-5"),
+        ("moonshot", "kimi-k2.6"),
+        ("deepseek", "deepseek-reasoner"),
+        ("openai", "kimi-k3"),
+    ):
+        assert EFFORT_FIELD not in _posted(slug, model, Effort.MEDIUM.value), (slug, model)
+
+
+def test_the_effort_field_is_the_one_the_lane_settings_put_it_under() -> None:
+    """Held against `brain.gate.effort`, outside the wire: the executor puts the effort under
+    `EFFORT_PARAMETER` and the wire reads it from `EFFORT_FIELD`. Delete this and one can be renamed
+    without the other, and no model is ever sent an effort again while every test above that
+    builds its request from `EFFORT_PARAMETER` still passes."""
+    assert EFFORT_FIELD == EFFORT_PARAMETER
+
+
+def test_every_model_that_takes_an_effort_has_a_word_for_each_lane_and_none_is_its_maximum() -> (
+    None
+):
+    """Every effort a lane can pin (`brain.gate.effort.EFFORT_BY_LANE`, which is outside the wire)
+    has a word for every model the table names, and no word is `max`, which asks a model that
+    always thinks for an unbounded pass that no lane chose. Delete this and an entry missing the
+    task lane's effort sends that model nothing, so it thinks at its maximum, or a lane is quietly
+    mapped to the maximum and the waited-on step runs out again."""
+    pinned = {one.value for one in EFFORT_BY_LANE.values() if one is not Effort.NONE}
+    assert pinned and EFFORT_WORDS
+    for name, words in EFFORT_WORDS.items():
+        assert pinned <= set(words) <= {one.value for one in Effort}, name
+        assert "max" not in words.values(), name
 
 
 def test_the_key_is_read_at_each_call_so_a_rotated_key_is_sent_from_the_next_one() -> None:
