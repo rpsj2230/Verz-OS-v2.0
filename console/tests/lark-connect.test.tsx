@@ -206,7 +206,8 @@ describe("Connect Lark", () => {
     fireEvent.change(container.querySelector("#connect-lark-app_id") as HTMLInputElement, {
       target: { value: "cli_abcdef" },
     });
-    fireEvent.change(container.querySelector("#connect-lark-app_secret") as HTMLInputElement, {
+    // The secret is the kit's masked field, which hears an input event rather than a change.
+    fireEvent.input(container.querySelector("#connect-lark-app_secret") as HTMLInputElement, {
       target: { value: SECRET },
     });
     fireEvent.click(button(container, TEST_CONNECTION));
@@ -236,6 +237,8 @@ describe("Connect Lark", () => {
       ["#connect-lark-encrypt_key", ENCRYPT_KEY],
       ["#connect-lark-verification_token", VERIFY_TOKEN],
     ] as const) {
+      // The three secrets are the kit's masked field, which hears an input event.
+      fireEvent.input(container.querySelector(id) as HTMLInputElement, { target: { value } });
       fireEvent.change(container.querySelector(id) as HTMLInputElement, { target: { value } });
     }
     fireEvent.click(button(container, SAVE_LARK));
@@ -283,7 +286,8 @@ describe("Connect Lark", () => {
     fireEvent.change(container.querySelector("#connect-lark-app_id") as HTMLInputElement, {
       target: { value: "cli_abcdef" },
     });
-    fireEvent.change(container.querySelector("#connect-lark-app_secret") as HTMLInputElement, {
+    // The secret is the kit's masked field, which hears an input event rather than a change.
+    fireEvent.input(container.querySelector("#connect-lark-app_secret") as HTMLInputElement, {
       target: { value: SECRET },
     });
     fireEvent.click(button(container, SAVE_LARK));

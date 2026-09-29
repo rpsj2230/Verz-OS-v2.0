@@ -48,7 +48,7 @@ import { NoticePill, SentPill } from "./pills";
 import {
   EDIT_RELAY_LABEL,
   NoticeSwitchDialog,
-  PASSWORD_LABEL,
+  passwordLabel,
   PasswordDrawer,
   REMOVE_LABEL,
   RelayDrawer,
@@ -227,7 +227,7 @@ function Body({ page, onAct }: { readonly page: NotificationsBody; readonly onAc
                 onAct({ act: "password" });
               }}
             >
-              {PASSWORD_LABEL}
+              {passwordLabel(email.password.held)}
             </Button>
             {email.configured ? (
               <>
@@ -296,7 +296,7 @@ export function NotificationsPage() {
         crumbs={[{ label: GROUP_LABEL }, { label: NOTIFICATIONS_HEADING }]}
         title={NOTIFICATIONS_HEADING}
         lede={NOTIFICATIONS_LEDE}
-        notice={told === null || told === "" ? undefined : <Note kind="works">{told}</Note>}
+        notice={told === null || told === "" ? undefined : <Note kind="done">{told}</Note>}
         loading={READING_NOTIFICATIONS}
         busy={answer.busy}
         failure={answer.failure}

@@ -235,6 +235,21 @@ describe("this install", () => {
     expect(valueBeside(container, "migration level")).toContain("unknown");
   });
 
+  test("a setting is named in words, and its variable is only under Advanced", async () => {
+    // Found on the owner's install on 2026-09-29: this page listed raw INSTALL_* names. What
+    // breaks if this is deleted: the variable is drawn in the list again, or not at all.
+    const currency = { name: "Currency", source: "declared", value: "SGD", because: "", setting: "INSTALL_CURRENCY" };
+    const container = await pageAnswering("Install", "Install", "/install", { facts: [KNOWN, currency] });
+    const copy = container.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('[data-slot="advanced"]').forEach((one) => {
+      one.remove();
+    });
+
+    expect(valueBeside(container, "Currency")).toContain("SGD");
+    expect(copy.textContent).not.toContain("INSTALL_CURRENCY");
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain("INSTALL_CURRENCY");
+  });
+
   test("an unknown fact shows the sentence saying why and no placeholder", async () => {
     // What breaks if this is deleted: a renderer supplies a dash, a dash reads as not
     // applicable, and the reader stops. `brain.console.installation.Fact` refuses to carry a
@@ -429,6 +444,18 @@ describe("version and updates", () => {
     expect((container.textContent ?? "").split(sentinel("come-back-in-a-minute"))).toHaveLength(2);
     expect(headings).not.toContain("The newest published release");
     expect(valueBeside(container, "Newest release")).toBeNull();
+  });
+
+  test("an unpinned install whose look has not finished says so in the newest release card", async () => {
+    // Found on the owner's install on 2026-09-29: running `:latest` with the check on, the page
+    // said nothing about the newest release, because the standing is about the running release.
+    // What breaks if this is deleted: the API's look sentence arrives and the page draws nothing.
+    const unpinned = { ...PANEL, told: null, unanswered: null, look: sentinel("look") };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", unpinned);
+    const headings = [...container.querySelectorAll("h2")].map((one) => one.textContent);
+
+    expect(headings).toContain("The newest published release");
+    expect((container.textContent ?? "").split(sentinel("look"))).toHaveLength(2);
   });
 
   test("a check that failed shows the reason it failed, in the API's words", async () => {

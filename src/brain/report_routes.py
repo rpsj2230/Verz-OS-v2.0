@@ -165,7 +165,7 @@ from brain.ops.schedule_runner import runner_for
 from brain.ops.service_levels import LaneReading, ServiceLevels
 from brain.ops.spend import Dimension
 from brain.ops.spend_store import read_spend_daily
-from brain.ops.telemetry_store import metered_between
+from brain.ops.telemetry_store import metered_between, unplaced_between
 from brain.routing_routes import names_of
 from brain.tables.gate import DepartmentRow
 from brain.tables.schedule import ControlRunRow
@@ -1000,7 +1000,9 @@ async def usage(
 
     The same two reads as adoption, in the same order, and for the same reason: the directory's
     departments, then the questions. Then the ledger rows in the window whose tokens were counted
-    (M27.7.14). `brain.console.usage_screen.usage_for_reader` chooses the questions once, groups
+    (M27.7.14), and the questions of people with no department, which the question ledger does
+    not keep (`usage_screen.A_QUESTION_IS_A_REQUEST_A_PERSON_MADE_WHEREVER_THEY_SIT`).
+    `brain.console.usage_screen.usage_for_reader` chooses the questions once, groups
     them twice, joins the tokens to the questions it chose, decides which axes this reader is
     offered, and names what is not measured. Nothing is filtered or summed here. Then the
     directory's names for the people on those lines and no others, which is
@@ -1012,6 +1014,7 @@ async def usage(
         departments = list((await session.execute(live_departments())).scalars().all())
         questions = await asked_between(session, start=start, end=asked.now)
         metered = await metered_between(session, start=start, end=asked.now)
+        unplaced = await unplaced_between(session, start=start, end=asked.now)
         screen = usage_for_reader(
             questions,
             departments,
@@ -1020,6 +1023,7 @@ async def usage(
             end=asked.now,
             now=asked.now,
             metered=metered,
+            unplaced=unplaced,
         )
         shown = people_on(screen)
         names = (

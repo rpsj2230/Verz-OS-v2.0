@@ -87,7 +87,8 @@ export const A_FORM_NEVER_SENDS_A_FIELD_IT_COULD_NOT_SHOW =
 /**
  * Written down because a generated form is the one screen whose fields nobody chose.
  *
- * `scripts/check-boundaries.mjs` refuses a password input in this console's own source. A
+ * `scripts/check-boundaries.mjs` refuses a password input in this console's own source outside
+ * the kit's secret field. A
  * form assembled from a payload is the way round that check, because the field type comes
  * from the document rather than from a file anybody greps.
  */

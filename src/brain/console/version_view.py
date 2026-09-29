@@ -848,6 +848,31 @@ class Panel:
         return ANSWERS[self.standing]
 
 
+#: What the page says about the newest release while the first look has not finished. Found on
+#: the owner's install on 2026-09-29: with the check switched on and the running release unknown,
+#: the standing is about the running release and nothing on the page said whether a look had
+#: been made, so the switch appeared to do nothing.
+A_LOOK_THAT_HAS_NOT_FINISHED: Final = (
+    "This install is switched on to look for newer releases, and its look at the release list "
+    "has not finished yet, so it cannot say which release is newest. Open this page again in a "
+    "minute."
+)
+
+
+def look_words(told: Told | Unanswered | None, standing: Standing) -> str:
+    """What to say about the newest release when nothing was told and nothing refused.
+
+    `None` is the check switched on with no finished look, which `standing_of` reports as
+    `NOT_LOOKED_YET` only when the running release is known: an install that names no release is
+    answered about that first, and the look then went unmentioned. So the sentence is for that
+    case, and empty when the standing already says it, for a release named, and for a reason
+    given, which the page draws from those fields.
+    """
+    if told is not None or standing is Standing.NOT_LOOKED_YET:
+        return ""
+    return A_LOOK_THAT_HAS_NOT_FINISHED
+
+
 def panel(
     running: Running,
     told: Told | Unanswered | None,
