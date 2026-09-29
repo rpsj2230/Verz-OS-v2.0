@@ -54,12 +54,21 @@ Rejected: appending to `obs.audit_entry` from here, which `brain_app` is granted
 entry is written by a trigger on a row, for the reason `0054` gives, so a decision an operator
 writes at a prompt is recorded exactly as one pressed in the console and the chain has one writer.
 
+**A decision whose own effect the database refuses because what it names has moved is not a
+fault.** `0120`'s trigger applies an approved promotion in the statement that approves it, and
+refuses one whose document is no longer as it was asked for by raising. Until 2026-09-29 that raise
+reached the decision route as a 500, and the card stayed on the screen to fail the next approver
+the same way. `HeldRows.record` now recognises that refusal, by its code and the trigger's own
+words, and raises `NoLongerAppliesError`, so the route can say so and close the card. Every other
+refusal stays what it was: a check the table itself refuses is still a fault, because it is one.
+See `A_REFUSAL_THAT_SAYS_THE_ACTION_MOVED_IS_AN_ANSWER`.
+
 **A resume re-resolves the reach and hands the stored row to `brain.gate.leash.resume`.**
 `resume_stored` takes the function that resolves a principal's reach now, not the reach the
 approval was granted at, so everything `resume` re-checks is checked against the present. What
 it reads is `state`, which the decision wrote and a check holds the verdict to.
 
-Task ids: M35.3.1.1, M33.6.1.3, M27.9.3
+Task ids: M35.3.1.1, M33.6.1.3, M27.9.3, M7.4.4
 """
 
 from __future__ import annotations
@@ -73,6 +82,7 @@ from typing import Any, Final, cast
 import structlog
 from pydantic import ValidationError
 from sqlalchemy import CursorResult, column, insert, select, table, text, update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.audit.ledger import AuditAction, AuditEntry
@@ -81,6 +91,7 @@ from brain.core.envelope import Entity, TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.gate.injection import RiskAssessment
 from brain.gate.leash import Action, ApprovalState, Leash, Resumption, SuspendedAction, resume
+from brain.knowledge.promotion import THE_DOCUMENT_MOVED
 from brain.ops.idempotency import OperationLedger
 from brain.tables.audit import AuditEntryRow, attributed_to
 from brain.tables.suspension import SuspensionRow
@@ -121,8 +132,46 @@ PENDING_CAPABILITIES: Final = table(
 )
 
 
+#: Why one refusal from the database is an answer rather than a fault.
+A_REFUSAL_THAT_SAYS_THE_ACTION_MOVED_IS_AN_ANSWER: Final = (
+    "A promotion's widening is applied by 0120's trigger in the statement that approves it, and a "
+    "document that moved since it was asked for is refused there by raising. Nothing the approver "
+    "did was wrong and nothing the process holds is broken: the request no longer applies. So "
+    "that one refusal, known by its code and its words, is raised as NoLongerAppliesError for "
+    "the route to say and to close, and every other error the statement raises is still a fault."
+)
+
+#: The SQLSTATE a trigger's `RAISE ... ERRCODE = 'check_violation'` carries, and a CHECK's.
+CHECK_VIOLATION: Final = "23514"
+
+#: The refusals that mean what an approval names has moved since it was raised, in the words the
+#: database says them. One today, `0120`'s, held equal to the migration by a test.
+NO_LONGER_APPLIES_REFUSALS: Final = frozenset({THE_DOCUMENT_MOVED})
+
+
 class SuspensionStoreError(Exception):
     """A suspension could not be written, read or decided as asked."""
+
+
+class NoLongerAppliesError(SuspensionStoreError):
+    """The database refused an approval because what it names moved after it was raised.
+
+    Raised before anything is written, inside the transaction, which rolls back. See
+    `A_REFUSAL_THAT_SAYS_THE_ACTION_MOVED_IS_AN_ANSWER`.
+    """
+
+
+def refused_because_it_moved(exc: DBAPIError) -> bool:
+    """Whether a statement's error is the refusal of an approval whose subject has moved.
+
+    Its code and its primary message, both: a CHECK on the table raises the same code with other
+    words, and is a fault. Read off the driver's diagnostics, which is where psycopg keeps the
+    message a `RAISE` set, apart from the context lines around it.
+    """
+    orig = exc.orig
+    diag = getattr(orig, "diag", None)
+    said = getattr(diag, "message_primary", None)
+    return getattr(orig, "sqlstate", None) == CHECK_VIOLATION and said in NO_LONGER_APPLIES_REFUSALS
 
 
 # ------------------------------------------------------------------------ the row
@@ -330,26 +379,31 @@ class HeldRows:
             actor_id=entry.actor_id, ent_hash=entry.ent_hash, trace_id=entry.trace_id
         ):
             await self.session.execute(statement)
-        # `CursorResult` rather than `Result`, which is what an UPDATE returns and is the only
-        # one carrying `rowcount`. Cast at a library boundary where proving the match buys nothing.
-        changed = cast(
-            "CursorResult[Any]",
-            await self.session.execute(
-                update(SuspensionRow)
-                .where(
-                    SuspensionRow.id == decided.id,
-                    SuspensionRow.state == ApprovalState.PENDING.value,
-                    SuspensionRow.action_digest == decided.action_digest,
-                )
-                .values(
-                    state=decided.state.value,
-                    decided_by=decided.decided_by,
-                    decided_at=decided.decided_at,
-                    verdict=entry.details.get("verdict"),
-                    reason_code=entry.details.get("reason_code"),
-                )
-            ),
+        deciding = (
+            update(SuspensionRow)
+            .where(
+                SuspensionRow.id == decided.id,
+                SuspensionRow.state == ApprovalState.PENDING.value,
+                SuspensionRow.action_digest == decided.action_digest,
+            )
+            .values(
+                state=decided.state.value,
+                decided_by=decided.decided_by,
+                decided_at=decided.decided_at,
+                verdict=entry.details.get("verdict"),
+                reason_code=entry.details.get("reason_code"),
+            )
         )
+        try:
+            # `CursorResult` rather than `Result`, which is what an UPDATE returns and is the only
+            # one carrying `rowcount`. Cast at a library boundary where proving the match buys
+            # nothing.
+            changed = cast("CursorResult[Any]", await self.session.execute(deciding))
+        except DBAPIError as exc:
+            if refused_because_it_moved(exc):
+                msg = f"suspension {decided.id!r} no longer applies: what it names has moved"
+                raise NoLongerAppliesError(msg) from exc
+            raise
         if changed.rowcount != 1:
             return None
         kept = await self._kept(entry.subject)

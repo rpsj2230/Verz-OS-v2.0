@@ -71,16 +71,20 @@ from brain.gate.leash import (
     render_artefact,
 )
 from brain.gate.suspension_store import (
+    CHECK_VIOLATION,
+    NO_LONGER_APPLIES_REFUSALS,
     HeldRows,
     StoredSuspensions,
     SuspensionStoreError,
     approvable,
     put_suspension,
     recorded_differently,
+    refused_because_it_moved,
     resume_stored,
     row_values,
     stored_from,
 )
+from brain.knowledge.promotion import THE_DOCUMENT_MOVED
 from brain.session import make_session_factory
 from brain.tables import suspension as table_module
 from brain.tables.identity import one_of
@@ -363,6 +367,60 @@ def test_the_decision_migration_holds_the_grammars_and_widths_it_copied() -> Non
     assert ApprovalVerdict.AMENDED not in table_module.RECORDED_VERDICTS
     assert {one.value for one in DecidableVerdict} <= set(table_module.RECORDED_VERDICTS)
     assert migration.down_revision == "0082"
+
+
+def test_the_store_knows_a_moved_document_by_the_words_and_code_0120_s_trigger_raises() -> None:
+    """The store tells the trigger's refusal of a moved document from every other error by its
+    code and its words, so both are held to the migration that raises them and to the driver's own
+    code for a check violation. The self-approval refusal is not among them: the queue keeps an
+    asker from their own card, and a raise reaching the store anyway is a fault. Delete this and
+    the trigger's wording can change alone, and every such card is a 500 on the screen again."""
+    migration = migration_module(ROOT / "migrations" / "versions" / "0120_knowledge_lifecycle.py")
+    raised = re.findall(
+        r"MESSAGE = '([^']*)',\s*ERRCODE = '([a-z_]+)'", migration.PROMOTION_FUNCTION
+    )
+
+    assert (THE_DOCUMENT_MOVED, "check_violation") in raised
+    assert psycopg.errors.CheckViolation.sqlstate == CHECK_VIOLATION
+    assert {THE_DOCUMENT_MOVED} == NO_LONGER_APPLIES_REFUSALS
+    assert {message for message, _ in raised} - NO_LONGER_APPLIES_REFUSALS == {
+        "a promotion is approved by somebody other than the person who asked"
+    }
+
+
+def driver_error(sqlstate: str | None, primary: str | None) -> DBAPIError:
+    """An error as SQLAlchemy wraps psycopg's: the code on the original, the words in its
+    diagnostics. A stand-in, because psycopg builds its diagnostics from a server's reply."""
+
+    class Diagnostics:
+        message_primary = primary
+
+    class DriverError(Exception):
+        def __init__(self) -> None:
+            super().__init__(primary or "")
+            self.sqlstate = sqlstate
+            self.diag = Diagnostics()
+
+    return DBAPIError("UPDATE gate.suspension", {}, DriverError())
+
+
+def test_only_the_refusal_of_a_moved_subject_is_told_apart_from_a_fault() -> None:
+    """The positive and every near miss: the trigger's words under the check violation code are
+    recognised, and the self-approval refusal, a check the table itself refuses, the same words
+    under another code and an error with no diagnostics are not. Delete this and the store can
+    answer a broken table as a request that no longer applies, which closes a card nobody decided
+    and hides the fault."""
+    assert refused_because_it_moved(driver_error(CHECK_VIOLATION, THE_DOCUMENT_MOVED))
+
+    for sqlstate, primary in (
+        (CHECK_VIOLATION, "a promotion is approved by somebody other than the person who asked"),
+        (CHECK_VIOLATION, 'new row for relation "suspension" violates check constraint "verdict"'),
+        ("23505", THE_DOCUMENT_MOVED),
+        (None, THE_DOCUMENT_MOVED),
+        (CHECK_VIOLATION, None),
+    ):
+        assert not refused_because_it_moved(driver_error(sqlstate, primary)), (sqlstate, primary)
+    assert not refused_because_it_moved(DBAPIError("UPDATE", {}, Exception("no diagnostics")))
 
 
 # ------------------------------------------------------------------ against the database
