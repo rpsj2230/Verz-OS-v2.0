@@ -6,7 +6,7 @@ so the bodies the unit tests read are the bodies the install check reads, and th
 that check's own test. Dates are pinned far from any wall clock, for CLAUDE.md's reason about
 fixtures with dates in them.
 
-Task ids: M11.6.3
+Task ids: M11.6.3, M11.9.4
 """
 
 from __future__ import annotations
@@ -514,3 +514,43 @@ def test_a_failed_schema_reading_is_not_tried_again_on_every_question() -> None:
     clock.now = LONG_AGO + SCHEMA_RETRIED_AFTER
     assert asyncio.run(schema.tables(USE)) == ()
     assert keys.leased == 2
+
+
+def test_an_agent_needing_a_base_reads_a_switched_on_base_as_serving(monkeypatch: Any) -> None:
+    """Connect Lark registers no connection row for a Base, so until this an agent template
+    needing `lark_base` read it as not installed whatever Connect Lark said. Delete this and that
+    can return, or a Base whose schema cannot be read can be offered to an agent as serving."""
+    from types import SimpleNamespace
+
+    import brain.agent_lifecycle_routes as lifecycle
+
+    class _Stored:
+        def __init__(self, sessions: Any) -> None:
+            del sessions
+
+        async def connected(self) -> tuple[Any, ...]:
+            return ()
+
+    base = recorded()
+    schema = BaseSchema(
+        keys=_AppKeys(), caller=base, resolver=_Resolver(), issuer=_Issuer(), clock=lambda: LONG_AGO
+    )
+    monkeypatch.setattr(lifecycle, "StoredConnections", _Stored)
+    monkeypatch.setattr(lifecycle, "sessions_of", lambda request: object())
+    monkeypatch.setattr(lifecycle, "base_schema_of", lambda state: schema)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    monkeypatch.setattr(lifecycle, "switched_on", lambda: USE)
+    registry = asyncio.run(lifecycle.connectors_of(request))  # type: ignore[arg-type]
+    assert registry.serving() == (LARK_BASE,)
+    monkeypatch.setattr(lifecycle, "switched_on", lambda: None)
+    assert len(asyncio.run(lifecycle.connectors_of(request))) == 0  # type: ignore[arg-type]
+    unreadable = BaseSchema(
+        keys=_Counted(None),
+        caller=base,
+        resolver=_Resolver(),
+        issuer=_Issuer(),
+        clock=lambda: LONG_AGO,
+    )
+    monkeypatch.setattr(lifecycle, "switched_on", lambda: USE)
+    monkeypatch.setattr(lifecycle, "base_schema_of", lambda state: unreadable)
+    assert len(asyncio.run(lifecycle.connectors_of(request))) == 0  # type: ignore[arg-type]
