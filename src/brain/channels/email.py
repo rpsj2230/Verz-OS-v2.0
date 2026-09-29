@@ -93,6 +93,7 @@ from string import Template
 from typing import Final
 
 from brain.channels.adapter import (
+    EVENTS_ADDRESS_ASK,
     SECRET_ASK,
     Arrived,
     ChannelCapabilities,
@@ -679,6 +680,11 @@ class EmailWire:
     def tenant_fields(self) -> tuple[str, ...]:
         return (ADDRESS,)
 
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """One secret, so no parts."""
+        return ()
+
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
         """The webhook channel's signature over the time and the exact bytes, and nothing read."""
         verify_signed(
@@ -863,9 +869,6 @@ export default {
     timestamp_header=TIMESTAMP_HEADER,
     signature_header=SIGNATURE_HEADER,
 )
-
-#: The ask on the Worker step that shows this install's events address to copy.
-EVENTS_ADDRESS_ASK: Final = "events_address"
 
 
 def _dashboard(

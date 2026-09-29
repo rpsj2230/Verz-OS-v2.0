@@ -60,6 +60,11 @@ MAX_SKETCH_WORDS: Final = 48
 #: The longest text a step offers to copy. A script or a manifest, not a document.
 MAX_COPY_CHARS: Final = 8000
 
+#: Where a text to copy names this install's events address. The route serving the step writes
+#: the address in its place, and leaves it for the person to replace on an install that names no
+#: public address yet, where the step shows no address either.
+EVENTS_ADDRESS_MARK: Final = "PASTE_THE_EVENTS_ADDRESS_HERE"
+
 
 class LineKind(enum.StrEnum):
     """What one row inside a picture is."""
