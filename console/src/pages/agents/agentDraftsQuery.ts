@@ -392,17 +392,13 @@ export const START_CONSEQUENCE =
 export const EDIT_QUESTION = (name: string): string => `Edit ${name} as a draft?`;
 export const EDIT_CONSEQUENCE =
   "A draft is made from the agent as it is now. The agent keeps working as it is until the draft is checked and published.";
-/** What each of the form's sections is called in a question, by the API's own word for it. */
-export const SECTION_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  identity: "name and summary",
-  persona: "instructions",
-  knowledge: "knowledge",
-  skills: "skills",
-  tools: "tools and permissions",
-  leash: "supervision",
-  tests: "test questions",
-});
-export const SAVE_QUESTION = (section: string): string => `Save the ${SECTION_WORDS[section] ?? section} section?`;
+/**
+ * The confirmation before a section is saved, naming the section by its heading on the Write step,
+ * which is the API's (`brain.builder.form.SECTION_TITLES`). Until 2026-09-29 this file kept its own
+ * table of section words beside the API's, and two tables of one set of names drift.
+ */
+export const SAVE_QUESTION = (heading: string): string =>
+  `Save the ${heading.slice(0, 1).toLowerCase()}${heading.slice(1)} section?`;
 export const SAVE_CONSEQUENCE = "It is kept as a new version of this draft. Nothing is live, and earlier versions are kept.";
 export const CHECK_QUESTION = "Check this draft?";
 export const CHECK_CONSEQUENCE =
@@ -426,5 +422,13 @@ export const KEEP_LABEL = "Not now";
 /** Said before a form is submitted, so nobody learns the format from a refusal. */
 export const PROCEDURE_NAME_HINT = "Lower-case letters, digits and hyphens, starting with a letter: look-up-an-invoice.";
 export const PROCEDURE_DESCRIPTION_HINT = "One sentence beginning with \"Use when\": Use when somebody asks about one invoice.";
-export const FORM_HINT =
-  "Each section is saved on its own. The address, version and publisher are set when it is published, whatever the form shows.";
+export const FORM_HINT = "Each section is saved on its own, by its own Save button.";
+
+/**
+ * Where a tool is allowed, in the Write step's own words: the tools section's heading and the list's
+ * label, both the API's (`brain.builder.form`). `tests/agent-drafts-pages.test.tsx` holds them to the
+ * served form, so a heading renamed there fails a test here rather than leaving this sentence
+ * pointing at a heading that has gone, which is what "Permissions" was.
+ */
+export const TOOLS_SECTION_HEADING = "Tools and permissions";
+export const TOOLS_LIST_LABEL = "Tools it may use";

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 import pytest
 
 from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
-from brain.agents.template import TemplateError, verify
+from brain.agents.template import MANIFEST_PATHS, TemplateError, verify
 from brain.builder.agent_drafts import (
     NOT_THE_AUTHOR,
     NOT_WITHIN_YOUR_REACH,
@@ -27,16 +27,19 @@ from brain.builder.agent_drafts import (
     carrier,
     ceiling_of,
     for_agent,
+    manifest_of,
     next_version,
     plain,
     raised_rungs,
     second_people_needed,
     state_of,
+    where,
     widenings,
 )
 from brain.builder.compose import BuilderError
 from brain.builder.draft_words import DraftAct, DraftChange, DraftKind, DraftState
 from brain.builder.drafts import FIRST_VERSION, ManifestDraft, Problem, Revision, body_text
+from brain.builder.form import FIELD_WORDS, form_document
 from brain.builder.publish import APPROVERS_FOR_A_WIDENING, APPROVERS_FOR_AN_ORDINARY_PUBLISH
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect
@@ -227,16 +230,59 @@ def test_a_question_asked_before_publishing_is_signed_with_a_key_nobody_else_hol
 
 
 def test_a_problem_names_its_section_in_the_forms_words() -> None:
-    """Delete this and a person reads `authority.capabilities.0.value`."""
+    """Delete this and a person reads `authority.capabilities.0.value`, or is sent to a heading
+    called Permissions that the Write step does not have (found on the owner's install)."""
     assert (
         plain(Problem(path="identity.display_name", kind="x", message="Too short"))
-        == "Identity, name: Too short"
+        == "Name and summary, display name: Too short"
     )
     assert plain(Problem(path="persona", kind="x", message="Too long")) == "Instructions: Too long"
     assert (
         plain(Problem(path="authority.capabilities.0.value", kind="x", message="Bad"))
-        == "Permissions, what it may read: Bad"
+        == "Tools and permissions, permissions: Bad"
     )
+    assert plain(Problem(path="authority", kind="x", message="Bad")) == (
+        "Knowledge or Tools and permissions: Bad"
+    )
+    assert plain(Problem(path="nowhere.at_all", kind="x", message="Bad")) == "nowhere.at_all: Bad"
+
+
+def test_every_problem_starts_with_a_heading_the_write_step_shows() -> None:
+    """The heading a problem names is read from the served form document, so this holds the two
+    against each other rather than `where` against its own table. Delete this and a section
+    renamed on the form leaves every problem pointing at the old name."""
+    headings = {entry["title"] for entry in form_document()["sections"]}
+    for path in MANIFEST_PATHS:
+        named = where(f"{path}.0.x")
+        assert named.split(",", 1)[0] in headings, path
+        assert named == where(path), path
+
+
+def test_the_fields_the_form_carries_without_drawing_are_the_ones_publishing_sets() -> None:
+    """The Write step draws no box for the address, the version or the publisher, because
+    publishing sets all three whatever the draft says. This holds that claim against publishing
+    itself: a document naming other values comes out as this agent, at this version, by this
+    publisher. Delete this and a field the server does not set could be hidden, so nobody could
+    ever change it, or a hidden field could stop being set and publish whatever was carried."""
+    hidden = {path for path, words in FIELD_WORDS.items() if words.set_by_the_server}
+    assert hidden == {"identity.template_id", "identity.version", "identity.published_by"}
+
+    document = blank_seed("invoice_helper_ab12cd")
+    document["identity"] = {
+        **document["identity"],
+        "template_id": "somebody_else",
+        "version": 9,
+        "published_by": "u_nobody",
+    }
+    made, problems = manifest_of(
+        document, agent_id="invoice_helper_ab12cd", version=3, publisher="u_author"
+    )
+
+    assert problems == ()
+    assert made is not None
+    assert made.identity.template_id == "invoice_helper_ab12cd"
+    assert made.identity.version == 3
+    assert made.identity.published_by == "u_author"
 
 
 def test_versions_of_an_agents_own_template_count_on_from_the_newest() -> None:
