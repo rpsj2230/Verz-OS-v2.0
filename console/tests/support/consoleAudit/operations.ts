@@ -9,6 +9,7 @@
 
 import { EXPORTS_API_PATH } from "../../../src/pages/dataTransferQuery";
 import { actionPath } from "../../../src/pages/jobsQuery";
+import { tunePath } from "../../../src/pages/tuningQuery";
 import { at, type Proofs, SETTINGS_PRESSED, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
@@ -18,9 +19,15 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
   ],
+  "src/pages/operations/LimitSettings.tsx tunePath(knob.name)": [at("PUT /api/v1/install/tuning/{name}", "tunePath", tunePath("person_per_minute"))],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "PUT /api/v1/install/tuning/{name}": {
+    row: t("test_tuning", "test_saving_a_window_writes_its_row_as_the_person_and_the_next_request_counts_against_it"),
+    audit: t("test_acceptance_capacity", "test_on_a_real_database_the_capacity_checks_pass_or_say_why_not_and_leave_nothing_behind", true),
+    behaviour: t("test_tuning", "test_every_reload_of_saved_settings_holds_the_saved_limits_and_names_a_changed_one", true),
+  },
   "POST /api/v1/data-transfer/exports": {
     row: t("test_data_export_store", "test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it", true),
     audit: t("test_data_export_store", "test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it", true),
