@@ -2,10 +2,10 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**4 items are open: 115, 116 and 118,** three decisions about Lark sign-in, Lark Base visibility and
-sending approval cards, each with my recommendation, **and 91,** the checks only you can do on your
-install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
-is, what I recommend, and every step.
+**3 items are open: 116 and 118,** two decisions about Lark Base visibility and sending approval cards,
+each with my recommendation, **and 91,** the checks only you can do on your install; it waits for the
+Knowledge upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and
+every step.
 
 # Open
 
@@ -50,34 +50,6 @@ answered.
 people are linked to their Lark accounts.
 
 **What I need from you:** reply "116: A now, B later", or tell me otherwise.
-
-## 115. How do the people on your Lark staff list become Brain users?
-
-**In plain terms:** the staff sync reads your 123 people from Lark and has placed 116 of them in 11
-departments, but none of them can sign in to the Brain. The sync creates no Brain accounts, and a
-person can only sign in once an administrator has linked a sign-in account to them by hand. So the
-work you asked for on 29 September (showing each person's status, keeping suspended and outsourced
-people out, and choosing where departments come from) would reach almost nobody until this is
-decided. That work is started and waits on this answer.
-
-**Option A: people sign in with their Lark account.** No Brain passwords at all. The sign-in service
-the Brain uses (Keycloak) has no ready-made Lark sign-in, so this means building a bridge between the
-two: the largest of the three.
-
-**Option B: the sync creates each person's Brain account and emails them an invitation.** Each active
-person on the staff list gets an account and an email to set their password and second factor, sent
-by the sign-in service's own email, the same one "Forgot password" uses. Suspended people and leavers
-get no account, and outsourced people get none unless an administrator allows their employment type.
-When someone leaves or is suspended in Lark, the next sync closes their account.
-
-**Option C: an administrator adds each person by hand.** Nothing to build, and a chore for every
-joiner.
-
-**My recommendation: B now, A later.** B uses what the Brain already has, works for any company
-whatever its staff source, and keeps the staff list and the Brain in step on their own. A can follow
-as a second way to sign in, once 118's option B has stored each person's Lark address.
-
-**What I need from you:** reply "115: B now, A later", or tell me otherwise.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
@@ -127,6 +99,30 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 115. How the people on your Lark staff list become Brain users - DECIDED 2026-09-29: B now, A next
+
+**In plain terms:** the staff sync reads your people from Lark and places them in departments, but it
+created no Brain accounts, so none of them could sign in. **Your answer, 2026-09-29:** "I will go with
+your recommendation: B now, A next. B gets your people onto the Brain soonest and suits any company.
+A then gives Lark companies one-click sign-in without passwords."
+
+What is being built, in this order:
+
+1. **B, now: the sync creates each active person's Brain account and emails them an invitation** to
+   set their password and second factor, through the sign-in service's own email (the one "Forgot
+   password" uses). Suspended people and leavers get no account; outsourced people get none unless an
+   administrator allows their employment type. When someone leaves or is suspended in Lark, the next
+   sync closes their account. It works the same for any company, whatever its staff source.
+2. **Then the work this was holding up:** each person's status and employment type on People,
+   suspended and outsourced people kept out of the Brain, and the choice of where departments come
+   from (Lark's, or your own with people assigned to them).
+3. **A, next: sign in with Lark**, as a second way in for companies whose staff list is Lark, with no
+   password. It needs each person's Lark address stored (item 118's option B).
+
+**What you will need to do:** nothing yet. If the sign-in service has no email settings on your
+install, the first sync that invites anybody says so on the staff source's page and tells you what
+to fill in.
 
 ## 117. Approving by pressing a button on a Lark card - DECIDED 2026-09-29: yes, once Lark requires two-step verification
 
