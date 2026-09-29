@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T21:45:21.302374+00:00",
-  "commit": "603be1f2",
-  "commit_subject": "Channels, Webhooks, Notifications and Subscribers are rebuilt on the page kit, and the relay can be removed (#183)",
+  "generated_at": "2026-09-29T01:23:02.757508+00:00",
+  "commit": "c282f351",
+  "commit_subject": "The Reports pages are dashboards on the page kit: figures, a chart per question, a 7/30/90 day period and export (#186)",
   "total": 1576,
   "done": 370,
   "percent": 23.5,
@@ -1188,7 +1188,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 43,
+  "closed_today": 0,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
