@@ -39,7 +39,7 @@ Not built: the worker that holds the transcript while a run is in flight and cal
 object store; `brain.ops.object_store.S3Backend` implements `StorageBackend` and nothing hands
 it to this module yet.
 
-Task ids: M19.6.6
+Task ids: M19.6.6, M24.3.4
 """
 
 from __future__ import annotations
@@ -226,16 +226,30 @@ def prefix_for(run_id: str, started_at: datetime) -> str:
     return f"{PREFIX}/{started_at:%Y/%m/%d}/{run_id}/"
 
 
+def transcript(recording: Recording) -> bytes:
+    """The transcript's bytes exactly as `write` stores them: one JSON line per entry, in order."""
+    return "".join(
+        json.dumps({"direction": direction.value, "line": text.rstrip("\n")}) + "\n"
+        for direction, text in recording.entries
+    ).encode("utf-8")
+
+
+def transcript_digest(recording: Recording) -> str:
+    """The sha256 of the stored transcript: how the ledger names a recording (M24.3.4).
+
+    Over the bytes `write` stores and nothing else, so the object in the bucket can be checked
+    against the entry that names it. A key would be the other way to name it, and the ledger would
+    keep the redaction marker instead, because a key is not a field name or a digest.
+    """
+    return hashlib.sha256(transcript(recording)).hexdigest()
+
+
 def write(backend: StorageBackend, recording: Recording) -> tuple[str, ...]:
     """Store the transcript and the kept pictures. Returns the keys written."""
     bucket = bucket_for(ObjectKind.BROWSER_RUN_RECORDING).name
     prefix = prefix_for(recording.run_id, recording.started_at)
-    transcript = "".join(
-        json.dumps({"direction": direction.value, "line": text.rstrip("\n")}) + "\n"
-        for direction, text in recording.entries
-    ).encode("utf-8")
     keys = [f"{prefix}transcript.jsonl"]
-    backend.put_object(bucket, keys[0], transcript, "application/x-ndjson")
+    backend.put_object(bucket, keys[0], transcript(recording), "application/x-ndjson")
     for digest, picture in recording.pictures:
         key = f"{prefix}frames/{digest}.png"
         backend.put_object(bucket, key, picture, "image/png")

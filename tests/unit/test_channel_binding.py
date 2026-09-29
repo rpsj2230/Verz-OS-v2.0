@@ -1056,14 +1056,17 @@ def test_0118_builds_the_code_table_exactly_as_the_model_declares_it_and_secures
 
 
 def test_0118_widens_the_ledger_to_the_new_action_and_names_the_list_it_replaces() -> None:
-    """The action list is the enum's once `0141` adds `pack` on top of it, and the list replaced
-    is the one `0137` left. Delete this and a trigger writes an action the database refuses."""
+    """The action list is the enum's once `0141` adds `pack` and `0150` adds `browser_session` on
+    top of it, and the list replaced is the one `0137` left. Delete this and a trigger writes an
+    action the database refuses."""
     m = migration()
     packs = migration_module(
         MIGRATION_0118.parent / "0141_packs_people_and_scope_labels_audited.py"
     )
+    browsing = migration_module(MIGRATION_0118.parent / "0150_trace_store_and_browser_session.py")
     assert packs.NARROWER_ACTIONS == m.WIDENED_ACTIONS
-    assert one_of("action", AuditAction) == packs.WIDENED_ACTIONS
+    assert browsing.NARROWER_ACTIONS == packs.WIDENED_ACTIONS
+    assert one_of("action", AuditAction) == browsing.WIDENED_ACTIONS
     assert "'channel_binding'" in m.WIDENED_ACTIONS
     assert "'channel_binding'" not in m.NARROWER_ACTIONS
     previous = migration_module(MIGRATION_0118.parent / "0137_agent_lifecycle_audit.py")
