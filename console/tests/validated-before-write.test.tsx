@@ -46,11 +46,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
   // The one form checks a published head; the ledger's filters are on the Audit log's own page.
   "src/pages/audit/VerifyPage.tsx": [{ pattern: "/audit/verify", index: 0, writes: true }],
-  // The naming form, then one column's editor (a rule, or a mark for an uploaded table); and on
-  // the page with nothing named, the naming form and then the upload.
-  "src/pages/Classification.tsx": [
-    { pattern: "/classification/:entity/:column", index: 0, writes: false },
-    { pattern: "/classification/:entity/:column", index: 1, writes: true },
+  // One column's editor (a rule, or a mark for an uploaded table), the one form on a table's page;
+  // and on the module's first page, the naming form and then the upload.
+  "src/pages/classification/ClassificationPage.tsx": [
+    { pattern: "/classification/:entity/:column", index: 0, writes: true },
+    { pattern: "/classification", index: 0, writes: false },
     { pattern: "/classification", index: 1, writes: true },
   ],
   "src/pages/operations/DataTransferPage.tsx": [{ pattern: "/import-export", index: 0, writes: true }],
