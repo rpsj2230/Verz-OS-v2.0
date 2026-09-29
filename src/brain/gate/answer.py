@@ -720,7 +720,9 @@ async def _outcome(
         answers_the_question=True,
     )
     if declined is None and not sentence:
-        declined = _withheld_or_absent(found, payload, scope)
+        declined = _withheld_or_absent(
+            found, payload, scope, policy=policy, entitlement=entitlement, now=now
+        )
     if declined is not None:
         return _abstained(stream, frames, gaps, declined)
 
@@ -864,7 +866,13 @@ async def _answered_by_model(
 
 
 def _withheld_or_absent(
-    found: FastLaneAnswer, payload: ChannelPayload, scope: SearchScope
+    found: FastLaneAnswer,
+    payload: ChannelPayload,
+    scope: SearchScope,
+    *,
+    policy: FieldPolicy,
+    entitlement: EntitlementSet,
+    now: datetime,
 ) -> Abstention:
     """The record came back and the field the rule answers with is not in it. Which of the
     two reasons that is, for the audit log only.
@@ -876,22 +884,19 @@ def _withheld_or_absent(
     frame streams rather than on the two sentences looking alike.
 
     It is visible to an auditor, which is the entire reason `not_entitled` exists: "DENIED
-    exists only for the audit log". `ChannelPayload.locked` names fields present on a record
-    and withheld from this caller, so this layer is the one that saw the refusal and is
-    therefore the one that can record it. A lane that recorded every one of these as an
-    absence would leave a ledger in which nobody was ever refused anything.
+    exists only for the audit log". Two layers can have refused the field, and this one can
+    tell which of them did. `ChannelPayload.locked` names a field present on a record and
+    withheld by the redactor. **A field the projection never fetched is the other, and it is
+    the one every fast-lane refusal is**: `compile_projection` builds the SELECT list from the
+    columns this caller holds a grant for, so a column they may not read is never read, the
+    redactor never sees it and records no lock. Until 2026-09-29 only the first was looked for,
+    so the lane logged an absence wherever a refusal had happened, and not one refusal of a
+    column on Ask ever reached an administrator (M8.2.1). See
+    `A_FIELD_THE_ASKER_HOLDS_NO_GRANT_FOR_WAS_REFUSED_AND_NOT_ABSENT`.
     """
-    # Unreachable through the fast lane as it stands, and kept with the reason stated rather
-    # than deleted. `compile_projection` builds the SELECT list from the columns this caller
-    # reaches, so a column they may not read is never fetched, so the redactor never sees it
-    # and records no lock. The refusal has already happened, one layer down, and left nothing
-    # here to record: this lane logs an absence where a refusal occurred, and that is a real
-    # gap in the ledger rather than a tidy outcome. The branch is here for a payload whose
-    # lock came from the redactor rather than the projection, which is what a document answer
-    # or a widened projection would produce.
     withheld = any(
         lock.field == found.field and lock.entity == found.entity for lock in payload.locked
-    )
+    ) or _held_no_grant_for(found, policy, entitlement, now)
     if withheld:
         return not_entitled(
             scope,
@@ -900,6 +905,32 @@ def _withheld_or_absent(
             field=found.field,
         )
     return nothing_retrieved(scope, detail=f"{found.entity}.{found.field} absent")
+
+
+def _held_no_grant_for(
+    found: FastLaneAnswer, policy: FieldPolicy, entitlement: EntitlementSet, now: datetime
+) -> bool:
+    """Whether this caller holds no grant at all for the field the rule answers with.
+
+    Decided from the field's own rule and the caller's reach, which is what
+    `compile_projection` decided it from, so it names the refusal that layer made. Reached only
+    once a record came back, so it never records a refusal beside a record that does not exist.
+    A field nothing classifies is not a refusal of this caller but a gap in the install's
+    classification, and a grant held in a narrower scope than the rows is left an absence:
+    recording it as one fails towards the old behaviour rather than towards naming a refusal
+    that did not happen.
+    """
+    rule = policy.rule_for(found.entity, found.field)
+    return rule is not None and entitlement.scope_for(rule.required_capability, now) is None
+
+
+#: Why a field the projection left out because of the caller's grants is recorded as a refusal.
+A_FIELD_THE_ASKER_HOLDS_NO_GRANT_FOR_WAS_REFUSED_AND_NOT_ABSENT: Final = (
+    "The projection reads only the columns the caller holds a grant for, so a field they hold "
+    "none for is never fetched and the redactor records no lock. That field was refused, not "
+    "absent, and the administrator's trace says so; the asker is told what an absent record "
+    "tells them, word for word, because the two reasons share one public sentence."
+)
 
 
 def _enter(recorder: Recorder | None, step: GateStep) -> None:
