@@ -632,6 +632,7 @@ WRITTEN_BY_CHECKS = (
     "agent.supervised_action",
     "agent.action_verdict",
     "agent.supervision_pin",
+    "agent.tool_attachment",
 )
 
 

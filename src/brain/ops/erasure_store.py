@@ -386,6 +386,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # reviewer are actors, and each row is about an agent's leash, never about a person.
         "agent.leash_change",
         "agent.supervision_pin",
+        # A tool attached to an agent or detached (`0196`): the person who pressed is an actor,
+        # and the row is about an agent's tools, never about a person.
+        "agent.tool_attachment",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).

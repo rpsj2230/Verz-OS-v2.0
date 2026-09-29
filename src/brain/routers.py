@@ -48,6 +48,10 @@ from brain.agent_about_routes import router as agent_about_router
 # supersession or an archive as a row, and the latest of a kind for a client.
 from brain.agent_artifact_routes import router as agent_artifact_router
 
+# Attaching a tool or a connector to an agent from its page, and detaching one, each checked when
+# it is pressed and written to the ledger with who, when and why.
+from brain.agent_attachment_routes import router as agent_attachment_router
+
 # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.

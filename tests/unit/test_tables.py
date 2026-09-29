@@ -158,6 +158,7 @@ MIGRATION_SKILL_EXPORT = VERSIONS / "0191_skill_export_and_rehearsal.py"
 MIGRATION_RETRIEVAL_EVENT = VERSIONS / "0193_retrieval_event.py"
 MIGRATION_ARTIFACT_CHANGE = VERSIONS / "0194_artifact_change_and_client.py"
 MIGRATION_LEASH = VERSIONS / "0195_leash_changes_and_supervision.py"
+MIGRATION_TOOL_ATTACHMENT = VERSIONS / "0196_tool_attachments.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -460,6 +461,8 @@ LEASH_TABLES: tuple[str, ...] = (
     "agent.action_verdict",
     "agent.supervision_pin",
 )
+#: And the one 0196 adds: a tool attached to an agent, or detached.
+TOOL_ATTACHMENT_TABLES: tuple[str, ...] = ("agent.tool_attachment",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -543,6 +546,7 @@ ALL_TABLES = (
     + RETRIEVAL_EVENT_TABLES
     + ARTIFACT_CHANGE_TABLES
     + LEASH_TABLES
+    + TOOL_ATTACHMENT_TABLES
 )
 
 
@@ -1393,6 +1397,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert artifact_change.TABLES == ARTIFACT_CHANGE_TABLES
     leash = migration_module(MIGRATION_LEASH)
     assert leash.TABLES == LEASH_TABLES
+    tool_attachment = migration_module(MIGRATION_TOOL_ATTACHMENT)
+    assert tool_attachment.TABLES == TOOL_ATTACHMENT_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1498,6 +1504,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(retrieval_event.TABLES)
         + tuple(artifact_change.TABLES)
         + tuple(leash.TABLES)
+        + tuple(tool_attachment.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1584,6 +1591,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(retrieval_event.TABLES),
         set(artifact_change.TABLES),
         set(leash.TABLES),
+        set(tool_attachment.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
