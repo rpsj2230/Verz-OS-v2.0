@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T18:06:47.446552+00:00",
-  "commit": "40b98dde",
-  "commit_subject": "Two owner decisions, measured: memory on the server ranked across every service waiting for it, and how large an upload may be (#264)",
+  "generated_at": "2026-09-29T18:12:25.292069+00:00",
+  "commit": "5eef9449",
+  "commit_subject": "The payload role is declared in the realm and read off the caller's own token, so a trace is read under it (#278)",
   "total": 1576,
   "done": 469,
   "percent": 29.8,
