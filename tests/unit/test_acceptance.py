@@ -603,6 +603,10 @@ WRITTEN_BY_CHECKS = (
     "ops.outbox_delivery",
     "gate.grants_version",
     "gate.policy_epoch",
+    "mem.persistent",
+    "mem.adaptive",
+    "mem.learning",
+    "mem.correction",
     "agent.browser_envelope",
     "agent.browser_session",
     "obs.trace_step",
@@ -689,9 +693,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 52
+    assert len(outcomes) == 56
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 154
+    assert runs == [(2,)] and len(recorded) == 162
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
