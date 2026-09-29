@@ -369,6 +369,34 @@ def test_a_key_the_worker_environment_sets_outranks_the_vault(
     assert keys.lookup(moonshot)() == "sk-shell"
 
 
+def test_a_key_s_source_is_said_in_the_order_it_is_read_and_never_its_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`WorkerProviderKeys.source`, which the M5.6.3 install check asks: the environment outranks
+    the vault, a key only the vault holds is the vault's, a slot neither holds is none, and the
+    answer is a `KeySource` and never the key. The source is read through the same cache as the
+    key, so asking it costs no second vault read. Delete this and the check can report a vault key
+    the environment was shadowing, or a caller can be handed the value by asking where it is."""
+    from brain.ops.model_probe_run import KeySource
+
+    for slot in PROVIDER_SLOTS:
+        monkeypatch.delenv(slot.env_var, raising=False)
+    by_slug = {one.slug: one for one in PROVIDER_SLOTS}
+    vault = Vault({"providers/anthropic": "sk-a", "providers/moonshot": "sk-m"})
+    keys = WorkerProviderKeys(vault, ttl=100.0)  # type: ignore[arg-type]
+    monkeypatch.setenv(by_slug["moonshot"].env_var, "sk-shell")
+
+    assert keys.source(by_slug["anthropic"], 0.0) is KeySource.VAULT
+    assert keys.source(by_slug["moonshot"], 0.0) is KeySource.ENVIRONMENT
+    assert keys.source(by_slug["openai"], 0.0) is KeySource.NONE
+    assert keys.held([by_slug["anthropic"]], 0.5) == frozenset({"anthropic"})
+    assert vault.reads.count("providers/anthropic") == 1
+    assert all(
+        isinstance(keys.source(one, 1.0), KeySource) and "sk-" not in keys.source(one, 1.0)
+        for one in PROVIDER_SLOTS
+    )
+
+
 def test_the_runner_on_an_install_with_no_key_opens_nothing_and_reports_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
