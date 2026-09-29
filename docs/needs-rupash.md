@@ -2,91 +2,13 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**7 items are open: 126,** which services Verz uses, **121 to 125,** whose conversations an agent's page lists, where uploaded
+**6 items are open: 121 to 125,** whose conversations an agent's page lists, where uploaded
 documents are stored, a task that names a table library, the automation canvas, and the Lark group
 for the evening digest, each with my recommendation, **and 91,** the checks only you can do on your
 install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
 is, what I recommend, and every step.
 
 # Open
-
-## 126. Which of these services does Verz use? Steps for each one you can connect today
-
-**In plain terms:** about thirty Wave 2 tasks are channels and connectors to other services. Most
-are built and tested in the repository; a task counts as done once it is proved on your install,
-and that needs a real account. Measured on 30 September, they fall into three groups, and only the
-first can be done by you today. **Never paste a key into chat, only into the console.**
-
-### Group 1: connect these yourself, today, entirely in the console
-
-Do only the ones Verz uses. Each takes about ten minutes. In the console open **Connectors**, press
-**Connect a source**, choose the service, and follow its screens, which show a picture of each step;
-the same steps in words:
-
-**Xero** (invoices and contacts, read only)
-
-1. Sign in to Xero's developer portal (developer.xero.com, **My Apps**) with an account that
-   administers your organisation, and press **New app** (Xero may offer it as a custom connection).
-   Name it "Company Brain". Give it exactly two scopes, `accounting.transactions.read` and
-   `accounting.contacts.read`, and nothing ending in `.write`.
-2. Press **Authorise** for the one Xero organisation the Brain should read, then copy that
-   organisation's id (Xero may call it the tenant id) and the key Xero issues.
-3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
-   **Connect Xero**. The key goes straight to the vault and is never shown again.
-
-**HubSpot** (contacts and deals, read only)
-
-1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
-   (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
-   Name it "Company Brain".
-2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
-   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
-3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
-   account's settings) and the token, and press **Connect HubSpot**.
-
-**Freshdesk** (tickets, read live)
-
-1. Choose the Freshdesk agent the Brain reads as: someone who sees the tickets it should answer
-   about and no more, and never an administrator.
-2. Sign in to Freshdesk as that agent, press the profile picture at the top right, open **Profile
-   settings**, and press **View API key**. Copy it.
-3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
-   `.freshdesk.com`), the short name of the one department whose people may be granted its
-   tickets, paste the key, and press **Connect Freshdesk**.
-
-After each one, press **Test** on its card, then tell me "126: connected Xero" (or whichever), and
-I prove it on your install and close its tasks.
-
-### Group 2: the first half is yours; the last step is being built
-
-**Google Drive** and **your Laravel system** cannot yet be finished from the console: both end with
-a step done on the server, which is itself an unfinished Wave 2 task (M11.7.7, every connector
-connectable from the console). It is being built now, so you will paste the key yourself rather
-than handing a key file to anyone. If Verz uses them, you can do the first steps now:
-
-- **Google Drive:** in Google Cloud console, **IAM & Admin**, **Service Accounts**, **Create
-  service account**, named "Company Brain", with no role and never domain-wide delegation. In the
-  same project, **APIs & Services**, **Library**, find **Google Drive API** and press **Enable**.
-  In Google Drive, right-click the one folder the Brain should read, **Share**, paste the service
-  account's email address and give it **Viewer**. Share nothing else with it.
-- **Laravel:** in your application's database, create one view for each thing the Brain should
-  read, holding only the columns it may see, and a database user with SELECT on those views only.
-  Whoever looks after that database does this; it is two SQL statements per view.
-
-### Group 3: not connectable yet on any install
-
-**Slack, Microsoft Teams, WhatsApp, Telegram and email** as channels are written and tested, but
-nothing on an install can yet receive or send through them: only Lark and the generic webhook are
-wired end to end (task M10.6.1). An account for them does nothing until that wiring is built.
-**Google Analytics, Search Console, Cloudflare, domains and hosting, Google Workspace and Slack as a
-source** are not built yet.
-
-### What I need from you
-
-Reply "126:" and the services Verz uses, for example "126: Xero, HubSpot, Google Drive, Slack".
-Group 1 you can connect straight away with the steps above. Groups 2 and 3 are built in the order
-you name them, and I send you steps as each becomes connectable. **Anything you leave out moves to
-Wave 5**: its build and tests stay, and it is proved when a company that uses it installs.
 
 ## 125. Which Lark group receives the evening build digest?
 
@@ -230,6 +152,67 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 126. Every service connectable from the console, one at a time - DECIDED 2026-09-30
+
+**Your answer, 2026-09-30:** "You need to do all one by one so that I can login to console and connect
+them through step by step instructions/screens provided in the backend console itself."
+
+So every service in the list is made connectable from **Connectors**, **Connect a source**, with its
+own step screens, one at a time, and I tell you each time one is ready. You connect it yourself and
+paste its key only into the console. **The order:**
+
+1. **Ready now:** Xero, HubSpot, Freshdesk (steps below, and on their Connect screens).
+2. **Next:** Google Drive, then your Laravel system (task M11.7.7: their last step moves from the
+   server into the console).
+3. **Then the channels:** email, Slack, Microsoft Teams, Telegram, WhatsApp (task M10.6.1 wires each
+   one end to end, and each gets its own Connect screens).
+4. **Then the new sources:** Google Workspace, Google Analytics, Google Search Console, Cloudflare,
+   your domain registrar and hosting, and Slack as a source.
+
+After you connect one, press **Test** on its card and tell me "connected Xero" (or whichever); I prove
+it on your install and close its tasks.
+
+**Ready now: Xero, HubSpot and Freshdesk.**
+
+Each takes about ten minutes. In the console open **Connectors**, press
+**Connect a source**, choose the service, and follow its screens, which show a picture of each step;
+the same steps in words:
+
+**Xero** (invoices and contacts, read only)
+
+1. Sign in to Xero's developer portal (developer.xero.com, **My Apps**) with an account that
+   administers your organisation, and press **New app** (Xero may offer it as a custom connection).
+   Name it "Company Brain". Give it exactly two scopes, `accounting.transactions.read` and
+   `accounting.contacts.read`, and nothing ending in `.write`.
+2. Press **Authorise** for the one Xero organisation the Brain should read, then copy that
+   organisation's id (Xero may call it the tenant id) and the key Xero issues.
+3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
+   **Connect Xero**. The key goes straight to the vault and is never shown again.
+
+**HubSpot** (contacts and deals, read only)
+
+1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
+   (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
+   Name it "Company Brain".
+2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
+   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
+   account's settings) and the token, and press **Connect HubSpot**.
+
+**Freshdesk** (tickets, read live)
+
+1. Choose the Freshdesk agent the Brain reads as: someone who sees the tickets it should answer
+   about and no more, and never an administrator.
+2. Sign in to Freshdesk as that agent, press the profile picture at the top right, open **Profile
+   settings**, and press **View API key**. Copy it.
+3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
+   `.freshdesk.com`), the short name of the one department whose people may be granted its
+   tickets, paste the key, and press **Connect Freshdesk**.
+
+After each one, press **Test** on its card, then tell me "126: connected Xero" (or whichever), and
+I prove it on your install and close its tasks.
+
 
 ## 118. An approval card reaches the approver in Lark as soon as it is raised - DECIDED 2026-09-29: B
 
