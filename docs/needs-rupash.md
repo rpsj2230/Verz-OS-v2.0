@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**11 items are open: 131,** making staff accounts work on your install, **127 to 129,** things
+**12 items are open: 130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,28 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 130. Does a staff list anybody with its link can edit give people sign-in accounts?
+
+**In plain terms:** item 115's B is built: the staff sync gives each active person a sign-in account
+and sends nobody anything. One case I decided the safe way and need you to confirm. A spreadsheet or
+a Google Sheet can be edited by anybody who has its link, so a row somebody adds would become a real
+way into the Brain for whatever address they typed, as long as they can read that mailbox and press
+Forgot password. Lark, Google Workspace, Microsoft Entra and LDAP are changed only by your
+administrators, and they give accounts as you asked.
+
+**Option A: only a company directory gives accounts.** A sheet still lists people, places them in
+departments and marks leavers; it makes no accounts, and the Staff sources page says so. People on a
+sheet are given their sign-in by an administrator in Keycloak, as today.
+
+**Option B: a sheet gives accounts too.** Anybody who can edit the sheet can then let somebody in.
+Only sensible for a sheet you have locked to one or two people.
+
+**My recommendation: A.** It is what is built, and it matches the rule the product already keeps: a
+sheet is trusted to say who exists and nothing more.
+
+**What I need from you:** reply "130: A" or "130: B". Until then A holds, which is the safe side: B
+only adds accounts.
 
 ## 131. Make staff accounts work on your install (after #281 is deployed)
 

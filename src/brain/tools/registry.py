@@ -896,6 +896,10 @@ class ToolRegistry:
         `min`, the only shape in which a side effect may touch a leash (`rung_ceiling`), so a
         rung only ever falls. An entry whose target no tool here carries is kept as written:
         `Leash.rung_for` answers SHADOW for whatever matches nothing anyway.
+
+        Called by `brain.gate.invoke.invoke`, the one place a run is assembled, and by nothing
+        that draws a page: the leash a page shows is the configured one. See
+        `brain.gate.invoke.A_RUN_IS_HELD_TO_THE_RUNG_ITS_TOOLS_SIDE_EFFECTS_ALLOW`.
         """
         return Leash(
             entries=tuple(
