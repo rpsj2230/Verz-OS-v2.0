@@ -66,19 +66,44 @@ A_SOURCE_NOBODY_CONNECTED_ASKS_NOTHING: Final = (
 # ---------------------------------------------------------------- the classifications
 
 
-def _from_rules(entity: str, rules: Iterable[FieldRule]) -> TableClassification:
-    """One entity's classification out of a connector's field rules for it."""
+#: The field each source's visibility predicate tests on every row it keeps.
+SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
+    {xero.CONNECTOR_NAME: "tenant_id", freshdesk.FRESHDESK: "department"}
+)
+
+
+def _scope_column(source: str, entity: str) -> ColumnRule:
+    """The column a source's visibility predicate tests, read by whoever reaches the row.
+
+    `brain.demo.THE_COLUMN_A_SCOPE_TESTS_IS_READ_BY_WHOEVER_REACHES_THE_ROW`, measured again here on
+    2026-09-30: a ticket granted in one department was dropped whole for its own department's
+    reader, because the redactor judges a department-scoped grant against the record and the record
+    had no department in it. Under `read:<entity>`, which every reader of the row holds, the column
+    tells nobody anything new: every row they reach is in the scope their grant names.
+    """
+    return ColumnRule(
+        column=SCOPED_BY[source],
+        required_capability=Capability(value=f"read:{entity}"),
+        classification=Classification.INTERNAL,
+    )
+
+
+def _from_rules(source: str, entity: str, rules: Iterable[FieldRule]) -> TableClassification:
+    """One entity's classification out of a connector's field rules for it, and its scope column."""
     return TableClassification(
         entity=entity,
-        rules=tuple(
-            ColumnRule(
-                column=rule.field,
-                required_capability=rule.required_capability,
-                classification=rule.classification,
-                derived_from=frozenset(rule.derived_from),
-            )
-            for rule in rules
-            if rule.entity == entity
+        rules=(
+            *(
+                ColumnRule(
+                    column=rule.field,
+                    required_capability=rule.required_capability,
+                    classification=rule.classification,
+                    derived_from=frozenset(rule.derived_from),
+                )
+                for rule in rules
+                if rule.entity == entity
+            ),
+            _scope_column(source, entity),
         ),
     )
 
@@ -87,8 +112,8 @@ def xero_classifications() -> tuple[TableClassification, ...]:
     """Xero's invoices and contacts, from `xero.XERO_FIELD_RULES`."""
     rules = xero.XERO_FIELD_RULES
     return (
-        _from_rules(xero.ENTITY_INVOICE, rules),
-        _from_rules(xero.ENTITY_CONTACT, rules),
+        _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_INVOICE, rules),
+        _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_CONTACT, rules),
     )
 
 
@@ -103,13 +128,16 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
     return (
         TableClassification(
             entity=freshdesk.TICKET,
-            rules=tuple(
-                ColumnRule(
-                    column=name,
-                    required_capability=Capability(value=f"read:{freshdesk.TICKET}.{name}"),
-                    classification=Classification.INTERNAL,
-                )
-                for name in freshdesk.projected_field_names()
+            rules=(
+                *(
+                    ColumnRule(
+                        column=name,
+                        required_capability=Capability(value=f"read:{freshdesk.TICKET}.{name}"),
+                        classification=Classification.INTERNAL,
+                    )
+                    for name in freshdesk.projected_field_names()
+                ),
+                _scope_column(freshdesk.FRESHDESK, freshdesk.TICKET),
             ),
         ),
     )
