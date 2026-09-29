@@ -3,7 +3,8 @@
 `brain.ops.acceptance_checks_connectors` proves what a connector may keep. This proves the frame
 every connector runs inside: what a connectable source declares, where its key lives and how a run
 borrows it, what a read may be sent to, what sits in front of every call, and what a person is told
-when a read fails. Eight checks, split where the leaves split, and each one drives the functions the
+when a read fails, and what the calls a source was sent come to on its page. Nine checks, split
+where the leaves split, and each one drives the functions the
 product runs rather than a restatement of them: `brain.ops.connector_sync_run.attempt` for the
 worker, `brain.ops.live_read_run.ConnectedSources` under `brain.connectors.live_read.read_live`
 for a question, `brain.ops.live_records.SourceRecords` for the lane's refresh, the connect route's
@@ -43,7 +44,7 @@ already unit tested that way; what an install has to show is that the executor i
 front of a real read, which only a read shows.
 
 Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1
-Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5
+Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.3.4
 """
 
 from __future__ import annotations
@@ -1108,3 +1109,81 @@ async def an_unreached_source_is_named_only_to_an_asker_who_could_see_it(h: Harn
         raise CheckFailedError("an asker who could see the source was not told it by name")
     if any(unconnected in one for one in told):
         raise CheckFailedError("an asker was told the name of a source their reach does not cover")
+
+
+# ------------------------------------------------------------ 9. what the calls were (M11.3.4)
+@check(
+    leaves=("M11.3.4",),
+    sentence=(
+        "Questions read a Xero tenant made up for the check live through the answer path's own "
+        "reader, one record served, one refused as over the source's limit and one failing: the "
+        "source's page is sent the calls a second and a minute, those in flight, the refused and "
+        "failed shares and the latency, and a reader who may see only their own usage none."
+    ),
+)
+async def a_source_s_live_calls_are_measured_on_its_page(h: Harness) -> None:
+    from types import SimpleNamespace
+
+    from brain.console.workspace import Basis
+    from brain.console_stats_routes import (
+        CALLS_ARE_EVERYBODY_S,
+        CALLS_ARE_THIS_PROCESS_S,
+        connector_calls,
+    )
+    from brain.core.envelope import TypedResult
+    from brain.knowledge.rows import ENTITY_KEY, ID_KEY, RowRecord
+    from brain.ops.live_records import SourceRecords
+
+    rig = _rig(h)
+    served, over, failing = (str(uuid.uuid4()) for _ in range(3))
+    number = h.word()
+
+    def answer(url: str) -> SourceAnswer:
+        if over in url:
+            # A wait past the question's budget, so the refusal is counted once and not retried.
+            return SourceAnswer(status=429, headers={"Retry-After": "60"}, body=b"{}")
+        if failing in url:
+            return SourceAnswer(status=503, headers={}, body=b"{}")
+        return _listed(url, _invoice(served, number))
+
+    sources = rig.sources(_Answering(answer))
+
+    async def connected() -> LiveSources:
+        return sources
+
+    records = SourceRecords(connected=connected, clock=_clock)
+    # The application's state as the stats route reads it: its live reader and nothing else.
+    state = SimpleNamespace(live_records=records)
+    before, _ = connector_calls(state, SOURCE, Basis.EVERYONE, _clock())
+    if before is None:
+        raise CheckFailedError("the source's page was not sent the calls questions made to it")
+    if before.requests != 0 or not before.quiet:
+        raise CheckFailedError("a source nobody asked about was shown calls")
+    tenant = rig.settings["tenant_id"]
+    for one in (served, over, failing):
+        index = TypedResult[RowRecord](
+            records=(
+                RowRecord.model_validate(
+                    {ENTITY_KEY: ENTITY_INVOICE, ID_KEY: one, "tenant_id": tenant}
+                ),
+            ),
+            source=SOURCE,
+        )
+        await records.refresh(index, source=SOURCE, entity=ENTITY_INVOICE, asker=h.actor)
+    now = _clock()
+    calls, told = connector_calls(state, SOURCE, Basis.EVERYONE, now)
+    if calls is None or told != CALLS_ARE_THIS_PROCESS_S:
+        raise CheckFailedError("the source's page was not sent the calls questions made to it")
+    if calls.requests != 3 or calls.concurrency != 0:
+        raise CheckFailedError("the source's page did not count each call questions made once")
+    if not math.isclose(calls.per_minute, calls.requests / calls.window_seconds * 60.0):
+        raise CheckFailedError("the source's calls a minute were not its calls over the window")
+    if not math.isclose(calls.per_second * 60.0, calls.per_minute):
+        raise CheckFailedError("the source's calls a second and a minute disagree")
+    if not (math.isclose(calls.quota_ratio, 1 / 3) and math.isclose(calls.error_ratio, 1 / 3)):
+        raise CheckFailedError("the refused and failed shares of the source's calls were wrong")
+    if not 0.0 <= calls.latency_p50_ms <= calls.latency_p95_ms:
+        raise CheckFailedError("the source's call latency was not measured")
+    hidden, why = connector_calls(state, SOURCE, Basis.OWN, now)
+    if hidden is not None or why != CALLS_ARE_EVERYBODY_S:
+        raise CheckFailedError("a reader of their own usage was shown everybody's calls")
