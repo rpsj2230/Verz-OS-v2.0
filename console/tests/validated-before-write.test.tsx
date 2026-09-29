@@ -78,7 +78,14 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
-  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // The preview as a person is in the Permissions card, above the model card, so the pin's is second.
+  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 1, writes: true }],
+  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // A person's Access view: the preview through an agent, under the grants, roles and placements.
+  "src/pages/people/PersonPreview.tsx": [{ pattern: "/people/:personId/:view", index: 0, writes: true }],
+  // The Dashboard opens first, and its one form is the monthly budget, drawn for a reader of
+  // everybody's spend.
+  "src/pages/agents/AgentSpend.tsx": [{ pattern: "/agents/:agentId", index: 0, writes: true }],
   // A model's price opens on its row in the prices card, under the providers and the matrix, which
   // draw no form of their own (M27.12.5).
   "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
@@ -100,6 +107,10 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/agents/AgentMemory.tsx":
+    "The one form corrects a memory, opened from its row in the Memory section at its own address, " +
+    "which no page case mounts. tests/agent-memory.test.tsx submits it blank and holds that nothing " +
+    "is sent and what to type is said beside it, and a correction is sent only from its confirmation.",
   "src/pages/compliance/ComplianceActs.tsx":
     "Naming a person, opening a case and each step of a case are forms inside drawers opened from the " +
     "Compliance views and a case's own page, outside the main landmark these cases read. Each says what " +

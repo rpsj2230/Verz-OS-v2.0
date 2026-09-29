@@ -314,6 +314,13 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
         "agent.manifest_act": Through(
             parent="agent.manifest_draft", key="draft_id", parent_key="id"
         ),
+        # A supersession or an archive is the person's an artifact was produced for, through the
+        # artifact (`0153`): the person who changed it is an actor, not an owner. `0153` grants no
+        # way for a row to leave, so an erasure keeps these and reports them kept, as it keeps the
+        # artifact.
+        "agent.artifact_change": Through(
+            parent="agent.artifact", key="artifact_id", parent_key="artifact_id"
+        ),
         # A request's handled mark is the asker's through the request it marks (`0146`): the owner
         # who marked it is an actor, not an owner. `0146` grants no way for a row to leave, so an
         # erasure keeps these and reports them kept, as it keeps the request.

@@ -44,16 +44,22 @@ from brain.access_request_routes import router as access_request_router
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
 
+# One agent's Artifacts section: its list, a download re-checked at the requester's reach, a
+# supersession or an archive as a row, and the latest of a kind for a client.
+from brain.agent_artifact_routes import router as agent_artifact_router
+
 # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
 from brain.agent_builder_routes import router as agent_builder_router
+from brain.agent_capability_routes import router as agent_capability_router
 
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
+from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
 from brain.agent_model_routes import router as agent_model_router
@@ -62,6 +68,7 @@ from brain.agent_model_routes import router as agent_model_router
 # again: who may see an agent is its audience rather than a capability, and a hidden agent
 # and a missing one are one answer. The same `asking` dependency, imported.
 from brain.agent_routes import router as agent_router
+from brain.agent_workspace_routes import router as agent_workspace_router
 
 # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
 # finding, and the timeout middleware in `brain.app` is the most recent one.

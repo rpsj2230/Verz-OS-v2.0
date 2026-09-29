@@ -68,10 +68,24 @@ async def _nothing(harness: Harness) -> None:
 def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every run of the suite here imports from a GitHub that does not answer, so no test in this
     file reaches the network; `tests/unit/test_acceptance_skills.py` fakes one that does."""
-    from brain.ops import acceptance_checks_skills
+    from brain.ops import acceptance_checks_skills, acceptance_workspace
+    from brain.ops.artifact_store import ARTIFACT_BUCKET
+    from brain.ops.object_store import S3Backend, StoreCredential
+    from brain.ops.storage import Backend, config_for
+    from tests.fixtures.fake_s3 import FakeS3
     from tests.unit.test_acceptance_skills import unreachable
 
     monkeypatch.setattr(acceptance_checks_skills, "_transport", unreachable)
+    # The artifact check's object store: the real client over a fake bucket, because this file
+    # runs with no vault and the product builds its store from the vault.
+    key = StoreCredential(access_key_id="brain-test-access", secret_access_key="brain-test")
+    fake = FakeS3(credential=key).holding(ARTIFACT_BUCKET, {})
+    backend = S3Backend(
+        config_for(Backend.SEAWEEDFS, endpoint_url="http://objects.example.test:8333"),
+        key,
+        transport=fake.transport(),
+    )
+    monkeypatch.setattr(acceptance_workspace, "artifact_backend", lambda h: (backend, "brain"))
 
 
 # ------------------------------------------------------------------------ the registry
@@ -597,6 +611,9 @@ WRITTEN_BY_CHECKS = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    "ops.budget_version",
+    "agent.artifact",
+    "agent.artifact_change",
 )
 
 
@@ -676,9 +693,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 47
+    assert len(outcomes) == 56
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 144
+    assert runs == [(2,)] and len(recorded) == 162
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
