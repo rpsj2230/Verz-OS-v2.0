@@ -368,6 +368,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # second keep writes over the first and reading them changes nothing.
         "brain.lark_connect_routes:LarkFactStore.read": Repeat.READS,
         "brain.lark_connect_routes:LarkFactStore.keep": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The declared wiki spaces: one `ops.setting` row a space, upserted on its live key, so a
+        # second declaration of a space writes over the first.
+        "brain.lark_connect_routes:WikiSpaceStore.declared": Repeat.READS,
+        "brain.lark_connect_routes:WikiSpaceStore.declare": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.knowledge.scanning:Parser.parse": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.member.connections:TokenRevoker.revoke": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The model executor: the ladder is read on every call, and each attempt is one row in
