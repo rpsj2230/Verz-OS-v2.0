@@ -33,7 +33,7 @@ column, which loses the reports: a real loss and the only reversal a column addi
 Task ids: M1.6.11, M1.6.12, M27.7.2
 
 Revision ID: 0155
-Revises: 0146
+Revises: 0150
 """
 
 from __future__ import annotations
@@ -43,9 +43,9 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0155"
-# The newest migration on origin/main when this was written. Another branch may land 0150 to 0154
-# first, and this line is then moved to the newest of them.
-down_revision = "0146"
+# The newest migration on origin/main when this was merged with it. A branch landing a newer one
+# first moves this line to it.
+down_revision = "0150"
 branch_labels = None
 depends_on = None
 

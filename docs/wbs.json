@@ -10,7 +10,13 @@
   "5": "Hands, delivery, go-live",
   "6": "Client template"
  },
- "wave_records": {},
+ "wave_records": {
+  "0": {
+   "commit": "dd6a23a9bc45f5fdada93069ac88fc60b4a5bcc6",
+   "recorded": "2026-09-29",
+   "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
+  }
+ },
  "modules": [
   {
    "id": "M0",

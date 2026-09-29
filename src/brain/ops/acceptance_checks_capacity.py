@@ -1,12 +1,14 @@
-"""The install acceptance checks for capacity: budgets and windows as rows, and what refuses now.
+"""The install acceptance checks for capacity: budgets and windows as rows, refusals now, sizing.
 
-Two checks, split where the install's parts split. The first is the database's: a budget and a
+Three checks, split where the install's parts split. The first is the database's: a budget and a
 request window saved the way the Rate limits screen's route saves them, refused outside the
 product's bounds, recorded in the audit ledger against who saved them, read back by the reload
 every process runs, and deciding the queued upload's admission from the saved row rather than
 the product's figure. The second is the cache's: a reserved person asked past the window in force
 in the install's own cache, and the Rate limits screen's own reading of the live windows listing
-them as refused now for a reader who may see every window and for nobody narrower.
+them as refused now for a reader who may see every window and for nobody narrower. The third is
+the Capacity screen's: what its route is sent about sizing at the busiest minute and the first
+limit reached at scale, held to the arithmetic it claims.
 
 **Nothing a check saves is held by the process running it.** The route holds what it saved at
 once, which is right for a person and wrong for a check: the worker or application running the
@@ -27,7 +29,7 @@ reading the live windows reads every window the cache holds and changes none, wh
 screen does when it is opened. See
 `brain.ops.acceptance.WHAT_THE_DATABASE_CANNOT_ROLL_BACK_IS_REMOVED_BY_NAME`.
 
-Task ids: M22.1.2, M22.4.1
+Task ids: M22.1.2, M22.4.1, M22.3.1, M22.3.2, M22.3.4
 """
 
 from __future__ import annotations
@@ -284,3 +286,39 @@ async def the_rate_limits_screen_lists_the_windows_refusing_now(h: Harness) -> N
         one.subject == asker for one in throttled_now(live, state, await h.reach(narrow), now=now)
     ):
         raise CheckFailedError("a reader of one department was shown a window refusing now")
+
+
+# ------------------------------------------ 3. sized for the busiest minute, first limit named
+@check(
+    leaves=("M22.3.1", "M22.3.2", "M22.3.4"),
+    sentence=(
+        "The Capacity screen's figures, as its route builds them: every sizing is a rate at the "
+        "busiest minute with the in-flight figure worked by Little's law, the slots it needs and "
+        "where the rate came from, and the first limit reached at ten and at a hundred times "
+        "today's volume is named."
+    ),
+)
+async def capacity_is_sized_for_the_busiest_minute_and_its_first_limit(h: Harness) -> None:
+    import math
+
+    from brain.install_routes import capacity_plan
+    from brain.ops.admission import little_law_concurrency
+
+    del h
+    sizings, first_limit = capacity_plan()
+    if not sizings:
+        raise CheckFailedError("the Capacity screen is sent no sizing")
+    for one in sizings:
+        if one.peak_per_second <= 0 or one.service_seconds <= 0:
+            raise CheckFailedError("a sizing is not stated as a rate at its busiest minute")
+        worked = little_law_concurrency(one.peak_per_second, one.service_seconds)
+        if not math.isclose(one.in_flight_at_peak, worked):
+            raise CheckFailedError("a sizing's in-flight figure is not Little's law of its inputs")
+        if one.slots_needed != max(1, math.ceil(worked)):
+            raise CheckFailedError("a sizing's slots are not its in-flight figure rounded up")
+        if not one.reason.strip():
+            raise CheckFailedError("a sizing does not say where its busiest minute came from")
+    if len({one.name for one in sizings}) != len(sizings):
+        raise CheckFailedError("two sizings share a name, so the screen cannot tell them apart")
+    if "10x" not in first_limit or "100x" not in first_limit:
+        raise CheckFailedError("the first limit at ten and a hundred times is not named")
