@@ -729,6 +729,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert (
         outcomes.pop("a_document_is_added_answered_replaced_and_falls_due_for_review")[0] == NOT_RUN
     )
+    # Both escalation checks ask through the stand-in; `tests/unit/test_acceptance_escalation.py`
+    # runs them with the hosted profile and a vault the test answers for.
+    for escalation_check in registered(("brain.ops.acceptance_escalation",)):
+        assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
