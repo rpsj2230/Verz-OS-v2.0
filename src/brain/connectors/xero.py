@@ -1515,6 +1515,9 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     return xero_manifest(XeroConnection(tenant_id=settings["tenant_id"]), ref=ref)
 
 
+#: Xero's developer portal, where a connection for this system is created. Xero's for every install.
+DEVELOPER_PORTAL_URL: Final = "https://developer.xero.com/app/manage"
+
 #: The screens an administrator connects Xero through, the form last. Every vendor name here is
 #: Xero's own, and each step also says it in words, so a moved button is found by its name.
 GUIDE: Final = keyed(
@@ -1539,7 +1542,7 @@ GUIDE: Final = keyed(
                 ),
                 button="New app",
             ),
-            link="https://developer.xero.com/app/manage",
+            link=DEVELOPER_PORTAL_URL,
             link_label="Open Xero's developer portal",
         ),
         GuideStep(
@@ -1559,7 +1562,7 @@ GUIDE: Final = keyed(
                 ),
                 button="Authorise",
             ),
-            link="https://developer.xero.com/app/manage",
+            link=DEVELOPER_PORTAL_URL,
             link_label="Open My Apps",
         ),
         GuideStep(

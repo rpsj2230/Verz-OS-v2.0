@@ -1847,6 +1847,9 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     return hubspot_manifest(HubSpotConnection(portal_id=settings["portal_id"]), ref=ref)
 
 
+#: HubSpot's own application, where a private app is created. HubSpot's for every install.
+HUBSPOT_APP_URL: Final = "https://app.hubspot.com/"
+
 #: The screens an administrator connects HubSpot through, the form last. HubSpot has moved private
 #: apps between menus, so the step names both places and the link only opens HubSpot.
 GUIDE: Final = keyed(
@@ -1866,7 +1869,7 @@ GUIDE: Final = keyed(
                 menu_mark="Private Apps",
                 button="Create a private app",
             ),
-            link="https://app.hubspot.com/",
+            link=HUBSPOT_APP_URL,
             link_label="Open HubSpot",
         ),
         GuideStep(
