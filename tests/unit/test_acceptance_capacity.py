@@ -26,6 +26,7 @@ import pytest
 from brain.ops import acceptance_checks_capacity as capacity
 from brain.ops import tuning
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
+from brain.ops.admission import seed_budgets
 from brain.settings import settings_from
 from tests.unit.test_acceptance import at_head, counts
 
@@ -148,7 +149,7 @@ def test_the_rows_check_fails_when_the_product_is_broken_where_it_proves(
 
         monkeypatch.setattr(install_settings, "load_tuned", nothing)
     else:
-        monkeypatch.setattr(tuning, "configured_budgets", lambda saved=None: tuning.seed_budgets())
+        monkeypatch.setattr(tuning, "configured_budgets", lambda saved=None: seed_budgets())
     with at_head(f"brain_acceptance_capacity_{broken}") as url:
         outcome = run_checks(url, (saved_check(),), {})
     assert outcome[saved_check().name] == (FAILED, reason)

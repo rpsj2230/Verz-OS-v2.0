@@ -16,6 +16,11 @@
 
 export const TUNING_API_PATH = "/install/tuning";
 
+/** Where one knob is set. */
+export function tunePath(name: string): string {
+  return `${TUNING_API_PATH}/${encodeURIComponent(name)}`;
+}
+
 export const TUNING_HEADING = "Limits you can change";
 export const TUNING_LEDE =
   "Each figure is between bounds the product fixes. A change is recorded in the audit trail under your name.";

@@ -35,6 +35,7 @@ import {
   figureWords,
   readTuning,
   sourceWords,
+  tunePath,
   type Knob,
 } from "../tuningQuery";
 import { Line, WholeList } from "./parts";
@@ -112,7 +113,7 @@ export function LimitSettings() {
     const amount = Number(typed.trim());
     setBusy(true);
     void (async () => {
-      const result = await request<unknown>(`${TUNING_API_PATH}/${encodeURIComponent(knob.name)}`, {
+      const result = await request<unknown>(tunePath(knob.name), {
         method: "PUT",
         body: { value: amount },
       });

@@ -306,7 +306,7 @@ async def save_settings(session: AsyncSession, settings: MailSettings, *, by: st
             session,
             f"{MAIL_NAMESPACE}.{name}",
             value_type=kind,
-            value=value,  # type: ignore[arg-type]
+            value=value,
             description=description,
             updated_by=by,
         )
