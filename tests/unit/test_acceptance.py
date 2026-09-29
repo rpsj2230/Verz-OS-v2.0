@@ -105,7 +105,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own line
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
-    connectors' four, the tools' three, a document's life in four, the classified tables' three,
+    connectors' four, the tools' four, a document's life in four, the classified tables' three,
     an answer's evidence in six, the connector framework's nine, retrieval's seven,
     ingestion's seven, threads' four and a document's whole life in one, the modules in
     `CHECK_MODULES` order rather than the order a process imported them. Delete this and a
@@ -152,6 +152,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
         "a_tool_named_for_a_sensitive_effect_must_declare_it",
         "a_switched_off_tool_is_refused_and_a_department_stops_its_own",
+        "a_tool_s_side_effect_holds_the_rung_an_agent_runs_at",
     ]
     assert by_module["brain.ops.acceptance_checks_lifecycle"] == [
         "a_newer_version_supersedes_the_older_and_answers_use_the_newer",
@@ -725,9 +726,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 57
+    assert len(outcomes) == 58
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 182
+    assert runs == [(2,)] and len(recorded) == 184
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
