@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T01:23:02.757508+00:00",
-  "commit": "c282f351",
-  "commit_subject": "The Reports pages are dashboards on the page kit: figures, a chart per question, a 7/30/90 day period and export (#186)",
+  "generated_at": "2026-09-29T01:49:04.860171+00:00",
+  "commit": "de1f1f52",
+  "commit_subject": "Agents are made and changed through drafts: saved as versions, checked, rehearsed, and a wider publish waits for a second person (#184)",
   "total": 1576,
   "done": 370,
   "percent": 23.5,
