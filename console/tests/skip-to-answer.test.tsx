@@ -198,12 +198,14 @@ describe("the skip-to-answer control", () => {
     await answerArrived(container);
 
     const skip = within(page(container)).getByRole("button", { name: SKIP_TO_ANSWER });
+    // The question, the kind it may be narrowed to (M7.6.1), the submit button, then the control.
     expect(tabStops(page(container)).map((one) => one.tagName)).toEqual([
       "TEXTAREA",
+      "SELECT",
       "BUTTON",
       "BUTTON",
     ]);
-    expect(tabStops(page(container))[2]).toBe(skip);
+    expect(tabStops(page(container))[3]).toBe(skip);
     expect(skip.tagName).toBe("BUTTON");
     expect(skip.getAttribute("type")).toBe("button");
     expect(skip.getAttribute("tabindex")).toBeNull();

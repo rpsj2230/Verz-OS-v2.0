@@ -2,10 +2,111 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**1 item is open: 91,** the checks only you can do on your install; it waits for the Knowledge
-upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and every step.
+**5 items are open: 115 to 118,** four decisions about Lark sign-in, Lark Base visibility and approving
+from Lark cards, each with my recommendation, **and 91,** the checks only you can do on your install; it
+waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it is, what I
+recommend, and every step.
 
 # Open
+
+## 118. Should an approval card reach the approver in Lark as soon as it is raised?
+
+**In plain terms:** when an agent asks for an approval, the approver in Lark does not hear about it
+until they write "approve" to the Brain's bot, and only then does the card appear. The Brain cannot
+send them the card first, because it deliberately keeps only a fingerprint of each person's Lark
+identity, not an address it could send to. The console's Needs-you list shows every waiting approval
+either way.
+
+**Option A: keep it as it is.** Approvers ask the bot, or look in the console. Nothing about anybody's
+Lark account is stored.
+
+**Option B: keep each linked person's Lark address, so the card is sent the moment the approval is
+raised.** Needs one database change. The Brain then holds one Lark identifier per linked person; it is
+treated as personal data, so it is removed when the person is erased, and it is never shown on a
+screen.
+
+**My recommendation: B.** An approval nobody is told about waits until somebody thinks to look, and an
+agent held at an approval is an agent doing nothing. The address is the least the Brain can hold to
+send a card, and B is also the first step towards signing in with Lark (item 115, option A).
+
+**What I need from you:** reply "118: B" or "118: A". Nothing is built for this until you do.
+
+## 117. May an approval be decided by pressing a button on a Lark card?
+
+**In plain terms:** you asked that approvals be decided only in the console or on Lark cards
+(OWN-147), and that approving needs a sign-in with a second factor (DEF-06). In the console both hold.
+On a Lark card the Brain checks that the press came from the Lark account linked to the person the card
+was made for, and for the same action, but it cannot tell whether that person signed in to Lark with
+two-step verification. So a card press is only as strong as your company's Lark sign-in.
+
+**What happens meanwhile:** the approval cards ship with a setting, **Approve from Lark cards**, that
+is **off on every install**. While it is off, a card shows the request and a link to decide it in the
+console, where your second factor is asked for. Nothing can be approved from Lark until you choose.
+
+**Option A: switch the setting on.** A press on the card approves. Suitable when the company's Lark
+requires two-step verification for everyone, which a Lark administrator can require for the whole
+company.
+
+**Option B: leave it off.** Every approval is decided in the console with a second factor.
+
+**Option C: build a stricter card.** A press counts only if the approver has also signed in to the
+Brain with their second factor within the last few hours; otherwise the card sends them to the console.
+Safer than A, and more build.
+
+**My recommendation: A, once you have confirmed that Verz's Lark requires two-step verification for
+everyone.** It keeps both of your rules in practice, and it keeps approvals where your people already
+are. If Lark does not require it, B until it does.
+
+**What I need from you:** reply "117: A", "117: B" or "117: C". If A, I will tell you where the
+setting is once it is live.
+
+## 116. Who may see the records in a Lark Base?
+
+**In plain terms:** the Lark Base connector reads your Base tables so the Brain can answer questions
+from them. Somebody has to decide which people may see which table's records through the Brain.
+
+**Option A: the Brain decides, table by table.** An administrator or data steward grants a department
+or a person access to each table on the Brain's own screens, exactly as for every other source. Works
+today and works the same for every company. The cost: a table shared with only a few people in Lark
+could be granted more widely in the Brain, by a person, on purpose, with the grant recorded.
+
+**Option B: follow Lark's own sharing.** A person sees a table's records through the Brain only if
+Lark shares that table with them. Needs every Brain user linked to their Lark account (item 115) and a
+permission check with Lark for each person at question time, so it cannot be built before 115 is
+answered.
+
+**My recommendation: A now, B later** as an option an administrator switches on per connection, once
+people are linked to their Lark accounts.
+
+**What I need from you:** reply "116: A now, B later", or tell me otherwise.
+
+## 115. How do the people on your Lark staff list become Brain users?
+
+**In plain terms:** the staff sync reads your 123 people from Lark and has placed 116 of them in 11
+departments, but none of them can sign in to the Brain. The sync creates no Brain accounts, and a
+person can only sign in once an administrator has linked a sign-in account to them by hand. So the
+work you asked for on 29 September (showing each person's status, keeping suspended and outsourced
+people out, and choosing where departments come from) would reach almost nobody until this is
+decided. That work is started and waits on this answer.
+
+**Option A: people sign in with their Lark account.** No Brain passwords at all. The sign-in service
+the Brain uses (Keycloak) has no ready-made Lark sign-in, so this means building a bridge between the
+two: the largest of the three.
+
+**Option B: the sync creates each person's Brain account and emails them an invitation.** Each active
+person on the staff list gets an account and an email to set their password and second factor, sent
+by the sign-in service's own email, the same one "Forgot password" uses. Suspended people and leavers
+get no account, and outsourced people get none unless an administrator allows their employment type.
+When someone leaves or is suspended in Lark, the next sync closes their account.
+
+**Option C: an administrator adds each person by hand.** Nothing to build, and a chore for every
+joiner.
+
+**My recommendation: B now, A later.** B uses what the Brain already has, works for any company
+whatever its staff source, and keeps the staff list and the Brain in step on their own. A can follow
+as a second way to sign in, once 118's option B has stored each person's Lark address.
+
+**What I need from you:** reply "115: B now, A later", or tell me otherwise.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 

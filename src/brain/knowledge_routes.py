@@ -59,7 +59,7 @@ connection sending a large file is not one. Where the install has no cache, or t
 answer, the lock alone bounds the parse, as it did before. See
 `THE_PARSE_HOLDS_A_SLOT_OF_THE_BUDGET`.
 
-Task ids: M7.1.1, M7.6.3, M7.2.5, M7.4.3, M7.6.1
+Task ids: M7.1.1, M7.6.3, M7.2.5, M7.4.3, M7.6.1, M7.7.3
 """
 
 from __future__ import annotations
@@ -98,13 +98,16 @@ from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.kinds import KIND_LABELS, KindError, KnowledgeKind, uploadable_kinds
 from brain.knowledge.scanners import checked_by
 from brain.knowledge.search import KNOWLEDGE_READ, KNOWLEDGE_UPLOAD, Reach, SearchError, reach_for
+from brain.knowledge.table_file import TABLE_SUFFIXES
 from brain.knowledge.text_path import TEXT_PATH_TYPES
 from brain.knowledge.uploads import (
+    OfferedAsATable,
     ReadUpload,
     ReceivedUpload,
     UploadNotOffered,
     assert_declared_length,
     assert_safe_filename,
+    offer_a_table_file,
     placement_for_upload,
     read_arriving,
     read_for_text_path,
@@ -128,6 +131,9 @@ UPLOAD_OPTIONS_PATH: Final = "/knowledge/uploads/options"
 
 #: The header the file's name travels in, percent-encoded UTF-8. See the module docstring.
 NAME_HEADER: Final = "x-upload-name"
+
+#: The code a table file's offer is refused under, which a page reads to draw the offer (M7.7.3).
+OFFERED_AS_A_TABLE: Final = "offered_as_table"
 
 #: What a document is found by once added. Words rather than a flag, so the page says them.
 FOUND_BY_TEXT: Final = "text search"
@@ -209,6 +215,9 @@ class UploadOptionsView(BaseModel):
     found_by: str
     #: The name of what checks a file before it is read, so nobody mistakes it for an antivirus.
     checked_by: str
+    #: The endings of the files offered to Classification rather than added as a document
+    #: (M7.7.3), so a page can make the offer before the file is sent.
+    offered_as_tables: list[str] = []
 
 
 class UploadedView(BaseModel):
@@ -411,6 +420,7 @@ async def upload_options(request: Request, asked: Asked) -> UploadOptionsView:
         found_by=FOUND_BY_TEXT if embedding_revision() is None else FOUND_BY_TEXT_AND_MEANING,
         # The install's own scanner, so the page names ClamAV when it is chosen (M7.1.3).
         checked_by=checked_by(),
+        offered_as_tables=sorted(TABLE_SUFFIXES),
     )
 
 
@@ -451,6 +461,7 @@ async def upload(
     length = request.headers.get("content-length")
     try:
         assert_safe_filename(filename)
+        offer_a_table_file(filename, declared)
         media_type = text_path_type(declared)
         assert_declared_length(
             media_type=media_type,
@@ -461,6 +472,8 @@ async def upload(
             upload=admit_upload(filename=filename, declared_type=media_type.value, content=body),
             body=body,
         )
+    except OfferedAsATable as exc:
+        return _refused("file", OFFERED_AS_A_TABLE, str(exc))
     except (IngestRefused, KindError) as exc:
         return _refused("file", "not_added", str(exc))
     ledger, taken = await take_reading_slot(request, now=asked.now)
@@ -470,6 +483,8 @@ async def upload(
         read = await asyncio.to_thread(
             read_one_at_a_time, received, kind=kind, placement=placement, owner_id=owner
         )
+    except OfferedAsATable as exc:
+        return _refused("file", OFFERED_AS_A_TABLE, str(exc))
     except (IngestRefused, KindError) as exc:
         return _refused("file", "not_added", str(exc))
     finally:

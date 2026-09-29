@@ -6,7 +6,7 @@
  * Task ids: none
  */
 
-import { type PageCase, UNBROKEN } from "../pageFixtures";
+import { LARK_GUIDE, type PageCase, STAFF_RUNS, UNBROKEN } from "../pageFixtures";
 
 /** One staff source whose setting names and whose meaning are both unbreakable tokens. */
 const STAFF_SOURCES = {
@@ -75,22 +75,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/govern/staff_sources": STAFF_SOURCES,
       "/api/v1/govern/staff_sources/guides": STAFF_SOURCE_GUIDES,
       // The nightly sync's three reads, each carrying the unbroken token where a value is drawn.
-      "/api/v1/govern/staff_sources/runs": {
-        runs: [
-          {
-            source: UNBROKEN,
-            started_at: "2999-03-02T02:00:00Z",
-            finished_at: "2999-03-02T02:00:05Z",
-            outcome: UNBROKEN,
-            detail: UNBROKEN,
-            added: [UNBROKEN],
-            marked_left: [],
-            renamed: [],
-            withheld: [],
-            changed_nobody: false,
-          },
-        ],
-      },
+      "/api/v1/govern/staff_sources/runs": STAFF_RUNS,
+      // Lark with its staff list on, so the page draws Lark's card with the runs above.
+      "/api/v1/connectors/lark-app": LARK_GUIDE,
       "/api/v1/govern/staff_sources/credential": {
         slot: "connector_keys/staff_source",
         held: true,

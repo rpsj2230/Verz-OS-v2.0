@@ -46,8 +46,7 @@ the item, its kind, level and department, and never a word of it.
 `brain.knowledge.ingest.SCAN_CAUSE_TEXT`'s words (M7.1.3). A place the person may not add to is a
 404 with no reason, as the upload's is.
 
-Task ids: M7.1.2, M7.1.3, M7.1.5, M22.2.4
-Task ids: M22.1.4, M22.2.1, M22.2.3
+Task ids: M7.1.2, M7.1.3, M7.1.5, M22.2.4, M7.7.3, M22.1.4, M22.2.1, M22.2.3
 """
 
 from __future__ import annotations
@@ -93,12 +92,14 @@ from brain.knowledge.scanners import configured_scanner
 from brain.knowledge.scanning import scan_for_parsing
 from brain.knowledge.uploads import (
     FetchedPage,
+    OfferedAsATable,
     ReadUpload,
     UploadNotOffered,
     admit_ingestion,
     assert_declared_length,
     assert_safe_filename,
     ingestion_request,
+    offer_a_table_file,
     placement_for_upload,
     read_arriving,
     read_for_link,
@@ -112,6 +113,7 @@ from brain.knowledge_routes import (
     FOUND_BY_TEXT,
     FOUND_BY_TEXT_AND_MEANING,
     NAME_HEADER,
+    OFFERED_AS_A_TABLE,
     UploadedView,
     give_back,
     live_departments,
@@ -299,6 +301,8 @@ async def add_link(
         page = await asyncio.to_thread(
             receive_page, link.url, fetcher=make_fetcher(), resolver=make_resolver()
         )
+    except OfferedAsATable as exc:
+        return _refused("url", OFFERED_AS_A_TABLE, str(exc))
     except (IngestRefused, KindError) as exc:
         return _refused("url", "not_added", str(exc))
     # Read in the request, so a slot as the single upload takes one, after the fetch for its
@@ -310,6 +314,8 @@ async def add_link(
         read = await asyncio.to_thread(
             _read_link, page, kind=link.kind, placement=placement, asked=asked
         )
+    except OfferedAsATable as exc:
+        return _refused("url", OFFERED_AS_A_TABLE, str(exc))
     except (IngestRefused, KindError) as exc:
         return _refused("url", "not_added", str(exc))
     finally:
@@ -438,13 +444,19 @@ async def queue_upload(
     placement = await _placement(request, asked, level, department)
     if isinstance(placement, JSONResponse):
         return placement
+    filename = unquote(request.headers.get(NAME_HEADER, ""))
+    declared = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    try:
+        # Before the store is asked: a spreadsheet belongs on Classification whether or not this
+        # install keeps queued files, and saying so is the more useful of the two answers (M7.7.3).
+        offer_a_table_file(filename, declared)
+    except OfferedAsATable as exc:
+        return _refused("file", OFFERED_AS_A_TABLE, str(exc))
     store = store_of(request)
     if store is None or store.backend is None:
         why = "" if store is None else f": {store.unconnected}"
         return _refused("file", "no_object_store", QUEUED_UPLOADS_NEED_THE_STORE + why)
 
-    filename = unquote(request.headers.get(NAME_HEADER, ""))
-    declared = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     length = request.headers.get("content-length")
     queue = queue_for(request)
     try:
