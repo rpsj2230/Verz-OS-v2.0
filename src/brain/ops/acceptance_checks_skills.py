@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any, Final
 from sqlalchemy import insert, text
 
 from brain.core.scope import Scope
+from brain.models.routing import DEFAULT_TIER, Tier
 from brain.ops.acceptance import (
     RESERVED_DEPARTMENTS,
     CheckFailedError,
@@ -504,12 +505,20 @@ async def a_skill_is_imported_from_a_github_commit_and_from_an_address(h: Harnes
 
 
 # --------------------------------------------- 3. an edit, its review and an agent's pin
-async def _an_agent(h: Harness, owner: str) -> str:
+async def _an_agent(
+    h: Harness,
+    owner: str,
+    *,
+    tier: Tier = DEFAULT_TIER,
+    capabilities: Sequence[str] = (),
+) -> str:
     """An agent of acceptance_a installed from a template signed with a key made for this check.
 
     The three rows `brain.agents.install_store.finish` writes, from its own row builders where it
     has them. The instance row is written field by field because that module builds it from a
     wizard's `Installation`, which a check with no connectors and no tools does not have.
+    `tier` and `capabilities` are the template's, for a check asking through the agent: its model
+    level, and the ceiling its runs are narrowed to, over acceptance_a.
     """
     from brain.agents.install_store import agent_values, version_values
     from brain.agents.model import AgentAudience
@@ -521,6 +530,7 @@ async def _an_agent(h: Harness, owner: str) -> str:
         materialise,
         publish,
     )
+    from brain.core.entitlement import Capability
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -535,7 +545,11 @@ async def _an_agent(h: Harness, owner: str) -> str:
                 display_name="Acceptance check agent",
             ),
             persona="Answers an install acceptance check and nobody else.",
-            authority=ManifestAuthority(scope=Scope.department(A)),
+            tier=tier,
+            authority=ManifestAuthority(
+                scope=Scope.department(A),
+                capabilities=tuple(Capability(value=one) for one in capabilities),
+            ),
         ),
         key=key,
         signed_by=owner,
