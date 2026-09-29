@@ -179,6 +179,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
         "a_source_s_live_calls_are_measured_on_its_page",
     ]
+    # Capacity as rows, the screens that read it, and the classes sharing one budget in the cache;
+    # `tests/unit/test_acceptance_capacity.py`.
+    assert by_module["brain.ops.acceptance_checks_capacity"] == [
+        "budgets_and_windows_are_rows_saved_within_bounds_and_audited",
+        "the_rate_limits_screen_lists_the_windows_refusing_now",
+        "capacity_is_sized_for_the_busiest_minute_and_its_first_limit",
+        "three_classes_share_one_budget_and_give_way_in_order",
+    ]
     # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
     assert by_module["brain.ops.acceptance_retrieval"] == [
         "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
@@ -659,7 +667,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, including the two Lark checks needing a bound
-    person now that the events route reads chat bindings (0118); the two checks needing a cache
+    person now that the events route reads chat bindings (0118); the three checks needing a cache
     say they were not run, the skill import says this install names no public skill, which is
     the declared default, and after both runs every table a check wrote to holds what it held
     before, while the result rows are there, one run each, keyed by the commit. Delete this and
@@ -694,6 +702,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
+    assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
