@@ -13,9 +13,9 @@ it is, what I recommend, and every step.
 
 **In plain terms:** ten Wave 2 tasks read documents properly: tables and page layout in PDFs, scanned
 pages, Excel and PowerPoint, and search by meaning rather than by matching words. They all need one
-new service, the model server (decided in item 31), plus the worker that feeds it and a store for
-the original files. Together those need **3,840 MB**: 3,072 for the model server, 512 for the
-worker and 256 for the file store. Your server has **248 MB** that nothing has claimed. The tasks
+new service, the model server (decided in item 31), plus the document worker that feeds it and a
+store for the original files. Together those need **3,840 MB**: 3,072 for the model server, 512 for
+the document worker and 256 for the file store. Your server has **248 MB** that nothing has claimed. The tasks
 are M7.2.1, M7.2.3, M7.2.4, M7.2.6, M7.3.3, M7.3.4, M7.3.5, M7.7.8, M7.7.9 and M7.7.10.
 
 **What I measured today (29 September), read-only, on the live server.** The machine has 11,960 MB,
@@ -82,45 +82,66 @@ worker` for step 5).
 
 ## 119. How large a file may people upload?
 
-**In plain terms:** the Brain sets a size limit on each type of file people can add to Knowledge.
-Today the console takes PDFs up to 50 MB, Word files up to 25 MB, and plain text and Markdown up to
-5 MB. The limits also list PowerPoint at 50 MB, Excel at 25, and CSV and images at 10; those are
-accepted once the model server (item 120) runs. The limit you choose decides how much memory the
-model server needs to read the largest file, so it is yours to choose.
+**In plain terms:** the door to Knowledge accepts PDFs up to 50 MB, Word files up to 25 MB, and plain
+text and Markdown up to 5 MB. The console cannot read files anywhere near that size today, because it
+reads them inside the Brain's own program, which is short of memory. Two things are for you to choose:
+how the console reads larger files now, and the size limit once the model server (item 120) runs.
 
-**What I measured.** Reading a file takes several times its size in memory. The product's own rule
-of thumb is six times for a PDF and eight for Word, Excel and PowerPoint, so a 50 MB PDF needs about
-300 MB, and a 50 MB PowerPoint about 400 MB. The model server is sized at 3,072 MB. Its three models
-take 2,496 MB of that and the program around them 512, which leaves **64 MB for one document at a
-time**. That reads a PDF of about 10 MB, or a Word file of about 8 MB. None of these figures has been
-measured on a real file yet, because the model server has never run; they are the product's
-arithmetic.
+**What I measured today (29 September), read-only.** The Brain's program is allowed 1,024 MB. It runs
+four copies of itself so it can answer several people at once: each copy was holding about 219 to 228
+MB, plus about 80 MB for the process that looks after them, and it has used at most 955 MB since it
+last started. Almost all of that is the program's own memory; less than 1 MB is file cache. Reading a
+file takes several times its size (the product's rule is four times for text, six for a PDF, eight
+for Word), and any of the four copies may be reading a file at the same moment.
 
-**Until the model server runs,** PDF and Word files are read by the Brain's own program, which is
-allowed 1,024 MB. Today it was using 845 MB, with a peak of 955 MB, so it has room for a PDF of about
-10 to 30 MB. I also found a fault: the Brain checks such a file against the budget of a different
-container (448 MB), so a large PDF could run the program out of memory. That is the product's fault
-to fix, not yours to decide. I have recorded it as its own task, and it needs nothing from you.
+**What changes on its own this week.** Until now the Brain checked each file against the wrong budget,
+so a large PDF could have run the program out of memory. That is fixed in the product (pull request
+265, going out with the next release) and needs nothing from you: each copy may now use its quarter of
+the 69 MB left over, about 17 MB. So from that release the console reads **text and Markdown up to 4.3
+MB, PDFs up to 2.9 MB and Word files up to 2.2 MB**, and refuses anything larger with a message asking
+for it to be split.
 
-**Option A: 25 MB for every document type.** Word and Excel stay where they are; PDF and PowerPoint
-come down from 50. The model server grows by 136 MB, to 3,208 MB. Anything over 25 MB is refused
-with a message asking the person to split it.
+**Question 1: how should the console read larger files?**
 
-**Option B: keep 50 MB.** The model server grows by 336 MB, to 3,408 MB.
+**Option A: send larger files to the document worker.** The document worker is a separate part built
+for exactly this, with 448 MB to read one file, which is enough for everything the door accepts:
+**text 5 MB, PDF 50 MB, Word 25 MB.** It needs the memory in item 120 (512 MB for the worker and 256
+MB for the file store) and some building by me to hand it the console's uploads.
 
-**Option C: keep the model server's size and lower the limit to 10 MB** (8 MB for Word, Excel and
-PowerPoint). No extra memory, and ordinary PDFs of 15 to 30 MB are refused.
+**Option B: give the program more memory, holding it at four copies.** At 1,536 MB each copy could read
+**PDFs up to 24 MB and Word files up to 18 MB**; at 2,048 MB, PDFs up to 45 MB and Word files up to 25
+MB. Two catches. The server has 248 MB unclaimed (item 120), so this needs memory from there too. And
+the program chooses how many copies to run from its memory, allowing 180 MB a copy when each really
+uses about 240, so without a cap, which I would have to build, more memory makes it start more copies
+and leaves less room than today: at 1,536 MB it would start seven, which already need more than
+1,536.
 
-**Option D: keep 50 MB and read large files a few pages at a time.** No extra memory, and more to
-build. It is simple for PDFs and much harder for PowerPoint.
+**Option C: read one file at a time across the whole program.** One file gets all 69 MB instead of a
+quarter: **text 5 MB, PDF 11.5 MB, Word 8.6 MB**, with no memory and no server change. The cost is
+that two people adding documents at the same moment wait for each other, a few seconds each. A small
+build for me.
 
-**My recommendation: A.** One figure for every document is easy for people to remember. 25 MB covers
-nearly all everyday documents, and it costs the least memory of the options that do not refuse
-ordinary files. B asks for 336 MB on a server that has 248 MB unclaimed (item 120). D is build
-effort for rare files.
+**My recommendation: C now, then A once item 120 frees the memory.** C quadruples what the console
+reads this week at no cost, and uploads are rare enough that waiting a few seconds is seldom noticed.
+A then reads everything the door accepts. B is the one I would not choose: it needs memory the server
+does not have and a cap I would have to build, and without the cap it makes things worse.
 
-**What I need from you:** reply "119: A", "119: B", "119: C" or "119: D", or give a different figure
-in MB. Nothing on your server changes; I size the model server from your answer.
+**Question 2: the size limit once the model server runs.** The model server (item 120) reads PDFs with
+their tables and scanned pages, and Excel and PowerPoint. As sized it has 64 MB to read one file, which
+is a PDF of about 10 MB or an Office file of about 8 MB. Reading bigger files means a bigger model
+server:
+
+- **25 MB for every document type:** it grows by 136 MB, to 3,208 MB. Word and Excel stay where they
+  are; PDF and PowerPoint come down from 50.
+- **Keep 50 MB:** it grows by 336 MB, to 3,408 MB.
+- **10 MB (8 MB for Office files):** no extra memory, and ordinary PDFs of 15 to 30 MB are refused.
+
+**My recommendation: 25 MB.** One figure for every document is easy for people to remember, it covers
+nearly all everyday documents, and it costs the least memory of the choices that do not refuse
+ordinary files.
+
+**What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
+in MB). Nothing on your server changes for either answer.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
