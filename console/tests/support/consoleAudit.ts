@@ -762,6 +762,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "/signed-out": "The page a person lands on after signing out, which asks nothing and manages nothing.",
   "/*": "The page drawn for an address the console does not have, which manages nothing.",
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
+  "POST /api/v1/widget/sessions":
+    "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
   "POST /api/v1/automation/tool-call":
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
   "chat.conversation":
