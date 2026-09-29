@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_channels"
 EMAIL = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
 SLACK = "a_slack_message_is_taken_signed_and_answered_on_the_bot_token"
+MAILBOX = "mail_in_the_mailbox_is_read_answered_and_marked"
 
 
 def mine() -> dict[str, Check]:
@@ -42,6 +43,7 @@ def test_each_channel_check_is_registered_with_the_leaf_it_proves() -> None:
     assert {name: one.leaves for name, one in mine().items()} == {
         EMAIL: ("M10.5.6",),
         SLACK: ("M10.5.1",),
+        MAILBOX: ("M10.5.6",),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     assert {"M10.5.6", "M10.5.1"} <= {
@@ -216,3 +218,49 @@ def test_the_slack_check_fails_where_the_product_breaks(
     else:
         monkeypatch.setattr(slack.SlackWire, "handshake", lambda self, arrived: None)
     assert run_check(install, (mine()[SLACK],)) == {SLACK: (FAILED, reason)}
+
+
+@pytest.mark.needs_db
+def test_the_mailbox_check_waits_for_a_relay_and_passes_with_one(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**The mailbox check as the worker runs it**: not run with no relay saved, and with one it
+    passes and leaves every table as it was. Delete this and a mailbox that answers nobody could
+    show as proved, or the check could commit a channel record to a client's install."""
+    before = counts(install)
+    assert run_check(install, (mine()[MAILBOX],)) == {
+        MAILBOX: (NOT_RUN, channels.NO_RELAY_IS_SAVED_FOR_THE_MAILBOX)
+    }
+    save_relay(install)
+    monkeypatch.setattr("brain.channel_routes.mail_password_of", lambda request: lends("pw"))
+    before = counts(install)
+    assert run_check(install, (mine()[MAILBOX],)) == {MAILBOX: (PASSED, "")}
+    assert counts(install) == before
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("verdict", "not exactly the colleague's message was answered"),
+        ("reading", "the mailbox's unread mail was not read, marked and closed"),
+    ],
+)
+def test_the_mailbox_check_fails_where_the_product_breaks(
+    install: str, monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """Broken the way each would break: a verdict that believes every sender, and a poll that
+    reads and marks less than the mailbox holds. Delete this and either could go with the check
+    green."""
+    from brain import mailbox_read
+    from brain.channels.email import Authentication
+
+    save_relay(install)
+    monkeypatch.setattr("brain.channel_routes.mail_password_of", lambda request: lends("pw"))
+    if broken == "verdict":
+        monkeypatch.setattr(
+            mailbox_read, "verdict_of", lambda message, settings: Authentication.PASSED
+        )
+    else:
+        monkeypatch.setattr(mailbox_read, "MOST_PER_POLL", 1)
+    assert run_check(install, (mine()[MAILBOX],)) == {MAILBOX: (FAILED, reason)}

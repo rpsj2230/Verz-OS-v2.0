@@ -161,12 +161,12 @@ const PROGRESS = {
   },
   "M10.5.1": {
     status: "READY FOR TESTING",
-    why: "Slack is connectable (M10/channel-slack): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
+    why: "Slack is connectable (#288): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
     updated: "2026-09-30",
   },
   "M10.5.6": {
     status: "READY FOR TESTING",
-    why: "email is connectable (#285): a signed envelope in, a reply out by the install's own relay, Connect Email steps with the receiving script, and an install check; the owner's real mail proves the vendor's half",
+    why: "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (M10/channel-email-mailbox), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
     updated: "2026-09-30",
   },
   "M10.6.1": {

@@ -308,3 +308,128 @@ async def a_slack_message_is_taken_signed_and_answered_on_the_bot_token(h: Harne
     body = json.loads(built.body)
     if body != {"channel": sender, "text": Unrecognised(channel=Channel.SLACK).prompt}:
         raise CheckFailedError("the answer was not the binding prompt, to the sender alone")
+
+
+# ------------------------------------------------------------------------ email, a mailbox
+#: The reason the mailbox check's reply half is not run on an install with no relay saved.
+NO_RELAY_IS_SAVED_FOR_THE_MAILBOX: Final = (
+    "mail was read from the stand-in mailbox and marked, but no mail relay is saved on "
+    "Notifications, so its answer had nowhere to leave from and its relay was not asked"
+)
+
+
+@dataclass
+class _StandInMailbox:
+    """`brain.channels.mailbox.MailboxReader` over messages the check made, in memory."""
+
+    messages: list[tuple[str, bytes]]
+    marked: list[str] = field(default_factory=list)
+    closed: bool = False
+
+    def unseen(self, most: int) -> list[tuple[str, bytes]]:
+        return [one for one in self.messages if one[0] not in self.marked][:most]
+
+    def mark_handled(self, ids: Any) -> None:
+        self.marked.extend(ids)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@check(
+    leaves=("M10.5.6",),
+    sentence=(
+        "An email channel reading a mailbox, with a stand-in mailbox the check filled, reads "
+        "its unread mail, answers a colleague its provider vouched for through the relay saved "
+        "on Notifications with how to link their address, answers nobody else, and marks "
+        "every message it read, deleting none."
+    ),
+)
+async def mail_in_the_mailbox_is_read_answered_and_marked(h: Harness) -> None:
+    from datetime import UTC, datetime
+
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.email import (
+        ADDRESS,
+        DOMAINS,
+        IMAP_HOST,
+        IMAP_PORT,
+        IMAP_USER,
+        RECEIVER,
+    )
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.mailbox_read import read_mailbox_once
+    from brain.ops.channel_store import StoredChannels
+    from brain.ops.mail import settings_from_rows, settings_rows
+
+    async with h.sessions() as session:
+        saved = settings_from_rows(await settings_rows(session))
+    box_user = f"ask-{h.run}@{_DOMAIN}"
+    receiver = f"mx.{_DOMAIN}"
+    await StoredChannels(h.sessions).save(
+        Channel.EMAIL,
+        enabled=True,
+        tenant={
+            ADDRESS: box_user,
+            IMAP_HOST: f"imap.{_DOMAIN}",
+            IMAP_PORT: "993",
+            IMAP_USER: box_user,
+            RECEIVER: receiver,
+            DOMAINS: _DOMAIN,
+        },
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    password = secrets.token_hex(16)
+    colleague, stranger = f"acceptance-{h.run}@{_DOMAIN}", f"acceptance-{h.run}@elsewhere.invalid"
+
+    def stamped(sender: str, n: int) -> bytes:
+        message = EmailMessage()
+        message["Authentication-Results"] = (
+            f"{receiver}; dmarc=pass header.from={sender.rpartition('@')[2]}"
+        )
+        message["From"] = sender
+        message["To"] = box_user
+        message["Subject"] = "Acceptance"
+        message["Message-ID"] = f"<acceptance-{h.run}-{n}@{_DOMAIN}>"
+        message.set_content(h.word())
+        return message.as_bytes()
+
+    box = _StandInMailbox(messages=[("1", stamped(colleague, 1)), ("2", stamped(stranger, 2))])
+    opened: list[tuple[str, str, bool]] = []
+
+    def opener(settings: Any, given: str) -> _StandInMailbox:
+        opened.append((settings.host, settings.user, given == password))
+        return box
+
+    relayed, https = _Relayed(), _Kept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(password)
+    state.channel_transport = https
+    state.operation_ledger = _HeldLedger()
+    state.mail_transport = relayed.build
+
+    ran = await read_mailbox_once(app, now=datetime.now(UTC), opener=opener)
+    if opened != [(f"imap.{_DOMAIN}", box_user, True)]:
+        raise CheckFailedError("the mailbox was not opened with the record's settings and secret")
+    if ran.read != 2 or sorted(box.marked) != ["1", "2"] or not box.closed:
+        raise CheckFailedError("the mailbox's unread mail was not read, marked and closed")
+    if https.sent:
+        raise CheckFailedError("an answer to mail was sent over HTTPS")
+    if saved is None:
+        if relayed.built:
+            raise CheckFailedError("with no relay saved, an answer was handed to a relay")
+        raise CheckNotRunError(NO_RELAY_IS_SAVED_FOR_THE_MAILBOX)
+    if len(relayed.kept.sent) != 1:
+        raise CheckFailedError("not exactly the colleague's message was answered")
+    (kept,) = relayed.kept.sent
+    if (kept.to, kept.body.rstrip()) != (colleague, Unrecognised(channel=Channel.EMAIL).prompt):
+        raise CheckFailedError("the colleague was not told how to link their address")

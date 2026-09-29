@@ -45,13 +45,46 @@ export function connectLabel(row: ChannelRow): string {
   return `Connect ${row.label}`;
 }
 
+/** What a form step asks for last: the secret, or each of its parts. */
+function secretAsks(row: ChannelRow): readonly string[] {
+  return row.secret_parts.length > 0 ? row.secret_parts : [SECRET_ASK];
+}
+
+/** Whether a step is a form: it ends by asking for the secret and asks otherwise for record fields. */
+function isForm(row: ChannelRow, step: FlowStep): boolean {
+  const secret = secretAsks(row);
+  const asked = step.asks;
+  const leading = asked.slice(0, asked.length - secret.length);
+  return (
+    asked.length >= secret.length &&
+    asked.slice(asked.length - secret.length).join("\n") === secret.join("\n") &&
+    leading.every((one) => row.tenant_fields.includes(one))
+  );
+}
+
+/** The steps on a path: those on every path, and the chosen path's own. */
+export function stepsOn(row: ChannelRow, path: string): readonly FlowStep[] {
+  return row.steps.filter((one) => one.path === "" || one.path === path);
+}
+
 /**
- * The step that holds the channel's own form: the one asking for its record's fields and its
- * secret, or its secret's parts. `brain.channels.adapter.channel_guides` holds that there is one.
+ * The step on this path that holds the channel's own form, asking for some of its record's fields
+ * and its secret or its secret's parts. `brain.channels.adapter.guide_problem` holds that each path
+ * has one.
  */
-export function formStep(row: ChannelRow): FlowStep | undefined {
-  const wanted = [...row.tenant_fields, ...(row.secret_parts.length > 0 ? row.secret_parts : [SECRET_ASK])].join("\n");
-  return row.steps.find((one) => one.asks.join("\n") === wanted);
+export function formStep(row: ChannelRow, path = ""): FlowStep | undefined {
+  return stepsOn(row, path).find((one) => isForm(row, one));
+}
+
+/** The record fields a form step asks for, in its order. */
+export function formFields(row: ChannelRow, step: FlowStep): readonly string[] {
+  return step.asks.slice(0, step.asks.length - secretAsks(row).length);
+}
+
+/** Where a channel's flow was left: the step, and the path chosen where the steps branch. */
+export interface ChannelPlace {
+  readonly at: string;
+  readonly path: string;
 }
 
 /** The memory key a channel's flow keeps its place under. */
@@ -99,22 +132,50 @@ export function ChannelFlow({
   /** Told the API's sentence when a set-up was saved in the flow, and null when none was. */
   readonly onClose: (told: string | null) => void;
 }) {
-  const steps = row.steps;
   const key = channelFlowKey(row.channel);
-  const [at, setAt] = useState<string>(() => recallFlow<string>(key) ?? steps[0]?.key ?? "");
+  const [place, setPlace] = useState<ChannelPlace>(() => recallFlow<ChannelPlace>(key) ?? { at: row.steps[0]?.key ?? "", path: "" });
   const [told, setTold] = useState<string | null>(null);
-  const form = formStep(row);
+  const steps = stepsOn(row, place.path);
+  const move = (next: ChannelPlace) => {
+    setPlace(next);
+    rememberFlow<ChannelPlace>(key, next);
+  };
+  const form = formStep(row, place.path);
   const panels: Record<string, ReactNode> = {};
   for (const one of steps) {
     if (one.asks.includes(EVENTS_ADDRESS_ASK)) {
       panels[one.key] = <EventsAddress address={row.events_address} />;
+    }
+    if (one.choices.length > 0) {
+      panels[one.key] = (
+        <div role="group" aria-label={one.title} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {one.choices.map((choice) => (
+            <Button
+              key={choice.key}
+              type="button"
+              variant={choice.key === place.path ? "default" : "outline"}
+              aria-pressed={choice.key === place.path}
+              className="min-h-11 justify-start sm:min-h-9"
+              onClick={() => {
+                const onPath = stepsOn(row, choice.key);
+                const after = onPath[onPath.findIndex((step) => step.key === one.key) + 1];
+                move({ at: after?.key ?? one.key, path: choice.key });
+              }}
+            >
+              {choice.label}
+            </Button>
+          ))}
+        </div>
+      );
     }
   }
   if (form !== undefined) {
     panels[form.key] = (
       <div className="flex min-w-0 flex-col gap-4">
         <SetUp
+          key={form.key}
           row={row}
+          fields={formFields(row, form)}
           onChanged={(sentence) => {
             forgetFlow(key);
             setTold(sentence);
@@ -139,12 +200,11 @@ export function ChannelFlow({
       )}
       <ConnectFlow
         steps={steps}
-        at={indexOf(steps, at)}
+        at={indexOf(steps, place.at)}
         onAt={(index) => {
           const next = steps[index];
           if (next !== undefined) {
-            setAt(next.key);
-            rememberFlow<string>(key, next.key);
+            move({ ...place, at: next.key });
           }
         }}
         panels={panels}
