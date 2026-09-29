@@ -282,8 +282,8 @@ def test_the_prompt_check_fails_when_a_person_reaches_the_shared_bytes(
 
     kept = model_lane.prompt_for
 
-    def personal(question: str, payload: Any, cards: Any = (), hints: Any = ()) -> Any:
-        layout = kept(question, payload, cards, hints)
+    def personal(question: str, payload: Any, cards: Any = (), hints: Any = (), **kw: Any) -> Any:
+        layout = kept(question, payload, cards, hints, **kw)
         own = build_prefix((), persona=model_lane.ANSWER_LANE_PERSONA + " " + question)
         return lay_out(own, *layout.variable)
 
