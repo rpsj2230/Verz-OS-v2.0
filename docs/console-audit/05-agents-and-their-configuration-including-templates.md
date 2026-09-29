@@ -12,7 +12,7 @@
 | `GET /api/v1/agent-templates` | `/agent-templates`, `/agents/new` |
 | `GET /api/v1/agent-templates/{template_id}` | `/agent-templates/:templateId` |
 | `GET /api/v1/agent-templates/{template_id}/versions/{version}` | `/agent-templates/:templateId` |
-| `GET /api/v1/agents` | `/`, `/agents`, `/department`, `/people/:personId` |
+| `GET /api/v1/agents` | `/`, `/agents`, `/department`, `/people/:personId`, `/people/:personId/:view` |
 | `GET /api/v1/agents/{agent_id}/about` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/capabilities` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/lifecycle` | **no screen** |

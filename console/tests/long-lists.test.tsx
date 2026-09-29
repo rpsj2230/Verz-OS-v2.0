@@ -105,6 +105,9 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/models/:provider": "/models",
   "/models/:provider/:view": "/models",
   "/people/:personId": "/agents",
+  // A person's Access view offers the roster's first page as the agents a run can be previewed
+  // through, and the Agents page pages, searches, filters and orders the same route.
+  "/people/:personId/:view": "/agents",
   "/roles": "/people",
   "/departments/:slug": "/departments",
   "/departments/:slug/:view": "/scopes",
@@ -278,6 +281,13 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/people": {},
   // A person's page borrows the roster for the agents they steward, and links to the Agents list.
   "/people/:personId": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: READ_ONLY,
+  },
+  "/people/:personId/:view": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
