@@ -1489,16 +1489,27 @@ def test_a_caller_with_no_grant_is_refused_each_screen_and_its_holder_is_answere
 
 def test_the_undo_is_the_only_write_on_the_three_screens(client: TestClient) -> None:
     """The application's own OpenAPI document declares GET on the three paths, POST on the undo,
-    and nothing else under either screen.
+    and nothing else under either screen but the Learning screen's two figures.
 
+    Those are `brain.tuning_routes`' (M16.6.8): a read and a PUT that saves an `ops.setting` row
+    within the product's bounds, which `tests/unit/test_learning_settings.py` follows to the row
+    and to the next recall, so they are listed here by name rather than excused by a prefix.
     Delete this and an edit or an upload can be added with nothing behind it, which is the control
     `docs/admin-console.md` says is worse than none: it renders and reaches no row."""
+    from brain.tuning_routes import LEARNING_SETTINGS_PATH
+
     paths = client.get("/openapi.json").json()["paths"]
+    settings = f"{API_PREFIX}{LEARNING_SETTINGS_PATH}"
 
     for path in (LIBRARY, LEARNING, MEMORY):
         assert set(paths[path]) == {"get"}
     assert set(paths[UNDO]) == {"post"}
-    assert [one for one in paths if one.startswith(f"{API_PREFIX}/govern/learning/")] == [UNDO]
+    assert set(paths[settings]) == {"get"}
+    assert set(paths[f"{settings}/{{name}}"]) == {"put"}
+    under_learning = sorted(
+        one for one in paths if one.startswith(f"{API_PREFIX}/govern/learning/")
+    )
+    assert under_learning == sorted([UNDO, settings, f"{settings}/{{name}}"])
     assert not [one for one in paths if one.startswith(f"{API_PREFIX}/govern/memory/")]
 
 
