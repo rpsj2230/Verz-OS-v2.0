@@ -24,7 +24,7 @@ Task ids: M16.6.4, M16.7.4, M16.7.13
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Final
@@ -121,20 +121,35 @@ class StoredMarks:
 
     async def counted(self, *, since: datetime, until: datetime) -> Tallied:
         """Every answer marked in `[since, until)`, counted once by its latest mark."""
-        latest = (
-            select(MarkRow.trace_id, MarkRow.principal_id, MarkRow.helpful)
-            .where(and_(MarkRow.marked_at >= since, MarkRow.marked_at < until))
-            .order_by(MarkRow.trace_id, MarkRow.principal_id, MarkRow.marked_at.desc(), MarkRow.id)
-            .distinct(MarkRow.trace_id, MarkRow.principal_id)
-            .subquery()
-        )
-        return await self._tally(select(latest.c.helpful, func.count()).group_by(latest.c.helpful))
+        async with self._sessions() as session:
+            return await counted_in(session, since=since, until=until)
 
     async def _tally(self, statement: Select[tuple[bool, int]]) -> Tallied:
         async with self._sessions() as session:
-            rows = (await session.execute(statement)).all()
-        found = {bool(helpful): int(count) for helpful, count in rows}
-        return Tallied(helpful=found.get(True, 0), unhelpful=found.get(False, 0))
+            return tallied((await session.execute(statement)).all())
+
+
+def marks_counted(since: datetime, until: datetime) -> Select[tuple[bool, int]]:
+    """How many answers were last marked each way in `[since, until)`. Grouped by the bit alone."""
+    latest = (
+        select(MarkRow.trace_id, MarkRow.principal_id, MarkRow.helpful)
+        .where(and_(MarkRow.marked_at >= since, MarkRow.marked_at < until))
+        .order_by(MarkRow.trace_id, MarkRow.principal_id, MarkRow.marked_at.desc(), MarkRow.id)
+        .distinct(MarkRow.trace_id, MarkRow.principal_id)
+        .subquery()
+    )
+    return select(latest.c.helpful, func.count()).group_by(latest.c.helpful)
+
+
+def tallied(rows: Sequence[Any]) -> Tallied:
+    """A count read back from `marks_counted` or a tally of one answer, a missing side as nought."""
+    found = {bool(helpful): int(count) for helpful, count in rows}
+    return Tallied(helpful=found.get(True, 0), unhelpful=found.get(False, 0))
+
+
+async def counted_in(session: AsyncSession, *, since: datetime, until: datetime) -> Tallied:
+    """`marks_counted`, read in a session the caller already holds, as the Learning screen does."""
+    return tallied((await session.execute(marks_counted(since, until))).all())
 
 
 class StoredLearningPauses:

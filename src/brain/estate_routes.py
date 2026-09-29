@@ -88,7 +88,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Annotated, Final, Protocol
 
@@ -136,6 +136,7 @@ from brain.memory.digest import Learning, Undo
 from brain.memory.formation import Formation, MemoryKind
 from brain.memory.signals import Signal
 from brain.memory.tiers import BLAST_RADIUS, Change, Proposal, Tier, TierError
+from brain.ops.learning_signal_store import Tallied, counted_in
 from brain.ops.memory_store import (
     Corrections,
     MemoryRecords,
@@ -218,6 +219,9 @@ A_TRUNCATION_FLAG_ON_A_LOOKUP_BY_PERSON_COUNTS_WHAT_IS_REMEMBERED_ABOUT_THEM: Fi
 LIBRARY_SCREEN: Final = "library"
 LEARNING_SCREEN: Final = "learning"
 MEMORY_SCREEN: Final = "memory"
+
+#: How far back the Learning screen counts marks: the week its recent learnings are counted over.
+MARKS_OVER: Final = timedelta(days=7)
 
 #: Where the undo is posted, under the learning screen's own path.
 UNDO_PATH: Final = "/govern/learning/undo"
@@ -381,6 +385,23 @@ class LearningReviewView(BaseModel):
     #: What the confirmation says an undo will do, keyed by `control_writes`. See `UNDO_SAYS`.
     undo_says: dict[str, str]
     staleness: StalenessBanner | None = None
+    #: How the week's answers were marked (M16.7.4), on the everyone basis, and null otherwise.
+    marks: MarksView | None = None
+
+
+class MarksView(BaseModel):
+    """How many answers were last marked helpful and not helpful over the week to `as_of`.
+
+    Counted over the whole install and never by who, for
+    `brain.memory.signals.A_COUNT_PER_PERSON_IS_A_PERFORMANCE_REVIEW`'s reason, and shown only on
+    the everyone basis, since it is a figure about everybody's answers.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    since: datetime
+    helpful: int
+    unhelpful: int
 
 
 class UndoAsked(BaseModel):
@@ -972,17 +993,26 @@ async def learning(request: Request, asked: Asked) -> LearningReviewView:
 
     reads = _require_console_reads(request)
 
-    async def load(session: AsyncSession) -> StoredLearnings:
+    basis = spans_departments(asked.reach, asked.now)
+    since = asked.now - MARKS_OVER
+
+    async def load(session: AsyncSession) -> tuple[StoredLearnings, Tallied | None]:
         agent_rows = (await session.execute(bounded_agents(MAX_AGENTS_CONSIDERED))).scalars().all()
         records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
-        return await learnings_stored(
+        stored = await learnings_stored(
             session, visible_records(records, asked), MAX_LEARNINGS_CONSIDERED
         )
+        marks = (
+            await counted_in(session, since=since, until=asked.now)
+            if basis is Basis.EVERYONE
+            else None
+        )
+        return stored, marks
 
     served = await reads.read(load, now=asked.now)
-    stored = served.value
+    stored, marks = served.value
     review = learning_estate(
-        basis=spans_departments(asked.reach, asked.now),
+        basis=basis,
         records=stored.records,
         learnings=stored.learnings,
         caller=asked.reach,
@@ -1025,6 +1055,9 @@ async def learning(request: Request, asked: Asked) -> LearningReviewView:
         tiers=tier_rules(),
         undo_says={correction.value: said for correction, said in UNDO_SAYS.items()},
         staleness=served.banner,
+        marks=None
+        if marks is None
+        else MarksView(since=since, helpful=marks.helpful, unhelpful=marks.unhelpful),
     )
 
 

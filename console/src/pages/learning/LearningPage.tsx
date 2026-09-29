@@ -87,6 +87,12 @@ export const LEARNING_LEDE =
 export const LOADING_LEARNING = "Loading what the system has learnt.";
 export const VIEWS_LABEL = "Learning views";
 export const UNDO_LABEL = "Undo";
+
+/** How the week's answers were marked, over the whole install, and what that count changes. */
+export const MARKS_LABEL = "How answers were marked";
+export const MARKED_HELPFUL = `Marked helpful in ${String(7)} days`;
+export const MARKED_NOT_HELPFUL = `Marked not helpful in ${String(7)} days`;
+export const MARKS_SUB = "counted; a mark changes nothing by itself";
 export const KEEP_IT = "Keep it";
 export const DETAILS_LABEL = "Details";
 export const NOT_UNDONE = "The learning was not undone";
@@ -561,12 +567,20 @@ function LearningDrawer({
 function Figures({ review }: { readonly review: Review }) {
   const withheld = review.tierThree === null;
   return (
-    <KpiStrip label="Learnings you may see" count={withheld ? 3 : 4}>
-      <StatCard label={`Learned in ${String(RECENT_DAYS)} days`} value={String(learnedRecently(review))} sub="tiers one and two" />
-      <StatCard label="Applied automatically" value={String(review.tierOne.length)} sub="each can be undone" />
-      <StatCard label="In shadow" value={String(review.tierTwo.length)} sub="proving themselves" />
-      {review.tierThree === null ? null : <StatCard label="Waiting on a person" value={String(review.tierThree.length)} sub="tier three" />}
-    </KpiStrip>
+    <>
+      <KpiStrip label="Learnings you may see" count={withheld ? 3 : 4}>
+        <StatCard label={`Learned in ${String(RECENT_DAYS)} days`} value={String(learnedRecently(review))} sub="tiers one and two" />
+        <StatCard label="Applied automatically" value={String(review.tierOne.length)} sub="each can be undone" />
+        <StatCard label="In shadow" value={String(review.tierTwo.length)} sub="proving themselves" />
+        {review.tierThree === null ? null : <StatCard label="Waiting on a person" value={String(review.tierThree.length)} sub="tier three" />}
+      </KpiStrip>
+      {review.marks === null ? null : (
+        <KpiStrip label={MARKS_LABEL} count={2}>
+          <StatCard label={MARKED_HELPFUL} value={String(review.marks.helpful)} sub={MARKS_SUB} />
+          <StatCard label={MARKED_NOT_HELPFUL} value={String(review.marks.unhelpful)} sub={MARKS_SUB} />
+        </KpiStrip>
+      )}
+    </>
   );
 }
 

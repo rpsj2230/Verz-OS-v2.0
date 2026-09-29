@@ -12,7 +12,7 @@
  * **What the API sends is compared with the Python models, not with this file's copy of them**, and
  * the bounds a request must respect are read out of the API's own document.
  *
- * Task ids: M27.7.21, M27.7.22, M27.16.1
+ * Task ids: M27.7.21, M27.7.22, M27.16.1, M16.7.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -20,7 +20,15 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { UNAVAILABLE_MARK } from "../src/components/kit";
 import { UNAVAILABLE } from "../src/pages/learning/learningActions";
-import { KEEP_IT, TIER_THREE_WITHHELD, UNDO_LABEL, UNDONE } from "../src/pages/learning/LearningPage";
+import {
+  KEEP_IT,
+  MARKED_HELPFUL,
+  MARKED_NOT_HELPFUL,
+  MARKS_LABEL,
+  TIER_THREE_WITHHELD,
+  UNDO_LABEL,
+  UNDONE,
+} from "../src/pages/learning/LearningPage";
 import { LEARNING_API_PATH, UNDO_API_PATH, consideredSentence, learnedRecently, readLearningPage } from "../src/pages/learningQuery";
 import { NOTHING_TO_READ_DESCRIPTION } from "../src/pages/memory/MemoryDetailPage";
 import { CHOOSE_HEADING } from "../src/pages/memory/MemoryPage";
@@ -196,8 +204,23 @@ function viewLinks(container: HTMLElement): string[] {
 describe("the Learning page", () => {
   test("every field the API sends about the review is read", () => {
     // What breaks if this is deleted: a field added to the review arrives and is dropped.
-    const read = ["basis", "as_of", "tier_one", "tier_two", "tier_three", "tiers", "considered", "undo_says", "staleness"];
+    const read = ["basis", "as_of", "tier_one", "tier_two", "tier_three", "tiers", "considered", "undo_says", "staleness", "marks"];
     expect(backendModelFields(ROUTES, "LearningReviewView").sort()).toEqual([...read].sort());
+  });
+
+  test("the week's marks are drawn as the API counted them, and not at all when it sent none", async () => {
+    // What breaks if this is deleted: a count of marks drawn for a reader the API sent none to, or
+    // a helpful and a not-helpful figure swapped, which reads as the opposite verdict on the answers.
+    const marked = await consoleAt(
+      "/learning",
+      reviewing(learningBody({ marks: { since: "2019-02-27T09:00:00Z", helpful: 7, unhelpful: 3 } })),
+    );
+    const strip = marked.container.querySelector(`[aria-label="${MARKS_LABEL}"]`);
+    expect(strip?.textContent).toContain(`${MARKED_HELPFUL}7`);
+    expect(strip?.textContent).toContain(`${MARKED_NOT_HELPFUL}3`);
+
+    const unmarked = await consoleAt("/learning", reviewing(learningBody({ marks: null })));
+    expect(unmarked.container.querySelector(`[aria-label="${MARKS_LABEL}"]`)).toBeNull();
   });
 
   test("the figures count the rows the API sent, and the first view is tier one alone", async () => {

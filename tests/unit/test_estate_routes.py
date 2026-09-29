@@ -320,6 +320,8 @@ class Stored:
         self.agents: list[AgentRow] = []
         self.learnings: list[LearningRow] = []
         self.corrections: list[CorrectionRow] = []
+        #: The week's marks as the count statement answers: (helpful, how many) pairs.
+        self.marks: list[tuple[bool, int]] = []
         self.statements: list[Any] = []
 
 
@@ -427,6 +429,9 @@ class StubSession(AsyncSession):
         if not hasattr(statement, "column_descriptions"):
             # `SET TRANSACTION READ ONLY`, the revision lock and the trace settings select nothing.
             return StubResult([])
+        if "mem.mark" in str(statement):
+            # The week's marks, which only the everyone basis reads: held in `_STORED.marks`.
+            return StubResult(list(_STORED.marks))
         table = statement.column_descriptions[0].get("entity")
         if table is None:
             # The store's `SELECT now()`.
@@ -895,6 +900,24 @@ def test_a_learning_formed_in_a_plain_conversation_is_reviewed_and_undone_like_a
     assert [(one["memory_id"], one["in_effect"]) for one in after["tier_one"]] == [
         ("m_asked", False)
     ]
+
+
+def test_the_weeks_marks_are_reported_to_a_reader_of_everybody_and_to_nobody_else(
+    client: TestClient, stored: Stored
+) -> None:
+    """**A mark is counted and reported** (M16.7.4): the review carries how many answers were
+    last marked helpful and not helpful over the week, for a reader on the everyone basis, and
+    nothing about marks for a reader on their own, since the figure is about everybody's answers.
+
+    Delete this and the count can go unread by anybody, or reach a reader it describes other
+    people's answers to."""
+    stored.marks = [(True, 3), (False, 2)]
+
+    wide = get_strongly(client, "u_admin", LEARNING).json()
+    narrow = get(client, "u_narrow", LEARNING).json()
+
+    assert (wide["marks"]["helpful"], wide["marks"]["unhelpful"]) == (3, 2)
+    assert narrow["marks"] is None
 
 
 def test_a_learning_the_reader_may_not_recall_is_absent_from_the_review_and_cannot_be_undone(
