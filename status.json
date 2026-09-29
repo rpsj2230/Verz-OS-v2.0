@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T16:35:41.896582+00:00",
-  "commit": "91bf74ae",
-  "commit_subject": "Connect Lark's Wiki step tells an administrator how many matched pages were not read, and never which (#267)",
+  "generated_at": "2026-09-29T16:56:32.910735+00:00",
+  "commit": "62d8c742",
+  "commit_subject": "Which services Verz uses goes to the owner, so channel and connector proofs are done in the order they matter (#271)",
   "total": 1576,
   "done": 466,
   "percent": 29.6,
