@@ -48,10 +48,18 @@ own and whose key is sent as HTTP Basic rather than as a bearer token. The key s
 header in the worker's run and nowhere else: a reading names a `KeyScheme` and never sees the key.
 See `A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`.
 
+**A connector says how an administrator connects it, step by step, in the same declaration.**
+`guide` is the screens the console's connect flow shows for this source, each with its words, a
+picture of the vendor screen it happens on and a link to that page where the vendor has one
+(`brain.ops.connect_steps`). A source connected from the console ends its guide with the screen
+that holds its form, asking for exactly the form's settings and its key, so the steps and the
+form cannot drift apart; a source connected at the server ends with the hand-over and asks for
+nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9
 """
 
 from __future__ import annotations
@@ -77,6 +85,7 @@ from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
 from brain.connectors.write_verification import ReadBack, builds_a_manifest
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
+from brain.ops.connect_steps import GuideStep
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -110,6 +119,17 @@ A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT: Final = (
     "writes it into a header. A new scheme is a new member here, reviewed where the key is "
     "handled."
 )
+
+#: Why a guide's last screen is where the source is connected, and what it asks for.
+A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED: Final = (
+    "A source connected from the console ends its guide with the screen holding its form, and "
+    "that screen asks for exactly the form's settings and its key, so a setting added to the "
+    "form is a step's field too. A source connected at the server ends with the hand-over and "
+    "asks for nothing, because this screen has nothing to take."
+)
+
+#: What the last screen of a console source's guide asks for besides its settings.
+CREDENTIAL_ASK: Final = "credential"
 
 #: The name every connector module declares itself under.
 DECLARATION_ATTRIBUTE: Final = "CONNECTOR"
@@ -353,6 +373,8 @@ class ConnectorDeclaration:
     reading: SourceReading | None = None
     #: How one of its records is read live at question time, or None when none is.
     live: LiveLookup | None = None
+    #: The screens the console's connect flow shows for it. See the module docstring.
+    guide: tuple[GuideStep, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -373,6 +395,19 @@ class ConnectorDeclaration:
                 f"{A_READING_NEEDS_A_CONNECTION_TO_READ}"
             )
             raise DeclarationError(msg)
+        if self.guide:
+            last = self.guide[-1].asks
+            wanted = (
+                ()
+                if self.console is None
+                else (*(one.name for one in self.console.settings), CREDENTIAL_ASK)
+            )
+            if tuple(last) != wanted:
+                msg = (
+                    f"connector {self.name!r} ends its guide asking for {list(last)}, and "
+                    f"its form takes {list(wanted)}. {A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED}"
+                )
+                raise DeclarationError(msg)
         if self.live is not None and self.reading is None:
             msg = (
                 f"connector {self.name!r} declares a live lookup and no reading; a record read "

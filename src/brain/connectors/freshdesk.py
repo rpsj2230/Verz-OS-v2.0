@@ -152,6 +152,7 @@ from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
 from brain.core.scope import Scope
 from brain.gate.provenance import FRESHNESS_TEXT, Freshness
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import (
     FRESHDESK_SEARCH_MAX_RECORDS,
     MAX_BACKOFF_SECONDS,
@@ -1575,9 +1576,72 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     )
 
 
+#: The screens an administrator connects Freshdesk through, the form last. The helpdesk's own
+#: address is the only place the key is sent, so no step links anywhere else.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="agent",
+            title="Choose the agent this system reads as",
+            text=(
+                "In Freshdesk, choose an agent who sees the tickets this system should answer "
+                "about and no more: the key can do whatever its agent can. Never an "
+                "administrator, whose key can change service levels and delete tickets."
+            ),
+            sketch=Sketch(
+                place="Freshdesk",
+                heading="Agents",
+                lines=(
+                    SketchLine(LineKind.ITEM, "An agent with read access", mark=True),
+                    SketchLine(LineKind.ITEM, "Not an administrator"),
+                ),
+            ),
+        ),
+        GuideStep(
+            key="key",
+            title="Copy that agent's API key",
+            text=(
+                "Sign in to Freshdesk as that agent, click the profile picture at the top "
+                "right, open Profile settings and click View API key (Freshdesk may call it "
+                "Your API Key). Copy it."
+            ),
+            sketch=Sketch(
+                place="Freshdesk",
+                heading="Profile settings",
+                lines=(SketchLine(LineKind.FIELD, "Your API Key", "********", mark=True),),
+                button="View API key",
+            ),
+        ),
+        GuideStep(
+            key="connect",
+            title="Paste the address, the department and the key here",
+            text=(
+                "Type the helpdesk's address ending in .freshdesk.com, the short name of the one "
+                "department whose people may be granted its tickets, and paste the key, then press "
+                "Connect Freshdesk. The key is only ever sent to that address."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Freshdesk",
+                lines=(
+                    SketchLine(
+                        LineKind.FIELD, "Helpdesk address", "yourcompany.freshdesk.com", mark=True
+                    ),
+                    SketchLine(LineKind.FIELD, "Department", "support", mark=True),
+                    SketchLine(LineKind.FIELD, "API key", "********", mark=True),
+                ),
+                button="Connect Freshdesk",
+            ),
+            asks=(DOMAIN_SETTING, DEPARTMENT_SETTING, "credential"),
+        ),
+    )
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=FRESHDESK,
     label="Freshdesk",
+    guide=GUIDE,
     console=ConsoleForm(
         settings=(
             Setting(

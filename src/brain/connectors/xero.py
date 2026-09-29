@@ -185,6 +185,7 @@ from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.projection import ProjectionRefusedError
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import ConnectorLimit, LimitDecision
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Fetcher, Resolver
@@ -1521,9 +1522,83 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     return xero_manifest(XeroConnection(tenant_id=settings["tenant_id"]), ref=ref)
 
 
+#: Xero's developer portal, where a connection for this system is created. Xero's for every install.
+DEVELOPER_PORTAL_URL: Final = "https://developer.xero.com/app/manage"
+
+#: The screens an administrator connects Xero through, the form last. Every vendor name here is
+#: Xero's own, and each step also says it in words, so a moved button is found by its name.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="create",
+            title="Create a connection in Xero",
+            text=(
+                "Sign in to Xero's developer portal with an account that administers your "
+                "organisation, open My Apps and click New app (Xero may offer it as a custom "
+                "connection). Name it after this system and give it only two scopes, "
+                "accounting.transactions.read and accounting.contacts.read, and nothing ending in "
+                ".write: this system answers questions about invoices and never raises one."
+            ),
+            sketch=Sketch(
+                place="Xero developer portal",
+                heading="My Apps",
+                lines=(
+                    SketchLine(LineKind.ITEM, "accounting.transactions.read", mark=True),
+                    SketchLine(LineKind.ITEM, "accounting.contacts.read", mark=True),
+                    SketchLine(LineKind.TEXT, "No scope ending in .write"),
+                ),
+                button="New app",
+            ),
+            link=DEVELOPER_PORTAL_URL,
+            link_label="Open Xero's developer portal",
+        ),
+        GuideStep(
+            key="authorise",
+            title="Authorise it for one organisation and copy its key",
+            text=(
+                "Authorise the connection for the one Xero organisation this system should read, "
+                "then copy that organisation's id (Xero may call it the tenant id) and the key "
+                "Xero issues for the connection. A connection reads one organisation and no other."
+            ),
+            sketch=Sketch(
+                place="Xero developer portal",
+                heading="Connection details",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Organisation (tenant) id", "...", mark=True),
+                    SketchLine(LineKind.FIELD, "Key", "********", mark=True),
+                ),
+                button="Authorise",
+            ),
+            link=DEVELOPER_PORTAL_URL,
+            link_label="Open My Apps",
+        ),
+        GuideStep(
+            key="connect",
+            title="Paste them here and connect",
+            text=(
+                "Paste the organisation id and the key below and press Connect Xero. The key "
+                "goes to the vault and is never shown again. The worker then reads invoices and "
+                "contacts on its schedule and keeps only a small index; every amount is read live."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Xero",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Organisation id", "...", mark=True),
+                    SketchLine(LineKind.FIELD, "Key", "********", mark=True),
+                ),
+                button="Connect Xero",
+            ),
+            asks=("tenant_id", "credential"),
+        ),
+    )
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=CONNECTOR_NAME,
     label="Xero",
+    guide=GUIDE,
     console=ConsoleForm(
         settings=(
             Setting(
