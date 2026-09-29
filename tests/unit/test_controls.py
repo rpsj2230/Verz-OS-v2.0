@@ -556,6 +556,49 @@ def test_a_caller_no_static_scan_can_see_run_is_reported(tmp_path: Path) -> None
     }
 
 
+def test_an_acceptance_check_the_run_calls_is_reached_and_nothing_beside_it_is(
+    tmp_path: Path,
+) -> None:
+    """`AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN`: a function decorated with
+    `check(leaves=..., sentence=...)` in a module `CHECK_MODULES` names is run by the acceptance
+    run, and so is a helper it calls by name. Beside them, three that are not: an undecorated
+    function in the same module, the same decorator in a module the registry does not name, and a
+    decorator called check with other arguments.
+
+    Delete this and either an acceptance check that asks a control's decision function reports a
+    scheduled control as unreached, or the exception widens until any decorator hides a chain."""
+    from brain.ops.acceptance import CHECK_MODULES
+    from brain.ops.controls import chains_worth_checking
+
+    named = next(one for one in CHECK_MODULES if one.startswith("brain.ops."))
+    decorated = '@check(leaves=("M1.1.1",), sentence="Said.")\n'
+    _write_tree(
+        tmp_path,
+        {
+            **_GUARDED,
+            f"{named.removeprefix('brain.').replace('.', '/')}.py": _IMPORT_SWEEP
+            + "check = object()\n\n\n"
+            + decorated
+            + "async def proved() -> None:\n    _asks()\n\n\n"
+            + "def _asks() -> None:\n    sweep()\n\n\n"
+            + "def beside() -> None:\n    sweep()\n\n\n"
+            + '@check(name="other")\n'
+            + "def lookalike() -> None:\n    sweep()\n",
+            "ops/unnamed_checks.py": _IMPORT_SWEEP
+            + "check = object()\n\n\n"
+            + decorated
+            + "async def proved() -> None:\n    sweep()\n",
+        },
+    )
+    wired = _control(symbols=("brain.knowing.guarded:sweep",), invoked_by=Invocation.IN_PROCESS)
+    findings = chains_worth_checking((wired,), tmp_path)
+    assert _unreached_callers(findings) == {
+        f"{named}:beside",
+        f"{named}:lookalike",
+        "brain.ops.unnamed_checks:proved",
+    }
+
+
 def test_a_call_written_as_import_the_module_then_call_the_attribute_is_found(
     tmp_path: Path,
 ) -> None:

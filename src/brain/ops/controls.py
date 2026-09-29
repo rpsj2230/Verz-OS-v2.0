@@ -175,6 +175,16 @@ A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE: Final = (
     "toward reporting a chain rather than toward hiding one."
 )
 
+#: The one function passed around as a value that the scan does follow, and why.
+AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN: Final = (
+    "An install acceptance check is registered by the check decorator and run by the "
+    "acceptance run, which calls every check of every module brain.ops.acceptance.CHECK_MODULES "
+    "names. That registry is a list the scan can read, so a function decorated with check in a "
+    "module the list names is reached, and one in any other module is not. Without this, a "
+    "check that asks a control's own decision function reports that control as unreached "
+    "although the worker schedules it."
+)
+
 
 class ControlsError(Exception):
     """A control was declared in a shape the registry cannot check or an operator cannot read.
@@ -1579,14 +1589,37 @@ def _registered_on_a_route(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool
     )
 
 
+def _registered_as_an_acceptance_check(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, module: str
+) -> bool:
+    """Whether the acceptance run calls this function: decorated with `check(leaves=...,
+    sentence=...)` in a module `brain.ops.acceptance.CHECK_MODULES` names.
+
+    See `AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN`. Both halves are the condition:
+    the decorator alone is a function no run imports, and the module alone is a helper beside
+    the checks. Imported here rather than at the top, because the registry's module is one
+    this scan reads rather than one it needs to be.
+    """
+    from brain.ops.acceptance import CHECK_MODULES
+
+    return module in CHECK_MODULES and any(
+        isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Name)
+        and decorator.func.id == "check"
+        and {keyword.arg for keyword in decorator.keywords} == {"leaves", "sentence"}
+        for decorator in node.decorator_list
+    )
+
+
 def _reached_functions(module: str, src: Path | None = None) -> frozenset[str]:
     """The units of this module that something is seen to run.
 
     See `A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE`. The module body
     and a route handler count only when another module imports this one; a top-level
-    function counts when another module calls it; and from those, a plain-name call inside
-    the file carries the answer on to the function it names, until nothing new is reached.
-    A method and `_NESTED_IN_MODULE_BODY` are never seeds and never carried to.
+    function counts when another module calls it, or when the acceptance run does
+    (`AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN`); and from those, a plain-name call
+    inside the file carries the answer on to the function it names, until nothing new is
+    reached. A method and `_NESTED_IN_MODULE_BODY` are never seeds and never carried to.
     """
     tree = _parsed(_module_path(f"{module}:_", src))
     functions = {
@@ -1597,7 +1630,11 @@ def _reached_functions(module: str, src: Path | None = None) -> frozenset[str]:
     imported = bool(_callers_of_module(module, src))
     reached: set[str] = {_MODULE_BODY} if imported else set()
     for name, node in functions.items():
-        if call_sites(f"{module}:{name}", src) or (imported and _registered_on_a_route(node)):
+        if (
+            call_sites(f"{module}:{name}", src)
+            or (imported and _registered_on_a_route(node))
+            or _registered_as_an_acceptance_check(node, module)
+        ):
             reached.add(name)
 
     onward: dict[str, set[str]] = {}
