@@ -32,7 +32,7 @@ promise to be complete keeps their account, on `dry_run`'s rule. See
 **A list anybody can edit makes no account.** Only a source trusted to say which department
 somebody is in, which is a directory an administrator controls, gives accounts; a spreadsheet or a
 Google Sheet, which whoever holds the link can edit, plans nothing. See
-`A_LIST_ANYBODY_CAN_EDIT_MAKES_NO_ACCOUNT`, and needs-rupash 119, which asks the owner to confirm
+`A_LIST_ANYBODY_CAN_EDIT_MAKES_NO_ACCOUNT`, and needs-rupash 126, which asks the owner to confirm
 it.
 
 Rejected: an invitation email (Keycloak's execute-actions email) when an account is made, which was
@@ -91,7 +91,7 @@ A_LIST_ANYBODY_CAN_EDIT_MAKES_NO_ACCOUNT: Final = (
     "An account is a way in, so it is made only from a source an administrator controls: one "
     "trusted to say which department somebody is in, which the directories are and a spreadsheet "
     "is not. A row anybody with a sheet's link adds would otherwise be an account for an address "
-    "whoever added it can read (needs-rupash 119)."
+    "whoever added it can read (needs-rupash 126)."
 )
 
 #: The sentence a run from such a source leaves.
@@ -297,17 +297,17 @@ def account_plan(
 def allowed_types(value: str) -> frozenset[EmploymentType]:
     """The employment types a setting's comma-separated value names; the default for a blank one.
 
-    `NOBODY` alone is the empty set. A word no type carries is refused by the setting's own check
-    before it is saved, so here it is ignored rather than raised: a sync must not stop over a value
-    somebody wrote by hand.
+    `NOBODY` alone, and only it, is the empty set. A word no type carries is refused by the
+    setting's own check before it is saved, so here it is ignored rather than raised: a sync must
+    not stop over a value somebody wrote by hand. And a value of nothing but such words is the
+    default rather than nobody, because reading `reguler` in an environment file as "nobody" would
+    close every account the sync made on the next run over a typing slip.
     """
     words = [one.strip().casefold() for one in value.split(",") if one.strip()]
-    if not words:
-        return DEFAULT_ALLOWED
     if words == [NOBODY]:
         return frozenset()
     known = {one.value: one for one in EmploymentType}
-    return frozenset(known[one] for one in words if one in known)
+    return frozenset(known[one] for one in words if one in known) or DEFAULT_ALLOWED
 
 
 def setting_value(types: Sequence[EmploymentType]) -> str:

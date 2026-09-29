@@ -217,6 +217,8 @@ def test_the_setting_names_types_and_says_nothing_for_the_default() -> None:
     assert allowed_types("regular, outsourced ,nonsense") == frozenset(
         {EmploymentType.REGULAR, EmploymentType.OUTSOURCED}
     )
+    # A value of nothing but a slip is the default, never nobody, which would close every account.
+    assert allowed_types("reguler") == allowed_types("nobody") == DEFAULT_ALLOWED
     assert setting_value([EmploymentType.OUTSOURCED, EmploymentType.REGULAR]) == (
         "regular,outsourced"
     )
@@ -285,3 +287,40 @@ def test_every_company_directory_at_its_shipped_trust_gives_accounts(source: str
     )
     assert [one.stable_id for one in plan.to_make] == ["on_ada"]
     assert plan.withheld == ()
+
+
+def test_an_account_a_person_made_and_an_administrator_disabled_is_not_opened_by_the_sync() -> None:
+    """The other half of closing only what it made: the sync opens again only what it closed. An
+    administrator who disabled somebody's hand-made account decided that, and the next night's
+    list saying the person is active does not undo it. Delete this and the sync reopens it."""
+    plan = account_plan(
+        roster(person("bo")),
+        stable_ids=STABLE,
+        accounts=[account("bo", enabled=False, made=False)],
+        allowed=DEFAULT_ALLOWED,
+        absent_is_gone=False,
+    )
+    assert plan.to_enable == ()
+    assert [one.account.account_id for one in plan.to_link] == ["kc-bo"]
+
+
+def test_a_changed_address_is_the_same_account_even_when_another_account_holds_the_new_one() -> (
+    None
+):
+    """Found by the source's identifier before the address, as the constant says: somebody whose
+    address changed keeps the account the sync made, rather than being handed an account somebody
+    else made with the new address while theirs is closed for absence. Delete this and the order
+    can flip with every other test green, because only this case tells the two apart."""
+    moved = StaffRecord("ada.new@example.test", "Ada", active=True, status=EmploymentStatus.ACTIVE)
+    plan = account_plan(
+        roster(moved),
+        stable_ids={"ada.new@example.test": "on_ada"},
+        accounts=[
+            account("ada"),
+            HeldAccount("kc-other", "ada.new@example.test", True),
+        ],
+        allowed=DEFAULT_ALLOWED,
+        absent_is_gone=True,
+    )
+    assert [one.account.account_id for one in plan.to_link] == ["kc-ada"]
+    assert plan.to_disable == ()
