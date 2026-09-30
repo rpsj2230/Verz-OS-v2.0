@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
+from typing import TypedDict
 
 import pytest
 from pydantic import TypeAdapter
@@ -86,6 +87,17 @@ from brain.knowledge.search import MAX_CANDIDATE_DEPTH
 NOW = datetime(2026, 9, 7, 9, 0, tzinfo=UTC)
 
 QUESTION = "How many hours are left on Acme"
+
+
+class _Shape(TypedDict):
+    """The narrowing a retrieval key requires beside the reach: every kind, the default count."""
+
+    kinds: tuple[str, ...]
+    limit: int
+
+
+#: A question narrowed to nothing and asking for the search tool's default number of passages.
+SHAPE: _Shape = {"kinds": (), "limit": 10}
 AGENT_CONFIG = "cfg-e3a1"
 
 #: A length at which the text somebody pasted is a document rather than a question. Held as
@@ -421,7 +433,7 @@ def test_a_key_needs_a_question_to_be_built_from():
     with pytest.raises(CacheLayerError):
         plan_key("   ", who, agent_config_hash=AGENT_CONFIG)
     with pytest.raises(CacheLayerError):
-        retrieval_key("", who, departments=("web",), corpus_epoch=1)
+        retrieval_key("", who, departments=("web",), corpus_epoch=1, **SHAPE)
 
 
 def test_a_revoked_grant_moves_the_answer_key():
@@ -456,9 +468,9 @@ def test_a_moved_policy_epoch_moves_every_key_this_module_builds():
     assert plan_key(QUESTION, before, agent_config_hash=AGENT_CONFIG) != plan_key(
         QUESTION, after, agent_config_hash=AGENT_CONFIG
     )
-    assert retrieval_key(QUESTION, before, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, after, departments=("web",), corpus_epoch=2
-    )
+    assert retrieval_key(
+        QUESTION, before, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, after, departments=("web",), corpus_epoch=2, **SHAPE)
 
 
 def test_a_moved_source_epoch_moves_the_answer_key():
@@ -696,9 +708,9 @@ def test_two_callers_with_the_same_grants_do_not_share_a_retrieval_key():
     bob = caller(ents("u_bob", "read:knowledge"))
 
     assert alice.ent_hash == bob.ent_hash
-    assert retrieval_key(QUESTION, alice, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, bob, departments=("web",), corpus_epoch=2
-    )
+    assert retrieval_key(
+        QUESTION, alice, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, bob, departments=("web",), corpus_epoch=2, **SHAPE)
 
 
 def test_a_retrieval_key_is_the_same_whatever_order_the_departments_arrive_in():
@@ -712,8 +724,8 @@ def test_a_retrieval_key_is_the_same_whatever_order_the_departments_arrive_in():
     who = caller(ents("u_alice", "read:knowledge"))
 
     assert retrieval_key(
-        QUESTION, who, departments=("web", "finance"), corpus_epoch=2
-    ) == retrieval_key(QUESTION, who, departments=("finance", "web"), corpus_epoch=2)
+        QUESTION, who, departments=("web", "finance"), corpus_epoch=2, **SHAPE
+    ) == retrieval_key(QUESTION, who, departments=("finance", "web"), corpus_epoch=2, **SHAPE)
 
 
 def test_a_department_added_to_a_callers_reach_moves_their_retrieval_key():
@@ -725,9 +737,9 @@ def test_a_department_added_to_a_callers_reach_moves_their_retrieval_key():
     """
     who = caller(ents("u_alice", "read:knowledge"))
 
-    assert retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, who, departments=("web", "finance"), corpus_epoch=2
-    )
+    assert retrieval_key(
+        QUESTION, who, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, who, departments=("web", "finance"), corpus_epoch=2, **SHAPE)
 
 
 def test_a_moved_corpus_epoch_moves_the_retrieval_key():
@@ -739,9 +751,55 @@ def test_a_moved_corpus_epoch_moves_the_retrieval_key():
     """
     who = caller(ents("u_alice", "read:knowledge"))
 
-    assert retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, who, departments=("web",), corpus_epoch=3
-    )
+    assert retrieval_key(
+        QUESTION, who, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=3, **SHAPE)
+
+
+def test_a_question_narrowed_or_asking_for_more_passages_is_a_different_retrieval():
+    """**The narrowing is in the key, and a key without it serves the wrong list.**
+
+    The same words narrowed to SOPs rank a different list from the words searched over every
+    kind, and a list cut at five is not one cut at ten. Delete this and a key could drop either,
+    and a question narrowed to one kind would be handed the list ranked for all of them: not a
+    disclosure, since every passage is re-read under the reach, and still a wrong answer served
+    fast. The equal pair proves the narrowing is sorted rather than compared as given.
+    """
+    who = caller(ents("u_alice", "read:knowledge"))
+
+    def key(kinds: tuple[str, ...], limit: int) -> str:
+        return retrieval_key(
+            QUESTION, who, departments=("web",), corpus_epoch=2, kinds=kinds, limit=limit
+        )
+
+    assert key((), 10) != key(("sop",), 10)
+    assert key(("sop",), 10) != key(("sop", "faq"), 10)
+    assert key((), 10) != key((), 5)
+    assert key(("sop", "faq"), 10) == key(("faq", "sop"), 10)
+
+
+def test_a_retrieval_key_refuses_a_narrowing_that_is_not_one():
+    """A kind repeated, a kind that is not a slug, and a request for no passages are refused.
+
+    Delete this and a repeated kind changes the key without changing the retrieval, which is a
+    miss nobody can explain, and a count of zero keys an entry for a search that asked for
+    nothing. The last line proves an ordinary narrowing is still accepted.
+    """
+    who = caller(ents("u_alice", "read:knowledge"))
+
+    def key(kinds: tuple[str, ...], limit: int) -> str:
+        return retrieval_key(
+            QUESTION, who, departments=("web",), corpus_epoch=2, kinds=kinds, limit=limit
+        )
+
+    with pytest.raises(CacheLayerError):
+        key(("sop", "sop"), 10)
+    with pytest.raises(CacheLayerError):
+        key(("sop,faq",), 10)
+    with pytest.raises(CacheLayerError):
+        key((), 0)
+
+    assert key(("sop", "faq"), 1)
 
 
 def test_a_retrieval_key_refuses_something_that_is_not_a_department():
@@ -754,13 +812,13 @@ def test_a_retrieval_key_refuses_something_that_is_not_a_department():
     who = caller(ents("u_alice", "read:knowledge"))
 
     with pytest.raises(CacheLayerError):
-        retrieval_key(QUESTION, who, departments=("web,finance",), corpus_epoch=2)
+        retrieval_key(QUESTION, who, departments=("web,finance",), corpus_epoch=2, **SHAPE)
     with pytest.raises(CacheLayerError):
-        retrieval_key(QUESTION, who, departments=("web", "web"), corpus_epoch=2)
+        retrieval_key(QUESTION, who, departments=("web", "web"), corpus_epoch=2, **SHAPE)
     with pytest.raises(CacheLayerError):
-        retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=-1)
+        retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=-1, **SHAPE)
 
-    assert retrieval_key(QUESTION, who, departments=("web", "finance"), corpus_epoch=0)
+    assert retrieval_key(QUESTION, who, departments=("web", "finance"), corpus_epoch=0, **SHAPE)
 
 
 def test_a_cached_retrieval_holds_references_and_no_passages():
