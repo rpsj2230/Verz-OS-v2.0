@@ -178,11 +178,12 @@ A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE: Final = (
 #: The one function passed around as a value that the scan does follow, and why.
 AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN: Final = (
     "An install acceptance check is registered by the check decorator and run by the "
-    "acceptance run, which calls every check of every module brain.ops.acceptance.CHECK_MODULES "
-    "names. That registry is a list the scan can read, so a function decorated with check in a "
-    "module the list names is reached, and one in any other module is not. Without this, a "
-    "check that asks a control's own decision function reports that control as unreached "
-    "although the worker schedules it."
+    "acceptance run, which calls every check of every module brain.ops.acceptance.check_modules "
+    "finds: every brain.ops.acceptance module that registers one, and a module that registers one "
+    "without placing itself is refused rather than skipped. So a function decorated with check in "
+    "a module of that name is reached, and one in any other module is not. Without this, a check "
+    "that asks a control's own decision function reports that control as unreached although the "
+    "worker schedules it."
 )
 
 
@@ -1597,16 +1598,16 @@ def _registered_as_an_acceptance_check(
     node: ast.FunctionDef | ast.AsyncFunctionDef, module: str
 ) -> bool:
     """Whether the acceptance run calls this function: decorated with `check(leaves=...,
-    sentence=...)` in a module `brain.ops.acceptance.CHECK_MODULES` names.
+    sentence=...)` in a module `brain.ops.acceptance.check_modules` finds.
 
     See `AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN`. Both halves are the condition:
     the decorator alone is a function no run imports, and the module alone is a helper beside
     the checks. Imported here rather than at the top, because the registry's module is one
     this scan reads rather than one it needs to be.
     """
-    from brain.ops.acceptance import CHECK_MODULES
+    from brain.ops.acceptance import is_check_module_name
 
-    return module in CHECK_MODULES and any(
+    return is_check_module_name(module) and any(
         isinstance(decorator, ast.Call)
         and isinstance(decorator.func, ast.Name)
         and decorator.func.id == "check"
