@@ -252,6 +252,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "gate.capability_pack_assignment": "principal_id",
         "gate.department_lead": "principal_id",
         "gate.elevation_request": "principal_id",
+        # A question handed to a person, in the asker's words (`0168`). `0168` grants no way for a
+        # row to leave, so an erasure keeps these and reports them kept, as it does a referral.
+        "gate.escalation": "asker_id",
         "gate.grants_version": "principal_id",
         "gate.review_decision": "principal_id",
         # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
