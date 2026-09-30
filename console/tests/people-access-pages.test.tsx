@@ -30,6 +30,7 @@ import { PEOPLE_FILTERS, readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
 import { AGENT_FORMAT } from "../src/pages/people/PersonPreview";
+import { ADD_WORK_EMAIL, JOIN, WORK_EMAIL_BLANK } from "../src/pages/people/WorkEmail";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 
@@ -399,6 +400,56 @@ describe("one person's page", () => {
     expect(kept.container.querySelector('[data-slot="staff-status-pill"]')?.textContent).toBe("Suspended");
     const fine = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
     expect(fine.container.textContent).not.toContain("cannot sign in or ask");
+  });
+
+  test("Add work email is offered only where the API says, sends only a shaped address, and joins after asking", async () => {
+    // What breaks if this is deleted: the owner's way to remove his own duplicate (M1.10.4), a blank
+    // or misspelt address sent, or a join that retires somebody's grants without a question.
+    const around = { [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
+    const asking = "The staff list's person for this email has signed in or holds something somebody gave them.";
+    const joined = "The work email is added, and the person the staff list had made for it is joined into this one.";
+    const sent: unknown[] = [];
+    const mounted = await consoleAt("/people/p_ada", {
+      [PERSON_API]: { body: detail({ may_add_work_email: true }) },
+      [`POST ${PERSON_API}/work-email`]: (body) => {
+        sent.push(body);
+        const confirmed = (body as { confirm?: boolean }).confirm === true;
+        return {
+          body: confirmed
+            ? { principal_id: "p_ada", outcome: "joined", written: true, told: joined }
+            : { principal_id: "p_ada", outcome: "ask", written: false, told: asking },
+        };
+      },
+      ...around,
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    const drawer = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    expect(writes(mounted.idp)).toEqual([]);
+    expect(drawer.textContent).toContain(WORK_EMAIL_BLANK);
+    fireEvent.change(drawer.querySelector("input[name=address]") as HTMLInputElement, { target: { value: " ada@example.test " } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    const question = await screen.findByRole("alertdialog");
+    expect(question.textContent).toContain(asking);
+    await act(async () => {
+      fireEvent.click(within(question).getByRole("button", { name: JOIN }));
+    });
+    await waitFor(() => {
+      expect(mounted.container.textContent).toContain(joined);
+    });
+    expect(sent).toEqual([
+      { address: "ada@example.test", confirm: false },
+      { address: "ada@example.test", confirm: true },
+    ]);
+
+    const plain = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
+    expect(within(plain.container).queryByRole("button", { name: ADD_WORK_EMAIL })).toBeNull();
   });
 
   test("a person the API refuses is its sentence and reference and nothing else, whatever the reason", async () => {

@@ -127,6 +127,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The export form is inside the drawer opened from the Access review header, outside the main " +
     "landmark these cases read. tests/review-pages.test.tsx submits it blank and holds that no " +
     "confirmation opens, nothing is sent and the reason and the reference are each said to be needed.",
+  "src/pages/people/WorkEmail.tsx":
+    "The work email form is inside the Add work email drawer opened from a person's Overview, outside " +
+    "the main landmark these cases read. tests/people-access-pages.test.tsx submits it blank and holds " +
+    "that nothing is sent and what to type is said beside the field.",
   "src/pages/access-requests/AccessRequestsPage.tsx":
     "The ask form is inside the Ask for access drawer opened from the page header, outside the main " +
     "landmark these cases read. tests/access-requests-page.test.tsx submits it blank and holds that " +
