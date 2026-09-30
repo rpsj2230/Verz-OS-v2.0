@@ -43,12 +43,19 @@ document to `brain.knowledge.chunk_store.ingest_document`, which is a bulk sync 
 owner's rule and was removed with the leg that fed it. See
 `brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
 
+**A source that is views in a company's own database takes one typed branch of this loop
+(M11.6.1).** Its reading is a `brain.connectors.declaration.ViewReading`, so `_read_views` reads
+each view once, bounded, admitted by the same ceiling, written through the same `kept_fields` and
+recorded by the same `after_attempt`. The lease hands over the user the slot keeps beside the
+password, and the pair lives in a `DatabaseLogin` for the attempt and is dropped with the lease.
+See `brain.connectors.declaration.A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+
 Rejected: reading through `brain.tools.fetch.Fetcher`, which the connectors' own `connector_fetch`
 closures take. It carries no headers and no status, so a key cannot be sent through it and a 429
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.6.1
 """
 
 from __future__ import annotations
@@ -66,7 +73,8 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.connectors.declaration import KeyScheme
+from brain.connectors.contract import FetchRequest
+from brain.connectors.declaration import DatabaseLogin, KeyScheme, ViewReading
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
@@ -98,6 +106,7 @@ from brain.ops.connector_sync import (
     SyncPlan,
     SyncState,
     after_attempt,
+    database_failure_detail,
     failure_detail,
     kept_fields,
     plan_for,
@@ -109,7 +118,7 @@ from brain.ops.connector_sync_store import (
     read_states,
     record_upsert,
 )
-from brain.ops.credentials import KEY_FIELD
+from brain.ops.credentials import KEY_FIELD, USER_FIELD
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import LimiterState, check
 from brain.ops.openbao import (
@@ -187,6 +196,14 @@ class KeyLease(Protocol):
         """The key, or the `SecretsUnavailableError` saying why this attempt has none."""
         ...
 
+    def user(self) -> str:
+        """The user name a database user's slot keeps beside its password, which is the key.
+
+        Raises the `SecretsUnavailableError` `key` would, or `ConnectorKeyAbsentError` for a slot
+        that keeps no user, which is every source whose credential is one key (M11.6.1).
+        """
+        ...
+
     def close(self, now: datetime) -> LeaseOutcome:
         """Give the lease back and say how that went. A second call answers the first's outcome."""
         ...
@@ -234,11 +251,13 @@ class _Held:
         reader: RunKeyReader | None = None,
         expires_at: datetime | None = None,
         key: SealedSecret | None = None,
+        user: str = "",
     ) -> None:
         self._failure = failure
         self._reader = reader
         self._expires_at = expires_at
         self._key = key
+        self._user = user
         self._ended: LeaseOutcome | None = None
 
     def __repr__(self) -> str:
@@ -254,10 +273,18 @@ class _Held:
             raise ConnectorKeyAbsentError(NO_KEY)
         return self._key.reveal()
 
+    def user(self) -> str:
+        if self._failure is not None:
+            raise self._failure
+        if self._key is None or not self._user:
+            # A slot holding one key keeps no user, and `close` forgets the user with the key.
+            raise ConnectorKeyAbsentError(NO_KEY)
+        return self._user
+
     def close(self, now: datetime) -> LeaseOutcome:
         if self._ended is not None:
             return self._ended
-        reader, self._reader, self._key = self._reader, None, None
+        reader, self._reader, self._key, self._user = self._reader, None, None, ""
         if reader is None:
             self._ended = LeaseOutcome.NONE
             return self._ended
@@ -339,7 +366,16 @@ class WorkerConnectorKeys:
         if not isinstance(value, str) or not value.strip():
             absent_key = ConnectorKeyAbsentError(NO_KEY)
             return _Held(failure=absent_key, reader=reader, expires_at=expires_at)
-        return _Held(failure=None, reader=reader, expires_at=expires_at, key=SealedSecret(value))
+        # A database user's slot keeps the user beside the password (M11.6.1); every other slot
+        # keeps none, and `user` then says so rather than handing over an empty name.
+        named = fields.get(USER_FIELD)
+        return _Held(
+            failure=None,
+            reader=reader,
+            expires_at=expires_at,
+            key=SealedSecret(value),
+            user=named.strip() if isinstance(named, str) else "",
+        )
 
 
 def worker_connector_keys(address: str, token: str) -> WorkerConnectorKeys:
@@ -595,6 +631,17 @@ async def _read_under(
         key = lease.key()
     except SecretsUnavailableError as unavailable:
         return finish(SyncOutcome.FAILED, key_detail(unavailable))
+    if isinstance(reading, ViewReading):
+        # A database's views: one bounded read per entity, as the user the slot keeps. See
+        # `brain.connectors.declaration.A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+        try:
+            login = DatabaseLogin(lease.user(), SealedSecret(key))
+        except SecretsUnavailableError as unavailable:
+            return finish(SyncOutcome.FAILED, key_detail(unavailable))
+        return await _read_views(
+            live, one, reading, login, finish=finish, sessions=sessions, resolver=resolver,
+            clock=clock, sleep=sleep,
+        )
     headers = call_headers(reading, live.connection.settings, key)
     limiter = LimiterState()
 
@@ -682,6 +729,76 @@ async def _read_under(
     return finish(SyncOutcome.SYNCED, detail)
 
 
+async def _read_views(
+    live: LiveConnection,
+    one: _Reading,
+    reading: ViewReading,
+    login: DatabaseLogin,
+    *,
+    finish: Callable[..., Attempt],
+    sessions: async_sessionmaker[AsyncSession],
+    resolver: Resolver,
+    clock: Callable[[], datetime],
+    sleep: Callable[[float], Awaitable[object]],
+) -> Attempt:
+    """Each view read once, bounded, admitted by the ceiling, and its index written (M11.6.1).
+
+    The REST loop's admission, write and outcome, with one read where that loop has pages: a
+    database does not page, and a read that reached its row cap is cut short, which the next run
+    reads again from the start. Every failure leaves one of `brain.ops.connector_sync`'s constant
+    sentences and never the database's own words, which can quote the statement.
+    """
+    manifest = one.plan.manifest
+    assert manifest is not None  # SyncPlan holds this for a runnable plan
+    limiter = LimiterState()
+    for entity in reading.entities():
+        decision = check(now=clock(), limits=one.plan.limits, state=limiter)
+        while not decision.allowed:
+            if one.waited + decision.retry_after_seconds > MAX_SECONDS_WAITING_IN_A_RUN:
+                return finish(
+                    SyncOutcome.QUOTA,
+                    OWN_SHARE_SPENT,
+                    retry_after_seconds=decision.retry_after_seconds,
+                )
+            one.waited += decision.retry_after_seconds
+            await sleep(decision.retry_after_seconds)
+            decision = check(now=clock(), limits=one.plan.limits, state=limiter)
+        limiter = limiter.record(clock(), one.plan.limits)
+        read_at = clock()
+        try:
+            page = reading.read(
+                FetchRequest(entity=entity),
+                settings=live.connection.settings,
+                login=login,
+                resolver=resolver,
+                fetched_at=read_at.isoformat(),
+            )
+        except UnsafeAddressError:
+            return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+        except Exception:
+            # Broad and typeless, for the REST loop's reason: a refusal can quote the settings.
+            return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+        if page.call is CallOutcome.QUOTA:
+            # A database has no allowance to refuse; only an application's own answer can say so.
+            return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
+        if page.call in (CallOutcome.REJECTED, CallOutcome.UNAVAILABLE):
+            return finish(SyncOutcome.FAILED, database_failure_detail(page.call), call=page.call)
+        try:
+            rows = [] if page.rows is None else [r.model_dump() for r in page.rows.records]
+            kept: list[tuple[ProjectedRecord, Mapping[str, StoredValue]]] = []
+            for row in rows:
+                projected = reading.projected(entity, row, seen_at=read_at)
+                if projected is not None:
+                    kept.append((projected, kept_fields(projected, manifest)))
+        except Exception:
+            return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+        await _write_page(sessions, kept)
+        one.records += len(kept)
+        one.cut_short = one.cut_short or page.call is CallOutcome.TRUNCATED
+    detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
+    return finish(SyncOutcome.SYNCED, detail)
+
+
 async def sync_on(
     *,
     sessions: async_sessionmaker[AsyncSession],
@@ -691,7 +808,7 @@ async def sync_on(
     resolver: Resolver,
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
-    readings: Mapping[str, SourceReading] = READINGS,
+    readings: Mapping[str, SourceReading | ViewReading] = READINGS,
 ) -> SyncRun:
     """Every live connection that may be read and is due, read once, and each attempt recorded."""
     async with sessions() as session, session.begin():

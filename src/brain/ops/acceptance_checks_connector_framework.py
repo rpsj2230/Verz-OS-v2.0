@@ -64,7 +64,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qs, urlsplit
 
 from brain.connectors.contract import FetchRequest, HealthState, identity_mode_default
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import ViewReading, shipped
 from brain.connectors.federation import CONNECTOR_TIMEOUT_MS, FEDERATION_TIMEOUT_MS, FailureReason
 from brain.connectors.live_read import (
     LIVE_READ_BUDGET_MS,
@@ -600,6 +600,8 @@ async def a_source_is_read_by_its_declaration_and_its_key_is_in_no_table(
     plan = plan_for(connected.connection, last=None, now=h.now)
     if plan.refused or not plan.due or plan.reading is None:
         raise CheckFailedError("the worker's plan would not read a source connected as declared")
+    if isinstance(plan.reading, ViewReading):
+        raise CheckFailedError("the source this check reads is not read over HTTP")
     answered = _Answering(_listed)
     read = await attempt(
         connected,
@@ -667,6 +669,8 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 
     rig = _rig(h)
     reading = READINGS[SOURCE]
+    if isinstance(reading, ViewReading):
+        raise CheckFailedError("the source this check reads is not read over HTTP")
     for entity in reading.entities():
         try:
             reading.operation(entity, settings=rig.settings, resolver=_Inside())
