@@ -252,8 +252,9 @@ ONE_HOP_IS_WHAT_THE_ANSWER_LANE_CAN_AFFORD = (
 
 #: Why this connector runs against no ceiling at all rather than the recorded figure.
 A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING = (
-    "tests/fixtures/cassettes/ records 10,000 calls a day per app per account, and "
-    "brain.ops.limits does not carry that figure. The console, the admission ladder and "
+    "The ceiling this connector runs against is the row brain.ops.limits keeps under its name, "
+    "recorded on 2026-09-30 from HubSpot's documented figure; until then it had none. The "
+    "console, the admission ladder and "
     "throttle.limits_for all read brain.ops.limits, so a number restated here would be a "
     "second answer sitting beside three verified ones and looking exactly like them. This "
     "connector therefore names the ceiling it would run against and reads it rather than "
@@ -261,7 +262,7 @@ A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING = (
     "row. Refusing is the intended behaviour: brain.ops.limits returns nothing for an "
     "unknown source precisely so that nobody runs one against no limit at all. Naming the "
     "ceiling rather than leaving it empty is deliberate too, because it makes adding the "
-    "verified row the only edit anybody has to make."
+    "verified row the only edit anybody has to make, and it was."
 )
 
 #: Why an unreachable CRM is never reported as an empty one.
@@ -379,6 +380,12 @@ CURSOR_PARAMETER: Final = "after"
 
 #: The parameter that decides whether a record comes back with anything on it at all.
 PROPERTIES_PARAMETER: Final = "properties"
+
+#: The path parameter a one-record read names its record by.
+RECORD_ID_PARAMETER: Final = "recordId"
+
+#: What a HubSpot CRM record id is: digits, as HubSpot issues them.
+RECORD_ID: Final = re.compile(r"^[0-9]{1,20}$")
 
 #: HubSpot's list endpoints refuse a page larger than this. Refused rather than clamped: a
 #: silently clamped page is an under-count that reads as a complete answer, which is the same
@@ -653,10 +660,26 @@ _LIST_PARAMETERS: Final[tuple[Mapping[str, Any], ...]] = (
 )
 
 
+def _one_record(name: str, item: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The GET that reads one CRM object by its id, answering with the object itself."""
+    return {
+        "get": {
+            "operationId": name,
+            "parameters": [
+                {"name": RECORD_ID_PARAMETER, "in": "path", "required": True},
+                {"name": PROPERTIES_PARAMETER, "in": "query", "required": False},
+            ],
+            "responses": {"200": {"content": {"application/json": {"schema": item}}}},
+        }
+    }
+
+
 def spec_document() -> Mapping[str, Any]:
     """The minimum OpenAPI this connector needs, as data.
 
-    Four operations and one server, because `load_spec` refuses a document listing several
+    Seven operations and one server: the three lists the worker indexes, the three one-record
+    reads a question makes live (`A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`), and the
+    associations. One server, because `load_spec` refuses a document listing several
     and the reason carries: a document naming production and a sandbox leaves which host is
     called to list order, and only one of them was checked.
 
@@ -704,6 +727,9 @@ def spec_document() -> Mapping[str, Any]:
                     "responses": _list_response(deal),
                 }
             },
+            "/crm/v3/objects/companies/{recordId}": _one_record("getCompany", company),
+            "/crm/v3/objects/contacts/{recordId}": _one_record("getContact", contact),
+            "/crm/v3/objects/deals/{recordId}": _one_record("getDeal", deal),
             "/crm/v3/objects/{objectType}/{objectId}/associations/{toObjectType}": {
                 "get": {
                     "operationId": "getAssociations",
@@ -789,6 +815,11 @@ _MAPPINGS: Final[Mapping[str, tuple[FieldMapping, ...]]] = MappingProxyType(
         ENTITY_DEAL: DEAL_FIELDS,
         ENTITY_ASSOCIATION: ASSOCIATION_FIELDS,
     }
+)
+
+#: The one-record read of each entity a question reads live.
+_ONE_RECORD_OPERATIONS: Final[Mapping[str, str]] = MappingProxyType(
+    {ENTITY_CLIENT: "getCompany", ENTITY_CONTACT: "getContact", ENTITY_DEAL: "getDeal"}
 )
 
 _OPERATIONS: Final[Mapping[str, str]] = MappingProxyType(
@@ -880,6 +911,24 @@ def operation_for(entity: str, *, resolver: Resolver) -> RestOperation:
         operation=operation_id,
         entity=entity,
         fields=_MAPPINGS[entity],
+    )
+    return load_hubspot_spec(resolver=resolver).bind(transport)
+
+
+def one_record_operation(entity: str, *, resolver: Resolver) -> RestOperation:
+    """The bound one-record read for an entity a question reads live (M11.9.2).
+
+    HubSpot's list answers a page and cannot be narrowed to one id, so a record read while
+    somebody waits is read by its own GET, with the same mapping the list is read with: the index
+    and the live read understand one record the same way, and only the address differs. See
+    `brain.connectors.declaration.A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+    """
+    operation_id = _ONE_RECORD_OPERATIONS.get(entity)
+    if operation_id is None:
+        msg = f"this connector reads {sorted(_ONE_RECORD_OPERATIONS)} live, not {entity!r}"
+        raise HubSpotError(msg)
+    transport = RestTransport(
+        spec_ref=SPEC_REF, operation=operation_id, entity=entity, fields=_MAPPINGS[entity]
     )
     return load_hubspot_spec(resolver=resolver).bind(transport)
 
@@ -1521,8 +1570,8 @@ def hubspot_manifest(
     and the whole of `A_WRITE_GRANT_NAMES_SOMEBODY`. A connector that could move a deal to
     closed-won is a different connector, approved by somebody named, and this is not it.
 
-    The ceiling is named and is not verified yet, so `throttle.limits_for` refuses this
-    manifest today. That is the intended behaviour: see
+    The ceiling is named, and `brain.ops.limits` holds HubSpot's documented figure under that
+    name, so `throttle.limits_for` sizes this manifest by it. See
     `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING`.
     """
     assert_declarations_agree()
@@ -1785,10 +1834,9 @@ class HubSpotReading:
 
     A method named after a module function calls that function, as `xero.XeroReading`'s do.
 
-    Not read on any install today, because `brain.ops.connector_sync.plan_for` stops at the
-    missing verified ceiling. It is here so the day the ceiling is recorded the source is read
-    with no other change, which is the edit `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING` says
-    should be the only one.
+    Read since 2026-09-30, when HubSpot's documented ceiling was recorded in `brain.ops.limits`:
+    that row was the only edit it needed, as `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING` said.
+    A record is read live by `HubSpotLiveLookup`, through the one-record GET.
     """
 
     def entities(self) -> tuple[str, ...]:
@@ -1843,6 +1891,48 @@ class HubSpotReading:
         self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
     ) -> ProjectedRecord | None:
         return projected_record(entity, row, last_seen_at=seen_at)
+
+
+class HubSpotLiveLookup:
+    """One company, contact or deal, read from HubSpot while somebody waits (M11.9.2).
+
+    Every value a question uses is read from the account when it is asked, the deal's amount
+    among them, which the index never holds
+    (`A_DEAL_AMOUNT_IS_A_CONTRACT_VALUE_IN_ANOTHER_VOCABULARY`). The service's credentials,
+    declared: a private app is one key for one account, and no person's own HubSpot key is held
+    for a read to run under.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return tuple(sorted(_ONE_RECORD_OPERATIONS))
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        del entity
+        return IdentityMode.SERVICE
+
+    def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
+        if entity not in _ONE_RECORD_OPERATIONS:
+            msg = f"this connector reads {sorted(_ONE_RECORD_OPERATIONS)} live, not {entity!r}"
+            raise HubSpotError(msg)
+        if not RECORD_ID.match(source_id):
+            msg = (
+                "a record id laid into HubSpot's address is digits, and this one is not; it is "
+                "refused rather than escaped"
+            )
+            raise HubSpotError(msg)
+        return MappingProxyType(
+            {
+                RECORD_ID_PARAMETER: source_id,
+                PROPERTIES_PARAMETER: ",".join(requested_properties(entity)),
+            }
+        )
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        # One fixed address for every connection; the portal is the key's, not the path's.
+        HubSpotConnection(portal_id=settings["portal_id"])
+        return one_record_operation(entity, resolver=resolver)
 
 
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
@@ -1953,6 +2043,7 @@ CONNECTOR: Final = ConnectorDeclaration(
             "HUBSPOT-200-companies-page",
             "HUBSPOT-200-contacts",
             "HUBSPOT-200-deals",
+            "HUBSPOT-200-deal",
             "HUBSPOT-200-associations",
             "HUBSPOT-429",
             "HUBSPOT-401",
@@ -1961,4 +2052,5 @@ CONNECTOR: Final = ConnectorDeclaration(
     ),
     recorded=Recorded(tested=True),
     reading=HubSpotReading(),
+    live=HubSpotLiveLookup(),
 )
