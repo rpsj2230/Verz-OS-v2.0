@@ -105,8 +105,8 @@ def test_the_hubspot_check_fails_where_the_path_is_broken(
 ) -> None:
     """Two breaks, one per half: HubSpot's records classified for nothing, which is where HubSpot
     stood before 2026-09-30, and the live lookup naming no one-record read, so no value is read
-    from HubSpot and the first question, a company's stage, is not answered. Each fails the check with its own sentence. Delete this and
-    the check can pass with either half gone."""
+    from HubSpot and the first question, a company's stage, is not answered. Each fails the check
+    with its own sentence. Delete this and the check can pass with either half gone."""
     import brain.connectors.hubspot as hubspot
     import brain.knowledge.connector_rows as connector_rows
 
