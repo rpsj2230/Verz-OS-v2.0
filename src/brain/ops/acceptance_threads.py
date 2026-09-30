@@ -30,6 +30,10 @@ if TYPE_CHECKING:
 
     from brain.chat.threads import Thread
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 190
+
 A, B = RESERVED_DEPARTMENTS
 
 #: What a check says when a person's thread held other than the exchanges asked in it.

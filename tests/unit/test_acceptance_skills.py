@@ -33,18 +33,18 @@ import pytest
 
 from brain.ops import acceptance_checks_skills as skills
 from brain.ops.acceptance import (
-    CHECK_MODULES,
     FAILED,
     NOT_RUN,
     PASSED,
     Check,
     CheckNotRunError,
+    check_modules,
     registered,
 )
 from brain.ops.acceptance_run import Harness
 from brain.tools.fetch import SKILL_SOURCE_HOSTS, FetchedBytes, github_tarball_url
 from brain.tools.skills import COMMIT_RE, SkillError
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 #: Each skill check and the leaves it proves, as the coordinator scoped them.
 LEAVES = {
@@ -163,7 +163,7 @@ def test_the_skill_checks_are_in_the_suite_and_prove_the_skill_library_s_leaves(
     """The module is one the registry imports, and each check names the leaves it was scoped to.
     Delete this and the skill checks can fall out of the run with the Install page listing four
     fewer rows, or close a leaf they do not exercise."""
-    assert "brain.ops.acceptance_checks_skills" in CHECK_MODULES
+    assert "brain.ops.acceptance_checks_skills" in check_modules()
     assert {one.name: one.leaves for one in mine()} == LEAVES
 
 
@@ -364,3 +364,16 @@ def test_the_import_check_is_not_run_when_github_is_silent_and_fails_when_its_ru
         FAILED,
         "GitHub answered and the import's own rules refused it",
     )
+
+
+def test_the_skills_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_skills") == [
+        "a_pasted_or_uploaded_skill_waits_undecided_and_unread",
+        "a_skill_is_imported_from_a_github_commit_and_from_an_address",
+        "an_edit_is_a_new_version_and_moves_no_agent_until_reassigned",
+        "categories_are_kept_and_offered_from_what_a_reader_was_shown",
+    ]
