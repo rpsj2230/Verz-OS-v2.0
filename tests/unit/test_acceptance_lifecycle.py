@@ -44,11 +44,11 @@ from sqlalchemy import text
 
 from brain.ops import acceptance_checks_lifecycle as lifecycle
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, REASON_CHARS, Check, registered
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 
-#: The module under test, by the name `CHECK_MODULES` will carry it under.
+#: The module under test, by the name `check_modules` finds it under.
 MODULE = "brain.ops.acceptance_checks_lifecycle"
 
 #: Each check and the leaf it proves, as the coordinator scoped them.
@@ -544,3 +544,16 @@ def test_an_approved_solution_nobody_verified_fails_the_solution_check(
         FAILED,
         "an approved solution did not answer as verified by the person who approved it",
     )
+
+
+def test_the_lifecycle_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_lifecycle") == [
+        "a_newer_version_supersedes_the_older_and_answers_use_the_newer",
+        "a_company_wide_request_waits_until_another_approver_approves_it",
+        "a_review_that_fell_due_opens_its_steward_s_task_until_verified",
+        "a_solution_answers_only_once_somebody_else_approves_it",
+    ]

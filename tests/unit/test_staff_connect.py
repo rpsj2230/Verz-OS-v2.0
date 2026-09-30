@@ -272,6 +272,29 @@ def test_a_test_that_stops_before_the_last_page_says_there_are_more_rather_than_
     assert "There are more" in found.told
 
 
+def test_a_connection_test_says_what_its_pages_held_and_which_lark_scope_names_departments() -> (
+    None
+):
+    """A test reads departments and people, so it says how many departments had a name and how
+    many people were placed. The owner's Lark app on 2026-09-29 held every scope the steps then
+    asked for, passed its test, and placed 123 people nowhere; a test that says "0 with a name"
+    and names the scope is where he would have seen it.
+
+    Delete this and the connection test goes back to proving the credential and nothing about
+    whether anybody will be placed in a department. The sibling is the whole test above."""
+    from tests.unit.test_staff_sync_run import NamelessDepartments
+
+    named = asyncio.run(check_connection(lark_guide(), LARK_FORM, Directory()))
+    nameless = asyncio.run(check_connection(lark_guide(), LARK_FORM, NamelessDepartments()))
+
+    assert "2 departments, 2 with a name, and 3 people; 3 placed in a department." in named.told
+    assert "contact:department.base:readonly" not in named.told
+    assert "2 departments, 0 with a name, and 3 people; 0 placed in a department." in nameless.told
+    assert "contact:department.base:readonly" in nameless.told
+    assert nameless.read is True
+    assert nameless.told.endswith(NOTHING_SAVED)
+
+
 def test_a_refused_credential_is_a_sentence_that_repeats_the_vendor_and_never_the_secret() -> None:
     """Delete this and a refused secret could come back in the refusal meant to explain it."""
     refused = Directory(token_answer=Answer(200, {"code": 10014, "msg": "app secret invalid"}))

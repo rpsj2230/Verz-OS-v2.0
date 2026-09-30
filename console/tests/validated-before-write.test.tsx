@@ -177,12 +177,6 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The connect form is inside the drawer opened from the page's Connect a source button, outside the " +
     "main landmark these cases read. tests/staff-sources-page.test.tsx opens the drawer, submits it " +
     "blank, and holds that no confirmation opens, nothing is sent and each empty box is named beside it.",
-  "src/components/ConnectLark.tsx":
-    "Its Test and Save buttons stay disabled until an App ID and an App Secret are typed, so a " +
-    "blank form cannot be sent. What is typed is judged by the API before anything reaches Lark: " +
-    "input_problems answers 422 by field for a malformed App ID, secret or Base link, which " +
-    "tests/unit/test_lark_connect.py holds with nothing sent to " +
-    "the fake Lark server, and tests/lark-connect.test.tsx drives the form.",
   "src/pages/settings/SettingsPage.tsx":
     "Each editable row's form sends one value, from a confirmation, and says under the field what it " +
     "accepts; the API judges it with setting_problem before anything is written, answering 422 with a " +

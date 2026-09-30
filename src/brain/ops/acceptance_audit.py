@@ -6,7 +6,7 @@ and a removed newest entry is detected, that a run's trace graph and payload hol
 content readable under the separate role, and that the compliance export holds no deployment
 history. This check performs every act, inside its rolled-back transaction, and reads back what the
 ledger, the audit view, the chain verifier, the trace store and the export make of them. It is a
-module of its own, named in `brain.ops.acceptance.CHECK_MODULES`, beside the checks that reach a
+module of its own, found by `brain.ops.acceptance.check_modules`, beside the checks that reach a
 model.
 
 **Every act is the product's own write, attributed as a console request attributes it.** A grant is
@@ -68,6 +68,10 @@ from brain.ops.acceptance_run import Harness
 if TYPE_CHECKING:
     from brain.audit.ledger import AuditEntry
     from brain.core.entitlement import EntitlementSet
+
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 70
 
 A, B = RESERVED_DEPARTMENTS
 
