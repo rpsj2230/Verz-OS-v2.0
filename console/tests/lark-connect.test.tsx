@@ -129,6 +129,8 @@ function step(key: string, title: string, link = ""): LarkStep {
     link,
     link_label: link === "" ? "" : `Open ${title}`,
     asks: [],
+    copy_text: "",
+    copy_label: "",
   };
 }
 
