@@ -123,7 +123,16 @@ the lane is handed; `sources_at` itself stays the connector sources the cache an
 screens key on. See
 `THE_SCOPE_STATEMENT_NAMES_EVERY_PLANE_A_READER_REACHES`.
 
+**A question may be narrowed to kinds of knowledge (M7.6.1).** `Question.kinds` reaches the passage
+search through `model_lane_for`, and a narrowed question is neither looked up in nor kept by the
+answer cache, whose key has no kind. See `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
+
 Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.5, M8.2.2
+**An answered question is kept in its asker's thread (M9.1.1).** `remembered` writes the exchange
+through `brain.chat.remember` after the lane answers, and the response names the thread in
+`THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
+
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
 """
 
 from __future__ import annotations
@@ -141,7 +150,7 @@ import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
@@ -174,7 +183,13 @@ from brain.gate.fast_lane import RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
 from brain.gate.live_records import LiveRecords
-from brain.gate.model_lane import PASSAGE_POLICY, AgentRun, DocumentSearchTool, ModelLane
+from brain.gate.model_lane import (
+    PASSAGE_POLICY,
+    AgentRun,
+    DocumentSearchTool,
+    FollowUp,
+    ModelLane,
+)
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.gate.roster import (
     AgentRoster,
@@ -188,6 +203,7 @@ from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
+from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.rows import (
     DEFAULT_ROW_LIMIT,
     MAX_ROW_LIMIT,
@@ -197,6 +213,7 @@ from brain.knowledge.rows import (
 )
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.memory.turn import Turn, recall_place, turn_of
+from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
@@ -818,6 +835,13 @@ AN_ANSWER_IS_COMPUTED_FOR_ONE_REACH_AND_CACHED_BY_NOBODY: Final = (
 )
 
 
+#: The response header naming the thread an answer was kept in.
+THREAD_HEADER: Final = "x-thread-id"
+
+#: The longest thread id a question may name: a UUID's text.
+THREAD_ID_CHARS: Final = 36
+
+
 class Question(BaseModel):
     """One question, bounded the way the cache bounds one.
 
@@ -835,6 +859,15 @@ class Question(BaseModel):
     #: The agent the person picked, by id, or None. Judged by `brain.gate.select.select_agent`
     #: against the agents this person may use, like any name; see `brain.gate.addressing`.
     agent: Annotated[str, StringConstraints(max_length=AGENT_ID_CHARS)] | None = None
+    #: The kinds of knowledge the person narrowed the question to, or none for every kind
+    #: (M7.6.1). Narrows what the passage search looks at and never whose reach it runs at. A
+    #: narrowed question is not looked up in or kept by the answer cache, whose key has no kind:
+    #: see `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
+    kinds: tuple[KnowledgeKind, ...] = Field(default=(), max_length=len(KnowledgeKind))
+    #: The thread this question continues, as the page holds its id, or None for a new one
+    #: (M9.1.1, M9.1.2). An id that is not this person's starts a new thread and says nothing
+    #: about the id: see `brain.chat.thread_store.AN_ID_THAT_IS_NOT_YOURS_STARTS_A_NEW_THREAD`.
+    thread: Annotated[str, StringConstraints(max_length=THREAD_ID_CHARS)] | None = None
 
 
 def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
@@ -1034,17 +1067,82 @@ DEFAULT_AGENT: Final = "brain"
 
 
 def model_lane_for(
-    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+    state: Any,
+    agent: AgentRecord | None,
+    registry: ToolRegistry,
+    kinds: tuple[KnowledgeKind, ...] = (),
+    follow_up: FollowUp | None = None,
 ) -> ModelLane | None:
-    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8).
+    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8),
+    searching only the kinds of knowledge the person narrowed the question to (M7.6.1), and
+    bringing what a continued thread brings (M9.2.3).
 
     The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
     read on this route yet, so it runs with none. See `brain.gate.roster`.
     """
     lane = model_lane_of(state)
-    if lane is None or agent is None:
+    if lane is None:
+        return None
+    if kinds and isinstance(lane.search, DocumentSearchTool):
+        lane = replace(lane, search=replace(lane.search, kinds=kinds))
+    if follow_up is not None:
+        lane = replace(lane, follow_up=follow_up)
+    if agent is None:
         return lane
     return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
+
+
+async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
+    """What a question continuing one of this person's threads brings, or None (M9.2.3).
+
+    None for a question naming no thread, one naming a thread that is not theirs or holds no
+    earlier question, and on a process with no database. The passages cited are the ones
+    `brain.chat.threads.continuation_context` still admits at this reach now, and the earlier
+    questions are the person's own words. A follow-up is never looked up in or kept by the answer
+    cache, whose key knows nothing of the thread; see
+    `A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH`.
+    """
+    from brain.chat.remember import threads_of
+    from brain.chat.threads import continuation_context
+    from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, recaller
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.tables.chat import MessageRole
+
+    store = threads_of(state)
+    if not ask.thread or store is None:
+        return None
+    thread = await store.thread(asking.principal.id, ask.thread)
+    if thread is None:
+        return None
+    earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
+    if not earlier:
+        return None
+    cited = tuple(
+        one.record_id
+        for one in continuation_context(thread, asking.reach, now=asking.now)
+        if one.entity == KNOWLEDGE_ENTITY
+    )
+    sessions = getattr(state, "db_sessions", None)
+    recall = None if sessions is None else recaller(SessionRowSource(sessions))
+    return FollowUp(earlier=earlier, cited=cited, recall=recall)
+
+
+#: Why a follow-up skips the answer cache both ways.
+A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH: Final = (
+    "A follow-up is answered from the thread's earlier questions and the passages it cited as "
+    "well as its own words, and the answer cache keys a question by its words alone. So a "
+    "follow-up served from the cache would be the answer to the words asked fresh, and one kept "
+    "there would answer the next person asking those words with another thread's context."
+)
+
+
+#: Why a question narrowed to kinds of knowledge skips the answer cache both ways.
+A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE: Final = (
+    "The answer cache keys a question by its words, the reach and the policies, and not by the "
+    "kinds of knowledge it was narrowed to. A question narrowed to FAQs served from the cache "
+    "entry of the same words asked of everything would be answered from documents the person "
+    "excluded, and the reverse. So a narrowed question is neither looked up nor kept."
+)
 
 
 def formations_of(state: Any) -> StoredFormations | None:
@@ -1277,6 +1375,27 @@ def limit_store_of(state: Any) -> ValkeyWindowStore | None:
     return made
 
 
+def capacity_ledger_of(state: Any) -> CapacityLedger | None:
+    """The slots and queues this process counts work in, or None on a process with no cache.
+
+    `limit_store_of`'s construction: what a test installed, or the synchronous client
+    `brain.app.lifespan` opens for the answer cache, wrapped once and kept on the state so its
+    health counters span requests. The same Valkey under its own key prefix, so no second
+    connection is opened and no key collides. None where no cache is configured, which every
+    caller answers with what it counted itself: see
+    `brain.ops.capacity_ledger.AN_UNANSWERED_LEDGER_DECIDES_ON_WHAT_THE_CALLER_COUNTED`.
+    """
+    found = getattr(state, "capacity_ledger", None)
+    if isinstance(found, CapacityLedger):
+        return found
+    client = getattr(state, "answer_client", None)
+    if client is None:
+        return None
+    made = make_ledger(client)
+    state.capacity_ledger = made
+    return made
+
+
 async def windows_say(
     store: ValkeyWindowStore | None,
     *,
@@ -1425,9 +1544,14 @@ async def answered_for(
     policies = {**field_policies(registry), **tables.policies}
     # A referred question is looked up in no store and stored in none: the step is entered and
     # misses, as it does on a process with none, so the request row reads as any other's.
+    # What a question continuing one of this person's threads brings (M9.2.3), read at their
+    # own reach before an agent narrows it, because what they may still read is theirs to judge.
+    follow_up = (
+        None if referral is not None else await follow_up_for(request.app.state, asking, ask)
+    )
     caching = (
         None
-        if referral is not None
+        if referral is not None or ask.kinds or follow_up is not None
         else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
     )
 
@@ -1473,7 +1597,11 @@ async def answered_for(
         # Only a request the front half routed to a tier may reach a model, so no model is
         # called before ROUTE and PROJECT: a fast-lane question answers or abstains. The model
         # is shown what the asker said about themselves and may still recall (M16.6.3).
-        model = model_lane_for(request.app.state, agent, registry) if front.calls_a_model else None
+        model = (
+            model_lane_for(request.app.state, agent, registry, ask.kinds, follow_up)
+            if front.calls_a_model
+            else None
+        )
         if referral is None:
             model = with_hints(
                 request.app.state,
@@ -1559,6 +1687,40 @@ async def answered_for(
     return answered
 
 
+async def remembered(
+    request: Request, asking: Answering, ask: Question, answered: Answered
+) -> str | None:
+    """Keep this exchange in the asker's thread, and say which thread (M9.1.1).
+
+    `brain.chat.remember.remember` over this process's store, with the policies the answer was
+    redacted under, which are what a stored answer's references are re-checked against. A
+    failure to keep it is logged and the answer still goes out: the person asked a question, and
+    losing its transcript is not a reason to withhold the answer.
+    """
+    from brain.chat.remember import remember, threads_of
+
+    registry = getattr(request.app.state, "tools", None)
+    try:
+        tables = await classified_lane_of(request.app.state)
+        policies = {
+            **(field_policies(registry) if isinstance(registry, ToolRegistry) else {}),
+            **tables.policies,
+        }
+        return await remember(
+            threads_of(request.app.state),
+            principal_id=asking.principal.id,
+            thread_id=ask.thread,
+            channel=asking.channel,
+            question=ask.question,
+            answered=answered,
+            policies=policies,
+            now=asking.now,
+        )
+    except Exception as exc:
+        log.warning("thread.not_kept", error=type(exc).__name__)
+        return None
+
+
 @router.post("/answer", responses=LIMITED_RESPONSES)
 async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Question) -> Response:
     """One question, answered as a stream of events, at this caller's reach.
@@ -1587,10 +1749,14 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     outcome = await answered_for(request, recorder, Answering.of(asked), ask)
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
+    thread = await remembered(request, Answering.of(asked), ask, outcome)
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
         headers={
+            # The thread the exchange was kept in, which the page continues by (M9.1.1). Empty
+            # when nothing was kept: a referred question, or a process with no database.
+            THREAD_HEADER: thread or "",
             # A permission requirement rather than a performance note. See the constant above.
             "Cache-Control": "no-store",
             # nginx buffers a proxied response by default, which turns a stream into one

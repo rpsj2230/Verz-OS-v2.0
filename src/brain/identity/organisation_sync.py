@@ -28,21 +28,38 @@ mention one.
 carries is never created: both are named, in `contested` and `unregistered`, and skipped. The sync
 reads where people sit; which teams exist is decided in the console.
 
-**Nothing here is scheduled.** No job applies a roster on any install, which is true of the whole
-staff sync: `dry_run` is read by the Staff sources screen and nothing applies it. This plan and its
-store method are the sync's half of M27.7.4, proved against PostgreSQL, and a caller that runs them
-on a schedule is the same missing caller the rest of the roster is waiting for.
+**A source's spelling is matched to a registered department before anything is compared.** A
+directory says `Web Development` and the install's department is the slug `web_development`, so
+`slug_of` carries `brain.identity.starter_pack_sync.registered_by_name`'s matching, by slug or name
+ignoring case and spacing, into the team paths and the leads. Until 2026-09-29 the plan compared the
+source's own spelling with registered slugs, so every department with a space in its name was
+`unregistered` and nobody was placed in any of its teams.
 
-Task ids: M27.7.4
+**Applied by every scheduled run since 2026-09-29.** This said "nothing here is scheduled" until
+the staff sync had run on the owner's install and placed nobody on the Departments and teams screen.
+`brain.ops.source_organisation.apply_organisation` is the run's call, after the roster, the heads'
+reach and the Starter packs, in a transaction of its own.
+
+**The departments themselves are founded by a person, from what the source names.**
+`departments_to_found` turns the names a staff source used into the departments a person is asked to
+create, each with the slug it would get, and leaves out every name a registered department already
+answers to. The sync never founds one: which departments exist decides which scopes exist, and a
+department is the unit every grant is bounded by. See
+`A_DEPARTMENT_IS_FOUNDED_BY_A_PERSON_FROM_WHAT_THE_SOURCE_NAMES`.
+
+Task ids: M27.7.4, M1.6.5, M1.6.12
 """
 
 from __future__ import annotations
 
+import hashlib
+import re
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Final
 
+from brain.core.department import DepartmentError, create_department
 from brain.identity.staff_source import Asserts, Roster, leads_from, teams_from
 from brain.tables.organisation import SYNC_ACTOR_PREFIX
 
@@ -57,9 +74,47 @@ THE_SYNC_ENDS_ONLY_THE_PLACEMENTS_IT_MADE: Final = (
 )
 
 
+#: Why the departments a source names are founded from the console and not by the sync.
+A_DEPARTMENT_IS_FOUNDED_BY_A_PERSON_FROM_WHAT_THE_SOURCE_NAMES: Final = (
+    "A department is the unit every grant, pack and document is bounded by, and founding one "
+    "writes the scope it is defined by. A scheduled read that founded whatever a directory named "
+    "would let a renamed Lark department become a second department overnight, with its own scope "
+    "and nobody in it. So the names a source uses are offered to an administrator as one confirmed "
+    "act, each with the slug it would get, and only the ones no registered department already "
+    "answers to; the sync then places people in the ones that exist."
+)
+
+#: The longest slug a department founded from a source's name is given, well inside the sixty
+#: `brain.core.department.Department` allows, so the scopes it starts with fit too.
+SLUG_CHARS: Final = 40
+
+
+def department_key(name: str) -> str:
+    """A department's spelling folded for matching: case and runs of spacing ignored.
+
+    The one folding `brain.identity.starter_pack_sync.registered_by_name` and this module both
+    use, declared here because `brain.identity.lifecycle` imports this module and not that one.
+    """
+    return " ".join(name.split()).casefold()
+
+
 def sync_actor(source: str) -> str:
     """The actor a placement this source's sync made carries. See `SYNC_ACTOR_PREFIX`."""
     return f"{SYNC_ACTOR_PREFIX}{source}"
+
+
+#: Why a run's trace id is written from the clock without its punctuation.
+A_RUN_S_TRACE_IS_ONE_THE_LEDGER_ACCEPTS: Final = (
+    "Every audited write a scheduled run makes carries its trace id into obs.audit_entry, whose "
+    "trace_id is letters, digits, dot, dash and underscore. An ISO time has a colon and a plus "
+    "sign, so a trace built from one is refused by the ledger's check and the whole write with "
+    "it; the run's broad catch then logs a class name and every placement is silently lost."
+)
+
+
+def sync_trace(step: str, now: datetime) -> str:
+    """The trace id a scheduled run's `step` writes under at `now`, in the ledger's own shape."""
+    return f"{step}-{now.astimezone(UTC):%Y%m%dT%H%M%SZ}"
 
 
 @dataclass(frozen=True)
@@ -131,6 +186,7 @@ def organisation_plan(
     memberships: Iterable[HeldMembership] = (),
     leads: Iterable[HeldLead] = (),
     last_applied: datetime | None,
+    slug_of: Mapping[str, str] | None = None,
 ) -> OrganisationPlan:
     """The placements this roster supports, against what the install holds (M27.7.4).
 
@@ -138,7 +194,13 @@ def organisation_plan(
     takes it; an address with no principal is skipped, because provisioning is not this module's.
     `teams` and `departments` are the registered team paths and department slugs.
     `last_applied` is when a sync from this source was last applied, `None` for never.
+    `slug_of` is `registered_by_name`'s answer, a folded spelling to the registered slug; a
+    department it does not answer for is compared as the source spelled it.
     """
+
+    def slug(department: str) -> str:
+        return (slug_of or {}).get(department_key(department), department)
+
     actor = sync_actor(roster.source)
     held_memberships = tuple(memberships)
     held_leads = tuple(leads)
@@ -183,7 +245,9 @@ def organisation_plan(
         principal = known.get(address)
         if principal is None:
             continue
-        for path in paths:
+        for named in paths:
+            department, _, team = named.partition(".")
+            path = f"{slug(department)}.{team}"
             if path in teams:
                 asserted_teams.add((path, principal))
             else:
@@ -204,7 +268,8 @@ def organisation_plan(
 
     contested: list[str] = []
     claimed: dict[str, str] = {}
-    for department, addresses in leads_from(roster).items():
+    for named, addresses in leads_from(roster).items():
+        department = slug(named)
         principals = sorted({known[one] for one in addresses if one in known})
         if not principals:
             continue
@@ -250,3 +315,84 @@ def organisation_plan(
         withheld=tuple(withheld),
         refusals=(),
     )
+
+
+# ------------------------------------------------------------- the departments a source names
+@dataclass(frozen=True)
+class DepartmentToFound:
+    """One department a source names that the install has not founded, and the slug it would get."""
+
+    name: str
+    slug: str
+
+
+@dataclass(frozen=True)
+class DepartmentsNamed:
+    """What founding the departments a source names would do. Names, never a count of people."""
+
+    to_found: tuple[DepartmentToFound, ...]
+    #: The source's spellings a registered department already answers to, by slug or name.
+    registered: tuple[str, ...]
+
+
+def _usable(slug: str, name: str) -> bool:
+    try:
+        create_department("company", slug, name)
+    except (DepartmentError, ValueError):
+        return False
+    return True
+
+
+def department_slug(name: str) -> str:
+    """The slug a department founded from a source's name is given.
+
+    Its letters and digits, lower case, words joined by underscores and cut at `SLUG_CHARS`, so
+    `Web Development` is `web_development`. A name with no ASCII letter in it, which is every
+    department of a company whose directory is in Chinese, is `department_` and eight characters
+    of its digest: a slug is an identifier in every grant, and inventing a transliteration would be
+    a guess at a name. A slug the department type refuses is given the digest form too.
+    """
+    words = re.findall(r"[a-z0-9]+", name.casefold())
+    slug = "_".join(words)[:SLUG_CHARS].strip("_")
+    if slug and not slug[0].isalpha():
+        slug = f"department_{slug}"[:SLUG_CHARS].strip("_")
+    if len(slug) < 2 or not _usable(slug, name.strip() or slug):
+        digest = hashlib.sha256(department_key(name).encode()).hexdigest()[:8]
+        slug = f"department_{digest}"
+    return slug
+
+
+def departments_to_found(
+    names: Iterable[str], registered: Mapping[str, str], answers: Mapping[str, str]
+) -> DepartmentsNamed:
+    """The departments to offer for founding from the names a source used.
+
+    `registered` is every live department's slug to its name, and `answers` is
+    `registered_by_name(registered)`. A name a registered department answers to is left out and
+    listed, so a second press founds nothing; two spellings of one name are one department; and a
+    slug already taken, by a registered department or by an earlier name here, is numbered.
+    """
+    taken = set(registered)
+    seen: set[str] = set()
+    to_found: list[DepartmentToFound] = []
+    already: list[str] = []
+    # By the folded spelling, then the spelling itself, so which of two spellings of one name is
+    # shown does not depend on the order a database collation returned them in.
+    for raw in sorted(names, key=lambda one: (department_key(one), " ".join(one.split()))):
+        name = " ".join(raw.split())
+        key = department_key(name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        if key in answers:
+            already.append(name)
+            continue
+        base = department_slug(name)
+        slug, at = base, 2
+        while slug in taken:
+            suffix = f"_{at}"
+            slug = f"{base[: SLUG_CHARS - len(suffix)].rstrip('_')}{suffix}"
+            at += 1
+        taken.add(slug)
+        to_found.append(DepartmentToFound(name=name, slug=slug))
+    return DepartmentsNamed(to_found=tuple(to_found), registered=tuple(already))

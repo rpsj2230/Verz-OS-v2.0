@@ -50,6 +50,7 @@ from typing import Final
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import Setting, SettingRefusedError, shipped
 from brain.connectors.manifest import ConnectorManifest
+from brain.ops.connect_steps import GuideStep
 from brain.ops.credentials import connector_key_slot
 from brain.ops.secrets import SecretRef, VaultRole
 
@@ -87,6 +88,8 @@ class Connectable:
     credential_label: str
     credential_hint: str
     build: Callable[[Mapping[str, str], SecretRef], ConnectorManifest]
+    #: The screens that take an administrator from nothing to this form, the form last.
+    guide: tuple[GuideStep, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,8 @@ class NotConnectable:
     name: str
     label: str
     why: str
+    #: The screens that prepare it at the vendor and hand it to the server, where they are known.
+    guide: tuple[GuideStep, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -122,6 +127,7 @@ CONNECTABLE: Final[Mapping[str, Connectable]] = MappingProxyType(
             credential_label=one.console.credential_label,
             credential_hint=one.console.credential_hint,
             build=one.console.build,
+            guide=one.guide,
         )
         for name, one in shipped().items()
         if one.console is not None
@@ -131,7 +137,9 @@ CONNECTABLE: Final[Mapping[str, Connectable]] = MappingProxyType(
 #: Every source this build has a connector for and the console cannot connect, and why.
 NOT_FROM_THE_CONSOLE: Final[Mapping[str, NotConnectable]] = MappingProxyType(
     {
-        name: NotConnectable(name=name, label=one.label, why=one.not_from_the_console)
+        name: NotConnectable(
+            name=name, label=one.label, why=one.not_from_the_console, guide=one.guide
+        )
         for name, one in shipped().items()
         if one.console is None
     }

@@ -41,15 +41,20 @@ from brain.identity.staff_adapters import (
     LarkSource,
     LdapSource,
     MicrosoftEntraSource,
+    ReadReport,
     RosterUnavailableError,
     SpreadsheetSource,
+    Unplaced,
     choices_and_adapters_that_do_not_match,
+    employment_type_from,
     source_strings_the_trust_table_does_not_know,
 )
 from brain.identity.staff_source import (
     DEFAULT_TRUST,
     STAFF_SOURCE_SETTING,
     Asserts,
+    EmploymentStatus,
+    EmploymentType,
     GroupRule,
     Roster,
     StaffRecord,
@@ -667,8 +672,10 @@ def test_somebody_in_two_departments_is_left_unplaced_and_said_so_rather_than_gu
     choosing how far somebody can see. There is one department on a roster record and Lark
     genuinely allows several, so the honest answer is that this reading cannot place them.
 
-    Reported in the dropped list, because a person who is unplaced and does not know it looks
-    exactly like a person whose department was never filled in.
+    Counted in the report, because a person who is unplaced and does not know it looks exactly
+    like a person whose department was never filled in. Not in `dropped`, which is the entries
+    that did not become a person: Jean did, and counting her as skipped told a connection test
+    that one entry could not be read as a person at all.
 
     Delete this and whichever department happens to sort first decides somebody's reach."""
     reading = LarkSource(
@@ -677,7 +684,9 @@ def test_somebody_in_two_departments_is_left_unplaced_and_said_so_rather_than_gu
     ).reading()
 
     assert person_at(reading.roster, "jean@example.com").department == ""
-    assert any("no one department bounds them" in one for one in reading.dropped), reading.dropped
+    assert reading.report.unplaced == {Unplaced.SEVERAL_DEPARTMENTS: 1}
+    assert reading.report.skipped == 0
+    assert reading.dropped == ()
 
 
 def test_the_lark_identifier_is_the_union_id_and_not_the_per_application_open_id() -> None:
@@ -997,7 +1006,7 @@ def test_no_adapter_here_reaches_a_vendor_library_or_a_socket() -> None:
 
     Delete this and the first adapter that needs one more field imports a client to fetch it,
     and the module stops being testable without a tenant."""
-    allowed = {"__future__", "re", "collections", "dataclasses", "typing", "brain"}
+    allowed = {"__future__", "enum", "re", "collections", "dataclasses", "typing", "brain"}
     source = Path(staff_adapters.__file__).read_text(encoding="utf-8")
 
     imported: set[str] = set()
@@ -1192,3 +1201,293 @@ def test_a_source_string_no_install_can_choose_is_offered_by_nothing() -> None:
 
     with pytest.raises(StaffSourceError):
         selected_source({STAFF_SOURCE_SETTING: "google-workspace"})
+
+
+# ------------------------------------------------------------------ what each reading reports
+def test_every_source_reports_what_it_read_and_why_anybody_is_in_no_department() -> None:
+    """One count for each reason, from each source's recorded payload, and the counts agree with
+    the roster: the placed are exactly the people `departments_from` keeps.
+
+    Delete this and a source that places nobody is reported like one that placed everybody."""
+    expected = {
+        # A sheet's department column is carried and not trusted, so its three are not placed.
+        SPREADSHEET: (4, 0, {Unplaced.NOT_TRUSTED: 4}),
+        GOOGLE_SHEET: (3, 0, {Unplaced.NOT_TRUSTED: 3}),
+        GOOGLE_WORKSPACE: (3, 3, {}),
+        MICROSOFT_ENTRA: (3, 3, {}),
+        LARK: (3, 3, {}),
+        LDAP: (3, 3, {}),
+    }
+    for source, adapter in every_adapter().items():
+        reading = adapter.reading()  # type: ignore[attr-defined]
+        report = reading.report
+        assert report.people == len(reading.roster.people), source
+        assert report.placed == len(departments_from(reading.roster)), source
+        assert report.skipped == len(reading.dropped), source
+        assert (report.people, report.placed, dict(report.unplaced)) == expected[source]
+    # Somebody at the top of the organisation sits in no organisational unit below it.
+    at_the_top = {**recorded.GOOGLE_WORKSPACE_USERS_PAGE_TWO["users"][0], "orgUnitPath": "/"}
+    top = GoogleWorkspaceSource(pages=[{"users": [at_the_top]}]).reading().report
+    assert (top.placed, top.unplaced) == (0, {Unplaced.NO_DEPARTMENT: 1})
+
+
+def test_only_lark_counts_the_departments_it_walked_and_how_many_had_a_name() -> None:
+    """Lark is the one source whose people carry a department identifier a second walk names, so
+    it alone reports that walk. Delete this and a nameless walk has nowhere to show up."""
+    for source, adapter in every_adapter().items():
+        report = adapter.reading().report  # type: ignore[attr-defined]
+        if source == LARK:
+            assert (report.departments, report.named) == (2, 2)
+        else:
+            assert (report.departments, report.named) == (None, None), source
+
+
+def test_a_lark_person_is_unplaced_for_each_reason_the_walk_can_find() -> None:
+    """A department read with no name, one the walk never read, the company's root alone, and
+    two departments at once are four different fixes at the source, so each is counted apart.
+
+    Delete this and the reasons collapse into one that tells nobody what to change."""
+    person = recorded.LARK_USERS_PAGE_ONE["data"]["items"][0]
+
+    def one(address: str, ids: list[str]) -> dict[str, object]:
+        return {
+            **person,
+            "union_id": f"on_{address}",
+            "enterprise_email": f"{address}@example.com",
+            "department_ids": ids,
+            "leader_user_id": "",
+        }
+
+    page = {
+        "code": 0,
+        "data": {
+            "has_more": False,
+            "items": [
+                one("named", ["od-engineering"]),
+                one("nameless", ["od-nameless"]),
+                one("unread", ["od-outside-the-range"]),
+                one("root", ["0"]),
+                one("nowhere", []),
+                one("twice", ["od-engineering", "od-finance"]),
+            ],
+        },
+    }
+    reading = LarkSource(
+        pages=[page], department_names={**recorded.LARK_DEPARTMENT_NAMES, "od-nameless": ""}
+    ).reading()
+
+    assert person_at(reading.roster, "named@example.com").department == "engineering"
+    report = reading.report
+    assert (report.departments, report.named, report.placed) == (3, 2, 1)
+    assert report.unplaced == {
+        Unplaced.UNNAMED_DEPARTMENT: 1,
+        Unplaced.UNREAD_DEPARTMENT: 1,
+        Unplaced.NO_DEPARTMENT: 2,
+        Unplaced.SEVERAL_DEPARTMENTS: 1,
+    }
+    assert report.advice == (staff_adapters.LARK_UNNAMED_ADVICE, staff_adapters.LARK_UNREAD_ADVICE)
+
+
+def test_a_report_names_nobody_and_says_its_counts_in_words() -> None:
+    """The report is shown on the run, the screen and the job history, so it may carry counts and
+    never a name, an address or an identifier. Delete this and a report is one f-string away from
+    listing the people it could not place."""
+    reading = LarkSource(
+        pages=[recorded.LARK_USERS_PAGE_ONE, recorded.LARK_USERS_PAGE_TWO],
+        department_names={"od-engineering": "", "od-finance": ""},
+    ).reading()
+    said = reading.report.words()
+
+    assert said.startswith("Read 2 departments, 0 with a name, and 3 people; 0 placed")
+    assert "Not placed: 3 in a department that came back with no name." in said
+    assert "contact:department.base:readonly" in said
+    for page in (recorded.LARK_USERS_PAGE_ONE, recorded.LARK_USERS_PAGE_TWO):
+        for person in page["data"]["items"]:
+            for value in (person["name"], person["enterprise_email"], person["union_id"]):
+                assert value not in said
+    for identifier in ("od-engineering", "od-finance"):
+        assert identifier not in said
+
+
+def test_a_report_whose_counts_do_not_add_up_is_refused() -> None:
+    """The placed and the unplaced are everybody read, and a reason counted zero times is not a
+    reason. Delete this and a report can say 123 read and 0 placed with no reason at all, which is
+    the report this exists to replace. The sibling below proves a true report is accepted."""
+    with pytest.raises(ValueError, match="add up"):
+        ReadReport(people=3, placed=0)
+    with pytest.raises(ValueError, match="no reason is zero"):
+        ReadReport(people=1, placed=1, unplaced={Unplaced.NO_DEPARTMENT: 0})
+    with pytest.raises(ValueError, match="no count is negative"):
+        ReadReport(people=0, placed=0, skipped=-1)
+    with pytest.raises(ValueError, match="how many of those had a name"):
+        ReadReport(people=0, placed=0, departments=2, named=3)
+    with pytest.raises(ValueError, match="how many of those had a name"):
+        ReadReport(people=0, placed=0, departments=2)
+
+
+def test_a_true_report_is_accepted_and_counts_one_of_each_in_the_singular() -> None:
+    """The positive sibling of the refusals above. Delete this and a report that refuses every
+    count would pass them."""
+    report = ReadReport(
+        people=2,
+        placed=1,
+        skipped=1,
+        unplaced={Unplaced.NO_DEPARTMENT: 1},
+        departments=1,
+        named=1,
+    )
+    assert report.words() == (
+        "Read 1 department, 1 with a name, and 2 people; 1 placed in a department. "
+        "Skipped 1 entry that was not a person. Not placed: 1 with no department."
+    )
+
+
+# ------------------------------------------------------- where somebody stands, and their type
+def test_lark_s_four_flags_are_four_standings_and_its_employee_type_a_type() -> None:
+    """Lark's flags, from the user object's documentation, read as where somebody stands, and its
+    numbered employee types as types, a company's own number as `OTHER`. Delete this and a
+    suspended person reads as having left, or an outsourced one as a regular employee, which is the
+    difference the owner asked the People list to show and the gate to act on."""
+    base = recorded.LARK_USERS_PAGE_ONE["data"]["items"][0]
+
+    def one(address: str, status: dict[str, bool], kind: object = None) -> dict[str, object]:
+        person: dict[str, object] = {
+            **base,
+            "union_id": f"on_{address}",
+            "enterprise_email": f"{address}@example.com",
+            "leader_user_id": "",
+            "status": status,
+        }
+        if kind is not None:
+            person["employee_type"] = kind
+        return person
+
+    page = {
+        "code": 0,
+        "data": {
+            "has_more": False,
+            "items": [
+                one("here", {"is_activated": True}, 1),
+                one("paused", {"is_frozen": True, "is_activated": True}, 3),
+                one("gone", {"is_resigned": True, "is_frozen": True}, 2),
+                one("quit", {"is_exited": True}, 5),
+                one("never", {"is_activated": False}, 4),
+                one("unjoined", {"is_activated": True, "is_unjoin": True}, 9),
+            ],
+        },
+    }
+    roster = LarkSource(pages=[page], department_names=recorded.LARK_DEPARTMENT_NAMES).roster()
+    found = {
+        one.work_address.split("@")[0]: (one.standing, one.employment_type, one.active)
+        for one in roster.people
+    }
+
+    assert found == {
+        "here": (EmploymentStatus.ACTIVE, EmploymentType.REGULAR, True),
+        "paused": (EmploymentStatus.SUSPENDED, EmploymentType.OUTSOURCED, False),
+        "gone": (EmploymentStatus.LEFT, EmploymentType.INTERN, False),
+        "quit": (EmploymentStatus.LEFT, EmploymentType.CONSULTANT, False),
+        "never": (EmploymentStatus.NOT_ACTIVATED, EmploymentType.LABOUR_DISPATCH, False),
+        "unjoined": (EmploymentStatus.NOT_ACTIVATED, EmploymentType.OTHER, False),
+    }
+    untyped = LarkSource(
+        pages=[recorded.LARK_USERS_PAGE_TWO], department_names=recorded.LARK_DEPARTMENT_NAMES
+    ).roster()
+    assert {one.employment_type for one in untyped.people} == {None}
+
+
+def test_every_directory_says_where_somebody_stands_and_its_free_text_type_is_read() -> None:
+    """Workspace's archived is left and suspended is suspended, with the employee type the Admin
+    console keeps as an organisation's description; Entra's disabled account is suspended, with
+    its `employeeType`; a sheet's type column is read. Delete this and only Lark's people have a
+    standing and a type, and the setting refuses nobody on the other three."""
+    workspace = GoogleWorkspaceSource(
+        pages=[
+            {
+                "users": [
+                    {
+                        "primaryEmail": "arch@example.com",
+                        "name": {"fullName": "Arch"},
+                        "archived": True,
+                        "organizations": [{"description": "Full-time"}],
+                    },
+                    {
+                        "primaryEmail": "sus@example.com",
+                        "name": {"fullName": "Sus"},
+                        "suspended": True,
+                        "organizations": [
+                            {"description": "Intern"},
+                            {"description": "Outsourced (agency)", "primary": True},
+                        ],
+                    },
+                ]
+            }
+        ]
+    ).roster()
+    entra = MicrosoftEntraSource(
+        pages=[
+            {
+                "value": [
+                    {
+                        "userPrincipalName": "off@example.com",
+                        "displayName": "Off",
+                        "accountEnabled": False,
+                        "employeeType": "Contractor",
+                    },
+                    {
+                        "userPrincipalName": "on@example.com",
+                        "displayName": "On",
+                        "accountEnabled": True,
+                        "employeeType": "Employee",
+                    },
+                ]
+            }
+        ]
+    ).roster()
+    sheet = SpreadsheetSource(
+        rows=(
+            ("Work Email", "Full Name", "Employment type", "Left?"),
+            ("ada@example.com", "Ada", "Outsourced", ""),
+            ("bo@example.com", "Bo", "Something else", "yes"),
+            ("cy@example.com", "Cy", "", ""),
+        )
+    ).roster()
+
+    def read(roster: Roster) -> dict[str, tuple[EmploymentStatus, EmploymentType | None]]:
+        return {one.work_address: (one.standing, one.employment_type) for one in roster.people}
+
+    assert read(workspace) == {
+        "arch@example.com": (EmploymentStatus.LEFT, EmploymentType.REGULAR),
+        "sus@example.com": (EmploymentStatus.SUSPENDED, EmploymentType.OUTSOURCED),
+    }
+    assert read(entra) == {
+        "off@example.com": (EmploymentStatus.SUSPENDED, EmploymentType.CONTRACTOR),
+        "on@example.com": (EmploymentStatus.ACTIVE, EmploymentType.REGULAR),
+    }
+    assert read(sheet) == {
+        "ada@example.com": (EmploymentStatus.ACTIVE, EmploymentType.OUTSOURCED),
+        "bo@example.com": (EmploymentStatus.LEFT, EmploymentType.OTHER),
+        "cy@example.com": (EmploymentStatus.ACTIVE, None),
+    }
+
+
+def test_free_text_is_read_by_its_words_and_empty_text_is_no_type() -> None:
+    """Written out here rather than read off the word table. Delete this and "Outsourced
+    contractor" is a contractor the setting lets in, or empty text is `OTHER`."""
+    assert employment_type_from("Outsourced contractor") is EmploymentType.OUTSOURCED
+    assert employment_type_from(" labour  dispatch ") is EmploymentType.LABOUR_DISPATCH
+    assert employment_type_from("Permanent") is EmploymentType.REGULAR
+    assert employment_type_from("Board member") is EmploymentType.OTHER
+    assert employment_type_from("") is None
+    assert employment_type_from(None) is None
+
+
+def test_a_record_that_says_both_here_and_suspended_is_refused_and_one_that_agrees_is_kept() -> (
+    None
+):
+    """Delete this and one reading removes somebody another keeps."""
+    with pytest.raises(ValueError, match="says one thing"):
+        StaffRecord("a@example.com", "A", active=True, status=EmploymentStatus.SUSPENDED)
+    kept = StaffRecord("a@example.com", "A", active=False, status=EmploymentStatus.SUSPENDED)
+    assert kept.standing is EmploymentStatus.SUSPENDED
+    assert StaffRecord("b@example.com", "B", active=False).standing is EmploymentStatus.LEFT

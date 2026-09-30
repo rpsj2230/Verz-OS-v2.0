@@ -21,6 +21,9 @@
  * this reader may add somebody here (`may_add`); a person added holds nothing, and is then linked
  * to a sign-in, placed and granted like anybody else.
  *
+ * **What to tell somebody whose account the staff sync made** is under the list when a staff list
+ * is read, with a way to copy it (`AccountReady`): nobody is sent anything (needs-rupash 115).
+ *
  * **The data steward card stays under the list**: a grant of a data read begins with the steward,
  * and an install set up before the setup wizard named one names them here.
  *
@@ -28,7 +31,7 @@
  * "principal:" vocabulary, the paragraph explaining how the page resolves an address, and the
  * duplicate grant forms under the list (they are on the person's Grants view).
  *
- * Task ids: M27.11.2, M27.15.19, M27.16.1
+ * Task ids: M27.11.2, M27.15.19, M27.16.1, M1.6.16
  */
 
 import { MoreHorizontal, UserPlus, Users } from "lucide-react";
@@ -45,6 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { dayWords } from "../access/formParts";
+import { AccountReady } from "./AccountReady";
 import { AddPersonDrawer, SeveralDrawer } from "./GrantDrawers";
 import { SecondFactorPill, StandingPill } from "./pills";
 import {
@@ -243,7 +247,12 @@ export function PeoplePage() {
         emptyTitle={NO_PEOPLE}
         emptyDescription={NO_PEOPLE_DESCRIPTION}
         emptyIcon={<Users aria-hidden />}
-        footer={<DataStewardCard />}
+        footer={
+          <>
+            {facts.accountReady === undefined ? null : <AccountReady sentence={facts.accountReady} />}
+            <DataStewardCard />
+          </>
+        }
       />
       <SeveralDrawer
         open={granting !== null}

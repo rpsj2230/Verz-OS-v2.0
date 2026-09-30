@@ -44,6 +44,16 @@ const PROGRESS = {
     why: "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
     updated: "2026-09-28",
   },
+  "M1.6.16": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
+    updated: "2026-09-30",
+  },
+  "M1.6.17": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
+    updated: "2026-09-30",
+  },
   "M1.8.3": {
     status: "READY FOR TESTING",
     why: "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",
@@ -149,10 +159,20 @@ const PROGRESS = {
     why: "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
     updated: "2026-09-28",
   },
+  "M10.5.1": {
+    status: "READY FOR TESTING",
+    why: "Slack is connectable (M10/channel-slack): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
+    updated: "2026-09-30",
+  },
+  "M10.5.6": {
+    status: "READY FOR TESTING",
+    why: "email is connectable (#285): a signed envelope in, a reply out by the install's own relay, Connect Email steps with the receiving script, and an install check; the owner's real mail proves the vendor's half",
+    updated: "2026-09-30",
+  },
   "M10.6.1": {
     status: "IN PROGRESS",
-    why: "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
-    updated: "2026-09-28",
+    why: "the webhook, Lark, email and Slack wires are live (PR #105; L1, merged d426e3d3; #285; M10/channel-slack); Teams, Telegram and WhatsApp each come with their own package",
+    updated: "2026-09-30",
   },
   "M10.6.3": {
     status: "READY FOR TESTING",
@@ -389,6 +409,26 @@ const PROGRESS = {
     why: "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, once the worker fix of 2026-09-28 deploys (needs-rupash 98)",
     updated: "2026-09-28",
   },
+  "M32.1.1.1": {
+    status: "BLOCKED",
+    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+    updated: "2026-09-30",
+  },
+  "M32.1.1.2": {
+    status: "BLOCKED",
+    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+    updated: "2026-09-30",
+  },
+  "M32.2.1.1": {
+    status: "BLOCKED",
+    why: "waits on memory for the personal-data detector: 1,536 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 1)",
+    updated: "2026-09-30",
+  },
+  "M32.2.1.2": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server that serves GLiNER: 3,840 MB wanted with its worker and file store, 248 MB unclaimed, measured 2026-09-30 (needs-rupash 120, row 2)",
+    updated: "2026-09-30",
+  },
   "M38.2.1.1": {
     status: "READY FOR TESTING",
     why: "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
@@ -439,15 +479,35 @@ const PROGRESS = {
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
   },
+  "M7.2.1": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
   "M7.2.2": {
     status: "READY FOR TESTING",
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
   },
+  "M7.2.3": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.2.4": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
   "M7.2.5": {
     status: "READY FOR TESTING",
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
+  },
+  "M7.2.6": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
   },
   "M7.3.1": {
     status: "READY FOR TESTING",
@@ -458,6 +518,21 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
+  },
+  "M7.3.3": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.3.4": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.3.5": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
   },
   "M7.4.1": {
     status: "READY FOR TESTING",
@@ -529,6 +604,16 @@ const PROGRESS = {
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
   },
+  "M7.7.10": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.7.11": {
+    status: "BLOCKED",
+    why: "waits on the owner's choice of upload limit, which sizes the model server; the model server reads 64 MB a document as sized (needs-rupash 119)",
+    updated: "2026-09-29",
+  },
   "M7.7.2": {
     status: "IN PROGRESS",
     why: "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
@@ -538,6 +623,16 @@ const PROGRESS = {
     status: "IN PROGRESS",
     why: "price lists uploaded on Classification convert (K6, merged c0552331); no upload path yet offers a price-list document for conversion",
     updated: "2026-09-28",
+  },
+  "M7.7.8": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.7.9": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
   },
   "M8.1.1": {
     status: "IN PROGRESS",

@@ -73,6 +73,7 @@ from brain.identity.organisation_store import (
     StructureRecords,
     StructureRefusal,
 )
+from brain.identity.organisation_sync import DepartmentsNamed, DepartmentToFound
 from brain.identity.teams import Team as TeamRecord
 from brain.identity.teams import references_team, team_scope
 from brain.ops.replica_store import Served
@@ -1857,3 +1858,86 @@ def test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed() 
         ("scope:web_and_sales", {"change": "renamed", "actor": "inferred"})
     ]
     assert AuditChain(chain).verify() is None
+
+
+# ----------------------------------------------------- departments the staff source names
+NAMED_BY_THE_SOURCE: Final = DepartmentsNamed(
+    to_found=(
+        DepartmentToFound(name="Design", slug="design"),
+        DepartmentToFound(name="Web Development", slug="web_development"),
+    ),
+    registered=("Finance",),
+)
+
+
+@contextmanager
+def naming(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
+    """The staff source's names as `named_departments` would read them, recording each read."""
+    read: list[str] = []
+
+    async def named(sessions: object, source: str) -> DepartmentsNamed:
+        read.append(source)
+        return NAMED_BY_THE_SOURCE
+
+    monkeypatch.setattr(routes, "sessions_of", lambda _: object())
+    monkeypatch.setattr(routes, "named_departments", named)
+    yield read
+
+
+def test_an_administrator_is_offered_the_source_s_departments_and_founds_those_confirmed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Found on the owner's install on 2026-09-29: Lark named eleven departments and the
+    Departments screen showed none, because nothing founded them. The screen now offers each name
+    with its short name, and one confirmed press founds the ones confirmed, through the founding
+    write, as the reader. Delete this and the departments a source names can again reach nothing."""
+    structure = seeded()
+    with naming(monkeypatch), client_over(structure) as client:
+        offered = client.get(
+            f"{API_PREFIX}/govern/departments/from-staff-source", headers=headers("u_admin")
+        )
+        founded_now = post(
+            client,
+            "u_admin",
+            "/govern/departments/from-staff-source",
+            {"slugs": ["web_development", "not_offered"]},
+        )
+
+    assert offered.status_code == 200, offered.text
+    assert offered.json() == {
+        "to_found": [
+            {"name": "Design", "slug": "design"},
+            {"name": "Web Development", "slug": "web_development"},
+        ],
+        "registered": ["Finance"],
+    }
+    assert founded_now.status_code == 200, founded_now.text
+    assert founded_now.json() == {
+        "created": [{"name": "Web Development", "slug": "web_development"}],
+        "not_founded": [],
+    }
+    assert structure.departments["web_development"][0] == "Web Development"
+    assert "design" not in structure.departments
+    assert [one.actor for one in structure.by] == ["u_admin"]
+
+
+def test_a_reader_who_may_not_found_departments_is_offered_none_and_founds_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A web administrator may shape web and may not found a department. They are offered what an
+    install whose source names nothing is offered, and a press is the one refusal, before the
+    source is read. Delete this and founding the company's departments needs only a department's
+    authority. The sibling above is the reader who may."""
+    structure = seeded()
+    with naming(monkeypatch) as read, client_over(structure) as client:
+        offered = client.get(
+            f"{API_PREFIX}/govern/departments/from-staff-source", headers=headers("u_elsewhere")
+        )
+        pressed_anyway = post(
+            client, "u_elsewhere", "/govern/departments/from-staff-source", {"slugs": ["design"]}
+        )
+
+    assert offered.json() == {"to_found": [], "registered": []}
+    assert pressed_anyway.status_code == 404
+    assert read == []
+    assert structure.calls == []
