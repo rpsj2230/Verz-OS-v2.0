@@ -784,9 +784,11 @@ def test_the_templates_that_read_only_documents_are_the_ones_every_install_can_s
 ) -> None:
     """**The positive half, written out.** The property above holds vacuously for a catalogue
     in which nothing is ever READY, so the set that is READY is named: the three templates whose
-    every tool is on the document plane, which every install with rows registers. Every other
-    template declares a row tool, a search or a draft that no source registers today, and stays
-    incomplete on both sources until one does.
+    every tool is on the document plane, which every install with rows registers, and since
+    2026-09-30 the WordPress developer, whose ticket read is the Freshdesk row tool every install
+    with rows now registers (`brain.knowledge.connector_rows`). Every other template declares a
+    row tool, a search or a draft that no source registers today, and stays incomplete on both
+    sources until one does.
 
     Delete this and a change that made every install incomplete passes the whole catalogue."""
     tools = build_registry(source=source, records=_NoRows())
@@ -797,4 +799,9 @@ def test_the_templates_that_read_only_documents_are_the_ones_every_install_can_s
         if _installed(manifest, tools).completeness.is_ready
     }
 
-    assert ready == {"html_developer", "internal_helpdesk", "knowledge_gap_curator"}
+    assert ready == {
+        "html_developer",
+        "internal_helpdesk",
+        "knowledge_gap_curator",
+        "wordpress_developer",
+    }
