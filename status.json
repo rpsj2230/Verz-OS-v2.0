@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-30T04:21:26.925061+00:00",
-  "commit": "77b65dd3",
-  "commit_subject": "Merge pull request #306 from rpsj2230/M11/w2-lark-base",
+  "generated_at": "2026-09-30T05:18:03.928052+00:00",
+  "commit": "4f91921d",
+  "commit_subject": "An agent's Profile shows what it is built from in detail, attaches skills from the approved library, draws its knowledge as a predicate, and previews one person's run (#221)",
   "total": 1584,
   "done": 471,
   "percent": 29.7,
@@ -68,9 +68,9 @@
       "done": 4,
       "percent": 1.7,
       "in_progress": 0,
-      "ready_for_testing": 0,
+      "ready_for_testing": 1,
       "blocked": 0,
-      "open": 225,
+      "open": 224,
       "acts": 0,
       "decided": 23
     },
@@ -1196,6 +1196,11 @@
       "status": "IN PROGRESS",
       "why": "the Lark channel is merged (L1, d426e3d3); the exit check also needs question-time live read (C2) and the binding route (CH2), neither on main yet",
       "updated": "2026-09-28"
+    },
+    "M40.7.1": {
+      "status": "READY FOR TESTING",
+      "why": "built (M1/relay-to-sign-in): every release gives the sign-in realm the mail relay saved on Notifications, through the step that already signs in to Keycloak inside its container, writing only when the relay changed and leaving a realm with no relay alone; an install check compares the host the realm reported with the relay's. Not built: hiding Forgot password while no relay is set. Proved on the install when a release has run and a reserved person's Forgot password email arrives",
+      "updated": "2026-09-30"
     }
   },
   "wave_records": {
