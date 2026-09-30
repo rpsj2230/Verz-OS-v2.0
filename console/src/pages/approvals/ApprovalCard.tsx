@@ -15,7 +15,13 @@
  * `A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT`. A rejection needs one of the route's reasons
  * and its button stays disabled until one is chosen.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M27.16.1
+ * **An approval that would send nothing says so above its buttons, in the API's words.** A change to a
+ * source this install has not allowed to be written (Cloudflare's DNS changes before their key is
+ * given) can still be approved, and the approval is recorded, but nothing is sent; the card says
+ * that before the approver decides rather than after. The sentence is the card's own field, so a
+ * card with nothing to say draws nothing.
+ *
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M27.16.1, M11.7.3
  */
 
 import { useCallback, useState, type ReactNode } from "react";
@@ -96,6 +102,11 @@ export function ApprovalCard({
           <When at={card.expiresAt} />
         </dd>
       </dl>
+      {card.unsentBecause === "" ? null : (
+        <p className="approval-card__unsent" role="note">
+          {card.unsentBecause}
+        </p>
+      )}
       {decision}
       {linked ? (
         <Link className="approval-card__link" to={approvalAddress(card.suspensionId)}>

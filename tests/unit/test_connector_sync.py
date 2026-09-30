@@ -104,6 +104,7 @@ def _settings(name: str) -> dict[str, str]:
         "xero": {"tenant_id": TENANT},
         "hubspot": {"portal_id": PORTAL},
         "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
+        "cloudflare": {"account_id": "0" * 32, "department": "operations"},
     }[name]
 
 

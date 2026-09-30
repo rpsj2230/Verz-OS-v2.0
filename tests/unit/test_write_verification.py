@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 from brain.connectors import (
+    cloudflare,
     freshdesk,
     google_drive,
     hubspot,
@@ -126,6 +127,16 @@ def freshdesk_answer(reply: freshdesk.Reply) -> Verification:
         freshdesk.Endpoint.SEARCH_TICKETS, domain="helpdesk.example.invalid"
     )
     return verdict(reading("freshdesk")(operation, reply))
+
+
+def cloudflare_answer(recorded: Cassette) -> Verification:
+    """A Cloudflare reply read as the listing its request was made against."""
+    operation = (
+        cloudflare.dns_records_operation()
+        if "/dns_records" in recorded.request
+        else cloudflare.zones_operation()
+    )
+    return verdict(reading("cloudflare")(operation, status=recorded.status, body=recorded.body))
 
 
 def lark_table() -> LarkBaseTable:
@@ -260,6 +271,18 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("laravel", "LARAVEL-1146"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-3024"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-2006"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-zones"): Verification.FOUND,
+    ("cloudflare", "CF-200-zones-full-page"): Verification.FOUND,
+    ("cloudflare", "CF-200-dns-records"): Verification.FOUND,
+    # An answered last page with no records is the one complete empty reading.
+    ("cloudflare", "CF-200-dns-records-empty"): Verification.ABSENT,
+    # One zone, one record and a GraphQL answer are not listings, so they prove nothing absent.
+    ("cloudflare", "CF-200-zone"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-dns-record"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-security-events"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-graphql-errors"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-429"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-403"): Verification.INCONCLUSIVE,
 }
 
 
@@ -303,6 +326,8 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             return verdict(reading("google_drive")(operation, reply))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
+        case "cloudflare":
+            return cloudflare_answer(recorded)
         case "lark_base":
             return lark_base_answer(lark_reply(recorded.cid))
         case "lark_wiki":

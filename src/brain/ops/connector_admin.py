@@ -37,7 +37,7 @@ by the first sync. A connection whose scope is decided by what the key happens t
 the connector `brain.connectors.contract.ConnectorScope` refuses to build: narrowing later does not
 un-fetch what was already read.
 
-Task ids: M42.6.5, M27.11.9, M11.2.6, M11.7.7
+Task ids: M42.6.5, M27.11.9, M11.2.6, M11.7.7, M11.7.3
 """
 
 from __future__ import annotations
@@ -147,6 +147,24 @@ KEY_REPLACED: Final = (
     "The new key is held in the vault. The worker uses it on its next attempt; revoke the old key "
     "in the source's own settings."
 )
+
+#: What allowing a write agrees to, said before its key is sent (M11.7.3).
+ALLOWING_A_WRITE: Final = (
+    "The key is written into the vault in a slot of its own, apart from the read key, and never "
+    "shown again; the ledger records who wrote it. From then on a change a person in the source's "
+    "department approves is sent with it once and read back before it is reported done. Nothing "
+    "is sent without that approval, and the connection and its read key stay as they are."
+)
+
+#: What a write grant's key being kept says (M11.7.3). The read key is untouched.
+WRITE_ALLOWED: Final = (
+    "The key for this write is held in the vault, in a slot of its own. From now on a change a "
+    "person approves is sent with it, once, and read back with the read key before it is reported "
+    "done. The read key is unchanged."
+)
+
+#: What asking for a write grant the source does not declare is told, by field.
+NO_SUCH_WRITE: Final = "This source has no such write to allow."
 
 #: What an exported connection record says about its key, in place of one.
 NO_KEY_IS_EXPORTED: Final = (

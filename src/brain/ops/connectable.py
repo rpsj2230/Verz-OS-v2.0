@@ -65,6 +65,7 @@ from brain.connectors.declaration import (
     CredentialShape,
     Setting,
     SettingRefusedError,
+    WriteGrant,
     shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
@@ -126,6 +127,8 @@ class Connectable:
     guide: tuple[GuideStep, ...] = ()
     #: How the credential is asked for and kept (M11.7.7).
     credential_shape: CredentialShape = CredentialShape.KEY
+    #: The writes it can be allowed to make, each with a key of its own (M11.7.3).
+    writes: tuple[WriteGrant, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -199,6 +202,7 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
             build=one.console.build,
             guide=one.guide,
             credential_shape=one.console.credential_shape,
+            writes=one.writes,
         )
         for name, one in declarations.items()
         if one.console is not None
