@@ -240,8 +240,8 @@ def test_an_unknown_connector_gets_no_invented_ceiling() -> None:
     """A default here would look verified and would not be. The connector budget in
     admission is the conservative fallback; a made-up rate limit would be a number somebody
     later quotes."""
-    assert source_limits("hubspot", principal_id="p_alice") == ()
-    assert connector_ceiling("hubspot") is None
+    assert source_limits("nowhere", principal_id="p_alice") == ()
+    assert connector_ceiling("nowhere") is None
 
 
 def test_a_connector_ceiling_of_one_serialises_everybody_rather_than_rounding_to_zero() -> None:

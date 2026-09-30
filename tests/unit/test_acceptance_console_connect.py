@@ -22,7 +22,7 @@ import pytest
 
 from brain.ops.acceptance import FAILED, PASSED, Check, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_console_connect"
@@ -45,14 +45,24 @@ def test_the_console_connect_check_is_registered_with_the_leaf_it_proves() -> No
     assert set(mine()[NAME].leaves) <= leaves
 
 
+def test_the_console_connect_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here
+    since 2026-09-30, so a package adding a check edits its own file and never a list every
+    package appends to. Delete this and a check can drop out of the module with the page simply
+    listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_console_connect") == [
+        "each_source_is_connected_edited_and_switched_off_in_the_console",
+    ]
+
+
 def test_every_source_the_console_connects_has_an_edit_and_a_wrong_shape() -> None:
     """Held against the product's own list rather than the check's. Delete this and a source added
     to the console is walked by nothing, or a credential shape added has no refusal tried."""
     from brain.connectors.declaration import CredentialShape
     from brain.ops.acceptance_checks_console_connect import EDITS, WRONG_SHAPE
-    from brain.ops.connectable import CONNECTABLE
+    from brain.ops.connectable import CONNECTABLE, DECLARED_FORMS
 
-    assert set(EDITS) == set(CONNECTABLE)
+    assert set(CONNECTABLE) <= set(EDITS) <= set(DECLARED_FORMS)
     assert set(WRONG_SHAPE) == {one.value for one in CredentialShape}
 
 

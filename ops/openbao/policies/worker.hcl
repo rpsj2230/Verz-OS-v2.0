@@ -75,6 +75,13 @@ path "auth/token/create/connector-run" {
   capabilities = ["create", "update"]
 }
 
+# The same for a message the worker's schedule sends: a channel's secret is read only through a
+# send token minted against the channel-send role (channel-send.hcl) and revoked when the send ends,
+# never under this policy. See brain.ops.channel_lease.A_CHANNEL_IS_READ_BY_THE_WORKER_ONLY_THROUGH_A_SEND_LEASE.
+path "auth/token/create/channel-send" {
+  capabilities = ["create", "update"]
+}
+
 path "sys/leases/revoke" {
   capabilities = ["update"]
 }

@@ -44,6 +44,21 @@ const PROGRESS = {
     why: "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
     updated: "2026-09-28",
   },
+  "M1.6.13": {
+    status: "READY FOR TESTING",
+    why: "built (M1/people-status): People shows where the staff list puts each person and their employment type, with filters; proved on the install with M1.6.15",
+    updated: "2026-09-30",
+  },
+  "M1.6.14": {
+    status: "READY FOR TESTING",
+    why: "built (M1/people-status): somebody the list says is suspended, gone or never activated, or of a type not allowed, is disabled on the next sync and their page says why; the last administrator is never kept out; proved on the install with M1.6.15",
+    updated: "2026-09-30",
+  },
+  "M40.7.1": {
+    status: "READY FOR TESTING",
+    why: "built (M1/relay-to-sign-in): every release gives the sign-in realm the mail relay saved on Notifications, through the step that already signs in to Keycloak inside its container, writing only when the relay changed and leaving a realm with no relay alone; an install check compares the host the realm reported with the relay's. Not built: hiding Forgot password while no relay is set. Proved on the install when a release has run and a reserved person's Forgot password email arrives",
+    updated: "2026-09-30",
+  },
   "M1.6.16": {
     status: "READY FOR TESTING",
     why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
@@ -161,12 +176,12 @@ const PROGRESS = {
   },
   "M10.5.1": {
     status: "READY FOR TESTING",
-    why: "Slack is connectable (M10/channel-slack): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
+    why: "Slack is connectable (#288): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
     updated: "2026-09-30",
   },
   "M10.5.6": {
     status: "READY FOR TESTING",
-    why: "email is connectable (#285): a signed envelope in, a reply out by the install's own relay, Connect Email steps with the receiving script, and an install check; the owner's real mail proves the vendor's half",
+    why: "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (M10/channel-email-mailbox), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
     updated: "2026-09-30",
   },
   "M10.6.1": {

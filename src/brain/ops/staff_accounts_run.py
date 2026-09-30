@@ -21,10 +21,14 @@ nothing wrote one for a person the sync brings in. It is written at `Assurance.U
 for and admits nothing from that mailbox. A person binds their mailbox to the email channel the
 usual way. See `THE_ROSTER_JOIN_IS_AN_EMAIL_BINDING_THAT_ADMITS_NOTHING`.
 
-**Closing an account ends the person's Brain sessions by disabling their person**, which `0003`'s
-cascade turns into ended sessions and inert grants in the one statement, recorded under the sync
-by `0095b`; opening the account again enables the person. Only people behind accounts the sync
-made are touched, for `staff_accounts.THE_SYNC_CLOSES_ONLY_THE_ACCOUNTS_IT_MADE`'s reason.
+**This step closes and opens accounts; it does not disable anybody.** Whether a Brain person may
+sign in or ask is `brain.identity.standing`'s, which the same run applies to every person the list
+can be joined to, however their sign-in was made, and which lets back in only whom the list kept
+out (package 2 of needs-rupash 115, 2026-09-30). Until then this step disabled and enabled the
+person behind each account it closed and opened, which was a second place deciding the same thing
+and the only one that could re-enable somebody an administrator had disabled by hand. An account
+whose person the standing step keeps in as the last administrator is not closed either
+(`keep_open`).
 
 **Nothing is sent.** See `staff_accounts.NOTHING_IS_SENT_AND_A_PERSON_ASKS_FOR_THEIR_OWN_LINK`.
 
@@ -61,7 +65,6 @@ from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.identity.organisation_sync import department_key, sync_actor, sync_trace
 from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
-from brain.identity.principal_state_store import StoredPrincipalStates
 from brain.identity.sign_in_binding import SignInBindingRefusedError, SignInBindings
 from brain.identity.staff_accounts import (
     AccountPlan,
@@ -220,30 +223,12 @@ async def person_for(
     return principal_id
 
 
-async def open_or_close_person(
-    sessions: async_sessionmaker[AsyncSession],
-    *,
-    issuer: str,
-    account: HeldAccount,
-    disabled: bool,
-    actor: str,
-    trace_id: str,
-) -> None:
-    """Disable or enable the person this account signs in as, if the account signs anybody in."""
+async def signs_in_as(
+    sessions: async_sessionmaker[AsyncSession], issuer: str, account: HeldAccount
+) -> str | None:
+    """The Brain person this account signs in as, or None when it signs nobody in."""
     async with sessions() as session, session.begin():
-        principal_id = await _bound(
-            session, SIGN_IN_CHANNEL, subject_digest(issuer, account.account_id)
-        )
-    if principal_id is None:
-        return
-    await StoredPrincipalStates(sessions).set_disabled(
-        principal_id,
-        disabled=disabled,
-        may=lambda _department: True,
-        by=actor,
-        ent_hash=NO_REACH,
-        trace_id=trace_id,
-    )
+        return await _bound(session, SIGN_IN_CHANNEL, subject_digest(issuer, account.account_id))
 
 
 async def provide_accounts(
@@ -257,11 +242,13 @@ async def provide_accounts(
     now: datetime,
     absent_is_gone: bool,
     trial: bool = False,
+    keep_open: frozenset[str] = frozenset(),
 ) -> AccountRun:
     """Plan the accounts this roster supports and carry the plan out, unless this is a trial.
 
-    Never raises for the sign-in service or the vault: the roster is committed before this runs,
-    so a refusal is a sentence on the run and the next night tries again.
+    `keep_open` is the principals the standing step keeps in as the last administrators, whose
+    accounts are not closed whatever the plan says. Never raises for the sign-in service or the
+    vault: a refusal is a sentence on the run and the next night tries again.
     """
     try:
         issuer = value_of("INSTALL_OIDC_ISSUER", env)
@@ -343,24 +330,10 @@ async def provide_accounts(
             )
         for account in plan.to_enable:
             await reopen(fetch, realm, bearer, account)
-            await open_or_close_person(
-                sessions,
-                issuer=issuer,
-                account=account,
-                disabled=False,
-                actor=actor,
-                trace_id=trace_id,
-            )
         for account in plan.to_disable:
+            if await signs_in_as(sessions, issuer, account) in keep_open:
+                continue
             await close(fetch, realm, bearer, account)
-            await open_or_close_person(
-                sessions,
-                issuer=issuer,
-                account=account,
-                disabled=True,
-                actor=actor,
-                trace_id=trace_id,
-            )
     except SignInServiceError as refused:
         return AccountRun(sentences=(f"Sign-in accounts: stopped. {refused}",))
     finally:

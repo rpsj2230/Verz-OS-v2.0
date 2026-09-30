@@ -87,16 +87,28 @@ async def each_source_is_connected_edited_and_switched_off_in_the_console(
     from brain.connectors.manifest import digest_input, manifest_digest
     from brain.identity.data_steward import declared_capabilities
     from brain.identity.principal_store import StoredPrincipals
-    from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE, given, key_reference
+    from brain.ops.connectable import (
+        CONNECTABLE,
+        DECLARED_FORMS,
+        NOT_FROM_THE_CONSOLE,
+        THIS_INSTALL_CANNOT_READ_IT_YET,
+        given,
+        key_reference,
+    )
     from brain.ops.connector_admin import connection_problems, people_problems
     from brain.ops.connector_store import StoredConnections, live
 
-    # Nothing is left for the server: what the console cannot connect is Connect Lark's.
+    # Nothing is left for the server: what the console does not offer is Connect Lark's, or a
+    # declared form this install cannot read yet, which is offered the day it can.
     if set(CONNECTABLE) | set(NOT_FROM_THE_CONSOLE) != set(shipped()):
         raise CheckFailedError("a shipped source is neither connectable here nor explained")
-    if any(not name.startswith("lark_") for name in NOT_FROM_THE_CONSOLE):
+    if any(
+        not name.startswith("lark_")
+        and not (name in DECLARED_FORMS and one.why == THIS_INSTALL_CANNOT_READ_IT_YET)
+        for name, one in NOT_FROM_THE_CONSOLE.items()
+    ):
         raise CheckFailedError("a source other than Lark's can only be connected at the server")
-    if set(EDITS) != set(CONNECTABLE):
+    if not set(CONNECTABLE) <= set(EDITS):
         raise CheckFailedError("a source the console connects has no edit this check makes")
 
     store = StoredConnections(h.sessions)
@@ -111,6 +123,19 @@ async def each_source_is_connected_edited_and_switched_off_in_the_console(
     async def is_live(principal_id: str) -> bool:
         return await people.live_principal(principal_id) is not None
 
+    # A setting that names a person is judged against this install's directory on every declared
+    # form, offered yet or not, so the rule is proved before the form is offered.
+    for name, kind in DECLARED_FORMS.items():
+        persons = {one.name: steward for one in kind.settings if one.names_a_person}
+        if not persons:
+            continue
+        settings = given(kind, {**_form(name), **persons})
+        if await people_problems(kind, settings, is_live=is_live):
+            raise CheckFailedError("the connect route refused a source connected as its form asks")
+        nobody = {**settings, **dict.fromkeys(persons, f"{steward}-nobody")}
+        if not await people_problems(kind, nobody, is_live=is_live):
+            raise CheckFailedError("a setting naming nobody here was not refused")
+
     for name, kind in CONNECTABLE.items():
         persons = {one.name: steward for one in kind.settings if one.names_a_person}
         settings = given(kind, {**_form(name), **persons})
@@ -119,9 +144,6 @@ async def each_source_is_connected_edited_and_switched_off_in_the_console(
             kind, settings, is_live=is_live
         ):
             raise CheckFailedError("the connect route refused a source connected as its form asks")
-        nobody = {**settings, **dict.fromkeys(persons, f"{steward}-nobody")}
-        if persons and not await people_problems(kind, nobody, is_live=is_live):
-            raise CheckFailedError("a setting naming nobody here was not refused")
         wrong = [
             (one.field, one.code)
             for one in connection_problems(name, settings, WRONG_SHAPE[kind.credential_shape.value])
