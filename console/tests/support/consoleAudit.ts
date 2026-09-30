@@ -776,6 +776,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
   "POST /api/v1/widget/sessions":
     "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
+  "POST /api/v1/widget/questions":
+    "Where a website visitor's question is answered from knowledge marked public, which writes nothing; what is public is decided on each document's page, by the marking route.",
   "POST /api/v1/automation/tool-call":
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
   "chat.conversation":

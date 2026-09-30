@@ -240,6 +240,10 @@ from brain.knowledge_intake_routes import router as knowledge_intake_router
 # tasks each opens and captured solutions decided. See `brain.knowledge_lifecycle_routes`.
 from brain.knowledge_lifecycle_routes import router as knowledge_lifecycle_router
 
+# Whether a document is public for the website widget, read and changed from its detail page by a
+# person whose grant decides it for that document's department. See `brain.knowledge_public_routes`.
+from brain.knowledge_public_routes import router as knowledge_public_router
+
 # Adding a document to the knowledge layer from the Knowledge page, read by the text path and
 # placed where the uploader holds `admin:knowledge`. See `brain.knowledge_routes`.
 from brain.knowledge_routes import router as knowledge_router
@@ -398,8 +402,9 @@ from brain.vault_routes import router as vault_router
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
 
-# The website widget's front door: a stranger's browser is handed a session that holds nothing, or
-# told why not, with no sign-in and the origin proved instead. See `brain.widget_routes`.
+# The website widget's front door: a stranger's browser is handed a session, or told why not, and
+# its questions are answered from knowledge marked public alone, with no sign-in and the origin
+# proved instead. See `brain.widget_routes`.
 from brain.widget_routes import router as widget_router
 
 

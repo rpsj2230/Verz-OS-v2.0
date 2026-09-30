@@ -35,7 +35,7 @@ they are there: the policy splits `app.departments` on a comma, and a department
 department matches no branch and is invisible to its own team. The half-verification refusal
 is `KnowledgeItem`'s own rule, held by the database because the sweep reads rows and not models.
 
-Task ids: M34.2.1.3, M7.4.1, M7.6.1
+Task ids: M34.2.1.3, M7.4.1, M7.6.1, M10.7.2
 """
 
 from __future__ import annotations
@@ -85,6 +85,10 @@ class KnowledgeItemRow(TimestampMixin, Base):
     #: by `0115`, nullable for the items written before it; see that migration for why no value
     #: is backfilled.
     kind: Mapped[str | None] = mapped_column(String(KIND_CHARS), nullable=True)
+    #: Who marked the item public for the website widget, and when (M10.7.2). Added by `0171`,
+    #: both or neither, and never on a personal item. See `brain.knowledge.public`.
+    public_by: Mapped[str | None] = mapped_column(String(OWNER_ID_CHARS), nullable=True)
+    public_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"item_id ~ '{REFERENCE_SQL_PATTERN}'", name="item_id_is_a_reference"),
@@ -102,6 +106,14 @@ class KnowledgeItemRow(TimestampMixin, Base):
         CheckConstraint(
             "(verified_by IS NULL) = (verified_at IS NULL)",
             name="a_verification_is_a_person_and_a_date",
+        ),
+        CheckConstraint(
+            "(public_by IS NULL) = (public_at IS NULL)",
+            name="a_public_marking_is_a_person_and_a_date",
+        ),
+        CheckConstraint(
+            "public_at IS NULL OR visibility <> 'personal'",
+            name="a_personal_item_is_never_public",
         ),
         # The sweep's access path: it asks for items whose date has arrived, and most items
         # have none.
