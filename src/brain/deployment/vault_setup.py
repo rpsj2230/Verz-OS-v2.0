@@ -73,6 +73,7 @@ from brain.deployment.app_environment import (
     worker_vault_overlays_for,
 )
 from brain.deployment.requirements import files_for
+from brain.ops.channel_lease import SEND_POLICY, SEND_ROLE_MAX_TTL_SECONDS, SEND_TOKEN_ROLE
 from brain.ops.connector_lease import RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS, RUN_TOKEN_ROLE
 from brain.ops.connector_slots import REFUSE_KEY, REQUEST_KEY, SLOT_SCOPES, SlotScopes
 from brain.ops.openbao import CONNECTOR_KEY_PREFIX, STATIC_PREFIXES
@@ -636,32 +637,47 @@ def slot_lines(caller: str) -> tuple[str, ...]:
     return tuple(lines)
 
 
+#: Every token role the release defines, as (role, the one policy it gives, its TTL ceiling). The
+#: connector run's and one channel send's: see `brain.ops.connector_lease` and
+#: `brain.ops.channel_lease`.
+TOKEN_ROLES: Final[tuple[tuple[str, str, int], ...]] = (
+    (RUN_TOKEN_ROLE, RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS),
+    (SEND_TOKEN_ROLE, SEND_POLICY, SEND_ROLE_MAX_TTL_SECONDS),
+)
+
+
 def role_lines(caller: str) -> tuple[str, ...]:
-    """The connector-run token role: its five settings read, written only where one differs."""
-    role = f"auth/token/roles/{RUN_TOKEN_ROLE}"
-    wanted = (
-        ("allowed_policies", f"[{RUN_POLICY}]"),
-        ("orphan", "false"),
-        ("renewable", "false"),
-        ("token_no_default_policy", "true"),
-        ("token_explicit_max_ttl", str(RUN_ROLE_MAX_TTL_SECONDS)),
-    )
-    checks = " && ".join(
-        f'test "$({caller} read -field={field} {role} 2>/dev/null)" = "{value}"'
-        for field, value in wanted
-    )
-    return (
-        f"role_ok() {{ {checks}; }}",
-        "if ! role_ok; then",
-        '  if test "$CHECK_ONLY" = no; then',
-        f"    {caller} write {role} allowed_policies={RUN_POLICY} "
-        "orphan=false renewable=false token_no_default_policy=true "
-        f"token_explicit_max_ttl={RUN_ROLE_MAX_TTL_SECONDS} >/dev/null || "
-        f'fail "the vault would not define the {RUN_TOKEN_ROLE} token role"',
-        "  fi",
-        f'  role_ok || missing "the {RUN_TOKEN_ROLE} token role"',
-        "fi",
-    )
+    """Every token role: its five settings read, written only where one differs."""
+    lines: list[str] = []
+    for name, policy, max_ttl in TOKEN_ROLES:
+        role = f"auth/token/roles/{name}"
+        wanted = (
+            ("allowed_policies", f"[{policy}]"),
+            ("orphan", "false"),
+            ("renewable", "false"),
+            ("token_no_default_policy", "true"),
+            ("token_explicit_max_ttl", str(max_ttl)),
+        )
+        checks = " && ".join(
+            f'test "$({caller} read -field={field} {role} 2>/dev/null)" = "{value}"'
+            for field, value in wanted
+        )
+        check = f"role_ok_{name.replace('-', '_')}"
+        lines.extend(
+            (
+                f"{check}() {{ {checks}; }}",
+                f"if ! {check}; then",
+                '  if test "$CHECK_ONLY" = no; then',
+                f"    {caller} write {role} allowed_policies={policy} "
+                "orphan=false renewable=false token_no_default_policy=true "
+                f"token_explicit_max_ttl={max_ttl} >/dev/null || "
+                f'fail "the vault would not define the {name} token role"',
+                "  fi",
+                f'  {check} || missing "the {name} token role"',
+                "fi",
+            )
+        )
+    return tuple(lines)
 
 
 def render_apply() -> str:
@@ -765,7 +781,7 @@ def render_apply() -> str:
         "  POLICIES=$((POLICIES + 1))",
         "done",
         "",
-        "# The token role a connector run's token is minted against.",
+        "# The token roles a connector run's token and one send's token are minted against.",
         *role_lines(caller),
         "",
         "# Every connected source's slot: its scopes, and no key.",
@@ -779,8 +795,9 @@ def render_apply() -> str:
         'if test "$CHECK_ONLY" = no; then',
         f"  {caller} token renew >/dev/null 2>&1 || true",
         "fi",
-        f'say "in force: {len(ENGINES)} engines, $POLICIES policies, the {RUN_TOKEN_ROLE} token '
-        f'role and {len(SLOT_SCOPES)} credential slots"',
+        f'say "in force: {len(ENGINES)} engines, $POLICIES policies, '
+        f"{len(TOKEN_ROLES)} token roles ({', '.join(name for name, _, _ in TOKEN_ROLES)}) "
+        f'and {len(SLOT_SCOPES)} credential slots"',
     ]
     return "\n".join(lines) + "\n"
 

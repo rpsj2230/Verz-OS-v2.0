@@ -666,6 +666,21 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
         "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The evening digest's destination and its send (M38.3.3): a channel's list of the
+        # conversations it may post to is a request built and a page read, and a send's secret is
+        # borrowed through a token that expires on its own if its revocation is lost.
+        "brain.ops.digest_destination:ConversationLister.conversations_request": Repeat.READS,
+        "brain.ops.digest_destination:ConversationLister.conversations_page": Repeat.READS,
+        "brain.ops.channel_lease:ChannelSecretLeases.lease": Repeat.EXPIRES_ON_ITS_OWN,
+        # The digest's send is made once per day and room inside `issue_once`
+        # (`brain.ops.digest_delivery`); these build the request, name the room, judge the
+        # answer and read the channel's record, and none of them sends anything.
+        "brain.ops.digest_run:DigestWire.room_of": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.request_for": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.judge": Repeat.READS,
+        "brain.ops.digest_run:ChannelRecordReader.get": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.read": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.write": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,

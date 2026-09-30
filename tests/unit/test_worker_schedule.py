@@ -157,7 +157,7 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_sixteen_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
@@ -165,9 +165,9 @@ def test_the_wired_runners_are_the_sixteen_the_schedule_is_meant_to_start() -> N
     runner and the connector sync after it, and the vault audit shipper last. The staff sync
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
     2026-09-28 and the install acceptance checks the same day, and the two recovery sweeps on
-    2026-09-30, in the registry's own order.
+    2026-09-30, and the evening digest the same day, in the registry's own order.
 
-    Delete this and every assertion below that names the sixteen could be satisfied by a table
+    Delete this and every assertion below that names the seventeen could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -186,6 +186,7 @@ def test_the_wired_runners_are_the_sixteen_the_schedule_is_meant_to_start() -> N
         "connector_sync",
         "vault_audit_ship",
         "acceptance_run",
+        "evening_digest",
     ]
 
 

@@ -65,10 +65,12 @@ Task ids: M28.2.4, M37.5.1.2
 
 from __future__ import annotations
 
+import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Final
+from zoneinfo import ZoneInfo
 
 from brain.ops.controls import CONTROLS, Control, Invocation
 
@@ -128,8 +130,47 @@ A_RUN_RECORDED_IN_THE_FUTURE_IS_A_CLOCK_THAT_MOVED: Final = (
 )
 
 
+#: Why a control may be owed at a time of day rather than an interval after its last run.
+A_DAILY_MESSAGE_IS_OWED_AT_ITS_HOUR_AND_NOT_A_DAY_AFTER_THE_LAST: Final = (
+    "An interval since the last run drifts: a daily control first run at ten in the morning runs "
+    "at ten for ever, and one delayed by a slow tick runs later every day after. A message a "
+    "person reads at the end of their day has to arrive at the hour they chose, in their own "
+    "time zone, so a control naming a time of day is owed at the most recent occurrence of it "
+    "that it has not run since, and a control that has never run waits for today's rather "
+    "than running at once."
+)
+
+#: A time of day as a person writes it: two digits, a colon, two digits, on the 24-hour clock.
+_TIME_OF_DAY: Final = re.compile(r"^([01][0-9]|2[0-3]):([0-5][0-9])$")
+
+
 class ScheduleError(Exception):
     """Raised when a schedule is described in a way nothing can act on."""
+
+
+def time_of_day(value: str) -> time | None:
+    """`HH:MM` on the 24-hour clock as a time, or None for anything else."""
+    matched = _TIME_OF_DAY.match(value.strip())
+    if matched is None:
+        return None
+    return time(int(matched.group(1)), int(matched.group(2)))
+
+
+@dataclass(frozen=True)
+class AtTime:
+    """A control's time of day, and the zone it is read in."""
+
+    at: time
+    zone: ZoneInfo
+
+    def latest(self, now: datetime) -> tuple[datetime, datetime]:
+        """Today's occurrence in the zone, and the most recent one at or before `now`."""
+        local = now.astimezone(self.zone)
+        today = datetime.combine(local.date(), self.at, tzinfo=self.zone)
+        if today <= local:
+            return today, today
+        yesterday = datetime.combine(local.date() - timedelta(days=1), self.at, tzinfo=self.zone)
+        return today, yesterday
 
 
 @dataclass(frozen=True)
@@ -194,6 +235,7 @@ def owed(
     last_run: Mapping[str, datetime],
     controls: Sequence[Control] | None = None,
     released: Collection[str] = (),
+    at: Mapping[str, AtTime] | None = None,
 ) -> tuple[Owed, ...]:
     """Every control due a run at `now`, in registry order.
 
@@ -203,14 +245,38 @@ def owed(
     `report_only` set rather than withheld: a sweep that is silently not scheduled is the
     defect this whole module exists for.
 
+    `at` names the controls owed at a time of day rather than an interval after their last run,
+    with the time and zone each is read in; see
+    `A_DAILY_MESSAGE_IS_OWED_AT_ITS_HOUR_AND_NOT_A_DAY_AFTER_THE_LAST`. A control it does not name
+    is owed on its interval as before.
+
     Takes its inputs rather than reading the registry and a clock, for the reason
     `brain.ops.starter.starter_gaps` records: a decision that can only be run against the real
     tree at the real instant cannot be shown to refuse anything, and both of its refusals
     survived a mutation run when it was written that way.
     """
+    at = {} if at is None else at
     found: list[Owed] = []
     for one in schedulable(controls):
         previous = last_run.get(one.name)
+        daily = at.get(one.name)
+        if daily is not None:
+            today, latest = daily.latest(now)
+            # Never run: today's occurrence, and not before it. See
+            # `A_DAILY_MESSAGE_IS_OWED_AT_ITS_HOUR_AND_NOT_A_DAY_AFTER_THE_LAST`.
+            due_at = today if previous is None else latest
+            if due_at > now or (previous is not None and previous >= due_at):
+                continue
+            found.append(
+                Owed(
+                    name=one.name,
+                    due_since=due_at,
+                    late_by=timedelta(0) if previous is None else now - due_at,
+                    first_run=previous is None,
+                    report_only=one.name in DESTRUCTIVE and one.name not in released,
+                )
+            )
+            continue
         if previous is None:
             found.append(
                 Owed(
