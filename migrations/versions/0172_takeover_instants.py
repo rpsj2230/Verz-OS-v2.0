@@ -38,7 +38,7 @@ The downgrade drops the function and the index, after which the breaker has noth
 Task ids: M8.3.5
 
 Revision ID: 0172
-Revises: 0156
+Revises: 0166
 """
 
 from __future__ import annotations
@@ -46,9 +46,9 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0172"
-# The head of origin/main when this was written. Re-pointed at whichever migration is the head
-# when it lands: nothing here depends on a table a later migration builds.
-down_revision = "0156"
+# Stacked after #268's 0166 on this branch, as the train lands them. Re-pointed at whichever
+# migration is the head when it lands: nothing here depends on a table a later migration builds.
+down_revision = "0166"
 branch_labels = None
 depends_on = None
 
