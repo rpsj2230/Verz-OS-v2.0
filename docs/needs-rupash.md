@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**15 items are open: 134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**16 items are open: 135,** whether the Brain's Google account is a Viewer or an Editor on the Drive folder, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,33 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 135. Google Drive: should the Brain's Google account be a Viewer or an Editor on the folder?
+
+**In plain terms:** when you connect Google Drive (item 126's list; its steps come to this page when
+it can read), you share one folder with an account made just for the Brain. The Brain promises that
+a file shared outside your company is never read. The catch: Google only tells an account who a file
+is shared with if that account is allowed to share the file itself, and a Viewer is not. So with
+Viewer access the Brain cannot see, for most files, whether they have been shared outside.
+
+**Option A: Viewer on the folder.** If the Brain's key file ever leaked, whoever held it could read
+that one folder and change nothing.
+- A file whose sharing Google does not show is treated as the folder's, because you chose to share
+  the folder.
+- A file Google does show as shared by link or shared outside is never read.
+- A file with its own, narrower permissions is never read (a Viewer can see that much).
+- So the promise becomes "a file shared outside your company is left out wherever Google shows its
+  sharing".
+
+**Option B: Editor on the folder.** Every file's sharing is visible, so "a file shared outside is
+never read" holds for every file. The Brain still only ever asks Google to read, so it cannot change
+anything itself, but a leaked key file could be used to change or delete files in that folder.
+
+**My recommendation: A.** The folder is already your decision about what the Brain may read, and a
+key that can only read is the safer thing to keep on a server. A is what is being built; switching
+to B later is one small change and one step in the guide.
+
+**What I need from you:** reply "135: A" or "135: B".
 
 ## 134. Connect the Slack channel (ready now)
 
