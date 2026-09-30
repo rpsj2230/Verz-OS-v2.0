@@ -318,8 +318,10 @@ CALLS_ARE_EVERYBODY_S: Final = (
     "everybody's usage."
 )
 
-#: Why there are no call figures on a process whose questions have read no source live yet: the
-#: answer path builds its live reader at the first question that needs one.
+#: Why there are no call figures on a process that keeps no live reader. A process with a
+#: database builds its reader at start (`brain.app`, so the figure tools share it) and counts
+#: from nought; one without builds none, and `brain.api_routes.live_records_of` builds one at
+#: the first question that needs it where the start did not.
 NO_LIVE_READER_HERE: Final = (
     "No question on this application process has read a source live yet, so there are no calls "
     "to count."
