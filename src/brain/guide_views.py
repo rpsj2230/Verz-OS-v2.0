@@ -5,7 +5,7 @@ it, so Connect Lark and every other connector's flow are one schema and the cons
 one component. A field here is a field there and nothing else: the picture stays a description the
 console draws (see `brain.ops.connect_steps.A_PICTURE_IS_AN_OUTLINE_THAT_NAMES_WHERE_TO_PRESS`).
 
-Task ids: M11.9.4, M27.11.9
+Task ids: M11.9.4, M27.11.9, M10.5.6
 """
 
 from __future__ import annotations
@@ -41,6 +41,15 @@ class SketchView(BaseModel):
     button: str
 
 
+class ChoiceView(BaseModel):
+    """One path a step offers: its key, and the words on its button."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str
+    label: str
+
+
 class GuideStepView(BaseModel):
     """One screen of a connect flow: its key, its words, its picture, its link, what it asks."""
 
@@ -55,6 +64,13 @@ class GuideStepView(BaseModel):
     link_label: str
     #: The values this screen collects, by the names the route that receives them judges.
     asks: list[str]
+    #: A text to paste into the vendor whole, and its button's words; empty when none.
+    copy_text: str = ""
+    copy_label: str = ""
+    #: The path this step belongs to where the steps branch; empty for every path.
+    path: str = ""
+    #: The paths this step offers, each a key and its button's words.
+    choices: list[ChoiceView] = []
 
 
 def sketch_view(sketch: Sketch) -> SketchView:
@@ -82,4 +98,8 @@ def step_view(step: GuideStep) -> GuideStepView:
         link=step.link,
         link_label=step.link_label,
         asks=list(step.asks),
+        copy_text=step.copy_text,
+        copy_label=step.copy_label,
+        path=step.path,
+        choices=[ChoiceView(key=key, label=label) for key, label in step.choices],
     )

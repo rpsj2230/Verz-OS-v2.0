@@ -55,6 +55,10 @@ from brain.ops.acceptance_run import Harness
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 210
+
 A, B = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons

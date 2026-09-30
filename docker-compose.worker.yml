@@ -133,6 +133,13 @@ services:
       # this, so the worker read `unset` on every install and recorded the import as not run
       # whatever the install had named. The same line and default as the application's.
       INSTALL_ACCEPTANCE_SKILL_SOURCE: ${INSTALL_ACCEPTANCE_SKILL_SOURCE:-}
+      INSTALL_DIGEST_DESTINATION: ${INSTALL_DIGEST_DESTINATION:-}
+      INSTALL_DIGEST_TIME: ${INSTALL_DIGEST_TIME:-}
+      INSTALL_TIME_ZONE: ${INSTALL_TIME_ZONE:-}
+      # The install's sign-in issuer, which names the Keycloak realm the staff sync makes sign-in
+      # accounts in (brain.ops.staff_accounts_run). The same line as the application's, so the
+      # two read one value; without it every run says the issuer is unset and makes nobody.
+      INSTALL_OIDC_ISSUER: ${INSTALL_OIDC_ISSUER:-}
       # Where a durable graph's saved state would go. Session mode for a different reason from
       # the queue's: the saver prepares statements server-side, and a pooler in transaction mode
       # hands the next statement to a backend that never saw the prepare. A session pooler keeps

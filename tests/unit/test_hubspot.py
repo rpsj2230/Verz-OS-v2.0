@@ -807,17 +807,18 @@ def test_a_connection_that_kept_a_token_is_refused_at_construction() -> None:
 
 # ------------------------------------------------------- the ceiling (M11.3.1, M11.3.5)
 def test_the_ceiling_is_read_from_the_verified_table_and_never_invented() -> None:
-    """**A finding rather than a feature.** The corpus records 10,000 calls a day per app per
-    account and `brain.ops.limits` does not carry that figure, so there is nothing verified for
-    this connector to run against and `throttle.ceiling_for` refuses. Refusing is the intended
-    behaviour: a number restated here would sit in a console beside three that were measured
-    and look exactly like them.
+    """The ceiling comes from `brain.ops.limits` and nowhere in this module, and since 2026-09-30
+    it is the documented figure: 100 calls per 10 seconds per private app, recorded as the
+    minute's so no burst reaches the ten-second window, and 250,000 a day per account. The
+    recording's figure is the independent fact the row is held to. Where the row is absent the
+    connector refuses rather than inventing one.
 
-    The branch means this test keeps working the day somebody verifies the figure and adds the
-    row, which is the only edit that should be needed.
-
-    Delete this and a hard-coded ConnectorLimit in this module reads as a measurement."""
-    assert limit_for(Source.HUBSPOT).calls == 10_000
+    Delete this and a hard-coded ConnectorLimit in this module reads as a measurement, or the
+    recorded row drifts from the documentation."""
+    recorded = connector_ceiling(CEILING_NAME)
+    assert recorded is not None
+    assert recorded.per_minute == limit_for(Source.HUBSPOT).calls == 100
+    assert recorded.per_day == 250_000
     assert manifest().ceiling == CEILING_NAME
     verified = connector_ceiling(CEILING_NAME)
     if verified is None:

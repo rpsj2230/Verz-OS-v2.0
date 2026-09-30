@@ -23,7 +23,11 @@ from brain.connectors.declaration import (
 )
 from brain.console.connector_detail import LARK_SOURCES
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
-from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
+from brain.ops.connectable import (
+    CONNECTABLE,
+    NOT_FROM_THE_CONSOLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
+)
 from brain.ops.connector_slots import SLOT_SCOPES
 
 #: A picture that draws what it marks, for the refusals below to vary one field of.
@@ -148,6 +152,7 @@ def test_a_server_source_says_why_in_its_declarations_own_words() -> None:
     """The hand-over step quotes the reason the Connectors screen shows, not a second copy of it.
     Delete this and the step and the screen can give two different reasons."""
     for name, kind in NOT_FROM_THE_CONSOLE.items():
-        if name in LARK_SOURCES:
+        if name in LARK_SOURCES or kind.why == THIS_INSTALL_CANNOT_READ_IT_YET:
+            # Connect Lark's, or a declared form not offered yet, which shows no steps at all.
             continue
         assert kind.why in kind.guide[-1].text, name

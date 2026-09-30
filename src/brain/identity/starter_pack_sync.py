@@ -51,6 +51,7 @@ from typing import Final
 from brain.core.department import department_scope
 from brain.core.scope import Scope
 from brain.identity.lifecycle import STARTER_PACK
+from brain.identity.organisation_sync import department_key
 from brain.identity.packs import PackAssignment
 from brain.identity.staff_source import Asserts, Roster
 from brain.identity.staff_sync import GRANTED_BY_CHARS, ROSTER_PREFIX
@@ -158,8 +159,7 @@ def department_of(scope: Scope) -> str | None:
     return named if department_scope(named) == scope else None
 
 
-def _key(name: str) -> str:
-    return " ".join(name.split()).casefold()
+_key = department_key
 
 
 def registered_by_name(departments: Mapping[str, str]) -> dict[str, str]:

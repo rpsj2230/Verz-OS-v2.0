@@ -270,6 +270,13 @@ FURNISHED_SETTING: Final = "starter.furnished"
 TEMPLATE_KEY_COMMAND: Final = "brain.ops.template_key"
 TEMPLATE_KEY_HELD_FLAG: Final = "--held"
 
+#: The staff accounts client's step: the release's script, and the application's module and flag
+#: its done test asks. Held equal to `brain.ops.accounts_key` by a test rather than imported, for
+#: `FURNISHED_SETTING`'s reason.
+ACCOUNTS_CLIENT_SCRIPT: Final = "ops/keycloak/accounts-client.sh"
+ACCOUNTS_KEY_COMMAND: Final = "brain.ops.accounts_key"
+ACCOUNTS_KEY_HELD_FLAG: Final = "--held"
+
 #: The variable carrying the trace ledger's password. Named here because the step reads it
 #: twice, once to refuse an install that has not set one and once to build the statement
 #: that creates the login. A test holds it equal to what the compose files interpolate.
@@ -957,6 +964,37 @@ PLAN: Final[tuple[Step, ...]] = (
         # counts as furnished here, which is what the store itself decides from the ledger.
         already_done=_in_the_database(
             f"select 1 from ops.setting where key = '{FURNISHED_SETTING}'"  # noqa: S608
+        ),
+    ),
+    Step(
+        # After readiness, because the application is what keeps the secret and says which realm
+        # it signs in with. The same script the server's deploy hook runs after every release, so
+        # a fresh install and one upgraded into this release end with the same client.
+        name="set up the staff sync's sign-in accounts client",
+        run=(
+            'BRAIN_APP_CONTAINER="$(docker compose $BRAIN_COMPOSE_FILES ps -q app)" '
+            'BRAIN_KEYCLOAK_CONTAINER="$(docker compose $BRAIN_COMPOSE_FILES ps -q keycloak '
+            '2>/dev/null)" '
+            # Relative, from the release directory an earlier step changed into: it reads the
+            # release's script and writes nothing there.
+            f'sh "./{ACCOUNTS_CLIENT_SCRIPT}"'
+        ),
+        why=(
+            "the staff sync gives each active person on the staff list a sign-in account, and "
+            "makes it through a Keycloak client that may manage users and nothing else. This "
+            "makes that client, gives it its three roles and keeps its secret in the vault, so "
+            "nobody copies a secret anywhere. Nobody is sent anything: a person sets a password "
+            "with Forgot password on the sign-in page. See brain.ops.accounts_key"
+        ),
+        on_failure=(
+            "the line above says which part did not take. The install works without it, and the "
+            "staff sync says on every run that it made no accounts; run this again once the "
+            "vault and Keycloak are both up. A second run changes nothing the first one did"
+        ),
+        changes=True,
+        already_done=(
+            'test "${BRAIN_VAULT:-yes}" = "no" || docker compose $BRAIN_COMPOSE_FILES exec -T app '
+            f"python -m {ACCOUNTS_KEY_COMMAND} {ACCOUNTS_KEY_HELD_FLAG}"
         ),
     ),
     Step(

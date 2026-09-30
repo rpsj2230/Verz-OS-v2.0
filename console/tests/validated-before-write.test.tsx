@@ -78,7 +78,14 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
-  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // The preview as a person is in the Permissions card, above the model card, so the pin's is second.
+  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 1, writes: true }],
+  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // A person's Access view: the preview through an agent, under the grants, roles and placements.
+  "src/pages/people/PersonPreview.tsx": [{ pattern: "/people/:personId/:view", index: 0, writes: true }],
+  // The Dashboard opens first, and its one form is the monthly budget, drawn for a reader of
+  // everybody's spend.
+  "src/pages/agents/AgentSpend.tsx": [{ pattern: "/agents/:agentId", index: 0, writes: true }],
   // A model's price opens on its row in the prices card, under the providers and the matrix, which
   // draw no form of their own (M27.12.5).
   "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
@@ -180,9 +187,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "Every form here opens behind a press the page cases do not make: Add a skill's drawer, Edit as a " +
     "new version, or the Profile's assign and categories cards. Each says what it accepts above its " +
     "fields, and a blank one cannot be sent: Add stays disabled until packageProblem accepts a package, " +
-    "Import until importProblem accepts the repository and commit or the address, and Save until the " +
-    "edit has text, which tests/skills-page.test.tsx holds for Add. The assign form only opens a " +
-    "confirmation naming an agent the API listed.",
+    "Import until importProblem accepts the repository and commit or the address, the written " +
+    "procedure's Import until procedureProblem accepts a chosen file, and Save until the edit has " +
+    "text, which tests/skills-page.test.tsx holds for Add and for the procedure. The assign form only " +
+    "opens a confirmation naming an agent the API listed.",
   "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",

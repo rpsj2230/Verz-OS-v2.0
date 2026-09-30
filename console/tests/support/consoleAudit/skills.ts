@@ -12,6 +12,7 @@ import {
   categoriesPath,
   detachPath,
   IMPORT_PATH,
+  PROCEDURE_PATH,
   reinstatementPath,
   retirementPath,
   reviewPath,
@@ -23,6 +24,9 @@ import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/skills/SkillForms.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
   "src/pages/skills/SkillForms.tsx IMPORT_PATH": [at("POST /api/v1/skills/imports", "IMPORT_PATH", IMPORT_PATH)],
+  "src/pages/skills/SkillForms.tsx PROCEDURE_PATH": [
+    at("POST /api/v1/skills/procedures", "PROCEDURE_PATH", PROCEDURE_PATH),
+  ],
   "src/pages/skills/SkillForms.tsx versionsPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/versions", "versionsPath", versionsPath("d".repeat(64))),
   ],
@@ -54,6 +58,19 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_skill_store", "test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger", true),
     audit: t("test_skill_store", "test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger", true),
     behaviour: t("test_skill_routes", "test_an_administrator_imports_a_skill_from_a_repository_at_a_commit_and_it_waits"),
+  },
+  "POST /api/v1/skills/procedures": {
+    row: t(
+      "test_acceptance_procedures",
+      "test_on_a_real_database_the_procedure_check_passes_and_leaves_nothing_behind",
+      true,
+    ),
+    audit: t(
+      "test_acceptance_procedures",
+      "test_on_a_real_database_the_procedure_check_passes_and_leaves_nothing_behind",
+      true,
+    ),
+    behaviour: t("test_skill_procedures", "test_an_administrator_imports_a_word_procedure_and_it_waits_with_its_findings"),
   },
   "POST /api/v1/skills/{digest}/versions": {
     row: t("test_skill_store", "test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger", true),

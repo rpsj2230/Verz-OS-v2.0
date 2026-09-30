@@ -53,7 +53,17 @@ RECORD: Final = {
                 "vcard",
                 [["version", {}, "text", "4.0"], ["fn", {}, "text", REGISTRAR]],
             ],
-        }
+        },
+        # The registrant: a person or a company, published by some registries and never read
+        # here. A canary, so a kept row holding it would be caught.
+        {
+            "objectClassName": "entity",
+            "roles": ["registrant"],
+            "vcardArray": [
+                "vcard",
+                [["version", {}, "text", "4.0"], ["fn", {}, "text", "CANARY-DOMAINS-REGISTRANT"]],
+            ],
+        },
     ],
     "nameservers": [
         {"objectClassName": "nameserver", "ldhName": "NS1.EXAMPLE.NET"},

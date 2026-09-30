@@ -531,6 +531,10 @@ class DomainsLiveLookup:
             raise DomainsError(msg)
         return {"name": name}
 
+    def operation(self, entity: str, *, settings: Mapping[str, str], resolver: Any) -> None:
+        """None: a domain is read by its routed page, from the registry that holds it."""
+        del entity, settings, resolver
+
     def facts(
         self, entity: str, source_id: str, *, caller: OneCall, resolver: Resolver
     ) -> Mapping[str, str]:

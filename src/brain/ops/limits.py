@@ -447,6 +447,19 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
         ),
     ),
     ConnectorLimit(
+        name="hubspot",
+        per_minute=100,
+        per_day=250_000,
+        note=(
+            "A private app may make 100 calls per 10 seconds, and the account 250,000 calls a day, "
+            "on the Free and Starter tiers; Professional and Enterprise allow 190 per 10 seconds "
+            "and 625,000 or 1,000,000 a day, and the API Limit Increase add-on raises both "
+            "(HubSpot's usage guidelines, read 2026-09-30, cited in brain.connectors.hubspot). "
+            "Recorded at the lowest tier, and the ten-second allowance as the minute's, so no "
+            "burst inside a minute can reach HubSpot's ten-second window."
+        ),
+    ),
+    ConnectorLimit(
         name="lark_base",
         per_minute=100,
         raisable=False,
@@ -1222,16 +1235,22 @@ def _whose(scope: LimitScope, period: str) -> str:
             assert_never(scope)
 
 
-def when_again(retry_after_seconds: float) -> str:
-    """When the person may ask again, from the same rounding the header uses.
+def wait_in_words(seconds: float) -> str:
+    """A wait as a person reads it, from the same rounding the header uses.
 
     Seconds under two minutes and whole minutes, rounded up, from there. See
-    `A_REFUSAL_SAYS_WHEN_IN_WORDS`.
+    `A_REFUSAL_SAYS_WHEN_IN_WORDS`. Shared with the queued upload's expected wait
+    (`brain.knowledge.ingest_queue.outcome_sentence`), so a wait is said one way everywhere.
     """
-    whole = int(retry_after_header(retry_after_seconds))
+    whole = int(retry_after_header(seconds))
     if whole < 2 * MINUTE_SECONDS:
-        return f"You can ask again in {whole} second{'' if whole == 1 else 's'}."
-    return f"You can ask again in {math.ceil(whole / MINUTE_SECONDS)} minutes."
+        return f"{whole} second{'' if whole == 1 else 's'}"
+    return f"{math.ceil(whole / MINUTE_SECONDS)} minutes"
+
+
+def when_again(retry_after_seconds: float) -> str:
+    """When the person may ask again, in `wait_in_words`."""
+    return f"You can ask again in {wait_in_words(retry_after_seconds)}."
 
 
 def refusal_sentence(binding: Limit | None, retry_after_seconds: float) -> str:

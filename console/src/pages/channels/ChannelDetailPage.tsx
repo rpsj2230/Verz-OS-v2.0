@@ -16,6 +16,10 @@
  * M27.15.43's third clause said where a person decides it; switching on says it starts receiving.
  * Both are recorded in the audit ledger by the database, as the dialog says.
  *
+ * **A channel with connect steps offers them from the header**, on every view, as `ChannelFlow`:
+ * the vendor's steps with a picture each and the set-up form last. A channel with none offers no
+ * button, rather than a flow of one form the Profile already draws.
+ *
  * Task ids: M27.13.1, M27.15.43, M27.16.1, M10.1.4
  */
 
@@ -44,6 +48,7 @@ import { at } from "../operations/parts";
 import { ACT_LABELS, UNAVAILABLE } from "./channelActions";
 import { ChannelAbout } from "./ChannelAbout";
 import { ChannelDashboard } from "./ChannelDashboard";
+import { ChannelFlow, connectLabel } from "./ChannelFlow";
 import { ChannelProfile } from "./ChannelProfile";
 import {
   CHANNELS_ADDRESS,
@@ -104,6 +109,7 @@ function ChannelAnswer({ name, tab }: { readonly name: string; readonly tab: str
   const [version, setVersion] = useState(0);
   const [told, setTold] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const answer = useResource<unknown>(channelRowApiPath(name), version);
@@ -159,6 +165,20 @@ function ChannelAnswer({ name, tab }: { readonly name: string; readonly tab: str
       subline={row.receives ? undefined : "Not received by this release yet"}
       actions={
         <>
+          {row.steps.length === 0 ? null : (
+            <Button
+              size="sm"
+              variant={row.status === "not_set_up" ? "default" : "outline"}
+              className="min-h-11 sm:min-h-8"
+              onClick={() => {
+                setTold(null);
+                setFailure(null);
+                setConnecting(true);
+              }}
+            >
+              {connectLabel(row)}
+            </Button>
+          )}
           {row.status === "not_set_up" ? null : (
             <Button
               size="sm"
@@ -228,6 +248,17 @@ function ChannelAnswer({ name, tab }: { readonly name: string; readonly tab: str
           setSwitching(false);
         }}
       />
+      {connecting ? (
+        <ChannelFlow
+          row={row}
+          onClose={(saved) => {
+            setConnecting(false);
+            if (saved !== null) {
+              changed(saved);
+            }
+          }}
+        />
+      ) : null}
     </>
   );
 }

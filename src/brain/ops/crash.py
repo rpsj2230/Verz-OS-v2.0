@@ -71,7 +71,8 @@ scheduled safety mechanisms here have no caller at all, and `queue_redrive` and
 `side_effect_resume` are two of them. Adding a fourteenth wire would answer the wrong half:
 what was missing is not a timer, it is the decision the timer would call. `redrive` and
 `verify_once` are now named on those two rows, so the registry records that each control has a
-second half and that nothing calls it either.
+second half. Since 2026-09-30 `brain.ops.recovery_run` calls both, and the worker's schedule
+starts it.
 
 Rejected: restating what a killed process is not. `idempotency.WHAT_THE_CRASH_MODEL_DOES_NOT_COVER`
 says it once, about the durable write, the source honouring the key and a source that refuses

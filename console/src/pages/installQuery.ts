@@ -247,6 +247,27 @@ export function readUnusual(payload: Limits | null): Read<readonly Unusual[]> {
   return { panel: rows };
 }
 
+/**
+ * One kind of work that has used its share of one budget and is deferred now (M22.1.5). A class and
+ * a budget with the share and the budget in force, which are configuration; never a count of what is
+ * in use, which is other people's work (`brain.install_routes.A_DEFERRED_ROW_NAMES_A_CLASS_AND_A_BUDGET_AND_NOBODY`).
+ */
+export type Deferred = components["schemas"]["DeferredView"];
+
+/**
+ * The kinds of work deferred now, or why that cannot be said.
+ *
+ * `readThrottled`'s shape and its reason: an absent list is nothing on this process being able to
+ * count the work in progress, an empty one is nothing deferred, and the page draws the two apart.
+ */
+export function readDeferred(payload: Limits | null): Read<readonly Deferred[]> {
+  const rows = payload?.deferred;
+  if (rows === null || rows === undefined) {
+    return { unread: payload?.deferred_unread ?? "" };
+  }
+  return { panel: rows };
+}
+
 /** One external ceiling requests run into. */
 export type Ceiling = components["schemas"]["CeilingView"];
 
@@ -286,6 +307,16 @@ export const WINDOW_COLUMNS: readonly (keyof Window)[] = [
   "window_seconds",
   "raisable",
   "when_unreachable",
+];
+
+/** How a deferred row's columns are shown: the kind of work, the budget, its share, and the sentence. */
+export const DEFERRED_COLUMNS: readonly (keyof Deferred)[] = [
+  "work",
+  "workload_class",
+  "budget",
+  "share",
+  "limit",
+  "said",
 ];
 
 /** How an unusual row's columns are shown. No count, and the API sends none. */

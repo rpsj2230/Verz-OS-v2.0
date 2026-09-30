@@ -1015,16 +1015,16 @@ def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
 # --------------------------------------------------------------- what it will not say
 
 
-def test_the_writes_are_nine_posts_and_no_read_answers_one_skill_by_name(
+def test_the_writes_are_ten_posts_and_no_read_answers_one_skill_by_name(
     client: TestClient,
 ) -> None:
-    """Under `/skills` there are two GETs, neither taking a path parameter, and nine POSTs: add a
-    package, import from a repository or an address, save an edit as a version, set categories,
-    decide about one, assign one, retire and reinstate a version, and detach one from an agent.
-    Read off the application's own document.
+    """Under `/skills` there are two GETs, neither taking a path parameter, and ten POSTs: add a
+    package, import from a repository or an address, import a written procedure (M12.2.10), save
+    an edit as a version, set categories, decide about one, assign one, retire and reinstate a
+    version, and detach one from an agent. Read off the application's own document.
 
-    Delete this and a tenth write, an approval folded into an import say, or a GET answering one
-    skill by name, can arrive without anybody arguing for it."""
+    Delete this and an eleventh write, an approval folded into an import say, or a GET answering
+    one skill by name, can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
 
@@ -1032,6 +1032,7 @@ def test_the_writes_are_nine_posts_and_no_read_answers_one_skill_by_name(
         SKILLS: {"get", "post"},
         f"{SKILLS}/library": {"get"},
         f"{SKILLS}/imports": {"post"},
+        f"{SKILLS}/procedures": {"post"},
         f"{SKILLS}/{{digest}}/versions": {"post"},
         f"{SKILLS}/{{digest}}/categories": {"post"},
         f"{SKILLS}/{{digest}}/review": {"post"},

@@ -39,6 +39,12 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)":
+    "Previewing a run through an agent for the person on the page writes nothing: it is the agent " +
+    "Profile's own preview route, which asks the gate and keeps no row.",
+  "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)":
+    "Previewing a person's run of an agent writes nothing: brain.agent_capability_routes asks the gate " +
+    "what that run would be handed and keeps no row, so there is nothing for a press to end or replace.",
   "src/pages/approvals/ApprovalCard.tsx approvalDecisionApiPath(suspensionId)":
     "Deciding an approval is the answer to a question the card has already asked. The artefact and " +
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +
@@ -166,6 +172,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
     "and it reaches no agent until it is approved and assigned, both of which are confirmed.",
+  "src/pages/skills/SkillForms.tsx PROCEDURE_PATH":
+    "Imports a written procedure into the library as a new draft, undecided, exactly as an added " +
+    "package is: the same words twice are refused, a revised document is a new version beside the " +
+    "old one, and it reaches no agent until it is approved and assigned, both of which are confirmed.",
   "src/pages/skills/SkillForms.tsx versionsPath(one.digest)":
     "Saves an edit as a new, undecided version beside the one it came from, which is never changed; " +
     "every agent keeps the version it runs, which tests/unit/test_skill_routes.py holds, so nothing " +
@@ -178,6 +188,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +
     "confirmed.",
+  "src/pages/staff-sources/StaffSourcesPage.tsx TRIAL_API_PATH":
+    "Try a read writes when a trial was asked for and nothing else: the worker then reads the source " +
+    "as the nightly run would and applies nothing, recording one tried row that names nobody, which " +
+    "tests/unit/test_staff_sync_run.py holds. A second press only moves the instant.",
   "src/pages/staff-sources/ConnectDrawer.tsx path":
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
