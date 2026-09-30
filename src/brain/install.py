@@ -495,6 +495,26 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         default="clamav:3310",
     ),
     # --- the skill import acceptance check, M38.5.1 (brain.ops.acceptance_checks_skills)
+    # --- the evening digest, M38.3.3 (brain.ops.digest_destination)
+    Setting(
+        name="INSTALL_DIGEST_DESTINATION",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Where the evening build digest is sent, as channel:conversation, chosen on Install, "
+            "Settings from the conversations each connected channel offers and never typed. "
+            "`unset` sends nothing."
+        ),
+        default="unset",
+    ),
+    Setting(
+        name="INSTALL_DIGEST_TIME",
+        belongs=Belongs.LOCALE,
+        meaning=(
+            "The time of day the evening digest is sent, as HH:MM on the 24-hour clock in the "
+            "install's time zone. Changed on Install, Settings."
+        ),
+        default="18:00",
+    ),
     Setting(
         name="INSTALL_ACCEPTANCE_SKILL_SOURCE",
         belongs=Belongs.CONNECTORS,

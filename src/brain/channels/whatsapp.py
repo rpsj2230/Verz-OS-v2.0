@@ -54,12 +54,37 @@ data: `normalise_messages` reads the mapping the Cloud API posts and refuses wha
 read. A module that owned an HTTP client could not be tested for the case that matters,
 which is a template filled from the wrong person's answer.
 
-Task ids: M10.5.3
+**`WIRE` receives WhatsApp on the one events address, and a request is Meta's only if the app
+secret signed its exact bytes (M10.6.2).** Meta puts `sha256=` and the hex HMAC-SHA256 of the
+bytes it posted, under the app secret, in `X-Hub-Signature-256`. `verify_signature` recomputes
+that over the bytes that arrived and compares the two in constant time, and it takes bytes and
+nothing else, so a missing header, a wrong secret, one altered byte and the same JSON written out
+again are one refusal, made before `WhatsAppWire.read` parses anything. The secret is the one the
+channel's record names: `brain.channels.inbound.receive` borrows it from the vault slot
+`brain.ops.channel_store.channel_secret_slot` derives, so no configuration value or constant can
+stand in for it, and an empty one is refused rather than used as a key anybody could compute an
+HMAC under. Meta signs no time and no nonce, so a replay is refused by the claim on the message id,
+for `brain.channels.webhook.A_REPLAY_IS_REFUSED_BY_THE_CLAIM`'s reason. See
+`A_WHATSAPP_REQUEST_IS_SIGNED_BY_META_OR_REFUSED`.
+
+**The wire verifies and reads, and it sends nothing, deliberately.** A reply needs the Cloud API's
+send, its access token and the template and session-window rules above wired to it, which is this
+module's own leaf and is not built; so `request_for` refuses every reply and
+`brain.channels.outbound.deliver` records it as refused `incomplete`, never as sent. Meta's
+subscription check is a GET carrying `hub.challenge`, which the one events address, a POST, does
+not answer, so subscribing the address in Meta's console is not built either. A delivery carrying
+no text message, or more than one, is refused as unreadable, as Lark's wire refuses an event it
+does not read. See `A_REPLY_ON_WHATSAPP_IS_NOT_BUILT`.
+
+Task ids: M10.5.3, M10.6.2
 """
 
 from __future__ import annotations
 
 import enum
+import hashlib
+import hmac
+import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -67,13 +92,18 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from brain.channels.adapter import (
+    Arrived,
     ChannelCapabilities,
     Feature,
+    Received,
+    VendorAnswer,
+    VendorRequest,
     assert_can_send,
     send_operation,
 )
 from brain.channels.cards import assert_label_survives, render_body
-from brain.connectors.throttle import CallOutcome
+from brain.channels.webhook import WebhookRefusedError, assert_raw_bytes
+from brain.connectors.throttle import CallOutcome, classify
 from brain.core.entitlement import EntitlementSet
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
@@ -762,3 +792,142 @@ def deliver(
 
     operation = send_operation(intent, channel=Channel.WHATSAPP, to=to_number)
     return issue_once(ledger, operation, post)
+
+
+# ------------------------------------------------------------------- the wire (M10.6.2)
+
+#: Why a WhatsApp request is checked over its bytes before anything reads them.
+A_WHATSAPP_REQUEST_IS_SIGNED_BY_META_OR_REFUSED: Final = (
+    "Meta signs each webhook with the app secret: X-Hub-Signature-256 is sha256= and the hex "
+    "HMAC-SHA256 of the exact bytes it posted. The same HMAC is computed over the bytes that "
+    "arrived, under the secret the channel's record names, and compared in constant time before "
+    "anything parses them, so a missing header, a wrong secret, one altered byte and the same JSON "
+    "written out again are one refusal, and the parser only ever reads bytes Meta signed."
+)
+
+#: Why an empty app secret verifies nothing.
+AN_EMPTY_KEY_VERIFIES_NOTHING: Final = (
+    "An HMAC under an empty key is one anybody can compute, so a slot holding an empty value "
+    "would accept every forged request as signed. It is refused as a signature that does not "
+    "match, and the channel stays shut until a real secret is kept."
+)
+
+#: Why the wire sends nothing back.
+A_REPLY_ON_WHATSAPP_IS_NOT_BUILT: Final = (
+    "This release verifies and reads a WhatsApp message and sends nothing back: the Cloud API "
+    "send, its access token, its templates and its session window are not wired, so a reply "
+    "planned for WhatsApp is refused as incomplete and recorded as refused, never as sent."
+)
+
+#: The header Meta signs a webhook in, lower-cased because `Arrived` lower-cases every name.
+SIGNATURE_HEADER: Final = "x-hub-signature-256"
+
+#: What the header's value begins with: the algorithm, then the hex digest.
+SIGNATURE_PREFIX: Final = "sha256="
+
+
+def signature_for(app_secret: str, body: bytes) -> str:
+    """What Meta puts in `X-Hub-Signature-256` for these bytes under this app secret.
+
+    Exported so a test and the install's acceptance check sign exactly as the check verifies,
+    from one definition, rather than against a literal.
+    """
+    digest = hmac.new(app_secret.encode("utf-8"), bytes(body), hashlib.sha256).hexdigest()
+    return f"{SIGNATURE_PREFIX}{digest}"
+
+
+def verify_signature(*, app_secret: str, signature: str, body: bytes) -> None:
+    """Refuse anything the app secret did not sign, over the exact bytes received.
+
+    Takes bytes and no parsed object, for `brain.channels.webhook.assert_raw_bytes`'s reason, and
+    raises rather than returning a bool, for `brain.channels.webhook.verify`'s. The presented value
+    is compared as bytes, so a header carrying characters outside ASCII is a signature that does
+    not match rather than a `TypeError` out of `hmac.compare_digest`. One refusal for every
+    reason, with one sentence, for `WebhookRefusedError`'s.
+    """
+    assert_raw_bytes(body)
+    if not app_secret:
+        # See AN_EMPTY_KEY_VERIFIES_NOTHING.
+        raise WebhookRefusedError("this request was not accepted")
+    expected = signature_for(app_secret, bytes(body)).encode("ascii")
+    presented = signature.encode("utf-8", "replace")
+    # Constant time, for the reason `brain.channels.webhook.verify` gives.
+    if not hmac.compare_digest(expected, presented):
+        raise WebhookRefusedError("this request was not accepted")
+
+
+@dataclass(frozen=True)
+class WhatsAppWire:
+    """`brain.channels.adapter.ChannelWire` for WhatsApp: verification and a read, no send.
+
+    Holds no secret and opens nothing. The record takes no tenant field, because verifying needs
+    nothing but the secret and nothing here sends; see `A_REPLY_ON_WHATSAPP_IS_NOT_BUILT`.
+    """
+
+    @property
+    def channel(self) -> Channel:
+        return Channel.WHATSAPP
+
+    @property
+    def tenant_fields(self) -> tuple[str, ...]:
+        return ()
+
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """One value: the app secret the Cloud API signs with, kept whole in the channel's slot."""
+        return ()
+
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
+        """`verify_signature` over the exact bytes, and the same request back: Meta signs and
+        does not encrypt. `now` is the protocol's; Meta signs no time."""
+        del now
+        verify_signature(
+            app_secret=secret,
+            signature=arrived.headers.get(SIGNATURE_HEADER, ""),
+            body=arrived.body,
+        )
+        return arrived
+
+    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
+        """Meta checks an address with a GET, which the events address does not serve, so a
+        verified POST is never a handshake."""
+        del arrived
+        return None
+
+    def read(self, arrived: Arrived) -> Received:
+        """The verified body as one text message and the sender to reply to, or `ValueError`.
+
+        `WhatsAppAdapter.normalise`'s rule: exactly one text message, since the events address
+        claims one message per request and picking the first of several would drop the rest.
+        """
+        try:
+            parsed = json.loads(arrived.body)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("a WhatsApp webhook is a JSON object") from exc
+        try:
+            event = WhatsAppAdapter().normalise(parsed)
+        except WhatsAppRefusedError as exc:
+            raise ValueError(str(exc)) from exc
+        return Received(event=event, reply_to=event.channel_identity)
+
+    def request_for(
+        self, *, to: str, text: str, secret: str, tenant: Mapping[str, str], now: datetime
+    ) -> VendorRequest:
+        """Every reply is refused as incomplete: see `A_REPLY_ON_WHATSAPP_IS_NOT_BUILT`."""
+        del to, text, secret, tenant, now
+        raise ValueError(A_REPLY_ON_WHATSAPP_IS_NOT_BUILT)
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome:
+        """`brain.connectors.throttle.classify`'s, an unsafe address refused. Nothing is sent
+        today, so this is asked of nothing; it is the protocol's."""
+        if answer.unsafe_address:
+            return CallOutcome.REJECTED
+        return classify(
+            status=answer.status,
+            timed_out=answer.timed_out,
+            connection_failed=answer.connection_failed,
+        )
+
+
+#: This channel's wire, found by `brain.channels.adapter.channel_wires`.
+WIRE: Final = WhatsAppWire()

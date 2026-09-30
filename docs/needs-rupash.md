@@ -56,37 +56,50 @@ be added the day someone needs page-by-page detail.
 
 **What I need from you:** reply "133: A" or "133: B".
 
-## 132. Connect the email channel (ready now if your domain is on Cloudflare)
+## 132. Connect the email channel (ready now, with any mail provider)
 
-**In plain terms:** people can now email the Brain and get an answer back by email (item 126's
-order: the first of the channels). Answers go out through the install's own mail relay; mail comes
-in, today, through Cloudflare. **If your company's domain is not on Cloudflare, wait:** a version
-that reads an ordinary mailbox (Google, Microsoft 365, Lark Mail or any other provider) is being
-built next, and I will tell you when it is ready.
+**In plain terms:** people can email the Brain and get an answer back by email, the first of the
+channels in item 126's order. Answers go out through the install's own mail relay. Mail comes in
+either from an ordinary mailbox the Brain reads once a minute (Google, Microsoft 365, Lark Mail or
+any provider with IMAP), or, if your domain's mail runs through Cloudflare, from Cloudflare Email
+Routing. **Use the mailbox route unless you already use Cloudflare Email Routing:** it needs only a
+mailbox.
 
 **What you do,** in the console under **Channels**, **Email**, **Connect Email**, which shows each
-step:
+step with a picture:
 
-1. **Set up the mail relay first.** Open **Notifications**, fill in **Email relay** with your mail
+1. **Choose the route.** At "Is your domain's mail on Cloudflare?" choose **No: read a mailbox**.
+2. **Set up the mail relay first.** Open **Notifications**, fill in **Email relay** with your mail
    provider's sending details (host, port, sender address, user name and password) and send its
-   test message. These can be the same details item 131 asks for.
-2. **Give the Brain an address of its own.** In Cloudflare open your domain, then **Email Routing**.
-   Use a subdomain of your domain just for the Brain, never the domain your staff's mailboxes use: open
-   **Settings** and add the subdomain under **Subdomains**. If Cloudflare asks to turn Email Routing
-   on for the whole domain, stop and ask whoever runs your company's mail.
-3. **Create the Worker that hands mail to the Brain.** Open **Workers & Pages**, create a Worker from
-   the Hello World start named company-brain-mail, replace its code with the script the console
-   gives you, and deploy. Under the Worker's **Settings**, **Variables and Secrets**, add
-   BRAIN_EVENTS_URL (the address the console shows), BRAIN_DOMAINS (your staff's email domains) and
-   BRAIN_SECRET, as a secret, a long random value you make up now.
-4. **Send the address's mail to the Worker.** In **Email Routing**, **Routing rules**, create an
-   address on that subdomain (for example one named ask), choose **Send to a Worker**, pick
-   company-brain-mail and save.
-5. **Save it in the console.** Type that address, paste the BRAIN_SECRET value, tick **Switched on**
-   and press **Save set-up**. Then write to the address from your own mailbox: the first answer asks
-   you to link your address to your account.
+   test message. These are the same details item 131 asks for, so do this once for both.
+3. **Make a mailbox only the Brain uses** (for example one named ask, at your company's domain) and
+   turn on IMAP for it:
+   - Google Workspace: in Gmail open **Settings**, **Forwarding and POP/IMAP**, **Enable IMAP**, and
+     make an app password if the mailbox signs in with two steps.
+   - Microsoft 365: in the admin centre open the mailbox, then **Mail**, **Manage email apps**, and
+     tick **IMAP**.
+   - Write down the IMAP server your provider names (the console's step names Google's and
+     Microsoft's) and port 993. Nobody should read this mailbox by hand: the Brain reads what is
+     unread and marks it read, and never deletes anything.
+4. **Find the name your provider stamps on arriving mail.** From your own work address send the new
+   mailbox a message, open it there and choose **Show original** (or **View source**). Find the
+   topmost line starting Authentication-Results: and copy the name before its first semicolon. On
+   Microsoft 365 that line names nobody, so the name is simply the word exchange.
+5. **Save it in the console.** Back in **Connect Email** type the mailbox's address, its IMAP
+   server, port 993 and user name, the name from step 4 in **receiver**, and your staff's email
+   domains in **domains**, separated by commas. Paste the mailbox's password (or its app password)
+   into the secret field, tick **Switched on** and press **Save set-up**. The password goes to the
+   vault and is never shown again.
+6. **Try it.** Write to the mailbox from your own work address. Within a minute the Brain answers,
+   and the first answer asks you to link your address to your Brain account.
 
-Tell me "connected email" afterwards and I prove it on your install.
+**If you use Cloudflare Email Routing instead,** choose **Yes** at step 1 and follow the Cloudflare
+steps the console shows: a subdomain just for the Brain, a Worker named company-brain-mail with the
+script the console gives you, and a routing rule sending that address's mail to the Worker.
+
+**What only your real mailbox proves:** that your provider stamps the name you copied, that the
+password signs in, and that the answer arrives. Tell me "connected email" afterwards and I prove it
+on your install.
 
 ## 130. Does a staff list anybody with its link can edit give people sign-in accounts?
 
@@ -116,17 +129,15 @@ only adds accounts.
 a Brain account with no email sent, and gets in by pressing **Forgot password** on the sign-in page.
 Two things on your install have to be in place first, one of them only you can do.
 
-**Part 1, yours: the sign-in service's email settings.** Forgot password sends its link by email,
-so the sign-in service (Keycloak) needs an email account to send from. Without it nobody can set a
-password. You need the details of a mailbox that may send mail: its server address (SMTP host),
-port, and a username and password; your email provider's help pages list them.
-
-1. Open the Keycloak admin console (the same place you added users for item 91) and sign in.
-2. Choose your realm, then **Realm settings**, then the **Email** tab.
-3. Fill in **From** (for example no-reply at your domain), **Host**, **Port**, **Encryption**
-   (usually StartTLS on port 587), turn on **Authentication** and fill in the **Username** and
-   **Password**.
-4. Press **Test connection**; Keycloak sends a test mail to your own address. Then **Save**.
+**Part 1, yours: one mail relay, typed once.** Forgot password sends its link by email through the
+same mail relay the Brain uses for everything else. Open **Notifications**, fill in **Email relay**
+(host, port, sender address, user name and password; your email provider's help pages list them)
+and press **Send a test message**. These are the same details item 132 asks for, so do it once for
+both. Nothing needs typing into Keycloak: once #311 is deployed and the deploy script in Part 2 is
+installed, every release gives the sign-in service the relay itself, and a relay you change later is
+picked up by the next release. If you already typed mail settings into Keycloak, the next release
+replaces them with the relay's. To confirm: on the **Install** page, the check *Forgot password is
+sent through the relay on Notifications* passes.
 
 **Part 2, mine with your go-ahead: three server steps.**
 
@@ -137,7 +148,7 @@ port, and a username and password; your email provider's help pages list them.
 - Add one setting the worker needs (the sign-in address, `INSTALL_OIDC_ISSUER`) to the worker in the
   hosting panel's stored configuration.
 
-**What you do:** fill in Part 1 whenever suits you, and reply "131: do the server steps" for Part 2.
+**What you do:** fill in the relay whenever suits you, and reply "131: do the server steps" for Part 2.
 I tell you when both are done and the next staff sync has made the accounts; then you can tell
 people: "Your account is ready. Go to the sign-in page, press Forgot password and enter your work
 email."
