@@ -34,10 +34,22 @@ was noticed rather than pretending the extraction was faithful, and a draft carr
 is one a reviewer is told to read rather than skim.
 
 **Scope.** This takes text that something else already extracted, plus a declaration of where
-it came from. It opens no file and imports no parser: `python-docx` and an HTML reader are
-deployment's problem and neither is a dependency of this repository. The interesting cases
-here are a heading structure nobody was consistent about and a paragraph that tries to talk
-to the model, and both are text.
+it came from. It opens no file and imports no parser: `brain.tools.sop_files` opens a Word
+document or a Confluence page, and writes what it could not carry into the text as a bracketed
+note (`[tracked change]`, `[hidden text]`, `[not read: ...]`) that this module reads like any
+other line. The interesting cases here are a heading structure nobody was consistent about and
+a paragraph that tries to talk to the model, and both are text.
+
+**Text that already marks its headings says so, and then a numbered line is a step.** Word's
+numbered headings arrive in a plain extraction as `1.2 Scope`, which is why a numbered line is
+read as a heading by default. `brain.tools.sop_files` knows which paragraphs were headings and
+writes them with hashes, so it passes `headings_marked` and its numbered lines stay the steps
+they were. See `A_NUMBERED_LINE_UNDER_MARKED_HEADINGS_IS_A_STEP`.
+
+**A named tool is a name in the tool grammar.** `TOOL_MENTION_RE` finds `a.b` anywhere in
+prose, which in a real document is `e.g`, `i.e` and every file name and web address. Only a
+mention the registry's own grammar (`source.verb_noun`) admits is reported, so the reviewer's
+list is the systems the procedure asks for rather than its punctuation.
 
 Task ids: M12.2.10
 """
@@ -50,9 +62,19 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Final
 
+from brain.tools.registry import TOOL_NAME_RE
 from brain.tools.skills import SKILL_NAME_RE, Skill
 
 # ------------------------------------------------------------------ written-down reasons
+
+#: Why a reader told the headings are marked leaves a numbered line alone.
+A_NUMBERED_LINE_UNDER_MARKED_HEADINGS_IS_A_STEP: Final = (
+    "a plain extraction of Word turns a numbered heading into '1.2 Scope', so by default a "
+    "numbered line is read as a heading. An extractor that read the headings from the "
+    "document's own styles has already written them with hashes, and a numbered line in its "
+    "text is a step; reading it as a heading would turn every step of a procedure into a "
+    "section and its first step into the procedure's title"
+)
 
 #: Why an imported procedure is never treated as something to obey.
 AN_IMPORTED_PROCEDURE_IS_DATA_AND_NOT_AN_INSTRUCTION: Final = (
@@ -167,10 +189,36 @@ ADDRESSED_PATTERNS: Final[tuple[re.Pattern[str], ...]] = tuple(
 #: is reported anyway because the point is that the rendering and the bytes differ.
 INVISIBLE_CHARACTERS: Final[frozenset[str]] = frozenset({"​", "‌", "‍", "⁠", "­", "‪", "‫", "‭", "‮"})
 
+#: The notes `brain.tools.sop_files` writes into the text where the file holds something a reader
+#: of the page is not shown. Lower case, because a line is matched lowered.
+TRACKED_CHANGE_NOTE: Final = "[tracked change]"
+COMMENT_NOTE: Final = "[comment]"
+HIDDEN_TEXT_NOTE: Final = "[hidden text]"
+
+#: The note written where the file holds something this import could not carry at all: a
+#: Confluence macro whose content is not in the export, a Word list whose numbering the file
+#: does not define. Followed by what it was, and closed with `]`.
+NOT_READ_NOTE: Final = "[not read: "
+
 #: Markers each source leaves behind when it exports content the reader was not shown.
 HIDDEN_MARKERS: Final[dict[SourceFormat, tuple[str, ...]]] = {
-    SourceFormat.WORD: ("[tracked change]", "[comment]", "<w:ins", "<w:del", "moveto", "movefrom"),
+    SourceFormat.WORD: (
+        TRACKED_CHANGE_NOTE,
+        COMMENT_NOTE,
+        HIDDEN_TEXT_NOTE,
+        "<w:ins",
+        "<w:del",
+        "moveto",
+        "movefrom",
+    ),
     SourceFormat.CONFLUENCE: ("<ac:structured-macro", "<ac:placeholder", "ac:name=", "<ri:"),
+    SourceFormat.PLAIN: (),
+}
+
+#: Markers of structure or content the extraction could not carry, per source.
+STRUCTURE_MARKERS: Final[dict[SourceFormat, tuple[str, ...]]] = {
+    SourceFormat.WORD: (NOT_READ_NOTE,),
+    SourceFormat.CONFLUENCE: (NOT_READ_NOTE,),
     SourceFormat.PLAIN: (),
 }
 
@@ -252,17 +300,27 @@ def _slug(title: str) -> str:
     return lowered[:80].rstrip("-")
 
 
-def _headings_and_body(lines: list[str]) -> tuple[str, list[str]]:
+def _headings_and_body(lines: list[str], *, headings_marked: bool) -> tuple[str, list[str]]:
     """The document's title and its lines with heading shapes normalised to hashes.
 
     Word numbers its headings, Confluence exports hashes once converted, and somebody
     always underlines one with equals signs. Normalising means a downstream reader sees one
     structure rather than three, and the *first* heading is the title because that is what
-    people put at the top of a procedure.
+    people put at the top of a procedure. With `headings_marked` only a hashed line is a
+    heading; see `A_NUMBERED_LINE_UNDER_MARKED_HEADINGS_IS_A_STEP`.
     """
     title = ""
     out: list[str] = []
     for index, line in enumerate(lines):
+        if headings_marked:
+            marked = HASH_HEADING_RE.match(line)
+            if marked:
+                text = marked.group(2).strip()
+                title = title or text
+                out.append(f"{marked.group(1)} {text}")
+            else:
+                out.append(line)
+            continue
         if UNDERLINE_RE.match(line) and out and out[-1].strip():
             # An underlined line is the heading above it, which the underline was marking.
             previous = out[-1].strip()
@@ -290,15 +348,19 @@ def read_procedure(
     *,
     source: SourceFormat,
     fallback_name: str = "",
+    headings_marked: bool = False,
 ) -> SopDraft:
     """Read a messy document as a procedure draft (M12.2.10).
 
     Refuses an empty document rather than producing an empty draft, because a review queue
     is a person's attention and an empty entry spends it for nothing.
 
-    `fallback_name` is used only when the document has no heading at all. It is a parameter
-    rather than a default like "imported-skill", so two nameless documents do not collide
-    into one skill name and silently overwrite each other in a list.
+    `fallback_name` is used only when the document's title gives no usable name. It is a
+    parameter rather than a default like "imported-skill", so two nameless documents do not
+    collide into one skill name and silently overwrite each other in a list.
+
+    `headings_marked` says the text's headings are already written with hashes, which
+    `brain.tools.sop_files` does; see `A_NUMBERED_LINE_UNDER_MARKED_HEADINGS_IS_A_STEP`.
     """
     if not text.strip():
         msg = "this document has no text in it, so there is no procedure to review"
@@ -356,12 +418,29 @@ def read_procedure(
                 )
                 break
 
-    title, normalised = _headings_and_body(lines)
+        for marker in STRUCTURE_MARKERS[source]:
+            if marker in lowered:
+                findings.append(
+                    Finding(
+                        concern=Concern.LOST_STRUCTURE,
+                        line_number=number,
+                        excerpt=_excerpt(line),
+                        detail=(
+                            f"this line marks something the {source.value} file holds that "
+                            "this import could not carry into the draft, so the procedure a "
+                            "reader of the original sees has more in it than this one"
+                        ),
+                    )
+                )
+                break
+
+    title, normalised = _headings_and_body(lines, headings_marked=headings_marked)
 
     requested: list[str] = []
     for number, line in enumerate(lines, start=1):
         for mention in TOOL_MENTION_RE.findall(line):
-            if mention in requested:
+            if mention in requested or not TOOL_NAME_RE.match(mention):
+                # Already reported, or not a tool name at all: `e.g`, a file, an address.
                 continue
             requested.append(mention)
             findings.append(
@@ -389,8 +468,12 @@ def read_procedure(
             )
         )
 
-    name = _slug(title) or _slug(fallback_name)
-    if not name or not SKILL_NAME_RE.match(name):
+    # The first candidate the skill grammar admits: a title opening with a digit gives a slug
+    # no skill may be called, and the fallback is then asked rather than the import refused.
+    name = next(
+        (one for one in (_slug(title), _slug(fallback_name)) if SKILL_NAME_RE.match(one)), ""
+    )
+    if not name:
         msg = (
             "this document has no usable title and no fallback name was given, so the draft "
             "has nothing to be called; two untitled imports would otherwise collide"

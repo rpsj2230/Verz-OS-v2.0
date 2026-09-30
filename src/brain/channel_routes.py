@@ -52,6 +52,15 @@ request's token exchange immediately before it, because Lark authorises with a t
 the App ID and App Secret; and has a `read` beside `send`, a GET for who is in a conversation,
 which `brain.ops.effects` classifies as a read so no send can go by it.
 
+**A press on an approval card is decided while Lark waits, and its card is closed after
+(M10.2.3, M10.2.4).** A press is claimed like a message and handed to
+`brain.approval_cards.ApprovalCards`, which decides it through the Approvals route's own
+`take_decision` as the bound approver, and the vendor is answered in the wire's words: a toast,
+and for a press that decided nothing the card replaced by a closed one in the same answer. A card
+a press did decide is replaced after the answer has gone, by the rate-limited patch, and the text
+fallback goes to the approver's own chat when the patch was not delivered. A bound sender's
+decision word in a message is answered by the same object's `offer` and decides nothing (M10.7.1).
+
 **A chat message is acknowledged before it is answered, and answered by the gate as the bound
 person.** A chat vendor posts again after a few seconds of silence, so a message that arrived with
 a conversation is answered 200 once claimed and its reply is made after the response, recorded in
@@ -79,6 +88,7 @@ that already names this install's public address, as Lark's is; both are empty f
 none, so the console draws a flow only where one was declared.
 
 Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5, M10.5.6, M10.5.1
+Task ids: M10.2.3, M10.2.4, M10.7.1
 """
 
 from __future__ import annotations
@@ -87,7 +97,7 @@ import asyncio
 import json
 from collections.abc import Callable, Coroutine, Mapping
 from datetime import UTC, datetime
-from typing import Annotated, Final
+from typing import Annotated, Final, cast
 
 import psycopg
 import structlog
@@ -98,8 +108,15 @@ from starlette.background import BackgroundTask
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked, wiring_of
+from brain.approval_cards import (
+    PRESS_NOT_TAKEN_TOLD,
+    ApprovalCards,
+    card_windows_of,
+    closed_after,
+)
 from brain.attribution import trace_of_request
 from brain.channels.adapter import (
+    CardWire,
     ChannelTransport,
     ChannelWire,
     VendorAnswer,
@@ -110,10 +127,13 @@ from brain.channels.adapter import (
 )
 from brain.channels.inbound import (
     MAX_BODY_BYTES,
+    ApprovalOfferer,
+    CardPresser,
     ChannelAnswerer,
     ChannelBindings,
     ChatBinder,
     NoBindingsYet,
+    Pressed,
     Receipt,
     ReceiptKind,
     receive,
@@ -458,8 +478,8 @@ class HttpsTransport:
         return headers
 
     def send(self, request: VendorRequest) -> VendorAnswer:
-        if request.method != "POST":
-            msg = "a send is a POST; a read goes through `read`"
+        if request.method not in ("POST", "PATCH"):
+            msg = "a send is a POST, or a PATCH replacing a card; a read goes through `read`"
             raise ValueError(msg)
         headers = self._authorised(request)
         if isinstance(headers, VendorAnswer):
@@ -467,6 +487,8 @@ class HttpsTransport:
         signed = self._signed(request.url, headers, request.body)
         if isinstance(signed, VendorAnswer):
             return signed
+        if request.method == "PATCH":
+            return _answer_of(self._sender.edit(signed))
         return _answer_of(self._sender.send(signed))
 
     def read(self, request: VendorRequest) -> VendorAnswer:
@@ -680,6 +702,34 @@ def binder_of(request: Request) -> ChatBinder | None:
         return found
     sessions = sessions_of(request)
     return None if sessions is None else StoredBinder(sessions, trace_id=trace_of_request())
+
+
+def _approval_cards(request: Request) -> object | None:
+    """`app.state.approval_cards` when a test put one there; otherwise the cards over this
+    process's gate, directory and suspension store, for this request's trace; otherwise None.
+
+    None answers a decision word with where to decide and nothing else, and a press with the one
+    refusal: a process with no gate or no directory has nobody to decide as."""
+    found: object = getattr(request.app.state, "approval_cards", None)
+    if found is not None:
+        return found
+    if wiring_of(request) is None:
+        return None
+    try:
+        return ApprovalCards.of(request, bindings=bindings_of(request))
+    except Failed:
+        return None
+
+
+def approval_cards_of(request: Request) -> ApprovalOfferer | None:
+    """What a bound sender's decision word is answered by. See `_approval_cards`."""
+    # A cast at the boundary of a test's state, where proving the structural match buys nothing.
+    return cast("ApprovalOfferer | None", _approval_cards(request))
+
+
+def presser_of(request: Request) -> CardPresser | None:
+    """What decides a press on a card: the same object as `approval_cards_of`."""
+    return cast("CardPresser | None", _approval_cards(request))
 
 
 class _NoReach:
@@ -907,6 +957,8 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         return JSONResponse(status_code=200, content=EventView(status=receipt.kind).model_dump())
 
     assert record is not None
+    if receipt.inbound is not None and receipt.inbound.press is not None:
+        return await _pressed(request, wire, receipt, record, now)
     if receipt.inbound is not None and receipt.inbound.conversation is not None:
         # A chat vendor waits seconds, not the length of an answer, and posts the event again
         # when it hears nothing: so the reply is made after the answer to the vendor has gone.
@@ -940,6 +992,7 @@ async def answer_receipt(
             bindings=bindings_of(request),
             answerer=answerer_of(request),
             binder=binder_of(request),
+            offerer=approval_cards_of(request),
             now=now,
         )
     except Exception as exc:
@@ -960,6 +1013,52 @@ async def answer_receipt(
         (await _deliver(request, one, record, datetime.now(UTC))).outcome for one in replies
     ]
     return outcomes[0] if outcomes else None
+
+
+async def _pressed(
+    request: Request, wire: ChannelWire, receipt: Receipt, record: ChannelRecord, now: datetime
+) -> JSONResponse:
+    """Decide a press and answer the vendor in its wire's words; close the card after.
+
+    A process with nothing to decide a press, or a wire with no cards, answers the one refusal and
+    decides nothing. Whatever deciding raised is answered the same way and logged by its kind,
+    because the vendor is waiting and the presser is told in words either way.
+    """
+    assert receipt.inbound is not None
+    presser = presser_of(request)
+    pressed = Pressed(told=PRESS_NOT_TAKEN_TOLD)
+    if presser is not None and isinstance(wire, CardWire):
+        try:
+            pressed = await presser.press(
+                receipt.inbound, record=record, reply_to=receipt.reply_to, now=now
+            )
+        except Exception as exc:
+            log.warning(
+                "card press not decided", channel=record.channel.value, kind=type(exc).__name__
+            )
+    if not isinstance(wire, CardWire):
+        view = EventView(status=receipt.kind)
+        return JSONResponse(status_code=200, content=view.model_dump())
+    body = dict(
+        wire.press_answer(told=pressed.told, closed=pressed.closed, decided=pressed.decided)
+    )
+    if pressed.patch is None and pressed.fallback is None:
+        return JSONResponse(status_code=200, content=body)
+    return JSONResponse(
+        status_code=200,
+        content=body,
+        background=BackgroundTask(_close_after_press, request, pressed, record),
+    )
+
+
+async def _close_after_press(request: Request, pressed: Pressed, record: ChannelRecord) -> None:
+    """The card a press decided, replaced; the text fallback when the replacement did not go."""
+    await closed_after(
+        pressed,
+        send=lambda one: _deliver(request, one, record, datetime.now(UTC)),
+        windows=card_windows_of(request),
+        now=datetime.now(UTC),
+    )
 
 
 async def _deliver(

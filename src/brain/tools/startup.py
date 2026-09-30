@@ -147,6 +147,7 @@ from typing import Final
 from brain import demo
 from brain.connectors.declaration import shipped
 from brain.knowledge.columns import PRICE_LIST, TableClassification
+from brain.knowledge.connector_rows import CONNECTOR_ROW_DESCRIPTIONS, CONNECTOR_ROW_ENTITIES
 from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, knowledge_tools
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
@@ -200,14 +201,14 @@ BUILT_IN_ROW_ENTITIES: Final = (PRICE_LIST,)
 #: built afterwards in the same process, which is the singleton the module docstring rejects
 #: arriving through a dictionary.
 SOURCE_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.row_classifications()}
+    {demo.DEMO_SOURCE: demo.row_classifications(), **CONNECTOR_ROW_ENTITIES}
 )
 
 #: The catalogue descriptions for those entities, by source and then entity. Beside the
 #: classifications rather than inside them for the reason `ROW_TOOL_DESCRIPTIONS` gives: a
 #: description is catalogue text whose collisions are a property of the whole registry.
 SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS}
+    {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS, **CONNECTOR_ROW_DESCRIPTIONS}
 )
 
 
