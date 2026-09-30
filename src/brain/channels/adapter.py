@@ -47,7 +47,23 @@ vendor like Lark asks before every request, and `verify` hands back the request 
 vendor that encrypts. All three arrived with the Lark channel and change nothing for a wire that
 declares none of them.
 
-Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6
+**A channel's connect steps sit beside its wire, and hold its own form once.** A module with a
+`WIRE` may declare `GUIDE`, the `brain.ops.connect_steps.GuideStep` screens that walk a person
+through the vendor, and `channel_guides` finds them as `channel_wires` finds the wires. One step
+asks for exactly the wire's tenant fields and its secret, or the secret's parts, which is what the
+channel's record takes, so a flow cannot hold a form that saves something else. See
+`A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE`.
+
+**A card is a message with controls on it, and a press is read like a message (M10.2.3).**
+`CardAction` is one control: its words and the identifiers a press sends back, which are
+identifiers and never a value. `CardPress` is what a press carried, handed back on
+`Received.press` beside a `ChannelEvent` of its own, so a press is claimed by the same dedupe key
+as a message and a replayed press is refused by the database. `CardWire` is the extra a wire
+declares when its vendor has cards: the request that posts one, and the answer a press is given.
+A wire that declares none is asked for none, and a card planned for it is refused as one it
+cannot carry.
+
+Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6, M10.5.6, M10.2.3
 """
 
 from __future__ import annotations
@@ -60,14 +76,18 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType, ModuleType
-from typing import Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
 from brain.core.redaction import OPAQUE_LABEL, ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent
+from brain.ops.connect_steps import GuideStep
 from brain.ops.idempotency import Intent, Operation, operation_for
+
+if TYPE_CHECKING:
+    from brain.identity.oidc import KeySet
 
 
 class DeliveryRefusedError(Exception):
@@ -258,6 +278,32 @@ A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE: Final = (
 #: The name a channel module gives its wire, so discovery reads one attribute and guesses nothing.
 WIRE_NAME: Final = "WIRE"
 
+#: The module attribute a channel's connect steps are declared under, beside its `WIRE`.
+GUIDE_NAME: Final = "GUIDE"
+
+#: What a channel's form step asks for besides its record's fields: its one secret.
+SECRET_ASK: Final = "secret"  # noqa: S105  a field name, not a secret
+
+#: The ask a step names to show this install's events address, which it shows and never collects.
+EVENTS_ADDRESS_ASK: Final = "events_address"
+
+#: Why a secret of several parts is written as a whole.
+SEVERAL_PARTS_ARE_WRITTEN_AS_ONE: Final = (
+    "A channel whose vendor needs more than one secret keeps them together in its one vault "
+    "slot, written as a whole: every part is given at once or none is, so a record never holds "
+    "one part new and another from before, and the route never reads a secret back to merge it."
+)
+
+#: Why a channel's steps hold its record's form once, and ask for nothing else.
+A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE: Final = (
+    "A channel's connect steps hold one screen that saves its record, asking for the fields its "
+    "wire takes and its secret, so a field the wire gains is a field the steps ask for too; every "
+    "other screen asks for nothing but to be shown the events address. Where the steps branch, "
+    "each path holds one such form, asking the fields that path needs, and every field is asked "
+    "on some path. The form need not be last: a vendor that checks the address as it is saved is "
+    "told to check it after."
+)
+
 #: The adapter methods a class needs to be read as an adapter. `ChannelAdapter`'s, by name.
 _ADAPTER_METHODS: Final = ("capabilities", "normalise", "send", "healthy")
 
@@ -350,6 +396,70 @@ def channel_wires() -> Mapping[Channel, ChannelWire]:
     return MappingProxyType(found)
 
 
+def guide_problem(steps: tuple[GuideStep, ...], wire: ChannelWire) -> str:
+    """What is wrong with a channel's steps, or empty; see the rule it names.
+
+    `A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE` is the rule.
+
+    With no choice among them, the one form asks every field the record takes. With a choice,
+    each path, the steps on no path and the steps on it, holds one form asking some of the fields,
+    and the paths' forms together ask every field.
+    """
+    secret = tuple(wire.secret_parts or (SECRET_ASK,))
+    fields = set(wire.tenant_fields)
+    paths = [key for one in steps for key, _ in one.choices]
+    unknown = sorted({one.path for one in steps if one.path} - set(paths))
+    if unknown:
+        return f"name paths no step offers: {unknown}"
+
+    def is_form(step: GuideStep) -> bool:
+        asked = tuple(step.asks)
+        leading = asked[: len(asked) - len(secret)]
+        return asked[len(asked) - len(secret) :] == secret and set(leading) <= fields
+
+    asked_somewhere: set[str] = set()
+    for path in paths or [""]:
+        seen = [one for one in steps if one.path in ("", path)]
+        forms = [one for one in seen if is_form(one)]
+        stray = sorted(
+            {ask for one in seen if not is_form(one) for ask in one.asks} - {EVENTS_ADDRESS_ASK}
+        )
+        if len(forms) != 1 or stray:
+            where = f"on path {path!r} " if path else ""
+            return f"{where}hold {len(forms)} form(s) and ask for {stray}"
+        asked_somewhere |= set(forms[0].asks[: len(forms[0].asks) - len(secret)])
+    if asked_somewhere != fields:
+        return f"ask {sorted(asked_somewhere)} of the record's {sorted(fields)}"
+    return ""
+
+
+def channel_guides() -> Mapping[Channel, tuple[GuideStep, ...]]:
+    """Every channel's connect steps, by channel: a module's `GUIDE`, beside its `WIRE`.
+
+    A guide in a module with no wire is refused, since there is nothing its form could save, and
+    so is one without exactly one step asking for the wire's fields and its secret, or with a step
+    asking for anything else. See `A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE`.
+    """
+    wires = channel_wires()
+    found: dict[Channel, tuple[GuideStep, ...]] = {}
+    for module in _channel_modules():
+        guide = getattr(module, GUIDE_NAME, None)
+        if guide is None:
+            continue
+        declared: object = getattr(module, WIRE_NAME, None)
+        wire = next((one for one in wires.values() if one is declared), None)
+        if wire is None:
+            msg = f"{module.__name__} declares connect steps and no wire they could set up"
+            raise ChannelRegistryError(msg)
+        steps = tuple(guide)
+        problem = guide_problem(steps, wire)
+        if problem:
+            msg = f"{wire.channel}'s steps {problem}. {A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE}"
+            raise ChannelRegistryError(msg)
+        found[wire.channel] = steps
+    return MappingProxyType(found)
+
+
 # ------------------------------------------------------------- the wire (M10.2.1, M10.6.1)
 
 
@@ -359,10 +469,18 @@ class Arrived:
 
     Bytes and never a parsed body, for `brain.channels.webhook`'s first argument: a signature
     covers what was sent, and a re-serialisation is something the sender never signed.
+
+    `tenant` and `keys` are what a vendor that signs with a published key needs besides the
+    secret: the record's identifiers, which such a token names, and the keys the vendor
+    publishes, fetched by the route for a `KeyedWire` and absent for every other. See
+    `A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE`.
     """
 
     headers: Mapping[str, str]
     body: bytes = field(repr=False)
+    #: The record's identifiers, for a wire whose check depends on how the record is set up.
+    tenant: Mapping[str, str] = field(default_factory=dict)
+    keys: KeySet | None = None
 
 
 @dataclass(frozen=True)
@@ -394,6 +512,34 @@ BOT_ID: Final = "bot_id"
 
 
 @dataclass(frozen=True)
+class CardAction:
+    """One control on a card: the words on it and what a press on it sends back (M10.2.3).
+
+    `value` is identifiers only, for `brain.channels.cards.press_value`'s reason: a press is logged
+    by whatever receives it, for every card ever pressed. `options` makes the control a choice of
+    several, each a value and the words for it, and a press then says which was chosen.
+    """
+
+    text: str
+    value: Mapping[str, str]
+    options: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class CardPress:
+    """What a press on a card sent back, and which delivered message the card is (M10.2.3).
+
+    `message_id` is the vendor's own id for the card's message, which is what an edit of it is
+    addressed to, so nothing about a card needs keeping between the send and the press.
+    """
+
+    value: Mapping[str, str]
+    #: The option chosen, for a control that offers several; empty for a button.
+    option: str
+    message_id: str
+
+
+@dataclass(frozen=True)
 class Received:
     """A verified request, read: the event the gate reads and where a reply to it goes."""
 
@@ -403,6 +549,9 @@ class Received:
     #: Present for a chat whose conversations can hold more than one reader. None for a channel
     #: where the reply goes back to the sender alone, as the company's own system's does.
     conversation: Conversation | None = None
+    #: Present when this was a press on a card rather than a message; the event is then the
+    #: press's own, carrying no text, so it is claimed exactly as a message is.
+    press: CardPress | None = None
 
 
 @dataclass(frozen=True)
@@ -417,7 +566,8 @@ class VendorRequest:
     url: str
     headers: Mapping[str, str] = field(repr=False)
     body: bytes = field(repr=False)
-    #: `POST` to deliver; `GET` for the one read a chat needs, who is in a conversation.
+    #: `POST` to deliver, `PATCH` to replace a card already delivered, both through `send` and
+    #: both keyed; `GET` for the one read a chat needs, who is in a conversation.
     method: str = "POST"
     #: A credential exchanged for a bearer token first, for a vendor that authorises requests
     #: with a token of its own minting rather than with the secret itself.
@@ -438,6 +588,8 @@ class TokenExchange:
     url: str
     body: bytes = field(repr=False)
     answered_in: str = "access_token"  # the JSON key, not a value
+    #: How the body is written: JSON for most vendors, a form for an OAuth token endpoint.
+    content_type: str = "application/json; charset=utf-8"
 
 
 @dataclass(frozen=True)
@@ -475,6 +627,17 @@ class ChannelWire(Protocol):
         """The tenant identifiers a record for this channel must hold, by name."""
         ...
 
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """The named values this channel's secret holds, or empty when it is one value.
+
+        A vendor that signs what it sends with one secret and takes its replies on another has
+        two, and both belong in the vault: the route keeps them together, as one JSON object in
+        the channel's one slot, and `verify` and `request_for` each read the part they need. See
+        `SEVERAL_PARTS_ARE_WRITTEN_AS_ONE`.
+        """
+        ...
+
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
         """Refuse, with `brain.channels.webhook.WebhookRefusedError`, anything the vendor did not
         send. Over the exact bytes, and before `read` looks at any of them.
@@ -506,6 +669,62 @@ class ChannelWire(Protocol):
         ...
 
 
+#: Why a vendor's published keys are fetched outside the wire and read inside it.
+A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE: Final = (
+    "A vendor that signs with a key it publishes, rather than with a secret shared with the "
+    "install, needs those keys to verify anything. The route fetches them from the one address "
+    "the wire names and caches them for every request; the wire, which opens no connection, "
+    "judges the token against them, and refuses whatever arrives when none could be fetched."
+)
+
+
+@runtime_checkable
+class KeyedWire(Protocol):
+    """A wire whose vendor signs with published keys: where they are, and how to read them.
+
+    `keys_address` is the vendor's OpenID metadata document. `key_set_of` reads that document
+    and the key set it points to into the keys `verify` is handed on `Arrived.keys`; the route
+    fetches both, and only from an address this names or the document gives on the same host.
+    """
+
+    @property
+    def keys_address(self) -> str: ...
+
+    def key_set_of(self, metadata: bytes, keys: bytes, now: datetime) -> KeySet: ...
+
+
+@runtime_checkable
+class CardWire(Protocol):
+    """What a wire adds when its vendor has cards a person can press (M10.2.3, M10.2.4).
+
+    Asked by `isinstance`, as `brain.chat_answer.RoomReader` is: whether a wire can post a card is
+    a question about its class, and a wire that cannot is refused a card as one it cannot carry.
+    Pure, as every wire method is. An edit of a card already sent is an ordinary reply to an
+    address of the wire's own, so it is sent, keyed and recorded as every reply is.
+    """
+
+    def card_request(
+        self,
+        *,
+        to: str,
+        text: str,
+        actions: tuple[CardAction, ...],
+        secret: str,
+        tenant: Mapping[str, str],
+    ) -> VendorRequest:
+        """The request that posts `text` as a card with these controls to `to`, or `ValueError`."""
+        ...
+
+    def edit_address(self, message_id: str) -> str:
+        """The address a reply is sent to so that it replaces the card in this message."""
+        ...
+
+    def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:
+        """What the vendor is answered with for a press: `told` shown to the presser at once, and
+        the card replaced by `closed` when it is not empty, at no cost against any ceiling."""
+        ...
+
+
 class ChannelTransport(Protocol):
     """Whatever puts a `VendorRequest` on the network. `brain.channel_routes.HttpsTransport`.
 
@@ -514,7 +733,9 @@ class ChannelTransport(Protocol):
 
     `read` is the other half, and a separate method so the two cannot be confused: a `GET` that
     changes nothing at the vendor, the one read a chat makes, who is in a conversation. It refuses
-    anything but a `GET`, so a send cannot reach the vendor by the door that is not keyed.
+    anything but a `GET`, so a send cannot reach the vendor by the door that is not keyed. `send`
+    takes a `POST` or a `PATCH`, the second being a card replaced in place, which is as much an
+    effect as a message and goes by the same keyed door.
     """
 
     def send(self, request: VendorRequest) -> VendorAnswer: ...

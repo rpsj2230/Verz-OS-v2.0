@@ -4,7 +4,7 @@ Driven with a ladder, an attempt log and drivers held in memory, so the walk is 
 policy layer describes it and nothing opens a socket or a connection.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.5.4, M5.5.2, M5.1.3, M5.7.3, M5.6.4, M5.4.1,
-M5.7.2, M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3, M6.4.4
+M5.7.2, M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3, M6.4.4, M5.6.1
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import inspect
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -28,12 +28,15 @@ from brain.models.adapter import (
     SdkDriver,
     TransportConnectionError,
     TransportStatusError,
+    TransportTimeoutError,
 )
 from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, LadderRung
 from brain.models.calls import (
     A_MODEL_CALL_WITHOUT_A_METER_HAS_NO_DOOR,
+    THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET,
     LadderState,
     ModelCalls,
+    last_step_seconds,
 )
 from brain.models.disclosure import DataCategory
 from brain.models.driver import (
@@ -51,6 +54,7 @@ from brain.models.metering import Meter, ModelRoute
 from brain.models.registry import ModelPin, ProviderKind, ProviderRecord
 from brain.models.residency import ScopedResidency
 from brain.models.routing import (
+    ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS,
     BREAKER_BASE_COOLDOWN_SECONDS,
     BREAKER_CONSECUTIVE_FAILURES,
     FallbackTrigger,
@@ -823,18 +827,20 @@ def record(
 def test_a_providers_lane_override_sets_the_timeout_and_attempts_each_try_runs_at() -> None:
     """M5.1.3: the answer lane's override for a provider is what the request is sent with.
 
-    Delete this and the overrides edited on the Models screen are stored and never applied."""
+    A step stands behind the overridden one, so neither try is the last step, which the answer
+    lane gives the rest of its budget. Delete this and the overrides edited on the Models screen
+    are stored and never applied."""
     flaky = Scripted(TransportConnectionError(), ok())
     calls, log = executor(
         Ladder(
-            (rung("anthropic"),),
+            (rung("anthropic"), rung("moonshot", position=1)),
             providers=(
                 record(
                     "anthropic", lanes={Lane.ANSWER: LaneOverride(timeout_seconds=7.5, attempts=2)}
                 ),
             ),
         ),
-        {"anthropic": flaky},
+        {"anthropic": flaky, "moonshot": Scripted(ok())},
     )
 
     assert complete(calls, Meter()).deployment_id == "anthropic-main-0"
@@ -843,20 +849,193 @@ def test_a_providers_lane_override_sets_the_timeout_and_attempts_each_try_runs_a
 
 
 def test_an_override_for_another_lane_leaves_this_lane_at_the_rungs_numbers() -> None:
-    """The sibling: overrides are per lane. Delete this and a task-lane timeout meant for
-    overnight work is what a person waiting on the answer lane gets."""
+    """The sibling: overrides are per lane. A step stands behind, so the first is not the last
+    step. Delete this and a task-lane timeout meant for overnight work is what a person waiting on
+    the answer lane gets."""
     transport = Scripted(ok())
     calls, _ = executor(
         Ladder(
-            (rung("anthropic"),),
+            (rung("anthropic"), rung("moonshot", position=1)),
             providers=(record("anthropic", lanes={Lane.TASK: LaneOverride(timeout_seconds=90.0)}),),
         ),
-        {"anthropic": transport},
+        {"anthropic": transport, "moonshot": Scripted(ok())},
     )
 
     complete(calls, Meter())
 
     assert transport.sent[0].timeout_seconds == 12.0
+
+
+# ------------------------------------------------- the last step and the answer budget (M5.6.1)
+class Ticking:
+    """A clock the transports move, so a walk spends seconds as a real one does."""
+
+    def __init__(self) -> None:
+        self.now = T0
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+class Spends(Scripted):
+    """A transport that spends seconds on a `Ticking` clock, then answers or fails.
+
+    `seconds` of None spends the whole timeout the request was sent with, which is what a
+    timeout costs."""
+
+    def __init__(self, clock: Ticking, seconds: float | None, answer: Answer) -> None:
+        super().__init__(answer)
+        self.clock = clock
+        self.seconds = seconds
+
+    def __call__(self, request: DriverRequest) -> Completion:
+        spent = request.timeout_seconds if self.seconds is None else self.seconds
+        self.clock.now += timedelta(seconds=spent)
+        return super().__call__(request)
+
+
+def timed(provider: str, position: int, seconds: float, *, tier: Tier = Tier.MAIN) -> LadderRung:
+    """A step at `position` of `tier` with its own timeout of `seconds`."""
+    return replace(rung(provider, tier=tier, position=position), timeout_seconds=seconds)
+
+
+def sent_seconds(*transports: Scripted) -> list[float]:
+    return [one.timeout_seconds for transport in transports for one in transport.sent]
+
+
+def test_a_walk_whose_first_steps_fail_gives_the_last_step_the_rest_of_the_budget() -> None:
+    """`THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET`, the owner's case: two steps fail in
+    three seconds, and Moonshot, last at four seconds of its own, is sent with the 25 second
+    budget less the three spent and the one second margin, and answers in thirteen. The two steps
+    before it are sent with exactly their own twelve and four.
+
+    Delete this and the last step goes back to its four seconds, and a question that falls through
+    to a slower provider fails with twenty seconds of its budget unspent."""
+    assert THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET
+    clock = Ticking()
+    first = Spends(clock, 1.0, TransportConnectionError())
+    second = Spends(clock, 2.0, TransportStatusError(503))
+    last = Spends(clock, 13.0, ok())
+    calls, log = executor(
+        Ladder((timed("anthropic", 0, 12.0), timed("openai", 1, 4.0), timed("moonshot", 2, 4.0))),
+        {"anthropic": first, "openai": second, "moonshot": last},
+        clock=clock,
+    )
+
+    answered = complete(calls, Meter())
+
+    assert answered.deployment_id == "moonshot-main-2"
+    assert sent_seconds(first, second, last) == [12.0, 4.0, 21.0]
+    assert [one[2] for one in log.outcomes()] == [
+        FallbackTrigger.CONNECTION_ERROR.value,
+        FallbackTrigger.PROVIDER_ERROR.value,
+        "ok",
+    ]
+
+
+def test_a_walk_that_times_out_everywhere_never_passes_the_budget() -> None:
+    """The bound: three steps that each spend the whole of what they are given. The first two
+    take their own twelve and four, the last is given what is left less the margin, eight, and the
+    walk ends at 24 seconds, inside the 25. Delete this and a last step given the whole budget
+    rather than what is left of it passes the test above."""
+    clock = Ticking()
+    steps = {
+        name: Spends(clock, None, TransportTimeoutError())
+        for name in ("anthropic", "openai", "moonshot")
+    }
+    calls, _ = executor(
+        Ladder((timed("anthropic", 0, 12.0), timed("openai", 1, 4.0), timed("moonshot", 2, 4.0))),
+        dict(steps),
+        clock=clock,
+    )
+
+    with pytest.raises(ProviderUnavailable):
+        complete(calls, Meter())
+
+    assert sent_seconds(*steps.values()) == [12.0, 4.0, 8.0]
+    assert (clock.now - T0).total_seconds() == 24.0
+    assert (clock.now - T0).total_seconds() <= ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS
+
+
+def test_a_last_step_reached_with_less_left_than_its_own_timeout_keeps_its_own() -> None:
+    """The floor: after 24 seconds of timeouts the rest of the budget is nothing, and the last step
+    is still sent with its own four seconds, which an administrator chose. Delete this and a late
+    arrival is given no time at all, which is a timeout nobody configured."""
+    clock = Ticking()
+    steps = {
+        name: Spends(clock, None, TransportTimeoutError())
+        for name in ("anthropic", "openai", "moonshot")
+    }
+    calls, _ = executor(
+        Ladder((timed("anthropic", 0, 12.0), timed("openai", 1, 12.0), timed("moonshot", 2, 4.0))),
+        dict(steps),
+        clock=clock,
+    )
+
+    with pytest.raises(ProviderUnavailable):
+        complete(calls, Meter())
+
+    assert sent_seconds(*steps.values()) == [12.0, 12.0, 4.0]
+
+
+def test_the_rest_of_the_budget_is_never_more_than_the_budget() -> None:
+    """The ceiling, which only a clock that stepped backwards can reach: a walk that appears to have
+    spent minus ten seconds is given the 25 second budget, not 34. Delete this and a clock
+    correction mid-walk hands the last step more than the person waiting was ever promised."""
+    assert last_step_seconds(4.0, spent=-10.0) == ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS
+    assert last_step_seconds(4.0, spent=0.0) == 24.0
+    assert last_step_seconds(30.0, spent=0.0) == 30.0
+
+
+def test_the_last_step_on_the_task_lane_keeps_its_own_timeout() -> None:
+    """Nobody waits on the task lane and it has no budget, so its last step is sent with its own
+    twelve seconds, while the same ladder on the answer lane gives it the rest, 24. Delete this and
+    the answer lane's budget shortens or lengthens overnight work it was never about."""
+    tasked = Scripted(ok())
+    calls, _ = executor(Ladder((rung("anthropic", tier=Tier.HEAVY),)), {"anthropic": tasked})
+    complete(calls, Meter(), lane=Lane.TASK, tier=Tier.HEAVY)
+
+    waited = Scripted(ok())
+    calls, _ = executor(Ladder((rung("anthropic", tier=Tier.HEAVY),)), {"anthropic": waited})
+    complete(calls, Meter(), tier=Tier.HEAVY)
+
+    assert sent_seconds(tasked) == [12.0]
+    assert sent_seconds(waited) == [24.0]
+
+
+def test_a_pinned_model_keeps_its_own_timeout_because_the_tier_stands_behind_it() -> None:
+    """A pin is tried first and the tier's chain after it, so the pin is never the last step: it
+    is sent with its own twelve seconds, and the tier's last step, reached next, is given the rest.
+    Delete this and a failing pin spends the budget the tier's own steps were meant to answer in."""
+    pinned = Scripted(TransportConnectionError())
+    backup = Scripted(ok())
+    calls, _ = executor(
+        Ladder((rung("moonshot", model="kimi-k2"), rung("anthropic", position=1))),
+        {"moonshot": pinned, "anthropic": backup},
+    )
+
+    complete(calls, Meter(), pin=ModelPin(provider="moonshot", model="kimi-k2"))
+
+    assert sent_seconds(pinned, backup) == [12.0, 24.0]
+
+
+def test_only_the_last_try_of_a_last_step_with_two_attempts_is_given_the_rest() -> None:
+    """A last step with two attempts: the first try is followed by the second, so it keeps its own
+    twelve, and the second, after a refused connection that took one second, is given the rest,
+    25 less the one spent and the margin. Delete this and a first try given the whole remainder
+    leaves its retry nothing."""
+    clock = Ticking()
+    flaky = Spends(clock, 1.0, TransportConnectionError())
+    calls, _ = executor(
+        Ladder((rung("anthropic", attempts=2),)),
+        {"anthropic": flaky},
+        clock=clock,
+    )
+
+    with pytest.raises(ProviderUnavailable):
+        complete(calls, Meter())
+
+    assert sent_seconds(flaky) == [12.0, 23.0]
 
 
 # ------------------------------------------------------ residency from the registry (M5.5.2)

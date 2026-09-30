@@ -21,7 +21,7 @@ owner's rule: `brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
 No test here calls a live API. The key is a sentinel, the call is a replay, and the address is the
 one a stand-in resolver hands out.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.8.2, M11.9.1
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.8.2, M11.9.1, M32.7.1
 """
 
 from __future__ import annotations
@@ -613,11 +613,19 @@ def test_a_source_whose_name_resolves_inside_the_network_is_not_called() -> None
 
 
 @pytest.mark.needs_db
-def test_a_source_nothing_may_read_is_counted_as_such_and_never_called() -> None:
-    """HubSpot, whose ceiling nobody verified, is connected beside Xero: Xero is read and HubSpot is
-    not called, and no attempt is recorded for it, because an attempt is a call and none was made.
+def test_a_source_nothing_may_read_is_counted_as_such_and_never_called(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HubSpot with its recorded ceiling taken away is connected beside Xero: Xero is read and
+    HubSpot is not called, and no attempt is recorded for it, because an attempt is a call and none
+    was made. Since 2026-09-30 HubSpot's documented ceiling is recorded, so the unmeasured source
+    is HubSpot with that row removed.
 
     Delete this and a source with no verified ceiling is read against no limit at all."""
+    from brain.ops import limits
+
+    measured = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    monkeypatch.setattr(limits, "_BY_NAME", measured)
     with a_database("brain_connector_sync_unverified") as url:
         connect(url)
         settings = {"portal_id": "12345678"}

@@ -23,7 +23,7 @@ import pytest
 
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_slack"
@@ -49,6 +49,16 @@ def test_the_slack_check_is_registered_with_the_leaf_it_proves() -> None:
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
     assert set(mine()[NAME].leaves) <= leaves
+
+
+def test_the_slack_messages_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here
+    since 2026-09-30, so a package adding a check edits its own file and never a list every
+    package appends to. Delete this and a check can drop out of the module with the page simply
+    listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_slack") == [
+        "a_slack_message_is_read_only_for_a_member_of_its_channel",
+    ]
 
 
 def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:

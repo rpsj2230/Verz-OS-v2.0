@@ -7,6 +7,9 @@
  * confirmation and the refusals the console does. A second form would be a second place for the
  * key to be kept too long.
  *
+ * **The credential is asked for in its source's shape** (`CredentialField`, M11.7.7): a key typed,
+ * a key file chosen or a database user's name and password, sent as the one `credential` field.
+ *
  * **The key is typed into a plain text field and cleared before the request leaves.** A password
  * field is refused by `scripts/check-boundaries.mjs`, for the reason written there, so the field
  * is `autoComplete="off"` and `spellCheck={false}` as the Webhooks screen's secret is, and the key
@@ -30,7 +33,7 @@
  * screen's connect flow keeps a source's settings while its dialog is closed (`kit/flowMemory.ts`),
  * so it hands them back here and hears each change; first run passes neither and starts blank.
  *
- * Task ids: M42.6.5, M42.5.9, M27.8.5, M27.11.9
+ * Task ids: M42.6.5, M42.5.9, M27.8.5, M27.11.9, M11.7.7
  */
 
 import { useState, type FormEvent } from "react";
@@ -48,6 +51,8 @@ import {
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { ConfirmAction } from "./ConfirmAction";
+import { CredentialField, credentialFor, credentialGiven } from "./CredentialField";
+import { useSecret } from "./ui/secret-field";
 
 /** The heading over a refusal that is not a problem with a field. */
 export const NOT_CONNECTED = "The source was not connected";
@@ -98,6 +103,9 @@ export function ConnectSource({
 }: ConnectSourceProps) {
   const [settings, setSettings] = useState<Record<string, string>>(() => ({ ...blankSettings(source), ...startSettings }));
   const [key, setKey] = useState("");
+  // A database user's password is typed into the kit's secret field and never held here.
+  const password = useSecret();
+  const [passwordPresent, setPasswordPresent] = useState(false);
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [blank, setBlank] = useState<Problem[]>([]);
@@ -113,7 +121,8 @@ export function ConnectSource({
     setFailure(null);
     // Blank fields are said beside their fields, in the API's words, before anything is confirmed
     // or sent. See `blankConnectionProblems`.
-    const found = blankConnectionProblems(source, settings, key, keyBlank);
+    const given = credentialGiven(source.credential_shape, key, passwordPresent) ? "given" : "";
+    const found = blankConnectionProblems(source, settings, given, keyBlank);
     setBlank(found);
     if (found.length > 0) {
       return;
@@ -122,7 +131,7 @@ export function ConnectSource({
   }
 
   function send(): void {
-    const body = connectionBody(source, settings, key);
+    const body = connectionBody(source, settings, credentialFor(source.credential_shape, key, password));
     setBusy(true);
     // The key leaves this component's state before the request does. See the module note.
     setKey("");
@@ -174,23 +183,22 @@ export function ConnectSource({
           </div>
         ))}
         <div className="rjsf-field">
-          <label className="control-label" htmlFor={`${prefix}-credential`}>
+          <label
+            className="control-label"
+            htmlFor={source.credential_shape === "database_user" ? `${prefix}-credential-user` : `${prefix}-credential`}
+          >
             {source.credential_label}
           </label>
-          <input
+          <CredentialField
+            shape={source.credential_shape}
             id={`${prefix}-credential`}
-            className="form-control"
-            type="text"
-            name="credential"
+            maxChars={Math.max(keyMaxChars, source.credential_max_chars)}
             value={key}
-            maxLength={keyMaxChars}
-            autoComplete="off"
-            spellCheck={false}
-            {...problemAttributes(problems, prefix, "credential")}
+            onChange={setKey}
+            secret={password}
+            onPasswordPresence={setPasswordPresent}
             disabled={busy || pending}
-            onChange={(event) => {
-              setKey(event.target.value);
-            }}
+            problemProps={problemAttributes(problems, prefix, "credential")}
           />
           <p className="field-description">{source.credential_hint}</p>
           <FieldProblems problems={problems} form={prefix} names="credential" />
@@ -219,7 +227,7 @@ export function ConnectSource({
               ))}
               <div className="fields__row">
                 <dt>{source.credential_label}</dt>
-                <dd>{key.trim() === "" ? KEY_NOT_GIVEN : KEY_SUPPLIED}</dd>
+                <dd>{credentialGiven(source.credential_shape, key, passwordPresent) ? KEY_SUPPLIED : KEY_NOT_GIVEN}</dd>
               </div>
             </dl>
           }

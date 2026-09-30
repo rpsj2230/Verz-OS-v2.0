@@ -12,10 +12,10 @@
  * `brain.console.staff_source_view` places one at `brain.console.govern.NOWHERE`, and they are
  * answered an empty page computed from grants this browser never receives.
  *
- * **Two addresses and the second is pressed rather than loaded.** The trial reads the chosen
- * source, which is a call to a server outside the install, and it names the company's staff,
- * which is a wider disclosure than the screen it sits on. `TRIAL_API_PATH` is therefore not
- * fetched when the page mounts; see `A_TRIAL_IS_A_REQUEST_SOMEBODY_MAKES`.
+ * **Two addresses and the second is pressed rather than loaded.** The trial asks the worker to
+ * read the chosen source, which is a call to a server outside the install, and what it read is a
+ * run naming counts of the company's staff. `TRIAL_API_PATH` is therefore not fetched when the page
+ * mounts; see `A_TRIAL_IS_A_REQUEST_SOMEBODY_MAKES`.
  *
  * **Choosing and connecting a source happens here since 2026-09-21.** The API saves the choice and
  * its location in `ops.setting`, the table the Settings screen writes, and keeps the credential in
@@ -48,22 +48,44 @@ export type SourceOption = components["schemas"]["SourceOptionView"];
 export type Selection = components["schemas"]["SelectionView"];
 /** The whole page, as `brain.staff_source_routes.StaffSourcesView` sends it. */
 export type StaffSources = components["schemas"]["StaffSourcesView"];
-/** One trial, as `TrialView` sends it: a run, or the reason there is none. */
+/** The first-run wizard's trial, as `TrialView` sends it: a run, or the reason there is none. */
 export type TrialAnswer = components["schemas"]["TrialView"];
-/** One run of the chosen source that wrote nothing. */
+/** One run of the chosen source that wrote nothing, in the first-run wizard. */
 export type TrialRun = components["schemas"]["TrialRunView"];
+/** Whether a trial read asked for on the Staff sources screen still waits for the worker. */
+export type StaffTrial = components["schemas"]["StaffTrialView"];
+
+/** A run's outcome when it was a trial read, which the status does not count as the last sync. */
+export const TRIED = "tried";
+
+/** How often, and how many times, the page asks whether the worker has read a trial yet. The
+ * worker ticks every thirty seconds, so forty asks five seconds apart outlast several ticks. */
+export const TRIAL_POLL_MS = 5_000;
+export const TRIAL_POLLS = 40;
+
+const NO_TRIAL: StaffTrial = Object.freeze({ requested_at: null, waiting: false, told: "" });
+
+/** Read `brain.staff_source_routes.StaffTrialView`, or nothing waiting for an unreadable body. */
+export function readStaffTrial(payload: unknown): StaffTrial {
+  if (typeof payload !== "object" || payload === null) {
+    return NO_TRIAL;
+  }
+  const body = payload as Partial<StaffTrial>;
+  return typeof body.waiting === "boolean" && typeof body.told === "string"
+    ? { requested_at: body.requested_at ?? null, waiting: body.waiting, told: body.told }
+    : NO_TRIAL;
+}
 
 /**
  * Written down because fetching the trial with the page is the obvious simplification.
  */
 export const A_TRIAL_IS_A_REQUEST_SOMEBODY_MAKES =
-  "The trial asks the API to read this company's staff list from Google, Microsoft, Lark, a " +
-  "sheet or a directory, and to name who would be added and who has gone missing. It is an " +
-  "outbound call to somebody else's server and it is a wider disclosure than the rest of this " +
-  "screen, at the content plane rather than the configuration one. A console that fetched it " +
-  "on mount would contact a client's directory every time anybody opened the page, and would " +
-  "make a reader who holds only the configuration grant issue a request they cannot be " +
-  "answered. So there is a button, and nothing is asked until it is pressed.";
+  "The trial asks the worker to read this company's staff list from Google, Microsoft, Lark, a " +
+  "sheet or a directory with the credential the nightly sync keeps, and to say what it read and " +
+  "what a run would change. It is an outbound call to somebody else's server and it is a wider " +
+  "disclosure than the rest of this screen, at the content plane rather than the configuration " +
+  "one. A console that asked for it on mount would contact a client's directory every time " +
+  "anybody opened the page. So there is a button, and nothing is asked until it is pressed.";
 
 /**
  * Written down because the screen used to say the opposite, and the old sentence is the one a
@@ -85,9 +107,10 @@ export const THE_DESIGN_COUNTS_AND_THIS_SCREEN_CANNOT =
   "is the disclosure rule rather than taste. Every listing on it is narrowed per caller by a " +
   "grant this browser never sees, so a number beside it is the subtraction CLAUDE.md forbids: " +
   "it would say how many sources a reader was not shown. ui/Chip.tsx already states the same " +
-  "rule about itself, and the trial's plan is lists of people rather than counts of them for " +
-  "the reason brain.identity.staff_sync.DryRun gives: an operator reading that four people " +
-  "would be removed cannot tell whether the four are the four they expect.";
+  "rule about itself. The one set of figures it draws is what a run read from the source, " +
+  "departments and people and why anybody is in no department, and that is not a count of " +
+  "anything withheld: a run is answered whole to a reader who may see runs and not at all to " +
+  "one who may not.";
 
 /** Where the API keeps this screen, and the trial behind it. */
 export const STAFF_SOURCES_API_PATH = "/govern/staff_sources";
@@ -111,6 +134,9 @@ const NOTHING: StaffSources = Object.freeze({
   options: [],
   selection: null,
   how_to_choose: "",
+  accounts: "",
+  email_settings: "",
+  account_ready: "",
 });
 
 /**
@@ -133,6 +159,9 @@ export function readStaffSources(payload: unknown): StaffSources {
     options?: unknown;
     selection?: unknown;
     how_to_choose?: unknown;
+    accounts?: unknown;
+    email_settings?: unknown;
+    account_ready?: unknown;
   };
   if (!Array.isArray(body.options)) {
     return NOTHING;
@@ -141,6 +170,9 @@ export function readStaffSources(payload: unknown): StaffSources {
     options: body.options as SourceOption[],
     selection: (body.selection ?? null) as Selection | null,
     how_to_choose: typeof body.how_to_choose === "string" ? body.how_to_choose : "",
+    accounts: typeof body.accounts === "string" ? body.accounts : "",
+    email_settings: typeof body.email_settings === "string" ? body.email_settings : "",
+    account_ready: typeof body.account_ready === "string" ? body.account_ready : "",
   };
 }
 

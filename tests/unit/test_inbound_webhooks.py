@@ -6,7 +6,7 @@ against the code: the named function is imported, a channel said to have no chec
 one, and the application's routes are searched for every address a platform could post to, which
 is one route, received on only for the channels with a wire.
 
-Task ids: M27.8.12, M10.2.1
+Task ids: M27.8.12, M10.2.1, M10.6.2
 """
 
 from __future__ import annotations
@@ -67,25 +67,29 @@ def test_every_check_the_screen_names_is_a_function_its_module_has() -> None:
         assert any(_CHECKING_PARAMETER.search(p) for p in parameters), (one.check, parameters)
 
 
-@pytest.mark.parametrize(
-    "channel", [one.channel for one in INBOUND if one.verification is Verification.NOT_WRITTEN]
-)
-def test_a_channel_said_to_have_no_check_has_no_function_that_could_be_one(
-    channel: Channel,
-) -> None:
-    """**The sentence the screen replaced was false for exactly these channels.** Searched rather
-    than trusted: no function in the channel's module takes a secret, a signature or a token.
-
-    Delete this and the day somebody writes a check for one of them, the screen goes on telling an
-    administrator that a forged request could not be told apart."""
+def _checking_functions(channel: Channel) -> list[str]:
+    """Every function the channel's module defines that takes a secret, a signature or a token."""
     module = importlib.import_module(f"brain.channels.{channel.value}")
-    checking = [
+    return [
         f"{name}({', '.join(inspect.signature(function).parameters)})"
         for name, function in inspect.getmembers(module, inspect.isfunction)
         if function.__module__ == module.__name__
         and any(_CHECKING_PARAMETER.search(p) for p in inspect.signature(function).parameters)
     ]
-    assert checking == []
+
+
+def test_a_channel_said_to_have_no_check_has_no_function_that_could_be_one() -> None:
+    """**The sentence the screen replaced was false for exactly these channels.** Searched rather
+    than trusted: no function in the channel's module takes a secret, a signature or a token. No
+    row says not written since WhatsApp's check was written, so the search is held to a module
+    where it must find one, and an empty answer for a row said to have none is still a finding.
+
+    Delete this and the day somebody writes a check for a channel said to have none, the screen goes
+    on telling an administrator that a forged request could not be told apart."""
+    for one in INBOUND:
+        if one.verification is Verification.NOT_WRITTEN:
+            assert _checking_functions(one.channel) == [], one.channel
+    assert "verify_signature(app_secret, signature, body)" in _checking_functions(Channel.WHATSAPP)
 
 
 def _api_routes(routes: Iterable[object]) -> Iterator[APIRoute]:
@@ -136,7 +140,18 @@ def test_the_one_address_a_platform_posts_to_is_the_channel_events_route() -> No
     assert any(path.endswith("/webhooks/subscribers") for path in paths)
 
     received = receiving()
-    assert received == frozenset(channel_wires()) == {Channel.LARK, Channel.WEBHOOK}
+    assert (
+        received
+        == frozenset(channel_wires())
+        == {
+            Channel.EMAIL,
+            Channel.LARK,
+            Channel.SLACK,
+            Channel.TEAMS,
+            Channel.WEBHOOK,
+            Channel.WHATSAPP,
+        }
+    )
     told = receiving_told()
     assert told != NO_CHANNEL_RECEIVES_A_WEBHOOK
     for one in INBOUND:

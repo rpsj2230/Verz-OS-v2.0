@@ -13,6 +13,11 @@
  * the route by a test), and a blank or out-of-range number is said beside it before anything asks
  * to be confirmed. Identifiers are under Advanced.
  *
+ * **One line says the seconds are a floor for a level's last step**, because the executor gives the
+ * last step a question reaches the rest of the answer's time (`brain.models.calls`,
+ * `THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET`), and a reader who set four seconds and saw
+ * a call wait twenty would otherwise take the screen for wrong.
+ *
  * Task ids: M5.3.3, M27.15.38, M5.6.2, M27.16.1
  */
 
@@ -49,6 +54,8 @@ const MOVE_FORM = "step-move";
 export const ATTEMPTS_HINT = `Tries before the next step. A whole number from 1 to ${String(MAX_SMALLINT)}.`;
 export const TIMEOUT_HINT = `Seconds to wait for an answer. More than 0 and at most ${String(MAX_TIMEOUT_SECONDS)}.`;
 export const CONCURRENCY_HINT = `Calls it takes at once. A whole number from 1 to ${String(MAX_SMALLINT)}.`;
+export const LAST_STEP_WAITS_LONGER =
+  "A level's last step may wait longer than its seconds: a question that reaches it gives it the rest of the time a person waits for an answer.";
 export const MOVE_LEVEL_HINT = "The level it moves to: its own, or another.";
 export const MOVE_STEP_HINT = "The step number it takes in that level, from 1. A number past the last puts it last.";
 
@@ -192,6 +199,9 @@ export function RungEditor({
             {number("timeout_seconds", "Seconds to wait", TIMEOUT_HINT, timeout, setTimeoutSeconds)}
             {number("max_concurrency", "Calls at once", CONCURRENCY_HINT, concurrency, setConcurrency)}
           </div>
+          <p data-slot="last-step-note" className="m-0 text-[12px] leading-snug text-dim">
+            {LAST_STEP_WAITS_LONGER}
+          </p>
           <label className="flex min-h-11 items-center gap-2 text-[13px] text-ink sm:min-h-8">
             <input
               type="checkbox"

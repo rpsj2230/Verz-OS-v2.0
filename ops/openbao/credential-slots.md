@@ -20,7 +20,7 @@ later" is a scope nobody removes.
 | `connectors/creds/hubspot` | HubSpot | `crm.objects.contacts.read`, `crm.objects.deals.read` | `crm.objects.*.write`, and anything touching `settings` |
 | `connectors/creds/laravel_readonly` | Laravel MySQL | A database user with SELECT on the allowlisted views only | SELECT on tables. The views are the contract; tables change shape without warning |
 | `connectors/creds/slack_messages` | Slack | A bot token with `channels:read`, `groups:read`, `channels:history`, `groups:history`, `users:read`, `users:read.email` | `chat:write` or any other write scope, and a user token. A user token is one person's whole account and reads as them |
-| `connectors/creds/google_drive` | Drive or M365 | Read on the specific shared drive | Domain-wide delegation. It reads everything, for everyone, for ever |
+| `connectors/creds/google_drive` | Drive or M365 | A service account with Viewer on the one folder shared with it | Domain-wide delegation. It reads everything, for everyone, for ever |
 | `browser/creds/*` | Browser runner | One credential per site, per task | Anything reusable across sites |
 
 ## Model provider keys, which work differently
@@ -208,7 +208,7 @@ is the catalogue, and a test holds this table to it):
 | Key slot | Source | Scopes | Not requested |
 |---|---|---|---|
 | `connector_keys/freshdesk` | freshdesk | an agent API key with read access | an admin key, which can change SLAs and delete tickets |
-| `connector_keys/google_drive` | google_drive | read on the named shared drive only | domain-wide delegation |
+| `connector_keys/google_drive` | google_drive | Viewer on the one folder shared with it | domain-wide delegation |
 | `connector_keys/hubspot` | hubspot | crm.objects.contacts.read; crm.objects.deals.read | crm.objects.*.write; anything touching settings |
 | `connector_keys/laravel` | laravel | SELECT on the allowlisted views only | SELECT on tables; any write |
 | `connector_keys/lark_base` | lark_base | bitable:app:readonly; base:record:read | base:record:write; drive:drive |

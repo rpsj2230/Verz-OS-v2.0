@@ -115,6 +115,9 @@ export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
   INSTALL_CURRENCY: "A three-letter currency code, such as SGD.",
   INSTALL_TIME_ZONE: "A time zone name, such as Asia/Singapore.",
   INSTALL_MODEL_PROFILE: "Where questions may be answered: on this server only, or by online providers.",
+  INSTALL_DIGEST_TIME: "A time on the 24-hour clock in the install's time zone, such as 18:00.",
+  INSTALL_LARK_CARD_APPROVALS:
+    "Whether a Lark card's buttons may approve. A press relies on Lark's own sign-in and carries no second factor from the Brain, so switch it on only if your Lark requires two-step verification.",
 });
 
 /** What a field accepts, or one plain sentence for a setting the table does not know. */
@@ -166,6 +169,10 @@ export const CHOICES: Readonly<Record<string, readonly { readonly value: string;
     INSTALL_MODEL_PROFILE: [
       { value: "local", label: "On this server only" },
       { value: "hosted", label: "Online providers" },
+    ],
+    INSTALL_LARK_CARD_APPROVALS: [
+      { value: "off", label: "Off: decide approvals in the console" },
+      { value: "on", label: "On: approve from Lark cards" },
     ],
   });
 

@@ -972,10 +972,12 @@ def test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks(esta
                 # gate's own run is `tests/unit/test_matrix_gate.py`'s.
                 app.state.matrix_gate = _PassingGate()
                 out = {"attempts": 1, "max_concurrency": 2, "timeout_seconds": 12, "enabled": False}
+                # Above the answer budget: the one step is the last, which is given the rest of
+                # the budget when its own figure is less, and the saved figure would not show.
                 back = {
                     "attempts": 1,
                     "max_concurrency": 2,
-                    "timeout_seconds": 9.5,
+                    "timeout_seconds": 30.5,
                     "enabled": True,
                 }
                 taken_out = call(c, "PATCH", "u_wide", edit, out)
@@ -989,7 +991,7 @@ def test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks(esta
         assert while_out["outcome"] == "out_of_rotation"
         assert once_back["answered"] is True
         (sent,) = estate.sent
-        assert sent.timeout_seconds == 9.5
+        assert sent.timeout_seconds == 30.5
         assert sql(url, "SELECT rung_id::text, outcome FROM ops.model_attempt") == [(rung_id, "ok")]
         assert sql(url, "SELECT status FROM ops.routing_change ORDER BY decided_at") == [
             ("applied",),

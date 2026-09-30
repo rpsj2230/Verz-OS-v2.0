@@ -44,7 +44,7 @@ import {
 } from "../src/pages/knowledge/knowledgeDocuments";
 import { ADD_LABEL, KNOWLEDGE_HEADING, NO_DOCUMENTS } from "../src/pages/knowledge/KnowledgePage";
 import { CAPTURE, CAPTURE_PROBLEMS } from "../src/pages/knowledge/SolutionsPage";
-import { QUEUED_STATES, readQueued } from "../src/pages/knowledgeIntakeQuery";
+import { QUEUED_FIELDS, QUEUED_STATES, queuedPath, readQueued } from "../src/pages/knowledgeIntakeQuery";
 import {
   instantOf,
   isAfterToday,
@@ -69,7 +69,7 @@ import {
 } from "../src/pages/knowledgeQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument } from "./support/openapi";
-import { backendEnumMembers } from "./support/python";
+import { backendEnumMembers, backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 
@@ -501,6 +501,39 @@ describe("the forms", () => {
     fireEvent.submit(manyForm.querySelector("form") as HTMLFormElement);
     expect(manyForm.textContent).toContain(PROBLEMS.files);
     expect(writes(many)).toEqual([]);
+  });
+
+  test("a file queued behind others is shown its place in line and expected wait, as the API said them", async () => {
+    // M22.1.4. What breaks if this is deleted: the queued upload's place and wait sent by the API
+    // and dropped by the form, which is every queued file told only that it is queued, or a field
+    // added to `QueuedView` that the form never reads.
+    expect([...QUEUED_FIELDS].sort()).toEqual(backendModelFields("src/brain/knowledge_intake_routes.py", "QueuedView").sort());
+    const said = "Notes.md is queued to be read, number 3 in line, and should start in about 90 seconds.";
+    const view = {
+      ticket: "a".repeat(40),
+      name: "Notes.md",
+      state: "queued",
+      said,
+      item_id: null,
+      passages: 0,
+      position: 3,
+      expected_wait_seconds: 90,
+    };
+    expect(Object.keys(view).sort()).toEqual([...QUEUED_FIELDS].sort());
+    const read = readQueued(view);
+    expect([read?.position, read?.expectedWaitSeconds]).toEqual([3, 90]);
+    expect(readQueued({ ...view, position: null, expected_wait_seconds: null })?.position).toBeNull();
+
+    const idp = api({}, view);
+    const container = await alone(idp, <AddManyForm options={options} onAdded={() => undefined} />);
+    const file = new File(["# Notes"], "Notes.md", { type: "" });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+    setField(container, "kind", "sop");
+    setField(container, "department", "web");
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(container.textContent).toContain(said));
+    const [sent] = writes(idp);
+    expect(`${sent?.url.pathname}${sent?.url.search}`).toBe(`${API}${queuedPath("sop", "department", "web")}`);
   });
 
   test("verifying refuses a day that is not after today before sending, and sends a later one as noon UTC", async () => {

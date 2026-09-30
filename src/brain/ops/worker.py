@@ -135,7 +135,9 @@ start and the finish in `ops.control_run`, including a failure with its reason. 
 the registry's. A control with no runner is left to `runner_gaps` to report, and the parse worker
 does not tick at all; see `THE_SCHEDULE_RUNS_IN_THE_GENERAL_WORKER_AND_NOWHERE_ELSE`. After each
 tick it makes any test of a connection a person asked for on the Connectors page
-(`brain.ops.connector_probe_run.tick_probes`), because only this process reads a source's key.
+(`brain.ops.connector_probe_run.tick_probes`), because only this process reads a source's key,
+and any trial read of the staff source a person asked for on the Staff sources page
+(`brain.ops.staff_trial.tick_staff_trial`), for the same reason about the staff source's key.
 
 **It runs on an install now, and that is what the claim below rests on.** Until 2026-09-29 this
 paragraph declined M32.4.1.4 because the compose file had never run on the host it was sized for,
@@ -231,8 +233,16 @@ from brain.ops.retention_store import released_controls
 from brain.ops.safe_error import describe
 from brain.ops.schedule import report_only_now
 from brain.ops.schedule_control import chosen_this_tick, paused_controls, run_requests
-from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
+from brain.ops.schedule_runner import (
+    RunnerError,
+    due_now,
+    next_tick,
+    runner_for,
+    start_control,
+    times_of_day,
+)
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
+from brain.ops.staff_trial import tick_staff_trial
 from brain.ops.wiring import WiringError, component
 from brain.session import (
     APPLICATION_ROLE,
@@ -1142,7 +1152,11 @@ async def tick_controls(
         paused = await paused_controls(session)
         requested = await run_requests(session)
     owed = due_now(
-        now=now, last_attempt=attempts, last_success=successes, released=sorted(released)
+        now=now,
+        last_attempt=attempts,
+        last_success=successes,
+        released=sorted(released),
+        at=times_of_day(),
     )
     chosen = chosen_this_tick(
         owed,
@@ -1365,8 +1379,9 @@ async def run_schedule(
     tick runs on what was already held. A failed run is printed with its reason as well as
     recorded. A tick that raises is printed and the next is tried; see
     `A_TICK_THAT_CANNOT_REACH_THE_DATABASE_IS_REPORTED_AND_THE_NEXT_ONE_TRIED`. After the tick,
-    `tick_probes` makes the connection tests people asked for, and a pass that raises is printed
-    and the next tick tried, for the same reason.
+    `tick_probes` makes the connection tests people asked for and `tick_staff_trial` the trial
+    read of the staff source, and a pass that raises is printed and the next tick tried, for the
+    same reason.
     Cancellation is not an `Exception` and is not caught, so stopping the worker stops this.
     """
     while True:
@@ -1399,6 +1414,14 @@ async def run_schedule(
             print(
                 f"  ! the connection tests asked for could not be made at {now.isoformat()}: "
                 f"{describe(exc)}",
+                file=sys.stderr,
+            )
+        try:
+            await tick_staff_trial(sessions, now=now, database_url=database_url)
+        except Exception as exc:
+            print(
+                f"  ! the trial read of the staff source asked for could not be made at "
+                f"{now.isoformat()}: {describe(exc)}",
                 file=sys.stderr,
             )
         await sleep(max(0.0, (next_tick(now=now) - clock()).total_seconds()))

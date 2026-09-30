@@ -773,6 +773,7 @@ def test_the_seven_connectors_are_discovered_from_the_package() -> None:
         "laravel",
         "lark_base",
         "lark_wiki",
+        "slack_messages",
         "xero",
     )
 

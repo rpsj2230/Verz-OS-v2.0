@@ -187,11 +187,16 @@ class ConnectedSources:
                 "Authorization": authorization(reading.key_scheme(), key),
             }
             try:
-                operation = reading.operation(
+                # The lookup's own one-record call where it names one, otherwise the reading's
+                # list narrowed to the record. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+                own = live.operation(
+                    request.entity, settings=connection.settings, resolver=self._resolver
+                )
+                operation = own or reading.operation(
                     request.entity, settings=connection.settings, resolver=self._resolver
                 )
                 arguments = {
-                    **reading.first_page(request.entity),
+                    **({} if own is not None else reading.first_page(request.entity)),
                     **live.arguments_for(request.entity, ids[0]),
                 }
                 checked = operation.prepare(arguments, resolver=self._resolver)

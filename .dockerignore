@@ -19,6 +19,9 @@ ops
 # is runbooks and host scripts with no business in a container that serves requests, so the
 # exclusion above stays and this is a hole in it rather than a change of mind.
 !ops/keycloak/realm-export.json
+# The accounts client's setup, which the deploy hook copies out of the image and runs once the
+# app is ready (ops/keycloak/accounts-client.sh says why). Only that script.
+!ops/keycloak/accounts-client.sh
 # And the release's vault changes, which the server's deploy hook copies out of the image and
 # applies before starting it (Dockerfile says why). Policies and the script that loads them only.
 !ops/openbao/apply-release.sh

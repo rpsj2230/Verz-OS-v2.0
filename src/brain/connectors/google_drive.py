@@ -180,7 +180,18 @@ read live and never embedded (`docs/needs-rupash.md` item 99), so the connector 
 it owes that decision first. It is declared as `CONNECTOR` at the foot of this module
 (`brain.connectors.declaration`).
 
-Task ids: M11.6.7
+**It is connected on the Connectors screen (M11.7.7).** The form asks for `DriveConnection`'s own
+four settings, the folder (its link or its id), the company's email domain, the department the
+folder belongs to and the id of the person answerable for it, and takes the service account's key
+file as a file, which `brain.ops.credentials.key_file_problems` judges and the vault keeps whole.
+Each setting is refused by the rule the connection already holds it to, naming that setting. **A
+folder inside a shared drive is not offered on the form yet**, because `drive_id` has no field
+there and a setting cannot be left blank; such a folder is still connected at the server. And the
+answerable person is typed as an id rather than chosen from the directory; the connect and edit
+routes refuse an id that names nobody live here (`Setting.names_a_person`), and a picker is the
+console's to add.
+
+Task ids: M11.6.7, M11.7.7
 """
 
 from __future__ import annotations
@@ -204,7 +215,15 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
-from brain.connectors.declaration import ConnectorDeclaration, Recorded
+from brain.connectors.declaration import (
+    CREDENTIAL_ASK,
+    ConnectorDeclaration,
+    ConsoleForm,
+    CredentialShape,
+    Recorded,
+    Setting,
+    SettingRefusedError,
+)
 from brain.connectors.manifest import (
     PRINCIPAL_FIELD_RE,
     RESOLVED_ACL_RE,
@@ -221,6 +240,7 @@ from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestO
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
 from brain.connectors.write_verification import ReadBack, Reading, unreadable
+from brain.core.department import SLUG_RE
 from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
@@ -371,6 +391,10 @@ WHAT_A_RECORDING_WOULD_SETTLE = (
 # ---------------------------------------------------------------------------- the names
 #: The connector's name, and the string every projected row, subscription and trace carries.
 GOOGLE_DRIVE: Final = "google_drive"
+
+#: The name the console and the tests read every connector's by. The same value, so a source listed
+#: as one connector cannot build another's manifest.
+CONNECTOR_NAME: Final = GOOGLE_DRIVE
 
 #: The one entity kind. A file's metadata, never its contents.
 FILE: Final = "file"
@@ -2213,21 +2237,130 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
     return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not next_cursor(reply))
 
 
-#: Why this screen cannot connect it, said by the declaration and by the guide's last step.
-NOT_FROM_THE_CONSOLE_SAYS: Final = (
-    "It is connected to one folder, with the department whose knowledge the folder "
-    "is and the person answerable for what it contributes, and its key is a service "
-    "account key file rather than one unbroken key. This screen takes neither yet, so "
-    "it is connected at the server."
+# ------------------------------------------------- connecting from the console (M11.7.7)
+#: The settings Connectors asks for. Each is one of `DriveConnection`'s, and the steward's name is
+#: this system's word for the person answerable, never Drive's word for an owner.
+FOLDER_SETTING: Final = "folder"
+DOMAIN_SETTING: Final = "domain"
+DEPARTMENT_SETTING: Final = "department"
+STEWARD_SETTING: Final = "steward"
+
+#: A folder's address as Drive shows it in a browser, whose last part is the folder's id.
+_FOLDER_IN_LINK: Final = re.compile(r"/folders/([A-Za-z0-9_-]{1,512})")
+
+#: A person's id here: one piece, as the People screen shows it.
+_STEWARD_RE: Final = re.compile(r"^\S{1,128}$")
+
+
+def folder_id_of(given: str) -> str:
+    """The folder's id out of its link, or the id itself, or empty when neither is there."""
+    text = given.strip()
+    if _FILE_ID_RE.match(text):
+        return text
+    found = _FOLDER_IN_LINK.search(text)
+    return found.group(1) if found else ""
+
+
+def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
+    """The manifest a connection made on the Connectors screen declares (M11.7.7).
+
+    Each setting is checked by the rule `DriveConnection` holds it to, one at a time, so a refusal
+    names the setting it is about and the person is told that one's sentence; the connection is
+    then built, which is the check that the four agree. A folder in a shared drive is not offered
+    here yet: see the module docstring.
+    """
+    folder = folder_id_of(settings.get(FOLDER_SETTING, ""))
+    if not folder:
+        raise SettingRefusedError("not a Drive folder", setting=FOLDER_SETTING)
+    domain = settings.get(DOMAIN_SETTING, "").strip().casefold()
+    if not _DOMAIN_RE.match(domain):
+        raise SettingRefusedError("not a domain", setting=DOMAIN_SETTING)
+    department = settings.get(DEPARTMENT_SETTING, "").strip()
+    if not SLUG_RE.fullmatch(department):
+        raise SettingRefusedError("not a department", setting=DEPARTMENT_SETTING)
+    steward = settings.get(STEWARD_SETTING, "").strip()
+    if not _STEWARD_RE.match(steward):
+        raise SettingRefusedError("not a person's id", setting=STEWARD_SETTING)
+    try:
+        connection = DriveConnection(
+            folder_id=folder, domain=domain, department=department, steward_id=steward
+        )
+    except ConnectorContractError as refused:
+        # The other three were judged above, so what the connection refuses is the folder: a
+        # selector such as `all` passes the id's grammar and narrows nothing.
+        raise SettingRefusedError("not one folder", setting=FOLDER_SETTING) from refused
+    return manifest(connection, ref=ref)
+
+
+#: What the Connectors screen asks for. The key is a service account's key file, chosen as a file.
+CONSOLE: Final = ConsoleForm(
+    settings=(
+        Setting(
+            name=FOLDER_SETTING,
+            label="Folder",
+            hint=(
+                "Open the one folder in Google Drive and copy its address from the browser, or "
+                "only the id after /folders/. Everything this system reads sits at or under it."
+            ),
+            refused=(
+                "That is not a Google Drive folder. Open the folder in Google Drive and copy its "
+                "address, which contains /folders/ followed by its id."
+            ),
+        ),
+        Setting(
+            name=DOMAIN_SETTING,
+            label="Email domain",
+            hint=(
+                "The part after @ in your company's email addresses, such as yourcompany.com. A "
+                "file shared with anybody outside it is left out."
+            ),
+            refused="That is not a domain. Type only the part after @, such as yourcompany.com.",
+        ),
+        Setting(
+            name=DEPARTMENT_SETTING,
+            label="Department it belongs to",
+            hint=(
+                "The short name of the department whose knowledge this folder is, as the "
+                "Departments page shows it. Its files are told to that department."
+            ),
+            refused=(
+                "That is not a department's short name. Use lower-case letters, digits and "
+                "underscores, exactly as the Departments page shows it."
+            ),
+        ),
+        Setting(
+            name=STEWARD_SETTING,
+            label="Answerable person",
+            hint=(
+                "The id of the person who answers for what this folder adds, as the People page "
+                "shows it. They are asked to re-check its files, not whoever owns them in Drive."
+            ),
+            refused=(
+                "That is not anybody here. Copy the person's id from the People page, with no "
+                "spaces."
+            ),
+            names_a_person=True,
+        ),
+    ),
+    credential_label="The service account's key file",
+    credential_hint=(
+        "Choose the JSON key file Google Cloud downloaded for the service account. The account "
+        "needs Viewer on the one folder shared with it and never domain-wide delegation. The file "
+        "is kept in the vault and never shown again."
+    ),
+    build=built_from_the_console,
+    credential_shape=CredentialShape.KEY_FILE,
 )
+
+
 #: Google Cloud console's service accounts page. Google's for every install.
 SERVICE_ACCOUNTS_URL: Final = "https://console.cloud.google.com/iam-admin/serviceaccounts"
 
 #: Where the Google Drive API is switched on for a project. Google's for every install.
 DRIVE_API_LIBRARY_URL: Final = "https://console.cloud.google.com/apis/library/drive.googleapis.com"
 
-#: The screens that prepare Google Drive for this system, ending where the server takes over:
-#: this screen takes no key file yet, which the last step says in the declaration's own words.
+#: The screens that prepare Google Drive for this system, ending with the form that connects it:
+#: the folder, the domain, the department, the answerable person and the key file (M11.7.7).
 GUIDE: Final = keyed(
     (
         GuideStep(
@@ -2283,22 +2416,57 @@ GUIDE: Final = keyed(
             ),
         ),
         GuideStep(
-            key="at_the_server",
-            title="Connect it at the server",
+            key="key_file",
+            title="Create a key file for it",
             text=(
-                "This screen cannot finish this one. "
-                + NOT_FROM_THE_CONSOLE_SAYS
-                + " Hand whoever runs this install's server the service account's key file, the "
-                "folder's id and the department the folder belongs to."
+                "Back in Service Accounts, open the account, choose the Keys tab, click Add key, "
+                "Create new key, choose JSON and click Create. A key file downloads. Keep it only "
+                "until the next step: this system keeps it in its vault and never shows it again."
             ),
             sketch=Sketch(
-                place="Your server",
-                heading="Connected at the server",
+                place="Google Cloud console",
+                heading="Keys",
+                menu=("Details", "Permissions", "Keys"),
+                menu_mark="Keys",
+                lines=(SketchLine(LineKind.ITEM, "Key type", "JSON", mark=True),),
+                button="Create",
+            ),
+            link=SERVICE_ACCOUNTS_URL,
+            link_label="Open Service Accounts",
+        ),
+        GuideStep(
+            key="connect",
+            title="Choose the key file and name the folder here",
+            text=(
+                "Paste the folder's link from Google Drive, type your company's email domain, the "
+                "short name of the department the folder belongs to and the id of the person "
+                "answerable for what it adds, choose the key file, then press Connect Google "
+                "Drive. Files are told to that department, and a file shared outside your domain "
+                "is left out."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Google Drive",
                 lines=(
-                    SketchLine(LineKind.ITEM, "The service account's key file", mark=True),
-                    SketchLine(LineKind.ITEM, "The folder's id", mark=True),
-                    SketchLine(LineKind.ITEM, "The department it belongs to", mark=True),
+                    SketchLine(
+                        LineKind.FIELD,
+                        "Folder",
+                        "drive.google.com/drive/folders/...",
+                        mark=True,
+                    ),
+                    SketchLine(LineKind.FIELD, "Email domain", "yourcompany.com", mark=True),
+                    SketchLine(LineKind.FIELD, "Department", "operations", mark=True),
+                    SketchLine(LineKind.FIELD, "Answerable person", "their id", mark=True),
+                    SketchLine(LineKind.FIELD, "Key file", "company-brain.json", mark=True),
                 ),
+                button="Connect Google Drive",
+            ),
+            asks=(
+                FOLDER_SETTING,
+                DOMAIN_SETTING,
+                DEPARTMENT_SETTING,
+                STEWARD_SETTING,
+                CREDENTIAL_ASK,
             ),
         ),
     )
@@ -2309,7 +2477,7 @@ CONNECTOR: Final = ConnectorDeclaration(
     name=GOOGLE_DRIVE,
     label="Google Drive",
     guide=GUIDE,
-    not_from_the_console=NOT_FROM_THE_CONSOLE_SAYS,
+    console=CONSOLE,
     read_back=ReadBack(
         reading=read_back_reading,
         recorded=(

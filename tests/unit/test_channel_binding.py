@@ -898,10 +898,10 @@ def test_the_channels_screen_shows_what_each_channel_declares_and_how_it_is_doin
     assert found["max_classification"] == declared.max_classification.value
     assert found["can_carry_label"] is declared.can_carry_label
     assert (found["receives"], found["health"], found["last_fault"]) == (True, "working", None)
-    slack = client.get(API_PREFIX + "/channels/slack/health", headers=as_("u_admin")).json()
-    assert (slack["receives"], slack["health"]) == (False, "not_set_up")
-    declared_slack = adapter_for(Channel.SLACK).capabilities().max_classification
-    assert slack["max_classification"] == declared_slack
+    telegram = client.get(API_PREFIX + "/channels/telegram/health", headers=as_("u_admin")).json()
+    assert (telegram["receives"], telegram["health"]) == (False, "not_set_up")
+    declared_telegram = adapter_for(Channel.TELEGRAM).capabilities().max_classification
+    assert telegram["max_classification"] == declared_telegram
     refused = client.get(API_PREFIX + "/channels/webhook/health", headers=as_("u_narrow"))
     nothing = client.get(API_PREFIX + "/channels/carrier-pigeon/health", headers=as_("u_admin"))
     assert refused.status_code == nothing.status_code == 404
@@ -921,7 +921,8 @@ def test_the_module_list_is_every_channel_the_reader_manages_with_its_state_and_
     and how its deliveries say it is doing, with who changed it last. A channel with no record is
     not set up and holds no secret, rather than a secret the vault could not be asked about.
 
-    Delete this and the list can drop a channel nobody set up, or show a secret held for one."""
+    Delete this and the list can drop a channel nobody set up, or show a secret held for one,
+    or a channel's page draw steps its flow was never sent."""
     place.world.records.kept[Channel.WEBHOOK] = fresh_record()
     place.world.deliveries.entries.append(
         DeliveryEntry(Channel.WEBHOOK, Direction.INBOUND, DeliveryOutcome.ACCEPTED)
@@ -935,13 +936,18 @@ def test_the_module_list_is_every_channel_the_reader_manages_with_its_state_and_
     assert (webhook["status"], webhook["secret"], webhook["health"]) == ("on", "held", "working")
     assert webhook["receives"] is True and webhook["changed_by"] == "u_admin"
     assert webhook["last_delivered_at"] is not None
-    slack = rows["slack"]
-    assert (slack["status"], slack["secret"], slack["health"]) == (
+    telegram = rows["telegram"]
+    assert (telegram["status"], telegram["secret"], telegram["health"]) == (
         "not_set_up",
         "none",
         "not_set_up",
     )
-    assert (slack["receives"], slack["tenant"], slack["changed_by"]) == (False, {}, None)
+    assert (telegram["receives"], telegram["tenant"], telegram["changed_by"]) == (False, {}, None)
+    # A channel's connect steps ride on its row, so its page and its flow read one answer: email
+    # has its own and ends in its form, a channel with none has none, and with no public address
+    # named on this install there is no events address to paste yet.
+    assert [one["asks"] for one in rows["email"]["steps"]][-1] == ["address", "secret"]
+    assert (rows["webhook"]["steps"], rows["email"]["events_address"]) == ([], "")
     assert "next_cursor" in answer.json() and "total" not in answer.json()
 
 
@@ -1002,23 +1008,27 @@ def test_each_channel_says_the_verbs_it_carries_and_how_a_group_is_answered(
     client: TestClient, place: Place
 ) -> None:
     """**M27.15.43.** The verbs are the admission rule's for the channel, and how a group is
-    answered follows the wire: at the floor on one that reads who is present (Lark), as a floor of
-    nothing on one that cannot (the webhook), and not at all where nothing is received (Slack).
+    answered follows the wire: at the floor on one that reads who is present (Lark, Slack), as a
+    floor of nothing on one that cannot (the webhook, Teams), and not at all where nothing is
+    received (Telegram).
 
     Delete this and the screen can say a channel approves what admission refuses, or that a room
     is answered at its floor on a wire that never reads one."""
     found = {
         name: client.get(f"{API_PREFIX}/channels/{name}/health", headers=as_("u_admin")).json()
-        for name in ("lark", "webhook", "slack")
+        for name in ("lark", "webhook", "slack", "teams", "telegram")
     }
     assert found["lark"]["verbs"] == sorted(CHANNEL_VERBS[Channel.LARK])
     assert "approve" in found["lark"]["verbs"] and "approve" not in found["slack"]["verbs"]
     assert {name: one["rooms"] for name, one in found.items()} == {
         "lark": "at_the_floor",
         "webhook": "as_nothing",
-        "slack": "not_received",
+        "slack": "at_the_floor",
+        "teams": "as_nothing",
+        "telegram": "not_received",
     }
     assert isinstance(channel_wires()[Channel.LARK], RoomReader)
+    assert isinstance(channel_wires()[Channel.SLACK], RoomReader)
     assert not isinstance(channel_wires()[Channel.WEBHOOK], RoomReader)
     assert {one["rooms_told"] for one in found.values()} == set(binding_routes.ROOMS_TOLD.values())
 

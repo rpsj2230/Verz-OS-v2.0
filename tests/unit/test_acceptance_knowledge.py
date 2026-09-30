@@ -26,7 +26,7 @@ from brain.ops import acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.ops.acceptance_knowledge import TABLE, a_document_holding_a_table
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 from tests.unit.test_acceptance_models import Providers, laddered, live_ladder
 
 MODULE = "brain.ops.acceptance_knowledge"
@@ -163,3 +163,13 @@ def test_a_re_verification_run_opening_nothing_fails_the_life_check(
 
     monkeypatch.setattr(item_store, "run_reverification", blind)
     assert "re-verification task" in _failed(install)
+
+
+def test_the_knowledge_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_knowledge") == [
+        "a_document_is_added_answered_replaced_and_falls_due_for_review",
+    ]

@@ -27,6 +27,7 @@ const OUTCOMES: Readonly<Record<string, string>> = {
   credential_refused: "Credential refused",
   unreachable: "Source unreachable",
   not_schedulable: "Not read on a schedule",
+  tried: "Trial read",
 };
 
 /** A key read as words: underscores as spaces, the first letter a capital. */

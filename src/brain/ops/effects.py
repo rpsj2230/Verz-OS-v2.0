@@ -572,6 +572,19 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The Limits screen's walk over the windows, which writes nothing.
         "brain.ops.limit_store:WindowClient.scan_iter": Repeat.READS,
         "brain.ops.limit_store:WindowClient.zrange": Repeat.READS,
+        # The capacity ledger's slots and places: a count kept in the cache, where a slot taken
+        # twice under one name is one slot and a slot taken twice under two lapses with its lease.
+        # See `brain.ops.capacity_ledger.A_SLOT_NOBODY_GAVE_BACK_IS_FREED_BY_ITS_LEASE`.
+        "brain.ops.capacity_ledger:LedgerPipeline.watch": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.multi": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.execute": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrange": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerPipeline.zremrangebyscore": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zadd": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrem": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.capacity_ledger:LedgerPipeline.expire": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerClient.pipeline": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerClient.zrange": Repeat.READS,
         # The denial alerts kept for each recipient: every write is a put by content, so a pass
         # run twice leaves the store as one pass did. See `brain.ops.denial_alert_store`.
         "brain.ops.denial_alert_store:AlertClient.scan_iter": Repeat.READS,
@@ -625,6 +638,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:LiveLookup.entities": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.arguments_for": Repeat.READS,
+        "brain.connectors.declaration:LiveLookup.operation": Repeat.READS,
         "brain.connectors.live_read:LiveSources.reads": Repeat.READS,
         "brain.connectors.live_read:LiveSources.source_for": Repeat.READS,
         "brain.gate.live_records:LiveRecords.refresh": Repeat.READS,
@@ -647,6 +661,22 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.queue:QueueDriver.fetch": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.complete": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.fail": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The recovery sweeps. Putting a job back is work on this system's own queue, whose
+        # effects go through the doors classified here; a second put-back of a job already
+        # waiting is refused by the driver, and so is a second set-aside or settle of a row that
+        # has already moved, which each door answers as the race it is.
+        "brain.ops.recovery_run:QueueRows.running": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.failed": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.run_again": Repeat.ENQUEUES_WORK,
+        "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
+        "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The evening digest's destination and its send (M38.3.3): a channel's list of the
+        # conversations it may post to is a request built and a page read, and a send's secret is
+        # borrowed through a token that expires on its own if its revocation is lost.
+        "brain.ops.digest_destination:ConversationLister.conversations_request": Repeat.READS,
+        "brain.ops.digest_destination:ConversationLister.conversations_page": Repeat.READS,
+        "brain.ops.channel_lease:ChannelSecretLeases.lease": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
@@ -732,6 +762,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.adapter:ChannelWire.read": Repeat.READS,
         "brain.channels.adapter:ChannelWire.request_for": Repeat.READS,
         "brain.channels.adapter:ChannelWire.judge": Repeat.READS,
+        "brain.channels.adapter:KeyedWire.key_set_of": Repeat.READS,
         "brain.channels.adapter:ChannelTransport.send": Repeat.ISSUES,
         "brain.channels.inbound:ChannelBindings.binding_for": Repeat.READS,
         # The gate run as the bound person: a model call and reads, and the send is `deliver`'s.
@@ -746,6 +777,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.channel_store:EventClaims.first": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.channel_store:ChannelSecrets.read": Repeat.READS,
         "brain.ops.channel_store:ChannelSecrets.held": Repeat.READS,
+        # The email channel's mailbox. A read peeks and sets no flag; marking read twice leaves the
+        # message read; signing out a second time does nothing. Nothing here deletes.
+        "brain.channels.mailbox:MailboxReader.unseen": Repeat.READS,
+        "brain.channels.mailbox:MailboxReader.mark_handled": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.channels.mailbox:MailboxReader.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The Lark chat channel (L1). A GET through the transport is the one read a group's
         # floor needs, who is in the conversation, and it changes nothing at the vendor.
         "brain.channels.adapter:ChannelTransport.read": Repeat.READS,
@@ -766,6 +802,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.binding:BindingTable.on_channel": Repeat.READS,
         "brain.channels.binding:BindingTable.bind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.channels.binding:BindingTable.unbind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Approval cards in a chat (M10.2.3). A wire builds a card's request and its press answer
+        # from bytes and a secret; the send is `deliver`'s, through the transport, keyed. An offer
+        # reads approvals and counts one hit in the card ceiling's open window per card; a press
+        # decides through `brain.approval_routes.take_decision`, whose update names the pending
+        # row, so a second press on a decided row changes nothing.
+        "brain.channels.adapter:CardWire.card_request": Repeat.READS,
+        "brain.channels.adapter:CardWire.edit_address": Repeat.READS,
+        "brain.channels.adapter:CardWire.press_answer": Repeat.READS,
+        "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
+        "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
     }
 )
 

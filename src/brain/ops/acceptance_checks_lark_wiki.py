@@ -41,6 +41,10 @@ if TYPE_CHECKING:
     from brain.ops.acceptance_run import Harness
     from brain.ops.connector_sync_run import SourceAnswer
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 315
+
 A, B = RESERVED_DEPARTMENTS
 
 #: The capability the knowledge plane is read with, restated from `brain.knowledge.search`.
