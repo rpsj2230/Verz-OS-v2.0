@@ -95,7 +95,7 @@ def test_only_a_connected_source_contributes_questions_and_each_is_keyed_on_its_
     source nobody connected answers "nothing found" to a question about it, which says the product
     knows the source exists, or a connected one contributes nothing."""
     assert connected_questions(()) == ()
-    assert connected_questions(["hubspot"]) == ()
+    assert connected_questions(["lark_base"]) == ()
     xero_only = connected_questions([xero.CONNECTOR_NAME])
     assert {rule.source for rule in xero_only} == {xero.CONNECTOR_NAME}
     for rule in xero_only:
@@ -162,3 +162,26 @@ def test_an_agent_install_reads_a_connected_source_as_serving_and_a_changed_one_
     assert registry.serving() == (xero.CONNECTOR_NAME,)
     monkeypatch.setattr(lifecycle, "sessions_of", lambda request: None)
     assert len(asyncio.run(lifecycle.connectors_of(request))) == 0  # type: ignore[arg-type]
+
+
+def test_hubspot_is_asked_by_a_company_or_deal_name_and_its_amount_is_confidential() -> None:
+    """HubSpot on Ask since 2026-09-30: its companies and deals are asked about by the name a
+    person knows them by, its contacts by no name at all (a contact is kept without one), and the
+    deal's amount is CONFIDENTIAL behind `read:deal.amount`, as HubSpot's own rules say. Delete this
+    and HubSpot can fall back to being read and asked about by nothing, or a deal's amount can be
+    told under an INTERNAL grant."""
+    from brain.connectors import hubspot
+    from brain.core.field_policy import Classification
+
+    rules = connected_questions([hubspot.CONNECTOR_NAME])
+    assert {rule.entity for rule in rules} == {hubspot.ENTITY_CLIENT, hubspot.ENTITY_DEAL}
+    for rule in rules:
+        assert rule.match_field == NAMED_BY[(rule.source, rule.entity)]
+    [deal] = [one for one in CONNECTOR_ROW_ENTITIES["hubspot"] if one.entity == hubspot.ENTITY_DEAL]
+    amount = deal.rule_for("amount")
+    assert amount is not None
+    assert (amount.required_capability.value, amount.classification) == (
+        "read:deal.amount",
+        Classification.CONFIDENTIAL,
+    )
+    assert deal.rule_for("portal_id") is not None

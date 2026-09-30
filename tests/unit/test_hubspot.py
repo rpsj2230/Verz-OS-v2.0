@@ -1417,3 +1417,51 @@ def test_a_field_mapping_that_writes_one_target_twice_is_refused() -> None:
                 FieldMapping(target="name", source_path="properties.lastname"),
             ),
         )
+
+
+# ------------------------------------------------------------------ read live (M11.9.2)
+def _recording(cid: str) -> Any:
+    return next(one for one in CASSETTES if one.cid == cid)
+
+
+def test_a_record_is_read_live_by_an_id_of_digits_and_nothing_else() -> None:
+    """HubSpot's record ids are digits, and one is laid into the address, so anything else is
+    refused rather than escaped; an entity nothing reads live is refused too. The positive case
+    is the same lookup with a real id. Delete this and a crafted id could reach a different
+    path of HubSpot's API under the connection's key."""
+    from brain.connectors.hubspot import RECORD_ID_PARAMETER, HubSpotLiveLookup
+
+    live = HubSpotLiveLookup()
+    asked = live.arguments_for(ENTITY_DEAL, "4471")
+    assert asked[RECORD_ID_PARAMETER] == "4471"
+    assert asked["properties"].split(",") == sorted(requested_properties(ENTITY_DEAL))
+    for crafted in ("4471/../../owners", "44 71", "", "4471?archived=true"):
+        with pytest.raises(HubSpotError, match="refused rather than escaped"):
+            live.arguments_for(ENTITY_DEAL, crafted)
+    with pytest.raises(HubSpotError):
+        live.arguments_for(ENTITY_ASSOCIATION, "4471")
+    assert live.entities() == tuple(sorted((ENTITY_CLIENT, ENTITY_CONTACT, ENTITY_DEAL)))
+    assert {live.identity_mode(one) for one in live.entities()} == {IdentityMode.SERVICE}
+
+
+def test_a_deal_s_amount_is_read_by_the_one_record_call_that_holds_it() -> None:
+    """The list cannot be narrowed to one id, so a live read names HubSpot's one-record GET, with
+    the list's own mapping, and the recorded deal's amount comes back from it. Delete this and a
+    live read of a deal falls back to the list, which answers a page, or to nothing."""
+    from brain.connectors.hubspot import HubSpotLiveLookup, HubSpotReading
+
+    live = HubSpotLiveLookup()
+    operation = live.operation(ENTITY_DEAL, settings={"portal_id": PORTAL}, resolver=Resolver())
+    assert operation is not None
+    checked = operation.prepare(live.arguments_for(ENTITY_DEAL, "4471"), resolver=Resolver())
+    assert checked.url.startswith("https://api.hubapi.com/crm/v3/objects/deals/4471?")
+    recorded = _recording("HUBSPOT-200-deal")
+    reply = HubSpotReading().interpret(
+        operation, status=recorded.status, body=recorded.body, fetched_at="2019-06-01T00:00:00Z"
+    )
+    assert reply.rows is not None
+    [deal] = reply.rows.records
+    assert (deal.id, deal.model_dump()["amount"]) == ("4471", recorded.body["properties"]["amount"])
+    # The list is what the worker indexes, and it is a different call.
+    listed = operation_for(ENTITY_DEAL, resolver=Resolver())
+    assert listed.operation.path != operation.operation.path
