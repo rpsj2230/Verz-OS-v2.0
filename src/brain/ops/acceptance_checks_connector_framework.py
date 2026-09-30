@@ -937,7 +937,7 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
         "Every connectable source's plan and live-read bucket follow its documented row in "
         "brain.ops.limits, and Xero's row states its daily figure in its own note; live reads past "
         "the bucket's burst are refused as quota with no call, and a source with no documented "
-        "row, HubSpot, Google Drive and Laravel today, is not read at all."
+        "row, Laravel today, is not read at all."
     ),
 )
 async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> None:
@@ -958,7 +958,7 @@ async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> Non
         row = connector_ceiling(manifest.ceiling)
         if row is None:
             # Refused for its missing ceiling, or before that for having no reading at all, which
-            # is Google Drive's and Laravel's case: either way it is not read.
+            # is Laravel's case: either way it is not read.
             if plan.refused not in (NO_VERIFIED_CEILING, NO_READING):
                 raise CheckFailedError(
                     "a source with no documented ceiling was planned for reading"

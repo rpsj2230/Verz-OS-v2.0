@@ -40,7 +40,7 @@ while the asker waits (Xero today; Freshdesk declares no live lookup yet), the r
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1, M11.6.7
 """
 
 from __future__ import annotations
@@ -195,6 +195,11 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
         google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
     }
 )
+
+#: The sources Ask answers through a passage reader rather than a row tool: their words are read
+#: live for a question and handed to the model step as passages, and they have no row to classify.
+#: Google Drive's folder is read by `brain.ops.drive_passages` (M11.6.7).
+ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset({"google_drive"})
 
 #: The field a person names a record by, per source and entity: the question's slot.
 NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(

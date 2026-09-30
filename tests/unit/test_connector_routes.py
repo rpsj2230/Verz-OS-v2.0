@@ -764,10 +764,11 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
     # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
-    # own, and Drive's and Laravel's forms wait until this install can read them, with no steps.
+    # own, and Laravel's form waits until this install can read it, with no steps. Drive reads
+    # since the same day (M11.6.7), so it is offered with its steps.
     served = {one["name"]: one for one in body["not_connectable"]}
-    assert set(served) == {"lark_base", "lark_wiki", "google_drive", "laravel"}
-    assert served["google_drive"]["steps"] == served["laravel"]["steps"] == []
+    assert set(served) == {"lark_base", "lark_wiki", "laravel"}
+    assert served["laravel"]["steps"] == []
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -790,6 +791,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "hubspot": False,
         "freshdesk": False,
         "google_analytics": False,
+        "google_drive": False,
     }
 
 

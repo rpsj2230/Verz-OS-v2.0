@@ -62,7 +62,7 @@ exists, because a row for something that is gone reads as coverage.
 | --- | --- | --- | --- | --- | --- |
 | `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |
 | `google_analytics` | `rest` | `analytics_property` | `read_only` | `none` | `google_analytics` |
-| `google_drive` | `rest` | `folder` | `read_only` | `none` | none measured |
+| `google_drive` | `rest` | `folder` | `read_only` | `none` | `google_drive` |
 | `hubspot` | `rest` | `portal` | `read_only` | `none` | `hubspot` |
 | `laravel` | `database` | `view` | `read_only` | `none` | none measured |
 | `lark_base` | `rest` | `base_table` | `read_only` | `none` | `lark_base` |
@@ -144,23 +144,28 @@ by the one named.
 
 ## `google_drive`
 
-One folder of one Drive, pinned at connect by folder id.
+One folder of one Drive, pinned at connect by folder id or link, connected on the Connectors
+screen with the department it belongs to and the person answerable for it.
 
-**Create** a service account and share the one folder with it, read-only. Do not grant
-domain-wide delegation: it reads everything, for everyone, for ever, and no scope declared here
-would narrow it.
+**Create** a service account, share the one folder with it as a viewer, and choose its key file on
+the form. Do not grant domain-wide delegation: it reads everything, for everyone, for ever, and no
+scope declared here would narrow it. The key file is exchanged for a `drive.readonly` token for
+each read and is never sent.
 
-**Two tools and neither returns a file's bytes.** It lists the folder and it reads a file's
-metadata. Fetching contents is a separate decision with separate consequences, and this
-connector is not it.
+**What it keeps and what it reads.** The worker lists the folder's own files every hour into the
+index: each file's name, type, dates and sharing verdict, never a word of it. A question reads the
+words of the few files whose names hold its words, live, only for a reader granted the folder's
+files in its department: a Google Doc exported as plain text and a plain-text file as it is. Files
+in subfolders are not read.
 
-**What it does not narrow.** The folder pin is this system's restriction rather than Google's.
-A service account reaches everything it has been granted, so the pin is enforced here, by
-refusing a file that is not in the declared folder, rather than by Google refusing to serve it.
+**What is never read.** A file Google shows as shared by link or outside your domain, a file in
+the bin, and a file whose access was limited below the folder's. A viewer is not shown how each
+file is shared, so a file whose sharing Google does not show is read as the folder's (decided by
+the owner, needs-rupash 135).
 
-**No measured ceiling.** Nothing here has recorded a real exchange with Drive, so the rate
-limits are Google's published figures rather than something observed. Treat the absence as
-what it is: the connector will not invent a limit it has not measured.
+**Its ceiling** is Google's documented quota, 325,000 units a minute per user of the project,
+recorded at the dearest call a read makes. A project owner may ask for more on the Cloud console's
+Quotas page.
 
 ## `hubspot`
 

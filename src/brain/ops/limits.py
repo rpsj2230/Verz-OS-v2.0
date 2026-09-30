@@ -460,6 +460,20 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
         ),
     ),
     ConnectorLimit(
+        name="google_drive",
+        per_minute=1_625,
+        per_day=2_000_000,
+        note=(
+            "Google counts the Drive API in quota units: 325,000 a minute for one user of one "
+            "project, 1,000,000 for the project, and 400,000,000 a day before billing applies; a "
+            "listing costs 100 units, a metadata read 5 and a download 200 "
+            "(https://developers.google.com/workspace/drive/api/guides/limits, read 2026-09-30). "
+            "Recorded at the dearest call a read makes, 1,625 downloads a minute and 2,000,000 "
+            "calls a day, so no mix of calls spends more. A project owner may ask for more on the "
+            "Cloud console's Quotas page, so it can be raised."
+        ),
+    ),
+    ConnectorLimit(
         name="hubspot",
         per_minute=100,
         per_day=250_000,

@@ -191,7 +191,7 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
     Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
     declared = shipped()
-    assert set(CONNECTABLE) == {"freshdesk", "google_analytics", "hubspot", "xero"}
+    assert set(CONNECTABLE) == {"freshdesk", "google_analytics", "google_drive", "hubspot", "xero"}
     for name in CONNECTABLE:
         one = declared[name]
         assert one.reading is not None or one.live is not None, name

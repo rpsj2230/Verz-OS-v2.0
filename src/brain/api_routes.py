@@ -220,6 +220,7 @@ from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.drive_passages import WithDrive, drive_passages_for
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -1084,6 +1085,10 @@ def model_lane_of(state: Any) -> ModelLane | None:
     search = getattr(state, "passage_search", None)
     if not isinstance(models, ModelService) or search is None:
         return None
+    # And a connected Google Drive folder, its files' words read live (M11.6.7).
+    drive = drive_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if drive is not None:
+        search = WithDrive(search, drive)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 
@@ -1109,8 +1114,12 @@ def model_lane_for(
     lane = model_lane_of(state)
     if lane is None:
         return None
-    if kinds and isinstance(lane.search, DocumentSearchTool):
-        lane = replace(lane, search=replace(lane.search, kinds=kinds))
+    if kinds:
+        # A question narrowed to kinds reads the library alone: a live source beside it holds no
+        # kind (`A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`).
+        library = lane.search.library if isinstance(lane.search, WithDrive) else lane.search
+        if isinstance(library, DocumentSearchTool):
+            lane = replace(lane, search=replace(library, kinds=kinds))
     if follow_up is not None:
         lane = replace(lane, follow_up=follow_up)
     if agent is None:
@@ -1159,6 +1168,14 @@ A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH: Final = (
     "well as its own words, and the answer cache keys a question by its words alone. So a "
     "follow-up served from the cache would be the answer to the words asked fresh, and one kept "
     "there would answer the next person asking those words with another thread's context."
+)
+
+
+#: Why a question narrowed to kinds of knowledge reads the library alone.
+A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE: Final = (
+    "A question narrowed to kinds of knowledge (M7.6.1) is answered from those kinds in the "
+    "company's own library and nothing else: a Google Drive folder read live beside the library "
+    "holds no kind, so it is left out of a narrowed question rather than asked and shown."
 )
 
 

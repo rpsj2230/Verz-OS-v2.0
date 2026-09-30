@@ -54,12 +54,18 @@ called `shared_with` or `permission_ids` fails the first time anybody builds one
 not the same check as `ProjectedEntity`'s: that one guards projected *field names* and never
 sees a dataclass here, and this one guards the dataclasses and never sees a manifest.
 
-**A file whose sharing could not be determined is refused, not defaulted.** Drive returns
-`permissions` only when a caller asks for it and only when the credential may see it, so
-"the field was not there" is a routine outcome and both defaults are wrong: defaulting to
-the folder's level publishes a file whose sharing nobody read, and defaulting to personal
-hides a document while nothing anywhere reports it. See
-`UNDETERMINED_SHARING_IS_REFUSED_RATHER_THAN_DEFAULTED`.
+**A file whose sharing could not be determined is refused at the knowledge layer's door, and
+read as the folder's where it is read live.** Drive returns `permissions` only when a caller asks
+for it and only to a caller that may share the file, which a service account holding Viewer on
+the folder may not (Google's File reference, read 2026-09-30), so "the field was not there" is the
+ordinary answer for this connector rather than a rare one. The door into the knowledge layer
+(`DriveConnection.knowledge_visibility`, which nothing calls) still refuses such a file rather
+than defaulting it, for `UNDETERMINED_SHARING_IS_REFUSED_RATHER_THAN_DEFAULTED`'s reason. The
+minimal index and the live read keep and read it as the folder's, because the folder is the grant
+(`A_DRIVE_PERMISSION_IS_NOT_A_PERMISSION_HERE`), and a file Drive does show as shared by link or
+outside the company is never read. The owner decided that narrowing (needs-rupash 135, decided:
+A): see `WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT`, and `sharing_admits_a_read` is the
+one function it lives in.
 
 **A file id is the identity; a path is not.** Files are renamed, moved between folders and
 edited, and only the id survives all three. So nothing here stores a path, `folder_id`
@@ -137,7 +143,10 @@ carries its own size ceiling, and choosing silently would decide what the compan
 procedures look like to a model. So `media_type_for` refuses them by name. **This is a real
 gap rather than a design: most of what sits in a company's Drive is native, and this
 connector indexes none of it.** The remedy is a reviewed export table, one row per native
-type, and it is not written here.
+type, and it is not written here. What this rejects is a format chosen for a parser. A live
+passage is another thing: a Google Doc is exported as plain text for the one question that needs
+it (`text_url_for`), which is the document's words without its layout, and nothing is parsed,
+embedded or kept. Sheets and Slides are not read at all.
 
 *Projecting nothing at all, on the grounds that Drive is files.* The content is knowledge
 and goes to the knowledge layer, which is why there is no `document` projection here. The
@@ -172,13 +181,32 @@ Scope: domain logic. Nothing here opens a socket, resolves a name, reads a clock
 credential. The page reader, the scanner, the fetched-at stamp and every interval are
 parameters, for the reason `brain.models.routing.CircuitBreaker` gives about `now`.
 
-**This connector keeps a minimal index and reads every value live.** What it keeps of a
-file is its id, name, folder, type, revision, sharing state and dates; a file's content is
-read from Drive when a question needs it. `admit_from_drive` can carry a file's bytes to
-the knowledge layer's scan gate and nothing calls it: by the owner's rule a Drive body is
-read live and never embedded (`docs/needs-rupash.md` item 99), so the connector that wires
-it owes that decision first. It is declared as `CONNECTOR` at the foot of this module
-(`brain.connectors.declaration`).
+**This connector keeps a minimal index and reads every value live.** The worker lists the
+pinned folder's direct children into the index (`DriveReading`): each file's id, name, type,
+revision, modified time and sharing verdict, the pin it was reached through and the department it
+belongs to, and never an owner, a permission, a path or a word of its content. A question reads
+text live (`brain.ops.drive_passages`): the files whose names hold the question's words are read
+from Drive while the asker waits, each checked again first (`withheld_from_a_read`), and handed to
+the answer lane as a passage that nothing keeps. `admit_from_drive` can carry a file's bytes to
+the knowledge layer's scan gate and nothing calls it: by the owner's rule a Drive body is read
+live and never embedded (`docs/needs-rupash.md` item 99). It is declared as `CONNECTOR` at the
+foot of this module (`brain.connectors.declaration`).
+
+**A file locked narrower than its folder is never read, as a Wiki page restricted in Lark is
+not.** Drive's `inheritedPermissionsDisabled` says a file no longer takes its folder's sharing,
+which is how somebody keeps one document to fewer people inside a folder shared more widely. A
+Viewer can read that field, so the live read refuses such a file before it asks for a word of it,
+and the department the folder was connected for is never told what the folder's own audience in
+Drive was not. See `A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`.
+
+**Only the folder's direct children are read.** Drive's query language reaches a folder's
+children and not its descendants, so a walk of the tree is one listing per subfolder, and a run's
+page loop carries one listing. A folder with subfolders is therefore read one level deep, which
+narrows "the folders it was given" and is said here rather than decided silently; a subfolder can
+be connected as a folder of its own meanwhile.
+
+**Its ceiling is Google's documented quota at the dearest call a read makes.** See
+`THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL` and `brain.ops.limits`.
 
 **It is connected on the Connectors screen (M11.7.7).** The form asks for `DriveConnection`'s own
 four settings, the folder (its link or its id), the company's email domain, the department the
@@ -203,6 +231,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, final
+from urllib.parse import urlencode
 
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
@@ -220,10 +249,13 @@ from brain.connectors.declaration import (
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
+    KeyScheme,
+    PageReply,
     Recorded,
     Setting,
     SettingRefusedError,
 )
+from brain.connectors.google_token import GOOGLE_SCOPES_BASE_URL
 from brain.connectors.manifest import (
     PRINCIPAL_FIELD_RE,
     RESOLVED_ACL_RE,
@@ -235,7 +267,7 @@ from brain.connectors.manifest import (
     ProjectedField,
     ToolDeclaration,
 )
-from brain.connectors.projection import ProjectedValue
+from brain.connectors.projection import ProjectedRecord, ProjectedValue
 from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
@@ -254,6 +286,7 @@ from brain.knowledge.visibility import admit_upload as admit_visibility_level
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import MAX_BACKOFF_SECONDS
 from brain.ops.secrets import SecretRef
+from brain.tools.fetch import Resolver
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the pin is a parameter type rather than a call anybody remembers to make first.
@@ -362,15 +395,32 @@ NOTHING_HERE_MAKES_A_DOCUMENT_SAFE_TO_READ = (
     "reviews a document before it answers questions."
 )
 
-#: Why this connector runs against no measured ceiling, said rather than implied.
-THERE_IS_NO_MEASURED_CEILING_HERE = (
-    "brain.ops.limits records verified figures for Xero, Freshdesk and Lark Base and none "
-    "for this source, and no live capture to derive one from either. So the manifest "
-    "declares no ceiling and throttle.limits_for refuses rather than inventing a number, "
-    "which is the correct refusal and is also a real gap: nothing paces this connector, so "
-    "twenty concurrent agent runs are twenty concurrent listings. The remedy is a measured "
-    "figure in brain.ops.limits, which the manifest then names; nothing in this module needs "
-    "to change when somebody records one."
+#: Why the ceiling is counted in the dearest call's units.
+THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL = (
+    "Google counts Drive calls in quota units rather than calls: 325,000 units a minute for one "
+    "user of one project, a listing costing 100, a metadata read 5 and a download 200. A ceiling "
+    "in calls has to hold whatever mix of calls a minute holds, so it is the allowance divided by "
+    "the dearest call a read makes, and no mix can then spend more than Google allows."
+)
+
+#: Why a file whose sharing Drive does not show is read as its folder's. needs-rupash 135.
+WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT = (
+    "Drive shows a file's permissions only to a caller that may share it, and the service "
+    "account is given Viewer on the folder so that its key can change nothing, so for most files "
+    "their sharing is not shown at all. Refusing every such file would read nothing; so a file "
+    "whose sharing Drive does not show is read as the folder's, the folder being the grant, and a "
+    "file Drive does show as shared by link or outside the company is never read. The owner "
+    "decided this, keeping the account a Viewer rather than giving it a role that shows every "
+    "file's sharing (needs-rupash 135, decided: A)."
+)
+
+#: Why a file whose inherited permissions are off is never read.
+A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ = (
+    "A file with its inherited permissions switched off no longer takes its folder's sharing: "
+    "somebody kept it to fewer people than the folder reaches. The department the folder was "
+    "connected for is the folder's audience here, so reading that file would tell them what "
+    "Drive keeps from some of them. It is refused before its text is asked for, as a Lark Wiki "
+    "page restricted below its space is."
 )
 
 #: The vendor facts here that a recording would settle and documentation cannot.
@@ -384,7 +434,8 @@ WHAT_A_RECORDING_WOULD_SETTLE = (
     "not a manager of the drive, which decides how often UNDETERMINED is the ordinary answer "
     "rather than the exception. And whether a 404 on a shortcut's target is shaped like a "
     "404 on a missing file, which is the one case where the ambiguity above is reached by "
-    "two different routes."
+    "two different routes. The third is now documented: Google's File reference says the "
+    "permissions list is returned only to a caller that may share the file."
 )
 
 
@@ -402,7 +453,19 @@ FILE: Final = "file"
 #: This connector's own version. Moves when anything in the manifest moves, because an
 #: upgrade is recognised by a version change and a pinned digest disagreeing with a connector
 #: nobody upgraded is the failure `brain.connectors.registry` fails closed on.
-VERSION: Final = "1.0.0"
+VERSION: Final = "1.1.0"
+
+#: The ceiling this connector's reads are paced by, recorded in `brain.ops.limits`.
+CEILING_NAME: Final = GOOGLE_DRIVE
+
+#: Google's page of Drive API quotas, the ceiling's citation.
+LIMITS_URL: Final = "https://developers.google.com/workspace/drive/api/guides/limits"
+
+#: The one scope a Drive token carries. Read-only, and checked by `google_token.checked_scopes`.
+DRIVE_SCOPE: Final = f"{GOOGLE_SCOPES_BASE_URL}drive.readonly"
+
+#: How often the worker lists the folder into the index.
+READING_INTERVAL: Final = timedelta(hours=1)
 
 #: What the field mapping names its specification. A reference and not a document, for the
 #: reason `RestTransport.spec_ref` gives.
@@ -681,6 +744,58 @@ def classify_sharing(entries: Sequence[PermissionFact] | None, *, domain: str) -
     return SharingState.RESTRICTED
 
 
+def sharing_of(permissions: object, *, domain: str) -> SharingState:
+    """A file's sharing verdict read out of the `permissions` Drive returned, or UNDETERMINED.
+
+    The one producer of a `SharingState` from a response, so the reduction happens where the reply
+    is read and the list goes no further. Each entry becomes a `PermissionFact` or is counted as
+    unreadable: an entry of a kind Drive does not document, or a user or group grant carrying no
+    domain, which the sub-selection `SHARING_SELECTOR` does not promise a user grant carries.
+
+    **An unreadable entry makes a verdict of RESTRICTED undetermined, and never hides a wider
+    one.** A link grant or a foreign domain among the entries read is reported whatever else could
+    not be read, because the wider fact is the one that refuses a read; a file whose readable
+    entries are all inside the company and one entry is not readable is not known to be inside it.
+    An absent or empty list is `classify_sharing`'s own UNDETERMINED, which is what Drive answers a
+    caller that may not share the file (`WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT`).
+    """
+    if not isinstance(permissions, list) or not permissions:
+        return classify_sharing(None, domain=domain)
+    facts: list[PermissionFact] = []
+    unreadable = False
+    for entry in permissions:
+        kind_given = entry.get("type") if isinstance(entry, Mapping) else None
+        try:
+            kind = PermissionKind(str(kind_given))
+        except ValueError:
+            unreadable = True
+            continue
+        if kind is PermissionKind.ANYONE:
+            facts.append(PermissionFact(kind=kind))
+            continue
+        named = entry.get("domain") if isinstance(entry, Mapping) else None
+        if not isinstance(named, str) or not _DOMAIN_RE.match(named.casefold()):
+            unreadable = True
+            continue
+        facts.append(PermissionFact(kind=kind, domain=named.casefold()))
+    verdict = classify_sharing(facts or None, domain=domain)
+    if unreadable and verdict is SharingState.RESTRICTED:
+        return SharingState.UNDETERMINED
+    return verdict
+
+
+def sharing_admits_a_read(sharing: SharingState) -> bool:
+    """Whether a file of this verdict may be listed as readable and read live.
+
+    **The one function the owner's decision in needs-rupash 135 (decided: A) lives in.** A file
+    whose sharing Drive did not show is read as the folder's and a file shown as shared by link or
+    outside the company is never read (`WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT`);
+    were the service account given a role that shows every file's sharing, UNDETERMINED would
+    leave this set, and nothing else would change.
+    """
+    return sharing in (SharingState.RESTRICTED, SharingState.UNDETERMINED)
+
+
 # ------------------------------------------------------------ the connection (M11.2.3)
 @dataclass(frozen=True)
 class DriveConnection:
@@ -747,6 +862,32 @@ class DriveConnection:
             )
             raise DriveError(msg)
 
+    @classmethod
+    def from_settings(cls, settings: Mapping[str, str]) -> DriveConnection:
+        """The connection a stored row's settings describe, each setting refused by name.
+
+        Each is checked by the rule this class holds it to, one at a time, so a refusal names the
+        setting it is about; the connection is then built, which is the check that the four agree.
+        """
+        folder = folder_id_of(settings.get(FOLDER_SETTING, ""))
+        if not folder:
+            raise SettingRefusedError("not a Drive folder", setting=FOLDER_SETTING)
+        domain = settings.get(DOMAIN_SETTING, "").strip().casefold()
+        if not _DOMAIN_RE.match(domain):
+            raise SettingRefusedError("not a domain", setting=DOMAIN_SETTING)
+        department = settings.get(DEPARTMENT_SETTING, "").strip()
+        if not SLUG_RE.fullmatch(department):
+            raise SettingRefusedError("not a department", setting=DEPARTMENT_SETTING)
+        steward = settings.get(STEWARD_SETTING, "").strip()
+        if not _STEWARD_RE.match(steward):
+            raise SettingRefusedError("not a person's id", setting=STEWARD_SETTING)
+        try:
+            return cls(folder_id=folder, domain=domain, department=department, steward_id=steward)
+        except ConnectorContractError as refused:
+            # The other three were judged above, so what the connection refuses is the folder: a
+            # selector such as `all` passes the id's grammar and narrows nothing.
+            raise SettingRefusedError("not one folder", setting=FOLDER_SETTING) from refused
+
     def scope(self) -> ConnectorScope:
         """What this connector was connected to. One folder, named."""
         return ConnectorScope(resource_kind="folder", selectors=(self.folder_id,))
@@ -768,14 +909,19 @@ class DriveConnection:
     def visibility_predicate(self) -> Scope:
         """Drive's own permission model, reduced to a predicate that can be stored.
 
-        The folder, and deliberately nothing else. In Drive the folder is the unit anybody
-        actually shares, and the per-file part of the model is a resolved ACL by
-        construction, so the folder is the only half of it that can be carried as a predicate
-        at all. A row that is not in the pinned folder is visible to nobody, and the
-        narrowing by department comes from the caller's own entitlement at the gate rather
-        than from the row, which is what lets a mover get a different row set with no writes.
+        The folder and the department it was connected for, and deliberately nothing else. In
+        Drive the folder is the unit anybody actually shares, and the per-file part of the model
+        is a resolved ACL by construction, so the folder is the only half of it that can be
+        carried as a predicate at all. The department is this install's half: a row carries it,
+        so a grant of `read:file` scoped to that department reaches the folder's rows and one
+        scoped elsewhere does not, and a mover gets a different row set with no writes.
         """
-        return Scope(clauses=(Clause(field="folder_id", op=Op.EQ, value=self.folder_id),))
+        return Scope(
+            clauses=(
+                Clause(field="folder_id", op=Op.EQ, value=self.folder_id),
+                Clause(field="department", op=Op.EQ, value=self.department),
+            )
+        )
 
     def knowledge_visibility(self, sharing: SharingState) -> KnowledgeVisibility:
         """The level a file from this folder is stored at (M11.6.7).
@@ -1189,6 +1335,9 @@ FILE_MAPPING: Final[tuple[FieldMapping, ...]] = (
     FieldMapping(target="parents", source_path="parents"),
     FieldMapping(target="drive_id", source_path="driveId"),
     FieldMapping(target="shortcut_target_id", source_path="shortcutDetails.targetId"),
+    #: Mapped, used by the live read and never kept. See
+    #: `A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`.
+    FieldMapping(target="locked", source_path="inheritedPermissionsDisabled"),
 )
 
 #: What the `fields` parameter asks Drive for, declared rather than derived from the mapping.
@@ -1205,6 +1354,7 @@ FILE_SELECTOR_ROOTS: Final[tuple[str, ...]] = (
     "driveId",
     "headRevisionId",
     "id",
+    "inheritedPermissionsDisabled",
     "mimeType",
     "modifiedTime",
     "name",
@@ -1953,14 +2103,21 @@ def projected_fields(
     in the way that matters, because `check_projection` refuses an over-long string, so a
     file with a long name would be dropped whole at ingest.
     """
-    if not sharing.is_known:
-        msg = (
-            f"this file's sharing is {sharing}, so there is no row to store: "
-            f"{UNDETERMINED_SHARING_IS_REFUSED_RATHER_THAN_DEFAULTED}"
-        )
-        raise DriveError(msg)
+    return fields_of(row, folder_id=connection.folder_id, sharing=sharing)
+
+
+def fields_of(
+    row: Mapping[str, Any], *, folder_id: str, sharing: SharingState
+) -> dict[str, ProjectedValue]:
+    """`projected_fields` over the pin alone, which is what the worker's reading holds.
+
+    **A verdict of UNDETERMINED is kept as that verdict**, and is no longer a refusal here: Drive
+    shows a Viewer no file's sharing, and the index is where a reviewer reads which files that
+    applies to. See `WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT` (needs-rupash 135). The
+    door into the knowledge layer still refuses it (`DriveConnection.knowledge_visibility`).
+    """
     built: dict[str, ProjectedValue] = {
-        "folder_id": connection.folder_id,
+        "folder_id": folder_id,
         "sharing_state": sharing.value,
     }
     for name in projected_field_names():
@@ -2168,8 +2325,9 @@ def manifest(
     the honest statement is the same: somebody chose this, and choosing it is not the same as
     it having been enforced.
 
-    **`ceiling` is empty and that is deliberate rather than forgotten.** See
-    `THERE_IS_NO_MEASURED_CEILING_HERE`.
+    **`ceiling` names Google's documented quota**, recorded in `brain.ops.limits` under
+    `CEILING_NAME` at the dearest call a read makes. See
+    `THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL`.
 
     **Both tools declare SERVICE identity**, which is the honest reading of a shared service
     account: Drive is not enforcing any of our people's permissions on our behalf, so ours
@@ -2208,7 +2366,7 @@ def manifest(
             ),
         ),
         projections=(file_projection(connection),),
-        ceiling="",
+        ceiling=CEILING_NAME,
     )
 
 
@@ -2235,6 +2393,249 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
     except ConnectorContractError:
         return unreadable()
     return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not next_cursor(reply))
+
+
+# ---------------------------------------------------------- the worker's reading (M11.6.7)
+@dataclass(frozen=True)
+class FolderListing(RestOperation):
+    """The pinned folder's listing, laying the pin and each file's sharing verdict on its rows.
+
+    The query, the field selector and the all-drives flags are the connection's own
+    (`first_page`), so a page is asked for by its cursor alone and a run cannot send a listing of
+    anything but the pin. Each row is checked against the pin as it arrives
+    (`assert_row_is_in_the_folder`, which refuses the page), carries the pin it was reached
+    through, and carries the verdict `sharing_of` reduced its permissions to; the permissions go
+    no further than this method.
+    """
+
+    connection: DriveConnection | None = None
+
+    def _pinned(self) -> DriveConnection:
+        if self.connection is None:
+            msg = "a folder listing is built for one connection and names none"
+            raise DriveError(msg)
+        return self.connection
+
+    def url_for(self, arguments: Mapping[str, str]) -> str:
+        unasked = sorted(set(arguments) - {PAGE_CURSOR_PARAMETER})
+        if unasked:
+            msg = (
+                f"a folder listing is asked for by its cursor alone and was given {unasked}; "
+                f"the query is the connection's. {SCOPE_AT_CONNECT_IS_THE_WHOLE_POINT}"
+            )
+            raise DriveError(msg)
+        request = replace(
+            first_page(self._pinned()), cursor=arguments.get(PAGE_CURSOR_PARAMETER, "")
+        )
+        return super().url_for(request.as_arguments())
+
+    def project(self, body: Any) -> tuple[Mapping[str, Any], ...]:
+        pinned = self._pinned()
+        rows = super().project(body)
+        listed = body.get("files") if isinstance(body, Mapping) else None
+        given = listed if isinstance(listed, list) else []
+        kept: list[Mapping[str, Any]] = []
+        for raw, row in zip(given, rows, strict=True):
+            assert_row_is_in_the_folder(pinned, row)
+            permissions = raw.get("permissions") if isinstance(raw, Mapping) else None
+            sharing = sharing_of(permissions, domain=pinned.domain)
+            kept.append({**row, "folder_id": pinned.folder_id, "sharing_state": sharing.value})
+        return tuple(kept)
+
+
+def folder_listing(connection: DriveConnection) -> FolderListing:
+    """The listing of this connection's folder, bound to the file mapping."""
+    base = operation_for(Endpoint.LIST_FILES)
+    return FolderListing(
+        base_url=base.base_url,
+        operation=base.operation,
+        transport=base.transport,
+        connection=connection,
+    )
+
+
+def _assert_file(entity: str) -> None:
+    if entity != FILE:
+        msg = f"this connector reads {FILE!r} and was asked for {entity!r}"
+        raise DriveError(msg)
+
+
+class DriveReading:
+    """The pinned folder, listed every hour into the minimal index and nothing else (M11.6.7).
+
+    A `declaration.ScopedReading`: its key is a service account's key file, exchanged for a token
+    carrying `DRIVE_SCOPE` for one run, and never sent. **A folder and a shortcut are listed and
+    not kept.** A folder is structure with no words, and a shortcut points anywhere, so its target
+    is kept only as the target's own row, when that is itself one of the folder's children (see
+    `A_SHORTCUT_IS_THE_WAY_OUT_OF_THE_FOLDER`).
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return (FILE,)
+
+    def refresh_interval(self) -> timedelta:
+        return READING_INTERVAL
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation:
+        # The address is Google's constant, checked when the call is prepared.
+        del resolver
+        _assert_file(entity)
+        return folder_listing(DriveConnection.from_settings(settings))
+
+    def key_scheme(self) -> KeyScheme:
+        return KeyScheme.GOOGLE_SERVICE_ACCOUNT
+
+    def token_scopes(self) -> tuple[str, ...]:
+        return (DRIVE_SCOPE,)
+
+    def first_page(self, entity: str) -> Mapping[str, str]:
+        _assert_file(entity)
+        return MappingProxyType({})
+
+    def next_page(
+        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
+    ) -> Mapping[str, str] | None:
+        del entity, asked, returned
+        cursor = next_cursor(Reply(status=200, body=body))
+        return MappingProxyType({PAGE_CURSOR_PARAMETER: cursor}) if cursor else None
+
+    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
+        # Built for its refusal of settings that are not a folder; Google needs no header here.
+        DriveConnection.from_settings(settings)
+        return MappingProxyType({})
+
+    def interpret(
+        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
+    ) -> PageReply:
+        call = call_outcome(Reply(status=status, body=body))
+        if call is not CallOutcome.OK:
+            return PageReply(call=call, rows=None)
+        return PageReply(call=call, rows=operation.records(body, fetched_at=fetched_at))
+
+    def retry_after(self, headers: Mapping[str, str]) -> float | None:
+        stated = Reply(status=0, headers=headers).header("Retry-After").strip()
+        try:
+            seconds = float(stated)
+        except ValueError:
+            return None
+        return seconds if seconds > 0 else None
+
+    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
+        del headers
+        return False
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """One listed file's index entry, or None for a folder, a shortcut or a row with no pin."""
+        _assert_file(entity)
+        try:
+            sharing = SharingState(str(row.get("sharing_state", "")))
+        except ValueError:
+            return None
+        file = file_from_row(row, sharing=sharing)
+        pin = row.get("folder_id")
+        if file is None or file.is_folder or file.is_shortcut or not isinstance(pin, str):
+            return None
+        return ProjectedRecord(
+            source=GOOGLE_DRIVE,
+            entity=FILE,
+            source_id=file.file_id,
+            last_seen_at=seen_at,
+            fields=fields_of(row, folder_id=pin, sharing=sharing),
+        )
+
+
+# ---------------------------------------------------- reading a file's words live (M11.6.7)
+#: The one native type whose words are read: a Google Doc, exported as plain text.
+GOOGLE_DOC_MIME: Final = "application/vnd.google-apps.document"
+EXPORTED_AS: Final = "text/plain"
+
+#: Files whose bytes are already words, read as they are. Anything else is not read.
+READ_AS_TEXT: Final = frozenset({"text/plain", "text/markdown", "text/csv"})
+
+#: The most bytes read for one file's words. Google exports at most 10 MB; a body past this is
+#: answered as no body by the caller, so a longer file is not read rather than read in part.
+MAX_TEXT_BYTES: Final = 2_000_000
+
+#: The longest passage of one file shown to the model.
+PASSAGE_CHARS: Final = 4000
+
+
+class Withheld(enum.StrEnum):
+    """Why a file's words were not read, for an operator's log. Never told to the asker."""
+
+    OUTSIDE = "outside"
+    TRASHED = "trashed"
+    LOCKED = "locked"
+    SHARED_BEYOND = "shared_beyond"
+    NOT_WORDS = "not_words"
+
+
+def text_url_for(file_id: str, mime_type: str) -> str | None:
+    """Where a file's words are read from, or None for a type whose words are not read.
+
+    A Google Doc is exported as plain text; a file of a type in `READ_AS_TEXT` is read by its
+    content; nothing else is. The id is held to the grammar before it is laid into an address.
+    """
+    if not _FILE_ID_RE.match(file_id):
+        msg = "a file id is laid into an address only when it is a Drive identifier"
+        raise DriveError(msg)
+    if mime_type == GOOGLE_DOC_MIME:
+        return f"{BASE_URL}/drive/v3/files/{file_id}/export?{urlencode({'mimeType': EXPORTED_AS})}"
+    if mime_type in READ_AS_TEXT:
+        query = urlencode({"alt": "media", SUPPORTS_ALL_DRIVES: "true"})
+        return f"{BASE_URL}/drive/v3/files/{file_id}?{query}"
+    return None
+
+
+def metadata_url_for(file_id: str) -> str:
+    """Where one file's metadata is read live, with its sharing and its lock."""
+    return operation_for(Endpoint.GET_FILE).url_for(
+        {
+            "fileId": file_id,
+            FIELDS_PARAMETER: field_selector(Endpoint.GET_FILE),
+            SUPPORTS_ALL_DRIVES: "true",
+        }
+    )
+
+
+def withheld_from_a_read(
+    connection: DriveConnection, row: Mapping[str, Any], sharing: SharingState
+) -> Withheld | None:
+    """Why this file, read live a moment ago, may not have its words read, or None when it may.
+
+    Asked of what Drive says now, not of the index, which is an hour old at most: a file moved out
+    of the folder, binned, locked or shared outside the company since it was listed is refused
+    here. `row` is the file's metadata as `GET_FILE`'s mapping projects it, and `sharing` is
+    `sharing_of` over its permissions. The order is the rule: where it is, whether it is in the
+    bin, whether it is locked narrower than its folder
+    (`A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`), how it is shared
+    (`sharing_admits_a_read`), and last whether it has words to read.
+    """
+    parents = row.get("parents")
+    listed = tuple(str(one) for one in parents) if isinstance(parents, list) else ()
+    if not any(connection.admits(one) for one in listed):
+        return Withheld.OUTSIDE
+    if row.get("trashed") is not False:
+        return Withheld.TRASHED
+    if row.get("locked") is True:
+        return Withheld.LOCKED
+    if not sharing_admits_a_read(sharing):
+        return Withheld.SHARED_BEYOND
+    file_id, mime_type = row.get(ID_TARGET), row.get("mime_type")
+    if not isinstance(file_id, str) or not isinstance(mime_type, str):
+        return Withheld.NOT_WORDS
+    if text_url_for(file_id, mime_type) is None:
+        return Withheld.NOT_WORDS
+    return None
+
+
+def words_of_a_body(body: bytes) -> str:
+    """A file's words as a passage: decoded, any byte-order mark dropped, cut to its length."""
+    return body.decode("utf-8", errors="replace").lstrip("\ufeff")[:PASSAGE_CHARS]
 
 
 # ------------------------------------------------- connecting from the console (M11.7.7)
@@ -2269,27 +2670,7 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     then built, which is the check that the four agree. A folder in a shared drive is not offered
     here yet: see the module docstring.
     """
-    folder = folder_id_of(settings.get(FOLDER_SETTING, ""))
-    if not folder:
-        raise SettingRefusedError("not a Drive folder", setting=FOLDER_SETTING)
-    domain = settings.get(DOMAIN_SETTING, "").strip().casefold()
-    if not _DOMAIN_RE.match(domain):
-        raise SettingRefusedError("not a domain", setting=DOMAIN_SETTING)
-    department = settings.get(DEPARTMENT_SETTING, "").strip()
-    if not SLUG_RE.fullmatch(department):
-        raise SettingRefusedError("not a department", setting=DEPARTMENT_SETTING)
-    steward = settings.get(STEWARD_SETTING, "").strip()
-    if not _STEWARD_RE.match(steward):
-        raise SettingRefusedError("not a person's id", setting=STEWARD_SETTING)
-    try:
-        connection = DriveConnection(
-            folder_id=folder, domain=domain, department=department, steward_id=steward
-        )
-    except ConnectorContractError as refused:
-        # The other three were judged above, so what the connection refuses is the folder: a
-        # selector such as `all` passes the id's grammar and narrows nothing.
-        raise SettingRefusedError("not one folder", setting=FOLDER_SETTING) from refused
-    return manifest(connection, ref=ref)
+    return manifest(DriveConnection.from_settings(settings), ref=ref)
 
 
 #: What the Connectors screen asks for. The key is a service account's key file, chosen as a file.
@@ -2312,7 +2693,8 @@ CONSOLE: Final = ConsoleForm(
             label="Email domain",
             hint=(
                 "The part after @ in your company's email addresses, such as yourcompany.com. A "
-                "file shared with anybody outside it is left out."
+                "file Google shows as shared outside it, or with anyone who has the link, is "
+                "never read."
             ),
             refused="That is not a domain. Type only the part after @, such as yourcompany.com.",
         ),
@@ -2404,7 +2786,10 @@ GUIDE: Final = keyed(
             text=(
                 "In Google Drive, right-click the one folder this system should read, choose "
                 "Share, paste the service account's email address and give it Viewer. Share "
-                "nothing else with it: one folder is what a connection reads."
+                "nothing else with it: one folder is what a connection reads. A viewer is not "
+                "shown how each file is shared, so every file in the folder is read as the "
+                "folder's; a file Google does show as shared outside your domain is left out, and "
+                "so is a file whose access was limited below the folder's."
             ),
             sketch=Sketch(
                 place="Google Drive",
@@ -2441,8 +2826,8 @@ GUIDE: Final = keyed(
                 "Paste the folder's link from Google Drive, type your company's email domain, the "
                 "short name of the department the folder belongs to and the id of the person "
                 "answerable for what it adds, choose the key file, then press Connect Google "
-                "Drive. Files are told to that department, and a file shared outside your domain "
-                "is left out."
+                "Drive. Files are told to that department. Only the folder's own files are read, "
+                "not those in its subfolders."
             ),
             sketch=Sketch(
                 place="Company Brain",
@@ -2490,13 +2875,6 @@ CONNECTOR: Final = ConnectorDeclaration(
         ),
         findings=(DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE,),
     ),
-    recorded=Recorded(
-        tested=True,
-        not_replayed=(
-            "a file is kept only with a sharing state, which is reduced from the permissions "
-            "Drive returns; the connector has no function reading them out of a response, and "
-            "Google's documentation does not say whether a user grant carries the domain that "
-            "reduction needs, so only a live capture can settle it",
-        ),
-    ),
+    recorded=Recorded(tested=True),
+    reading=DriveReading(),
 )
