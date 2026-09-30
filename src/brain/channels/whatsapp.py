@@ -872,6 +872,11 @@ class WhatsAppWire:
     def tenant_fields(self) -> tuple[str, ...]:
         return ()
 
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """One value: the app secret the Cloud API signs with, kept whole in the channel's slot."""
+        return ()
+
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
         """`verify_signature` over the exact bytes, and the same request back: Meta signs and
         does not encrypt. `now` is the protocol's; Meta signs no time."""

@@ -18512,6 +18512,47 @@
     "M42.4.7"
    ],
    "decision": "needs-rupash 82: recorded as OWN3-1 with two new installer tasks"
+  },
+  {
+   "id": "DEC-61",
+   "source": "owner decision needs-rupash 115, 2026-09-29",
+   "area": "Identity",
+   "requirement": "The staff sync gives each active person on the staff list, of an employment type the install allows, a Brain sign-in account and sends nobody anything: a person sets their password with Forgot password on the sign-in page and then their second factor. Suspended people, leavers and people never activated get none, outsourced people get none unless an administrator allows their type, and when someone leaves or is suspended the next sync closes the account the sync made and ends their Brain sessions.",
+   "leaves": [
+    "M1.6.16",
+    "M1.6.17"
+   ],
+   "proof": [
+    "M1.6.18"
+   ],
+   "decision": "needs-rupash 130: a staff list anybody with its link can edit (a spreadsheet or a Google Sheet) makes no accounts until the owner says otherwise"
+  },
+  {
+   "id": "DEC-62",
+   "source": "owner decision needs-rupash 115, 2026-09-29",
+   "area": "Identity",
+   "requirement": "A person on a Lark staff list can sign in with Lark and no password, matched to the account the staff sync made for them by their stored Lark address, after the staff sync's own accounts (B) are in place.",
+   "leaves": [
+    "M1.1.8"
+   ],
+   "proof": [
+    "M1.1.9"
+   ],
+   "decision": null
+  },
+  {
+   "id": "DEC-63",
+   "source": "owner decision needs-rupash 115, 2026-09-29",
+   "area": "Identity",
+   "requirement": "People shows each person's employment status and type as the staff source says them, with filters, and somebody suspended, gone or never activated, or of a type the install does not allow, cannot sign in or ask, with the reason on their page.",
+   "leaves": [
+    "M1.6.13",
+    "M1.6.14"
+   ],
+   "proof": [
+    "M1.6.15"
+   ],
+   "decision": null
   }
  ]
 }

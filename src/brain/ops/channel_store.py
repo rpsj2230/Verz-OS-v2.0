@@ -37,9 +37,9 @@ database error inside a request that had otherwise finished.
 column's default is `now()`, which is the instant the transaction started, so every delivery written
 in one transaction shared a time and `recent` then ordered them by a random id: the Channels
 screen's health, which is decided by the newest delivery, was a coin toss between them. Found by the
-install's own health check (`brain.ops.acceptance_checks_channels`), which writes a sent and then a
-refused delivery in one rolled-back transaction. `record` names `clock_timestamp()`, which moves
-inside a transaction where `now()` does not, and which needs no migration. See
+install's own health check (`brain.ops.acceptance_checks_channel_framework`), which writes a sent
+and then a refused delivery in one rolled-back transaction. `record` names `clock_timestamp()`,
+which moves inside a transaction where `now()` does not, and which needs no migration. See
 `A_DELIVERY_IS_STAMPED_WHEN_IT_IS_WRITTEN`.
 
 Rejected: the channel's own key under `connector_keys/`, which is where `brain.ops.lark_connect`

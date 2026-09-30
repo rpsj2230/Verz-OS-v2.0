@@ -3,7 +3,7 @@
 - **Screens:** `/jobs`, `/jobs/:name`, `/jobs/:name/:view`, `/runs`
 - **Tables:** `ops.control_run`, `ops.operation`, `ops.acceptance_result`
 - **Installation values:** none
-- **Measured here:** 7 routes, 0 called by no screen; 3 write routes, 3 with all three proofs; 1 gaps.
+- **Measured here:** 8 routes, 1 called by no screen; 3 write routes, 3 with all three proofs; 2 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -11,11 +11,13 @@
 | `GET /api/v1/jobs/{name}` | `/jobs/:name`, `/jobs/:name/:view` |
 | `GET /api/v1/jobs/{name}/runs` | `/jobs/:name` |
 | `GET /api/v1/operate/runs` | `/runs` |
+| `GET /api/v1/operations/interrupted` | **no screen** |
 | `POST /api/v1/jobs/{name}/pause` | `/jobs`, `/jobs/:name`, `/jobs/:name/:view` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs`, `/jobs/:name`, `/jobs/:name/:view` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs`, `/jobs/:name`, `/jobs/:name/:view` |
 
 - **Gap.** A run in progress cannot be stopped. Recorded: The route says no_run_can_be_stopped: a control runs to its end inside the worker's tick and there is nothing to signal.
+- **Gap.** The interrupted actions a stopped worker left unconfirmed are served and no screen draws them or resolves one yet. Open leaf `M27.15.46`.
 
 **Every write to this area, followed to the system.**
 

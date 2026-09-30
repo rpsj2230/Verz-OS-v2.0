@@ -68,12 +68,22 @@ whose identifier is not that shape is skipped and counted as not read.
 checks a scope per field and answers a field it may not show by leaving it out, which is the
 quiet failure: without `contact:user.employee:readonly` every person arrives with no work
 address and no status, and the call still succeeds. So `LARK_SCOPES` is written field by field
-from the contact API's documentation (2026-09-28): `contact:department.organize:readonly` for
-both endpoints and department names, `contact:user.base:readonly` for names,
-`contact:user.employee:readonly` for the Lark Mail address and the status,
-`contact:user.department:readonly` for departments and the manager, and
-`contact:user.email:readonly` for the account address used where there is no Lark Mail. See
+from the contact API's documentation (2026-09-28, corrected 2026-09-29):
+`contact:department.organize:readonly` admits both endpoints and the department tree,
+`contact:department.base:readonly` shows each department's name, `contact:user.base:readonly`
+each person's name, `contact:user.employee:readonly` the Lark Mail address and the status,
+`contact:user.department:readonly` a person's departments and manager, and
+`contact:user.email:readonly` the account address used where there is no Lark Mail. See
 `A_LARK_SCOPE_IS_CHECKED_PER_FIELD_AND_A_MISSING_ONE_IS_SILENT`.
+
+**The department's name was the scope this list missed, and it placed a whole company nowhere.**
+Until 2026-09-29 the list read "`contact:department.organize:readonly` for both endpoints and
+department names", and Lark's field permission table for the department walk says otherwise: that
+scope admits the call and shows the tree, and `name` is shown only to
+`contact:department.base:readonly` (or a whole-directory scope this product does not ask for). On
+the owner's install every department came back nameless, 123 people were added, and not one was
+placed in a department. `staff_adapters.LARK_DEPARTMENT_NAME_SCOPE` is that scope, declared where
+the name is read, and the reading now counts a nameless department and names the scope.
 
 **What has never happened.** None of these addresses has been called from this repository. The
 scopes, parameters and answer shapes are written from each vendor's documentation, the same
@@ -94,6 +104,8 @@ from urllib.parse import quote, urlencode, urlsplit
 from brain.identity.staff_adapters import (
     GOOGLE_WORKSPACE,
     LARK,
+    LARK_DEPARTMENT_NAME_SCOPE,
+    LARK_PERSON_DEPARTMENT_SCOPE,
     MICROSOFT_ENTRA,
     GoogleWorkspaceSource,
     LarkSource,
@@ -159,7 +171,7 @@ GOOGLE_OWN_ACCOUNT: Final = "my_customer"
 #: The fields a Directory read asks for, as Google's `fields` parameter, and nothing more.
 GOOGLE_USER_FIELDS: Final = (
     "nextPageToken,users(id,primaryEmail,name/fullName,suspended,archived,orgUnitPath,aliases,"
-    "relations)"
+    "relations,organizations(description,primary))"
 )
 GOOGLE_GROUP_FIELDS: Final = "nextPageToken,groups(id,email)"
 GOOGLE_MEMBER_FIELDS: Final = "nextPageToken,members(email,type)"
@@ -180,7 +192,7 @@ MICROSOFT_GROUPS_PERMISSION: Final = "GroupMember.Read.All"
 
 #: What a Graph read of people selects, and the manager it expands to. Nothing else is asked for.
 MICROSOFT_USER_FIELDS: Final = (
-    "id,userPrincipalName,displayName,department,accountEnabled,proxyAddresses"
+    "id,userPrincipalName,displayName,department,accountEnabled,proxyAddresses,employeeType"
 )
 MICROSOFT_MANAGER_EXPAND: Final = "manager($select=id,userPrincipalName)"
 
@@ -200,8 +212,9 @@ LARK_PLATFORMS: Final[Mapping[str, tuple[str, str]]] = {
 #: What reading Lark's people needs, field by field from the contact API's documentation: see
 #: `A_LARK_SCOPE_IS_CHECKED_PER_FIELD_AND_A_MISSING_ONE_IS_SILENT`. Never granted anywhere here.
 LARK_SCOPES: Final = (
-    "contact:department.organize:readonly contact:user.base:readonly "
-    "contact:user.employee:readonly contact:user.department:readonly contact:user.email:readonly"
+    f"contact:department.organize:readonly {LARK_DEPARTMENT_NAME_SCOPE} "
+    "contact:user.base:readonly contact:user.employee:readonly "
+    f"{LARK_PERSON_DEPARTMENT_SCOPE} contact:user.email:readonly"
 )
 
 #: What reading Lark's user groups needs. The scheduled sync reads groups; a sign-in does not.
@@ -213,12 +226,13 @@ LARK_SYNC_SCOPES: Final = f"{LARK_SCOPES} {LARK_GROUP_SCOPE}"
 #: What each of those scopes lets the sync read, in the words every screen that asks for them
 #: uses. A test holds its keys equal to `LARK_SYNC_SCOPES`.
 LARK_SCOPE_PURPOSE: Final[Mapping[str, str]] = {
-    "contact:department.organize:readonly": "read your departments and their names",
+    "contact:department.organize:readonly": "read your departments and how they are arranged",
+    LARK_DEPARTMENT_NAME_SCOPE: "read each department's name",
     "contact:user.base:readonly": "read each person's name",
     "contact:user.employee:readonly": (
         "read each person's Lark Mail address and whether they are active, suspended or have left"
     ),
-    "contact:user.department:readonly": "read which department each person is in and their manager",
+    LARK_PERSON_DEPARTMENT_SCOPE: "read which department each person is in and their manager",
     "contact:user.email:readonly": (
         "read the email on each person's account, used for anybody without a Lark Mail address"
     ),
@@ -270,7 +284,8 @@ class Outbound:
     url: str
     headers: Mapping[str, str] = field(default_factory=dict, repr=False)
     form: Mapping[str, str] | None = field(default=None, repr=False)
-    json_body: Mapping[str, str] | None = field(default=None, repr=False)
+    #: Any JSON object: an account `brain.connectors.sign_in_accounts` sends is nested.
+    json_body: Mapping[str, Any] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)

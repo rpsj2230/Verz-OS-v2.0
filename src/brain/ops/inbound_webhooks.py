@@ -98,12 +98,15 @@ class InboundChannel:
 INBOUND: Final[tuple[InboundChannel, ...]] = (
     InboundChannel(
         channel=Channel.EMAIL,
-        verification=Verification.NOT_A_WEBHOOK,
-        check="",
+        verification=Verification.WRITTEN,
+        check="brain.channels.webhook:verify",
         how=(
-            "Mail arrives through a mail server, which records whether the sender passed its "
-            "authentication checks; the adapter takes that verdict from the server, never from the "
-            "message, and treats mail that did not pass as from nobody."
+            "The company's mail service receives the message and turns away mail that fails the "
+            "sender's DMARC policy; a script there posts it here with that verdict, signed with "
+            "the channel's secret over the time and the exact bytes, the webhook channel's "
+            "construction. The check refuses a stale or unsigned request, and mail whose verdict "
+            "is not a pass is treated as from nobody. It is received at its channel's events "
+            "address while its record is switched on."
         ),
     ),
     InboundChannel(
@@ -125,7 +128,8 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         how=(
             "Slack signs each request with the app's signing secret over the time and the exact "
             "bytes sent; the check refuses a request more than five minutes old or signed with "
-            "anything else."
+            "anything else. It is received at its channel's events address while its record is "
+            "switched on."
         ),
     ),
     InboundChannel(

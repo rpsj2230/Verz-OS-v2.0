@@ -40,7 +40,7 @@ from brain.channels.whatsapp import (
     verify_signature,
 )
 from brain.gate.context import Channel
-from brain.ops.acceptance_checks_channels import whatsapp_message
+from brain.ops.acceptance_checks_channel_framework import whatsapp_message
 from brain.ops.channel_store import channel_secret_ref
 from brain.ops.idempotency import Intent
 from brain.tables.channel import DeliveryOutcome, RefusedBecause
