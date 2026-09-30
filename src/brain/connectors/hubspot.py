@@ -96,18 +96,14 @@ arrives leaves behind, which is nothing. A cursor's failure is visible from the 
 this declares `UPDATED_SINCE`, pays the price named in `A_CURSOR_CANNOT_SEE_A_DELETION` by
 declaring an id sweep, and says so rather than claiming a push it may not receive.
 
-*Calling this connector's person entity something of its own.* `brain.core.field_policy` is
-keyed by entity name, so `contact` here and `contact` in `brain.connectors.xero` are one key
-and `FieldPolicy` raises rather than choosing between two opinions about it. Renaming would
-have made the two unjoinable in the entity registry, which is the thing that makes federation
-work at all. Instead every rule this module declares for `contact` is either a field Xero does
-not declare or is declared identically to Xero's, and `assert_policy_merges_with` is the check
-rather than the intention. See `TWO_SOURCES_ONE_ENTITY_NAME`.
-
-*Naming the company entity `company`.* The house noun for a customer organisation is `client`,
-and the canaries, the redaction invariants and the access route all classify `client.name`
-already. A CRM company and a ledger client are the same real organisation, and giving them two
-names would mean no answer could ever join them.
+*Sharing the house nouns `client` and `contact`, which this module did until 2026-09-30.* It
+argued that a CRM company and a ledger client are one organisation and should share one entity
+name, with `assert_policy_merges_with` keeping two sources' rules for one name in agreement.
+That held while HubSpot answered nothing. Once its records were classified for Ask, the records
+screen and the answer lane, which read one row tool per entity, met Xero's `contact` and the
+demo's `client` and answered neither. So the entities are named for HubSpot
+(`ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`); the join between a CRM company and a ledger client is
+the entity registry's, whose profiles name sources and fields rather than entity names.
 
 Scope: domain logic. Nothing here opens a connection, resolves a name, reads a clock or holds
 a credential. The resolver, the fetcher and `fetched_at` are all parameters, and
@@ -360,13 +356,23 @@ MANIFEST_VERSION: Final = "1.0.0"
 
 BASE_URL: Final = "https://api.hubapi.com"
 
-#: The house noun for a customer organisation, which is what a HubSpot company is. See the
-#: module docstring on why this is not called `company`.
-ENTITY_CLIENT: Final = "client"
-ENTITY_CONTACT: Final = "contact"
-ENTITY_DEAL: Final = "deal"
+#: HubSpot's entities, each named for HubSpot. See `ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`.
+ENTITY_CLIENT: Final = "hubspot_company"
+ENTITY_CONTACT: Final = "hubspot_contact"
+ENTITY_DEAL: Final = "hubspot_deal"
 #: An edge, and nothing on the far end of it. See `AN_ASSOCIATION_IS_A_SECOND_QUESTION`.
-ENTITY_ASSOCIATION: Final = "association"
+ENTITY_ASSOCIATION: Final = "hubspot_association"
+
+#: Why HubSpot's entities are not the house nouns `client` and `contact`.
+ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK: Final = (
+    "The records screen and the answer lane read one row tool per entity, and call two a "
+    "misconfigured install (brain.api_routes.records). HubSpot's companies and contacts were "
+    "called `client` and `contact`, the house nouns, and once HubSpot was answerable on Ask on "
+    "2026-09-30 its `contact` met Xero's and its `client` met the demo's, and both screens "
+    "answered neither. So each is named for HubSpot. Joining a CRM company to a ledger client is "
+    "the entity registry's work, whose profiles name sources and fields "
+    "(brain.resolution.entities), not entity names."
+)
 
 #: A filter key naming the account. Accepted so a caller may state which portal they believe
 #: they are addressing, and checked against the pin; never used to choose one.
@@ -1091,7 +1097,7 @@ CONTACT_PROJECTED: Final[tuple[ProjectedField, ...]] = (
 )
 
 #: A deal without its amount. Everything needed to find the deal and say where it is in the
-#: pipeline, and not the number, which is fetched live for whoever holds `read:deal.amount`.
+#: pipeline, and not the number, which is fetched live for whoever holds `read:hubspot_deal.amount`.
 DEAL_PROJECTED: Final[tuple[ProjectedField, ...]] = (
     ProjectedField(name="deal_name", shape=FieldShape.LABEL, uses=(HotUse.IDENTIFY,)),
     ProjectedField(name="stage", shape=FieldShape.STATUS, uses=(HotUse.FILTER, HotUse.COUNT)),
@@ -1389,7 +1395,7 @@ def traversal_plan(
 #:
 #: `deal.amount` is CONFIDENTIAL and it is the point of the table: see
 #: `A_PIPELINE_FIGURE_IS_NOT_A_PAYROLL_FIGURE`. It is returnable to somebody holding
-#: `read:deal.amount` and it is never storable, which `brain.core.field_policy` names as the
+#: `read:hubspot_deal.amount` and it is never storable, which `brain.core.field_policy` names as the
 #: ordinary case rather than the exception.
 #:
 #: `client.name` and `contact.updated_at` are spelled exactly as the house already spells
@@ -1404,29 +1410,55 @@ def traversal_plan(
 #: either be ignored or make the CRM unusable, which are the two ways a classification stops
 #: meaning anything.
 HUBSPOT_FIELD_RULES: Final[tuple[FieldRule, ...]] = (
-    FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "domain", "read:client.domain", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "name", "read:hubspot_company.name", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "domain", "read:hubspot_company.domain", Classification.INTERNAL),
     FieldRule.of(
-        ENTITY_CLIENT, "lifecycle_stage", "read:client.lifecycle_stage", Classification.INTERNAL
+        ENTITY_CLIENT,
+        "lifecycle_stage",
+        "read:hubspot_company.lifecycle_stage",
+        Classification.INTERNAL,
     ),
-    FieldRule.of(ENTITY_CLIENT, "owner_id", "read:client.owner_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "updated_at", "read:client.updated_at", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "first_name", "read:contact.first_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "last_name", "read:contact.last_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "job_title", "read:contact.job_title", Classification.INTERNAL),
     FieldRule.of(
-        ENTITY_CONTACT, "lifecycle_stage", "read:contact.lifecycle_stage", Classification.INTERNAL
+        ENTITY_CLIENT, "owner_id", "read:hubspot_company.owner_id", Classification.INTERNAL
     ),
-    FieldRule.of(ENTITY_CONTACT, "company_id", "read:contact.company_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "owner_id", "read:contact.owner_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "updated_at", "read:contact.updated_at", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "deal_name", "read:deal.deal_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "amount", "read:deal.amount", Classification.CONFIDENTIAL),
-    FieldRule.of(ENTITY_DEAL, "stage", "read:deal.stage", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "pipeline", "read:deal.pipeline", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "close_date", "read:deal.close_date", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "owner_id", "read:deal.owner_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_ASSOCIATION, "kind", "read:association.kind", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_CLIENT, "updated_at", "read:hubspot_company.updated_at", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "first_name", "read:hubspot_contact.first_name", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "last_name", "read:hubspot_contact.last_name", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "job_title", "read:hubspot_contact.job_title", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT,
+        "lifecycle_stage",
+        "read:hubspot_contact.lifecycle_stage",
+        Classification.INTERNAL,
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "company_id", "read:hubspot_contact.company_id", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "owner_id", "read:hubspot_contact.owner_id", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "updated_at", "read:hubspot_contact.updated_at", Classification.INTERNAL
+    ),
+    FieldRule.of(ENTITY_DEAL, "deal_name", "read:hubspot_deal.deal_name", Classification.INTERNAL),
+    FieldRule.of(ENTITY_DEAL, "amount", "read:hubspot_deal.amount", Classification.CONFIDENTIAL),
+    FieldRule.of(ENTITY_DEAL, "stage", "read:hubspot_deal.stage", Classification.INTERNAL),
+    FieldRule.of(ENTITY_DEAL, "pipeline", "read:hubspot_deal.pipeline", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_DEAL, "close_date", "read:hubspot_deal.close_date", Classification.INTERNAL
+    ),
+    FieldRule.of(ENTITY_DEAL, "owner_id", "read:hubspot_deal.owner_id", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_ASSOCIATION, "kind", "read:hubspot_association.kind", Classification.INTERNAL
+    ),
 )
 
 
