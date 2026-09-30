@@ -398,6 +398,10 @@ from brain.vault_routes import router as vault_router
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
 
+# The website widget's front door: a stranger's browser is handed a session that holds nothing, or
+# told why not, with no sign-in and the origin proved instead. See `brain.widget_routes`.
+from brain.widget_routes import router as widget_router
+
 
 def routers_in(namespace: Mapping[str, object]) -> tuple[APIRouter, ...]:
     """Every router a module's namespace holds, in the order of the names they are held under."""

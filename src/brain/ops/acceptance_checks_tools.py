@@ -68,6 +68,10 @@ if TYPE_CHECKING:
     from brain.knowledge.rows import RowRecord
     from brain.tools.registry import SensitiveEffect, ToolRegistry, ToolSwitchedOffError
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 90
+
 A, B = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons

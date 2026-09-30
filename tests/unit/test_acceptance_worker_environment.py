@@ -31,7 +31,7 @@ from collections.abc import Mapping
 from typing import Any, Final
 
 from brain.console.configuration import EDITABLE_SETTINGS, READ_BY
-from brain.ops.acceptance import CHECK_MODULES
+from brain.ops.acceptance import check_modules
 from tests.unit.test_compose_cache_address import APPLICATION, ours_with_a_database
 from tests.unit.test_compose_networks import compositions, load
 
@@ -46,13 +46,13 @@ WORKER_RUNS: Final = ("brain.ops.staff_accounts_run",)
 def read_by_a_check() -> tuple[str, ...]:
     """Every installation setting an acceptance check module is named as reading."""
     return tuple(
-        sorted(name for name, readers in READ_BY.items() if set(readers) & set(CHECK_MODULES))
+        sorted(name for name, readers in READ_BY.items() if set(readers) & set(check_modules()))
     )
 
 
 def read_in_the_worker() -> tuple[str, ...]:
     """Every setting a check or another worker run reads, less those the worker reads saved."""
-    runs = set(CHECK_MODULES) | set(WORKER_RUNS)
+    runs = set(check_modules()) | set(WORKER_RUNS)
     return tuple(
         sorted(
             name
