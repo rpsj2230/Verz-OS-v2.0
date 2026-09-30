@@ -1,9 +1,9 @@
 ### Backup and recovery
 
 - **Screens:** `/recovery`, `/retention`, `/retention/:view`, `/retention/holds/:holdId`, `/retention/erasures/:requestId`, `/compliance`, `/compliance/:view`, `/compliance/breaches/:caseId`, `/referrals`
-- **Tables:** `ops.retention_release`, `ops.retention_report`, `obs.legal_hold`, `ops.erasure_request`, `ops.breach_case`, `ops.sensitive_referral`
+- **Tables:** `ops.retention_release`, `ops.retention_report`, `obs.legal_hold`, `ops.erasure_request`, `ops.breach_case`, `ops.sensitive_referral`, `gate.escalation`
 - **Installation values:** none
-- **Measured here:** 22 routes, 0 called by no screen; 13 write routes, 12 with all three proofs; 1 gaps.
+- **Measured here:** 24 routes, 0 called by no screen; 14 write routes, 13 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -11,6 +11,7 @@
 | `GET /api/v1/govern/compliance/register` | `/compliance/:view` |
 | `GET /api/v1/govern/compliance/topics` | `/compliance/:view` |
 | `GET /api/v1/govern/erasures` | `/retention`, `/retention/:view`, `/retention/erasures/:requestId`, `/retention/holds/:holdId` |
+| `GET /api/v1/govern/escalation-routes` | `/compliance/:view` |
 | `GET /api/v1/govern/retention` | `/retention`, `/retention/:view`, `/retention/erasures/:requestId`, `/retention/holds/:holdId` |
 | `GET /api/v1/govern/retention/controls` | `/retention`, `/retention/:view`, `/retention/erasures/:requestId`, `/retention/holds/:holdId` |
 | `GET /api/v1/govern/retention/exports` | `/retention/:view` |
@@ -29,6 +30,7 @@
 | `POST /api/v1/govern/retention/withdrawal` | `/retention`, `/retention/:view`, `/retention/erasures/:requestId`, `/retention/holds/:holdId` |
 | `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` |
 | `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance`, `/compliance/:view`, `/compliance/breaches/:caseId` |
+| `PUT /api/v1/govern/escalation-routes/{queue}` | `/compliance`, `/compliance/:view`, `/compliance/breaches/:caseId` |
 
 - **Gap.** A recovery drill cannot be started, and a restore cannot be verified, from the console. Open leaf `M30.3.9`.
 
@@ -49,3 +51,4 @@
 | `POST /api/v1/govern/retention/withdrawal` | `/retention`, `/retention/:view`, `/retention/erasures/:requestId`, `/retention/holds/:holdId` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |
 | `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
 | `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance`, `/compliance/:view`, `/compliance/breaches/:caseId` | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic` in `tests/unit/test_compliance_routes.py` |
+| `PUT /api/v1/govern/escalation-routes/{queue}` | `/compliance`, `/compliance/:view`, `/compliance/breaches/:caseId` | `test_a_queue_s_person_is_named_by_the_compliance_authority_and_nobody_else` in `tests/unit/test_escalation_routes_db.py` (database, in CI) | `test_a_queue_s_person_is_named_by_the_compliance_authority_and_nobody_else` in `tests/unit/test_escalation_routes_db.py` (database, in CI) | `test_a_handoff_goes_to_the_person_named_and_is_read_by_them_and_its_asker_alone` in `tests/unit/test_escalation_store.py` (database, in CI) |

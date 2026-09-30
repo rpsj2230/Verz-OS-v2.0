@@ -114,8 +114,11 @@ import {
   askBody,
   citationAddress,
   freshnessWords,
+  MARK_API_PATH,
+  markBody,
   MAX_QUESTION_CHARS,
   NOTHING_ASKED,
+  readMarked,
   withEvent,
   type AnswerView,
   type CitationView,
@@ -178,6 +181,11 @@ export const SKIP_TO_ANSWER = "Skip to answer";
 
 /** What the answer is called when focus lands on it, so a screen reader says where it is. */
 export const ANSWER_LABEL = "Answer";
+
+/** The question over the two marks, and the two marks. One action each, and no words. */
+export const WAS_IT_HELPFUL = "Was this answer helpful?";
+export const HELPFUL = "Helpful";
+export const NOT_HELPFUL = "Not helpful";
 
 /** Why the answer is reached by a control rather than by tabbing past what it stands on. */
 export const THE_ANSWER_IS_ONE_KEYPRESS_FROM_THE_QUESTION =
@@ -261,6 +269,60 @@ function Cited({ citation }: { readonly citation: CitationView }) {
         </span>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Helpful or not helpful on the answer just given, one press each (M16.6.4). The mark is the
+ * answer's reference and one bit; once counted, the API's sentence replaces the two buttons, and a
+ * refusal is drawn as any failure is. Keyed by the reference, so a new answer starts unmarked.
+ */
+function Marking({ traceId }: { readonly traceId: string }) {
+  const [told, setTold] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  const mark = useCallback(
+    (helpful: boolean) => {
+      const body = markBody(traceId, helpful);
+      if (body === null) {
+        return;
+      }
+      setBusy(true);
+      setFailure(null);
+      void (async () => {
+        const result = await request<unknown>(MARK_API_PATH, { method: "POST", body });
+        setBusy(false);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setTold(readMarked(result.data));
+      })();
+    },
+    [traceId],
+  );
+
+  if (told !== "") {
+    return (
+      <p className="note" role="status">
+        {told}
+      </p>
+    );
+  }
+  return (
+    <section className="ask__marks" aria-label={WAS_IT_HELPFUL}>
+      <p className="note">{WAS_IT_HELPFUL}</p>
+      <div className="form-actions">
+        <button type="button" className="button" disabled={busy} onClick={() => mark(true)}>
+          {HELPFUL}
+        </button>
+        <button type="button" className="button" disabled={busy} onClick={() => mark(false)}>
+          {NOT_HELPFUL}
+        </button>
+      </div>
+      {failure ? <FailureNotice failure={failure} /> : null}
+    </section>
   );
 }
 
@@ -573,6 +635,10 @@ export function Ask() {
             </Notice>
           ) : null}
         </section>
+      ) : null}
+
+      {!busy && view.answer !== "" && markBody(traceId, true) !== null ? (
+        <Marking traceId={traceId} key={traceId} />
       ) : null}
 
       {failure ? <FailureNotice failure={failure} fields={[QUESTION_NAME]} /> : null}
