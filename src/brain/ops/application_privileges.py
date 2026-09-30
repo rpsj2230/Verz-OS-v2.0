@@ -122,6 +122,13 @@ USES_EXPLAINED: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
             "the database owner, and refuses a connection row-level security narrows, because a "
             "row a policy hides is a row the erasure would silently leave behind"
         ),
+        ("brain.ops.escalation_store", "gate.escalation", "UPDATE"): (
+            "expire_overdue is run by run_expiry_now, which brain.ops.schedule_runner starts with "
+            "the worker's database URL on sessions from make_session_factory, never "
+            "make_application_sessions, so expired_at is written by the database owner; 0168 "
+            "grants brain_app UPDATE of the two delivery columns alone, which are the only ones "
+            "record_delivery writes"
+        ),
         ("brain.knowledge.item_store", "know.item", "SELECT"): _SET_BY_THE_CALLER,
         ("brain.knowledge.item_store", "know.item", "UPDATE"): _SET_BY_THE_CALLER,
         ("brain.ops.trace_store", "obs.trace_step", "SELECT"): (

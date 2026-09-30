@@ -11,7 +11,7 @@ the fake. Where a case turns on wildcard coverage or on expiry, it is built from
 `Capability` and the real `not_after`, because those are the two places the composition is
 easy to get subtly wrong.
 
-Task ids: M16.1.1, M16.1.4, M16.1.5, M16.4.1, M16.4.4
+Task ids: M16.1.1, M16.1.4, M16.1.5, M16.4.1, M16.4.4, M16.7.2
 """
 
 from __future__ import annotations
@@ -545,3 +545,50 @@ def test_the_kind_is_recorded_rather_than_inferred_from_where_a_row_was_found() 
     something is copied between stores."""
     assert formed("read:client.name").kind is MemoryKind.ADAPTIVE
     assert {one.value for one in MemoryKind} == {"session", "persistent", "adaptive"}
+
+
+# ------------------------------------------------------ a memory said again (M16.7.2)
+def test_an_inference_confirmed_decays_from_its_confirmation_at_its_formed_worth() -> None:
+    """Formed sixty days ago and never said again, an inference at 0.6 is below the floor; said
+    again ten days ago, it is recalled at what ten days of decay leave of 0.6. Delete this and a
+    confirmation can be stored and change nothing recall decides, so saying a preference again
+    would keep nothing alive."""
+    from dataclasses import replace
+
+    old = formed("read:client.name", at=NOW - timedelta(days=60))
+    confirmed = replace(old, confirmed_at=NOW - timedelta(days=10))
+    who = reader("read:client.name")
+
+    assert may_recall(old, who, now=NOW, formed_confidence=0.6) is None
+    again = may_recall(confirmed, who, now=NOW, formed_confidence=0.6)
+    assert again is not None
+    assert again.confidence == pytest.approx(0.6 * math.pow(0.5, 10 / HALF_LIFE_DAYS))
+    assert confirmed.decays_from == NOW - timedelta(days=10)
+
+
+def test_a_confirmation_before_the_formation_does_not_age_the_memory() -> None:
+    """A confirmation stamped earlier than the formation by a skewed clock leaves decay running
+    from the formation. Delete this and a clock between two machines can make a memory younger
+    than nothing and older than it is, and a new inference would be forgotten on its first day."""
+    from dataclasses import replace
+
+    fresh = formed("read:client.name", at=NOW)
+    skewed = replace(fresh, confirmed_at=NOW - timedelta(days=400))
+
+    assert skewed.decays_from == NOW
+    recollection = may_recall(skewed, reader("read:client.name"), now=NOW, formed_confidence=0.6)
+    assert recollection is not None and recollection.confidence == pytest.approx(0.6)
+
+
+def test_a_naive_confirmation_time_cannot_be_constructed() -> None:
+    """Delete this and a confirmation read without a zone compares wrongly against a formation
+    with one, and raises inside recall instead of here."""
+    with pytest.raises(ValueError, match="naive confirmation"):
+        Formation(
+            principal_id="p_writer",
+            capabilities=(Capability(value="read:client.name"),),
+            scope=WEB,
+            ent_hash="0" * 32,
+            formed_at=NOW,
+            confirmed_at=datetime(2026, 9, 1, 12, 0),
+        )
