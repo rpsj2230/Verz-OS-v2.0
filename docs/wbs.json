@@ -5474,7 +5474,13 @@
     }
    },
    "act_groups": {},
-   "leaf_progress": {}
+   "leaf_progress": {
+    "M40.7.1": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/relay-to-sign-in): every release gives the sign-in realm the mail relay saved on Notifications, through the step that already signs in to Keycloak inside its container, writing only when the relay changed and leaving a realm with no relay alone; an install check compares the host the realm reported with the relay's. Not built: hiding Forgot password while no relay is set. Proved on the install when a release has run and a reserved person's Forgot password email arrives",
+     "updated": "2026-09-30"
+    }
+   }
   },
   {
    "id": "M41",
