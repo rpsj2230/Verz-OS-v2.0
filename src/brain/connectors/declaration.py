@@ -59,7 +59,7 @@ nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.contract import ConnectorContractError
@@ -163,6 +163,9 @@ class KeyScheme(enum.StrEnum):
     #: HTTP Basic with the key as the user name and `X` as the password, which is how Freshdesk
     #: documents its API key (https://developers.freshdesk.com/api/#authentication).
     BASIC_KEY_AS_USER = "basic_key_as_user"
+    #: No key at all: a source whose publisher gives its record to anybody who asks, as a registry
+    #: gives its RDAP record (M11.7.4). The worker takes no lease and sends no `Authorization`.
+    NONE = "none"
 
 
 # ---------------------------------------------------------------- connecting from the console
@@ -181,6 +184,9 @@ class CredentialShape(enum.StrEnum):
     KEY_FILE = "key_file"
     #: A user's name and password, typed as two: a read-only database user.
     DATABASE_USER = "database_user"
+    #: Nothing: the source's record is published to anybody who asks, and nothing is kept in the
+    #: vault because there is nothing to keep (M11.7.4). The form says so and asks for nothing.
+    NONE = "none"
 
 
 #: Why a credential is asked for in its own shape rather than as one pasted key.
@@ -191,6 +197,11 @@ A_CREDENTIAL_IS_ASKED_FOR_IN_THE_SHAPE_THE_SOURCE_ISSUES_IT: Final = (
     "one string would have them invent a separator. Each shape is judged before anything is sent "
     "and kept in the vault whole, and none is ever shown again."
 )
+
+
+#: The longest setting accepted unless a setting says otherwise, which is `ConnectorScope`'s own
+#: ceiling on a selector.
+DEFAULT_SETTING_CHARS: Final = 200
 
 
 @dataclass(frozen=True)
@@ -205,6 +216,9 @@ class Setting:
     #: Whether the value is a person's id here, which the connect route checks names somebody live
     #: on this install before anything is written (M11.7.7). A connector cannot: it reads no table.
     names_a_person: bool = False
+    #: The longest value accepted. A list the connection is scoped to, such as the domains a
+    #: domains connection reads, is longer than one identifier (M11.7.4).
+    max_chars: int = DEFAULT_SETTING_CHARS
 
 
 @dataclass(frozen=True)
@@ -329,6 +343,88 @@ class SourceReading(Protocol):
         ...
 
 
+#: Why a reading may send each page to a server of its own.
+A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER: Final = (
+    "Most sources are one service, so a reading's pages all go to one address. A registry's RDAP "
+    "record is not: each top-level domain is published by its own registry at its own address, "
+    "so a domains connection's pages go one to a domain, each to the server that domain's "
+    "registry publishes. A routed reading is told the connection's settings for every page, "
+    "because the pages are the connection's own list, and a domain it cannot route is written "
+    "into the index as unpublished without a call rather than left out."
+)
+
+
+@runtime_checkable
+class RoutedReading(Protocol):
+    """A reading whose pages each go to a server of their own (M11.7.4).
+
+    The worker's run and the live read ask a reading that is one of these for each page's
+    operation, and for the first and next page with the connection's settings; every other method
+    is `SourceReading`'s. See `A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER`.
+    """
+
+    def first_route(self, entity: str, *, settings: Mapping[str, str]) -> Mapping[str, str] | None:
+        """The arguments of the first page this connection reads, or None when it reads none."""
+        ...
+
+    def next_route(
+        self, entity: str, asked: Mapping[str, str], *, settings: Mapping[str, str]
+    ) -> Mapping[str, str] | None:
+        """The arguments of the page after `asked`, or None when that was the last."""
+        ...
+
+    def operation_for(
+        self,
+        entity: str,
+        page: Mapping[str, str],
+        *,
+        settings: Mapping[str, str],
+        resolver: Resolver,
+    ) -> RestOperation:
+        """The operation one page is read by, at the server that page's record is published at."""
+        ...
+
+    def unrouted(
+        self, entity: str, *, settings: Mapping[str, str], seen_at: datetime
+    ) -> tuple[ProjectedRecord, ...]:
+        """The index entries of records no server publishes, kept without a call."""
+        ...
+
+    def unpublished(
+        self, entity: str, source_id: str, *, settings: Mapping[str, str], fetched_at: str
+    ) -> TypedResult[SourceRecord] | None:
+        """What a live read of a record no server publishes is told, or None for a routed one.
+
+        The record said as unpublished, read with no call, so a question about it is answered
+        with that rather than with a source that could not be reached.
+        """
+        ...
+
+
+class OneCall(Protocol):
+    """One GET, as the worker's and the live read's caller makes it. Never raises."""
+
+    def get(self, url: str, *, address: str, headers: Mapping[str, str], max_bytes: int) -> Any:
+        """The answer: a status, headers and a body, or that it came back not at all."""
+        ...
+
+
+@runtime_checkable
+class ChecksLiveFacts(Protocol):
+    """A live lookup that adds facts read from somewhere other than its source's record (M11.7.4).
+
+    A domain's registry says who registered it and until when; whether its site answers is asked
+    of the site itself. The facts are values read for the question and kept nowhere, like every
+    other value a live read returns.
+    """
+
+    def facts(
+        self, entity: str, source_id: str, *, caller: OneCall, resolver: Resolver
+    ) -> Mapping[str, str]:
+        """The facts one record carries besides its source's record, by field name."""
+        ...
+
+
 # ------------------------------------------------------------------ reading one record live
 #: Why a live lookup may name an operation of its own.
 A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
@@ -429,11 +525,11 @@ class ConnectorDeclaration:
             raise DeclarationError(msg)
         if self.guide:
             last = self.guide[-1].asks
-            wanted = (
-                ()
-                if self.console is None
-                else (*(one.name for one in self.console.settings), CREDENTIAL_ASK)
-            )
+            wanted: tuple[str, ...] = ()
+            if self.console is not None:
+                wanted = tuple(one.name for one in self.console.settings)
+                if self.console.credential_shape is not CredentialShape.NONE:
+                    wanted = (*wanted, CREDENTIAL_ASK)
             if tuple(last) != wanted:
                 msg = (
                     f"connector {self.name!r} ends its guide asking for {list(last)}, and "

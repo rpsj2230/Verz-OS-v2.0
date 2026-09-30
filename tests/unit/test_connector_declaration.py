@@ -59,7 +59,7 @@ def a_package(root: Path, name: str, modules: dict[str, str]) -> ModuleType:
 
 
 def test_every_connector_that_ships_declares_itself_under_its_own_module_name() -> None:
-    """The seven connectors this release ships, each found by the `CONNECTOR` its module states.
+    """The eight connectors this release ships, each found by the `CONNECTOR` its module states.
     The count is asserted so an empty discovery cannot pass, and each name is compared with the
     module's own constant rather than with the key it was found under.
 
@@ -68,6 +68,7 @@ def test_every_connector_that_ships_declares_itself_under_its_own_module_name() 
     found = shipped()
 
     assert set(found) == {
+        "domains",
         "freshdesk",
         "google_drive",
         "hubspot",
@@ -107,7 +108,7 @@ def test_every_registry_that_used_to_be_a_list_is_read_off_the_declarations() ->
     }
     assert dict(RECORDINGS) == {name: one.recorded for name, one in declared.items()}
     assert dict(read_backs()) == {name: one.read_back for name, one in declared.items()}
-    assert set(READINGS) == {"freshdesk", "hubspot", "xero"}
+    assert set(READINGS) == {"domains", "freshdesk", "hubspot", "xero"}
 
 
 # ------------------------------------------------------------------ discovery

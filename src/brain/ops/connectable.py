@@ -61,6 +61,7 @@ from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import (
+    DEFAULT_SETTING_CHARS,
     ConnectorDeclaration,
     CredentialShape,
     Setting,
@@ -101,8 +102,9 @@ A_SETTING_IS_REFUSED_BY_THE_CONNECTOR_THAT_WOULD_USE_IT: Final = (
 #: The role a connected source's key is read under when something runs the connector.
 READING_ROLE: Final = VaultRole.WORKER
 
-#: The longest setting accepted, which is `ConnectorScope`'s own ceiling on a selector.
-MAX_SETTING_CHARS: Final = 200
+#: The longest setting accepted unless the setting says otherwise, which is `ConnectorScope`'s own
+#: ceiling on a selector. The declaration's own default, named here for the screens that read it.
+MAX_SETTING_CHARS: Final = DEFAULT_SETTING_CHARS
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -270,13 +272,13 @@ def settings_problems(kind: Connectable, settings: Mapping[str, str]) -> tuple[S
         value = settings.get(one.name, "").strip()
         if not value:
             found.append(SettingProblem(field=one.name, code="blank", message=blank_sentence(one)))
-        elif len(value) > MAX_SETTING_CHARS:
+        elif len(value) > one.max_chars:
             found.append(
                 SettingProblem(
                     field=one.name,
                     code="too_long",
                     message=(
-                        f"That is longer than {MAX_SETTING_CHARS} characters, which is longer "
+                        f"That is longer than {one.max_chars} characters, which is longer "
                         f"than any {one.label.lower()}. Check what was copied."
                     ),
                 )

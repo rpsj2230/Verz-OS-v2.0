@@ -469,6 +469,18 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
             "a higher number is sizing against a number that does not exist."
         ),
     ),
+    ConnectorLimit(
+        name="domains",
+        per_minute=30,
+        raisable=False,
+        note=(
+            "RDAP servers state no common figure: RFC 7480 section 5.5 lets each registry limit "
+            "as it chooses and answer 429 when it does, and one domains connection's calls go "
+            "to many registries. Thirty a minute is this product's own pace, one lookup every "
+            "two seconds, which reads a book of two hundred domains in under seven minutes and "
+            "is below every limit a registry publishes. Not a vendor's figure, and said so."
+        ),
+    ),
 )
 
 _BY_NAME: Mapping[str, ConnectorLimit] = MappingProxyType({c.name: c for c in SOURCE_CEILINGS})

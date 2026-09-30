@@ -79,6 +79,7 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
         "department": "operations",
         "steward": "u_steward",
     },
+    "domains": {"domains": "example.com, example.org", "department": "operations"},
     "laravel": {
         "schema": "portal",
         "client_rule": "department = sales",

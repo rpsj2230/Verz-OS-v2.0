@@ -31,7 +31,7 @@ while the asker waits (Xero today; Freshdesk declares no live lookup yet), the r
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, xero
+from brain.connectors import domains, freshdesk, xero
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -68,7 +68,11 @@ A_SOURCE_NOBODY_CONNECTED_ASKS_NOTHING: Final = (
 
 #: The field each source's visibility predicate tests on every row it keeps.
 SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
-    {xero.CONNECTOR_NAME: "tenant_id", freshdesk.FRESHDESK: "department"}
+    {
+        xero.CONNECTOR_NAME: "tenant_id",
+        freshdesk.FRESHDESK: "department",
+        domains.CONNECTOR_NAME: "department",
+    }
 )
 
 
@@ -144,11 +148,39 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def domains_classifications() -> tuple[TableClassification, ...]:
+    """A domain's kept fields and the three read live, each behind its own capability (M11.7.4).
+
+    `read:domain.expiry`, `read:domain.registrar` and so on, INTERNAL, in Freshdesk's pattern: a
+    domain is reached with `read:domain` in the department the connection names, and each fact a
+    person is told is a further grant. The live facts are classified here because a value read
+    live and classified by nobody is withheld from everybody.
+    """
+    names = (*(one.name for one in domains.FIELDS), *domains.LIVE_ONLY)
+    return (
+        TableClassification(
+            entity=domains.DOMAIN,
+            rules=(
+                *(
+                    ColumnRule(
+                        column=name,
+                        required_capability=Capability(value=f"read:{domains.DOMAIN}.{name}"),
+                        classification=Classification.INTERNAL,
+                    )
+                    for name in names
+                ),
+                _scope_column(domains.CONNECTOR_NAME, domains.DOMAIN),
+            ),
+        ),
+    )
+
+
 #: Every connected source's classifications, by the source's name.
 CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
     {
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
+        domains.CONNECTOR_NAME: domains_classifications(),
     }
 )
 
@@ -158,6 +190,7 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE): "invoice_number",
         (xero.CONNECTOR_NAME, xero.ENTITY_CONTACT): "name",
         (freshdesk.FRESHDESK, freshdesk.TICKET): "subject",
+        (domains.CONNECTOR_NAME, domains.DOMAIN): "name",
     }
 )
 
@@ -175,6 +208,12 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
             freshdesk.TICKET: (
                 "Look up Freshdesk tickets by subject: status, priority, due date and when it "
                 "last changed"
+            ),
+        },
+        domains.CONNECTOR_NAME: {
+            domains.DOMAIN: (
+                "Look up the agency's domains by name: when each expires and its registration "
+                "status, and its registrar and whether its site answers, read live"
             ),
         },
     }

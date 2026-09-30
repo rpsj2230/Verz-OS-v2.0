@@ -22,7 +22,7 @@ import pytest
 
 import brain.connectors
 from brain.connectors.contract import AccessMode
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.write_verification import builds_a_manifest
 from brain.ops.connectable import (
@@ -57,12 +57,14 @@ IDENTIFIERS: Final = {
     "freshdesk": "example.freshdesk.com",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "laravel": "portal",
+    "domains": "example.com, example.org",
 }
 
 #: The settings after the first, for a source whose form asks for more than one.
 FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "freshdesk": {"department": "support"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "domains": {"department": "operations"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -85,9 +87,15 @@ SLOT_ROWS: Final = {"laravel": "laravel_readonly"}
 
 
 def in_scope(identifier: str, selectors: tuple[str, ...]) -> bool:
-    """Whether the scope names the identifier typed: as a selector, or as what each is inside, as
-    a database holds the views a Laravel connection names (`portal.v_client`)."""
-    return identifier in selectors or all(one.startswith(f"{identifier}.") for one in selectors)
+    """Whether the scope names the identifier typed: as a selector, as what each is inside, as
+    a database holds the views a Laravel connection names (`portal.v_client`), or as the list the
+    selectors are, as a domains connection's are."""
+    listed = tuple(one.strip() for one in identifier.split(","))
+    return (
+        identifier in selectors
+        or all(one.startswith(f"{identifier}.") for one in selectors)
+        or listed == selectors
+    )
 
 
 def settings_for(name: str, value: str | None = None) -> dict[str, str]:
@@ -145,6 +153,10 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
     """The scopes an administrator is told to request are the ones `credential-slots.md` argued for
     that connector. Delete this and the form's hint drifts from the document, and the scope asked
     for on install day is whichever one somebody last typed."""
+    if CONNECTABLE[name].credential_shape is CredentialShape.NONE:
+        # A source that takes no key has no slot and no scope; its hint says nothing is kept.
+        assert "nothing is kept" in CONNECTABLE[name].credential_hint
+        return
     row = next(
         line
         for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
@@ -189,7 +201,7 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
     Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
     declared = shipped()
-    assert set(CONNECTABLE) == {"freshdesk", "hubspot", "xero"}
+    assert set(CONNECTABLE) == {"domains", "freshdesk", "hubspot", "xero"}
     for name in CONNECTABLE:
         one = declared[name]
         assert one.reading is not None or one.live is not None, name
