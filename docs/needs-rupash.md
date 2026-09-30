@@ -129,17 +129,15 @@ only adds accounts.
 a Brain account with no email sent, and gets in by pressing **Forgot password** on the sign-in page.
 Two things on your install have to be in place first, one of them only you can do.
 
-**Part 1, yours: the sign-in service's email settings.** Forgot password sends its link by email,
-so the sign-in service (Keycloak) needs an email account to send from. Without it nobody can set a
-password. You need the details of a mailbox that may send mail: its server address (SMTP host),
-port, and a username and password; your email provider's help pages list them.
-
-1. Open the Keycloak admin console (the same place you added users for item 91) and sign in.
-2. Choose your realm, then **Realm settings**, then the **Email** tab.
-3. Fill in **From** (for example no-reply at your domain), **Host**, **Port**, **Encryption**
-   (usually StartTLS on port 587), turn on **Authentication** and fill in the **Username** and
-   **Password**.
-4. Press **Test connection**; Keycloak sends a test mail to your own address. Then **Save**.
+**Part 1, yours: one mail relay, typed once.** Forgot password sends its link by email through the
+same mail relay the Brain uses for everything else. Open **Notifications**, fill in **Email relay**
+(host, port, sender address, user name and password; your email provider's help pages list them)
+and press **Send a test message**. These are the same details item 132 asks for, so do it once for
+both. Nothing needs typing into Keycloak: once #311 is deployed and the deploy script in Part 2 is
+installed, every release gives the sign-in service the relay itself, and a relay you change later is
+picked up by the next release. If you already typed mail settings into Keycloak, the next release
+replaces them with the relay's. To confirm: on the **Install** page, the check *Forgot password is
+sent through the relay on Notifications* passes.
 
 **Part 2, mine with your go-ahead: three server steps.**
 
@@ -150,7 +148,7 @@ port, and a username and password; your email provider's help pages list them.
 - Add one setting the worker needs (the sign-in address, `INSTALL_OIDC_ISSUER`) to the worker in the
   hosting panel's stored configuration.
 
-**What you do:** fill in Part 1 whenever suits you, and reply "131: do the server steps" for Part 2.
+**What you do:** fill in the relay whenever suits you, and reply "131: do the server steps" for Part 2.
 I tell you when both are done and the next staff sync has made the accounts; then you can tell
 people: "Your account is ready. Go to the sign-in page, press Forgot password and enter your work
 email."
