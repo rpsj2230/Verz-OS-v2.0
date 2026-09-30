@@ -755,3 +755,34 @@ def test_the_clock_a_caller_passes_is_the_clock_the_expiry_is_judged_against() -
 
     assert before.records, "a contractor inside their bound was refused"
     assert not after.records, "a contractor past their bound was answered"
+
+
+# ------------------------------------------------ an index row is as old as its last read (M11.4.9)
+def test_an_answer_from_index_rows_is_dated_by_the_oldest_row_and_not_by_the_question() -> None:
+    """`AN_INDEX_ROW_IS_AS_OLD_AS_ITS_LAST_READ`. Two rows the worker last confirmed at different
+    times date the answer at the older, and rows carrying no read time date it by the question.
+    Delete this and an index nobody refreshed for a week answers as current, which is the one thing
+    the staleness sentence exists to say."""
+    from datetime import UTC, datetime, timedelta
+
+    from brain.knowledge.rows import SEEN_KEY, answered_as_of
+
+    asked_at = datetime(2999, 1, 2, 9, tzinfo=UTC)
+    older, newer = asked_at - timedelta(days=3), asked_at - timedelta(hours=1)
+    rows = [{"id": "a", SEEN_KEY: newer}, {"id": "b", SEEN_KEY: older}]
+    assert answered_as_of(rows, asked_at) == older.isoformat()
+    assert answered_as_of([{"id": "a"}], asked_at) == asked_at.isoformat()
+    assert answered_as_of([], asked_at) == asked_at.isoformat()
+    assert answered_as_of([], None) == ""
+
+
+def test_the_row_s_read_time_is_selected_under_a_label_no_column_can_take() -> None:
+    """Delete this and the read time can go unselected, so every index answer is dated by the
+    question again, or be labelled as a column a classification could name and leak as a field."""
+    from brain.knowledge.rows import SEEN_KEY
+
+    query = compile_row_query(
+        TICKET_TOOL, RowRequest(), entitlement=ents("read:ticket", "read:ticket.*")
+    )
+    assert f'AS "{SEEN_KEY}"' in rendered(query)
+    assert not SEEN_KEY[0].isalnum()

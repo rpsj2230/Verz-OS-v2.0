@@ -21,6 +21,19 @@ address the rule checked. The fetch runs off the event loop. What arrives is rea
 `brain.console.skill_library.read_github` or `read_url` and lands undecided, exactly as a pasted
 package does. See `AN_IMPORT_IS_A_SUBMISSION_AND_NEVER_AN_APPROVAL`.
 
+**A written procedure is imported from a Word document or a Confluence page (M12.2.10).**
+`POST /skills/procedures` asks `may_add` before a byte of the body is read, then reads the file as
+the request body, raw, with its name in `x-upload-name`, under `brain.tools.sop_files`' ceiling as
+it arrives, which is `brain.knowledge_routes`' construction for an upload and for its reason: a JSON
+body carrying the file as base64 is held whole before any bound applies, and a Word document with
+screenshots is forty times a `SKILL.md`. `brain.console.skill_library.read_procedure_file` refuses a
+file that is not what its name says, over its bound or an archive that expands past one, before a
+parser sees it; the draft is added undecided through `_added`, exactly as a package is, at the next
+version of its name. Every row a written procedure became carries `findings`, read from its body
+when the row is shown, so the importer and every later reviewer see the same lines. Categories are
+set afterwards with the categories route: a query string is written into every access log, and a
+category is a word somebody may take from a client's name.
+
 **Approving is the review authority's, and an administrator may approve their own import
 (M12.4.6).** `POST /skills/{digest}/review` asks `may_review`, then `decided`. The owner decided
 D4 on 2026-09-18, so the importer is no longer refused; their decision is written with
@@ -122,7 +135,7 @@ who decided it, who retired it and who assigned it are sent as display names bes
 page used to print, read from the directory for exactly those people.
 
 Task ids: M42.6.4, M27.8.6, M12.2.2, M12.2.3, M12.2.5, M12.2.6, M12.3.2, M12.4.6, M12.4.13
-Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1
+Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1, M12.2.10
 """
 
 from __future__ import annotations
@@ -134,6 +147,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Final, Literal, Protocol, runtime_checkable
+from urllib.parse import unquote
 
 import structlog
 from fastapi import APIRouter, Depends, Path, Request
@@ -195,10 +209,13 @@ from brain.console.skill_library import (
     may_assign,
     may_read_library,
     may_review,
+    procedure_findings,
+    procedure_package,
     queue_entries,
     reach_through,
     read_github,
     read_package,
+    read_procedure_file,
     read_url,
     retired_digests,
     retiring,
@@ -209,6 +226,9 @@ from brain.console.skill_library import holding as agents_holding
 from brain.console.workspace import WorkspaceError
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.knowledge.ingest import IngestRefused
+from brain.knowledge.uploads import assert_safe_filename, read_arriving
+from brain.knowledge_routes import NAME_HEADER
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.skill_fetch import HttpsFetcher, SystemResolver
 from brain.ops.skill_store import MAX_LIBRARY, StoredSkills
@@ -220,6 +240,8 @@ from brain.tools.fetch import Fetcher, Resolver, fetch_skill_source, fetch_skill
 from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, SkillDiff, content_diff
 from brain.tools.skills import DIGEST_RE, SkillError, SkillPin, markdown_of
+from brain.tools.sop_files import MAX_PROCEDURE_BYTES
+from brain.tools.sop_import import Finding
 
 log = structlog.get_logger()
 
@@ -386,6 +408,33 @@ class ToolReachView(BaseModel):
     capability: str | None
 
 
+class ProcedureFindingView(BaseModel):
+    """One thing a reviewer should see in a written procedure's draft (M12.2.10).
+
+    `brain.tools.sop_import.Finding`: what it is about, the line of the body it is on, that line,
+    and why it was pointed at. Sent only where the body is sent, since the line is the body's.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    concern: Literal["addressed_to_the_system", "hidden_content", "lost_structure", "named_tool"]
+    line_number: int
+    excerpt: str
+    detail: str
+
+
+def finding_view(found: Finding) -> ProcedureFindingView:
+    """A finding as the page draws it. The concern's value is the Literal above, by construction."""
+    return ProcedureFindingView.model_validate(
+        {
+            "concern": found.concern.value,
+            "line_number": found.line_number,
+            "excerpt": found.excerpt,
+            "detail": found.detail,
+        }
+    )
+
+
 class LibrarySkillView(BaseModel):
     """One skill in the library: SCREEN 6's library row and its review pane in one shape.
 
@@ -441,6 +490,9 @@ class LibrarySkillView(BaseModel):
     #: The display names of whoever added it and whoever decided it, when the directory holds one.
     submitted_by_name: str | None = None
     reviewer_name: str | None = None
+    #: What a reviewer should see in a written procedure's draft, read from its body, for a reader
+    #: the body is disclosed to (M12.2.10). Empty for every other skill.
+    findings: tuple[ProcedureFindingView, ...] = ()
 
 
 class AgentChoiceView(BaseModel):
@@ -1010,6 +1062,11 @@ def library_view(
         retirable=edits,
         submitted_by_name=named.get(one.submitted_by),
         reviewer_name=named.get(imported.reviewer) if imported.reviewer else None,
+        findings=(
+            tuple(finding_view(found) for found in procedure_findings(one))
+            if discloses_body
+            else ()
+        ),
     )
 
 
@@ -1458,6 +1515,54 @@ async def import_skill(request: Request, body: SkillImportAsked, asked: Asked) -
     categories = _categories_or_refused(body.categories)
     package = await _fetched_package(request, body)
     return await _added(request, asked, _adding(package, asked), categories)
+
+
+#: Where a written procedure is imported, as the request body, raw.
+PROCEDURES_PATH: Final = "/skills/procedures"
+
+
+def _declared_length(request: Request) -> int | None:
+    length = request.headers.get("content-length", "")
+    return int(length) if length.isdigit() else None
+
+
+@router.post(
+    PROCEDURES_PATH,
+    status_code=201,
+    response_model=LibrarySkillView,
+    responses=COMMON_RESPONSES,
+)
+async def import_procedure(request: Request, asked: Asked) -> JSONResponse:
+    """Import a Word document or a Confluence page as a draft skill, undecided (M12.2.10).
+
+    The authority is asked before a byte is read, so a caller who may not add learns nothing about
+    what a file would do and sends this server nothing it holds. A declared length over the bound
+    is refused before reading, and the running ceiling refuses one that lied. The reading is CPU
+    work over bytes in memory and runs off the event loop.
+    """
+    if not may_add(asked.reach, asked.now):
+        log.info("procedure not importable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    file_name = unquote(request.headers.get(NAME_HEADER, ""))
+    declared = _declared_length(request)
+    try:
+        assert_safe_filename(file_name)
+        if declared is not None and declared > MAX_PROCEDURE_BYTES:
+            raise IngestRefused(
+                f"the file declares {declared} bytes, over the {MAX_PROCEDURE_BYTES} a procedure "
+                "may be; nothing was read"
+            )
+        content = await read_arriving(request.stream(), ceiling=MAX_PROCEDURE_BYTES)
+        procedure = await asyncio.to_thread(read_procedure_file, file_name, content)
+    except IngestRefused as refused:
+        raise _refused_because(f"this procedure was not imported: {refused}") from None
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+
+    def making(held: Sequence[LibrarySkill]) -> LibrarySkill:
+        return added(procedure_package(procedure, held), by=asked.caller.principal.id, at=asked.now)
+
+    return await _added(request, asked, making, ())
 
 
 Digest = Annotated[str, Path(pattern=DIGEST_PATTERN)]

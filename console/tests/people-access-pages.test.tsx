@@ -26,7 +26,7 @@ import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src
 import { phraseFor } from "../src/pages/auditQuery";
 import { ACCOUNT_READY_HEADING, COPY } from "../src/pages/people/AccountReady";
 import { UNAVAILABLE } from "../src/pages/people/peopleActions";
-import { readPeople } from "../src/pages/people/peopleQuery";
+import { PEOPLE_FILTERS, readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
@@ -307,6 +307,25 @@ describe("the People list", () => {
     expect(none.container.querySelector("blockquote")).toBeNull();
   });
 
+  test("beside a staff list each row says where the list puts them and their type, and both are filters", async () => {
+    // What breaks if this is deleted: People stops saying who the staff list keeps out (M1.6.13), or a
+    // status arrives as the API's raw word, or the list cannot be narrowed to the suspended.
+    const suspended = { ...ADA, staff_status: "suspended", employment_type: "labour_dispatch" };
+    const { container } = await consoleAt("/people", {
+      [`${API}/govern/directory`]: { body: directory([suspended, BEN]) },
+    });
+    const pill = container.querySelector('[data-slot="staff-status-pill"]');
+    expect(pill?.textContent).toBe("Suspended");
+    expect(container.textContent).toContain("Labour dispatch");
+    expect(container.textContent).not.toContain("labour_dispatch");
+    expect(container.querySelectorAll('[data-slot="staff-status-pill"]')).toHaveLength(1);
+    const columns = PEOPLE_FILTERS.map((one) => one.column);
+    expect(columns).toEqual(expect.arrayContaining(["staff_status", "employment_type"]));
+    const schemas = (apiDocument()["components"] as { schemas: Record<string, Record<string, unknown>> }).schemas;
+    const view = schemas["DirectoryPersonView"] ?? schemas["DirectoryPersonView-Output"] ?? {};
+    expect(declaredPropertyNames(view)).toEqual(expect.arrayContaining(["staff_status", "employment_type"]));
+  });
+
   test("selecting people offers one grant to all of them, asked first with each named, and only the confirmation sends", async () => {
     // What breaks if this is deleted: a bulk grant written without the grantor seeing who it reaches,
     // or one that writes some people and not others (the route is all or nothing and says so).
@@ -364,6 +383,21 @@ describe("one person's page", () => {
 
     const old = await consoleAt(`/people/${encodeURIComponent("principal:p_ada")}`, answers);
     expect(old.container.querySelector('[data-slot="detail-header"] h1')?.textContent).toBe("Ada Okafor");
+  });
+
+  test("a person the staff list keeps out says why on their Overview, in the API's words, and one it lets in says nothing", async () => {
+    // What breaks if this is deleted: an administrator sees a disabled person with no reason (M1.6.14),
+    // re-enables them, and the next sync disables them again.
+    const why = "The staff list says they are suspended, so they cannot sign in or ask.";
+    const around = { [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
+    const kept = await consoleAt("/people/p_ada", {
+      [PERSON_API]: { body: detail({ person: { ...ADA, staff_status: "suspended" }, kept_out: why }) },
+      ...around,
+    });
+    expect(kept.container.querySelector('[data-slot="note"]')?.textContent).toContain(why);
+    expect(kept.container.querySelector('[data-slot="staff-status-pill"]')?.textContent).toBe("Suspended");
+    const fine = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
+    expect(fine.container.textContent).not.toContain("cannot sign in or ask");
   });
 
   test("a person the API refuses is its sentence and reference and nothing else, whatever the reason", async () => {
