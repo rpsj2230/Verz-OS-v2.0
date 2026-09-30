@@ -269,9 +269,10 @@ class HttpsSender:
             timeout=self._timeout,
             context=self._context,
         )
+        # JSON unless the request says otherwise: an OAuth token endpoint takes a form.
         headers = {
-            **request.headers,
             "Content-Type": "application/json",
+            **request.headers,
             "User-Agent": USER_AGENT,
         }
         try:

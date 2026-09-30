@@ -65,6 +65,7 @@ from brain.channels.outbound import (
     deliver,
 )
 from brain.channels.slack import WIRE as SLACK_WIRE
+from brain.channels.teams import WIRE as TEAMS_WIRE
 from brain.channels.webhook import (
     REPLY_URL,
     SIGNATURE_HEADER,
@@ -474,6 +475,7 @@ def test_every_adapter_in_the_package_is_registered_once_in_channel_order() -> N
         Channel.EMAIL: EMAIL_WIRE,
         Channel.LARK: LARK_WIRE,
         Channel.SLACK: SLACK_WIRE,
+        Channel.TEAMS: TEAMS_WIRE,
         Channel.WEBHOOK: WIRE,
     }
 

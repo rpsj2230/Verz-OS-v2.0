@@ -67,7 +67,7 @@ import hashlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +88,9 @@ from brain.ops.channel_store import (
 )
 from brain.ops.idempotency import Intent
 from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
+
+if TYPE_CHECKING:
+    from brain.identity.oidc import KeySet
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -265,12 +268,17 @@ async def receive(
     claims: EventClaims,
     deliveries: DeliveryRecords,
     now: datetime,
+    keys: Callable[[], Awaitable[KeySet | None]] | None = None,
 ) -> Receipt:
     """One request to one channel, taken as far as it may go, and recorded however far that is.
 
     `body` is how the bytes are read, and it is called only once the record is on and the declared
     size is within bounds. `headers` have lower-cased names. Does not answer: a claimed message is
     handed back for `reply_for` and the route. See the module docstring for the order.
+
+    `keys` fetches the vendor's published signing keys for a wire that needs them, and is asked
+    only once the secret is held, just before verifying; see
+    `brain.channels.adapter.A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE`.
     """
     channel = wire.channel
     if record is None:
@@ -294,7 +302,9 @@ async def receive(
     try:
         # What verified is what is read: the same bytes, or, for a vendor that encrypts, the
         # body opened with the secret. Nothing below sees the request as it arrived.
-        opened = wire.verify(Arrived(headers=headers, body=raw, tenant=record.tenant), secret, now)
+        published = await keys() if keys is not None else None
+        arrived = Arrived(headers=headers, body=raw, tenant=record.tenant, keys=published)
+        opened = wire.verify(arrived, secret, now)
     except WebhookRefusedError:
         return await _refuse(deliveries, channel, RefusedBecause.BAD_SIGNATURE)
     del secret

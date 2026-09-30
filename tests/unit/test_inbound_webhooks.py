@@ -143,6 +143,7 @@ def test_the_one_address_a_platform_posts_to_is_the_channel_events_route() -> No
             Channel.EMAIL,
             Channel.LARK,
             Channel.SLACK,
+            Channel.TEAMS,
             Channel.WEBHOOK,
         }
     )

@@ -85,9 +85,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Final
+from urllib.parse import urlsplit
 
 import psycopg
 import structlog
@@ -102,6 +103,7 @@ from brain.attribution import trace_of_request
 from brain.channels.adapter import (
     ChannelTransport,
     ChannelWire,
+    KeyedWire,
     VendorAnswer,
     VendorRequest,
     channel_adapters,
@@ -129,6 +131,8 @@ from brain.db import libpq_conninfo
 from brain.gate.context import Channel
 from brain.gate.resolve import EntitlementStore
 from brain.guide_views import GuideStepView, step_view
+from brain.identity.oidc import JwksCache, KeySet, TokenRefusedError
+from brain.identity.roles import IdentityError
 from brain.install import InstallError, value_of
 from brain.install_routes import settings_of
 from brain.notification_routes import mail_password_of
@@ -170,6 +174,7 @@ from brain.ops.openbao import OpenBaoVault
 from brain.ops.operation_store import PostgresOperationLedger
 from brain.ops.outbox import SignedRequest
 from brain.ops.outbox_store import SendResult
+from brain.ops.safe_error import describe
 from brain.ops.secrets import VaultRole
 from brain.ops.webhook_delivery import HttpsSender, SystemResolver
 from brain.routing_routes import sessions_of
@@ -447,7 +452,7 @@ class HttpsTransport:
         exchange = request.exchange
         if exchange is None:
             return headers
-        signed = self._signed(exchange.url, {}, exchange.body)
+        signed = self._signed(exchange.url, {"Content-Type": exchange.content_type}, exchange.body)
         if isinstance(signed, VendorAnswer):
             return signed
         answered = _answer_of(self._sender.mint(signed))
@@ -623,6 +628,77 @@ def _on_a_running_loop() -> bool:
     except RuntimeError:
         return False
     return True
+
+
+class PublishedKeys:
+    """`brain.identity.oidc.JwksFetch` for a `KeyedWire`: its metadata, then its key set.
+
+    Both are read through the channel transport, so the address rule applies to each, and the
+    key set is read only from the host the metadata document is on: a document that pointed
+    anywhere else would be choosing where this install's trust comes from. See
+    `brain.channels.adapter.A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE`.
+    """
+
+    def __init__(self, wire: KeyedWire, transport: ChannelTransport) -> None:
+        self._wire = wire
+        self._transport = transport
+
+    def _get(self, url: str) -> bytes:
+        answer = self._transport.read(VendorRequest(url=url, headers={}, body=b"", method="GET"))
+        if answer.status != 200 or not answer.body:
+            msg = f"{urlsplit(url).hostname} did not answer with its document"
+            raise IdentityError(msg)
+        return answer.body
+
+    def __call__(self, issuer: str) -> KeySet:
+        del issuer  # One address per wire; the cache's key is it.
+        address = self._wire.keys_address
+        metadata = self._get(address)
+        try:
+            listed = json.loads(metadata).get("jwks_uri")
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError) as exc:
+            raise IdentityError("the metadata document is not JSON") from exc
+        if (
+            not isinstance(listed, str)
+            or urlsplit(listed).scheme != "https"
+            or urlsplit(listed).hostname != urlsplit(address).hostname
+        ):
+            raise IdentityError("the metadata document names its keys on another host")
+        try:
+            return self._wire.key_set_of(metadata, self._get(listed), datetime.now(UTC))
+        except ValueError as exc:
+            raise IdentityError(describe(exc)) from exc
+
+
+def vendor_keys_of(request: Request, wire: object) -> Callable[[], Awaitable[KeySet | None]] | None:
+    """How a request fetches its vendor's published keys: None for a wire that needs none.
+
+    `app.state.channel_keys` when a test put a key set there; otherwise one cache per
+    application and address, so a key set is fetched once an hour rather than once a request,
+    and an unreachable vendor leaves the cached set in use for its grace, then refuses.
+    """
+    if not isinstance(wire, KeyedWire):
+        return None
+    keyed: KeyedWire = wire
+    found = getattr(request.app.state, "channel_keys", None)
+    caches: dict[str, JwksCache] | None = getattr(request.app.state, "channel_key_caches", None)
+    if caches is None:
+        caches = {}
+        request.app.state.channel_key_caches = caches
+    cache = caches.setdefault(
+        keyed.keys_address, JwksCache(PublishedKeys(keyed, transport_of(request)))
+    )
+
+    async def load() -> KeySet | None:
+        if isinstance(found, KeySet):
+            return found
+        try:
+            return await asyncio.to_thread(cache.keys_for, keyed.keys_address, datetime.now(UTC))
+        except TokenRefusedError:
+            log.info("vendor keys not read", address=urlsplit(keyed.keys_address).hostname)
+            return None
+
+    return load
 
 
 def ledger_of(request: Request) -> LedgerRunner:
@@ -895,6 +971,7 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         claims=claims_of(request),
         deliveries=deliveries,
         now=now,
+        keys=vendor_keys_of(request, wire),
     )
     if receipt.kind is ReceiptKind.REFUSED:
         assert receipt.reason is not None
