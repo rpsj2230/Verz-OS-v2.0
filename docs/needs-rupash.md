@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**15 items are open: 134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**16 items are open: 138,** whether a Laravel client record is visible to one department or several, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,28 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 138. Laravel: may each client record be visible to one department, or to several?
+
+**In plain terms:** when you connect your Laravel application's database (its steps come to this page
+when it can read), you write a rule for each view saying who may see its records, for example
+"department = sales": a sales person sees the clients whose department is sales. The Brain keeps one
+such value per record in its small index. A rule naming several departments for one record ("visible
+to sales and operations") cannot be kept that way, so it would have saved and then shown nobody
+anything. It is now refused when you connect, with a sentence saying why.
+
+**Option A: one department per record, for now.** Every client record belongs to one department, and
+people in that department see it (administrators and anyone granted wider reach see more, as
+everywhere else).
+
+**Option B: several departments per record.** The index learns to keep a short list per record, so
+a client shared by sales and operations is seen by both. More work, and it makes the index hold a
+little more about each record.
+
+**My recommendation: A now.** Most client records have one owning department, and B can be added the
+day a real record needs two.
+
+**What I need from you:** reply "138: A" or "138: B".
 
 ## 134. Connect the Slack channel (ready now)
 
