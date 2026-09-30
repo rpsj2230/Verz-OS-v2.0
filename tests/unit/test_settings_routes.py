@@ -161,10 +161,13 @@ def test_the_screen_shows_every_setting_grouped_with_its_source_and_the_starter_
     names = [row["name"] for group in body["groups"] for row in group["settings"]]
     assert sorted(names) == sorted(one.name for one in INSTALLATION)
     assert [group["group"] for group in body["groups"]] == [one.value for one in SECTION_ORDER]
+    # Lark's one editable row is the Approve from Lark cards switch; how Lark is connected stays
+    # on Connect Lark.
     assert {group["group"] for group in body["groups"] if group["editable"]} == {
         "company",
         "locale",
         "models",
+        "lark",
         "staff",
     }
     settings = [row for group in body["groups"] for row in group["settings"]]

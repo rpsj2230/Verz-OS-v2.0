@@ -76,6 +76,23 @@ def _row_tool_names(registry: ToolRegistry) -> tuple[str, ...]:
     return tuple(d.name for d in registry.definitions() if d.source)
 
 
+#: Every connected source's own entities, registered on every install with a row source since
+#: 2026-09-30 (`brain.knowledge.connector_rows`). Read off the filing rather than written here, so
+#: a connector's entities added or removed move every expectation below with them.
+CONNECTOR_PAIRS = frozenset(
+    (source, one.entity)
+    for source in startup.connector_row_sources()
+    for one in SOURCE_ROW_ENTITIES[source]
+)
+CONNECTOR_TOOLS = frozenset(f"{source}.read_{entity}" for source, entity in CONNECTOR_PAIRS)
+CONNECTOR_ENTITIES = frozenset(entity for _, entity in CONNECTOR_PAIRS)
+
+
+def _own(names: Sequence[str]) -> tuple[str, ...]:
+    """The row tools a registry holds for its own source, the connected sources' set aside."""
+    return tuple(one for one in names if one not in CONNECTOR_TOOLS)
+
+
 # --------------------------------------------------------------- there is a builder
 def test_the_registry_the_application_builds_comes_back_frozen() -> None:
     """A caller handed an unfrozen registry can register into it after the whole-registry
@@ -100,10 +117,11 @@ def test_a_row_tool_is_registered_for_every_entity_that_has_a_classification() -
     Named against `BUILT_IN_ROW_ENTITIES` rather than against the number one, so adding a
     second classification does not require editing this test to keep it honest."""
     registry = build_registry(source="xero", records=_Rows())
-    rows = _row_tool_names(registry)
+    rows = _own(_row_tool_names(registry))
 
     assert len(rows) == len(BUILT_IN_ROW_ENTITIES)
     assert rows == ("xero.read_price_list",)
+    assert set(_row_tool_names(registry)) >= CONNECTOR_TOOLS
     assert PRICE_LIST in BUILT_IN_ROW_ENTITIES
 
 
@@ -112,8 +130,8 @@ def test_the_source_is_part_of_every_tools_name() -> None:
     keyed that way and two systems' record ids collide by coincidence of integers. The name
     carries it, so a catalogue holding two sources' price lists describes two tools rather
     than one ambiguous one."""
-    xero = _row_tool_names(build_registry(source="xero", records=_Rows()))
-    freshdesk = _row_tool_names(build_registry(source="freshdesk", records=_Rows()))
+    xero = _own(_row_tool_names(build_registry(source="xero", records=_Rows())))
+    freshdesk = _own(_row_tool_names(build_registry(source="freshdesk", records=_Rows())))
 
     assert xero == ("xero.read_price_list",)
     assert freshdesk == ("freshdesk.read_price_list",)
@@ -217,11 +235,21 @@ def test_the_demos_source_registers_its_own_entities_beside_the_built_ins() -> N
     registry = build_registry(source=demo.DEMO_SOURCE, records=_Rows())
     stored = {str(row["entity"]) for row in demo.record_rows()}
     built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES}
-    rows = [d for d in registry.definitions() if d.entity != KNOWLEDGE_ENTITY]
+    rows = [
+        d
+        for d in registry.definitions()
+        if d.entity != KNOWLEDGE_ENTITY and d.name not in CONNECTOR_TOOLS
+    ]
 
-    assert {d.entity for d in registry.definitions()} == stored | built_in | {KNOWLEDGE_ENTITY}
+    assert {d.entity for d in registry.definitions()} == (
+        stored | built_in | {KNOWLEDGE_ENTITY} | CONNECTOR_ENTITIES
+    )
     assert {d.source for d in rows} == {demo.DEMO_SOURCE}
-    assert len(registry) == len(row_entities_for(demo.DEMO_SOURCE)) + len(knowledge_tools(_Rows()))
+    assert len(registry) == (
+        len(row_entities_for(demo.DEMO_SOURCE))
+        + len(knowledge_tools(_Rows()))
+        + len(CONNECTOR_TOOLS)
+    )
 
 
 def test_no_install_reading_another_source_registers_anything_the_demo_brings() -> None:
@@ -236,7 +264,7 @@ def test_no_install_reading_another_source_registers_anything_the_demo_brings() 
 
     Delete this and `row_entities_for` can hand the demo's entities to every source, which is
     `BUILT_IN_ROW_ENTITIES` widened by another route."""
-    built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES} | {KNOWLEDGE_ENTITY}
+    built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES} | {KNOWLEDGE_ENTITY} | CONNECTOR_ENTITIES
     for source in (Settings().tool_source, "xero", "laravel"):
         registry = build_registry(source=source, records=_Rows())
         assert {d.entity for d in registry.definitions()} == built_in, source
@@ -288,7 +316,7 @@ def test_the_answer_lane_reads_no_document_tool_as_a_reader_of_rows() -> None:
     as a table of rows."""
     registry = build_registry(source="local", records=_Rows())
 
-    assert set(row_readers(registry)) == {("local", "price_list")}
+    assert set(row_readers(registry)) == {("local", "price_list")} | CONNECTOR_PAIRS
 
 
 def test_every_entity_is_classified_by_one_owner() -> None:
@@ -341,9 +369,9 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         {**startup.SOURCE_ROW_DESCRIPTIONS, "xero": {"invoice": "Read Xero invoices."}},
     )
 
-    assert startup.connector_row_sources() == ("xero",)
+    assert startup.connector_row_sources() == ("freshdesk", "xero")
     registered = set(row_readers(build_registry(source="local", records=_Rows())))
-    assert registered == {("local", "price_list"), ("xero", "invoice")}
+    assert registered == {("local", "price_list"), ("xero", "invoice"), ("freshdesk", "ticket")}
     assert classification_for("invoice", source="xero") == xero_invoices
 
 
