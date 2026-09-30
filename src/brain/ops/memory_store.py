@@ -21,9 +21,17 @@ the other way is legitimately a second row on the same pair.
 **The instant is the database's.** `correction.superseded_ids` decides a pair by its latest word and
 marks both on a tie, so the order of two corrections is the whole of what an undo means. An instant
 from the application's clock is whichever container served the request, which is the ledger's own
-argument for taking its order from one authoritative reading. The store reads `now()` in the
-transaction and hands it to the domain as `at`, so the correction the caller is handed and the row
-that was written carry the same instant.
+argument for taking its order from one authoritative reading. The store reads the database's
+clock in the transaction, after the lock, and hands it to the domain as `at`, so the correction the
+caller is handed and the row that was written carry the same instant.
+
+**Read as `statement_timestamp()` since 2026-09-29, not `now()`.** `now()` is when the transaction
+began, which is before the lock was granted: a revision that waited on another's lock was stamped
+earlier than the one it waited for, so the pair's latest word was the wrong one, and two revisions
+of one pair written in one transaction were stamped alike and marked each other. The install's
+acceptance check, which writes an edit and then forgets it in one transaction, found the second.
+`statement_timestamp()` is the start of the statement reading it, after the lock, so revisions are
+ordered as they were written. See `A_REVISION_IS_STAMPED_WHEN_IT_IS_DECIDED`.
 
 **The trace and the reach are set before the insert**, as `brain.ops.connector_store` sets them, so
 `0061`'s trigger appends the ledger entry under the request's trace and the caller's entitlement
@@ -41,6 +49,12 @@ person, asks `brain.memory.turn.propose_memories`, and writes each memory beside
 row, which is the revision record the Memory screen reads. No correction is written, because nothing
 was replaced.
 
+**An agent whose learning is paused forms nothing from its runs** (M16.7.13).
+`StoredFormations.form` reads the agent's latest `agent.learning_pause` row in the transaction
+that would write, before the lock on the person, and a paused agent's turn is answered
+`NotFormed.PAUSED`. The pause stops formation and nothing else, so it can narrow what is learned
+and never widen it.
+
 **A turn is formed from by the answer route since 2026-09-29, and read back for a model.** Nothing
 called `StoredFormations.after_turn` until then, so no install ever formed a memory and the Memory
 and Learning screens could only be empty; `brain.api_routes.answered_for` now hands it every turn
@@ -49,7 +63,7 @@ memories, read and decided by `brain.memory.recall.recall` at the run's reach an
 asker is now, whose statements a model is shown as hints. See
 `A_MODEL_IS_SHOWN_ONLY_WHAT_THE_ASKER_MAY_RECALL_ABOUT_THEMSELVES`.
 
-Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3
+Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3, M16.7.13
 """
 
 from __future__ import annotations
@@ -72,6 +86,7 @@ from brain.memory.recall import recall
 from brain.memory.review import Edit, edit
 from brain.memory.signals import Signal
 from brain.memory.turn import Held, NotFormed, Turn, propose_memories, worth_forming
+from brain.ops.learning_signal_store import paused_in
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
@@ -131,9 +146,18 @@ def lock_on(memory_id: str) -> Any:
     )
 
 
+#: Why a revision's instant is read after its lock rather than at its transaction's start.
+A_REVISION_IS_STAMPED_WHEN_IT_IS_DECIDED: Final = (
+    "The order of two corrections of one pair is the whole of what the pair means, and now() is "
+    "when the transaction began, before its lock was granted. A revision that waited would be "
+    "stamped before the one it waited for, and two revisions in one transaction would tie and "
+    "mark each other. So the instant is the statement's, read after the lock."
+)
+
+
 def the_clock() -> Select[Any]:
-    """The database's instant for this transaction."""
-    return select(func.now())
+    """The database's instant for this revision: the reading statement's, after the lock."""
+    return select(func.statement_timestamp())
 
 
 def corrections_naming(memory_ids: Collection[str]) -> Select[tuple[CorrectionRow]]:
@@ -156,6 +180,16 @@ def learnings_of_agents(agent_ids: Collection[str], limit: int) -> Select[tuple[
     return (
         select(LearningRow)
         .where(LearningRow.agent_id.in_(sorted(set(agent_ids))))
+        .order_by(LearningRow.recorded_at.desc(), LearningRow.memory_id)
+        .limit(limit)
+    )
+
+
+def learnings_of_conversations(limit: int) -> Select[tuple[LearningRow]]:
+    """The learnings formed with no agent running, most recently recorded first, bounded."""
+    return (
+        select(LearningRow)
+        .where(LearningRow.agent_id.is_(None))
         .order_by(LearningRow.recorded_at.desc(), LearningRow.memory_id)
         .limit(limit)
     )
@@ -426,6 +460,10 @@ class StoredFormations:
         if not worth_forming(turn.said):
             return Formed(memory_ids=(), skipped=(NotFormed.NOTHING_TO_REMEMBER,))
         async with self._sessions() as session, session.begin():
+            # An agent whose learning is paused teaches nothing from its runs (M16.7.13). Read in
+            # the transaction that would write, so a pause set a moment ago is honoured.
+            if turn.agent_id is not None and await paused_in(session, (turn.agent_id,)):
+                return Formed(memory_ids=(), skipped=(NotFormed.PAUSED,))
             await session.execute(lock_on_person(turn.principal_id))
             held = [
                 Held(memory_id=row[0], kind=MemoryKind(row[1]), statement=row[2])
