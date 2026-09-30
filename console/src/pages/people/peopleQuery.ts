@@ -205,18 +205,22 @@ export interface DirectoryFacts {
   readonly mayAdd: boolean;
   readonly adding?: string;
   readonly disabling?: string;
+  /** With a staff list read: the sentence to pass on to somebody whose account the sync made. */
+  readonly accountReady?: string;
 }
 
 export function readDirectoryFacts(payload: unknown): DirectoryFacts {
   const body = fieldsOf(payload);
   const adding = said(body?.["adding"]);
   const disabling = said(body?.["disabling"]);
+  const accountReady = said(body?.["account_ready"]);
   return {
     editable: body?.["editable"] === true,
     mayDisable: body?.["may_disable"] === true,
     mayAdd: body?.["may_add"] === true,
     ...(adding === undefined ? {} : { adding }),
     ...(disabling === undefined ? {} : { disabling }),
+    ...(accountReady === undefined ? {} : { accountReady }),
   };
 }
 

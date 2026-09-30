@@ -33,6 +33,14 @@ exactly like a scope never added. So a test where no chosen use got any scope re
 not yet released and says both remedies in order, and a partial one names the scopes and reminds
 that each addition needs a new version. See `A_SCOPE_NOT_RELEASED_LOOKS_LIKE_A_SCOPE_NOT_ADDED`.
 
+**A scope Lark checks per field is tested by reading the field, because the call succeeds without
+it.** The staff list's test read one person and called it working. On 2026-09-29 the owner's app
+passed that and the night's sync then placed 123 people in no department: Lark admits the
+department walk without `contact:department.base:readonly` and leaves each department's `name`
+out. So the test reads one department as the sync does and names that scope when the name is
+missing, and a refused department walk (the "no dept authority" the owner's first sync met) is
+the data range, reported as such rather than hidden behind a person the root could list.
+
 **Knowledge is switched on as configuration and never copied.** The owner's rule is that a
 connector keeps a minimal index and reads content live at question time. Switching knowledge on
 here writes which Base and which platform, as installation settings, and keeps the credential in
@@ -67,7 +75,7 @@ import enum
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final
@@ -82,6 +90,7 @@ from brain.connectors.staff_directories import (
     Fetch,
     Outbound,
 )
+from brain.identity.staff_adapters import LARK_DEPARTMENT_NAME_SCOPE
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 
 # ------------------------------------------------------------------ written-down reasons
@@ -848,8 +857,12 @@ def steps_for(uses: Sequence[Use], *, platform: str, app_id: str = "") -> tuple[
     return keyed(tuple(found))
 
 
-def _origin(redirect_uris: str) -> str:
-    """This install's public origin, from the first redirect URI, or empty when it names none."""
+def install_origin(redirect_uris: str) -> str:
+    """This install's public origin, from the first redirect URI, or empty when it names none.
+
+    Public because every address a vendor is told to post to is built on it: Lark's here, and
+    every other channel's in `brain.channel_routes`.
+    """
     first = next((one.strip() for one in redirect_uris.split(",") if one.strip()), "")
     parts = urlsplit(first)
     if parts.scheme not in ("https", "http") or not parts.netloc:
@@ -863,7 +876,7 @@ def events_address(redirect_uris: str) -> str:
     Built from `INSTALL_OIDC_REDIRECT_URIS`, the one installation setting that already names this
     install's public address, so no second setting can disagree with it. Empty when it names none.
     """
-    origin = _origin(redirect_uris)
+    origin = install_origin(redirect_uris)
     return f"{origin}{LARK_EVENTS_PATH}" if origin else ""
 
 
@@ -873,7 +886,7 @@ def ask_address(redirect_uris: str) -> str:
     From the same setting as `events_address`, for its reason. The page carries no answer and no
     question, so following it runs the gate again for whoever follows it (M10.4.3).
     """
-    origin = _origin(redirect_uris)
+    origin = install_origin(redirect_uris)
     return f"{origin}{ASK_PATH}" if origin else ""
 
 
@@ -1016,6 +1029,9 @@ class UseResult:
     verdict: Verdict
     told: str
     missing: tuple[str, ...] = ()
+    #: True when every call was answered and a field was left out, which is a scope Lark checks
+    #: per field. Lark granted something, so this is never read as a version not released.
+    answered: bool = False
     #: The wiki spaces Lark showed the app, as (id, name), for the step that declares them.
     spaces: tuple[tuple[str, str], ...] = ()
 
@@ -1126,8 +1142,8 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
     refused = _refused_or_other(spec, people, not_shared=range_sentence)
     if refused is not None:
         return refused
-    if _items(people):
-        return UseResult(spec.use, Verdict.WORKING, "Working: the app can read the staff list.")
+    # The department walk is the sync's first call, so it is read even when a person was: the
+    # root can list people while the walk is refused, and a department can come back unnamed.
     departments = await _get(
         fetch,
         base,
@@ -1139,7 +1155,10 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
     refused = _refused_or_other(spec, departments, not_shared=range_sentence)
     if refused is not None:
         return refused
-    if _items(departments):
+    found = _items(departments)
+    if found and not str(found[0].get("name") or "").strip():
+        return replace(_missing(spec, (LARK_DEPARTMENT_NAME_SCOPE,)), answered=True)
+    if found or _items(people):
         return UseResult(spec.use, Verdict.WORKING, "Working: the app can read the staff list.")
     return UseResult(spec.use, Verdict.NOT_SHARED, range_sentence)
 
@@ -1319,7 +1338,9 @@ async def bot_open_id(
 
 def _released(results: Sequence[UseResult]) -> tuple[UseResult, ...]:
     """Every result, with an all-missing test read as a version not released. See the constant."""
-    if not results or any(one.verdict is not Verdict.MISSING_SCOPE for one in results):
+    if not results or any(
+        one.verdict is not Verdict.MISSING_SCOPE or one.answered for one in results
+    ):
         return tuple(results)
     return tuple(
         UseResult(

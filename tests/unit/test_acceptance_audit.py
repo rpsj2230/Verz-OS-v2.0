@@ -33,7 +33,7 @@ from brain.ops.acceptance_audit import (
     NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
 )
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_audit"
 NAME = "each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught"
@@ -243,3 +243,13 @@ def test_a_trace_store_the_application_can_read_fails_the_check() -> None:
         sql(url, "GRANT SELECT ON obs.trace_step TO brain_app")
         said = run_audit(url)
     assert said == (FAILED, "a stored trace is readable by the application's own role")
+
+
+def test_the_audit_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_audit") == [
+        "each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught",
+    ]

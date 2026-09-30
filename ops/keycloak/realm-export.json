@@ -514,6 +514,33 @@
       ]
     },
     {
+      "clientId": "brain-accounts",
+      "name": "Staff accounts",
+      "description": "The staff sync's caller. Makes, finds, closes and opens sign-in accounts for the people the staff source lists, and nothing else.",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "access.token.signed.response.alg": "RS256",
+        "use.refresh.tokens": "false"
+      },
+      "_comment": [
+        "Client credentials only, and its service account holds three realm-management roles:",
+        "manage-users, view-users and query-users, declared under users below for a realm",
+        "imported fresh and added again by ops/keycloak/accounts-client.sh on every release,",
+        "because --import-realm never touches a realm that already exists. Not manage-realm,",
+        "not manage-clients: it can make and disable a person and cannot change how anybody",
+        "signs in.",
+        "No secret here, as for brain-sync. accounts-client.sh reads the one Keycloak",
+        "generated and keeps it in the vault at connector_keys/sign_in_accounts, which the",
+        "worker borrows for a run. See brain.connectors.sign_in_accounts."
+      ]
+    },
+    {
       "clientId": "account",
       "name": "${client_account}",
       "enabled": true,
@@ -612,6 +639,16 @@
     }
   ],
 
+  "users": [
+    {
+      "username": "service-account-brain-accounts",
+      "enabled": true,
+      "serviceAccountClientId": "brain-accounts",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "query-users"]
+      }
+    }
+  ],
   "clientScopeMappings": {
     "account": [
       {

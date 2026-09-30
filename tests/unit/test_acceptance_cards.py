@@ -36,8 +36,8 @@ from typing import Any
 import pytest
 
 from brain.ops import acceptance_checks_cards as cards
-from brain.ops.acceptance import CHECK_MODULES, FAILED, PASSED, REASON_CHARS, Check, registered
-from tests.unit.test_acceptance import at_head, counts
+from brain.ops.acceptance import FAILED, PASSED, REASON_CHARS, Check, check_modules, registered
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_cards"
@@ -73,11 +73,19 @@ def by_name(name: str) -> Check:
 
 # ------------------------------------------------------------------------ without a server
 def test_the_card_checks_are_in_the_suite_with_the_leaves_they_prove() -> None:
-    """Named in `CHECK_MODULES`, in this order, each with its leaves. Delete this and a card check
-    drops out of the suite with the Install page simply showing one fewer row."""
-    assert MODULE in CHECK_MODULES
+    """Found among the suite's modules, in this order, each with its leaves. Delete this and a card
+    check drops out of the suite with the Install page simply showing one fewer row."""
+    assert MODULE in check_modules()
     assert {one.name: one.leaves for one in mine()} == LEAVES
     assert [one.name for one in mine()] == [TYPED, PRESSED, POLICY]
+
+
+def test_the_cards_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here
+    since 2026-09-30, so a package adding a check edits its own file and never a list every
+    package appends to. Delete this and a check can drop out of the module with the page simply
+    listing one fewer row."""
+    assert checks_in(MODULE) == [TYPED, PRESSED, POLICY]
 
 
 def test_every_leaf_the_card_checks_name_is_a_leaf_of_the_work_breakdown() -> None:
