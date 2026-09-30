@@ -93,7 +93,7 @@ Scope: nothing here opens a connection. A `RowSource` is passed in, for the reas
 `brain.ops.limits` gives about holding no client: a query builder that owns a socket cannot
 be tested on the cases that matter, and the cases that matter here are the empty ones.
 
-Task ids: M15.1.1, M15.1.2, M15.1.3, M15.1.4
+Task ids: M15.1.1, M15.1.2, M15.1.3, M15.1.4, M11.4.9
 """
 
 from __future__ import annotations
@@ -176,6 +176,20 @@ ROW_LAYOUT: Final = ColumnLayout(jsonb_column="fields", promoted=frozenset({"sou
 #: record that arrives without them is dropped whole as untagged.
 ENTITY_KEY: Final = "entity"
 ID_KEY: Final = "id"
+
+#: The label the row's `last_seen_at` is selected under: when the source last confirmed the row,
+#: which is how old an answer standing on it is (M11.4.9). An `@` no classified column can carry,
+#: and never a field: records are built from the projection's columns, so it cannot reach one.
+SEEN_KEY: Final = "@seen"
+
+#: Why an answer from the index is dated by the row and not by the question.
+AN_INDEX_ROW_IS_AS_OLD_AS_ITS_LAST_READ: Final = (
+    "A row in the index is what a source said when the worker last read it, not what it says "
+    "now. Dating the answer by the moment the question was asked called every projected row "
+    "current, so an index the worker had not refreshed for a week answered without a word about "
+    "its age. The answer is dated by the oldest row it stands on, so one old row is enough to "
+    "say so and a fresh one cannot hide it."
+)
 
 #: Distinct parameter prefixes for the three predicates that make up one WHERE clause.
 #: `CompiledPredicate.and_` refuses a collision rather than binding one scope's value into
@@ -541,6 +555,9 @@ def _selected(columns: Sequence[str], carried: Sequence[str] = ()) -> list[Any]:
     chosen: list[Any] = [
         RECORD.c[ENTITY_KEY].label(ENTITY_KEY),
         RECORD.c.source_id.label(ID_KEY),
+        # When the source last confirmed the row, for the answer's date and never a field:
+        # see `AN_INDEX_ROW_IS_AS_OLD_AS_ITS_LAST_READ`.
+        RECORD.c.last_seen_at.label(SEEN_KEY),
     ]
     chosen.extend(RECORD.c.fields[name].astext.label(name) for name in columns)
     chosen.extend(
@@ -678,9 +695,22 @@ async def read_rows(
         source=tool.source,
         # No clock is read here, for the reason `brain.knowledge.visibility` gives: a module
         # that reads the clock cannot be tested at the boundary that goes wrong.
-        fetched_at=now.isoformat() if now is not None else "",
+        fetched_at=answered_as_of(fetched, now),
         truncated=len(built) == request.limit,
     )
+
+
+def answered_as_of(rows: Sequence[Mapping[str, Any]], now: datetime | None) -> str:
+    """When what these rows say was read from their source: the oldest row's last read (M11.4.9).
+
+    See `AN_INDEX_ROW_IS_AS_OLD_AS_ITS_LAST_READ`. A row carrying no read time, which is a row
+    from a source that is not the index, leaves the answer dated by the question, as before; with
+    no rows at all there is nothing to date and the question's instant is kept.
+    """
+    seen = [one for row in rows if isinstance(one := row.get(SEEN_KEY), datetime)]
+    if seen:
+        return min(seen).isoformat()
+    return now.isoformat() if now is not None else ""
 
 
 # ------------------------------------------------- no model writes SQL (M15.1.3)
