@@ -155,10 +155,15 @@ export function setupBody(
   values: Readonly<Record<string, string>>,
   secret: string,
   parts: Readonly<Record<string, string>> = {},
+  required: readonly string[] = fields,
 ): { enabled: boolean; tenant: Record<string, string>; secret?: string; secret_parts?: Record<string, string> } {
   const tenant: Record<string, string> = {};
   for (const field of fields) {
-    tenant[field] = (values[field] ?? "").trim();
+    const value = (values[field] ?? "").trim();
+    // A blank field nobody requires is left out, so a path that does not ask for it saves without it.
+    if (value !== "" || required.includes(field)) {
+      tenant[field] = value;
+    }
   }
   const typed = Object.values(parts).some((one) => one !== "");
   if (typed) {
