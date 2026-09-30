@@ -115,6 +115,7 @@ export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
   INSTALL_CURRENCY: "A three-letter currency code, such as SGD.",
   INSTALL_TIME_ZONE: "A time zone name, such as Asia/Singapore.",
   INSTALL_MODEL_PROFILE: "Where questions may be answered: on this server only, or by online providers.",
+  INSTALL_DIGEST_TIME: "A time on the 24-hour clock in the install's time zone, such as 18:00.",
 });
 
 /** What a field accepts, or one plain sentence for a setting the table does not know. */
