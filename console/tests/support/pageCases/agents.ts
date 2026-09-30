@@ -18,17 +18,22 @@ const AGENT_STATS = {
   currency: "SGD",
   last_active: "2019-03-04T09:42:00Z",
   at_least: false,
-  periods: ["7d", "30d"].map((range) => ({
+  periods: ["7d", "30d", "90d", "mtd"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
     until: "2019-03-04T12:00:00Z",
     runs: 391,
+    messages: 360,
     answered: 360,
     nothing_returned: 31,
     p50_latency_ms: 1840.5,
-    cost_minor: null,
+    cost_minor: 18240,
+    // The cost per person, whose widest value is a name with nowhere to break.
+    callers: [{ principal_id: UNBROKEN, name: UNBROKEN, spend_minor: 18240 }],
   })),
-  unrecorded: [{ figure: "model_cost", why: UNBROKEN }],
+  unrecorded: [],
+  // The month against the agent's own budget, drawn for a reader of everybody's spend.
+  projection: { spent_minor: 18240, projected_minor: 99999999, ceiling_minor: 50000, over_ceiling: true },
 };
 
 const WORKSPACE = {

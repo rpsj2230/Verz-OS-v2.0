@@ -11,6 +11,7 @@ Every refusal is compared status to status and message to message with the answe
 matches nothing gets, and every refusal has a sibling proving the reader in reach is answered.
 
 Task ids: M27.15.27, M27.15.33, M11.3.4
+Task ids: M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.1.3.4
 """
 
 from __future__ import annotations
@@ -57,6 +58,8 @@ from brain.ops.connector_sync import SyncOutcome, SyncState
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.ops.telemetry import RequestStatus
 from brain.tables.agent import AgentRow
+from brain.tables.budget import BudgetVersionRow
+from brain.tables.identity import PrincipalRow
 from brain.tables.spend import SpendActualRow
 from tests.fixtures.console_http import Stub, console_client, get
 from tests.fixtures.setting_rows import Result, Row
@@ -111,6 +114,8 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
 NOW = datetime.now(UTC)
 AGENT = "desk"
 HIDDEN_AGENT = "finance_desk"
+PERSON = TrafficClass.HUMAN_INTERACTIVE.value
+SCHEDULED = TrafficClass.AUTOMATION.value
 
 
 class Held:
@@ -123,18 +128,25 @@ class Held:
                 HIDDEN_AGENT, level=Visibility.DEPARTMENT, department="finance"
             ),
         }
-        #: (selected agent, principal, received, status, duration)
-        self.requests: list[tuple[str, str, datetime, str, float]] = [
-            (AGENT, "u_narrow", NOW - timedelta(days=1), "answered", 200.0),
-            (AGENT, "u_narrow", NOW - timedelta(days=10), "nothing_returned", 400.0),
-            (AGENT, "u_admin", NOW - timedelta(days=2), "answered", 800.0),
-            (AGENT, "u_elsewhere", NOW - timedelta(days=3), "failed", 1600.0),
-            (HIDDEN_AGENT, "u_elsewhere", NOW - timedelta(days=1), "answered", 50.0),
+        #: (selected agent, principal, received, status, duration, traffic class). The one
+        #: automation's run is a run and not a message; the sixty-day one is only in ninety days.
+        self.requests: list[tuple[str, str, datetime, str, float, str]] = [
+            (AGENT, "u_narrow", NOW - timedelta(days=1), "answered", 200.0, PERSON),
+            (AGENT, "u_narrow", NOW - timedelta(days=10), "nothing_returned", 400.0, PERSON),
+            (AGENT, "u_admin", NOW - timedelta(days=2), "answered", 800.0, SCHEDULED),
+            (AGENT, "u_elsewhere", NOW - timedelta(days=3), "failed", 1600.0, PERSON),
+            (AGENT, "u_admin", NOW - timedelta(days=60), "answered", 100.0, PERSON),
+            (HIDDEN_AGENT, "u_elsewhere", NOW - timedelta(days=1), "answered", 50.0, PERSON),
         ]
         self.spend: list[SpendActualRow] = [
             spend_row("u_narrow", 120, NOW - timedelta(days=1)),
             spend_row("u_admin", 300, NOW - timedelta(days=12)),
+            spend_row("u_admin", 80, NOW - timedelta(days=60)),
         ]
+        #: The agent's monthly budget, as `ops.budget_version` would hold it, or none.
+        self.budgets: list[BudgetVersionRow] = []
+        #: The directory's display names, which the cost per person is drawn with.
+        self.names: dict[str, str] = {"u_admin": "Admin Person", "u_narrow": "Narrow Person"}
         self.attempts: list[tuple[datetime, str]] = [
             (NOW - timedelta(days=1), "synced"),
             (NOW - timedelta(days=2), "failed"),
@@ -205,11 +217,20 @@ class Held:
             return Result([])
         if described[0].get("entity") is SpendActualRow:
             return Result(self.spend)
-        if columns == ["principal", "received_at", "status", "duration_ms"]:
+        if described[0].get("entity") is BudgetVersionRow:
+            return Result(one for one in self.budgets if one.subject == _bound(params, "subject"))
+        if described[0].get("entity") is PrincipalRow and len(described) == 1:
+            asked_for = {str(one) for one in (_bound(params, "id") or ())}
+            return Result(
+                PrincipalRow(id=key, display_name=name)
+                for key, name in self.names.items()
+                if key in asked_for
+            )
+        if columns == ["principal", "received_at", "status", "duration_ms", "traffic_class"]:
             principal = _bound(params, "principal")
             return Result(
-                Row((who, at, status, ms))
-                for agent, who, at, status, ms in self.requests
+                Row((who, at, status, ms, traffic))
+                for agent, who, at, status, ms, traffic in self.requests
                 if agent == _bound(params, "selected_agent")
                 and (principal is None or who == principal)
             )
@@ -370,7 +391,7 @@ def test_a_reader_of_everybodys_usage_is_counted_over_every_request_the_agent_an
     assert response.status_code == 200, response.text
     body = AgentStatsView.model_validate(response.json())
 
-    week, month = body.periods
+    week, month, *_ = body.periods
     assert (body.basis, week.range, month.range) == ("everyone", "7d", "30d")
     assert (week.runs, week.answered, week.nothing_returned) == (3, 2, 0)
     assert (month.runs, month.answered, month.nothing_returned) == (4, 2, 1)
@@ -387,7 +408,7 @@ def test_a_reader_without_the_usage_read_is_counted_over_their_own_requests_in_t
     client, _ = served
     body = AgentStatsView.model_validate(stats(client, "u_narrow", "agents", AGENT).json())
 
-    week, month = body.periods
+    week, month, *_ = body.periods
     assert body.basis == "own"
     assert (week.runs, month.runs, month.nothing_returned) == (1, 2, 1)
     assert month.p50_latency_ms == 300.0
@@ -417,18 +438,123 @@ def test_cost_is_not_recorded_rather_than_nought_until_a_run_writes_one(
     client, _ = served
     monkeypatch.setattr(console_stats_routes, "RUN_SPEND_IS_RECORDED", False)
     unrecorded = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
-    assert [one.cost_minor for one in unrecorded.periods] == [None, None]
+    assert [one.cost_minor for one in unrecorded.periods] == [None] * 4
+    assert [one.callers for one in unrecorded.periods] == [[]] * 4
     assert [one.figure for one in unrecorded.unrecorded] == ["model_cost"]
 
     monkeypatch.setattr(console_stats_routes, "RUN_SPEND_IS_RECORDED", True)
     everyone = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
     own = AgentStatsView.model_validate(stats(client, "u_narrow", "agents", AGENT).json())
 
-    assert [one.cost_minor for one in everyone.periods] == [120, 420]
+    assert [one.cost_minor for one in everyone.periods[:3]] == [120, 420, 500]
     assert everyone.cost_basis == "everyone"
-    assert [one.cost_minor for one in own.periods] == [120, 120]
+    assert [one.cost_minor for one in own.periods[:3]] == [120, 120, 120]
     assert own.cost_basis == "own"
     assert everyone.unrecorded == []
+
+
+def _month_start() -> datetime:
+    return NOW.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def test_an_agents_figures_are_given_over_seven_thirty_and_ninety_days_and_the_month_to_date(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """M39.1.3.2: the page's range selector offers four windows, so the route must send four.
+    The sixty-day request is in ninety days and in no shorter window, and the month to date holds
+    exactly the requests since the first of this month, whatever today's date is. Delete this and
+    the selector can offer a window the route never counted."""
+    client, _ = served
+    body = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
+
+    assert [one.range for one in body.periods] == ["7d", "30d", "90d", "mtd"]
+    week, month, quarter, to_date = body.periods
+    assert (week.runs, month.runs, quarter.runs) == (3, 4, 5)
+    assert to_date.since == _month_start()
+    since_first = sum(
+        1 for agent, _, at, *_ in Held().requests if agent == AGENT and at >= _month_start()
+    )
+    assert to_date.runs == since_first
+
+
+def test_an_agents_messages_are_the_runs_a_person_sent_and_never_an_automations(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """M39.1.3.1: spend, runs and messages are the agent's headline figures. A message is a run a
+    person started; the automation's run is a run and not a message. Delete this and the message
+    figure can be the run figure under another name."""
+    client, _ = served
+    body = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
+
+    week, month, quarter, _ = body.periods
+    assert (week.runs, week.messages) == (3, 2)
+    assert (month.runs, month.messages) == (4, 3)
+    assert (quarter.runs, quarter.messages) == (5, 4)
+
+
+def test_the_cost_per_person_is_heaviest_first_and_only_the_readers_own_on_the_narrower_basis(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M39.1.3.3: cost attributed per caller, so one heavy user is visible to a reader of
+    everybody's spend, named from the directory. A reader without the budget read is shown their
+    own row and nobody else's, and never a remainder. Delete this and the list can name
+    colleagues to anybody who opens the agent."""
+    client, _ = served
+    monkeypatch.setattr(console_stats_routes, "RUN_SPEND_IS_RECORDED", True)
+    everyone = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
+    own = AgentStatsView.model_validate(stats(client, "u_narrow", "agents", AGENT).json())
+
+    month = everyone.periods[1]
+    assert [(one.principal_id, one.name, one.spend_minor) for one in month.callers] == [
+        ("u_admin", "Admin Person", 300),
+        ("u_narrow", "Narrow Person", 120),
+    ]
+    assert [one.spend_minor for one in everyone.periods[2].callers] == [380, 120]
+    assert [
+        [(one.principal_id, one.spend_minor) for one in period.callers]
+        for period in own.periods[:3]
+    ] == [[("u_narrow", 120)]] * 3
+
+
+def _monthly_budget(ceiling: int) -> BudgetVersionRow:
+    return BudgetVersionRow(
+        level="agent",
+        subject=AGENT,
+        period="month",
+        ceiling_minor=ceiling,
+        version=1,
+        author="u_admin",
+        effective_from=NOW - timedelta(days=400),
+        reason="set on the agent's page",
+        alert_fractions=[],
+    )
+
+
+def test_the_projection_is_against_the_agents_own_monthly_budget_for_a_reader_of_everybodys_spend(
+    served: tuple[TestClient, Stub], held: Held, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M39.1.3.4: the month-end projection is everybody's month to date against the agent's own
+    monthly budget. Absent with no budget set, and withheld from a reader of their own spend,
+    because a projection of one person's spend against a ceiling everybody shares is a confident
+    figure that is wrong. Delete this and the page can project nothing, or project somebody's
+    afternoon."""
+    client, _ = served
+    monkeypatch.setattr(console_stats_routes, "RUN_SPEND_IS_RECORDED", True)
+    assert (
+        AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json()).projection
+        is None
+    )
+
+    held.budgets.append(_monthly_budget(1))
+    shown = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
+    withheld = AgentStatsView.model_validate(stats(client, "u_narrow", "agents", AGENT).json())
+
+    to_date = sum(one.cost_minor for one in held.spend if one.at >= _month_start())
+    assert shown.projection is not None
+    assert (shown.projection.spent_minor, shown.projection.ceiling_minor) == (to_date, 1)
+    assert shown.projection.projected_minor >= to_date
+    assert shown.projection.over_ceiling is (shown.projection.projected_minor > 1)
+    assert withheld.projection is None
 
 
 # ------------------------------------------------------------------------------ skills
