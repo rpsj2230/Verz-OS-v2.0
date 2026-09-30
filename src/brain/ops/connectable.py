@@ -16,9 +16,11 @@ type and a credential in the shape its vendor issues it**, and this install can 
 Xero is pinned to one organisation, HubSpot to one account and Freshdesk to one helpdesk and the
 one department that reads it. Google Drive's form names one folder, the department it belongs to
 and the person answerable for it, with a service account's key file, and the Laravel database's
-names one schema's views, each with the visibility rule written by whoever read its definition,
-with a read-only user's name and password; both are declared and neither is offered until this
-install can read them. Each connection class already refuses a setting that narrows nothing.
+names its server, one schema's views, each with the visibility rule written by whoever read its
+definition, with a read-only user's name and password. Both were declared before either could be
+read; Laravel is offered since M11.6.1 because it now reads, by the rule below and nothing else,
+and Drive is listed until it does. Each connection class already refuses a setting that narrows
+nothing.
 Lark's Base and Wiki are connected on Connect Lark, which says so, and the screen shows that
 sentence rather than leaving them out.
 
@@ -234,6 +236,11 @@ def key_reference(name: str) -> SecretRef:
     return SecretRef(path=connector_key_slot(name).path, role=READING_ROLE)
 
 
+def max_chars_of(setting: Setting) -> int:
+    """The longest value a setting takes: its own bound where it declares one, else the form's."""
+    return setting.max_chars or MAX_SETTING_CHARS
+
+
 def blank_sentence(setting: Setting) -> str:
     """What a person is told when this setting is left blank. Served beside the form as well, so a
     console can say it before the confirmation opens without a second copy of the words."""
@@ -270,13 +277,13 @@ def settings_problems(kind: Connectable, settings: Mapping[str, str]) -> tuple[S
         value = settings.get(one.name, "").strip()
         if not value:
             found.append(SettingProblem(field=one.name, code="blank", message=blank_sentence(one)))
-        elif len(value) > MAX_SETTING_CHARS:
+        elif len(value) > max_chars_of(one):
             found.append(
                 SettingProblem(
                     field=one.name,
                     code="too_long",
                     message=(
-                        f"That is longer than {MAX_SETTING_CHARS} characters, which is longer "
+                        f"That is longer than {max_chars_of(one)} characters, which is longer "
                         f"than any {one.label.lower()}. Check what was copied."
                     ),
                 )

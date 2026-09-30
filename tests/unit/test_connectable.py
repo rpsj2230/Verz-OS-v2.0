@@ -64,8 +64,12 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "freshdesk": {"department": "support"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
     "laravel": {
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
         "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
+        "user_rule": "department = operations",
         "max_rows": "500",
         "timeout_seconds": "10",
     },
@@ -187,9 +191,10 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every source offered today:
     each has a reading or a live lookup, and a recorded ceiling. Delete this and the screen can
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
-    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
+    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling. Laravel is
+    offered since M11.6.1 because it reads, and by this rule alone."""
     declared = shipped()
-    assert set(CONNECTABLE) == {"freshdesk", "hubspot", "xero"}
+    assert set(CONNECTABLE) == {"freshdesk", "hubspot", "laravel", "xero"}
     for name in CONNECTABLE:
         one = declared[name]
         assert one.reading is not None or one.live is not None, name
