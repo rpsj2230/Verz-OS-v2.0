@@ -68,6 +68,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.api_routes import Answering, Question, answered_for, field_policies, wiring_of
 from brain.attribution import trace_of_request
 from brain.channels.adapter import (
+    BOT_ID,
     ChannelCapabilities,
     ChannelTransport,
     Conversation,
@@ -547,7 +548,13 @@ class ChatAnswerer:
     async def _present(
         self, record: ChannelRecord, conversation: Conversation
     ) -> frozenset[str] | None:
-        """The digests of everybody in the conversation, or None when it cannot be read whole."""
+        """The digests of everybody in the conversation, or None when it cannot be read whole.
+
+        The bot the record names is not a reader: it is the one sending. Lark leaves bots out of
+        its list and Slack lists the app's own bot user among the members, so the digest of the
+        record's `BOT_ID` is taken out here, for every channel alike, rather than counted as a
+        person bound to nobody, which would make every room's floor nothing.
+        """
         # Typed as an object: whether a wire can read a room is a question about its class.
         wire: object = channel_wires().get(record.channel)
         if not isinstance(wire, RoomReader):
@@ -577,7 +584,8 @@ class ChatAnswerer:
             if len(found) > MAX_ROOM_MEMBERS:
                 return None
             if not page:
-                return frozenset(found)
+                bot = record.tenant.get(BOT_ID, "")
+                return frozenset(found - {identity_hash(record.channel, bot)} if bot else found)
         return None
 
     async def _members(

@@ -23,7 +23,7 @@ import pytest
 
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_sources"
@@ -76,6 +76,15 @@ def written(url: str) -> dict[str, int]:
 
 
 @pytest.mark.needs_db
+def test_the_sources_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them: one check, a
+    connected source asked on Ask from its index and its source. Held here, beside the module's
+    other tests, so a package adding a check edits its own file and never a list every package
+    appends to. Delete this and a check can drop out of the module with the page simply listing one
+    fewer row."""
+    assert checks_in(MODULE) == [NAME]
+
+
 def test_on_a_real_database_a_connected_source_answers_and_nothing_is_left_behind() -> None:
     """**The check as the worker runs it, against PostgreSQL at head.** It passes, and the
     projection, the connections, the attempts and the ledger hold what they held before. Delete
