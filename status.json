@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-30T02:28:52.499347+00:00",
-  "commit": "c8d9e928",
-  "commit_subject": "Two tasks close on the install's own acceptance runs: the recovery sweeps and the widget's session route (#297)",
+  "generated_at": "2026-09-30T02:47:03.170093+00:00",
+  "commit": "4022c29e",
+  "commit_subject": "A level's last step is given the rest of the answer's time, and the prober waits for it as long as a question would (#248)",
   "total": 1584,
   "done": 471,
   "percent": 29.7,
