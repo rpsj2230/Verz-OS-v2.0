@@ -566,17 +566,34 @@ def test_a_reader_without_the_usage_read_is_counted_over_their_own_live_reads_in
 def test_the_source_s_calls_are_told_to_a_reader_of_everybody_s_usage_and_to_nobody_else(
     served: tuple[TestClient, Stub],
 ) -> None:
-    """M11.3.4 on the route: a process with no live reader says so to `u_admin`, and `u_wide`,
-    who reads only their own usage, is told why there are none rather than handed everybody's
-    calls. Delete this and the route can serve the calls every question made to a reader who may
-    not see anybody else's questions, or serve nought where nothing counts."""
-    from brain.console_stats_routes import CALLS_ARE_EVERYBODY_S, NO_LIVE_READER_HERE
+    """M11.3.4 on the route: a process with no live reader says so to `u_admin`, one with a reader
+    tells `u_admin` its count from nought, and `u_wide`, who reads only their own usage, is told
+    why there are none rather than handed everybody's calls either way. Each case is set on the
+    state rather than left to the lifespan, which builds a reader where this run has a database
+    (`brain.app`, since the figure tools of M11.7.1 share it). Delete this and the route can serve
+    the calls every question made to a reader who may not see anybody else's questions, or serve
+    nought where nothing counts."""
+    from brain.console_stats_routes import (
+        CALLS_ARE_EVERYBODY_S,
+        CALLS_ARE_THIS_PROCESS_S,
+        NO_LIVE_READER_HERE,
+    )
+    from brain.ops.live_read_run import live_records_for
 
     client, _ = served
+    state = client.app.state  # type: ignore[attr-defined]
+
+    state.live_records = None
     wide = ConnectorStatsView.model_validate(stats(client, "u_admin", "connectors", "xero").json())
     own = ConnectorStatsView.model_validate(stats(client, "u_wide", "connectors", "xero").json())
-
     assert (wide.calls, wide.calls_told) == (None, NO_LIVE_READER_HERE)
+    assert (own.calls, own.calls_told) == (None, CALLS_ARE_EVERYBODY_S)
+
+    state.live_records = live_records_for(state.db_sessions, None)
+    wide = ConnectorStatsView.model_validate(stats(client, "u_admin", "connectors", "xero").json())
+    own = ConnectorStatsView.model_validate(stats(client, "u_wide", "connectors", "xero").json())
+    assert wide.calls is not None and (wide.calls.requests, wide.calls.quiet) == (0, True)
+    assert wide.calls_told == CALLS_ARE_THIS_PROCESS_S
     assert (own.calls, own.calls_told) == (None, CALLS_ARE_EVERYBODY_S)
 
 
