@@ -178,6 +178,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +
     "confirmed.",
+  "src/pages/staff-sources/StaffSourcesPage.tsx TRIAL_API_PATH":
+    "Try a read writes when a trial was asked for and nothing else: the worker then reads the source " +
+    "as the nightly run would and applies nothing, recording one tried row that names nobody, which " +
+    "tests/unit/test_staff_sync_run.py holds. A second press only moves the instant.",
   "src/pages/staff-sources/ConnectDrawer.tsx path":
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +

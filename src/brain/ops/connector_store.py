@@ -116,6 +116,9 @@ class Connection:
     digest: str
     connected_by: str
     connected_at: datetime
+    #: The declaration text `digest` is the hash of, or empty for a connection made before it was
+    #: kept. See `brain.console.declaration_drift`.
+    agreed: str = ""
 
 
 @dataclass(frozen=True)
@@ -151,6 +154,7 @@ class ConnectorChanges(Protocol):
         trace_id: str,
         ent_hash: str,
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         """Disconnect the live connection and connect these settings, in one transaction.
 
@@ -183,6 +187,7 @@ class ConnectorRecords(Protocol):
         ent_hash: str,
         keep_key: Callable[[], Awaitable[datetime | None]],
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         """Record a connection with its key kept, or nothing. See the module docstring.
 
@@ -230,17 +235,30 @@ def every_live() -> Select[Any]:
             ConnectorConnectionRow.digest,
             ConnectorConnectionRow.connected_by,
             ConnectorConnectionRow.connected_at,
+            ConnectorConnectionRow.agreed,
         )
         .where(ConnectorConnectionRow.disconnected_at.is_(None))
         .order_by(ConnectorConnectionRow.connector)
     )
 
 
-def connected_row(connector: str, settings: Mapping[str, str], digest: str, actor: str) -> Insert:
-    """The row a connection leaves. The time is the database's, as the ledger entry's is."""
+def connected_row(
+    connector: str, settings: Mapping[str, str], digest: str, actor: str, agreed: str = ""
+) -> Insert:
+    """The row a connection leaves. The time is the database's, as the ledger entry's is.
+
+    `agreed` is the declaration text `digest` is the hash of; empty keeps none, as a row written
+    before `0157` does.
+    """
     return (
         insert(ConnectorConnectionRow)
-        .values(connector=connector, settings=dict(settings), digest=digest, connected_by=actor)
+        .values(
+            connector=connector,
+            settings=dict(settings),
+            digest=digest,
+            connected_by=actor,
+            agreed=agreed or None,
+        )
         .returning(ConnectorConnectionRow.connected_at)
     )
 
@@ -295,6 +313,7 @@ class StoredConnections:
                 digest=one["digest"],
                 connected_by=one["connected_by"],
                 connected_at=one["connected_at"],
+                agreed=one["agreed"] or "",
             )
             for one in rows
         )
@@ -310,6 +329,7 @@ class StoredConnections:
         ent_hash: str,
         keep_key: Callable[[], Awaitable[datetime | None]],
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         async with self._sessions() as session, session.begin():
             await session.execute(lock_on(connector))
@@ -326,7 +346,7 @@ class StoredConnections:
             await session.execute(_set_config(ACTOR_SETTING, actor))
             try:
                 at = (
-                    await session.execute(connected_row(connector, settings, digest, actor))
+                    await session.execute(connected_row(connector, settings, digest, actor, agreed))
                 ).scalar_one()
             except IntegrityError as raced:
                 raise ConnectorTakenError(connector) from raced
@@ -337,6 +357,7 @@ class StoredConnections:
             digest=digest,
             connected_by=actor,
             connected_at=at,
+            agreed=agreed,
         )
 
     async def disconnect(
@@ -362,6 +383,7 @@ class StoredConnections:
         trace_id: str,
         ent_hash: str,
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         async with self._sessions() as session, session.begin():
             await session.execute(lock_on(connector))
@@ -377,7 +399,7 @@ class StoredConnections:
             if ended is None:
                 raise NotConnectedError(connector)
             at = (
-                await session.execute(connected_row(connector, settings, digest, actor))
+                await session.execute(connected_row(connector, settings, digest, actor, agreed))
             ).scalar_one()
             await grant_declared_in(session, declared)
         return Connection(
@@ -386,6 +408,7 @@ class StoredConnections:
             digest=digest,
             connected_by=actor,
             connected_at=at,
+            agreed=agreed,
         )
 
     async def history(self, connector: str) -> tuple[ConnectionRecord, ...]:

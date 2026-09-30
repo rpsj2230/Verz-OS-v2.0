@@ -17,7 +17,16 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { FLAGGED } from "../src/components/kit";
-import { guidePath, LARK_FLOW, type LarkGuide, type LarkStep, type LarkTested } from "../src/pages/larkConnectQuery";
+import {
+  guidePath,
+  LARK_FLOW,
+  skippedPages,
+  skippedWords,
+  type LarkGuide,
+  type LarkStep,
+  type LarkTested,
+} from "../src/pages/larkConnectQuery";
+import { SKIPPED_LABEL } from "../src/pages/connectors/WikiSpaces";
 import { ACT_LABELS } from "../src/pages/connectors/connectorActions";
 import { LARK_HEADING, switchOffLabel } from "../src/pages/connectors/LarkCard";
 import {
@@ -70,6 +79,7 @@ async function memory(): Promise<typeof import("../src/components/kit/flowMemory
 
 beforeEach(() => {
   clipboard = [];
+  GUIDE_EXTRA = {};
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
@@ -119,6 +129,8 @@ function step(key: string, title: string, link = ""): LarkStep {
     link,
     link_label: link === "" ? "" : `Open ${title}`,
     asks: [],
+    copy_text: "",
+    copy_label: "",
   };
 }
 
@@ -223,6 +235,9 @@ function json(body: unknown, status = 200): Response {
 }
 
 /** The stand-in API: the guide for the uses and App ID asked about, a test, a save, a switch off. */
+/** Fields the stand-in guide carries beyond `guide()`'s, for a field the API adds later. */
+let GUIDE_EXTRA: Readonly<Record<string, unknown>> = {};
+
 function larkApi(connected: LarkGuide | null = null) {
   return (raw: string, init?: RequestInit): Response | null => {
     const url = new URL(raw, ORIGIN);
@@ -231,7 +246,10 @@ function larkApi(connected: LarkGuide | null = null) {
         return json(connected);
       }
       const asked = url.searchParams.get("uses");
-      return json(guide(asked === null || asked === "none" ? [] : asked.split(","), {}, url.searchParams.get("app_id") ?? ""));
+      return json({
+        ...guide(asked === null || asked === "none" ? [] : asked.split(","), {}, url.searchParams.get("app_id") ?? ""),
+        ...GUIDE_EXTRA,
+      });
     }
     if (url.pathname === "/api/v1/connectors/lark-app/test") {
       const sent = JSON.parse(String(init?.body)) as { uses: string[] };
@@ -699,5 +717,40 @@ describe("the knowledge steps", () => {
     expect(screen.getByRole("heading", { name: "Grant each table to the people who may read it" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open Capabilities" }).getAttribute("href")).toBe("/capabilities");
     expect(screen.getByRole("link", { name: "Open People" }).getAttribute("href")).toBe("/people");
+  });
+});
+
+describe("wiki pages a question matched and did not read", () => {
+  const NOTE = "SKIPPED-NOTE: restricted in Lark, settings unreadable, or the space undeclared.";
+
+  async function wikiStep(): Promise<void> {
+    await openFlow({ at: "choose", add: ["knowledge_wiki"] });
+    await waitFor(() => {
+      expect(stepLine()).toBe("Step 1 of 7");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Step 7 of 7/ }));
+    await screen.findByRole("heading", { name: "Say who may read each wiki space" });
+  }
+
+  test("an administrator is told how many matched pages were not read, and why, and no page by name", async () => {
+    // What breaks if this is deleted: an administrator never learns that questions are meeting
+    // pages the Brain may not read, which looks exactly like a wiki with nothing on the subject.
+    GUIDE_EXTRA = { wiki_pages_skipped: 12, wiki_pages_skipped_note: NOTE };
+    await wikiStep();
+    const skipped = await screen.findByRole("region", { name: SKIPPED_LABEL });
+    expect(skipped.textContent).toBe(`${skippedWords(12)}${NOTE}`);
+    expect(skippedWords(12)).toBe("12 wiki pages questions matched were not read.");
+    expect(skippedWords(1)).toBe("1 wiki page a question matched was not read.");
+  });
+
+  test("nothing is shown when the API sends no count, or nought", async () => {
+    // What breaks if this is deleted: a reader the API sends no count to is shown a line anyway,
+    // or a zero is drawn as if something had been withheld.
+    GUIDE_EXTRA = { wiki_pages_skipped: null, wiki_pages_skipped_note: NOTE };
+    await wikiStep();
+    expect(screen.queryByRole("region", { name: SKIPPED_LABEL })).toBeNull();
+    expect(document.body.textContent).not.toContain("SKIPPED-NOTE");
+    expect(skippedPages({ ...guide([]), wiki_pages_skipped: 0, wiki_pages_skipped_note: NOTE } as LarkGuide)).toBeNull();
+    expect(skippedPages(guide([]))).toBeNull();
   });
 });

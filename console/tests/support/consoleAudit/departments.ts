@@ -19,7 +19,7 @@ import {
   RETIRE_SCOPE_API_PATH,
   RETIRE_TEAM_API_PATH,
 } from "../../../src/pages/governPeopleQuery";
-import { RENAME_SCOPE_API_PATH } from "../../../src/pages/departments/departmentsQuery";
+import { RENAME_SCOPE_API_PATH, SOURCE_DEPARTMENTS_API_PATH } from "../../../src/pages/departments/departmentsQuery";
 import { at, type Proof, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 const PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE = t(
@@ -57,6 +57,9 @@ function structure(behaviour: Proof): Proofs {
 }
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/departments/SourceDepartments.tsx SOURCE_DEPARTMENTS_API_PATH": [
+    at("POST /api/v1/govern/departments/from-staff-source", "SOURCE_DEPARTMENTS_API_PATH", SOURCE_DEPARTMENTS_API_PATH),
+  ],
   "src/pages/departments/StructureDrawers.tsx FOUND_API_PATH": [at("POST /api/v1/govern/departments", "FOUND_API_PATH", FOUND_API_PATH)],
   "src/pages/departments/StructureDrawers.tsx ADD_TEAM_API_PATH": [
     at("POST /api/v1/govern/departments/team", "ADD_TEAM_API_PATH", ADD_TEAM_API_PATH),
@@ -102,6 +105,22 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     behaviour: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
   },
   "POST /api/v1/govern/departments": structure(A_NEW_SCOPE_IS_GRANTABLE),
+  "POST /api/v1/govern/departments/from-staff-source": {
+    row: t(
+      "test_source_organisation",
+      "test_a_source_s_departments_are_offered_founded_once_as_the_person_and_put_on_the_ledger",
+      true,
+    ),
+    audit: t(
+      "test_source_organisation",
+      "test_a_source_s_departments_are_offered_founded_once_as_the_person_and_put_on_the_ledger",
+      true,
+    ),
+    behaviour: t(
+      "test_organisation_structure",
+      "test_an_administrator_is_offered_the_source_s_departments_and_founds_those_confirmed",
+    ),
+  },
   "POST /api/v1/govern/departments/rename": structure(THE_STRUCTURE_CHANGES_AS_ASKED),
   "POST /api/v1/govern/departments/retirement": structure(A_RETIREMENT_WAITS_FOR_LIVE_GRANTS),
   "POST /api/v1/govern/departments/team": structure(THE_STRUCTURE_CHANGES_AS_ASKED),

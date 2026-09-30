@@ -87,7 +87,27 @@ the reason `channels.whatsapp` gives about itself: the cases worth testing are t
 ones, and a module that owned an HTTP client could only be tested for them against a live
 workspace.
 
-Task ids: M10.5.1
+**`SlackWire` is how an install receives and answers, and it reads the room the way Lark's does.**
+It verifies with the signing secret, answers Slack's address check, and reads a person's message
+into the gate's event with the three addresses `brain.channels.adapter.Conversation` names: the
+conversation (`chat.postMessage`), the person's own conversation with the app (`chat.postMessage`
+to their id) and the person alone inside a shared one (`chat.postEphemeral`). Who reads what is
+then `brain.chat_answer`'s decision, over `conversations.members`, exactly as for Lark, so no
+planning in this module is duplicated on the request path. The bot's own id is the record's
+`BOT_ID`, which is how a shared conversation is answered only when it named the app, and how the
+app is left out of the room it answers.
+
+**The secret is two values kept as one.** Slack signs with the signing secret and takes posts on
+the bot's token; both live in the channel's one vault slot as `SlackSecret`, and each direction
+reads its own. See `TWO_SECRETS_ONE_FOR_EACH_DIRECTION`.
+
+**Connect Slack starts from a manifest.** `GUIDE`'s first step offers `MANIFEST` to paste into
+Slack's Create New App, with this install's events address written in by the route, so the scopes,
+the events and the address are set in one paste rather than typed across four screens. The form
+is not the last step: Slack checks the address as it is saved, which only answers once the record
+is switched on with its secret, so the steps end by having Slack check it again.
+
+Task ids: M10.5.1, M10.6.1
 """
 
 from __future__ import annotations
@@ -95,26 +115,43 @@ from __future__ import annotations
 import enum
 import hashlib
 import hmac
+import json
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, assert_never
+from urllib.parse import urlencode
 
 from brain.channels.adapter import (
+    BOT_ID,
+    EVENTS_ADDRESS_ASK,
+    Arrived,
     ChannelCapabilities,
+    Conversation,
     Feature,
+    Received,
+    VendorAnswer,
+    VendorRequest,
     assert_can_send,
     send_operation,
 )
 from brain.channels.cards import assert_label_survives, render_body
 from brain.channels.room import Degradation, Member, plan
-from brain.channels.webhook import assert_raw_bytes
-from brain.connectors.throttle import CallOutcome
+from brain.channels.webhook import WebhookRefusedError, assert_raw_bytes
+from brain.connectors.throttle import CallOutcome, classify
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.connect_steps import (
+    EVENTS_ADDRESS_MARK,
+    GuideStep,
+    LineKind,
+    Sketch,
+    SketchLine,
+    keyed,
+)
 from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
@@ -1025,3 +1062,495 @@ def deliver(
         intent, channel=Channel.SLACK, to=posting.conversation, viewer=to_user
     )
     return issue_once(ledger, operation, send)
+
+
+# ------------------------------------------------------------ the wire (M10.5.1, M10.6.1)
+
+#: Why this channel's secret has two parts, and which part each direction reads.
+TWO_SECRETS_ONE_FOR_EACH_DIRECTION: Final = (
+    "Slack signs what it sends with the app's signing secret and takes what the app sends on the "
+    "bot's token. Both are kept in the channel's one vault slot, together, and each direction "
+    "reads only its own: verifying reads the signing secret and sending reads the token."
+)
+
+#: Why the words before a question are left out of it when they only name somebody.
+A_LEADING_MENTION_ADDRESSES_THE_QUESTION_AND_IS_NOT_PART_OF_IT: Final = (
+    "In a channel a person asks the bot by naming it first, so the mentions that open a message "
+    "say who it is for and are left out of the question; a person named later in the sentence "
+    "is part of what is asked and stays, as Slack wrote it."
+)
+
+#: Slack's Web API, where every request this channel makes goes.
+SLACK_API_URL: Final = "https://slack.com/api"
+
+#: The two parts of this channel's secret. See `TWO_SECRETS_ONE_FOR_EACH_DIRECTION`.
+SIGNING_SECRET: Final = "signing_secret"  # noqa: S105  a field name, not a secret
+BOT_TOKEN: Final = "bot_token"  # noqa: S105  a field name, not a secret
+
+#: The request Slack sends to check the events address when it is saved.
+URL_VERIFICATION: Final = "url_verification"
+
+#: The three kinds of address a reply goes to: the conversation, the person's own conversation
+#: with the app, and one person inside a conversation (`chat.postEphemeral`).
+ROOM_ADDRESS: Final = "channel"
+SENDER_ADDRESS: Final = "user"
+ASIDE_ADDRESS: Final = "aside"
+
+#: The longest text Slack's `chat.postMessage` keeps; longer is truncated by Slack, so refused here.
+MAX_TEXT_CHARS: Final = 40_000
+
+#: Members asked for per page of `conversations.members`. Slack's documented most is 1,000.
+MEMBERS_PAGE: Final = 200
+
+#: The `error` Slack answers a request it refused on volume.
+RATE_LIMITED: Final = "ratelimited"
+
+#: An id Slack issued: a conversation (`C`, `D`, `G`) or a person (`U`, `W`).
+_SLACK_ID: Final = re.compile(r"^[CDGUW][A-Z0-9]{2,31}$")
+_MENTION: Final = re.compile(r"<@([UW][A-Z0-9]{2,31})(?:\|[^>]*)?>")
+_LEADING_MENTIONS: Final = re.compile(r"^(?:\s*<@[UW][A-Z0-9]{2,31}(?:\|[^>]*)?>)+\s*")
+
+
+@dataclass(frozen=True)
+class SlackSecret:
+    """The channel's two secrets, as the vault keeps them: one JSON object. Never printed."""
+
+    signing_secret: str = field(repr=False)
+    bot_token: str = field(repr=False)
+
+    @classmethod
+    def parse(cls, secret: str) -> SlackSecret:
+        """The two parts, or `ValueError` for anything that is not both, each a line of text."""
+        try:
+            kept = json.loads(secret)
+        except json.JSONDecodeError as exc:
+            raise ValueError("this channel's secret is its two parts") from exc
+        if not isinstance(kept, dict):
+            raise ValueError("this channel's secret is its two parts")
+        signing, token = kept.get(SIGNING_SECRET), kept.get(BOT_TOKEN)
+        if not (isinstance(signing, str) and signing and isinstance(token, str) and token):
+            raise ValueError("this channel's secret is its two parts")
+        return cls(signing_secret=signing, bot_token=token)
+
+
+def question_of(text: str) -> str:
+    """The words a person asked, with the mentions that open the message left out.
+
+    See `A_LEADING_MENTION_ADDRESSES_THE_QUESTION_AND_IS_NOT_PART_OF_IT`.
+    """
+    return _LEADING_MENTIONS.sub("", text, count=1).strip()
+
+
+def _refused() -> WebhookRefusedError:
+    return WebhookRefusedError(NOT_ACCEPTED)
+
+
+def _json_object(body: bytes) -> Mapping[str, Any]:
+    try:
+        parsed = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("a Slack request is a JSON object") from exc
+    if not isinstance(parsed, Mapping):
+        raise ValueError("a Slack request is a JSON object")
+    return parsed
+
+
+def _ok(body: bytes) -> tuple[bool | None, str]:
+    """Slack's `ok` and `error` from an answer's body, or None when there is no readable one."""
+    try:
+        parsed = _json_object(body)
+    except ValueError:
+        return None, ""
+    ok, error = parsed.get("ok"), parsed.get("error")
+    return (ok if isinstance(ok, bool) else None), (error if isinstance(error, str) else "")
+
+
+def _slack_id(value: str) -> str:
+    if not _SLACK_ID.fullmatch(value):
+        msg = f"{value!r} is not an id Slack issued"
+        raise ValueError(msg)
+    return value
+
+
+@dataclass(frozen=True)
+class SlackWire:
+    """`brain.channels.adapter.ChannelWire` for Slack. Holds no secret and opens nothing.
+
+    Reads the Events API's messages, and replies with `chat.postMessage` to a conversation or to
+    a person's own conversation with the app, and with `chat.postEphemeral` to one person inside
+    a shared one. Also a room reader for `brain.chat_answer`: `conversations.members`, paged.
+    """
+
+    @property
+    def channel(self) -> Channel:
+        return Channel.SLACK
+
+    @property
+    def tenant_fields(self) -> tuple[str, ...]:
+        return (BOT_ID,)
+
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """See `TWO_SECRETS_ONE_FOR_EACH_DIRECTION`."""
+        return (SIGNING_SECRET, BOT_TOKEN)
+
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
+        """`verify` with the signing secret, over the exact bytes and the signed time."""
+        try:
+            kept = SlackSecret.parse(secret)
+            verify(
+                signing_secret=kept.signing_secret,
+                signature=arrived.headers.get(SIGNATURE_HEADER.lower(), ""),
+                timestamp=arrived.headers.get(TIMESTAMP_HEADER.lower(), ""),
+                body=arrived.body,
+                now=now,
+            )
+        except (ValueError, SlackRefusedError) as exc:
+            raise _refused() from exc
+        return arrived
+
+    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
+        """Slack's address check, answered with its own challenge; None for an event."""
+        try:
+            event = _json_object(arrived.body)
+        except ValueError as exc:
+            raise _refused() from exc
+        if event.get("type") != URL_VERIFICATION:
+            return None
+        challenge = event.get("challenge")
+        if not isinstance(challenge, str) or not challenge:
+            raise _refused()
+        return {"challenge": challenge}
+
+    def read(self, arrived: Arrived) -> Received:
+        """A person's message as the gate's event, and the three places a reply may go.
+
+        `normalise_message`'s refusals are this channel's: anything but a plain message from a
+        person, and a conversation of no kind Slack names. The mentions that open the message are
+        left out of the question and every mention is kept, as a digest, for the rule that a
+        shared conversation is answered only when it named the app.
+        """
+        try:
+            message = normalise_message(_json_object(arrived.body))
+        except SlackRefusedError as exc:
+            raise ValueError(str(exc)) from exc
+        text = question_of(message.event.text)
+        if not text:
+            raise ValueError("this message names somebody and asks nothing")
+        sender = message.event.channel_identity
+        room = f"{ROOM_ADDRESS}:{message.conversation}"
+        shared = not audience_is_one_person(message.surface)
+        named = _MENTION.findall(message.event.text)
+        return Received(
+            event=replace(message.event, text=text),
+            reply_to=room,
+            conversation=Conversation(
+                room_to=room,
+                sender_to=f"{SENDER_ADDRESS}:{sender}",
+                conversation_id=message.conversation,
+                shared=shared,
+                aside_to=f"{ASIDE_ADDRESS}:{message.conversation}:{sender}" if shared else "",
+                addressed=frozenset(identity_hash(Channel.SLACK, one) for one in named),
+            ),
+        )
+
+    def request_for(
+        self, *, to: str, text: str, secret: str, tenant: Mapping[str, str], now: datetime
+    ) -> VendorRequest:
+        """One message, on the bot's token, to one address.
+
+        `channel:` and `user:` post with `chat.postMessage`, which takes a person's id for the
+        app's own conversation with them; `aside:` posts with `chat.postEphemeral`, read by that
+        person alone; a bare id, as a test message names one, posts to it. `ValueError` for any
+        other address, and for a text longer than Slack keeps.
+        """
+        del tenant, now  # Slack stamps its own time and the token is the credential.
+        kept = SlackSecret.parse(secret)
+        if len(text) > MAX_TEXT_CHARS:
+            raise ValueError("this answer is longer than a Slack message keeps")
+        kind, _, rest = to.partition(":")
+        payload: dict[str, str]
+        if not rest and _SLACK_ID.fullmatch(kind):
+            method, payload = "chat.postMessage", {"channel": kind, "text": text}
+        elif kind in (ROOM_ADDRESS, SENDER_ADDRESS):
+            method, payload = "chat.postMessage", {"channel": _slack_id(rest), "text": text}
+        elif kind == ASIDE_ADDRESS and rest.count(":") == 1:
+            conversation, person = rest.split(":")
+            method = "chat.postEphemeral"
+            payload = {
+                "channel": _slack_id(conversation),
+                "user": _slack_id(person),
+                "text": text,
+            }
+        else:
+            msg = f"{to!r} is not an address this channel sends to"
+            raise ValueError(msg)
+        return VendorRequest(
+            url=f"{SLACK_API_URL}/{method}",
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": f"Bearer {kept.bot_token}",
+            },
+            body=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        )
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome:
+        """Slack's `ok` decides, because Slack refuses inside a 200.
+
+        `ok` true with a 200 is delivered; `ratelimited`, in the body or as a 429, is a quota; any
+        other `error` is a refusal. A 200 whose body cannot be read may have been delivered, so it
+        is not known rather than sent. Everything with no body to read is `classify`'s.
+        """
+        if answer.unsafe_address:
+            return CallOutcome.REJECTED
+        if answer.status == 200:
+            ok, error = _ok(answer.body)
+            if ok is None:
+                return CallOutcome.UNAVAILABLE
+            if ok:
+                return CallOutcome.OK
+            return CallOutcome.QUOTA if error == RATE_LIMITED else CallOutcome.REJECTED
+        outcome = classify(
+            status=answer.status,
+            timed_out=answer.timed_out,
+            connection_failed=answer.connection_failed,
+        )
+        return CallOutcome.REJECTED if outcome is CallOutcome.OK else outcome
+
+    def members_request(
+        self, *, conversation_id: str, page: str, secret: str, tenant: Mapping[str, str]
+    ) -> VendorRequest:
+        """One page of who is in a conversation, by member id. The read a floor needs (M10.4.1).
+
+        Slack lists the app's own bot among them, which `brain.chat_answer` takes out by the
+        record's `BOT_ID`.
+        """
+        del tenant
+        kept = SlackSecret.parse(secret)
+        query = {"channel": _slack_id(conversation_id), "limit": str(MEMBERS_PAGE)}
+        if page:
+            query["cursor"] = page
+        return VendorRequest(
+            url=f"{SLACK_API_URL}/conversations.members?{urlencode(query)}",
+            headers={"Authorization": f"Bearer {kept.bot_token}"},
+            body=b"",
+            method="GET",
+        )
+
+    def members_page(self, answer: VendorAnswer) -> tuple[frozenset[str], str]:
+        """The digests of the members on one page, and the next page's cursor or empty.
+
+        Digested at once, so no member id outlives this call. `ValueError` for any answer that is
+        not a page: a floor computed over a list that failed to read is a floor over nobody.
+        """
+        if self.judge(answer) is not CallOutcome.OK:
+            raise ValueError("Slack did not answer with who is in this conversation")
+        page = _json_object(answer.body)
+        members = page.get("members")
+        if not isinstance(members, list):
+            raise ValueError("Slack's page of members is not a list")
+        found = set()
+        for member in members:
+            if not isinstance(member, str) or not member:
+                raise ValueError("a member on Slack's page has no id")
+            found.add(identity_hash(Channel.SLACK, member))
+        meta = page.get("response_metadata")
+        cursor = meta.get("next_cursor") if isinstance(meta, Mapping) else None
+        return frozenset(found), (cursor if isinstance(cursor, str) else "")
+
+
+#: This channel's wire, found by `brain.channels.adapter.channel_wires`.
+WIRE: Final = SlackWire()
+
+
+# ------------------------------------------------------------ the connect steps (M10.5.1)
+
+#: Where the steps send a person to create the app: Slack's list of the apps they manage.
+SLACK_APPS_URL: Final = "https://api.slack.com/apps"
+
+#: The events Slack is asked to send: a message in each of the four kinds of conversation.
+BOT_EVENTS: Final = ("message.channels", "message.groups", "message.im", "message.mpim")
+
+#: The scopes the bot asks for: read the four kinds of conversation and who is in each, write.
+BOT_SCOPES: Final = (
+    "channels:history",
+    "channels:read",
+    "chat:write",
+    "groups:history",
+    "groups:read",
+    "im:history",
+    "im:read",
+    "im:write",
+    "mpim:history",
+    "mpim:read",
+)
+
+#: The app manifest the first step offers to paste: everything Slack needs to create the app,
+#: with this install's events address filled in where the route knows it.
+MANIFEST: Final = json.dumps(
+    {
+        "display_information": {
+            "name": "Company Brain",
+            "description": "Answers questions from your company's own data, at your own reach.",
+        },
+        "features": {
+            "app_home": {"messages_tab_enabled": True, "messages_tab_read_only_enabled": False},
+            "bot_user": {"display_name": "Company Brain", "always_online": True},
+        },
+        "oauth_config": {"scopes": {"bot": list(BOT_SCOPES)}},
+        "settings": {
+            "event_subscriptions": {
+                "request_url": EVENTS_ADDRESS_MARK,
+                "bot_events": list(BOT_EVENTS),
+            },
+            "org_deploy_enabled": False,
+            "socket_mode_enabled": False,
+            "token_rotation_enabled": False,
+        },
+    },
+    indent=2,
+)
+
+_APP_MENU: Final = ("Basic Information", "OAuth & Permissions", "Event Subscriptions")
+
+
+def _app_page(
+    heading: str, *, menu_mark: str, lines: tuple[SketchLine, ...] = (), button: str = ""
+) -> Sketch:
+    return Sketch(
+        place="Slack API",
+        heading=heading,
+        menu=_APP_MENU,
+        menu_mark=menu_mark,
+        lines=lines,
+        button=button,
+    )
+
+
+#: The steps that connect Slack, found by `brain.channels.adapter.channel_guides`.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="create",
+            title="Create the Slack app from its manifest",
+            text=(
+                "Open Your Apps on Slack's site, click Create New App and choose From a manifest. "
+                "Pick your workspace, choose JSON, replace what is there with the manifest copied "
+                "here, click Next and then Create. The manifest holds this install's events "
+                "address shown below, the permissions the app needs and the four message events. "
+                "Slack says the address is not verified yet: that is expected until the last step."
+            ),
+            sketch=Sketch(
+                place="Slack API",
+                heading="Create an app",
+                lines=(
+                    SketchLine(LineKind.ITEM, "From scratch"),
+                    SketchLine(LineKind.ITEM, "From a manifest", mark=True),
+                ),
+                button="Next",
+            ),
+            link=SLACK_APPS_URL,
+            link_label="Open Your Apps",
+            asks=(EVENTS_ADDRESS_ASK,),
+            copy_text=MANIFEST,
+            copy_label="Copy the app manifest",
+        ),
+        GuideStep(
+            key="install",
+            title="Install the app and copy its bot token",
+            text=(
+                "In the app's left menu open OAuth & Permissions, click Install to Workspace and "
+                "then Allow. Copy the Bot User OAuth Token shown there, which starts with xoxb-. "
+                "It is what lets the app post answers."
+            ),
+            sketch=_app_page(
+                "OAuth & Permissions",
+                menu_mark="OAuth & Permissions",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Bot User OAuth Token", "xoxb-********", mark=True),
+                ),
+                button="Install to Workspace",
+            ),
+            link=SLACK_APPS_URL,
+            link_label="Open Your Apps",
+        ),
+        GuideStep(
+            key="signing",
+            title="Copy the signing secret",
+            text=(
+                "Open Basic Information, find App Credentials, click Show beside Signing Secret "
+                "and copy it. It is what proves a message came from Slack."
+            ),
+            sketch=_app_page(
+                "Basic Information",
+                menu_mark="Basic Information",
+                lines=(
+                    SketchLine(LineKind.FIELD, "App ID", "A0********"),
+                    SketchLine(LineKind.FIELD, "Signing Secret", "********", mark=True),
+                ),
+                button="Show",
+            ),
+            link=SLACK_APPS_URL,
+            link_label="Open Your Apps",
+        ),
+        GuideStep(
+            key="member",
+            title="Copy the app's member ID",
+            text=(
+                "In Slack itself, open the app under Apps, click its name at the top to open its "
+                "profile, click the three dots and choose Copy member ID. It starts with U. In a "
+                "channel the Brain answers only a message that names this member."
+            ),
+            sketch=Sketch(
+                place="Slack",
+                heading="Company Brain",
+                lines=(
+                    SketchLine(LineKind.ITEM, "View app details"),
+                    SketchLine(LineKind.ITEM, "Copy member ID", mark=True),
+                ),
+            ),
+        ),
+        GuideStep(
+            key="save",
+            title="Save the member ID and the two secrets here",
+            text=(
+                "Paste the member ID into bot_id and the signing secret and the bot token into "
+                "their fields, tick Switched on and press Save set-up. Both secrets are kept in "
+                "the vault together and never shown again."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Slack",
+                lines=(
+                    SketchLine(LineKind.FIELD, BOT_ID, "U0********", mark=True),
+                    SketchLine(LineKind.FIELD, SIGNING_SECRET, "********", mark=True),
+                    SketchLine(LineKind.FIELD, BOT_TOKEN, "xoxb-********", mark=True),
+                    SketchLine(LineKind.TOGGLE, "Switched on", mark=True),
+                ),
+                button="Save set-up",
+            ),
+            asks=(BOT_ID, SIGNING_SECRET, BOT_TOKEN),
+        ),
+        GuideStep(
+            key="verify",
+            title="Let Slack check the address",
+            text=(
+                "Back in the app's Event Subscriptions, click Retry beside the Request URL until "
+                "it says Verified, then Save Changes. Now write to the app in a direct message, "
+                "or invite it to a channel with /invite and name it in your message: the first "
+                "answer asks you to link your Slack account to your Brain account."
+            ),
+            sketch=_app_page(
+                "Event Subscriptions",
+                menu_mark="Event Subscriptions",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Request URL", "Your events address", mark=True),
+                    SketchLine(LineKind.TEXT, "Verified"),
+                ),
+                button="Save Changes",
+            ),
+            link=SLACK_APPS_URL,
+            link_label="Open Your Apps",
+        ),
+    )
+)

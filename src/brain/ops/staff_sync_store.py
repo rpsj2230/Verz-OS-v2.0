@@ -59,6 +59,9 @@ class RunRecord:
     marked_left: tuple[str, ...] = ()
     renamed: tuple[str, ...] = ()
     withheld: tuple[str, ...] = ()
+    #: What the run read, one sentence an element: `ReadReport.sentences`. Empty when it read
+    #: nothing. Counts and constant sentences, never a name.
+    report: tuple[str, ...] = ()
 
 
 def members_of(source: str) -> Select[Any]:
@@ -69,6 +72,29 @@ def members_of(source: str) -> Select[Any]:
         StaffMemberRow.stable_id,
         StaffMemberRow.left_at,
     ).where(StaffMemberRow.source == source)
+
+
+def department_names_listed(source: str) -> Select[Any]:
+    """Every department name a live roster row of this source carries, once each.
+
+    A row's department is kept only when the source is trusted to assert one, so an untrusted
+    source names none. See `brain.ops.source_organisation.named_departments`.
+    """
+    return (
+        select(StaffMemberRow.department)
+        .where(
+            StaffMemberRow.source == source,
+            StaffMemberRow.left_at.is_(None),
+            StaffMemberRow.department.is_not(None),
+        )
+        .distinct()
+        .order_by(StaffMemberRow.department)
+    )
+
+
+def last_started() -> Select[Any]:
+    """When the newest run of whichever source started, which is what answers a trial asked for."""
+    return select(func.max(StaffSyncRunRow.started_at))
 
 
 def last_applied_of(source: str) -> Select[Any]:
@@ -125,6 +151,10 @@ def stop_leavers_agents(now: datetime) -> Update:
     )
 
 
+def _kind(one: MemberWrite) -> str | None:
+    return None if one.employment_type is None else one.employment_type.value
+
+
 def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
     """The statement one decided write becomes."""
     if one.write is Write.MARK_LEFT:
@@ -135,7 +165,7 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
                 StaffMemberRow.address_hash == one.address_hash,
                 StaffMemberRow.left_at.is_(None),
             )
-            .values(left_at=now, left_because=one.left_because)
+            .values(left_at=now, left_because=one.left_because, status=one.status.value)
         )
     if one.write is Write.RENAME:
         return (
@@ -147,6 +177,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
                 department=one.department,
                 stable_id=one.stable_id,
                 last_listed_at=now,
+                status=one.status.value,
+                employment_type=_kind(one),
             )
         )
     if one.write is Write.REFRESH:
@@ -161,6 +193,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
                 department=one.department,
                 stable_id=one.stable_id,
                 last_listed_at=now,
+                status=one.status.value,
+                employment_type=_kind(one),
             )
         )
     # An addition is an upsert, so a person who had left and is listed again is the same row
@@ -173,6 +207,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
         stable_id=one.stable_id,
         first_listed_at=now,
         last_listed_at=now,
+        status=one.status.value,
+        employment_type=_kind(one),
     )
     return statement.on_conflict_do_update(
         index_elements=[StaffMemberRow.source, StaffMemberRow.address_hash],
@@ -181,6 +217,8 @@ def _member_write(source: str, one: MemberWrite, now: datetime) -> Any:
             "department": one.department,
             "stable_id": one.stable_id,
             "last_listed_at": now,
+            "status": one.status.value,
+            "employment_type": _kind(one),
             "left_at": None,
             "left_because": None,
         },
@@ -200,6 +238,7 @@ def run_row(record: RunRecord) -> Any:
         marked_left=list(record.marked_left),
         renamed=list(record.renamed),
         withheld=list(record.withheld),
+        report=list(record.report),
     )
 
 
@@ -215,6 +254,12 @@ async def read_members(session: AsyncSession, source: str) -> tuple[StoredMember
         )
         for row in rows
     )
+
+
+async def read_last_started(session: AsyncSession) -> datetime | None:
+    """When the newest run started, of any source and any outcome. None when none has."""
+    found: datetime | None = (await session.execute(last_started())).scalar_one_or_none()
+    return found
 
 
 async def read_last_applied(session: AsyncSession, source: str) -> datetime | None:
@@ -246,6 +291,7 @@ async def read_runs(session: AsyncSession, limit: int = RUNS_SHOWN) -> tuple[Run
             marked_left=tuple(row["marked_left"]),
             renamed=tuple(row["renamed"]),
             withheld=tuple(row["withheld"]),
+            report=tuple(row["report"]),
         )
         for row in rows
     )

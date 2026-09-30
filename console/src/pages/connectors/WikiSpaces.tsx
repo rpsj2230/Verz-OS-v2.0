@@ -14,6 +14,10 @@
  *
  * **The declarer is the steward**, which the step says; the declared list names each steward.
  *
+ * **An administrator is told how many matched pages were not read**, as one number and the API's
+ * note on why, and never which pages: the API sends the count only to a reader who may switch the
+ * Wiki on (`skippedPages`), and this shows nothing for none or nought.
+ *
  * Task ids: M11.6.4, M11.9.4, M27.11.9
  */
 
@@ -36,7 +40,9 @@ import {
   type DeclaredSpaces,
   type LarkTested,
   type SpaceChoice,
+  type SkippedPages,
   type SpacesDeclared,
+  skippedWords,
 } from "../larkConnectQuery";
 
 export const DECLARED = "Spaces declared";
@@ -60,7 +66,18 @@ function reachWords(reach: string, department: string, names: Readonly<Record<st
   return reach === "company" ? WHOLE_COMPANY : `${ONE_DEPARTMENT}: ${names[department] ?? department}`;
 }
 
-export function WikiSpaces({ tested, may }: { readonly tested: LarkTested | null; readonly may: boolean }) {
+export const SKIPPED_LABEL = "Pages not read";
+
+export function WikiSpaces({
+  tested,
+  may,
+  skipped = null,
+}: {
+  readonly tested: LarkTested | null;
+  readonly may: boolean;
+  /** How many matched pages were not read, for an administrator; null shows nothing. */
+  readonly skipped?: SkippedPages | null;
+}) {
   const [generation, setGeneration] = useState(0);
   const declaredAnswer = useResource<DeclaredSpaces>(LARK_WIKI_SPACES_API_PATH, generation);
   const departments = readOrganisation(useResource<unknown>(DEPARTMENTS_API_PATH).data).departments;
@@ -110,6 +127,12 @@ export function WikiSpaces({ tested, may }: { readonly tested: LarkTested | null
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
+      {skipped === null ? null : (
+        <section aria-label={SKIPPED_LABEL} className="flex min-w-0 flex-col gap-1 rounded-md border border-line p-3">
+          <p className="m-0 text-[13px] font-medium text-ink">{skippedWords(skipped.count)}</p>
+          {skipped.note === "" ? null : <p className="m-0 text-[12.5px] leading-snug text-dim">{skipped.note}</p>}
+        </section>
+      )}
       <section aria-label={DECLARED} className="flex min-w-0 flex-col gap-1.5">
         <h4 className="m-0 text-[13px] font-semibold text-ink">{DECLARED}</h4>
         {declared.length === 0 ? (

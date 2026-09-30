@@ -74,7 +74,10 @@ module.exports = {
     // deployed, verified system to exist first. Everything else in M42 describes and
     // scripts a system being built, and waiting for go-live to write any of it is how a
     // deployment guide ends up describing what somebody remembers.
-    "M42.4.1":6, "M42.4.2":6, "M42.4.3":6, "M42.4.4":6, "M42.4.5":6, "M42.4.6":6
+    "M42.4.1":6, "M42.4.2":6, "M42.4.3":6, "M42.4.4":6, "M42.4.5":6, "M42.4.6":6,
+    // Sign in with Lark comes after the staff sync's own accounts: owner, 2026-09-29, item 115
+    // ("B now, A next").
+    "M1.1.8":3, "M1.1.9":3
   },
   NAMES:{
     0:"Foundation", 1:"The gate", 2:"Data, channels, retrieval",

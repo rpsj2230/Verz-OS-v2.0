@@ -172,10 +172,12 @@ neither lets a caller name a queue: see `A_TASK_RUNS_ON_THE_QUEUE_ITS_CLASS_DERI
 task is a control run, registered by `brain.ops.worker` and enqueued by its `--run-control` mode,
 and a test enqueues one against a real database and watches a worker run it and record it.
 
-`Job.redrive` is not handed to the driver, and that is deliberate for now: the driver's own
-retry re-runs a failed job, and a re-drive is the machine dying under a job that never reached
-a verdict, which is `queue_redrive`'s and is still not wired. Mapping one onto the other would
-be the conflation the crash recovery paragraph above refuses.
+`Job.redrive` is not handed to the driver, and that is deliberate: the driver's own retry re-runs
+a failed job, and a re-drive is the machine dying under a job that never reached a verdict, which
+is `queue_redrive`'s. Mapping one onto the other would be the conflation the crash recovery
+paragraph above refuses. So no task is registered with a retry of the driver's, and
+`brain.ops.recovery_run` is the one place a job is put back: `DriverQueue` reads the rows and
+makes the moves, and the sweep there decides them.
 
 Task ids: M32.4.1.1, M32.4.1.3, M32.4.2.1, M32.4.2.2, M32.4.2.3, M17.1.2
 """
@@ -186,7 +188,7 @@ import enum
 import re
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Final, Protocol
 from urllib.parse import urlsplit
 
@@ -1554,6 +1556,125 @@ async def outstanding_jobs(app: App, tasks: Iterable[str]) -> tuple[int, int]:
             waiting += int(row["todo"])
             running += int(row["doing"])
     return waiting, running
+
+
+#: Every job the driver has marked running, with its worker's newest heartbeat and how many times
+#: it was put back. A job whose worker row the driver has already pruned has no heartbeat at all,
+#: which the sweep reads as the oldest there is.
+#:
+#: The count is the driver's own events for a running job returned to its queue and for a failed
+#: job retried. No task of ours is registered with a retry of the driver's (`register_task` passes
+#: none), so every such event is a re-drive, which is what `InFlight.redrives` means; the driver's
+#: `attempts` is not, because it also counts every finish.
+RUNNING_JOBS_SQL: Final = (
+    "SELECT j.id, j.task_name, j.worker_id, w.last_heartbeat, r.redrives"
+    " FROM procrastinate_jobs AS j"
+    " LEFT JOIN procrastinate_workers AS w ON w.id = j.worker_id"
+    " CROSS JOIN LATERAL ("
+    "SELECT count(*) AS redrives FROM procrastinate_events AS e"
+    " WHERE e.job_id = j.id AND e.type IN ('deferred_for_retry', 'retried')"
+    ") AS r"
+    " WHERE j.status = 'doing'"
+    " ORDER BY j.id"
+)
+
+#: Failed jobs of the named tasks still under the cap. Narrowed in the query so the read stays
+#: bounded as failed rows accumulate: a job past the cap, or of a task nobody declared safe, is
+#: never going to be re-driven and has no reason to be read every minute.
+FAILED_JOBS_SQL: Final = (
+    "SELECT j.id, j.task_name, j.worker_id, r.redrives"
+    " FROM procrastinate_jobs AS j"
+    " CROSS JOIN LATERAL ("
+    "SELECT count(*) AS redrives FROM procrastinate_events AS e"
+    " WHERE e.job_id = j.id AND e.type IN ('deferred_for_retry', 'retried')"
+    ") AS r"
+    " WHERE j.status = 'failed' AND j.task_name = ANY(%(tasks)s) AND r.redrives < %(cap)s"
+    " ORDER BY j.id"
+)
+
+#: The heartbeat a job with no live worker is read as having: before any real one.
+NO_HEARTBEAT: Final = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+class DriverQueue:
+    """`brain.ops.recovery_run.QueueRows` over the driver, the one module that may name it.
+
+    `redrive_by_task` is what each task declares about running twice, handed in so this module
+    does not import the recovery sweep that imports it. A task it does not name is unsafe.
+
+    **A failed job is read with no heartbeat whatever its worker is doing.** The driver leaves the
+    worker's id on a job it finished, and that worker may be alive and heartbeating; reading its
+    heartbeat would make `verdict_for` call a failed job running and leave it for ever.
+    """
+
+    def __init__(self, app: App, redrive_by_task: Mapping[str, Redrive]) -> None:
+        self.app = app
+        self.redrive_by_task = redrive_by_task
+
+    def _redrive_of(self, task: str) -> Redrive:
+        return self.redrive_by_task.get(task, Redrive.UNSAFE)
+
+    async def running(self) -> tuple[InFlight, ...]:
+        rows = await self.app.connector.execute_query_all_async(RUNNING_JOBS_SQL)
+        return tuple(
+            InFlight(
+                job_id=str(row["id"]),
+                task=str(row["task_name"]),
+                worker_id="" if row["worker_id"] is None else str(row["worker_id"]),
+                heartbeat_at=row["last_heartbeat"] or NO_HEARTBEAT,
+                redrives=int(row["redrives"]),
+                redrive=self._redrive_of(str(row["task_name"])),
+            )
+            for row in rows
+        )
+
+    async def failed(self) -> tuple[InFlight, ...]:
+        safe = sorted(t for t, said in self.redrive_by_task.items() if said is Redrive.SAFE)
+        rows = await self.app.connector.execute_query_all_async(
+            FAILED_JOBS_SQL, tasks=safe, cap=MAX_REDRIVES
+        )
+        return tuple(
+            InFlight(
+                job_id=str(row["id"]),
+                task=str(row["task_name"]),
+                worker_id="" if row["worker_id"] is None else str(row["worker_id"]),
+                heartbeat_at=NO_HEARTBEAT,
+                redrives=int(row["redrives"]),
+                redrive=self._redrive_of(str(row["task_name"])),
+            )
+            for row in rows
+        )
+
+    async def run_again(self, job_id: str, now: datetime) -> bool:
+        return await _moved(self.app.job_manager.retry_job_by_id_async(int(job_id), now))
+
+    async def set_aside(self, job_id: str) -> bool:
+        from procrastinate.jobs import Status
+
+        return await _moved(
+            self.app.job_manager.finish_job_by_id_async(
+                int(job_id), status=Status.FAILED, delete_job=False
+            )
+        )
+
+
+async def _moved(move: Awaitable[None]) -> bool:
+    """True when the driver made the move, False when the job had already left its state.
+
+    The driver's own functions refuse a job no longer in the state they move from by raising
+    from the database, which reaches here as the driver's connector error caused by a raise in a
+    function. That one shape is the race; any other error is a fault and is not swallowed.
+    """
+    from procrastinate.exceptions import ConnectorException
+    from psycopg.errors import RaiseException
+
+    try:
+        await move
+    except ConnectorException as exc:
+        if isinstance(exc.__cause__, RaiseException):
+            return False
+        raise
+    return True
 
 
 def _tables_in(connection: Connection[Any], schema: str) -> frozenset[str]:
