@@ -38,6 +38,7 @@ from brain.approval_routes import (
     DecidableVerdict,
     DecisionAsked,
     RejectionReason,
+    TakeoverReason,
 )
 from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
 from brain.audit.record import ApprovalVerdict, AuditRecorder
@@ -337,6 +338,72 @@ def test_a_rejection_moves_the_row_to_rejected_and_the_ledger_keeps_its_reason(
     assert entry.details["reason_code"] == "wrong_target"
 
 
+def test_taking_an_agent_s_action_over_leaves_it_unrun_and_the_ledger_says_taken_over(
+    client: TestClient, store: MemoryStore
+) -> None:
+    """The card offers it, the row moves to the state that does not run under the approver's name,
+    and the one entry records the verdict as a takeover with its reason, not as a rejection.
+    Delete this and a takeover can land as a rejection, which `ApprovalVerdict` argues hides an
+    agent whose work is being done by hand, or as an approval, which runs the thing the person
+    said they would do themselves."""
+    store.rows = {"m_1": a_suspension("m_1")}
+    card = client.get(f"{APPROVALS}/m_1", headers=headers("u_narrow")).json()
+
+    response = post(
+        client, "u_narrow", "m_1", {"verdict": "taken_over", "reason_code": "needs_judgement"}
+    )
+
+    assert card["may_take_over"] is True
+    assert response.status_code == 200, response.text
+    assert response.json() == {"suspension_id": "m_1", "verdict": "taken_over"}
+    stored = store.rows["m_1"]
+    assert (stored.state, stored.decided_by) == (ApprovalState.REJECTED, "u_narrow")
+    [entry] = store.ledger.entries
+    assert entry.details == {
+        "verdict": "taken_over",
+        "action_digest": stored.action_digest,
+        "reason_code": "needs_judgement",
+    }
+
+
+def test_a_person_s_own_request_is_not_taken_over_and_is_told_so_only_to_its_approver(
+    client: TestClient, store: MemoryStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A promotion's card offers two choices, a takeover sent for it anyway is refused in words to
+    an approver who may decide it and moves nothing, and anybody else gets the invented id's
+    answer. The same approver then approves it. Delete this and a takeover of a person's own
+    request lowers the rung of an agent that did nothing, which
+    `ONLY_AN_AGENT_S_WORK_IS_TAKEN_OVER` refuses."""
+    from brain.knowledge.visibility import PROMOTION_CAPABILITY
+
+    approves = Grant(capability=PROMOTION_CAPABILITY, scope=in_department(MAINTENANCE))
+    monkeypatch.setitem(GRANTS, "u_wide", (*GRANTS["u_wide"], approves))
+    card = a_promotion("u_narrow")
+    store.rows = {card.id: card}
+    signed = {
+        pid: {"authorization": f"Bearer {token_for(pid, claims=SECOND_FACTOR)}"}
+        for pid in ("u_narrow", "u_wide", "u_none")
+    }
+    taking = {"verdict": "taken_over", "reason_code": "quicker_by_hand"}
+
+    shown = client.get(f"{APPROVALS}/{card.id}", headers=signed["u_wide"]).json()
+    refused = client.post(decision_path(card.id), json=taking, headers=signed["u_wide"])
+    stranger = client.post(decision_path(card.id), json=taking, headers=signed["u_none"])
+    missing = client.post(decision_path("nothing_here"), json=taking, headers=signed["u_wide"])
+
+    assert shown["may_take_over"] is False
+    assert refused.status_code == 404
+    assert refused.json()["message"] == approval_routes.A_PERSON_S_OWN_REQUEST_IS_NOT_TAKEN_OVER
+    assert without_trace(stranger) == without_trace(missing)
+    assert refused.json()["message"] != missing.json()["message"]
+    assert store.rows[card.id].state is ApprovalState.PENDING
+    assert store.ledger.entries == ()
+    approved = client.post(
+        decision_path(card.id), json={"verdict": "approved"}, headers=signed["u_wide"]
+    )
+    assert approved.status_code == 200, approved.text
+
+
 def test_deciding_out_of_reach_decided_lapsed_or_invented_is_one_404_and_writes_nothing(
     client: TestClient, store: MemoryStore
 ) -> None:
@@ -617,7 +684,7 @@ def test_the_body_refuses_exactly_what_the_recorder_refuses() -> None:
     )
     offered = 0
     for verdict in DecidableVerdict:
-        for reason in (None, *RejectionReason):
+        for reason in (None, *RejectionReason, *TakeoverReason):
             try:
                 DecisionAsked(verdict=verdict, reason_code=reason)
                 body_accepts = True
@@ -633,18 +700,46 @@ def test_the_body_refuses_exactly_what_the_recorder_refuses() -> None:
                 recorder_accepts = True
             except ValueError:
                 recorder_accepts = False
-            assert body_accepts == recorder_accepts, (verdict, reason)
+            # The recorder admits any code in its grammar; the body admits each verdict's own.
+            own = reason is None or isinstance(reason, _REASONS[verdict])
+            assert body_accepts == (recorder_accepts and own), (verdict, reason)
             offered += body_accepts
-    assert offered == 1 + len(RejectionReason)
+    assert offered == 1 + len(RejectionReason) + len(TakeoverReason)
 
 
-def test_only_approving_and_rejecting_are_offered_and_both_are_ledger_verdicts() -> None:
-    """Delete this and taking over or amending can be offered with nothing behind either, which
-    `TAKING_OVER_AND_AMENDING_WAIT_FOR_WHAT_THEY_HAND_OVER_TO` refuses."""
+#: Which list each verdict's reason comes from, written here rather than read from the route.
+_REASONS: Mapping[DecidableVerdict, type] = {
+    DecidableVerdict.APPROVED: type(None),
+    DecidableVerdict.REJECTED: RejectionReason,
+    DecidableVerdict.TAKEN_OVER: TakeoverReason,
+}
+
+
+def test_approving_rejecting_and_taking_over_are_offered_and_amending_is_not() -> None:
+    """Delete this and amending can be offered with nothing behind it, which
+    `AMENDING_WAITS_FOR_A_REPLACEMENT_RAISED_THROUGH_THE_GATE` refuses, or taking over can drop
+    out of the route while the card still draws its button."""
     offered = {one.value for one in DecidableVerdict}
 
-    assert offered == {ApprovalVerdict.APPROVED.value, ApprovalVerdict.REJECTED.value}
-    assert offered <= {one.value for one in ApprovalVerdict}
+    assert offered == {
+        ApprovalVerdict.APPROVED.value,
+        ApprovalVerdict.REJECTED.value,
+        ApprovalVerdict.TAKEN_OVER.value,
+    }
+    assert ApprovalVerdict.AMENDED.value not in offered
+
+
+def test_a_rejection_s_reason_and_a_takeover_s_reason_share_no_code() -> None:
+    """The body reads which list a reason came from by its code alone, so a code in both lists
+    would let a rejection be recorded with a takeover's why. Delete this and the two lists can
+    grow a shared word, and a rejection would be accepted with it silently."""
+    assert not {one.value for one in RejectionReason} & {one.value for one in TakeoverReason}
+    for reason in TakeoverReason:
+        with pytest.raises(ValueError, match="names one of its own reasons"):
+            DecisionAsked(verdict=DecidableVerdict.REJECTED, reason_code=reason)
+    for rejected in RejectionReason:
+        with pytest.raises(ValueError, match="names one of its own reasons"):
+            DecisionAsked(verdict=DecidableVerdict.TAKEN_OVER, reason_code=rejected)
 
 
 # ------------------------------------------------------------------------ the process

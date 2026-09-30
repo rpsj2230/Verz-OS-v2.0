@@ -344,6 +344,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.resolve:EntitlementStore.load": Repeat.READS,
         "brain.gate.resolve:EntitlementCache.get": Repeat.READS,
         "brain.gate.resolve:EntitlementCache.set": Repeat.DERIVED_STATE,
+        # The autonomy breaker's feed: when an agent's work was taken over, read at an instant.
+        "brain.gate.takeover_store:TakeoverStandings.standing": Repeat.READS,
+        "brain.gate.takeover_store:TakeoverStandings.standings": Repeat.READS,
         # Identity.
         "brain.identity.bearer:KeySource.keys_for": Repeat.READS,
         "brain.identity.bearer:KeySource.key_for": Repeat.READS,

@@ -123,7 +123,7 @@ export function ApprovalsPage() {
       <ul className="approval-list" aria-label={APPROVAL_LIST_LABEL}>
         {read.cards.map((card) => (
           <li key={card.suspensionId}>
-            <ApprovalCard card={card} people={people} linked decision={<DecisionControls suspensionId={card.suspensionId} onDecided={decided} />} />
+            <ApprovalCard card={card} people={people} linked decision={<DecisionControls suspensionId={card.suspensionId} mayTakeOver={card.mayTakeOver} onDecided={decided} />} />
           </li>
         ))}
       </ul>
