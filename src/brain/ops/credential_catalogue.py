@@ -244,12 +244,15 @@ STORE_DESCRIPTION: Final = (
 CONNECTOR_HOLDERS: Final[Mapping[str, str]] = MappingProxyType({"staff_source": "Staff list"})
 
 CHANNEL_HOLDERS: Final[Mapping[Channel, str]] = MappingProxyType(
-    {Channel.LARK: "Lark chat", Channel.WEBHOOK: "Inbound webhook"}
+    {Channel.LARK: "Lark chat", Channel.WEBHOOK: "Inbound webhook", Channel.WHATSAPP: "WhatsApp"}
 )
 CHANNEL_ASK: Final[Mapping[Channel, tuple[str, ...]]] = MappingProxyType(
     {
         Channel.LARK: ("the App Secret of the app this company created for its assistant",),
         Channel.WEBHOOK: ("the signing secret the sending system was given for this install",),
+        Channel.WHATSAPP: (
+            "the App Secret of the Meta app that owns this install's WhatsApp Business number",
+        ),
     }
 )
 CHANNEL_ASK_OTHERWISE: Final = ("the secret the channel's vendor issued for this install",)
