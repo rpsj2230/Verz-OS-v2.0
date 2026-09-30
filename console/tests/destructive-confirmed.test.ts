@@ -172,6 +172,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
     "and it reaches no agent until it is approved and assigned, both of which are confirmed.",
+  "src/pages/skills/SkillForms.tsx PROCEDURE_PATH":
+    "Imports a written procedure into the library as a new draft, undecided, exactly as an added " +
+    "package is: the same words twice are refused, a revised document is a new version beside the " +
+    "old one, and it reaches no agent until it is approved and assigned, both of which are confirmed.",
   "src/pages/skills/SkillForms.tsx versionsPath(one.digest)":
     "Saves an edit as a new, undecided version beside the one it came from, which is never changed; " +
     "every agent keeps the version it runs, which tests/unit/test_skill_routes.py holds, so nothing " +

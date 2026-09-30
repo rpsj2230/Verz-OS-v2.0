@@ -14,11 +14,14 @@
  * (M27.15.56). **Detaching ends an assignment by adding a record**, and the agents list is read
  * again after it, so the agent is gone from it (M27.15.55).
  *
+ * **A written procedure's version lists what its reader found** (M12.2.10), a line of the draft each,
+ * where the words are shown and nowhere else, so a reviewer reads them before deciding.
+ *
  * **Names on the page, identifiers in Advanced.** The version's digest, the commit it came from,
  * the version it was edited from and the people's identifiers are in each version's Advanced
  * section; the page names people and agents.
  *
- * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6
+ * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.2.10
  */
 
 import { FlaskConical, Pencil } from "lucide-react";
@@ -44,6 +47,7 @@ import {
   decisionQuestion,
   decisionWords,
   detachPath,
+  findingWords,
   reinstatementPath,
   retirementPath,
   reviewPath,
@@ -61,6 +65,8 @@ import { UNAVAILABLE } from "./skillActions";
 import { dayWords, named, type SkillDetail } from "./skillDetailQuery";
 
 export const VERSIONS_HEADING = "Versions";
+/** Above what a written procedure's reader found for a reviewer (M12.2.10). */
+export const FINDINGS_HEADING = "Read these lines before deciding";
 export const AGENTS_HEADING = "Agents using it";
 export const CATEGORIES_HEADING = "Categories";
 export const NO_AGENTS = "No agent you can see runs this skill.";
@@ -347,6 +353,7 @@ function Version({
           </pre>
         </details>
       )}
+      <Findings one={one} />
       {one.diff === null || one.diff === undefined ? null : <Changed diff={one.diff} />}
       {editing ? (
         <EditVersionForm
@@ -497,6 +504,28 @@ function Agents({ detail, onTold }: { readonly detail: SkillDetail; readonly onT
         </ul>
       )}
     </SectionCard>
+  );
+}
+
+/** What a written procedure's reader found for a reviewer, sent only with the body (M12.2.10). */
+function Findings({ one }: { readonly one: LibrarySkill }) {
+  if (one.findings.length === 0) {
+    return null;
+  }
+  return (
+    <div data-slot="procedure-findings" className="flex min-w-0 flex-col gap-2 rounded-md border border-line p-3">
+      <p className="m-0 text-[13px] font-medium text-ink">{FINDINGS_HEADING}</p>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {one.findings.map((finding) => (
+          <li
+            key={`${String(finding.line_number)} ${finding.concern}`}
+            className="text-[12.5px] leading-relaxed text-body [overflow-wrap:anywhere]"
+          >
+            {findingWords(finding)}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
