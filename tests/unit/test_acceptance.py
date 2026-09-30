@@ -571,10 +571,13 @@ WRITTEN_BY_CHECKS = (
     "mem.adaptive",
     "mem.learning",
     "mem.correction",
+    "gate.fast_path_rule",
     "agent.browser_envelope",
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    "mem.mark",
+    "agent.learning_pause",
     "ops.operation",
 )
 
@@ -642,6 +645,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
+    # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
+    assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -671,6 +676,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
+    assert outcomes.pop("mail_in_the_mailbox_is_read_answered_and_marked") == (
+        NOT_RUN,
+        acceptance_checks_channels.NO_RELAY_IS_SAVED_FOR_THE_MAILBOX,
+    )
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.

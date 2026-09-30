@@ -41,6 +41,15 @@ class SketchView(BaseModel):
     button: str
 
 
+class ChoiceView(BaseModel):
+    """One path a step offers: its key, and the words on its button."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str
+    label: str
+
+
 class GuideStepView(BaseModel):
     """One screen of a connect flow: its key, its words, its picture, its link, what it asks."""
 
@@ -58,6 +67,10 @@ class GuideStepView(BaseModel):
     #: A text to paste into the vendor whole, and its button's words; empty when none.
     copy_text: str = ""
     copy_label: str = ""
+    #: The path this step belongs to where the steps branch; empty for every path.
+    path: str = ""
+    #: The paths this step offers, each a key and its button's words.
+    choices: list[ChoiceView] = []
 
 
 def sketch_view(sketch: Sketch) -> SketchView:
@@ -87,4 +100,6 @@ def step_view(step: GuideStep) -> GuideStepView:
         asks=list(step.asks),
         copy_text=step.copy_text,
         copy_label=step.copy_label,
+        path=step.path,
+        choices=[ChoiceView(key=key, label=label) for key, label in step.choices],
     )

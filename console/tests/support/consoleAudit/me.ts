@@ -8,6 +8,7 @@
  */
 
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
+import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
@@ -17,6 +18,10 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/MyChannels.tsx myUnbindApiPath(row.channel)": [
     at("POST /api/v1/me/channels/{name}/unbind", "myUnbindApiPath", myUnbindApiPath("webhook")),
   ],
+  "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
+    at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
+  ],
+  "src/pages/MyWorkspace.tsx EDIT_API_PATH": [at("POST /api/v1/me/memory/edit", "EDIT_API_PATH", EDIT_API_PATH)],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -38,5 +43,20 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: A_BINDING_CHANGE_IS_AUDITED,
     audit: A_BINDING_CHANGE_IS_AUDITED,
     behaviour: t("test_channel_binding", "test_a_person_unbinds_their_own_chat_and_it_is_recorded_as_theirs"),
+  },
+  // A forget is the Learning screen's undo written for the person the memory is about, through the
+  // same store, so the same database test follows it to the row, the ledger and the next recall.
+  "POST /api/v1/me/memory/forget": {
+    row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    behaviour: t("test_mine_routes", "test_a_member_forgets_a_memory_formed_from_their_own_words"),
+  },
+  "POST /api/v1/me/memory/edit": {
+    row: t("test_memory_store", "test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next", true),
+    audit: t("test_memory_store", "test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next", true),
+    behaviour: t(
+      "test_mine_routes",
+      "test_a_member_edits_a_memory_and_the_replacement_changes_the_words_and_nothing_else",
+    ),
   },
 };

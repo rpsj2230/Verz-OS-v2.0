@@ -131,6 +131,8 @@ function step(key: string, title: string, link = ""): LarkStep {
     asks: [],
     copy_text: "",
     copy_label: "",
+    path: "",
+    choices: [],
   };
 }
 
