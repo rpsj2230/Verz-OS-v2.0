@@ -169,6 +169,7 @@ PERSON_ATTRIBUTES: Final[tuple[str, ...]] = (
     "manager",
     "userAccountControl",
     "memberOf",
+    "employeeType",
 )
 
 #: The attribute list that asks for no attributes at all (RFC 4511): a group search wants names.

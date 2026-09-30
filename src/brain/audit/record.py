@@ -1139,7 +1139,7 @@ class AuditRecorder:
             details["source"] = source
         return self._write(AuditAction.SKILL, subject("skill", name), details)
 
-    def connector(self, *, connector: str, change: ConnectorChange) -> AuditEntry:
+    def connector(self, *, connector: str, change: ConnectorChange, digest: str = "") -> AuditEntry:
         """Record that a source was connected from the console, or disconnected.
 
         Written in a deployed database by `0057`'s trigger on `ops.connector_connection`, on the
@@ -1148,10 +1148,13 @@ class AuditRecorder:
         source's own identifiers, which the connection's row keeps, and the key is recorded as a
         write under `credential` by `credential`, with nothing of it in either entry. There is no
         parameter through which either could arrive.
+
+        **Since `0157` each entry also names the digest of the declaration the row agreed to**, so
+        accepting a changed declaration, a disconnection and a connection under one trace, leaves
+        the digest before and the one after. Empty leaves it out, as `0057`'s entries did.
         """
-        return self._write(
-            AuditAction.CONNECTOR, subject("connector", connector), {"change": change.value}
-        )
+        details = {"change": change.value} | ({"digest": digest} if digest else {})
+        return self._write(AuditAction.CONNECTOR, subject("connector", connector), details)
 
     def setting(
         self,

@@ -108,6 +108,11 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "its fields take before anything is sent, and tests/compliance-page.test.tsx submits the naming, " +
     "the opening, the assessment and a notification blank and holds that no confirmation opens and " +
     "nothing is sent.",
+  "src/pages/compliance/EscalationQueues.tsx":
+    "Naming who answers for an escalation queue is a form inside a drawer opened from the Escalation " +
+    "queues view, outside the main landmark these cases read. It says what each field takes before " +
+    "anything is sent, and tests/compliance-page.test.tsx submits it blank and holds that no " +
+    "confirmation opens and nothing is sent.",
   "src/pages/retention/RetentionActs.tsx":
     "The hold, lift and erasure forms are inside drawers opened from the Legal holds and Erasure " +
     "requests views, outside the main landmark these cases read. Each says what its fields take before " +
@@ -172,12 +177,6 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The connect form is inside the drawer opened from the page's Connect a source button, outside the " +
     "main landmark these cases read. tests/staff-sources-page.test.tsx opens the drawer, submits it " +
     "blank, and holds that no confirmation opens, nothing is sent and each empty box is named beside it.",
-  "src/components/ConnectLark.tsx":
-    "Its Test and Save buttons stay disabled until an App ID and an App Secret are typed, so a " +
-    "blank form cannot be sent. What is typed is judged by the API before anything reaches Lark: " +
-    "input_problems answers 422 by field for a malformed App ID, secret or Base link, which " +
-    "tests/unit/test_lark_connect.py holds with nothing sent to " +
-    "the fake Lark server, and tests/lark-connect.test.tsx drives the form.",
   "src/pages/settings/SettingsPage.tsx":
     "Each editable row's form sends one value, from a confirmation, and says under the field what it " +
     "accepts; the API judges it with setting_problem before anything is written, answering 422 with a " +

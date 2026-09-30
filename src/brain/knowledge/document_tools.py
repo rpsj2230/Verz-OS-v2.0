@@ -596,6 +596,37 @@ def searcher(
     return search
 
 
+#: The most passages a follow-up recalls from what earlier answers in its thread cited.
+MAX_RECALLED: Final = 6
+
+
+def recaller(records: RowSource) -> Callable[..., Awaitable[TypedResult[KnowledgePassage]]]:
+    """Passages by the references an earlier answer cited, under the caller's reach now (M9.2.3).
+
+    Not a registered tool: a model is never handed a passage reference, and this takes nothing
+    else. It reads through `passages_query`, which applies the reach inside the statement again,
+    and the chunk table's row-level security applies beneath it, so a reference to a passage the
+    caller no longer reaches returns nothing and says nothing about it. The caller has already
+    re-checked the references with `brain.chat.turns.context_for`; this is the second wall.
+    """
+
+    async def recall(
+        chunk_ids: Sequence[str],
+        *,
+        entitlement: EntitlementSet,
+        now: datetime | None = None,
+    ) -> TypedResult[KnowledgePassage]:
+        wanted = list(dict.fromkeys(chunk_ids))[:MAX_RECALLED]
+        reach = await reach_through(records, entitlement, now)
+        if reach is None or not wanted:
+            return _result((), now, truncated=False)
+        bodies = passages_query(wanted, reach=reach)
+        rows = await records.rows(bodies)
+        return _result(_passages(wanted, rows), now, truncated=False)
+
+    return recall
+
+
 def reader(records: RowSource) -> Callable[..., Awaitable[TypedResult[KnowledgePassage]]]:
     """The handler for `knowledge.read_document`, bound to where the chunks are read."""
 

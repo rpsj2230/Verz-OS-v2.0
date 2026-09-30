@@ -175,7 +175,7 @@ address to register, which is your web address followed by `/first-run/staff-lis
 | --- | --- | --- |
 | Google Workspace | In Google Cloud console, in a project belonging to your company, an OAuth client of the type Web application, with the return address as an authorised redirect URI. Enable the Admin SDK API in the same project. | Nothing on the client. Sign in with a Workspace administrator's account, which is what lets it read the user directory. |
 | Microsoft Entra | In the Microsoft Entra admin centre, an application registration with a Web platform, the return address as a redirect URI, and a client secret. | The delegated Microsoft Graph permission `User.Read.All`, with admin consent granted for your organisation. |
-| Lark | In the Lark developer console, a custom app with the return address as a redirect URL under Security settings. Copy its App ID and App Secret. | The scopes `contact:department.organize:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly` and `contact:user.email:readonly`; a contact range covering everyone who should be listed; and a published version. |
+| Lark | In the Lark developer console, a custom app with the return address as a redirect URL under Security settings. Copy its App ID and App Secret. | The scopes `contact:department.organize:readonly`, `contact:department.base:readonly` (without it Lark reads every department with no name and nobody is placed in one), `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly` and `contact:user.email:readonly`; a contact range covering everyone who should be listed; and a published version. |
 
 Then paste the application's client ID and secret on the screen and press **Sign in and read the
 list**. The directory's own sign-in page opens in a second window, because the setup code lives
@@ -229,7 +229,7 @@ screen and to nothing else. Each is connected from **Govern > Staff sources**, w
 
 | Directory | What the vault slot `connector_keys/staff_source` keeps | What to grant |
 | --- | --- | --- |
-| Lark | `<App ID>:<App Secret>`, or the Lark app the Connectors screen keeps | `contact:department.organize:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly`, `contact:user.email:readonly`, `contact:group:readonly`; contact range All members; a released version |
+| Lark | `<App ID>:<App Secret>`, or the Lark app the Connectors screen keeps | `contact:department.organize:readonly`, `contact:department.base:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly`, `contact:user.email:readonly`, `contact:group:readonly`; contact range All members; a released version |
 | Microsoft Entra | `<application id>:<client secret>` | the application permissions `User.Read.All` and `GroupMember.Read.All`, with admin consent |
 | Google Workspace | `<administrator>:<service account>:<key>`, made from the pasted JSON key file | domain-wide delegation of `admin.directory.user.readonly` and `admin.directory.group.readonly` to the service account, acting as an administrator |
 

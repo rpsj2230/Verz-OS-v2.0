@@ -24,7 +24,7 @@
  * the URL" is asserted over every address the console touched rather than over the one
  * somebody thought to check.
  *
- * Task ids: M42.6.3, M3.9.8
+ * Task ids: M42.6.3, M3.9.8, M7.6.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -36,11 +36,13 @@ import { NO_REFERENCE_CAME_BACK } from "../src/ui/FailureNotice";
 import {
   AGENT_LABEL,
   ANY_AGENT,
+  ANY_KIND,
   ASK_ADDRESS,
   ASK_HEADING,
   ASK_LABEL,
   BASED_ON,
   HELPFUL,
+  KIND_LABEL,
   NOT_HELPFUL,
   NOTHING_ASKED_YET,
   PROGRESS_LABEL,
@@ -54,6 +56,7 @@ import {
   NOTHING_ASKED,
   withEvent,
 } from "../src/pages/askQuery";
+import { KIND_WORDS } from "../src/pages/knowledgeQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { consoleRules, declared, inherited, pixels } from "./support/cascade";
 import { parseCss, type CssRule } from "./support/css";
@@ -406,13 +409,16 @@ describe("asking a question", () => {
   test("the question can only travel in a body, because the route declares nowhere else to put it", () => {
     // What breaks if this is deleted: a query parameter or a path segment added later and
     // used by a console that already had somewhere to put a question. The route's own
-    // document is read: the question and the optional agent the person picked are the body's
-    // only properties, no query parameter and no path parameter, and the bound the field holds is
-    // the document's bound rather than a number copied here.
+    // document is read: the question, the optional agent the person picked, the optional kinds
+    // they narrowed it to (M7.6.1) and the optional thread it continues (M9.1.1) are the body's
+    // only properties, no query parameter and no path parameter, and the bound the field holds
+    // is the document's bound rather than a number copied here.
     expect(ANSWER_API_PATH).toBe("/answer");
     expect(declaredPropertyNames(declaredRequestBodySchema(ANSWER_ROUTE, "post"))).toEqual([
       "agent",
+      "kinds",
       "question",
+      "thread",
     ]);
     expect(declaredParameterNames(ANSWER_ROUTE, "post", "query")).toEqual([]);
     expect(declaredParameterNames(ANSWER_ROUTE, "post", "path")).toEqual([]);
@@ -616,7 +622,10 @@ describe("the ask screen without a mouse and on a phone", () => {
     expect(field?.getAttribute("id")).toBeTruthy();
 
     const reachable = [...page(container).querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex]")];
-    expect(reachable.map((one) => one.tagName)).toEqual(["TEXTAREA", "BUTTON"]);
+    // The question, the kind it may be narrowed to (M7.6.1), then the button.
+    expect(reachable.map((one) => one.tagName)).toEqual(["TEXTAREA", "SELECT", "BUTTON"]);
+    const kind = page(container).querySelector("select#ask-kind");
+    expect(page(container).querySelector(`label[for="${kind?.getAttribute("id") ?? ""}"]`)?.textContent).toBe(KIND_LABEL);
     for (const one of reachable) {
       expect(one.getAttribute("tabindex")).toBeNull();
     }
@@ -715,7 +724,7 @@ describe("naming the agent that answers", () => {
     // the body and every question goes to the router's choice.
     const { container, idp } = await askScreen(whole(answerFrames("An answer.")), roster);
     const picker = await waitFor(() => {
-      const found = container.querySelector("select");
+      const found = container.querySelector<HTMLSelectElement>("select#ask-agent");
       if (!found) {
         throw new Error("the picker has not arrived");
       }
@@ -742,7 +751,47 @@ describe("naming the agent that answers", () => {
     expect(askBody(" a question ", " helper ")).toEqual({ question: "a question", agent: "helper" });
 
     const { container } = await askScreen(whole(answerFrames("An answer.")));
-    expect(container.querySelector("select")).toBeNull();
+    expect(container.querySelector("select#ask-agent")).toBeNull();
+  });
+});
+
+// --------------------------------------------------------- narrowing to a kind (M7.6.1)
+
+describe("narrowing a question to one kind of knowledge", () => {
+  test("the kind picker offers every kind the API stores, and the chosen kind travels in the body", async () => {
+    // What breaks if this is deleted: a person cannot narrow a question to FAQs or SOPs, which
+    // M7.6.1 names, or the picker's value never reaches the route and every question searches
+    // every kind while the page says otherwise.
+    const { container, idp } = await askScreen(whole(answerFrames("An answer.")));
+    const picker = container.querySelector<HTMLSelectElement>("select#ask-kind");
+    if (picker === null) {
+      throw new Error("the kind picker is not drawn");
+    }
+    expect(container.textContent).toContain(KIND_LABEL);
+    expect([...picker.options].map((one) => [one.value, one.textContent])).toEqual([
+      ["", ANY_KIND],
+      ...Object.entries(KIND_WORDS),
+    ]);
+
+    fireEvent.change(picker, { target: { value: "faq" } });
+    ask(container, QUESTION);
+    await waitFor(() => {
+      expect(asked(idp)).toHaveLength(1);
+    });
+    expect(asked(idp)[0]?.body).toEqual({ question: QUESTION, kinds: ["faq"] });
+  });
+
+  test("every kind leaves the question unnarrowed, and a word the API does not store is never sent", () => {
+    // The positive sibling and the guard: the first choice sends no kinds at all, which is the
+    // question as it was always asked, and a kind this console does not know is dropped rather
+    // than sent to be refused.
+    expect(askBody("a question", "", "")).toEqual({ question: "a question" });
+    expect(askBody("a question", "helper", "sop")).toEqual({
+      question: "a question",
+      agent: "helper",
+      kinds: ["sop"],
+    });
+    expect(askBody("a question", "", "not_a_kind")).toEqual({ question: "a question" });
   });
 });
 

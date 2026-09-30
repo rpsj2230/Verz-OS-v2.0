@@ -21,8 +21,8 @@ from typing import Any
 
 import pytest
 
-from brain.ops.acceptance import CHECK_MODULES, FAILED, PASSED, Check, registered
-from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head
+from brain.ops.acceptance import FAILED, PASSED, Check, check_modules, registered
+from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head, checks_in
 
 MODULE = "brain.ops.acceptance_checks_learning"
 
@@ -73,7 +73,7 @@ def test_the_learning_checks_prove_the_learning_leaves_and_nothing_else() -> Non
     """Each check names the leaves it was scoped to, and the module is in the suite. Delete this
     and a check can close a leaf it does not exercise, or fall out of the run."""
     assert {check.name: check.leaves for check in mine()} == LEAVES
-    assert MODULE in CHECK_MODULES
+    assert MODULE in check_modules()
 
 
 def test_every_leaf_the_learning_checks_name_is_a_leaf_of_the_work_breakdown() -> None:
@@ -88,6 +88,22 @@ def test_every_table_the_learning_checks_write_is_one_the_suite_measures() -> No
     """Delete this and a table these checks write can be left out of the suite's count, so a
     check that committed a correction to a client's install would pass the suite."""
     assert set(WRITTEN_BY_LEARNING_CHECKS) <= set(WRITTEN_BY_CHECKS)
+
+
+def test_the_learning_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them, held here
+    beside the module's other tests so a package adding a check edits its own file and never a
+    list every package appends to. Delete this and a check can drop out of the module with the
+    page simply listing one fewer row."""
+    assert checks_in(MODULE) == [
+        "a_person_edits_and_forgets_their_own_memory",
+        "every_learned_change_is_held_at_the_tier_its_reach_needs",
+        "a_conversation_learning_is_reviewed_and_undone",
+        "learning_figures_are_set_in_bounds_and_move_no_tier",
+        "a_department_admin_reads_their_own_department_s_memory",
+        "the_waiting_queue_alarms_past_one_sitting_of_review",
+        "a_ready_rule_waits_for_a_person_and_no_job_applies_it",
+    ]
 
 
 # --------------------------------------------------------------------------- a real run

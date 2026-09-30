@@ -84,6 +84,7 @@ from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.denial_digest_run import run_denial_digest_now
 from brain.ops.erasure_store import drain_erasure_queue
+from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
 from brain.ops.retention_store import run_retention_sweep
@@ -308,6 +309,34 @@ def outbox_dispatch(now: datetime, report_only: bool, database_url: str) -> str:
         loop_factory=_loop_factory(),
     )
     return ran.summary()
+
+
+#: Why the expiry declines in report-only mode, though it removes nothing.
+AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING: Final = (
+    "Marking an escalation expired changes what its asker is told, so a run asked to only report "
+    "marks nothing and says so, as every runner keeps the mode it was given."
+)
+
+
+def escalation_expiry(now: datetime, report_only: bool, database_url: str) -> str:
+    """Mark every escalation whose deadline has passed as expired, and say how many (M8.3.4).
+
+    `brain.ops.escalation_store.run_expiry_now` does it as the worker's login; this is the literal
+    call the registry reads. Declines in report-only mode, see
+    `AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING`, and takes the worker's event loop for the
+    reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no escalation was marked expired. "
+            f"{AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    expired = run_expiry_now(database_url, now=now, loop_factory=_loop_factory())
+    if expired == 0:
+        return "no escalation was due to expire"
+    return f"{expired} escalation(s) past their deadline marked expired; each asker is told so"
 
 
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
@@ -564,6 +593,53 @@ def denial_digest(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+def queue_redrive(now: datetime, report_only: bool, database_url: str) -> str:
+    """Re-drive what a dead worker or a transient failure left behind, and say what it came to.
+
+    `brain.ops.recovery_run.run_queue_redrive_now` is the literal call the registry reads, on the
+    queue's own connection (`QUEUE_URL`, which the worker already needs to run at all) rather than
+    `database_url`, because the queue's tables are the driver's and the driver is the one client
+    that may move a row. Declines in report-only mode, see
+    `brain.ops.recovery_run.A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING`, and takes the
+    worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    from brain.ops.recovery_run import (
+        A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING,
+        run_queue_redrive_now,
+    )
+    from brain.ops.worker import QUEUE_URL_ENV, _loop_factory
+
+    if report_only:
+        return (
+            f"report only: no job was moved. {A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING}"
+        )
+    queue_url = process_environment().get(QUEUE_URL_ENV, "").strip()
+    if not queue_url:
+        return f"no job was moved: {QUEUE_URL_ENV} is not set on this worker, so it has no queue"
+    return run_queue_redrive_now(queue_url, now=now, loop_factory=_loop_factory()).summary()
+
+
+def side_effect_resume(now: datetime, report_only: bool, database_url: str) -> str:
+    """Read back every interrupted side effect a connector can answer for, and list the rest.
+
+    `brain.ops.recovery_run.run_side_effect_resume_now` is the literal call the registry reads, on
+    the worker's own connection to `ops.operation`. Declines in report-only mode for the queue
+    sweep's reason, and takes the worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    from brain.ops.recovery_run import (
+        A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING,
+        run_side_effect_resume_now,
+    )
+    from brain.ops.worker import _loop_factory
+
+    if report_only:
+        return (
+            "report only: no operation was read back. "
+            f"{A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING}"
+        )
+    return run_side_effect_resume_now(database_url, now=now, loop_factory=_loop_factory()).summary()
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -644,6 +720,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
     # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
     Runner(name="knowledge_reverification", run=knowledge_reverification),
+    # Wired on 2026-09-30 with `gate.escalation` (`0168`). See `brain.ops.escalation_store`.
+    Runner(name="escalation_expiry", run=escalation_expiry),
     # For whoever builds it: the feature observations `drift` measures over, which are
     # resolution decisions nobody records for this purpose yet. The fit is weekly.
     Runner(
@@ -653,26 +731,12 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "company, which this install does not keep yet"
         ),
     ),
-    # For whoever builds it: `verdict_for` decides what to do with a stuck job and `redrive`
-    # acts on the verdict; the queue arrived with M32.4.1.1, and nothing asks either yet.
-    Runner(
-        name="queue_redrive",
-        needs=(
-            "the part that finds background work left stuck when a worker stopped and starts it "
-            "again, which is not built yet"
-        ),
-    ),
-    # For whoever builds it: a tick that reads the records `resume` decides over and a read-back
-    # to settle them. `brain.ops.idempotency.issue_once` writes every side effect into
-    # `ops.operation` since 0051; nothing lists the unsettled ones or calls a read-back yet.
-    Runner(
-        name="side_effect_resume",
-        needs=(
-            "the part that checks with the other system whether an action left part-way through, "
-            "such as a message whose delivery was never confirmed, really happened, which is "
-            "not built yet"
-        ),
-    ),
+    # Wired on 2026-09-30: `brain.ops.recovery_run.sweep_queue` re-drives an orphaned or failed
+    # job its task declares safe and sets aside the rest, over the worker's own queue connection.
+    Runner(name="queue_redrive", run=queue_redrive),
+    # Wired on 2026-09-30: `brain.ops.recovery_run.resume_side_effects` reads back an interrupted
+    # operation where its connector declares a read-back and lists the rest for a person.
+    Runner(name="side_effect_resume", run=side_effect_resume),
     # Wired on 2026-09-22 with `ops.provider_health` and the worker's read of the model provider
     # slots. See `brain.ops.model_probe_run`.
     Runner(name="model_health_probes", run=model_health_probes),
@@ -734,6 +798,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return retention_sweep(now, report_only, database_url)
         case "knowledge_reverification":
             return knowledge_reverification(now, report_only, database_url)
+        case "escalation_expiry":
+            return escalation_expiry(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case "outbox_dispatch":
@@ -758,6 +824,10 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return denial_digest(now, report_only, database_url)
         case "acceptance_run":
             return acceptance_run(now, report_only, database_url)
+        case "queue_redrive":
+            return queue_redrive(now, report_only, database_url)
+        case "side_effect_resume":
+            return side_effect_resume(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

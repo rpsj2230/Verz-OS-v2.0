@@ -63,6 +63,10 @@ if TYPE_CHECKING:
 
 A, B = RESERVED_DEPARTMENTS
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 300
+
 #: What the steward pausing the check's agent writes as the reason.
 PAUSED_BECAUSE: Final = "Paused by an install acceptance check for the length of the check"
 

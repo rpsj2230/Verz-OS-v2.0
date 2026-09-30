@@ -97,6 +97,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
+from brain.gate.abstain import EXPIRY_EVERY as ESCALATION_EXPIRY_EVERY
 from brain.identity.staff_sync import SYNC_INTERVAL
 from brain.knowledge.verification import DEFAULT_CADENCE
 from brain.models.health import PROBE_INTERVAL_SECONDS
@@ -178,11 +179,12 @@ A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE: Final = (
 #: The one function passed around as a value that the scan does follow, and why.
 AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN: Final = (
     "An install acceptance check is registered by the check decorator and run by the "
-    "acceptance run, which calls every check of every module brain.ops.acceptance.CHECK_MODULES "
-    "names. That registry is a list the scan can read, so a function decorated with check in a "
-    "module the list names is reached, and one in any other module is not. Without this, a "
-    "check that asks a control's own decision function reports that control as unreached "
-    "although the worker schedules it."
+    "acceptance run, which calls every check of every module brain.ops.acceptance.check_modules "
+    "finds: every brain.ops.acceptance module that registers one, and a module that registers one "
+    "without placing itself is refused rather than skipped. So a function decorated with check in "
+    "a module of that name is reached, and one in any other module is not. Without this, a check "
+    "that asks a control's own decision function reports that control as unreached although the "
+    "worker schedules it."
 )
 
 
@@ -603,6 +605,29 @@ CONTROLS: Final[tuple[Control, ...]] = (
         invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
+        name="escalation_expiry",
+        # Since 2026-09-30 (`0168`, M8.3.4). The worker's schedule starts `run_expiry_now`, which
+        # runs `expire_overdue` as the worker's login; the install acceptance check calls
+        # `expire_overdue` itself, inside its rolled-back transaction, rather than waiting a day.
+        symbols=(
+            "brain.ops.escalation_store:run_expiry_now",
+            "brain.ops.escalation_store:expire_overdue",
+        ),
+        guards=(
+            "that a question handed to a person does not stay open for ever once nobody picked "
+            "it up, and that the person who asked is told so"
+        ),
+        lost_silently=(
+            "The asker was told a person would look and goes on waiting. Nobody picked it up, and "
+            "nothing turns that into an event: the question silently stops existing, which is "
+            "the failure an expiry exists to make visible."
+        ),
+        every=ESCALATION_EXPIRY_EVERY,
+        cadence_from="brain.gate.abstain:EXPIRY_EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
         name="resolution_calibration",
         symbols=("brain.resolution.calibration:due", "brain.resolution.calibration:drift"),
         guards=(
@@ -641,7 +666,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=stale_after(),
         cadence_from="brain.ops.heartbeat:stale_after",
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        # Started by the worker's schedule since 2026-09-30, through
+        # `brain.ops.recovery_run.sweep_queue`, which calls `redrive` and makes the move it allows.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="side_effect_resume",
@@ -662,7 +689,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=stale_after(),
         cadence_from="brain.ops.heartbeat:stale_after",
         severity=Severity.WOKEN,
-        invoked_by=Invocation.NOTHING,
+        # Started by the worker's schedule since 2026-09-30, through
+        # `brain.ops.recovery_run.resume_side_effects`, which calls `resume` and `verify_once`.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="audit_anchor",
@@ -1593,16 +1622,16 @@ def _registered_as_an_acceptance_check(
     node: ast.FunctionDef | ast.AsyncFunctionDef, module: str
 ) -> bool:
     """Whether the acceptance run calls this function: decorated with `check(leaves=...,
-    sentence=...)` in a module `brain.ops.acceptance.CHECK_MODULES` names.
+    sentence=...)` in a module `brain.ops.acceptance.check_modules` finds.
 
     See `AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN`. Both halves are the condition:
     the decorator alone is a function no run imports, and the module alone is a helper beside
     the checks. Imported here rather than at the top, because the registry's module is one
     this scan reads rather than one it needs to be.
     """
-    from brain.ops.acceptance import CHECK_MODULES
+    from brain.ops.acceptance import is_check_module_name
 
-    return module in CHECK_MODULES and any(
+    return is_check_module_name(module) and any(
         isinstance(decorator, ast.Call)
         and isinstance(decorator.func, ast.Name)
         and decorator.func.id == "check"

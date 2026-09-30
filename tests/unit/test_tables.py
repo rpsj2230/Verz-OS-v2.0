@@ -146,6 +146,7 @@ MIGRATION_ACCESS_REQUEST_HANDLED = (
     VERSIONS / "0146_access_request_handled_and_certification_export.py"
 )
 MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
+MIGRATION_ESCALATION = VERSIONS / "0168_escalation.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -414,6 +415,8 @@ TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
     "obs.trace_step",
     "obs.trace_read",
 )
+#: And the one 0168 adds: a question handed to a person, kept until it expires.
+ESCALATION_TABLES: tuple[str, ...] = ("gate.escalation",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -485,6 +488,7 @@ ALL_TABLES = (
     + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
     + LEARNING_SIGNAL_TABLES
+    + ESCALATION_TABLES
 )
 
 
@@ -1311,6 +1315,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
     learning_signal = migration_module(MIGRATION_LEARNING_SIGNAL)
     assert learning_signal.TABLES == LEARNING_SIGNAL_TABLES
+    escalation = migration_module(MIGRATION_ESCALATION)
+    assert escalation.TABLES == ESCALATION_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1404,6 +1410,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
         + tuple(learning_signal.TABLES)
+        + tuple(escalation.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1478,6 +1485,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
         set(learning_signal.TABLES),
+        set(escalation.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

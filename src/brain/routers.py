@@ -179,6 +179,10 @@ from brain.erasure_routes import router as erasure_router
 # console can read. See `brain.error_routes`.
 from brain.error_routes import router as error_router
 
+# A question nothing answered, handed to the person named for its skill's queue, the caller's two
+# lists of them, and the naming form. See `brain.escalation_routes`.
+from brain.escalation_routes import router as escalation_router
+
 # The Knowledge, Learning and Memory screens. A router of its own because all three are the
 # estate-wide reads `brain.console.govern_estate` decides, and all three stand on a store
 # that is empty on every install today: each response says which of its facts has no source
@@ -272,6 +276,10 @@ from brain.notification_routes import router as notification_router
 # refuses a reader who could not see everybody's. See `brain.operate_routes`.
 from brain.operate_routes import router as operate_router
 
+# The interrupted actions: every side effect a stopped worker left unconfirmed and what the
+# recovery sweep learnt about it, for a reader who may see that sweep. See `brain.operation_routes`.
+from brain.operation_routes import router as operation_router
+
 # Disabling a person and enabling them again, from the Departments and teams screen, behind the
 # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
 from brain.principal_state_routes import router as principal_state_router
@@ -363,9 +371,17 @@ from brain.staff_source_routes import router as staff_source_router
 # `brain.storage_routes`.
 from brain.storage_routes import router as storage_router
 
+# A person's own threads, listed, searched and reopened at the reach held now. See
+# `brain.thread_routes`.
+from brain.thread_routes import router as thread_router
+
 # The Tools screen: every tool with what it needs and does, and the switch that stops one for
 # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
 from brain.tool_routes import router as tool_router
+
+# One run's stored trace, read under the payload role the caller's own token carries, with the
+# read on record before it happens. See `brain.trace_routes`.
+from brain.trace_routes import router as trace_router
 
 # Every budget and request window a person may set from the Rate limits screen, within the
 # product's bounds, and one set, behind `admin:install_setting`. See `brain.tuning_routes`.
@@ -380,6 +396,10 @@ from brain.vault_routes import router as vault_router
 # `admin:webhook_subscriber`. Built on `NoEchoRoute`, because two of its writes carry a
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
+
+# The website widget's front door: a stranger's browser is handed a session that holds nothing, or
+# told why not, with no sign-in and the origin proved instead. See `brain.widget_routes`.
+from brain.widget_routes import router as widget_router
 
 
 def routers_in(namespace: Mapping[str, object]) -> tuple[APIRouter, ...]:
