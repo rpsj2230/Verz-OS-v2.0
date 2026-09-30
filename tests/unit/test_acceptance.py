@@ -582,6 +582,7 @@ WRITTEN_BY_CHECKS = (
     "obs.trace_step",
     "obs.trace_read",
     "ops.operation",
+    "ops.budget_version",
 )
 
 

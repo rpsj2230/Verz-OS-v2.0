@@ -48,6 +48,7 @@ from brain.agent_about_routes import router as agent_about_router
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
 from brain.agent_builder_routes import router as agent_builder_router
+from brain.agent_capability_routes import router as agent_capability_router
 
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router
@@ -62,6 +63,7 @@ from brain.agent_model_routes import router as agent_model_router
 # again: who may see an agent is its audience rather than a capability, and a hidden agent
 # and a missing one are one answer. The same `asking` dependency, imported.
 from brain.agent_routes import router as agent_router
+from brain.agent_workspace_routes import router as agent_workspace_router
 
 # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
 # finding, and the timeout middleware in `brain.app` is the most recent one.
