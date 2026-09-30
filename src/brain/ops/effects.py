@@ -344,6 +344,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.resolve:EntitlementStore.load": Repeat.READS,
         "brain.gate.resolve:EntitlementCache.get": Repeat.READS,
         "brain.gate.resolve:EntitlementCache.set": Repeat.DERIVED_STATE,
+        # The autonomy breaker's feed: when an agent's work was taken over, read at an instant.
+        "brain.gate.takeover_store:TakeoverStandings.standing": Repeat.READS,
+        "brain.gate.takeover_store:TakeoverStandings.standings": Repeat.READS,
         # Identity.
         "brain.identity.bearer:KeySource.keys_for": Repeat.READS,
         "brain.identity.bearer:KeySource.key_for": Repeat.READS,
@@ -812,6 +815,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
         "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
+        # A bound person's Lark address, kept as their verified message arrives (`0166`): an update
+        # of their own live row that a second call with the same address leaves unchanged.
+        "brain.channels.adapter:CardWire.person_address": Repeat.READS,
+        "brain.channels.adapter:PersonWire.person_address": Repeat.READS,
+        # The channel a person last wrote on, for telling them something later.
+        "brain.tell_later:LastUsedAddresses.last_used": Repeat.READS,
+        "brain.channels.inbound:AddressBook.remember": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
     }
 )
 

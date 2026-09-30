@@ -37,7 +37,7 @@ Rejected: a preference per person. `brain.member.connections` models which chann
 each kind on, and nothing sends anything to a person yet for it to apply to. An install-wide
 switch is the one a person can turn today and see change something.
 
-Task ids: M27.8.11, M27.7.12
+Task ids: M27.8.11, M27.7.12, M8.3.2
 """
 
 from __future__ import annotations
@@ -89,6 +89,7 @@ class NoticeKind(enum.StrEnum):
     BUDGET_STOPPED = "budget_stopped"
     ACCESS_REQUEST = "access_request"
     HANDED_TO_A_PERSON = "handed_to_a_person"
+    QUESTION_NOT_PICKED_UP = "question_not_picked_up"
     LEARNING_DIGEST = "learning_digest"
     CONTROL_NOT_RUN = "control_not_run"
     BACKUP_EXPOSURE = "backup_exposure"
@@ -199,10 +200,31 @@ NOTICES: Final[tuple[Notice, ...]] = (
     Notice(
         kind=NoticeKind.HANDED_TO_A_PERSON,
         title="A question handed to a person",
-        told="The human queue a question was handed to.",
-        about="That a question needs a person to answer it.",
-        how="The queue's channel. Nothing sends it yet.",
+        told="The person named for the queue a skill hands its unanswered questions to.",
+        about=(
+            "Who asked, the question in their words, what was tried and what is needed, and "
+            "by when."
+        ),
+        how=(
+            "Sent to the named person's own channel as the question is handed on, and listed "
+            "for them in the web application. Switched off, the question is still handed on "
+            "and listed, and nothing is sent."
+        ),
         composed_by="brain.gate.abstain:raise_escalation",
+        sent_by="brain.escalation_routes:handed_on",
+    ),
+    Notice(
+        kind=NoticeKind.QUESTION_NOT_PICKED_UP,
+        title="A handed-on question nobody picked up",
+        told="The person who asked, about their own question.",
+        about="That nobody from the queue picked it up by its deadline, naming the queue.",
+        how=(
+            "Sent once to the asker's own chat, on the channel they last wrote on, when the "
+            "worker marks the question expired, and listed for them in the web application. "
+            "Switched off, the expiry is still listed, and nothing is sent."
+        ),
+        composed_by="brain.escalation_told:expired_text",
+        sent_by="brain.escalation_told:tell_expired_askers",
     ),
     Notice(
         kind=NoticeKind.LEARNING_DIGEST,

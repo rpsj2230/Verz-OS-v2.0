@@ -93,6 +93,16 @@ A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING: Final = (
     "here and one with thirteen of twenty three migrations flagged for building a schema."
 )
 
+#: Why taking a privilege on a brand new function away from PUBLIC is not a narrowing.
+A_REVOKE_ON_A_FUNCTION_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING: Final = (
+    "PostgreSQL grants EXECUTE to PUBLIC on every function it creates, so a SECURITY DEFINER "
+    "function is callable by every role with USAGE on its schema until that is revoked. A "
+    "REVOKE on a function the same body creates takes away something no earlier release could "
+    "call, because the function did not exist for it. 0036 and 0040 left the default grant in "
+    "place because this check read every REVOKE as a narrowing; a revoke on a function that "
+    "was already there still is one."
+)
+
 #: Why a restriction that binds only rows naming a column this migration added is not a narrowing.
 A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: Final = (
     "The previous release never names a column this migration added, so every row it writes "
@@ -217,6 +227,10 @@ _CREATE_TABLE = re.compile(
 )
 _ALTER_TABLE = re.compile(rf"^ALTER\s+TABLE\s+(?:ONLY\s+)?({_QUALIFIED})\s+(?P<rest>.*)$", re.I)
 _ON_TABLE = re.compile(rf"\bON\s+({_QUALIFIED})\b", re.IGNORECASE)
+#: A function a body creates, and the function a REVOKE takes a privilege from. `CREATE OR REPLACE`
+#: is not the first: a function it replaces was already there for the previous release to call.
+_CREATE_FUNCTION = re.compile(rf"^CREATE\s+FUNCTION\s+({_QUALIFIED})\s*\(", re.I)
+_REVOKE_ON_FUNCTION = re.compile(rf"^REVOKE\s+.*?\bON\s+FUNCTION\s+({_QUALIFIED})\s*\(", re.I)
 
 
 @dataclass(frozen=True)
@@ -684,11 +698,36 @@ _NARROWING_HEADS: Final[tuple[str, ...]] = (
 )
 
 
+def _functions_created(calls: tuple[_Call, ...]) -> frozenset[str]:
+    """Every `schema.function` this body creates with a plain `CREATE FUNCTION`, by name.
+
+    By name and not by signature, as `_tables_created` reads a table by name: a body that creates
+    one overload and revokes on another of the same name has revoked on a function it made, and
+    this repository writes no overloads.
+    """
+    return frozenset(
+        found.group(1).lower()
+        for call in calls
+        for statement in call.sql
+        if (found := _CREATE_FUNCTION.match(statement)) is not None
+    )
+
+
 def _from_statement(
-    statement: str, made: frozenset[str], replaced: frozenset[str] = frozenset()
+    statement: str,
+    made: frozenset[str],
+    replaced: frozenset[str] = frozenset(),
+    functions: frozenset[str] = frozenset(),
 ) -> Change:
-    """One SQL statement, read against the tables this body creates and re-polices."""
+    """One SQL statement, read against the tables and functions this body creates."""
     upper = statement.upper()
+    revoked = _REVOKE_ON_FUNCTION.match(statement)
+    if revoked is not None and revoked.group(1).lower() in functions:
+        return Change(
+            Verdict.SAFE,
+            "privilege taken from a function created here",
+            f"{statement}. {A_REVOKE_ON_A_FUNCTION_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING}",
+        )
     if upper.startswith("DROP INDEX"):
         return Change(
             Verdict.SAFE,
@@ -993,6 +1032,7 @@ def changes_in(
     calls, complete = _calls(tree, applying)
     counterpart, _ = _calls(tree, reversing)
     made = _tables_created(calls)
+    functions = _functions_created(calls)
     replaced = frozenset(
         table
         for call in calls
@@ -1026,7 +1066,7 @@ def changes_in(
                 )
             )
             continue
-        out.extend(_from_statement(one, made, replaced) for one in call.sql)
+        out.extend(_from_statement(one, made, replaced, functions) for one in call.sql)
     return tuple(out)
 
 

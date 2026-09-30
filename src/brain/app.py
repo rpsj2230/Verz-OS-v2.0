@@ -82,6 +82,7 @@ from brain.channels.widget import allowed_origins
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
+from brain.escalation_told import keep_telling_expired_askers
 from brain.firstrun import GRANTED_BY
 from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
@@ -90,6 +91,7 @@ from brain.gate.resolve import EntitlementCache
 from brain.gate.roster import AgentRoster
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
+from brain.gate.takeover_store import StoredTakeovers
 from brain.identity.administration_reconciliation import (
     TRACE_PREFIX as RECONCILIATION_TRACE,
 )
@@ -354,6 +356,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # The email channel's mailbox, read every minute where the answer is made; it reads nothing
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
+    telling: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -415,6 +418,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             log.exception("installation settings could not be loaded")
         holding = asyncio.create_task(keep_holding(app.state.db_sessions))
         reading = asyncio.create_task(keep_reading_the_mailbox(app))
+        # An asker whose handed-on question expired is told in their own chat, by this process
+        # because the worker holds no channel's token. See `brain.escalation_told`.
+        telling = asyncio.create_task(keep_telling_expired_askers(app))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -620,6 +626,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Approvals are read and decided on the database, whose trigger keeps each decision's ledger
     # entry. See `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions)
+    # Where the autonomy breaker reads when an agent's work was taken over (M8.3.5), through the
+    # one function `0172` grants past the suspension policy. See `brain.gate.takeover_store`.
+    app.state.takeovers = (
+        StoredTakeovers(app.state.db_sessions) if app.state.db_sessions is not None else None
+    )
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
@@ -720,6 +731,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             reading.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await reading
+        if telling is not None:
+            telling.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await telling
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -1008,6 +1023,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.first_administrators = None
     # The same, for where approvals are read from and decided. See `suspension_store_for`.
     app.state.suspensions = None
+    # The same, for where the autonomy breaker reads takeovers. Built beside `suspensions`.
+    app.state.takeovers = None
     # The same, for an automation's registration and its owner's standing. Built beside `gate`
     # and never without it: see `wirings_for`.
     app.state.automation = None

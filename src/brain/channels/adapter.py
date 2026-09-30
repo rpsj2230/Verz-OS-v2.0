@@ -659,6 +659,22 @@ class ChannelWire(Protocol):
 
 
 @runtime_checkable
+class PersonWire(Protocol):
+    """What a wire adds when it can write to one person who did not just write to it.
+
+    Asked by `isinstance`, as `CardWire` is. A person is written to unasked only on a channel whose
+    identity is their own (`brain.ops.binding_store.ADDRESS_KEPT_ON`, needs-rupash 118), at the
+    address `person_address` makes from the identity their binding keeps. Pure, as every wire
+    method is.
+    """
+
+    def person_address(self, identity: str) -> str:
+        """The address of this identity's own conversation with the bot. The identity goes in a
+        request's body, never in its URL."""
+        ...
+
+
+@runtime_checkable
 class CardWire(Protocol):
     """What a wire adds when its vendor has cards a person can press (M10.2.3, M10.2.4).
 
@@ -682,6 +698,12 @@ class CardWire(Protocol):
 
     def edit_address(self, message_id: str) -> str:
         """The address a reply is sent to so that it replaces the card in this message."""
+        ...
+
+    def person_address(self, identity: str) -> str:
+        """The address of this identity's own conversation with the bot, for a card sent to a
+        person who did not ask (needs-rupash 118). The identity goes in a request's body, never
+        in its URL."""
         ...
 
     def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:

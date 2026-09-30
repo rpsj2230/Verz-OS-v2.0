@@ -1185,6 +1185,11 @@ class SlackWire:
     def channel(self) -> Channel:
         return Channel.SLACK
 
+    def person_address(self, identity: str) -> str:
+        """A person's own conversation with the app: `user:`, which `request_for` posts to with
+        `chat.postMessage` by the person's id in the body (needs-rupash 118)."""
+        return f"{SENDER_ADDRESS}:{identity}"
+
     @property
     def tenant_fields(self) -> tuple[str, ...]:
         return (BOT_ID,)

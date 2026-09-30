@@ -65,11 +65,18 @@ shadow and once for real, which an agent could in principle notice. Keying the s
 ledger of its own would close that and was not built, because nothing yet runs an agent that
 could ask.
 
+**A rung people keep taking over stands one lower (M8.3.5).** `decide`, `govern` and `resume`
+take the agent's `brain.gate.abstain.AutonomyBreaker` for the action's target as `standing`, and
+`effective_tier` lowers the configured rung by it before anything else tightens it. It arrives as
+a value, read by the caller from `brain.gate.takeover_store` at the decision's own instant, for the
+reason the operation ledger arrives as a protocol: this module reads no table. See
+`A_TAKEN_OVER_AGENT_STANDS_ONE_RUNG_LOWER`.
+
 Scope: this is policy, not a runtime. M3.8.1, the agent loop itself, does not exist yet, so
 simulation and execution arrive as callables and the operation ledger as a protocol. Nothing
 here opens a connection, reads a table or calls a model.
 
-Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M3.9.6, M17.3.1
+Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M3.9.6, M17.3.1, M8.3.5
 """
 
 from __future__ import annotations
@@ -90,6 +97,7 @@ from brain.core.envelope import Entity, ToolDefinition, TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.core.redaction import compute_mask
 from brain.core.scope import Scope
+from brain.gate.abstain import AutonomyBreaker
 from brain.gate.injection import AutonomyTier, RiskAssessment, autonomy_ceiling
 from brain.ops.idempotency import (
     CallOutcome,
@@ -400,16 +408,51 @@ A_SENSITIVE_EFFECT_ALWAYS_WAITS_FOR_A_PERSON: Final = (
 )
 
 
-def effective_tier(leash: Leash, action: Action, assessment: RiskAssessment) -> AutonomyTier:
-    """The rung, intersected with the risk ceiling and the sensitive-effect cap.
+#: Why the breaker's standing is applied to the configured rung and nowhere else.
+A_TAKEN_OVER_AGENT_STANDS_ONE_RUNG_LOWER: Final = (
+    "People taking an agent's work over three times inside a week on one target is evidence the "
+    "rung was set too high there, so the rung that target's next action is held to is the "
+    "configured one lowered a step by brain.gate.abstain.AutonomyBreaker, before the risk ceiling "
+    "and the sensitive-effect cap, which only lower it further. A standing for another agent or "
+    "target is refused, because it would demote the wrong one, and one without an instant is "
+    "refused, because its window is measured from the moment the decision is taken."
+)
+
+
+def effective_tier(
+    leash: Leash,
+    action: Action,
+    assessment: RiskAssessment,
+    *,
+    standing: AutonomyBreaker | None = None,
+    now: datetime | None = None,
+) -> AutonomyTier:
+    """The rung, lowered by the breaker's standing, then the risk ceiling and the sensitive cap.
 
     `autonomy_ceiling` is imported rather than reimplemented. A second copy of "the score
     can only tighten" would have to be kept in step with the first forever, and the day they
     diverge, the divergence is discovered by an action happening that should not have.
     The cap is `min`, like every other ceiling here: see
     `A_SENSITIVE_EFFECT_ALWAYS_WAITS_FOR_A_PERSON`.
+
+    `standing` is the agent's breaker on this action's target (M8.3.5), and `now` the instant its
+    window ends. See `A_TAKEN_OVER_AGENT_STANDS_ONE_RUNG_LOWER`.
     """
-    tier = autonomy_ceiling(leash.rung_for(action.agent_id, action.target, action.row), assessment)
+    rung = leash.rung_for(action.agent_id, action.target, action.row)
+    if standing is not None:
+        if (standing.agent_id, standing.target) != (action.agent_id, action.target):
+            msg = (
+                f"a standing for {standing.agent_id}/{standing.target} was given for an action of "
+                f"{action.agent_id} on {action.target}. {A_TAKEN_OVER_AGENT_STANDS_ONE_RUNG_LOWER}"
+            )
+            raise ValueError(msg)
+        if now is None:
+            msg = (
+                f"a standing was given with no instant. {A_TAKEN_OVER_AGENT_STANDS_ONE_RUNG_LOWER}"
+            )
+            raise ValueError(msg)
+        rung = standing.rung(rung, now)
+    tier = autonomy_ceiling(rung, assessment)
     if action.tool.declares_sensitive_effect():
         return min(tier, SENSITIVE_EFFECT_RUNG)
     return tier
@@ -483,6 +526,7 @@ def decide(
     leash: Leash,
     assessment: RiskAssessment,
     now: datetime | None = None,
+    standing: AutonomyBreaker | None = None,
 ) -> Decision:
     """Run all three checks, in order, and say what may happen (M3.8.6).
 
@@ -508,7 +552,7 @@ def decide(
                 # Computed here rather than before the loop, so that a capability refusal
                 # short-circuits before the leash is read at all. A refused caller's leash
                 # is not a question anybody asked.
-                tier = effective_tier(leash, action, assessment)
+                tier = effective_tier(leash, action, assessment, standing=standing, now=now)
                 outcome = _rung_check(tier)
             case CheckName.MASK:
                 outcome = _mask_check(action, entitlement=run, policy=policy, now=now)
@@ -994,6 +1038,7 @@ def resume[T: Entity](
     now: datetime,
     execute: Callable[[Action], TypedResult[T]],
     ledger: OperationLedger,
+    standing: AutonomyBreaker | None = None,
 ) -> Resumption[T]:
     """Re-check everything, then do it once (M3.8.4, M17.3.1).
 
@@ -1041,6 +1086,7 @@ def resume[T: Entity](
         leash=leash,
         assessment=assessment,
         now=now,
+        standing=standing,
     )
     if not decision.permitted:
         return Resumption(
@@ -1150,6 +1196,7 @@ def govern[T: Entity](
     ledger: OperationLedger,
     window: timedelta = DEFAULT_APPROVAL_WINDOW,
     suspension_id: str | None = None,
+    standing: AutonomyBreaker | None = None,
 ) -> Governed[T]:
     """Decide, then route: simulate, suspend, execute or refuse.
 
@@ -1170,6 +1217,7 @@ def govern[T: Entity](
         leash=leash,
         assessment=assessment,
         now=now,
+        standing=standing,
     )
     route = route_for(decision)
     record = _record(
