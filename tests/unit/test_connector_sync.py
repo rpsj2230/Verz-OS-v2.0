@@ -164,17 +164,33 @@ def test_an_agreed_xero_connection_under_a_verified_ceiling_is_read_with_the_wor
     assert plan.manifest.credential.ref.role is READING_ROLE
 
 
-def test_hubspot_is_not_read_because_nobody_verified_its_ceiling() -> None:
-    """Held against HubSpot's own record of the fact rather than against the sentence alone: the
-    connector says its ceiling is unverified, and the plan says the same thing to a person.
+def test_a_source_with_no_recorded_ceiling_is_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HubSpot with its row taken out of `brain.ops.limits`: the connector says its ceiling is
+    unverified, and the plan says the same thing to a person.
 
-    Delete this and HubSpot is read against no ceiling, which `throttle.limits_for` exists to
+    Delete this and a source is read against no ceiling, which `throttle.limits_for` exists to
     refuse, or the refusal stops being said on the screen."""
+    from brain.ops import limits
+
+    kept = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    monkeypatch.setattr(limits, "_BY_NAME", kept)
     assert hubspot.ceiling_is_verified() is False
     plan = plan_for(a_connection("hubspot"), last=None, now=NOW)
 
     assert plan.refused == NO_VERIFIED_CEILING
     assert (plan.manifest, plan.reading, plan.due) == (None, None, False)
+
+
+def test_hubspot_is_read_against_its_documented_ceiling() -> None:
+    """**The finding of 2026-09-30, closed.** HubSpot was offered on the Connectors screen with no
+    ceiling recorded, so a connected account was never read. Its documented figure is recorded
+    now and the plan reads it. Delete this and HubSpot can fall back to being offered and never
+    read, which is what item 128 asks the owner to connect."""
+    assert hubspot.ceiling_is_verified() is True
+    plan = plan_for(a_connection("hubspot"), last=None, now=NOW)
+
+    assert plan.refused == ""
+    assert plan.reading is not None and plan.due
 
 
 def test_a_connection_whose_declaration_changed_since_it_was_agreed_to_is_not_read() -> None:

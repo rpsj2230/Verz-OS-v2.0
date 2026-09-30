@@ -348,6 +348,9 @@ CONNECTOR_NAME: Final = "hubspot"
 #: rather than restated: see `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING`.
 CEILING_NAME: Final = "hubspot"
 
+#: The ceiling `brain.ops.limits` records for this name is HubSpot's documented one, read on
+#: 2026-09-30 (https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines).
+
 #: What `TypedResult.source` and `ProjectedRecord.source` carry. The specification is named
 #: rather than embedded, for the reason `RestTransport.spec_ref` gives.
 SPEC_REF: Final = "hubspot"

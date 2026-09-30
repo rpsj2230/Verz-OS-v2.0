@@ -60,9 +60,9 @@ def test_every_source_the_console_connects_has_an_edit_and_a_wrong_shape() -> No
     to the console is walked by nothing, or a credential shape added has no refusal tried."""
     from brain.connectors.declaration import CredentialShape
     from brain.ops.acceptance_checks_console_connect import EDITS, WRONG_SHAPE
-    from brain.ops.connectable import CONNECTABLE
+    from brain.ops.connectable import CONNECTABLE, DECLARED_FORMS
 
-    assert set(EDITS) == set(CONNECTABLE)
+    assert set(CONNECTABLE) <= set(EDITS) <= set(DECLARED_FORMS)
     assert set(WRONG_SHAPE) == {one.value for one in CredentialShape}
 
 

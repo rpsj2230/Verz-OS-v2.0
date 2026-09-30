@@ -19,7 +19,7 @@ from brain.connectors import google_drive, laravel
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import CredentialShape, SettingRefusedError
 from brain.core.scope import Clause, Op, Scope
-from brain.ops.connectable import CONNECTABLE, key_reference, settings_problems
+from brain.ops.connectable import DECLARED_FORMS, key_reference, settings_problems
 from brain.ops.connector_admin import credential_problems
 from brain.ops.credentials import (
     KEY_FIELD,
@@ -142,9 +142,9 @@ def test_every_shape_is_told_against_the_one_credential_field() -> None:
 def test_the_two_sources_take_their_credential_in_their_own_shape() -> None:
     """Delete this and Drive can be offered a key box, or Laravel one string to invent a separator
     in."""
-    assert CONNECTABLE["google_drive"].credential_shape is CredentialShape.KEY_FILE
-    assert CONNECTABLE["laravel"].credential_shape is CredentialShape.DATABASE_USER
-    assert CONNECTABLE["xero"].credential_shape is CredentialShape.KEY
+    assert DECLARED_FORMS["google_drive"].credential_shape is CredentialShape.KEY_FILE
+    assert DECLARED_FORMS["laravel"].credential_shape is CredentialShape.DATABASE_USER
+    assert DECLARED_FORMS["xero"].credential_shape is CredentialShape.KEY
 
 
 # ------------------------------------------------------------------------ the forms
@@ -158,7 +158,7 @@ def test_a_drive_folder_is_named_by_its_link_or_its_id_and_the_folder_is_the_sco
         {**DRIVE, "folder": "1AbCdEfGhIjKlMnOp"}, key_reference("google_drive")
     )
     assert by_link.scope.selectors == by_id.scope.selectors == ("1AbCdEfGhIjKlMnOp",)
-    assert settings_problems(CONNECTABLE["google_drive"], DRIVE) == ()
+    assert settings_problems(DECLARED_FORMS["google_drive"], DRIVE) == ()
 
 
 @pytest.mark.parametrize(
