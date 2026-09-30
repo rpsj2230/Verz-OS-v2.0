@@ -18,12 +18,17 @@ is connected already is refused, and the check reads its questions off the conne
 transaction, so a real connection would stand in the check's place. See
 `A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN`.
 
-**What it does not prove, said once.** Freshdesk declares no live lookup, so a ticket is answered
-from its index row alone and its body is never read; a question over many records (M11.8.3's
-headers clause) has no question shape yet; and the request recorders are not handed to the lane,
-so that the canary search covers what the lane and the sources wrote and not the request row.
+**Every connected value is read live, so the stale answer is asked of the price list.** Xero's
+invoices and contacts and Freshdesk's tickets, bodies included, are read from the source when a
+question asks (M11.9.2), so no connected answer stands on an old index row; the product's own
+price list is the pair every install answers from its index, and a row of it read days before is
+what surfaces the staleness (M11.4.9). See `A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD`.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9
+**What it does not prove, said once.** A question over many records (M11.8.3's headers clause) has
+no question shape yet, and the request recorders are not handed to the lane, so the canary search
+covers what the lane and the sources wrote and not the request row.
+
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2
 """
 
 from __future__ import annotations
@@ -68,14 +73,26 @@ A_SOURCE_IS_CONNECTED_HERE_ALREADY: Final = (
     "again and does not ask about it"
 )
 
-#: Why the stale ticket is read a few days before the question.
-A_TICKET_READ_DAYS_AGO_IS_ANSWERED_AS_OLD: Final = (
-    "The helpdesk's ticket is read by the worker at an instant three days before the question, "
-    "which is past the product's horizon for a record, so an answer standing on it must say "
-    "that what it is based on may be out of date and date its citation by that read."
+#: Why the ticket is read days before the question, and why its answer is not old.
+A_TICKET_READ_LIVE_IS_NOT_OLD: Final = (
+    "The helpdesk's ticket is indexed by the worker three days before the question, and every "
+    "value a question uses is read from the helpdesk when it is asked (M11.9.2), so the answer "
+    "stands on that read and carries no note that it may be out of date."
 )
 
-__all__ = ["A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN", "A_TICKET_READ_DAYS_AGO_IS_ANSWERED_AS_OLD"]
+#: Why the stale answer is asked of the product's own price list.
+A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD: Final = (
+    "Every shipped connected source is read live, so an answer standing on an index row is one "
+    "about a pair no source reads live, and the built-in price list is one every install reads "
+    "from its index. A row of it read three days before the question is past the product's "
+    "horizon, so the answer must say it may be out of date and date its citation by that read."
+)
+
+__all__ = [
+    "A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN",
+    "A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD",
+    "A_TICKET_READ_LIVE_IS_NOT_OLD",
+]
 
 # ------------------------------------------------------------------------ the figures
 #: How long before the question the helpdesk was read.
@@ -95,6 +112,7 @@ class _Helpdesk:
     """`SourceCaller` answering Freshdesk's ticket list with the check's one ticket. No socket."""
 
     ticket: dict[str, Any]
+    body: str = ""
     asked: list[str] = field(default_factory=list)
 
     def get(self, url: str, *, address: str, headers: Any, max_bytes: int) -> SourceAnswer:
@@ -102,9 +120,25 @@ class _Helpdesk:
 
         del address, headers, max_bytes
         self.asked.append(url)
-        if "/api/v2/tickets" in url:
+        path = url.split("?", 1)[0]
+        if path.endswith(f"/api/v2/tickets/{self.ticket['id']}"):
+            one = {**self.ticket, "description_text": self.body}
+            return SourceAnswer(status=200, headers={}, body=json.dumps(one).encode())
+        if path.endswith("/api/v2/tickets"):
             return SourceAnswer(status=200, headers={}, body=json.dumps([self.ticket]).encode())
         return SourceAnswer(status=404, headers={}, body=b"{}")
+
+
+@dataclass
+class _Both:
+    """`SourceCaller` sending each call to the recorded source whose address it names."""
+
+    ledger: Any
+    helpdesk: _Helpdesk
+
+    def get(self, url: str, *, address: str, headers: Any, max_bytes: int) -> SourceAnswer:
+        to = self.helpdesk if HELPDESK in url else self.ledger
+        return to.get(url, address=address, headers=headers, max_bytes=max_bytes)
 
 
 def _connection(h: Harness, connector: str, settings: dict[str, str]) -> Connection:
@@ -170,9 +204,9 @@ def _prose(answered: Answered) -> str:
     sentence=(
         "A Xero organisation and a Freshdesk helpdesk made up for the check are connected, read by "
         "the worker from recorded answers and asked about through the answer route's own parts: "
-        "an invoice's amount is read live for a reader granted it and withheld as if absent from "
-        "one who is not, a ticket read days ago is said to be possibly out of date, and the live "
-        "value is in no table."
+        "an invoice's amount and a ticket's body are read live for a reader granted them and "
+        "withheld as if absent from one who is not, a price read days ago is said to be possibly "
+        "out of date, and nothing read live is in a table."
     ),
 )
 async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Harness) -> None:
@@ -249,7 +283,9 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
         {freshdesk.DOMAIN_SETTING: HELPDESK, freshdesk.DEPARTMENT_SETTING: A},
     )
     read_at = h.now - READ_BEFORE_THE_QUESTION
-    await _connect_and_read(h, helpdesk_connection, _Helpdesk(ticket), at=read_at)
+    body = fresh_canary("ACCEPTANCE")
+    helpdesk = _Helpdesk(ticket, body=body)
+    await _connect_and_read(h, helpdesk_connection, helpdesk, at=read_at)
 
     # What the answer route builds, by its own functions, over the check's transaction.
     rules = await connected_questions_of(state)
@@ -269,14 +305,14 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
         return ConnectedSources(
             connections,
             keys=_Keys(),
-            caller=ledger,
+            caller=_Both(ledger=ledger, helpdesk=helpdesk),
             resolver=_Resolver(),
             clock=lambda: h.now,
         )
 
     live_records = SourceRecords(connected=connected, clock=lambda: h.now)
 
-    async def ask(principal_id: str, question: str) -> Answered:
+    async def ask(principal_id: str, question: str, *, also: Any = ()) -> Answered:
         person = await StoredPrincipals(h.sessions).live_principal(principal_id)
         if person is None:
             raise CheckFailedError("a reserved person was not live in the directory")
@@ -285,7 +321,7 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
             question,
             origin=Origin(trace_id=h.trace_id, principal=person, channel=Channel.CONSOLE),
             recorders=(),
-            rules=rules,
+            rules=(*rules, *also),
             readers=readers,
             entitlement=reach,
             policies=field_policies(registry),
@@ -325,24 +361,91 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
     if _prose(withheld) != _prose(nobody):
         raise CheckFailedError("a withheld amount was told apart from an invoice that is not there")
 
-    # M11.6.2 and M11.4.9: the ticket from its index row, as old as its last read.
+    # M11.6.2: the ticket found by its index row and read from the helpdesk, body and all.
+    support = h.principal(A, "support")
     await h.person(
-        h.principal(A, "support"),
+        support,
         department=A,
         grants=tuple(
             (one, Scope.department(A))
-            for one in ("read:ticket", "read:ticket.subject", "read:ticket.status")
+            for one in (
+                "read:ticket",
+                "read:ticket.subject",
+                "read:ticket.status",
+                f"read:ticket.{freshdesk.LIVE_BODY_FIELD}",
+            )
         ),
     )
-    old = await ask(h.principal(A, "support"), asking("status", subject))
-    if old.composed is None or old.provenance is None:
+    status = await ask(support, asking("status", subject))
+    if status.composed is None or status.provenance is None:
         raise CheckFailedError("a connected helpdesk's ticket was not answered on Ask")
-    if STALENESS_TEXT[Freshness.STALE] not in _prose(old):
-        raise CheckFailedError("an answer from a ticket read days ago did not say it may be old")
-    dated = {datetime.fromisoformat(one.freshness.fetched_at) for one in old.provenance.rows}
-    if dated != {read_at}:
-        raise CheckFailedError("a ticket's citation was not dated by when the source was read")
+    if STALENESS_TEXT[Freshness.STALE] in _prose(status):
+        raise CheckFailedError("a ticket read live was answered as though read days ago")
+    told = await ask(support, asking(freshdesk.LIVE_BODY_FIELD, subject))
+    if told.composed is None or body not in _prose(told):
+        raise CheckFailedError("a ticket's body was not read from the helpdesk when it was asked")
+    agent = h.principal(A, "agent")
+    await h.person(
+        agent,
+        department=A,
+        grants=tuple((one, Scope.department(A)) for one in ("read:ticket", "read:ticket.subject")),
+    )
+    hidden = await ask(agent, asking(freshdesk.LIVE_BODY_FIELD, subject))
+    missing = await ask(agent, asking(freshdesk.LIVE_BODY_FIELD, h.word()))
+    if body in _prose(hidden) or _prose(hidden) != _prose(missing):
+        raise CheckFailedError("a ticket's body was told to a reader not granted it")
+
+    # M11.4.9: an answer standing on an index row read days ago says so, on the product's own
+    # price list, which every install reads from its index and no source reads live.
+    await _stale_price(h, ask, asking)
 
     # Nothing a live read returned was kept anywhere.
     if await _search(h, canary):
         raise CheckFailedError("an amount read live was found in a table")
+    if await _search(h, body):
+        raise CheckFailedError("a ticket's body read live was found in a table")
+
+
+async def _stale_price(h: Harness, ask: Any, asking: Any) -> None:
+    """A price list row the index read days ago, answered with the note that it may be old.
+
+    Written into the check's own transaction through the sync's own `record_upsert`, under the
+    source this install's registry reads its built-in price list from, so the reader, the row
+    plane and the date are the product's. See `A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD`.
+    """
+    from brain.connectors.projection import ProjectedRecord
+    from brain.gate.provenance import STALENESS_TEXT, Freshness
+    from brain.knowledge.classified_rows import questions_over
+    from brain.knowledge.columns import PRICE_LIST
+    from brain.ops.connector_sync_store import record_upsert
+
+    read_at = h.now - READ_BEFORE_THE_QUESTION
+    name, price = h.word(), "417.00"
+    source = h.settings.tool_source
+    row = ProjectedRecord(
+        source=source,
+        entity=PRICE_LIST.entity,
+        source_id=f"acceptance-{h.word()}",
+        last_seen_at=read_at,
+        fields={"name": name, "sell_price": price},
+    )
+    async with h.sessions() as session, session.begin():
+        await session.execute(record_upsert(row, {"name": name, "sell_price": price}))
+    buyer = h.principal(A, "buyer")
+    await h.person(
+        buyer,
+        department=A,
+        grants=tuple(
+            (one, Scope.unrestricted())
+            for one in ("read:price_list", "read:price_list.name", "read:price_list.sell_price")
+        ),
+    )
+    shapes = questions_over(PRICE_LIST, source=source, key_column="name")
+    old = await ask(buyer, asking("sell_price", name), also=shapes)
+    if old.composed is None or price not in _prose(old) or old.provenance is None:
+        raise CheckFailedError("a price the index read days ago was not answered on Ask")
+    if STALENESS_TEXT[Freshness.STALE] not in _prose(old):
+        raise CheckFailedError("an answer from a row read days ago did not say it may be old")
+    dated = {datetime.fromisoformat(one.freshness.fetched_at) for one in old.provenance.rows}
+    if dated != {read_at}:
+        raise CheckFailedError("a row's citation was not dated by when it was last read")

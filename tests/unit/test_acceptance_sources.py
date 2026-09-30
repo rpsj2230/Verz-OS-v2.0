@@ -7,7 +7,7 @@ holds afterwards what it held before. Then it is run against the product broken 
 connected sources contributing no question shapes, a live read that is never made, and an index
 answer dated by the question rather than by its row. Each fails with its own sentence.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2
 """
 
 from __future__ import annotations
@@ -105,15 +105,17 @@ def test_on_a_real_database_a_connected_source_answers_and_nothing_is_left_behin
     [
         ("questions", "a source nobody connected contributed a question shape"),
         ("live", "an invoice's amount was not read live for a reader granted it"),
-        ("age", "an answer from a ticket read days ago did not say it may be old"),
+        ("age", "an answer from a row read days ago did not say it may be old"),
+        ("body", "a ticket's body was not read from the helpdesk when it was asked"),
     ],
 )
 def test_the_sources_check_fails_where_the_path_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
-    """Three breaks, one per property: every connector's questions offered whether it is connected
-    or not, a live reader that never reads, and an index answer dated by the question. Each fails
-    the check with its own sentence. Delete this and the check can pass with the property gone."""
+    """Four breaks, one per property: every connector's questions offered whether it is connected
+    or not, a live reader that never reads, an index answer dated by the question, and a ticket's
+    live read that no longer takes its body. Each fails the check with its own sentence. Delete
+    this and the check can pass with the property gone."""
     import brain.api_routes as api_routes
     import brain.knowledge.connector_rows as connector_rows
     import brain.knowledge.rows as rows
@@ -134,12 +136,16 @@ def test_the_sources_check_fails_where_the_path_is_broken(
             return None
 
         monkeypatch.setattr(live_records.SourceRecords, "refresh", never)
-    else:
+    elif broken == "age":
         monkeypatch.setattr(
             rows,
             "answered_as_of",
             lambda fetched, now: now.isoformat() if now is not None else "",
         )
+    else:
+        import brain.connectors.freshdesk as freshdesk
+
+        monkeypatch.setattr(freshdesk, "TICKET_LIVE_MAPPING", freshdesk.TICKET_MAPPING)
     with at_head(f"brain_acceptance_sources_{broken}") as url:
         before = written(url)
         outcome = run_checks(url, (mine()[NAME],))

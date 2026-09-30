@@ -335,16 +335,19 @@ class _NoKeys:
         raise CheckFailedError("the chat channel asked for the realm's keys, which it never needs")
 
 
-async def lark_app(h: Harness) -> _LarkApp:
-    """The events route over the check's transaction, with a Lark app set up in memory."""
+async def channel_app(h: Harness, *, channel_secrets: object, channel_transport: object) -> FastAPI:
+    """The channel router over the check's transaction, holding a channel's secret and transport.
+
+    The objects the lifespan sets on the application's state, each over `harness.sessions`: the
+    gate `brain.app.wirings_for` builds, with no entitlement cache, the registry, the install's
+    answer rules and an operation ledger in memory. A check that sets up a channel saves its record
+    through the channel store; the route's own wiring functions choose every other store.
+    """
     from fastapi import FastAPI
 
     from brain.api_routes import GateWiring
     from brain.cache import NoEntitlementCache, PostgresVersionSource
     from brain.channel_routes import router
-    from brain.channels.adapter import BOT_ID
-    from brain.channels.lark import APP_ID_FIELD, PLATFORM_FIELD, LarkSecret
-    from brain.gate.context import Channel
     from brain.gate.entitlement_store import StoredEntitlements
     from brain.gate.rule_store import load_rules
     from brain.identity.keycloak_tokens import keycloak_authority
@@ -352,7 +355,6 @@ async def lark_app(h: Harness) -> _LarkApp:
     from brain.identity.roles import IdentityError
     from brain.install import InstallError
     from brain.knowledge.row_store import SessionRowSource
-    from brain.ops.channel_store import StoredChannels
     from brain.ops.trace_sink import CountingTraceSink
     from brain.tools.startup import build_registry
 
@@ -372,15 +374,45 @@ async def lark_app(h: Harness) -> _LarkApp:
         store=StoredEntitlements(h.sessions),
         cache=NoEntitlementCache(),
     )
+    try:
+        rules = await load_rules(h.sessions)
+    except Exception:
+        # The lifespan's choice for a rule table that cannot be read: an empty rule set.
+        rules = ()
+    app = FastAPI()
+    state = app.state
+    app.include_router(router)
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.gate = gate
+    state.tools = build_registry(
+        source=h.settings.tool_source, records=SessionRowSource(h.sessions)
+    )
+    state.fast_path_rules = rules
+    state.trace_sink = CountingTraceSink()
+    state.channel_secrets = channel_secrets
+    state.channel_transport = channel_transport
+    state.operation_ledger = _HeldLedger()
+    return app
+
+
+async def lark_app(h: Harness) -> _LarkApp:
+    """The events route over the check's transaction, with a Lark app set up in memory."""
+    from brain.channels.adapter import BOT_ID
+    from brain.channels.lark import APP_ID_FIELD, PLATFORM_FIELD, LarkSecret
+    from brain.gate.context import Channel
+    from brain.ops.channel_store import StoredChannels
+
     kept = LarkSecret(
         app_secret=secrets.token_hex(16),
         encrypt_key=secrets.token_hex(16),
         verification_token=secrets.token_hex(16),
     )
+    lark = _Lark()
     made = _LarkApp(
         h=h,
-        app=FastAPI(),
-        lark=_Lark(),
+        app=await channel_app(h, channel_secrets=_Secret(kept.kept()), channel_transport=lark),
+        lark=lark,
         app_id=f"cli_{secrets.token_hex(8)}",
         bot=open_id(),
         encrypt_key=kept.encrypt_key,
@@ -394,24 +426,6 @@ async def lark_app(h: Harness) -> _LarkApp:
         ent_hash="0" * 32,
         trace_id=h.trace_id,
     )
-    try:
-        rules = await load_rules(h.sessions)
-    except Exception:
-        # The lifespan's choice for a rule table that cannot be read: an empty rule set.
-        rules = ()
-    state = made.app.state
-    made.app.include_router(router)
-    state.settings = h.settings
-    state.db_sessions = h.sessions
-    state.gate = gate
-    state.tools = build_registry(
-        source=h.settings.tool_source, records=SessionRowSource(h.sessions)
-    )
-    state.fast_path_rules = rules
-    state.trace_sink = CountingTraceSink()
-    state.channel_secrets = _Secret(kept.kept())
-    state.channel_transport = made.lark
-    state.operation_ledger = _HeldLedger()
     return made
 
 
