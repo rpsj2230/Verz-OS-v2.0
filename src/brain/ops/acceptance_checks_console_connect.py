@@ -40,6 +40,10 @@ from brain.ops.acceptance_run import SET_UP_REACH, Harness
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 310
+
 #: What the check does with a source the install has connected already.
 A_CONNECTED_SOURCE_IS_JUDGED_ONLY: Final = (
     "A source this install has connected is connected from the console already, and the store "

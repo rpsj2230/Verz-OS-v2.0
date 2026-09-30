@@ -34,7 +34,7 @@ from brain.ops import acceptance_checks_connectors as connectors
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
 from brain.ops.acceptance_run import Harness
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_connectors"
@@ -383,3 +383,16 @@ def test_the_lifecycle_check_fails_when_a_step_does_not_take(
         after = connector_counts(url)
     assert outcome[lifecycle().name] == (FAILED, reason)
     assert after == before
+
+
+def test_the_connectors_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_connectors") == [
+        "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
+        "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
+        "a_changed_declaration_makes_the_next_sync_refuse",
+        "a_source_is_connected_switched_off_and_upgraded_from_the_console",
+    ]

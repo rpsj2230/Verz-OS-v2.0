@@ -22,7 +22,7 @@ import pytest
 
 from brain.ops.acceptance import FAILED, PASSED, Check, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_console_connect"
@@ -43,6 +43,15 @@ def test_the_console_connect_check_is_registered_with_the_leaf_it_proves() -> No
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
     assert set(mine()[NAME].leaves) <= leaves
+
+
+def test_the_console_connect_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them: one check, every
+    source connected, edited and switched off in the console. Held here, beside the module's other
+    tests, so a package adding a check edits its own file and never a list every package appends to.
+    Delete this and a check can drop out of the module with the page simply listing one fewer
+    row."""
+    assert checks_in(MODULE) == [NAME]
 
 
 def test_every_source_the_console_connects_has_an_edit_and_a_wrong_shape() -> None:

@@ -14,13 +14,13 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { NOT_RECORDED } from "../src/components/kit";
+import { NOT_COPIED_TEXT, NOT_RECORDED } from "../src/components/kit";
 import { DISCONNECT_LABEL, GET_CODE_LABEL, READING_MY_CHANNELS } from "../src/components/MyChannels";
 import { TENANT_FORMAT } from "../src/pages/channelsQuery";
 import { ACT_LABELS, UNAVAILABLE } from "../src/pages/channels/channelActions";
 import { SWITCH_OFF_CONSEQUENCE } from "../src/pages/channels/ChannelDetailPage";
 import { UNBIND_CONSEQUENCE } from "../src/pages/channels/ChannelDashboard";
-import { SECRET_FORMAT } from "../src/pages/channels/ChannelProfile";
+import { partLabel, SECRET_FORMAT } from "../src/pages/channels/ChannelProfile";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument } from "./support/openapi";
 import { PAGES } from "./support/pageCases";
@@ -48,7 +48,10 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     health: "working",
     last_delivered_at: AT,
     events_path: "/api/v1/channels/webhook/events",
+    events_address: "",
+    steps: [],
     tenant_fields: ["reply_url"],
+    secret_parts: [],
     tenant: { reply_url: "https://hooks.example.test/reply" },
     changed_at: AT,
     changed_by: "u_ada",
@@ -368,6 +371,181 @@ describe("one channel's page", () => {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
     expect(UNAVAILABLE.verify.retiredBy.test("/api/v1/channels/{name}/verify")).toBe(true);
+  });
+});
+
+const SCRIPT = "export default { async email(message, env) {} };";
+const ADDRESS_TO_PASTE = "https://brain.example.test/api/v1/channels/email/events";
+
+function aStep(key: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    key,
+    title: `Do ${key}`,
+    text: `What to press for ${key}.`,
+    sketch: { place: "Vendor", heading: key, menu: [], menu_mark: "", tabs: [], tab_mark: "", lines: [], button: "" },
+    link: "",
+    link_label: "",
+    asks: [],
+    copy_text: "",
+    copy_label: "",
+    ...extra,
+  };
+}
+
+const EMAIL = row({
+  channel: "email",
+  label: "Email",
+  status: "not_set_up",
+  secret: "none",
+  health: "not_set_up",
+  last_delivered_at: null,
+  events_path: "/api/v1/channels/email/events",
+  events_address: ADDRESS_TO_PASTE,
+  tenant_fields: ["address"],
+  tenant: {},
+  changed_at: null,
+  changed_by: null,
+  changed_by_name: null,
+  steps: [
+    aStep("address", { link: "https://dash.example.test/", link_label: "Open the vendor" }),
+    aStep("worker", { asks: ["events_address"], copy_text: SCRIPT, copy_label: "Copy the Worker script" }),
+    aStep("save", { asks: ["address", "secret"] }),
+  ],
+});
+
+function emailAnswers(): Record<string, unknown> {
+  return answers({
+    "/api/v1/console/channels/email": EMAIL,
+    "/api/v1/console/channels/email/stats": { ...stats(), channel: "email" },
+    "/api/v1/channels/email/health": { ...HEALTH, channel: "email" },
+    "/api/v1/channels/email/bindings": { ...BOUND, channel: "email", items: [] },
+    "/api/v1/channels/email/deliveries": { channel: "email", deliveries: [] },
+  });
+}
+
+function flow(): HTMLElement {
+  const found = document.body.querySelector<HTMLElement>('[data-slot="flow-dialog"]');
+  if (found === null) {
+    throw new Error("No connect flow is open.");
+  }
+  return found;
+}
+
+describe("connecting a channel one screen at a time", () => {
+  test("a channel with steps offers them from its header, with the address to paste and the script to copy", async () => {
+    // What breaks if this is deleted: the steps a channel's module declares reach no screen, the
+    // Worker step shows no address to paste, or its script can only be retyped by hand when the
+    // browser refuses the clipboard.
+    const { container } = await consoleAt("/channels/email", emailAnswers());
+    fireEvent.click(button(container, "Connect Email"));
+    expect(flow().textContent).toContain("Step 1 of 3");
+    expect(flow().querySelector('a[href="https://dash.example.test/"]')?.textContent).toContain("Open the vendor");
+    fireEvent.click(button(flow(), "Step 2 of 3"));
+    expect(flow().textContent).toContain(ADDRESS_TO_PASTE);
+    fireEvent.click(button(flow(), "Copy the Worker script"));
+    await waitFor(() => {
+      expect(flow().textContent).toContain(NOT_COPIED_TEXT);
+    });
+    const script = flow().querySelector<HTMLTextAreaElement>('textarea[aria-label="Copy the Worker script"]');
+    expect(script?.value).toBe(SCRIPT);
+  });
+
+  test("the last screen is the set-up form, sends the secret once, and then offers a test message", async () => {
+    // What breaks if this is deleted: the flow ends in a form that saves nothing, sends the secret
+    // twice or leaves it in the page, or closes before the test message it promises.
+    const { container, sent } = await consoleAt("/channels/email", emailAnswers());
+    fireEvent.click(button(container, "Connect Email"));
+    fireEvent.click(button(flow(), "Step 3 of 3"));
+    const form = flow().querySelector<HTMLFormElement>('form[aria-label="Set up Email"]') as HTMLFormElement;
+    expect(flow().querySelector('form[aria-label="Send test message on Email"]')).toBeNull();
+    fireEvent.change(form.querySelector('input[name="address"]') as HTMLInputElement, {
+      target: { value: "ask@ask.example.test" },
+    });
+    fireEvent.input(form.querySelector('[data-slot="secret-field"] input') as HTMLInputElement, {
+      target: { value: SECRET_TYPED },
+    });
+    fireEvent.click(form.querySelector('input[name="enabled"]') as HTMLInputElement);
+    fireEvent.click(button(form, ACT_LABELS.save));
+    fireEvent.click(button(dialog(), ACT_LABELS.save));
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "PUT").map((one) => [one.path, one.body])).toEqual([
+        ["/api/v1/channels/email", { enabled: true, tenant: { address: "ask@ask.example.test" }, secret: SECRET_TYPED }],
+      ]);
+    });
+    await waitFor(() => {
+      expect(flow().querySelector('form[aria-label="Send test message on Email"]')).not.toBeNull();
+    });
+    expect(document.body.innerHTML).not.toContain(SECRET_TYPED);
+  });
+
+  test("a secret of two parts is typed in two fields and sent whole, never one part alone", async () => {
+    // What breaks if this is deleted: Slack's form takes one secret field that no wire can read, or
+    // saves a new signing secret beside an old token, which verifies and then cannot send.
+    const slack = row({
+      channel: "slack",
+      label: "Slack",
+      status: "not_set_up",
+      secret: "none",
+      health: "not_set_up",
+      last_delivered_at: null,
+      events_path: "/api/v1/channels/slack/events",
+      events_address: "https://brain.example.test/api/v1/channels/slack/events",
+      tenant_fields: ["bot_id"],
+      secret_parts: ["signing_secret", "bot_token"],
+      tenant: {},
+      changed_at: null,
+      changed_by: null,
+      changed_by_name: null,
+      steps: [
+        aStep("create", { asks: ["events_address"], copy_text: "{}", copy_label: "Copy the app manifest" }),
+        aStep("save", { asks: ["bot_id", "signing_secret", "bot_token"] }),
+        aStep("verify"),
+      ],
+    });
+    const read = answers({
+      "/api/v1/console/channels/slack": slack,
+      "/api/v1/console/channels/slack/stats": { ...stats(), channel: "slack" },
+      "/api/v1/channels/slack/health": { ...HEALTH, channel: "slack" },
+      "/api/v1/channels/slack/bindings": { ...BOUND, channel: "slack", items: [] },
+      "/api/v1/channels/slack/deliveries": { channel: "slack", deliveries: [] },
+    });
+    const { container, sent } = await consoleAt("/channels/slack", read);
+    fireEvent.click(button(container, "Connect Slack"));
+    fireEvent.click(button(flow(), "Step 2 of 3"));
+    const form = flow().querySelector<HTMLFormElement>('form[aria-label="Set up Slack"]') as HTMLFormElement;
+    const secrets = [...form.querySelectorAll<HTMLInputElement>('[data-slot="secret-field"] input')];
+    expect(secrets).toHaveLength(2);
+    expect(form.textContent).toContain(partLabel("signing_secret"));
+    expect(form.textContent).toContain(partLabel("bot_token"));
+    fireEvent.change(form.querySelector('input[name="bot_id"]') as HTMLInputElement, { target: { value: "U0BRAINBOT" } });
+    fireEvent.input(secrets[0] as HTMLInputElement, { target: { value: SECRET_TYPED } });
+    fireEvent.click(button(form, ACT_LABELS.save));
+    expect(form.querySelector('[aria-label="Problems with bot_token"]')?.textContent).toContain("Paste bot_token too");
+    expect(document.body.querySelector('[data-slot="confirm-dialog"]')).toBeNull();
+
+    fireEvent.input(secrets[1] as HTMLInputElement, { target: { value: "xoxb-typed-in-0123" } });
+    fireEvent.click(button(form, ACT_LABELS.save));
+    fireEvent.click(button(dialog(), ACT_LABELS.save));
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "PUT").map((one) => [one.path, one.body])).toEqual([
+        [
+          "/api/v1/channels/slack",
+          {
+            enabled: false,
+            tenant: { bot_id: "U0BRAINBOT" },
+            secret_parts: { signing_secret: SECRET_TYPED, bot_token: "xoxb-typed-in-0123" },
+          },
+        ],
+      ]);
+    });
+    expect(document.body.innerHTML).not.toContain(SECRET_TYPED);
+    expect(document.body.innerHTML).not.toContain("xoxb-typed-in-0123");
+  });
+
+  test("a channel with no steps offers no connect button", async () => {
+    // What breaks if this is deleted: every channel shows a Connect button that opens an empty flow.
+    const { container } = await consoleAt("/channels/webhook", answers());
+    expect([...container.querySelectorAll("button")].some((one) => one.textContent?.startsWith("Connect"))).toBe(false);
   });
 });
 

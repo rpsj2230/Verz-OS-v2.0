@@ -57,6 +57,10 @@ from sqlalchemy import text
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_run import Harness
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 170
+
 A, _ = RESERVED_DEPARTMENTS
 
 log = structlog.get_logger(__name__)

@@ -67,6 +67,10 @@ if TYPE_CHECKING:
 A, B = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 330
+
 #: What the check says where the install has Google Analytics connected already.
 ANALYTICS_IS_CONNECTED_HERE_ALREADY: Final = (
     "this install has Google Analytics connected already, so the check does not connect it again "
