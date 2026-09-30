@@ -7,7 +7,10 @@
  * on a case that no longer takes it, a principal id where a person's name belongs, and a count of
  * intercepted questions small enough to point at somebody.
  *
- * Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1
+ * And the escalation queues (M8.3.2): who answers for each queue a skill hands its unanswered
+ * questions to, and the confirmed form that names them.
+ *
+ * Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1, M8.3.2
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -50,7 +53,16 @@ import {
   type RegisterAnswer,
   type TopicsAnswer,
 } from "../src/pages/complianceQuery";
+import {
+  NAME_QUEUE_LABEL,
+  NAME_QUEUE_SUBMIT,
+  NO_QUEUES,
+  QUEUE_PROBLEMS,
+  queueBody,
+  type RoutesAnswer,
+} from "../src/pages/compliance/EscalationQueues";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
+import { backendModelFields } from "./support/python";
 import { declaredPropertySchema, declaredRequestBodySchema } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
 import { chooseInMenu, confirmWith } from "./support/rowMenu";
@@ -59,6 +71,7 @@ const CONSOLE_ORIGIN = "https://console.test";
 const TOPICS_OPERATION = "/api/v1/govern/compliance/topics";
 const REGISTER_OPERATION = "/api/v1/govern/compliance/register";
 const BREACHES_OPERATION = "/api/v1/govern/compliance/breaches";
+const ROUTES_OPERATION = "/api/v1/govern/escalation-routes";
 const CASE = "11111111-1111-4111-8111-111111111111";
 
 beforeAll(async () => {
@@ -151,6 +164,26 @@ interface Stand {
   topics?: TopicsAnswer;
   register?: RegisterAnswer;
   breaches?: BreachesAnswer;
+  routes?: RoutesAnswer;
+}
+
+function queues(overrides: Partial<RoutesAnswer> = {}): RoutesAnswer {
+  return {
+    routes: [
+      {
+        queue: "pricing",
+        person: "u_quotes",
+        person_name: "Quinn Quotes",
+        channel: "lark",
+        address: "ou_quotes",
+        named_by: "u_admin",
+        named_at: "2019-03-04T09:00:00Z",
+      },
+    ],
+    channels: ["lark", "webhook"],
+    told: "ROUTING-TOLD-SENTENCE",
+    ...overrides,
+  };
 }
 
 async function mount(path: string, stand: Stand = {}): Promise<{ container: HTMLElement; idp: FakeIdp }> {
@@ -168,6 +201,7 @@ async function mount(path: string, stand: Stand = {}): Promise<{ container: HTML
         [TOPICS_OPERATION]: stand.topics ?? topics(),
         [REGISTER_OPERATION]: stand.register ?? register(),
         [BREACHES_OPERATION]: cases,
+        [ROUTES_OPERATION]: stand.routes ?? queues(),
       };
       return at in reads ? json(reads[at]) : null;
     },
@@ -310,6 +344,65 @@ describe("sensitive topics", () => {
     await waitFor(() => {
       expect(writes(idp)).toEqual([{ method: "PUT", path: `${TOPICS_OPERATION}/grievance`, body: { principal_id: "u_new" } }]);
     });
+  });
+});
+
+describe("escalation queues", () => {
+  test("each queue says who answers for it, by name, and where they are reached, under the served sentence", async () => {
+    // What breaks if this is deleted: a queue drawn with a reference where a name belongs, or with
+    // no channel, so nobody can tell where the questions it is handed go.
+    const { container } = await mount(viewAddress("escalations"));
+    expect(container.textContent).toContain("pricing");
+    expect(container.textContent).toContain("Quinn Quotes");
+    expect(container.textContent).toContain("lark, ou_quotes");
+    expect(container.textContent).toContain("ROUTING-TOLD-SENTENCE");
+  });
+
+  test("an install with no queue named says so and still offers the form", async () => {
+    // What breaks if this is deleted: an empty table that reads as a broken page, with no way to name
+    // the first person.
+    const { container } = await mount(viewAddress("escalations"), { routes: queues({ routes: [] }) });
+    expect(container.textContent).toContain(NO_QUEUES);
+    expect(screen.getByRole("button", { name: new RegExp(NAME_QUEUE_LABEL) })).toBeTruthy();
+  });
+
+  test("naming says what each field takes, refuses blanks before anything is sent, and is confirmed before the PUT", async () => {
+    // What breaks if this is deleted: a naming sent without its confirmation, which replaces whoever
+    // answered for the queue, or a form judged only after the route refuses it.
+    const { idp } = await mount(viewAddress("escalations"));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(NAME_QUEUE_LABEL) }));
+    const form = (await screen.findByRole("form", { name: NAME_QUEUE_LABEL })) as HTMLFormElement;
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(form.textContent).toContain(QUEUE_PROBLEMS.queue);
+    });
+    expect(form.textContent).toContain(QUEUE_PROBLEMS.person);
+    expect(form.textContent).toContain(QUEUE_PROBLEMS.channel);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    type(form, "queue", "pricing");
+    type(form, "person", " u_new ");
+    choose(form, "Channel", "webhook");
+    type(form, "address", " desk ");
+    fireEvent.submit(form);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("in place of whoever was named before");
+    expect(writes(idp)).toEqual([]);
+    await confirmWith(NAME_QUEUE_SUBMIT);
+    await waitFor(() => {
+      expect(writes(idp)).toEqual([
+        { method: "PUT", path: `${ROUTES_OPERATION}/pricing`, body: { person: "u_new", channel: "webhook", address: "desk" } },
+      ]);
+    });
+  });
+
+  test("the body and the fields read are the route's own", () => {
+    // What breaks if this is deleted: a renamed field in the route that this page goes on sending or
+    // reading, so every naming is refused or every queue is drawn empty.
+    const body = declaredRequestBodySchema(`${ROUTES_OPERATION}/{queue}`, "put");
+    expect(Object.keys(body["properties"] as object).sort()).toEqual(Object.keys(queueBody({ queue: "q", person: "p", channel: "c", address: "a" })).sort());
+    expect(Object.keys(queues().routes[0] ?? {}).sort()).toEqual(backendModelFields("src/brain/escalation_routes.py", "RouteView").sort());
+    expect(Object.keys(queues()).sort()).toEqual(backendModelFields("src/brain/escalation_routes.py", "RoutesView").sort());
   });
 });
 
