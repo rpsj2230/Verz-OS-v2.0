@@ -8,10 +8,11 @@
  * asks for exactly its form's settings and its key, and that step draws `components/
  * ConnectSource.tsx`, the same form, confirmation and refusals first run uses.
  *
- * **A source connected at the server gets its flow too.** Google Drive and the Laravel views are
- * prepared at the vendor (a service account and a shared folder; a read-only user over named
- * views) and finished by whoever runs the server, which the last step says in the declaration's
- * own words. It draws no form, because this screen has nothing to take.
+ * **Since 2026-09-30 no source is connected at the server (M11.7.7).** Google Drive's last step
+ * takes its folder, department, answerable person and a key file chosen as a file, and the Laravel
+ * views' takes each view's rule and a database user as a name and a password, through
+ * `components/CredentialField.tsx`. A source the API still lists as not connectable here gets its
+ * flow with no form, and today that is none but Lark's, which has its own.
  *
  * **Opened with no source, it asks which first**, listing the sources this reader may connect and
  * the ones prepared here for the server. Lark is not among them: it has its own flow and button.
