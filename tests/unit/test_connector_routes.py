@@ -28,6 +28,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import Any, Final
 
 import pytest
@@ -75,7 +76,13 @@ from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
 from brain.identity.data_steward import declared_capabilities
-from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE, manifest_for
+from brain.ops.connectable import (
+    CONNECTABLE,
+    DECLARED_FORMS,
+    NOT_FROM_THE_CONSOLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
+    manifest_for,
+)
 from brain.ops.connector_admin import (
     CONNECTED,
     CONNECTING_A_SOURCE,
@@ -222,10 +229,11 @@ class NoDatabase:
 
 
 def settings_for(name: str) -> dict[str, str]:
-    """The settings a connectable source takes, and none for a source the console cannot connect."""
-    if name not in CONNECTABLE:
+    """The settings a declared form takes, and none for a source with no form."""
+    if name not in DECLARED_FORMS:
         return {}
-    return {CONNECTABLE[name].settings[0].name: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
+    first = DECLARED_FORMS[name].settings[0].name
+    return {first: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
 
 
 def a_connection(
@@ -371,6 +379,39 @@ def held_vault() -> Vault:
 # ------------------------------------------------------------------ what a reader is told
 
 
+@pytest.fixture
+def hubspot_unmeasured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HubSpot with its recorded ceiling taken away, so its plan refuses as an unmeasured source's
+    does. Since 2026-09-30 every source the console offers has a ceiling, so a refusal for want
+    of one is shown on a source that had it taken away."""
+    from brain.ops import limits
+
+    kept = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    monkeypatch.setattr(limits, "_BY_NAME", kept)
+
+
+@pytest.fixture
+def forms_offered_as_if_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Google Drive's and Laravel's declared forms offered as though this install could read them,
+    so their route halves (a key file, a database user, an answerable person) are proved before
+    their readings land. See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS` in
+    `brain.ops.connectable`."""
+    import brain.connector_routes as routes
+    import brain.ops.connectable as connectable
+    import brain.ops.connector_admin as admin
+
+    both = ("google_drive", "laravel")
+    offered = MappingProxyType(
+        {**connectable.CONNECTABLE, **{one: connectable.DECLARED_FORMS[one] for one in both}}
+    )
+    listed = {k: v for k, v in connectable.NOT_FROM_THE_CONSOLE.items() if k not in both}
+    for module in (routes, connectable, admin):
+        if hasattr(module, "CONNECTABLE"):
+            monkeypatch.setattr(module, "CONNECTABLE", offered)
+        if hasattr(module, "NOT_FROM_THE_CONSOLE"):
+            monkeypatch.setattr(module, "NOT_FROM_THE_CONSOLE", MappingProxyType(listed))
+
+
 def test_a_reader_is_told_which_sources_are_connected_and_what_each_may_read(
     app: FastAPI, client: TestClient
 ) -> None:
@@ -443,7 +484,7 @@ def an_attempt(name: str, **changed: Any) -> SyncState:
 
 
 def test_a_connected_source_shows_when_it_was_last_read_and_how_that_went(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, hubspot_unmeasured: None
 ) -> None:
     """**The screen's half of the leaf.** A source read to the end shows the attempt's time and
     health in its trust row and its last read beside them. A source whose key was declined shows
@@ -697,7 +738,9 @@ def test_the_screen_lists_every_shipped_connector_from_its_own_declaration(
     for name, label in offered.items():
         assert declared[name].console is not None and label == declared[name].label
     for name, (label, why) in explained.items():
-        assert (label, why) == (declared[name].label, declared[name].not_from_the_console)
+        # A form this install cannot read yet says so; a source with no form, in its own words.
+        said = declared[name].not_from_the_console or THIS_INSTALL_CANNOT_READ_IT_YET
+        assert (label, why) == (declared[name].label, said)
 
 
 def test_every_source_is_served_with_the_steps_of_its_connect_flow(
@@ -720,9 +763,11 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
             "credential",
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
-    # Since 2026-09-30 (M11.7.7) the only sources not connected here are Lark's, whose flow is
-    # Connect Lark's own; each is still served with a sentence saying so.
-    assert {one["name"] for one in body["not_connectable"]} == {"lark_base", "lark_wiki"}
+    # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
+    # own, and Drive's and Laravel's forms wait until this install can read them, with no steps.
+    served = {one["name"]: one for one in body["not_connectable"]}
+    assert set(served) == {"lark_base", "lark_wiki", "google_drive", "laravel"}
+    assert served["google_drive"]["steps"] == served["laravel"]["steps"] == []
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -744,9 +789,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "xero": True,
         "hubspot": False,
         "freshdesk": False,
-        "google_drive": False,
         "google_analytics": False,
-        "laravel": False,
     }
 
 
@@ -838,7 +881,7 @@ def test_an_administrator_connects_a_source_and_its_key_is_kept_in_its_slot_and_
 
 
 def test_a_key_file_and_a_database_user_reach_their_slots_in_their_own_shapes(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
 ) -> None:
     """M11.7.7 through the route: Google Drive's key file is kept whole as its slot's key, and the
     Laravel user as its password with its name beside it, and the forms say which shape each
@@ -872,7 +915,7 @@ def test_a_key_file_and_a_database_user_reach_their_slots_in_their_own_shapes(
 
 
 def test_an_answerable_person_who_is_nobody_here_is_refused_and_nothing_is_kept(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
 ) -> None:
     """`Setting.names_a_person`: Google Drive's steward must be somebody live on this install. The
     connector reads no table, so the route asks. Delete this and a mistyped id is kept as the
@@ -906,7 +949,7 @@ def test_an_answerable_person_who_is_nobody_here_is_refused_and_nothing_is_kept(
 
 
 def test_a_credential_in_the_wrong_shape_is_refused_and_nothing_is_kept(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
 ) -> None:
     """Delete this and a pasted key is kept as though it were a key file, or a user with no
     password is kept and every read fails at the database."""
@@ -1481,7 +1524,7 @@ def test_an_administrator_asks_for_a_test_and_is_told_it_waits_for_the_worker(
 
 
 def test_a_test_is_refused_before_anything_is_asked_when_it_should_be(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, hubspot_unmeasured: None
 ) -> None:
     """A caller who may not manage the source, a source not connected and a name that is not a
     source are the one refusal; a source whose plan refuses it is a problem in the plan's own words.

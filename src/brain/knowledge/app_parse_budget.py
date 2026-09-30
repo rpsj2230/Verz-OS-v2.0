@@ -17,9 +17,13 @@ and none of them is chosen here:
 - `APP_MEMORY_MIB`, the application service's limit in `docker-compose.yml`. A test reads the
   file and holds this to it, the way `brain.ops.wiring.PRODUCTION_BASELINE_MIB` is held, because
   the value of the number is that it stops matching when somebody changes the file.
-- `APP_RESIDENT_MIB`, what the container holds before any document is read. **The peak, not the
-  instant**, for the reason `brain.ops.wiring` sizes against reservations rather than free
-  memory: what is spare at one moment is what is needed on the busy afternoon.
+- What the container holds before any document is read, `resident_mib`: the supervisor and one
+  worker's share for each process, `brain.runtime.RUNTIME_HEADROOM_MB` plus `WORKER_MB` each,
+  which are the measured peaks rounded up. **The peak, not the instant**, for the reason
+  `brain.ops.wiring` sizes against reservations rather than free memory: what is spare at one
+  moment is what is needed on the busy afternoon. A model rather than one measured figure,
+  because a container of another size starts another number of processes and each brings its
+  own memory; `APP_RESIDENT_MIB` is the measurement the model is held to.
 - The number of processes, from `brain.runtime.most_workers`: the memory and pooler ceilings
   the launcher starts against. `_ONE_PARSE_AT_A_TIME` in `brain.knowledge_routes` is a lock inside
   one process, so each of them may be reading a document at the same moment, and the spare
@@ -56,7 +60,7 @@ from typing import Final
 from brain.knowledge.ingest import TYPE_LIMITS, MediaType, ceiling_for
 from brain.knowledge.parse_budget import MIB, PARSE_EXPANSION
 from brain.knowledge.text_path import TEXT_PATH_TYPES
-from brain.runtime import most_workers
+from brain.runtime import RUNTIME_HEADROOM_MB, WORKER_MB, most_workers
 
 #: The compose service the in-app text path runs in.
 APP_SERVICE: Final = "app"
@@ -65,15 +69,20 @@ APP_SERVICE: Final = "app"
 #: file by `tests/unit/test_app_parse_budget.py`.
 APP_MEMORY_MIB: Final = 1024
 
-#: What the application container holds before it reads any document, in MiB. Measured on a
-#: staging install on 2026-09-29 shortly after start, read-only from its cgroup: 845 MiB current
-#: and 955 MiB `memory.peak`, across the processes `most_workers(APP_MEMORY_MIB)` starts. The
-#: peak, for the reason the module docstring gives. Re-measure it when the container changes.
+#: What the deployed application container was measured to hold before it read any document, in
+#: MiB: cgroup `memory.peak` on a staging install on 2026-09-29, 955 and then 954 after the next
+#: deploy. Not the figure the budget uses: `resident_mib_for` is, and a test holds it to cover
+#: this one, so the model can never promise more room than the container was seen to have.
 APP_RESIDENT_MIB: Final = 955
 
 
+def resident_mib_for(memory_mib: int) -> int:
+    """What a container of this size holds before any read: the supervisor and each process."""
+    return RUNTIME_HEADROOM_MB + most_workers(memory_mib) * WORKER_MB
+
+
 def app_parse_budget_bytes(
-    *, memory_mib: int = APP_MEMORY_MIB, resident_mib: int = APP_RESIDENT_MIB
+    *, memory_mib: int = APP_MEMORY_MIB, resident_mib: int | None = None
 ) -> int:
     """The most one document read inside the application may be declared to cost.
 
@@ -83,7 +92,8 @@ def app_parse_budget_bytes(
     against a negative number. Both figures are parameters, so this can be asked of a container
     we do not run.
     """
-    spare_mib = max(0, memory_mib - resident_mib)
+    held = resident_mib_for(memory_mib) if resident_mib is None else resident_mib
+    spare_mib = max(0, memory_mib - held)
     return spare_mib * MIB // most_workers(memory_mib)
 
 
@@ -103,7 +113,7 @@ def largest_in_app_cost(types: Iterable[MediaType] = TEXT_PATH_TYPES) -> tuple[M
 
 
 def app_parse_gaps(
-    *, memory_mib: int = APP_MEMORY_MIB, resident_mib: int = APP_RESIDENT_MIB
+    *, memory_mib: int = APP_MEMORY_MIB, resident_mib: int | None = None
 ) -> tuple[str, ...]:
     """Whether the application can read everything the door lets onto the in-app path.
 
@@ -111,7 +121,8 @@ def app_parse_gaps(
     the application at start for the operator; never returned to anybody who uploaded something,
     for `A_REFUSAL_NAMES_THE_FILE_AND_NEVER_THE_QUEUE`'s reason.
     """
-    budget = app_parse_budget_bytes(memory_mib=memory_mib, resident_mib=resident_mib)
+    held = resident_mib_for(memory_mib) if resident_mib is None else resident_mib
+    budget = app_parse_budget_bytes(memory_mib=memory_mib, resident_mib=held)
     media_type, cost = largest_in_app_cost()
     if cost <= budget:
         return ()
@@ -120,7 +131,7 @@ def app_parse_gaps(
     return (
         f"the door admits {media_type.value} up to {ceiling_for(media_type) // MIB} MiB, a "
         f"declared cost of {cost // MIB} MiB, and a document read inside the application may cost "
-        f"{budget // MIB} MiB ({memory_mib} MiB limit, {resident_mib} MiB held before any read, "
+        f"{budget // MIB} MiB ({memory_mib} MiB limit, {held} MiB held before any read, "
         f"{most_workers(memory_mib)} processes), so the largest such file it can read is "
         f"{readable_mib:.1f} MiB and a larger one is refused as too large; give the application "
         "container more memory, or read large documents in the parse worker",

@@ -18,4 +18,5 @@ def test_the_accounts_checks_are_listed_in_their_page_order() -> None:
     module with the page simply listing one fewer row."""
     assert checks_in("brain.ops.acceptance_checks_accounts") == [
         "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
+        "the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own",
     ]

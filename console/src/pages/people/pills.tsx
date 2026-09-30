@@ -5,6 +5,7 @@
  * Task ids: M27.16.1
  */
 
+import { STAFF_STATUS_WORDS } from "./peopleQuery";
 import { cn } from "../../lib/utils";
 
 const PILL = "inline-block rounded-[2px] px-1.5 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.03em] whitespace-nowrap";
@@ -28,4 +29,13 @@ export function SecondFactorPill({ seen }: { readonly seen: boolean }) {
 /** A small plain pill, for a kind of thing rather than a state. */
 export function KindPill({ children }: { readonly children: string }) {
   return <span className={cn(PILL, "bg-sunk text-body")}>{children}</span>;
+}
+
+/** Where the staff list says somebody stands. Anything but active is why they cannot sign in. */
+export function StaffStatusPill({ status }: { readonly status: string }) {
+  return (
+    <span data-slot="staff-status-pill" className={cn(PILL, status === "active" ? "bg-ok-wash text-ok" : "bg-warn-wash text-warn")}>
+      {STAFF_STATUS_WORDS[status] ?? status}
+    </span>
+  );
 }
