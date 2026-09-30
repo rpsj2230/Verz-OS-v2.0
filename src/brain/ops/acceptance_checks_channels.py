@@ -34,7 +34,12 @@ the one a message is posted with: accepted, answered with the binding prompt on 
 header made any other way refused. What only the owner's bot proves is that Telegram accepts the
 registration and sends and delivers as documented.
 
-Task ids: M10.5.6, M10.5.1, M10.5.2, M10.5.4
+**WhatsApp: Meta's check of the address, then two people in one notification.** The GET check is
+answered only for the verify token the check made, and a notification signed with the check's app
+secret, carrying two senders' messages, is answered twice, to each sender alone, on the access
+token. What only the owner's number proves is that Meta signs, batches and delivers as documented.
+
+Task ids: M10.5.6, M10.5.1, M10.5.2, M10.5.4, M10.5.3
 """
 
 from __future__ import annotations
@@ -684,3 +689,133 @@ async def a_telegram_message_on_the_registered_header_is_answered(h: Harness) ->
     body = json.loads(built.body)
     if body != {"chat_id": sender, "text": Unrecognised(channel=Channel.TELEGRAM).prompt}:
         raise CheckFailedError("the answer was not the binding prompt, to the sender alone")
+
+
+# ------------------------------------------------------------------------------ whatsapp
+@dataclass
+class _WhatsAppKept(_Kept):
+    """The check's transport, answering each send as the Cloud API documents a success."""
+
+    def send(self, request: Any) -> Any:
+        from brain.channels.adapter import VendorAnswer
+
+        self.sent.append(request)
+        return VendorAnswer(status=200, body=b'{"messages":[{"id":"wamid.acceptance"}]}')
+
+
+@check(
+    leaves=("M10.5.3",),
+    sentence=(
+        "A WhatsApp channel set up with secrets the check made answers Meta's check of the "
+        "address only for its verify token, refuses a notification signed with another app "
+        "secret, and answers each of two people whose messages came in one signed notification "
+        "with the binding prompt, to them alone, on the access token, kept rather than sent."
+    ),
+)
+async def two_whatsapp_messages_in_one_notification_are_each_answered(h: Harness) -> None:
+    import hashlib
+    import hmac
+
+    import httpx
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.whatsapp import (
+        ACCESS_TOKEN,
+        APP_SECRET,
+        GRAPH_API_URL,
+        GRAPH_API_VERSION,
+        PHONE_NUMBER_ID,
+        SIGNATURE_HEADER,
+        VERIFY_TOKEN,
+    )
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.ops.channel_store import StoredChannels
+
+    app_secret, access, verify = (secrets.token_hex(24) for _ in range(3))
+    number = str(secrets.randbelow(10**12) + 10**12)
+    await StoredChannels(h.sessions).save(
+        Channel.WHATSAPP,
+        enabled=True,
+        tenant={PHONE_NUMBER_ID: number},
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    kept = _WhatsAppKept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(
+        json.dumps({APP_SECRET: app_secret, ACCESS_TOKEN: access, VERIFY_TOKEN: verify})
+    )
+    state.channel_transport = kept
+    state.operation_ledger = _HeldLedger()
+    events = f"/api/v1/channels/{Channel.WHATSAPP.value}/events"
+    people = [str(secrets.randbelow(10**10) + 10**10) for _ in range(2)]
+
+    def message(sender: str, n: int) -> dict[str, Any]:
+        return {
+            "from": sender,
+            "id": f"wamid.{h.run}.{n}",
+            "timestamp": str(int(time.time())),
+            "type": "text",
+            "text": {"body": h.word()},
+        }
+
+    batch = {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "id": "acceptance",
+                "changes": [
+                    {
+                        "field": "messages",
+                        "value": {
+                            "messaging_product": "whatsapp",
+                            "metadata": {"phone_number_id": number},
+                            "messages": [message(one, n) for n, one in enumerate(people)],
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    raw = json.dumps(batch).encode("utf-8")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="https://acceptance.invalid"
+    ) as c:
+        asked = {"hub.mode": "subscribe", "hub.challenge": h.run}
+        checked = await c.get(events, params={**asked, "hub.verify_token": verify})
+        if checked.status_code != 200 or checked.text != h.run:
+            raise CheckFailedError("Meta's check of the address was not answered for its word")
+        wrong = await c.get(events, params={**asked, "hub.verify_token": secrets.token_hex(8)})
+        if wrong.status_code == 200:
+            raise CheckFailedError("Meta's check of the address was answered for another word")
+
+        def signed(secret: str) -> dict[str, str]:
+            digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+            return {SIGNATURE_HEADER: f"sha256={digest}"}
+
+        forged = await c.post(events, content=raw, headers=signed(secrets.token_hex(24)))
+        if forged.status_code == 200 or kept.sent:
+            raise CheckFailedError("a notification signed with another app secret was accepted")
+        accepted = await c.post(events, content=raw, headers=signed(app_secret))
+    if accepted.status_code != 200 or accepted.json().get("status") != "accepted":
+        raise CheckFailedError("a notification Meta would sign was not accepted")
+    if sorted(json.loads(one.body).get("to") for one in kept.sent) != sorted(people):
+        raise CheckFailedError("each of the two people was not answered once, in their own chat")
+    for built in kept.sent:
+        if built.url != f"{GRAPH_API_URL}/{GRAPH_API_VERSION}/{number}/messages":
+            raise CheckFailedError("an answer was not built for the Graph API from this number")
+        if built.headers.get("Authorization") != f"Bearer {access}":
+            raise CheckFailedError("an answer was not built on the access token")
+        if (
+            json.loads(built.body).get("text", {}).get("body")
+            != Unrecognised(channel=Channel.WHATSAPP).prompt
+        ):
+            raise CheckFailedError("an answer was not the binding prompt")
