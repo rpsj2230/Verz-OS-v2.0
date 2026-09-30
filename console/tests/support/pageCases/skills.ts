@@ -41,6 +41,7 @@ const SKILL_VERSION = {
   retired_at: null,
   retired_by: null,
   retirable: true,
+  findings: [{ concern: "addressed_to_the_system", line_number: 3, excerpt: UNBROKEN, detail: UNBROKEN }],
 };
 
 const SKILLS = {
