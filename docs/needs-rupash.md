@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**16 items are open: 138,** whether a Laravel client record is visible to one department or several, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**17 items are open: 139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,26 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 139. Website widget: should visitors get answers written by the model, or the published passages themselves?
+
+**In plain terms:** the website widget (M10.7.2, #315) lets visitors to your website ask questions,
+and it only ever reads documents an administrator has marked public. Today it answers with the
+matching passages from those documents, word for word. Having the model write a short answer from
+them reads better, but every visitor question then costs a model call, paid by you, asked by people
+who are not your staff and have no budget of their own.
+
+**Option A: passages only, for now.** No model cost, and nothing is ever said that is not already
+in a public document.
+
+**Option B: the model writes the answer** from the public passages only, under a daily spending cap
+for the widget that you set in the console, and the widget falls back to passages once the cap is
+reached.
+
+**My recommendation: A now, B later.** Start with passages, watch what visitors ask for a few weeks,
+and switch on B with a cap if the answers need to read better.
+
+**What I need from you:** reply "139: A" or "139: B".
 
 ## 138. Laravel: may each client record be visible to one department, or to several?
 
