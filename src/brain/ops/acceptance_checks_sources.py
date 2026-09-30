@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 
 #: Where this module's checks stand on the Install page, before every larger key. See
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
-CHECK_ORDER: Final = 280
+CHECK_ORDER: Final = 300
 
 A, _ = RESERVED_DEPARTMENTS
 
