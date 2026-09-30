@@ -388,6 +388,8 @@ function aStep(key: string, extra: Record<string, unknown> = {}): Record<string,
     asks: [],
     copy_text: "",
     copy_label: "",
+    path: "",
+    choices: [],
     ...extra,
   };
 }
@@ -540,6 +542,66 @@ describe("connecting a channel one screen at a time", () => {
     });
     expect(document.body.innerHTML).not.toContain(SECRET_TYPED);
     expect(document.body.innerHTML).not.toContain("xoxb-typed-in-0123");
+  });
+
+  test("steps that branch show the chosen path, and its form asks only that path's fields", async () => {
+    // What breaks if this is deleted: a company without Cloudflare is walked through Cloudflare's
+    // steps, or the mailbox form asks for the Worker's secret and not the mailbox's.
+    const mailboxFields = ["address", "imap_host", "imap_port", "imap_user", "receiver", "domains"];
+    const branching = row({
+      ...EMAIL,
+      tenant_fields: mailboxFields,
+      steps: [
+        aStep("where", {
+          choices: [
+            { key: "mailbox", label: "No: read a mailbox" },
+            { key: "cloudflare", label: "Yes: use Cloudflare Email Routing" },
+          ],
+        }),
+        aStep("relay"),
+        aStep("mailbox", { path: "mailbox" }),
+        aStep("save_mailbox", { path: "mailbox", asks: [...mailboxFields, "secret"] }),
+        aStep("worker", { path: "cloudflare", asks: ["events_address"] }),
+        aStep("save", { path: "cloudflare", asks: ["address", "secret"] }),
+      ],
+    });
+    const read = { ...emailAnswers(), "/api/v1/console/channels/email": branching };
+    const { container, sent } = await consoleAt("/channels/email", read);
+    fireEvent.click(button(container, "Connect Email"));
+    expect(flow().textContent).toContain("Step 1 of 2");
+    fireEvent.click(button(flow(), "No: read a mailbox"));
+    expect(flow().textContent).toContain("Step 2 of 4");
+    fireEvent.click(button(flow(), "Step 4 of 4"));
+    const form = flow().querySelector<HTMLFormElement>('form[aria-label="Set up Email"]') as HTMLFormElement;
+    const drawn = [...form.querySelectorAll<HTMLInputElement>("input[name]")].map((one) => one.name).filter((one) => one !== "enabled");
+    expect(drawn).toEqual(mailboxFields);
+    const values: Record<string, string> = {
+      address: "ask@example.test",
+      imap_host: "imap.example.test",
+      imap_port: "993",
+      imap_user: "ask@example.test",
+      receiver: "mx.example.test",
+      domains: "example.test",
+    };
+    for (const [name, value] of Object.entries(values)) {
+      fireEvent.change(form.querySelector(`input[name="${name}"]`) as HTMLInputElement, { target: { value } });
+    }
+    fireEvent.input(form.querySelector('[data-slot="secret-field"] input') as HTMLInputElement, { target: { value: SECRET_TYPED } });
+    fireEvent.click(button(form, ACT_LABELS.save));
+    fireEvent.click(button(dialog(), ACT_LABELS.save));
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "PUT").map((one) => one.body)).toEqual([
+        { enabled: false, tenant: values, secret: SECRET_TYPED },
+      ]);
+    });
+
+    fireEvent.click(button(flow(), "Step 1 of 4"));
+    fireEvent.click(button(flow(), "Yes: use Cloudflare Email Routing"));
+    fireEvent.click(button(flow(), "Step 4 of 4"));
+    const other = flow().querySelectorAll<HTMLFormElement>('form[aria-label="Set up Email"]');
+    const visible = [...other].find((one) => !one.closest("[hidden]"));
+    const names = [...(visible?.querySelectorAll<HTMLInputElement>("input[name]") ?? [])].map((one) => one.name).filter((one) => one !== "enabled");
+    expect(names).toEqual(["address"]);
   });
 
   test("a channel with no steps offers no connect button", async () => {

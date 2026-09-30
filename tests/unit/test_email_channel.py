@@ -724,12 +724,14 @@ def test_the_relay_is_asked_on_the_send_s_thread_and_never_on_the_event_loop() -
 # ======================================================================== the steps
 
 
-def test_email_s_steps_end_with_the_form_that_saves_its_record() -> None:
-    """Delete this and the last step could ask for a field the record does not take, or leave
-    out the secret, so the flow would end in a form that saves nothing usable."""
+def test_email_s_cloudflare_steps_end_with_the_form_that_saves_its_address_and_secret() -> None:
+    """Delete this and the Cloudflare path's last step could ask for a field the record does not
+    take, or leave out the secret, so it would end in a form that saves nothing usable. The
+    mailbox path's form is `tests/unit/test_email_mailbox.py`'s."""
     steps = channel_guides()[Channel.EMAIL]
     assert steps == GUIDE
-    assert steps[-1].asks == (*WIRE.tenant_fields, SECRET_ASK) == ("address", "secret")
+    assert (steps[-1].path, steps[-1].asks) == ("cloudflare", ("address", SECRET_ASK))
+    assert set(steps[-1].asks[:-1]) <= set(WIRE.tenant_fields)
 
 
 def _module(name: str, **attributes: object) -> ModuleType:
@@ -755,7 +757,7 @@ def test_a_guide_beside_no_wire_or_ending_in_another_form_is_refused(
         else _module("brain.channels.stray", GUIDE=ending, WIRE=WIRE)
     )
     monkeypatch.setattr(adapter, "_channel_modules", lambda: iter([*real, stray]))
-    with pytest.raises(ChannelRegistryError, match=r"wire|record takes"):
+    with pytest.raises(ChannelRegistryError, match=r"wire|form"):
         channel_guides()
 
 

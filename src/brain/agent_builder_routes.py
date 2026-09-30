@@ -517,7 +517,7 @@ def _whole(draft: AgentDraft, revision: Revision, publisher: str) -> TemplateMan
     return manifest
 
 
-def _becomes(
+async def _becomes(
     request: Request,
     draft: AgentDraft,
     manifest: TemplateManifest,
@@ -529,7 +529,7 @@ def _becomes(
         agent_id=draft.agent_id,
         created_by=draft.owner_id,
         audience=audience,
-        registry=connectors_of(request),
+        registry=await connectors_of(request),
         tools=_tools(request),
         at=asked.now,
     )
@@ -584,7 +584,7 @@ async def _approvable(
     if isinstance(audience, str) or not _reaches(asked, draft.agent_id, audience):
         return None
     try:
-        settled = _becomes(request, draft, manifest, audience, asked)
+        settled = await _becomes(request, draft, manifest, audience, asked)
     except BuilderError:
         return None
     if approval_refusal(
@@ -645,14 +645,14 @@ def _summary(draft: AgentDraft) -> AgentDraftSummary:
     )
 
 
-def _drawable(request: Request, draft: AgentDraft, asked: Asking) -> list[str]:
+async def _drawable(request: Request, draft: AgentDraft, asked: Asking) -> list[str]:
     """The tools a procedure drawn for this draft may call: the registered tools its allowed tools
     bind to on this install, which are the names a skill calls. None while it binds nothing."""
     manifest = _whole(draft, _latest(draft), draft.owner_id)
     if manifest is None:
         return []
     try:
-        made = _becomes(request, draft, manifest, new_audience(draft.owner_id, None), asked)
+        made = await _becomes(request, draft, manifest, new_audience(draft.owner_id, None), asked)
     except BuilderError:
         return []
     return sorted(made.record.authority.allowed_tools)
@@ -715,7 +715,7 @@ async def _publish(
     revision = _latest(draft)
     publisher = asked.caller.principal.id
     tools = _tools(request)
-    registry = connectors_of(request)
+    registry = await connectors_of(request)
     if found is None:
         signed = _signed(
             revision,
@@ -862,7 +862,9 @@ async def _start(
         draft=draft.draft, agent_id=agent_id, kind=kind, base_hash=base_hash, revisions=(first,)
     )
     log.info("agent draft started", draft=draft_id, agent=agent_id, kind=kind.value, by=me)
-    view = _view(started, asked, widened=None, key=key, drawable=_drawable(request, started, asked))
+    view = _view(
+        started, asked, widened=None, key=key, drawable=await _drawable(request, started, asked)
+    )
     return JSONResponse(status_code=201, content=view.model_dump(mode="json"))
 
 
@@ -941,7 +943,9 @@ async def agent_draft(request: Request, draft_id: str, asked: Asked) -> AgentDra
     """One draft, for its author, or for a person who could approve it while it waits."""
     _, draft, widened = await _openable(request, draft_id, asked)
     key = template_key_of(request)
-    return _view(draft, asked, widened=widened, key=key, drawable=_drawable(request, draft, asked))
+    return _view(
+        draft, asked, widened=widened, key=key, drawable=await _drawable(request, draft, asked)
+    )
 
 
 @router.post(SAVE_PATH, response_model=DraftSavedView, responses=_TOLD)
@@ -992,7 +996,7 @@ async def save_agent_draft(
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
 
 
-def _check(
+async def _check(
     request: Request, draft: AgentDraft, found: FoundAgent | None, asked: Asking
 ) -> tuple[DraftCheckView, Installation | None]:
     """Everything the check says about the latest revision, and what it would become."""
@@ -1014,7 +1018,7 @@ def _check(
             found.record.audience if found is not None else new_audience(draft.owner_id, None)
         )
         try:
-            settled = _becomes(request, draft, manifest, audience, asked)
+            settled = await _becomes(request, draft, manifest, audience, asked)
         except BuilderError as refused:
             stops.append(str(refused))
         if settled is not None:
@@ -1050,7 +1054,7 @@ async def check_agent_draft(
     store, draft = await _own(request, draft_id, asked)
     if _latest(draft).number != body.revision:
         return _not_changed(MOVED, NOT_THE_LATEST)
-    view, _ = _check(request, draft, await _target(store, draft), asked)
+    view, _ = await _check(request, draft, await _target(store, draft), asked)
     if view.passed and not published(draft):
         await store.record(
             draft.draft_id,
@@ -1078,7 +1082,7 @@ async def rehearse_agent_draft(
     store, draft = await _own(request, draft_id, asked)
     if _latest(draft).number != body.revision:
         return _not_changed(MOVED, NOT_THE_LATEST)
-    view, settled = _check(request, draft, await _target(store, draft), asked)
+    view, settled = await _check(request, draft, await _target(store, draft), asked)
     if settled is None:
         return _not_changed(REFUSED, " ".join(view.problems))
     manifest = settled.effective.manifest
@@ -1106,7 +1110,7 @@ async def draw_agent_procedure(
 ) -> JSONResponse:
     """The SKILL.md a drawn procedure is, over the tools this draft allows. Nothing is kept."""
     _, draft = await _own(request, draft_id, asked)
-    tools = _drawable(request, draft, asked)
+    tools = await _drawable(request, draft, asked)
     try:
         procedure = read_drawing(body.drawing, drawable_tools=tools)
         skill = skill_markdown(procedure, name=body.name, description=body.description)
@@ -1140,7 +1144,7 @@ async def publish_agent_draft(
     if state is not DraftState.CHECKED:
         return _not_changed(REFUSED, CHECK_FIRST)
     found = await _target(store, draft)
-    view, settled = _check(request, draft, found, asked)
+    view, settled = await _check(request, draft, found, asked)
     if not view.passed or settled is None:
         return _not_changed(REFUSED, " ".join(view.problems))
     audience = await _audience_asked(store, draft, found, body.for_department)

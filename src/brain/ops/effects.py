@@ -765,6 +765,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.channel_store:EventClaims.first": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.channel_store:ChannelSecrets.read": Repeat.READS,
         "brain.ops.channel_store:ChannelSecrets.held": Repeat.READS,
+        # The email channel's mailbox. A read peeks and sets no flag; marking read twice leaves the
+        # message read; signing out a second time does nothing. Nothing here deletes.
+        "brain.channels.mailbox:MailboxReader.unseen": Repeat.READS,
+        "brain.channels.mailbox:MailboxReader.mark_handled": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.channels.mailbox:MailboxReader.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The Lark chat channel (L1). A GET through the transport is the one read a group's
         # floor needs, who is in the conversation, and it changes nothing at the vendor.
         "brain.channels.adapter:ChannelTransport.read": Repeat.READS,
@@ -785,6 +790,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.binding:BindingTable.on_channel": Repeat.READS,
         "brain.channels.binding:BindingTable.bind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.channels.binding:BindingTable.unbind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Approval cards in a chat (M10.2.3). A wire builds a card's request and its press answer
+        # from bytes and a secret; the send is `deliver`'s, through the transport, keyed. An offer
+        # reads approvals and counts one hit in the card ceiling's open window per card; a press
+        # decides through `brain.approval_routes.take_decision`, whose update names the pending
+        # row, so a second press on a decided row changes nothing.
+        "brain.channels.adapter:CardWire.card_request": Repeat.READS,
+        "brain.channels.adapter:CardWire.edit_address": Repeat.READS,
+        "brain.channels.adapter:CardWire.press_answer": Repeat.READS,
+        "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
+        "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
     }
 )
 
