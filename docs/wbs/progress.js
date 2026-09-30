@@ -69,6 +69,16 @@ const PROGRESS = {
     why: "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
     updated: "2026-09-30",
   },
+  "M1.10.1": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3",
+    updated: "2026-09-30",
+  },
+  "M1.10.2": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
+    updated: "2026-09-30",
+  },
   "M1.8.3": {
     status: "READY FOR TESTING",
     why: "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",
