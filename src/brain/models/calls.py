@@ -61,6 +61,25 @@ stops a pinned one too: a refusal from the pinned model is not tried on the tier
 **Each try records what categories of data it sent** (M5.6.4), as the caller named them, on the
 attempt row. See `brain.models.disclosure`.
 
+**On the answer lane, the last step a walk can try is given the rest of the budget** (M5.6.1). A
+failover's short timeout (`brain.models.default_ladder.WAITED_ON_FAILOVER_TIMEOUT_SECONDS`, four
+seconds) exists so the whole walk fits `ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS`, and that argument
+stops at the last step: nothing comes after it, so time it is not given is time nobody uses.
+Measured on the owner's install, Moonshot, last in every level, took about thirteen seconds over a
+real question, past a failover's four and a primary's twelve, so a question that fell through to it
+failed with time still on the clock. So the last try of the last step in the level's selection,
+which has already dropped a step switched off, keyless, paused or open, is sent with the budget
+less what the walk has spent and `LAST_STEP_MARGIN_SECONDS`, never less than its own timeout, and
+never more than the budget. Earlier steps keep their own, because every second one takes is a
+second the steps after it lose; a pinned model keeps its own, because the tier stands behind it;
+and the task lane is unchanged, because nobody is waiting on it and it has no budget. **The walk's
+worst case is unchanged**: a walk that reaches the last step with time left ends by the budget less
+the margin, and one that does not runs to the sum of its own timeouts, which
+`driver.check_answer_lane_budget` already holds under the budget. Rejected: a deadline on every
+step, which would cut a slow primary short to save time for failovers that may not be needed, and a
+longer figure written into the default's last step, which a walk reaching it late would spend past
+the budget. See `THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET`.
+
 **Every try carries its lane's pinned effort** (M6.4.4). `brain.gate.effort.settings_for` pins one
 effort per lane, and `ModelSettings.as_extra` states it in the shape `DriverRequest.extra` takes,
 and until 2026-09-29 nothing called either, so no provider was ever told one and a model that
@@ -146,6 +165,7 @@ from brain.models.metering import Meter
 from brain.models.registry import ModelPin, ProviderRecord
 from brain.models.residency import ScopedResidency, requirement_for
 from brain.models.routing import (
+    ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS,
     BREAKER_PROBE_CLAIM_TTL_SECONDS,
     TIER_LADDER,
     UNCONSTRAINED,
@@ -192,10 +212,44 @@ EVERY_TRY_CARRIES_ITS_LANES_EFFORT: Final = (
     "wire's decision, and a model not known to take one is sent nothing."
 )
 
+#: Why the answer lane's last step is given the rest of the budget and no earlier step is.
+THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET: Final = (
+    "A failover's short timeout exists so the whole walk fits the answer lane's budget, and that "
+    "argument ends at the last step a walk can try: nothing comes after it, so time it is not "
+    "given is time nobody uses, and a slower provider there fails a question it would have "
+    "answered. So on the answer lane that step's last try is given the budget less what the walk "
+    "has spent and a small margin, never less than its own timeout and never more than the "
+    "budget. An earlier step keeps its own, because every second it takes is a second the steps "
+    "after it lose."
+)
+
+#: What the answer lane keeps back when its last step is given the rest of the budget: the time
+#: after the model answers, in which the answer is composed and sent to the person waiting.
+LAST_STEP_MARGIN_SECONDS: Final = 1.0
+
 #: The breaker outcomes a walk treats as the provider failing. See `brain.models.evidence`.
 _ILL: Final[frozenset[FallbackTrigger]] = frozenset(
     {FallbackTrigger.CONNECTION_ERROR, FallbackTrigger.TIMEOUT, FallbackTrigger.PROVIDER_ERROR}
 )
+
+
+def last_step_seconds(
+    configured: float,
+    *,
+    spent: float,
+    budget: float = ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS,
+    margin: float = LAST_STEP_MARGIN_SECONDS,
+) -> float:
+    """The seconds the answer lane's last step is given, having spent `spent` of the budget.
+
+    The rest of the budget less the margin, never less than the step's own `configured` figure,
+    which an administrator chose and which a late arrival must not shorten, and never more than
+    the budget, which a clock that stepped backwards (`spent` below nought) would otherwise pass.
+    The prober asks this with nothing spent, which is the most the step can ever be given. See
+    `THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET`.
+    """
+    rest = min(budget, budget - margin - spent)
+    return max(configured, rest)
 
 
 # ------------------------------------------------------------------------------ the ports
@@ -443,6 +497,9 @@ class ModelCalls:
         if routing is not None and routing.lane is not lane:
             msg = f"a request routed as {routing.lane} cannot be sent on the {lane} lane"
             raise ValueError(msg)
+        # The walk's clock starts before the ladder is read, because that read is spent from the
+        # same budget the last step is given the rest of.
+        started = self._clock()
         plan = await self.planned()
         # Every constraint the reach touches, on top of whatever the caller already demanded.
         # Composed by `intersect`, so nothing here can widen what the caller passed.
@@ -476,6 +533,7 @@ class ModelCalls:
             categories=tuple(sorted({one.value for one in categories})),
             health=self._health,
             extra=settings_for(lane).as_extra(),
+            started=started,
         )
         try:
             return await self._walked(walk, chain, tier, residency, pin)
@@ -493,7 +551,8 @@ class ModelCalls:
         """The pin, then the tier's chain and any escalation, until an answer or a raise."""
         pinned = None if pin is None else self._pinned(chain, pin, residency, walk)
         if pinned is not None:
-            answered = await walk.through(pinned.tier, (pinned,), counted=False)
+            # Never the last step: the tier's own chain stands behind a pin.
+            answered = await walk.through(pinned.tier, (pinned,), counted=False, final=False)
             if answered is not None:
                 return answered
             # An overflow on the pinned model leaves the decision to the tier's own chain, which
@@ -601,8 +660,12 @@ class _Walk:
         categories: tuple[str, ...] = (),
         health: HealthLog | None = None,
         extra: Mapping[str, str] | None = None,
+        started: datetime | None = None,
     ) -> None:
         self.assembly = assembly
+        #: When the walk began, which the answer lane's last step is given the rest of the
+        #: budget from. See `THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET`.
+        self.started: datetime = clock() if started is None else started
         #: The lane's call settings every try carries. See `EVERY_TRY_CARRIES_ITS_LANES_EFFORT`.
         self.extra: Mapping[str, str] = {} if extra is None else extra
         self.health: HealthLog = NoHealthLog() if health is None else health
@@ -646,21 +709,32 @@ class _Walk:
         )
 
     async def through(
-        self, tier: Tier, rungs: tuple[RoutingRung, ...], *, counted: bool = True
+        self,
+        tier: Tier,
+        rungs: tuple[RoutingRung, ...],
+        *,
+        counted: bool = True,
+        final: bool = True,
     ) -> DriverResponse | None:
         """Try this tier's rungs in order. The answer, or None to go on, or a raise to stop.
 
-        `counted` is False for a pinned rung, whose tries are not a depth in any chain.
+        `counted` is False for a pinned rung, whose tries are not a depth in any chain. `final`
+        is False when another chain stands behind these rungs, so none of them is the last step.
+        The last try of the last rung here is the last step the walk can take: `rungs` is the
+        tier's selection, made just now, so a step switched off, keyless, paused, outside the
+        residency constraint or open is already not behind it.
         """
-        for rung in rungs:
-            for _ in range(self.policy(rung).attempts):
+        for index, rung in enumerate(rungs):
+            tries = self.policy(rung).attempts
+            for attempt in range(tries):
                 claimed = self._admit(rung.deployment.id)
                 if claimed is None:
                     # Open, or half open and claimed by another walk, or opened by a failure
                     # earlier in this same walk: the provider is not asked again here.
                     break
+                last = final and index == len(rungs) - 1 and attempt == tries - 1
                 try:
-                    answered = await self._attempt(tier, rung, counted=counted)
+                    answered = await self._attempt(tier, rung, counted=counted, last=last)
                 finally:
                     if claimed:
                         self.claims.pop(rung.deployment.id, None)
@@ -693,6 +767,18 @@ class _Walk:
         self.breakers[deployment_id] = current
         return True
 
+    def seconds_for(self, rung: RoutingRung, *, last: bool) -> float:
+        """The seconds this try is sent with: the policy's, or the rest of the answer budget.
+
+        See `THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET`. The task lane has no budget
+        and nobody waiting, so its every try keeps the policy's figure.
+        """
+        configured = self.policy(rung).timeout_seconds
+        if not last or self.lane is not Lane.ANSWER:
+            return configured
+        spent = (self.clock() - self.started).total_seconds()
+        return last_step_seconds(configured, spent=spent)
+
     def policy(self, rung: RoutingRung) -> CallPolicy:
         """The rung's numbers with its provider's override for this lane, or its own (M5.1.3)."""
         record = self.assembly.registry.get(rung.deployment.provider)
@@ -724,9 +810,13 @@ class _Walk:
             )
 
     async def _attempt(
-        self, tier: Tier, rung: RoutingRung, *, counted: bool = True
+        self, tier: Tier, rung: RoutingRung, *, counted: bool = True, last: bool = False
     ) -> DriverResponse | None:
-        """One try: counted, recorded, sent, recorded again, and learned from."""
+        """One try: counted, recorded, sent, recorded again, and learned from.
+
+        `last` is whether this is the last try the walk can make, which the answer lane gives the
+        rest of its budget.
+        """
         ladder_rung = self.assembly.rung(rung.deployment.id, tier)
         if self.last is not None:
             if self.last_deployment == rung.deployment.id:
@@ -746,7 +836,7 @@ class _Walk:
             deployment_id=rung.deployment.id,
             model=rung.model,
             messages=self.messages,
-            timeout_seconds=self.policy(rung).timeout_seconds,
+            timeout_seconds=self.seconds_for(rung, last=last),
             max_output_tokens=self.max_output_tokens,
             extra=self.extra,
         )
