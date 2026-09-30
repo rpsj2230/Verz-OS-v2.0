@@ -328,7 +328,9 @@ def test_the_migration_adds_the_column_the_model_declares_and_the_downgrade_drop
     from tests.unit.test_tables import rendered, squash
 
     migration = _migration()
-    assert migration.down_revision == "0150"
+    # Which revision it follows moves with the train it lands in, so it is not pinned here: every
+    # test that builds the schema at head refuses a chain with two heads or a missing predecessor.
+    assert migration.revision == "0166"
     assert migration.CHANNEL_ADDRESS_CHARS == CHANNEL_ADDRESS_CHARS
     up = squash(rendered("upgrade", MIGRATION))
     down = squash(rendered("downgrade", MIGRATION))
