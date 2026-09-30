@@ -1972,6 +1972,10 @@ class LaravelLiveLookup:
             raise LaravelError(msg)
         return {ID_COLUMN: source_id}
 
+    def operation(self, entity: str, *, settings: Mapping[str, str], resolver: Any) -> None:
+        """None: a view is read by its bounded read narrowed to the id, not by a REST call."""
+        del entity, settings, resolver
+
 
 #: What the Connectors screen asks for. The credential is the read-only user, as a name and a
 #: password, kept together in the vault.

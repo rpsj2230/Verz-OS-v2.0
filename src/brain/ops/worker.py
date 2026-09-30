@@ -233,7 +233,14 @@ from brain.ops.retention_store import released_controls
 from brain.ops.safe_error import describe
 from brain.ops.schedule import report_only_now
 from brain.ops.schedule_control import chosen_this_tick, paused_controls, run_requests
-from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
+from brain.ops.schedule_runner import (
+    RunnerError,
+    due_now,
+    next_tick,
+    runner_for,
+    start_control,
+    times_of_day,
+)
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
 from brain.ops.staff_trial import tick_staff_trial
 from brain.ops.wiring import WiringError, component
@@ -1145,7 +1152,11 @@ async def tick_controls(
         paused = await paused_controls(session)
         requested = await run_requests(session)
     owed = due_now(
-        now=now, last_attempt=attempts, last_success=successes, released=sorted(released)
+        now=now,
+        last_attempt=attempts,
+        last_success=successes,
+        released=sorted(released),
+        at=times_of_day(),
     )
     chosen = chosen_this_tick(
         owed,

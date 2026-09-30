@@ -7,12 +7,18 @@
  * Task ids: none
  */
 
+import { DIGEST_DESTINATION_API_PATH } from "../../../src/pages/digestDestinationQuery";
 import { defaultPath, savePath } from "../../../src/pages/settingsQuery";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 const BRANDING_SAVED = t(
   "test_settings_routes",
   "test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next",
+);
+
+const DESTINATION_CHOSEN = t(
+  "test_digest_routes",
+  "test_a_group_on_the_list_is_saved_audited_and_outranks_the_environment",
 );
 
 const SETTING_RETURNED = t(
@@ -27,6 +33,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/settings/SettingsPage.tsx defaultPath(row.name)": [
     at("POST /api/v1/install/settings/{name}/default", "defaultPath", defaultPath("INSTALL_COMPANY_NAME")),
   ],
+  "src/pages/settings/DigestDestination.tsx DIGEST_DESTINATION_API_PATH": [
+    at("PUT /api/v1/digest/destination", "DIGEST_DESTINATION_API_PATH", DIGEST_DESTINATION_API_PATH),
+  ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -36,6 +45,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       none: "The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back.",
     },
     behaviour: BRANDING_SAVED,
+  },
+  "PUT /api/v1/digest/destination": {
+    row: DESTINATION_CHOSEN,
+    audit: {
+      none: "The route sets the audit attribution 0059's trigger reads before the write, which DESTINATION_CHOSEN asserts over a stub; no scratch-Postgres test yet reads the ledger entry back.",
+    },
+    behaviour: DESTINATION_CHOSEN,
   },
   "POST /api/v1/install/settings/{name}/default": {
     row: SETTING_RETURNED,

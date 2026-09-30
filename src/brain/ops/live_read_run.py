@@ -40,7 +40,7 @@ a `brain.connectors.declaration.ViewReading` is read here by one bounded read na
 record's id, as the user the slot keeps beside the password, and the lease is given back in the
 same `finally` as a REST source's.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.6.3, M11.6.4
 """
 
 from __future__ import annotations
@@ -85,6 +85,10 @@ from brain.ops.connector_sync_run import (
     WorkerConnectorKeys,
     authorization,
 )
+from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
+from brain.ops.lark_base_live import BaseSchema, with_base
+from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, wiki_host
+from brain.ops.lark_wiki_spaces import declared_spaces
 from brain.ops.leases import SealedSecret
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
@@ -196,11 +200,16 @@ class ConnectedSources:
                 "Authorization": authorization(reading.key_scheme(), key),
             }
             try:
-                operation = reading.operation(
+                # The lookup's own one-record call where it names one, otherwise the reading's
+                # list narrowed to the record. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+                own = live.operation(
+                    request.entity, settings=connection.settings, resolver=self._resolver
+                )
+                operation = own or reading.operation(
                     request.entity, settings=connection.settings, resolver=self._resolver
                 )
                 arguments = {
-                    **reading.first_page(request.entity),
+                    **({} if own is not None else reading.first_page(request.entity)),
                     **live.arguments_for(request.entity, ids[0]),
                 }
                 checked = operation.prepare(arguments, resolver=self._resolver)
@@ -278,15 +287,57 @@ def _utc_now() -> datetime:
     return datetime.now(tz=UTC)
 
 
+def base_schema_for(vault: RunTokenVault | None) -> BaseSchema:
+    """The process's one reading of a switched-on Lark Base's schema, over its vault."""
+    return BaseSchema(
+        keys=WorkerConnectorKeys(vault),
+        caller=HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000),
+        resolver=SystemResolver(),
+        issuer=HttpsTokenIssuer(),
+        clock=_utc_now,
+    )
+
+
+def wiki_passages_for(
+    sessions: async_sessionmaker[AsyncSession] | None,
+    vault: RunTokenVault | None,
+    *,
+    withheld: WithheldPages | None = None,
+) -> WikiPassages | None:
+    """The Wiki's passages for the answer lane's model step, or None with no Wiki switched on.
+
+    Asked on each question, so a Wiki switched on or off in Connect Lark is read or not from the
+    next one, and its declared spaces are read from the database on each question too
+    (`brain.ops.lark_wiki_spaces.declared_spaces`).
+    """
+    host = wiki_host()
+    if sessions is None or host is None:
+        return None
+    return WikiPassages(
+        host,
+        lambda: declared_spaces(sessions),
+        keys=WorkerConnectorKeys(vault),
+        caller=HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000),
+        resolver=SystemResolver(),
+        issuer=HttpsTokenIssuer(),
+        withheld=withheld,
+    )
+
+
 def live_records_for(
-    sessions: async_sessionmaker[AsyncSession] | None, vault: RunTokenVault | None
+    sessions: async_sessionmaker[AsyncSession] | None,
+    vault: RunTokenVault | None,
+    *,
+    schema: BaseSchema | None = None,
 ) -> SourceRecords | None:
     """The live reads this process makes, over its database and its vault, or None with no database.
 
     None leaves the answer lane answering from the rows it has, which is every process with no
     connection table to read. A process with no vault still reads its connections and refuses each
     read for want of a key, so the answer says the source could not be reached rather than
-    answering from the index.
+    answering from the index. A Lark Base switched on in Connect Lark is read beside the connected
+    sources (`brain.ops.lark_base_live`), its schema from `schema`, which the answer route shares
+    so that the question and its live read see the same tables.
     """
     if sessions is None:
         return None
@@ -294,14 +345,27 @@ def live_records_for(
     caller = HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000)
     resolver = SystemResolver()
     stored = StoredConnections(sessions)
+    tables = base_schema_for(vault) if schema is None else schema
+    issuer = HttpsTokenIssuer()
 
     async def connected() -> LiveSources:
         rows = await stored.connected()
-        return ConnectedSources(
+        sources = ConnectedSources(
             {one.connector: one for one in rows},
             keys=keys,
             caller=caller,
             resolver=resolver,
+            clock=_utc_now,
+        )
+        use = switched_on()
+        return with_base(
+            sources,
+            use,
+            () if use is None else await tables.tables(use),
+            keys=keys,
+            caller=caller,
+            resolver=resolver,
+            issuer=issuer,
             clock=_utc_now,
         )
 

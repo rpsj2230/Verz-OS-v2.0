@@ -30,7 +30,7 @@ from brain.connectors.minimal_index import (
     plant,
     sightings,
 )
-from brain.ops import connector_sync, connector_sync_run, connector_sync_store
+from brain.ops import connector_sync, connector_sync_run, connector_sync_store, lark_base_index
 from tests.fixtures.cassettes import FILES, Cassette, Expect
 
 pytestmark = pytest.mark.invariant
@@ -118,7 +118,13 @@ def test_the_scheduled_sync_hands_nothing_to_the_knowledge_corpus() -> None:
 
     Delete this and the leg that embedded every body a source held into `know.chunk` can come
     back through one import, which is the bulk sync the owner has ruled out twice."""
-    for module in (connector_sync, connector_sync_run, connector_sync_store, declaration):
+    for module in (
+        connector_sync,
+        connector_sync_run,
+        connector_sync_store,
+        declaration,
+        lark_base_index,
+    ):
         tree = ast.parse(inspect.getsource(module))
         imported = {
             node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
