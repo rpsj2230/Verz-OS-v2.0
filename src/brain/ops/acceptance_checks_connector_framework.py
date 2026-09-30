@@ -129,6 +129,10 @@ if TYPE_CHECKING:
     from brain.ops.openbao import RoleToken, StaticVersion
     from brain.tools.fetch import Resolver
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 130
+
 # ------------------------------------------------------------------ written-down reasons
 #: Why each connectable source is connected with identifiers the check made up.
 A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN: Final = (

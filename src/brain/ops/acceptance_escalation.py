@@ -46,6 +46,10 @@ from brain.ops.acceptance_run import Harness
 
 A, B = RESERVED_DEPARTMENTS
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 270
+
 #: Why the check's handoff reaches a transport the check holds.
 THE_HANDOFF_REACHES_A_CHANNEL_THE_CHECK_HOLDS: Final = (
     "The named person is reached through the product's own sender on a webhook channel the check "

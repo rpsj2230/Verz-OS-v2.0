@@ -26,7 +26,13 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_audit, acceptance_checks_channels, acceptance_run
+from brain.ops import (
+    acceptance,
+    acceptance_audit,
+    acceptance_checks_channels,
+    acceptance_checks_recovery,
+    acceptance_run,
+)
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
@@ -50,11 +56,11 @@ from brain.settings import settings_from
 from tests.unit.test_limit_store import FakeClient
 
 ROOT = Path(__file__).resolve().parents[2]
-#: Every module a check or the harness raises a verdict from: the harness, and each module named in
-#: `CHECK_MODULES`, so a new check module is held to the literal-reason rule the day it is named.
+#: Every module a check or the harness raises a verdict from: the harness, and each module the
+#: suite finds, so a new check module is held to the literal-reason rule the day it is written.
 SOURCES = (
     ROOT / "src" / "brain" / "ops" / "acceptance_run.py",
-    *(ROOT / "src" / f"{module.replace('.', '/')}.py" for module in acceptance.CHECK_MODULES),
+    *(ROOT / "src" / f"{module.replace('.', '/')}.py" for module in acceptance.check_modules()),
 )
 
 #: Pinned far from any wall clock, for CLAUDE.md's reason about fixtures with dates in them.
@@ -101,150 +107,72 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
         assert set(one.leaves) <= leaves, one.name
 
 
-def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
-    """Held per module, so a package adding checks in a module of its own changes only its own
-    lines here, the modules in `CHECK_MODULES` order rather than the order a process imported
-    them. Delete this and a check can drop out of the suite with the page simply listing one fewer
-    row, or the page can lead with whichever module was imported first."""
+def checks_in(module: str) -> list[str]:
+    """The checks one module registers, in the order the Install page lists them.
+
+    What each check module's own test file holds its list against, so a package adding a check
+    edits its own file and never a list every package appends to.
+    """
+    return [one.name for one in registered() if one.run.__module__ == module]
+
+
+def test_the_suite_is_every_check_module_in_the_order_each_declares() -> None:
+    """`A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`, on the discovered result. The page lists the
+    modules by the key each declares, ties by name, and never in the order a process imported
+    them; every module that registers a check is in it, and every check in it is in one of them.
+    Delete this and a check module can drop out of the run with the page listing fewer rows, or
+    the page can lead with whichever module was imported first."""
+    import importlib
+
+    modules = acceptance.check_modules()
+    keys = [getattr(importlib.import_module(one), acceptance.ORDER_ATTRIBUTE) for one in modules]
+    assert list(modules) == sorted(modules, key=lambda one: (keys[modules.index(one)], one))
+    assert modules[0] == "brain.ops.acceptance_checks"
+    assert len(modules) >= 20
+    suite = registered()
     by_module: dict[str, list[str]] = {}
-    for one in registered():
+    for one in suite:
         by_module.setdefault(one.run.__module__, []).append(one.name)
-    assert by_module["brain.ops.acceptance_checks"] == [
+    assert list(by_module) == list(modules)
+    assert {one.run.__module__ for one in suite} == set(modules)
+    assert all(acceptance.is_check_module_name(one) for one in modules)
+
+
+def test_the_first_two_modules_hold_their_checks_in_order() -> None:
+    """The two modules with no test file of their own, held here. Delete this and a check can
+    drop out of either with the page listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks") == [
         "asking_past_a_window_is_refused_with_a_retry_hint",
         "a_webhook_channel_receives_once_and_stops_both_ways",
         "documents_are_answered_in_their_department_only",
     ]
-    assert by_module["brain.ops.acceptance_oversight"] == [
+    assert checks_in("brain.ops.acceptance_oversight") == [
         "unusual_volume_is_found_per_person",
         "repeated_refusals_raise_a_denial_notice",
         "a_head_reads_their_own_peoples_audit_entries_only",
     ]
-    assert by_module["brain.ops.acceptance_checks_chat"] == [
-        "a_lark_group_message_is_answered_only_when_it_names_the_bot",
-        "a_person_bound_in_lark_is_given_their_web_answer_directly",
-        "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
-    ]
-    assert by_module["brain.ops.acceptance_checks_skills"] == [
-        "a_pasted_or_uploaded_skill_waits_undecided_and_unread",
-        "a_skill_is_imported_from_a_github_commit_and_from_an_address",
-        "an_edit_is_a_new_version_and_moves_no_agent_until_reassigned",
-        "categories_are_kept_and_offered_from_what_a_reader_was_shown",
-    ]
-    # One row per provider per leaf, then three; `tests/unit/test_acceptance_models.py` names them.
-    assert len(by_module["brain.ops.acceptance_models"]) == 11
-    # One per clause of M5.6.3; `tests/unit/test_acceptance_routing.py` names them.
-    assert len(by_module["brain.ops.acceptance_routing"]) == 6
-    assert by_module["brain.ops.acceptance_audit"] == [
-        "each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught"
-    ]
-    assert by_module["brain.ops.acceptance_checks_connectors"] == [
-        "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
-        "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
-        "a_changed_declaration_makes_the_next_sync_refuse",
-        "a_source_is_connected_switched_off_and_upgraded_from_the_console",
-    ]
-    assert by_module["brain.ops.acceptance_checks_tools"] == [
-        "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
-        "a_tool_named_for_a_sensitive_effect_must_declare_it",
-        "a_switched_off_tool_is_refused_and_a_department_stops_its_own",
-        "a_tool_s_side_effect_holds_the_rung_an_agent_runs_at",
-    ]
-    assert by_module["brain.ops.acceptance_checks_lifecycle"] == [
-        "a_newer_version_supersedes_the_older_and_answers_use_the_newer",
-        "a_company_wide_request_waits_until_another_approver_approves_it",
-        "a_review_that_fell_due_opens_its_steward_s_task_until_verified",
-        "a_solution_answers_only_once_somebody_else_approves_it",
-    ]
-    assert by_module["brain.ops.acceptance_checks_tables"] == [
-        "a_price_list_upload_classifies_every_column",
-        "a_reader_without_the_cost_grant_is_told_the_sell_price_alone",
-        "an_applied_mark_is_in_the_ledger_under_the_administrator",
-    ]
-    # What an answer stands on and how it declines; `tests/unit/test_acceptance_answers.py`.
-    assert by_module["brain.ops.acceptance_answers"] == [
-        "a_document_answer_cites_the_passage_it_was_shown_with_its_badge",
-        "a_record_answer_cites_the_record_field_and_read_time",
-        "four_kinds_of_nothing_are_kept_apart",
-        "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
-        "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone",
-        "a_prompt_too_long_for_every_model_is_answered_from_fewer",
-    ]
-    assert by_module["brain.ops.acceptance_checks_connector_framework"] == [
-        "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
-        "a_rest_read_is_built_from_a_spec_and_refused_before_a_call",
-        "a_source_is_connected_to_one_named_thing_and_never_to_everything",
-        "a_run_leases_its_key_and_the_next_run_reads_a_replaced_one",
-        "a_live_read_uses_the_service_key_ends_on_time_and_is_made_once",
-        "a_burst_is_paced_by_the_source_s_documented_ceiling",
-        "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
-        "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
-        "a_source_s_live_calls_are_measured_on_its_page",
-    ]
-    # Capacity as rows, the screens that read it, and the classes sharing one budget in the cache;
-    # `tests/unit/test_acceptance_capacity.py`.
-    assert by_module["brain.ops.acceptance_checks_capacity"] == [
-        "budgets_and_windows_are_rows_saved_within_bounds_and_audited",
-        "the_rate_limits_screen_lists_the_windows_refusing_now",
-        "capacity_is_sized_for_the_busiest_minute_and_its_first_limit",
-        "three_classes_share_one_budget_and_give_way_in_order",
-    ]
-    # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
-    assert by_module["brain.ops.acceptance_retrieval"] == [
-        "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
-        "a_word_in_a_title_outranks_a_word_in_passing",
-        "a_documents_passages_come_back_together_in_reading_order",
-        "a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd",
-        "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
-        "the_database_withholds_passages_the_statement_did_not_filter",
-        "three_readers_get_everything_in_their_scope_and_nothing_else",
-    ]
-    # Getting a document in; `tests/unit/test_acceptance_ingest.py`.
-    assert by_module["brain.ops.acceptance_ingest"] == [
-        "a_file_carrying_script_or_macros_is_refused_before_it_is_read",
-        "the_antivirus_test_file_is_refused_as_malware",
-        "a_link_is_fetched_read_and_found_in_its_department",
-        "a_full_ingestion_queue_refuses_with_a_retry_hint",
-        "a_queued_file_is_kept_in_the_store_and_read_by_the_worker",
-        "the_embedding_width_is_the_installs_and_held_under_vectors",
-        "a_price_list_sent_as_a_document_is_offered_to_classification",
-    ]
-    # A person's threads; `tests/unit/test_acceptance_threads.py`.
-    assert by_module["brain.ops.acceptance_threads"] == [
-        "a_question_is_kept_in_its_askers_thread_and_searched_by_them",
-        "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
-        "a_follow_up_is_answered_from_what_its_thread_cited",
-        "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it",
-    ]
-    # A document's whole life, walked as one flow; `tests/unit/test_acceptance_knowledge.py`.
-    assert by_module["brain.ops.acceptance_knowledge"] == [
-        "a_document_is_added_answered_replaced_and_falls_due_for_review",
-    ]
-    # The canvas's door; `tests/unit/test_acceptance_automation.py`.
-    assert by_module["brain.ops.acceptance_checks_automation"] == [
-        "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
-    ]
-    assert by_module["brain.ops.acceptance_checks_organisation"] == [
-        "departments_a_staff_source_names_are_founded_once",
-        "the_staff_sync_places_people_where_its_source_says",
-    ]
-    # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
-    assert by_module["brain.ops.acceptance_checks_accounts"] == [
-        "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
-    ]
-    # One per channel a vendor connects; `tests/unit/test_acceptance_channels.py` runs them.
-    assert by_module["brain.ops.acceptance_checks_channels"] == [
-        "an_email_is_taken_signed_and_answered_by_the_install_s_relay",
-    ]
-    # Escalation and sensitive topics on an install; `tests/unit/test_acceptance_escalation.py`.
-    assert by_module["brain.ops.acceptance_escalation"] == [
-        "an_escalated_question_reaches_its_person_and_times_out",
-        "a_sensitive_question_is_routed_before_any_agent_answers",
-    ]
-    assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
     assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
     assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == ("M1.8.3",)
+
+
+def test_a_module_that_registers_checks_is_placed_or_refused_and_never_skipped() -> None:
+    """The three refusals `ordered_check_modules` makes, with its positive case beside them: a
+    module registering checks with no key, a key with no checks, and a check registered outside
+    the prefix are each refused; placed modules come back by key, ties by name. Delete this and
+    a module that forgot its key drops out of the Install page with nothing saying so."""
+    from brain.ops.acceptance import AcceptanceError, ordered_check_modules
+
+    declared = {"b.late": 20, "b.one": 10, "b.also": 10, "b.first": 5, "b.helper": None}
+    placed = ["b.late", "b.one", "b.also", "b.first"]
+    assert ordered_check_modules(declared, placed) == ("b.first", "b.also", "b.one", "b.late")
+    with pytest.raises(AcceptanceError, match="declare no CHECK_ORDER"):
+        ordered_check_modules(declared, [*placed, "b.helper"])
+    with pytest.raises(AcceptanceError, match="register no check"):
+        ordered_check_modules(declared, ["b.one", "b.also", "b.first"])
+    with pytest.raises(AcceptanceError, match="does not look in"):
+        ordered_check_modules(declared, [*placed, "elsewhere"])
 
 
 def test_every_reason_a_check_raises_is_a_literal_sentence() -> None:
@@ -647,6 +575,7 @@ WRITTEN_BY_CHECKS = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    "ops.operation",
 )
 
 
@@ -757,6 +686,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
+    # No worker has ticked here, so neither recovery sweep has a scheduled run to judge;
+    # `tests/unit/test_acceptance_recovery.py` records one and both pass.
+    for recovery_check in registered(("brain.ops.acceptance_checks_recovery",)):
+        assert outcomes.pop(recovery_check.name) == (
+            NOT_RUN,
+            acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
+        )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)

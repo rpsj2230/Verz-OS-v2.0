@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Four of the twenty-one mechanisms are started by nothing
+## Two of the twenty-one mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -310,7 +310,9 @@ starting the webhook dispatch, and six later that day, when it began starting th
 canaries. Five became true on 2026-09-22, when the schedule began probing model providers. Four
 became true on 2026-09-28, when the denial digest was given the module that reads the hour's
 refusals from the audit ledger and keeps the alerts it raises, and the worker's schedule starts
-it every hour.
+it every hour. Two became true on 2026-09-30, when the worker's schedule began re-driving jobs a
+dead worker or a transient failure left behind, and reading back side effects a dead worker left
+unconfirmed, and listing for a person each one its connector cannot answer for.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -324,8 +326,8 @@ it every hour.
 | `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
 | `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `in_process` |
 | `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |
-| `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `nothing` |
-| `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `nothing` |
+| `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `in_process` |
+| `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `in_process` |
 | `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
 | `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `in_process` |
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |

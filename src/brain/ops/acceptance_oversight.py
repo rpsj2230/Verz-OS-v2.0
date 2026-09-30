@@ -3,7 +3,7 @@
 The three mechanisms somebody watching the install relies on, each asked on the install it runs on
 as reserved principals of the reserved departments, inside the check's rolled-back transaction
 (`brain.ops.acceptance.NOTHING_A_CHECK_WRITES_IS_EVER_COMMITTED`). A module of its own beside
-`brain.ops.acceptance_checks`, named in `brain.ops.acceptance.CHECK_MODULES`, so a package adding
+`brain.ops.acceptance_checks`, found by `brain.ops.acceptance.check_modules`, so a package adding
 checks elsewhere does not edit these.
 
 **Each reads only the reserved people's rows.** The volume statement, the denial statement and the
@@ -38,6 +38,10 @@ from brain.ops.acceptance import (
     check,
 )
 from brain.ops.acceptance_run import Harness
+
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 20
 
 A, B = RESERVED_DEPARTMENTS
 

@@ -40,7 +40,7 @@ from brain.ops.acceptance_answers import (
 )
 from brain.ops.acceptance_models import STAND_IN_ADDRESS
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 from tests.unit.test_acceptance_models import Providers, laddered, live_ladder
 
 MODULE = "brain.ops.acceptance_answers"
@@ -397,3 +397,18 @@ def test_an_answer_silent_about_its_trimmed_passages_fails_the_trim_check(
 
     monkeypatch.setattr(model_lane.Trimmed, "sentence", lambda self: "")
     assert "did not say" in _failed(install, TRIM)
+
+
+def test_the_answers_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_answers") == [
+        "a_document_answer_cites_the_passage_it_was_shown_with_its_badge",
+        "a_record_answer_cites_the_record_field_and_read_time",
+        "four_kinds_of_nothing_are_kept_apart",
+        "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
+        "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone",
+        "a_prompt_too_long_for_every_model_is_answered_from_fewer",
+    ]
