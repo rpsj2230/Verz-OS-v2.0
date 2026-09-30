@@ -50,6 +50,10 @@ from brain.ops.acceptance import (
 )
 from brain.ops.acceptance_run import Harness
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 10
+
 A, B = RESERVED_DEPARTMENTS
 
 #: The four reads a department's knowledge reader holds, as a Starter pack assignment grants them.
@@ -384,10 +388,12 @@ async def _upload(
     body: bytes,
     department: str = A,
     level: Any = None,
+    kind: Any = None,
 ) -> Any:
     """The upload route's own sequence, as `uploader`: placed in `department`, admitted, read,
     then stored. `level` is the `Visibility` the upload asks for, the department's unless
-    said, and a personal upload is placed at the uploader's own level as the route places it."""
+    said, and a personal upload is placed at the uploader's own level as the route places it.
+    `kind` is the `KnowledgeKind` it is added as, an SOP unless said."""
     from brain.knowledge.chunk_store import ingest_document
     from brain.knowledge.embed_policy import REVISION_SETTING, REVISION_UNSET
     from brain.knowledge.ingest import ParseFailure, admit_upload, ceiling_for
@@ -428,7 +434,7 @@ async def _upload(
     read = await asyncio.to_thread(
         read_one_at_a_time,
         received,
-        kind=KnowledgeKind.SOP,
+        kind=KnowledgeKind.SOP if kind is None else kind,
         placement=placement,
         owner_id=uploader,
     )

@@ -24,6 +24,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { UNAVAILABLE_MARK } from "../src/components/kit";
 import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src/pages/access/formParts";
 import { phraseFor } from "../src/pages/auditQuery";
+import { ACCOUNT_READY_HEADING, COPY } from "../src/pages/people/AccountReady";
 import { UNAVAILABLE } from "../src/pages/people/peopleActions";
 import { readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -289,6 +290,22 @@ describe("the People list", () => {
     const declared = declaredPropertyNames(declaredRequestBodySchema(`${API}/govern/directory`, "post"));
     expect(Object.keys(sent?.body as object).every((key) => declared.includes(key))).toBe(true);
     await waitFor(() => expect(mounted.router.state.location.pathname).toBe("/people/p_new"));
+  });
+
+  test("with a staff list read, the sentence to pass on is under the list with a Copy button, and without one it is not", async () => {
+    // What breaks if this is deleted: the one thing the owner asked People to carry once the sync
+    // sends nobody anything, the sentence telling somebody their account is ready, can go missing,
+    // or appear on an install that makes no accounts.
+    const said = "Your account is ready. Go to the sign-in page, press Forgot password and enter your work email.";
+    const listed = await consoleAt("/people", {
+      [`${API}/govern/directory`]: { body: directory([ADA], { account_ready: said }) },
+    });
+    expect(listed.container.textContent).toContain(ACCOUNT_READY_HEADING);
+    expect(listed.container.querySelector("blockquote")?.textContent).toBe(said);
+    expect(within(listed.container).getByRole("button", { name: COPY })).toBeTruthy();
+    const none = await consoleAt("/people", { [`${API}/govern/directory`]: { body: directory([ADA]) } });
+    expect(none.container.textContent).not.toContain(ACCOUNT_READY_HEADING);
+    expect(none.container.querySelector("blockquote")).toBeNull();
   });
 
   test("selecting people offers one grant to all of them, asked first with each named, and only the confirmation sends", async () => {
@@ -568,6 +585,35 @@ describe("Departments and teams", () => {
     expect(textOf(row)).toContain("Ada Okafor");
     expect(textOf(row)).toContain("Design");
     expect(textOf(row)).not.toMatch(/\d/);
+  });
+
+  test("the departments the staff source names are created by one confirmed press that lists each and sends their short names", async () => {
+    // What breaks if this is deleted: the owner's install on 2026-09-29, eleven departments named by
+    // Lark and none on this screen, or departments created without a confirmation naming each.
+    let offered: unknown = { to_found: [{ name: "Web Development", slug: "web_development" }, { name: "设计部", slug: "department_bf7a74ff" }], registered: ["Finance"] };
+    const mounted = await consoleAt("/departments", {
+      [`${API}/govern/departments`]: { body: organisation([WEB]) },
+      [`${API}/govern/departments/from-staff-source`]: () => ({ body: offered }),
+      [`POST ${API}/govern/departments/from-staff-source`]: () => {
+        offered = { to_found: [], registered: ["Finance", "Web Development", "设计部"] };
+        return { body: { created: [{ name: "Web Development", slug: "web_development" }, { name: "设计部", slug: "department_bf7a74ff" }], not_founded: [] } };
+      },
+    });
+    const offer = await screen.findByRole("list", { name: "Departments your staff source names" });
+    expect(textOf(offer)).toContain("Web Development");
+    expect(textOf(offer)).toContain("设计部");
+    press(mounted.container, "Create the departments your staff source names");
+    const dialog = await confirmation("Create these departments?");
+    expect(textOf(dialog)).toContain("Web Development (short name web_development)");
+    expect(writes(mounted.idp)).toEqual([]);
+    press(dialog, "Create the departments your staff source names");
+    await waitFor(() =>
+      expect(writes(mounted.idp)).toEqual([
+        { to: `POST ${API}/govern/departments/from-staff-source`, body: { slugs: ["web_development", "department_bf7a74ff"] } },
+      ]),
+    );
+    await waitFor(() => expect(mounted.container.textContent).toContain("Created Web Development, 设计部."));
+    expect(asked(mounted.idp).filter((url) => url.pathname === `${API}/govern/departments`).length).toBeGreaterThanOrEqual(2);
   });
 
   test("a short name says its form before submit, and acceptance-test is told to use an underscore without anything sent", async () => {

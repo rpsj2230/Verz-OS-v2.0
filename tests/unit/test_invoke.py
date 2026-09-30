@@ -1,7 +1,7 @@
 """Assembling one agent run. Every test is a way a run could be more trusted than it should
 be, or could start when it should not.
 
-Task ids: M3.8.1
+Task ids: M3.8.1, M12.1.3
 """
 
 from __future__ import annotations
@@ -233,6 +233,102 @@ def test_a_leash_scope_is_evaluated_against_the_row() -> None:
         _invoke(**common, row={"department": "maintenance"}).ceiling_rung is AutonomyTier.AUTONOMOUS
     )
     assert _invoke(**common, row={"department": "finance"}).ceiling_rung is AutonomyTier.SHADOW
+
+
+# ------------------------------------------- a side effect holds the rung (M12.1.3)
+#: Each side effect a tool can have and the rung a run holds an Autonomous entry on it to, as
+#: the owner reads the rule: a person sees a draft, a write and a send before it happens, and
+#: money is only ever rehearsed. Written out rather than read from `default_rung`, so a change
+#: to that mapping is a failing test here and not a test that moves with it.
+HELD_AT = {
+    SideEffect.DRAFT: AutonomyTier.ASSISTED,
+    SideEffect.WRITE: AutonomyTier.ASSISTED,
+    SideEffect.SEND: AutonomyTier.ASSISTED,
+    SideEffect.MONEY: AutonomyTier.SHADOW,
+}
+
+#: One tool per side effect, named so no name reads as one of the owner's sensitive effects.
+ACTING = {
+    SideEffect.DRAFT: "note.draft_summary",
+    SideEffect.WRITE: "note.update_summary",
+    SideEffect.SEND: "note.share_summary",
+    SideEffect.MONEY: "note.transfer_funds",
+}
+
+
+def _acting_registry() -> ToolRegistry:
+    """The default registry's two reads, and one tool for each side effect that acts."""
+    r = _registry()
+    for effect, name in ACTING.items():
+        r.register(_definition(name, "write:note.summary", effect), a_handler)
+    return r
+
+
+def _run_on(tool: str, rung: AutonomyTier = AutonomyTier.AUTONOMOUS) -> Invocation:
+    """A run reaching this one tool, configured at `rung` on it, through the acting registry."""
+    return _invoke(
+        registry=_acting_registry(),
+        entitlement=_entitlement("read:client.name", "read:ticket.status", "write:note.summary"),
+        ceiling=AgentCeiling(
+            agent_id=AGENT, allowed_tools=frozenset({tool}), max_side_effect=SideEffect.MONEY
+        ),
+        leash=_leash(rung, tool),
+    )
+
+
+def test_an_autonomous_entry_on_a_tool_that_acts_runs_at_the_rung_its_side_effect_allows() -> None:
+    """`A_RUN_IS_HELD_TO_THE_RUNG_ITS_TOOLS_SIDE_EFFECTS_ALLOW`, per side effect, against the
+    owner's reading of the rule written out above and against the registry's own
+    `leash_ceiling`, which is the rung the Tools screen shows. Delete this and `invoke` can go
+    back to trusting the configured rung, which is what it did until 2026-09-30: a send tool
+    set Autonomous sent with nobody seeing it first."""
+    from brain.tools.registry import leash_ceiling
+
+    assert set(HELD_AT) | {SideEffect.NONE} == set(SideEffect)
+    registry = _acting_registry()
+    for effect, name in ACTING.items():
+        held = _run_on(name).ceiling_rung
+        assert held is HELD_AT[effect], name
+        assert held is leash_ceiling(registry.get(name).definition), name
+        assert held < AutonomyTier.AUTONOMOUS, name
+
+
+def test_an_autonomous_entry_on_a_read_still_runs_autonomous() -> None:
+    """The positive sibling. A side effect of none allows every rung, so the hold changes nothing
+    for a tool that only reads. Delete this and a hold that lowered every run to Assisted would
+    pass the test above while stopping every agent from answering on its own."""
+    for name in ("client.read_summary", "ticket.read_status"):
+        assert _run_on(name).ceiling_rung is AutonomyTier.AUTONOMOUS, name
+
+
+def test_the_hold_never_raises_a_rung_set_below_it() -> None:
+    """`tighten` is `min`, so a Shadow entry on a draft tool stays Shadow. Delete this and the
+    side effect can be applied as a default, raising a rung somebody pinned to Assisted."""
+    assert _run_on(ACTING[SideEffect.DRAFT], AutonomyTier.SHADOW).ceiling_rung is (
+        AutonomyTier.SHADOW
+    )
+
+
+def test_the_run_carries_the_held_leash_and_the_configured_one_is_not_rewritten() -> None:
+    """A step inside the run is governed by `Invocation.leash`, so it must be the held one; and
+    the leash handed in is what a page shows, so it must still say what was configured. Delete
+    this and a step can be governed at the configured rung while the run says Assisted, or the
+    page can start showing a rung nobody set."""
+    configured = _leash(AutonomyTier.AUTONOMOUS, ACTING[SideEffect.SEND], "client.read_summary")
+    inv = _invoke(
+        registry=_acting_registry(),
+        entitlement=_entitlement("read:client.name", "write:note.summary"),
+        ceiling=AgentCeiling(
+            agent_id=AGENT,
+            allowed_tools=frozenset({ACTING[SideEffect.SEND], "client.read_summary"}),
+            max_side_effect=SideEffect.SEND,
+        ),
+        leash=configured,
+    )
+    assert inv.leash.rung_for(AGENT, ACTING[SideEffect.SEND], {}) is AutonomyTier.ASSISTED
+    assert inv.leash.rung_for(AGENT, "client.read_summary", {}) is AutonomyTier.AUTONOMOUS
+    assert configured.rung_for(AGENT, ACTING[SideEffect.SEND], {}) is AutonomyTier.AUTONOMOUS
+    assert inv.ceiling_rung is AutonomyTier.ASSISTED
 
 
 # ------------------------------------------------------- risk only ever tightens

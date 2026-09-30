@@ -42,6 +42,10 @@ if TYPE_CHECKING:
 
     from brain.agents.model import AgentRecord
 
+#: Where this module's checks stand on the Install page: after every module that was there before
+#: it. See `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 270
+
 A, B = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------------ the figures

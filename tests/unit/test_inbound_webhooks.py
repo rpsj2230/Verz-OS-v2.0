@@ -136,7 +136,16 @@ def test_the_one_address_a_platform_posts_to_is_the_channel_events_route() -> No
     assert any(path.endswith("/webhooks/subscribers") for path in paths)
 
     received = receiving()
-    assert received == frozenset(channel_wires()) == {Channel.LARK, Channel.WEBHOOK}
+    assert (
+        received
+        == frozenset(channel_wires())
+        == {
+            Channel.EMAIL,
+            Channel.LARK,
+            Channel.SLACK,
+            Channel.WEBHOOK,
+        }
+    )
     told = receiving_told()
     assert told != NO_CHANNEL_RECEIVES_A_WEBHOOK
     for one in INBOUND:

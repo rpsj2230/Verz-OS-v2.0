@@ -23,6 +23,7 @@ Task ids: M42.6.5, M27.15.8
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
@@ -38,9 +39,11 @@ from pydantic import ValidationError
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
 from brain.connector_routes import (
+    ACCEPT_PATH,
     CONNECTORS_PATH,
     CONNECTORS_READ,
     DISCONNECT_PATH,
+    DRIFT_PATH,
     EDIT_PATH,
     EXPORT_PATH,
     KEY_PATH,
@@ -253,6 +256,7 @@ class Records:
         ent_hash: str,
         keep_key: Callable[[], Awaitable[datetime | None]],
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         self.asked += 1
         self.declared.append(tuple(declared))
@@ -265,6 +269,7 @@ class Records:
             digest=digest,
             connected_by=actor,
             connected_at=LONG_AGO,
+            agreed=agreed,
         )
         self.rows[connector] = made
         self.connects.append({"connection": made, "ent_hash": ent_hash})
@@ -675,6 +680,30 @@ def test_the_screen_lists_every_shipped_connector_from_its_own_declaration(
         assert (label, why) == (declared[name].label, declared[name].not_from_the_console)
 
 
+def test_every_source_is_served_with_the_steps_of_its_connect_flow(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The console draws each source's connect flow from these steps, so they are served with the
+    form: a console source's last step asks for its form's fields and its key, a server source's
+    for nothing. Delete this and the flow has nothing to draw, or draws steps the route never
+    sent."""
+    from brain.connectors.declaration import shipped
+
+    attach(app, None, held_vault())
+    body = get(client, "u_admin").json()
+    declared = shipped()
+    for one in body["connectable"]:
+        keys = [step["key"] for step in one["steps"]]
+        assert keys == [step.key for step in declared[one["name"]].guide]
+        assert one["steps"][-1]["asks"] == [
+            *(setting["name"] for setting in one["settings"]),
+            "credential",
+        ]
+        assert all(step["sketch"]["heading"] for step in one["steps"])
+    drive = next(one for one in body["not_connectable"] if one["name"] == "google_drive")
+    assert drive["steps"][-1]["asks"] == [] and len(drive["steps"]) == 4
+
+
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
     app: FastAPI, client: TestClient
 ) -> None:
@@ -1043,6 +1072,7 @@ class ChangingRecords(Records):
         trace_id: str,
         ent_hash: str,
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         old = self.rows.get(connector)
         if old is None:
@@ -1064,6 +1094,7 @@ class ChangingRecords(Records):
             digest=digest,
             connected_by=actor,
             connected_at=LONG_AGO + timedelta(days=1),
+            agreed=agreed,
         )
         self.rows[connector] = made
         self.edits.append({"connection": made, "declared": tuple(declared)})
@@ -1409,3 +1440,171 @@ def test_the_test_route_leaves_connect_larks_own_test_to_connect_lark() -> None:
     assert [one for one in router.routes if one.matches(scope)[0] is not Match.NONE] == []
     probing = {"type": "http", "path": probe_path("xero"), "method": "POST"}
     assert [one for one in router.routes if one.matches(probing)[0] is Match.FULL]
+
+
+# ------------------------------------------------------------------ a changed declaration
+
+
+def an_older_xero() -> tuple[str, str, str]:
+    """Xero as an earlier release declared it, one field fewer kept in its index: the text agreed,
+    its digest, and the field this release added. Built from this release's own manifest, so the
+    field is one Xero really keeps."""
+    import dataclasses
+
+    from brain.connectors.manifest import digest_input
+
+    current = manifest_for("xero", settings_for("xero"))
+    entity = current.projections[0]
+    dropped = entity.fields[-1]
+    older = dataclasses.replace(
+        current,
+        version="0.9.0",
+        projections=(
+            dataclasses.replace(entity, fields=entity.fields[:-1]),
+            *current.projections[1:],
+        ),
+    )
+    return digest_input(older), manifest_digest(older), f"a {entity.entity}'s {dropped.name}"
+
+
+def drift_path(name: str) -> str:
+    return API_PREFIX + DRIFT_PATH.replace("{connector}", name)
+
+
+def accept_path(name: str) -> str:
+    return API_PREFIX + ACCEPT_PATH.replace("{connector}", name)
+
+
+def an_agreed_connection(agreed: str, digest: str) -> Connection:
+    return dataclasses.replace(a_connection("xero", digest=digest), agreed=agreed)
+
+
+def test_the_diff_names_a_field_the_new_declaration_keeps(app: FastAPI, client: TestClient) -> None:
+    """A connection agreed when Xero kept one field fewer is told, in words, that the index now
+    keeps that field, and which versions are compared. Delete this and a person accepts a change
+    they were never shown, which is the gap the pill alone left."""
+    agreed, digest, field = an_older_xero()
+    field_words = field.replace("_", " ")
+    attach(app, ChangingRecords((an_agreed_connection(agreed, digest),)), held_vault())
+    answered = read(client, "u_admin", drift_path("xero")).json()
+    assert answered["changed"] is True and answered["known"] is True
+    assert {"kind": "added", "what": f"Now also keeps in its index: {field_words}", "was": ""} in (
+        answered["lines"]
+    )
+    assert answered["was_version"] == "0.9.0" and answered["now_version"] != "0.9.0"
+    assert answered["agreed_digest"] == digest
+    assert answered["current_digest"] == manifest_digest(manifest_for("xero", settings_for("xero")))
+    assert answered["may_accept"] is True and answered["confirm"]
+
+
+def test_an_agreed_text_that_does_not_hash_to_the_pin_is_not_believed(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A row whose kept text is not the declaration its digest names, or keeps none, cannot say
+    what changed, and the screen lists everything the declaration does now instead. Delete this
+    and a row edited by hand puts words in front of the person about to accept."""
+    agreed, digest, _ = an_older_xero()
+    forged = agreed.replace("0.9.0", "0.9.1")
+    attach(app, ChangingRecords((an_agreed_connection(forged, digest),)), held_vault())
+    answered = read(client, "u_admin", drift_path("xero")).json()
+    assert answered["changed"] is True and answered["known"] is False
+    assert answered["lines"] == [] and answered["now_does"]
+    current = manifest_for("xero", settings_for("xero"))
+    assert current.tools[0].description in answered["now_does"]
+
+
+def test_an_unchanged_connection_shows_no_pill_and_no_diff(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The positive case: a connection agreed under this release's declaration is not marked and
+    has nothing to accept. Delete this and every connected source shows a change, which teaches
+    people to accept without reading."""
+    attach(app, ChangingRecords((a_connection("xero"),)), held_vault())
+    answered = read(client, "u_admin", drift_path("xero")).json()
+    assert answered["changed"] is False and answered["lines"] == [] and not answered["may_accept"]
+    [row] = [
+        one
+        for one in read(client, "u_admin", f"{API_PREFIX}{SOURCES_PATH}").json()["items"]
+        if one["name"] == "xero"
+    ]
+    assert row["declaration_changed"] is False
+
+
+def test_accepting_repins_the_declaration_and_the_source_is_read_again(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The accept names the digest shown, connects the source again with its own settings under
+    this release's declaration and keeps the text agreed; the pill goes and the scheduled read's
+    plan no longer refuses it. Delete this and accepting a change leaves the source unread, or
+    pins something other than what was shown."""
+    from brain.connectors.manifest import digest_input
+    from brain.ops.connector_sync import DECLARATION_NOT_AGREED, plan_for
+
+    agreed, digest, _ = an_older_xero()
+    records = ChangingRecords((an_agreed_connection(agreed, digest),))
+    attach(app, records, held_vault())
+    before = records.rows["xero"]
+    assert plan_for(before, last=None, now=AT).refused == DECLARATION_NOT_AGREED
+    shown = read(client, "u_admin", drift_path("xero")).json()["current_digest"]
+    answered = post(client, "u_admin", accept_path("xero"), {"digest": shown})
+    assert answered.status_code == 200 and answered.json()["digest"] == shown
+    after = records.rows["xero"]
+    current = manifest_for("xero", settings_for("xero"))
+    assert (after.digest, after.settings, after.agreed) == (
+        shown,
+        before.settings,
+        digest_input(current),
+    )
+    assert records.ended[-1].digest == digest
+    assert plan_for(after, last=None, now=AT).refused != DECLARATION_NOT_AGREED
+    assert read(client, "u_admin", drift_path("xero")).json()["changed"] is False
+
+
+def test_an_accept_naming_another_digest_or_nothing_changed_is_refused(
+    app: FastAPI, client: TestClient
+) -> None:
+    """An accept must name the declaration the reader was shown; a release landing in between is
+    refused by field, and an accept with nothing changed says so. Delete this and a change can be
+    accepted by a person who read a different one."""
+    agreed, digest, _ = an_older_xero()
+    records = ChangingRecords((an_agreed_connection(agreed, digest),))
+    attach(app, records, held_vault())
+    moved = post(client, "u_admin", accept_path("xero"), {"digest": "f" * 64})
+    assert moved.status_code == 422
+    assert [one["field"] for one in moved.json()["problems"]] == ["digest"]
+    assert records.edits == []
+    same = ChangingRecords((a_connection("xero"),))
+    attach(app, same, held_vault())
+    current = manifest_digest(manifest_for("xero", settings_for("xero")))
+    unchanged = post(client, "u_admin", accept_path("xero"), {"digest": current})
+    assert unchanged.status_code == 422 and same.edits == []
+
+
+def test_a_reader_without_the_install_authority_sees_the_diff_and_cannot_accept(
+    app: FastAPI, client: TestClient
+) -> None:
+    """u_wide reads the Connectors screen and holds no installation authority: they are shown the
+    pill and what changed, offered no accept, and refused one in the one way this router refuses.
+    Delete this and anybody who can read the screen can agree a source to a new declaration."""
+    agreed, digest, field = an_older_xero()
+    records = ChangingRecords((an_agreed_connection(agreed, digest),))
+    attach(app, records, held_vault())
+    answered = read(client, "u_wide", drift_path("xero")).json()
+    assert answered["changed"] is True and answered["may_accept"] is False
+    assert any(field.replace("_", " ") in one["what"] for one in answered["lines"])
+    refused = post(client, "u_wide", accept_path("xero"), {"digest": answered["current_digest"]})
+    assert refused.status_code == 404 and records.edits == []
+
+
+def test_connecting_and_editing_keep_the_declaration_text_the_digest_is_taken_over(
+    app: FastAPI, client: TestClient
+) -> None:
+    """Every row written from now on keeps what it agreed to, so the next release can say what
+    changed. Delete this and the drift view can never be anything but "not kept"."""
+    import hashlib
+
+    records = ChangingRecords()
+    attach(app, records, held_vault())
+    assert post(client, "u_admin", LISTING, connection_body()).status_code == 200
+    made = records.rows["xero"]
+    assert hashlib.sha256(made.agreed.encode("utf-8")).hexdigest() == made.digest
