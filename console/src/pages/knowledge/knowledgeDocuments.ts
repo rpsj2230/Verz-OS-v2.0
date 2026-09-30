@@ -16,10 +16,11 @@
  * verifier arrive with their display names; the page draws those, and the principal ids go to the
  * detail page's Advanced section with the document's own reference.
  *
- * Task ids: M27.15.40, M27.16.1
+ * Task ids: M27.15.40, M27.16.1, M7.6.1
  */
 
 import type { FilterChoice, SortChoice } from "../../components/listing";
+import { kindWord } from "../knowledgeQuery";
 
 /** The module's heading, which the navigation, the list and every trail back to it share. */
 export const KNOWLEDGE_HEADING = "Knowledge";
@@ -368,6 +369,14 @@ export const DOCUMENT_FILTERS: readonly FilterChoice<Readonly<Record<string, unk
     everything: "Any state",
     read: (row) => said(row["state"]),
     describe: stateWords,
+  },
+  {
+    // The kind each document was added as (M7.6.1), in the library's own words for it.
+    column: "kind",
+    label: "Kind",
+    everything: "Every kind",
+    read: (row) => said(row["kind"]),
+    describe: kindWord,
   },
   {
     column: "review",

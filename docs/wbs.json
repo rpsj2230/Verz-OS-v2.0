@@ -142,6 +142,8 @@
     "M1.1.5",
     "M1.1.6",
     "M1.1.7",
+    "M1.1.8",
+    "M1.1.9",
     "M1.2.1",
     "M1.2.2",
     "M1.2.3",
@@ -175,6 +177,12 @@
     "M1.6.10",
     "M1.6.11",
     "M1.6.12",
+    "M1.6.13",
+    "M1.6.14",
+    "M1.6.15",
+    "M1.6.16",
+    "M1.6.17",
+    "M1.6.18",
     "M1.7.1",
     "M1.8.1",
     "M1.8.2",
@@ -195,6 +203,8 @@
     "Group and role sync from the IdP",
     "Session handling, refresh, logout propagation",
     "Service-account authentication for API callers",
+    "Sign in with Lark: Keycloak brokers Lark as an identity provider, so a person on a Lark staff list signs in with Lark and no password, matched to the account the staff sync made by their stored Lark address",
+    "Proved on the install: a reserved person on the Lark staff list signs in with Lark and lands in the console as themselves, and a reserved leaver cannot",
     "principal table: id, kind, employment, not_after, disabled_at",
     "principal_identity mapping channel identities to a principal",
     "Disable and re-enable with cascade to sessions",
@@ -228,6 +238,12 @@
     "Warn when two sources both assert roles, because neither can see the other rows",
     "Console page to choose, configure and test a staff source before it runs",
     "Scheduled sync with a dry run showing what would be added and removed",
+    "Each person's employment status and type read from the staff source and shown on People in words, with filters",
+    "Somebody the source says is suspended, has left or never activated, or whose employment type the install does not allow, cannot sign in or ask, and the administrator sees why on their page",
+    "Proved on the install: a reserved person suspended or of a type not allowed is refused sign-in and asking, and allowed again when the source or the setting says so",
+    "The staff sync gives each active person of an employment type the install allows a sign-in account, found by the source's identifier or work address before one is made and bound to their Brain person, and sends nobody anything: a person sets their password with Forgot password",
+    "An account the sync made is closed on the next sync when its person leaves, is suspended or is of a type no longer allowed, which disables their Brain person and ends their sessions; an account a person made is linked and never closed",
+    "Proved on the install: the staff sync makes an account for a reserved person with no email sent, Forgot password sets their password and then their second factor, and a reserved leaver's account is closed on the next sync",
     "Every capability a served route or console screen requires is in the capability registry an install is furnished with and can be granted from the console, and a sweep fails the build when one is not",
     "A person marked as external cannot be saved without an end date, and on that date every grant, session and channel binding they hold stops working",
     "A service account or API key acts at its named owner's live reach narrowed by its own declared limit, holds no grant of its own, and stops working the moment its owner loses that reach or leaves",
@@ -241,6 +257,8 @@
     "A record's access view, showing who can see that record, opens only for someone who can already see it"
    ],
    "leaf_waves": {
+    "M1.1.8": 3,
+    "M1.1.9": 3,
     "M1.8.5": 2,
     "M1.8.8": 4
    },
@@ -257,6 +275,26 @@
      "status": "READY FOR TESTING",
      "why": "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
      "updated": "2026-09-28"
+    },
+    "M1.6.13": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/people-status): People shows where the staff list puts each person and their employment type, with filters; proved on the install with M1.6.15",
+     "updated": "2026-09-30"
+    },
+    "M1.6.14": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/people-status): somebody the list says is suspended, gone or never activated, or of a type not allowed, is disabled on the next sync and their page says why; the last administrator is never kept out; proved on the install with M1.6.15",
+     "updated": "2026-09-30"
+    },
+    "M1.6.16": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
+     "updated": "2026-09-30"
+    },
+    "M1.6.17": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
+     "updated": "2026-09-30"
     },
     "M1.8.3": {
      "status": "READY FOR TESTING",
@@ -793,15 +831,35 @@
      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
      "updated": "2026-09-28"
     },
+    "M7.2.1": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
     "M7.2.2": {
      "status": "READY FOR TESTING",
      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
      "updated": "2026-09-28"
     },
+    "M7.2.3": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
+    "M7.2.4": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
     "M7.2.5": {
      "status": "READY FOR TESTING",
      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
      "updated": "2026-09-28"
+    },
+    "M7.2.6": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
     },
     "M7.3.1": {
      "status": "READY FOR TESTING",
@@ -812,6 +870,21 @@
      "status": "READY FOR TESTING",
      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
      "updated": "2026-09-28"
+    },
+    "M7.3.3": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
+    "M7.3.4": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
+    "M7.3.5": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
     },
     "M7.4.1": {
      "status": "READY FOR TESTING",
@@ -892,6 +965,26 @@
      "status": "IN PROGRESS",
      "why": "price lists uploaded on Classification convert (K6, merged c0552331); no upload path yet offers a price-list document for conversion",
      "updated": "2026-09-28"
+    },
+    "M7.7.8": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
+    "M7.7.9": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
+    "M7.7.10": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+     "updated": "2026-09-29"
+    },
+    "M7.7.11": {
+     "status": "BLOCKED",
+     "why": "waits on the owner's choice of upload limit, which sizes the model server; the model server reads 64 MB a document as sized (needs-rupash 119)",
+     "updated": "2026-09-29"
     }
    }
   },
@@ -981,6 +1074,26 @@
      "status": "IN PROGRESS",
      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
      "updated": "2026-09-28"
+    },
+    "M8.3.1": {
+     "status": "READY FOR TESTING",
+     "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+     "updated": "2026-09-30"
+    },
+    "M8.3.2": {
+     "status": "READY FOR TESTING",
+     "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+     "updated": "2026-09-30"
+    },
+    "M8.3.4": {
+     "status": "READY FOR TESTING",
+     "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+     "updated": "2026-09-30"
+    },
+    "M8.4.1": {
+     "status": "READY FOR TESTING",
+     "why": "escalation and sensitive topics (migration 0168): proved when both install checks in brain.ops.acceptance_escalation pass after deploy, and on a real channel once a queue's person is named on the Compliance screen",
+     "updated": "2026-09-30"
     }
    }
   },
@@ -1203,10 +1316,20 @@
      "why": "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
      "updated": "2026-09-28"
     },
+    "M10.5.1": {
+     "status": "READY FOR TESTING",
+     "why": "Slack is connectable (#288): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
+     "updated": "2026-09-30"
+    },
+    "M10.5.6": {
+     "status": "READY FOR TESTING",
+     "why": "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (M10/channel-email-mailbox), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
+     "updated": "2026-09-30"
+    },
     "M10.6.1": {
      "status": "IN PROGRESS",
-     "why": "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
-     "updated": "2026-09-28"
+     "why": "the webhook, Lark, email and Slack wires are live (PR #105; L1, merged d426e3d3; #285; M10/channel-slack); Teams, Telegram and WhatsApp each come with their own package",
+     "updated": "2026-09-30"
     },
     "M10.6.3": {
      "status": "READY FOR TESTING",
@@ -4028,7 +4151,28 @@
     }
    },
    "act_groups": {},
-   "leaf_progress": {}
+   "leaf_progress": {
+    "M32.1.1.1": {
+     "status": "BLOCKED",
+     "why": "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+     "updated": "2026-09-30"
+    },
+    "M32.1.1.2": {
+     "status": "BLOCKED",
+     "why": "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+     "updated": "2026-09-30"
+    },
+    "M32.2.1.1": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the personal-data detector: 1,536 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 1)",
+     "updated": "2026-09-30"
+    },
+    "M32.2.1.2": {
+     "status": "BLOCKED",
+     "why": "waits on memory for the model server that serves GLiNER: 3,840 MB wanted with its worker and file store, 248 MB unclaimed, measured 2026-09-30 (needs-rupash 120, row 2)",
+     "updated": "2026-09-30"
+    }
+   }
   },
   {
    "id": "M33",

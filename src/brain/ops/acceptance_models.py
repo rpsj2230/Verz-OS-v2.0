@@ -91,6 +91,10 @@ if TYPE_CHECKING:
     from brain.ops.matrix_gate import RungAddition
     from brain.ops.model_service import ModelService
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 50
+
 A, B = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
@@ -430,6 +434,7 @@ async def asked(
     *,
     agent: str | None = None,
     at: datetime | None = None,
+    kinds: Sequence[Any] = (),
 ) -> Answered:
     """One question through `/answer`'s own function, as `principal_id` in the console.
 
@@ -438,6 +443,7 @@ async def asked(
     row then carry. A window refusing it is a failure: the check installs no windows. `agent` is
     the agent picked beside the question, as the web application sends it.
 
+    `kinds` are the kinds of knowledge the question is narrowed to, as Ask's picker sends them.
     `at` is the instant the question is asked, the check's start unless said otherwise. A check
     reading an answer's freshness asks at the moment it asks, because everything it wrote since
     its start carries a later time, and a read time after the moment of asking is one the product
@@ -461,7 +467,7 @@ async def asked(
         request,
         open_trace(trace_of(h, n), now, Channel.CONSOLE),
         Answering(principal=person, reach=reach, channel=Channel.CONSOLE, now=now),
-        Question(question=question, agent=agent),
+        Question(question=question, agent=agent, kinds=tuple(kinds)),
     )
     if not isinstance(outcome, Answered):
         raise CheckFailedError("a question was refused by a window the check never installs")

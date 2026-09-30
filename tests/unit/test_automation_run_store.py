@@ -81,17 +81,19 @@ def test_the_migration_widens_the_control_names_to_exactly_the_registry() -> Non
     """Delete this and the first run the schedule records under `automation_run` is refused by the
     database, or a name the registry dropped stays admitted.
 
-    `0068` widened the names once more with `connector_sync`, `0093` with `vault_audit_ship` and
-    `0133` with `acceptance_run`, so each list is exactly the one the next replaces, and `0133`'s is
-    exactly the registry."""
+    `0068` widened the names once more with `connector_sync`, `0093` with `vault_audit_ship`,
+    `0133` with `acceptance_run` and `0168` with `escalation_expiry`, so each list is exactly the
+    one the next replaces, and `0168`'s is exactly the registry."""
     module = migration_module(MIGRATION)
     after = migration_module(VERSIONS / "0068_connector_sync.py")
     vault = migration_module(VERSIONS / "0093_vault_leases_and_audit.py")
-    latest = migration_module(VERSIONS / "0133_acceptance_result.py")
+    acceptance = migration_module(VERSIONS / "0133_acceptance_result.py")
+    latest = migration_module(VERSIONS / "0168_escalation.py")
     assert squash(module.WITH_AUTOMATION_RUN) == squash(after.WITHOUT_CONNECTOR_SYNC)
     assert squash(after.WITH_CONNECTOR_SYNC) == squash(vault.WITHOUT_VAULT_AUDIT_SHIP)
-    assert squash(vault.WITH_VAULT_AUDIT_SHIP) == squash(latest.WITHOUT_ACCEPTANCE_RUN)
-    assert squash(latest.WITH_ACCEPTANCE_RUN) == squash(
+    assert squash(vault.WITH_VAULT_AUDIT_SHIP) == squash(acceptance.WITHOUT_ACCEPTANCE_RUN)
+    assert squash(acceptance.WITH_ACCEPTANCE_RUN) == squash(latest.WITHOUT_ESCALATION_EXPIRY)
+    assert squash(latest.WITH_ESCALATION_EXPIRY) == squash(
         one_of("name", tuple(one.name for one in CONTROLS))
     )
     assert module.SUPERSEDES == {module.WITHOUT_AUTOMATION_RUN: module.WITH_AUTOMATION_RUN}

@@ -26,13 +26,13 @@ per question from `know.classified_table` (`brain.ops.classification_store.class
 and that read is configuration, like the rule rows `brain.gate.rule_store` loads: what the lane
 may ask, not what it answers from. Only the rows an answer is taken from are read as the role.
 
-Revises `0150`, the head of main when this was written; `0153`, `0154` and `0155` are queued
-ahead of it and this is re-pointed as they land.
+Revises `0163`, the memory confirmation migration of the branch this is stacked on (#255), in the
+order the migration queue lands.
 
 Task ids: M6.1.3
 
 Revision ID: 0162
-Revises: 0150
+Revises: 0163
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0162"
-down_revision = "0150"
+down_revision = "0163"
 branch_labels = None
 depends_on = None
 

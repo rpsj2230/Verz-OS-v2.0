@@ -87,7 +87,18 @@
  * this page draws it as it draws every text frame. See
  * `askQuery.A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES`.
  *
- * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9
+ * **A question can be narrowed to one kind of knowledge (M7.6.1).** The picker lists the closed
+ * list `KIND_WORDS` holds, the same words the library shows, and its first choice searches every
+ * kind, which is what an unnarrowed question has always done.
+ *
+ * **A question continues a conversation, and a person's conversations are listed and searched
+ * here (M9.1.1, M9.1.2, M9.1.3).** The route names the thread an answer was kept in and the next
+ * question sends it back; the panel lists this person's conversations wherever each was asked,
+ * searches their own questions, and reopens one at the reach they hold now. A person with no
+ * conversations sees no panel.
+ *
+ * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
+ * Task ids: M9.1.1, M9.1.2, M9.1.3
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -103,12 +114,32 @@ import {
   askBody,
   citationAddress,
   freshnessWords,
+  MARK_API_PATH,
+  markBody,
   MAX_QUESTION_CHARS,
   NOTHING_ASKED,
+  readMarked,
   withEvent,
   type AnswerView,
   type CitationView,
 } from "./askQuery";
+import { KIND_WORDS } from "./knowledgeQuery";
+import {
+  channelWords,
+  CORRECTION_WORDS,
+  correctionPath,
+  messageWords,
+  readCorrection,
+  readThread,
+  readThreads,
+  speaker,
+  threadPath,
+  threadSearchPath,
+  THREADS_API_PATH,
+  type CorrectionKind,
+  type ThreadShown,
+  type ThreadSummary,
+} from "./threadsQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
 
@@ -151,6 +182,11 @@ export const SKIP_TO_ANSWER = "Skip to answer";
 /** What the answer is called when focus lands on it, so a screen reader says where it is. */
 export const ANSWER_LABEL = "Answer";
 
+/** The question over the two marks, and the two marks. One action each, and no words. */
+export const WAS_IT_HELPFUL = "Was this answer helpful?";
+export const HELPFUL = "Helpful";
+export const NOT_HELPFUL = "Not helpful";
+
 /** Why the answer is reached by a control rather than by tabbing past what it stands on. */
 export const THE_ANSWER_IS_ONE_KEYPRESS_FROM_THE_QUESTION =
   "The citations are drawn above the answer, so reading in document order passes every one " +
@@ -171,6 +207,39 @@ export const ANY_AGENT = "Whichever agent suits the question";
 
 /** The id tying the picker to its label. */
 const AGENT_FIELD_ID = "ask-agent";
+
+/** The conversations panel: its heading, its search, and the control starting a new one (M9.1). */
+export const CONVERSATIONS_HEADING = "Your conversations";
+export const SEARCH_CONVERSATIONS = "Search your questions";
+export const SEARCH_LABEL = "Search";
+export const NEW_CONVERSATION = "Start a new conversation";
+export const CONTINUING = "Your next question continues this conversation.";
+export const NOTHING_FOUND_IN_CONVERSATIONS = "None of your questions holds those words.";
+
+/** The id tying the search to its label. */
+const SEARCH_FIELD_ID = "ask-search";
+
+/**
+ * The control under an answer kept in a conversation, marking it wrong (M9.2.4). A kind and no
+ * words: see `threadsQuery.ts` for why there is no field saying what the right answer was.
+ */
+export const WAS_IT_WRONG = "Was this answer wrong?";
+export const MARK_WRONG = "Mark it wrong";
+export const MARKED_WRONG = "Marked. Your conversation now notes that this answer was wrong.";
+export const NOT_MARKED = "That could not be marked. Nothing was changed.";
+
+/** The id tying the correction's kind to its label. */
+const CORRECTION_FIELD_ID = "ask-correction";
+
+/** The first kind offered. */
+const FIRST_CORRECTION: CorrectionKind = "wrong_fact";
+
+/** The kind picker's label, and its first choice, which searches every kind (M7.6.1). */
+export const KIND_LABEL = "Search only";
+export const ANY_KIND = "Every kind of knowledge";
+
+/** The id tying the kind picker to its label. */
+const KIND_FIELD_ID = "ask-kind";
 
 /** The id tying the label to the field. One field on the page, so one id. */
 const QUESTION_FIELD_ID = "ask-question";
@@ -203,6 +272,60 @@ function Cited({ citation }: { readonly citation: CitationView }) {
   );
 }
 
+/**
+ * Helpful or not helpful on the answer just given, one press each (M16.6.4). The mark is the
+ * answer's reference and one bit; once counted, the API's sentence replaces the two buttons, and a
+ * refusal is drawn as any failure is. Keyed by the reference, so a new answer starts unmarked.
+ */
+function Marking({ traceId }: { readonly traceId: string }) {
+  const [told, setTold] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  const mark = useCallback(
+    (helpful: boolean) => {
+      const body = markBody(traceId, helpful);
+      if (body === null) {
+        return;
+      }
+      setBusy(true);
+      setFailure(null);
+      void (async () => {
+        const result = await request<unknown>(MARK_API_PATH, { method: "POST", body });
+        setBusy(false);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setTold(readMarked(result.data));
+      })();
+    },
+    [traceId],
+  );
+
+  if (told !== "") {
+    return (
+      <p className="note" role="status">
+        {told}
+      </p>
+    );
+  }
+  return (
+    <section className="ask__marks" aria-label={WAS_IT_HELPFUL}>
+      <p className="note">{WAS_IT_HELPFUL}</p>
+      <div className="form-actions">
+        <button type="button" className="button" disabled={busy} onClick={() => mark(true)}>
+          {HELPFUL}
+        </button>
+        <button type="button" className="button" disabled={busy} onClick={() => mark(false)}>
+          {NOT_HELPFUL}
+        </button>
+      </div>
+      {failure ? <FailureNotice failure={failure} /> : null}
+    </section>
+  );
+}
+
 /** What is on the screen apart from the question somebody is typing. */
 interface Asking {
   readonly view: AnswerView;
@@ -223,6 +346,27 @@ export function Ask() {
   const [asking, setAsking] = useState<Asking>(IDLE);
   const [agents, setAgents] = useState<readonly RosterEntryView[]>([]);
   const [agent, setAgent] = useState("");
+  const [kind, setKind] = useState("");
+  // The conversation the next question continues, and this person's conversations (M9.1).
+  const [thread, setThread] = useState("");
+  const [threads, setThreads] = useState<readonly ThreadSummary[] | null>(null);
+  const [searching, setSearching] = useState("");
+  const [found, setFound] = useState<readonly ThreadSummary[] | null>(null);
+  const [reopened, setReopened] = useState<ThreadShown | null>(null);
+  // Marking the answer on the page wrong: the kind chosen, and what the route said (M9.2.4).
+  const [wrong, setWrong] = useState<CorrectionKind>(FIRST_CORRECTION);
+  const [marked, setMarked] = useState<"" | "marked" | "failed">("");
+
+  // This person's conversations. A list that did not come back is no panel rather than an error:
+  // the question can still be asked, and it starts a conversation of its own.
+  const listThreads = useCallback(async () => {
+    const listed = await request<unknown>(THREADS_API_PATH);
+    const read = listed.ok ? readThreads(listed.data) : null;
+    setThreads(read);
+  }, []);
+  useEffect(() => {
+    void listThreads();
+  }, [listThreads]);
 
   // The agents this person may see, for the picker. A roster that did not come back is no
   // picker rather than an error: the question can still be asked, and the router chooses.
@@ -262,7 +406,7 @@ export function Ask() {
   const ask = useCallback(
     (submitted: FormEvent<HTMLFormElement>) => {
       submitted.preventDefault();
-      const body = askBody(question, agent);
+      const body = askBody(question, agent, kind, thread);
       if (body === null) {
         // Not a question the route would take. Doing nothing is the answer: a request known
         // to be refused is a round trip spent to be told what this console already knew.
@@ -272,6 +416,7 @@ export function Ask() {
       const controller = new AbortController();
       inFlight.current = controller;
       focusWasInTheForm.current = form.current?.contains(document.activeElement) ?? false;
+      setMarked("");
       setAsking({ view: NOTHING_ASKED, busy: true, failure: null, traceId: "" });
 
       void (async () => {
@@ -287,6 +432,9 @@ export function Ask() {
           return;
         }
         setAsking((one) => ({ ...one, traceId: opened.traceId }));
+        if (opened.threadId !== "") {
+          setThread(opened.threadId);
+        }
         for await (const event of opened.events) {
           if (controller.signal.aborted) {
             return;
@@ -295,10 +443,11 @@ export function Ask() {
         }
         if (!controller.signal.aborted) {
           setAsking((one) => ({ ...one, busy: false }));
+          void listThreads();
         }
       })();
     },
-    [question, agent],
+    [question, agent, kind, thread, listThreads],
   );
 
   const { view, busy, failure, traceId } = asking;
@@ -362,6 +511,23 @@ export function Ask() {
             </select>
           </>
         ) : null}
+        <label className="ask__label" htmlFor={KIND_FIELD_ID}>
+          {KIND_LABEL}
+        </label>
+        <select
+          id={KIND_FIELD_ID}
+          className="form-control"
+          value={kind}
+          disabled={busy}
+          onChange={(changed) => setKind(changed.target.value)}
+        >
+          <option value="">{ANY_KIND}</option>
+          {Object.entries(KIND_WORDS).map(([value, words]) => (
+            <option key={value} value={value}>
+              {words}
+            </option>
+          ))}
+        </select>
         <div className="form-actions">
           <button
             type="submit"
@@ -423,6 +589,46 @@ export function Ask() {
         >
           {view.answer !== "" ? <p className="ask__answer">{view.answer}</p> : null}
 
+          {thread !== "" && !busy && view.answer !== "" ? (
+            <form
+              className="ask__correction"
+              onSubmit={(submitted) => {
+                submitted.preventDefault();
+                void (async () => {
+                  const sent = await request<unknown>(correctionPath(thread), {
+                    method: "POST",
+                    body: { kind: wrong },
+                  });
+                  setMarked(sent.ok && readCorrection(sent.data) !== null ? "marked" : "failed");
+                })();
+              }}
+            >
+              <label className="ask__label" htmlFor={CORRECTION_FIELD_ID}>
+                {WAS_IT_WRONG}
+              </label>
+              <select
+                id={CORRECTION_FIELD_ID}
+                className="form-control"
+                value={wrong}
+                onChange={(changed) => setWrong(changed.target.value as CorrectionKind)}
+              >
+                {(Object.keys(CORRECTION_WORDS) as CorrectionKind[]).map((one) => (
+                  <option key={one} value={one}>
+                    {CORRECTION_WORDS[one]}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="button" disabled={marked === "marked"}>
+                {MARK_WRONG}
+              </button>
+              {marked !== "" ? (
+                <p className="note" role="status">
+                  {marked === "marked" ? MARKED_WRONG : NOT_MARKED}
+                </p>
+              ) : null}
+            </form>
+          ) : null}
+
           {view.failed !== null ? (
             <Notice title={SOMETHING_DID_NOT_WORK} traceId={traceId} withoutTrace={NO_REFERENCE_CAME_BACK}>
               <p>{view.failed}</p>
@@ -431,9 +637,104 @@ export function Ask() {
         </section>
       ) : null}
 
+      {!busy && view.answer !== "" && markBody(traceId, true) !== null ? (
+        <Marking traceId={traceId} key={traceId} />
+      ) : null}
+
       {failure ? <FailureNotice failure={failure} fields={[QUESTION_NAME]} /> : null}
 
       {!busy && !asked && failure === null ? <p className="note">{NOTHING_ASKED_YET}</p> : null}
+
+      {thread !== "" ? (
+        <div className="ask__thread">
+          <p className="note">{CONTINUING}</p>
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              setThread("");
+              setReopened(null);
+            }}
+          >
+            {NEW_CONVERSATION}
+          </button>
+        </div>
+      ) : null}
+
+      {reopened !== null ? (
+        <section className="card ask__reopened" aria-label={reopened.title}>
+          <h2>{reopened.title}</h2>
+          <ol className="ask__messages">
+            {reopened.messages.map((one, at) => (
+              <li key={`${at}-${one.at}`}>
+                <strong>{speaker(one.role)}</strong> {channelWords(one.channel)}: {messageWords(one.body)}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {threads !== null && threads.length > 0 ? (
+        <section className="card ask__conversations">
+          <h2>{CONVERSATIONS_HEADING}</h2>
+          <form
+            className="ask__search"
+            role="search"
+            onSubmit={(submitted) => {
+              submitted.preventDefault();
+              const path = threadSearchPath(searching);
+              if (path === null) {
+                setFound(null);
+                return;
+              }
+              void (async () => {
+                const asked = await request<unknown>(path);
+                setFound(asked.ok ? readThreads(asked.data) : null);
+              })();
+            }}
+          >
+            <label className="ask__label" htmlFor={SEARCH_FIELD_ID}>
+              {SEARCH_CONVERSATIONS}
+            </label>
+            <input
+              id={SEARCH_FIELD_ID}
+              className="form-control"
+              type="search"
+              value={searching}
+              onChange={(changed) => setSearching(changed.target.value)}
+            />
+            <button type="submit" className="button">
+              {SEARCH_LABEL}
+            </button>
+          </form>
+          {found !== null && found.length === 0 ? (
+            <p className="note">{NOTHING_FOUND_IN_CONVERSATIONS}</p>
+          ) : null}
+          <ul className="ask__threads">
+            {(found ?? threads).map((one) => (
+              <li key={one.threadId}>
+                <button
+                  type="button"
+                  className="button button--link"
+                  onClick={() => {
+                    void (async () => {
+                      const opened = await request<unknown>(threadPath(one.threadId));
+                      const read = opened.ok ? readThread(opened.data) : null;
+                      if (read !== null) {
+                        setReopened(read);
+                        setThread(read.threadId);
+                      }
+                    })();
+                  }}
+                >
+                  {one.title}
+                </button>{" "}
+                <span className="note">{channelWords(one.lastChannel)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </article>
   );
 }

@@ -11,6 +11,10 @@
  * secret twice; so it stays in the field until the save is sent, is cleared then whatever comes
  * back, and is never put into an address, a store or a log. See `THE_SECRET_STAYS_IN_ITS_FIELD`.
  *
+ * **Where a test sends somebody back is the API's too.** Each use's result names the steps to redo by
+ * key (`redo`), and `redoSteps` turns those into the steps as the guide serves them, pictures and
+ * all, so the flow can say "go back to step 5" and show its picture.
+ *
  * Task ids: M11.9.4, M10.2.1
  */
 
@@ -19,12 +23,14 @@ import type { components } from "../api/schema";
 export type LarkGuide = components["schemas"]["LarkView"];
 export type LarkUse = components["schemas"]["LarkUseView"];
 export type LarkScope = components["schemas"]["LarkScopeView"];
-export type LarkStep = components["schemas"]["LarkStepView"];
+export type LarkStep = components["schemas"]["GuideStepView"];
 export type LarkAsked = components["schemas"]["LarkAsked"];
 export type LarkTested = components["schemas"]["LarkTestView"];
 export type LarkUseResult = components["schemas"]["LarkUseResultView"];
 export type LarkSaved = components["schemas"]["LarkSavedView"];
 export type LarkEvents = components["schemas"]["LarkEventsView"];
+export type LarkLastTest = components["schemas"]["LarkLastTestView"];
+export type LarkSwitchedOff = components["schemas"]["LarkSwitchedOffView"];
 
 export const THE_SCOPE_LIST_IS_THE_APIS =
   "Which scopes each use needs is written once, on the server, and the test checks exactly that " +
@@ -38,6 +44,10 @@ export const THE_SECRET_STAYS_IN_ITS_FIELD =
 
 export const LARK_API_PATH = "/connectors/lark-app";
 export const LARK_TEST_API_PATH = "/connectors/lark-app/test";
+export const LARK_SWITCH_OFF_API_PATH = "/connectors/lark-app/switch-off";
+
+/** The key the Lark flow keeps its place under while its dialog is closed. */
+export const LARK_FLOW = "lark";
 
 /**
  * The guide for these uses on this platform. The API answers the scope list and the steps.
@@ -45,13 +55,17 @@ export const LARK_TEST_API_PATH = "/connectors/lark-app/test";
  * `null` asks for the uses already switched on; an empty list asks for none, spelled `none`, so
  * unticking every use is not read as "show me what is on".
  */
-export function guidePath(uses: readonly string[] | null, platform: string): string {
+export function guidePath(uses: readonly string[] | null, platform: string, appId = ""): string {
   const query = new URLSearchParams();
   if (uses !== null) {
     query.set("uses", uses.length > 0 ? uses.join(",") : "none");
   }
   if (platform !== "") {
     query.set("platform", platform);
+  }
+  // Not a secret: the App ID is on every page of the app in Lark, and it builds the steps' links.
+  if (appId.trim() !== "") {
+    query.set("app_id", appId.trim());
   }
   const text = query.toString();
   return text === "" ? LARK_API_PATH : `${LARK_API_PATH}?${text}`;
@@ -119,4 +133,100 @@ export function verdictWords(verdict: string): string {
     default:
       return "Did not answer";
   }
+}
+
+/** The uses switched on, in the API's order. */
+export function switchedOn(guide: LarkGuide): readonly LarkUse[] {
+  return guide.uses.filter((one) => one.switched_on);
+}
+
+/** The uses to start the flow with: what is on, with any asked for added, in the API's order. */
+export function startingUses(guide: LarkGuide, add: readonly string[]): string[] {
+  const wanted = new Set([...guide.uses.filter((one) => one.switched_on).map((one) => one.name), ...add]);
+  return guide.uses.map((one) => one.name).filter((one) => wanted.has(one));
+}
+
+/** The steps a test sent somebody back to, as the guide serves them, each once, in flow order. */
+export function redoSteps(guide: LarkGuide, tested: LarkTested | null): readonly LarkStep[] {
+  if (tested === null) {
+    return [];
+  }
+  const keys = new Set([...tested.redo, ...tested.uses.flatMap((one) => one.redo)]);
+  return guide.steps.filter((one) => keys.has(one.key));
+}
+
+/** The steps one result sends somebody back to, as the guide serves them. */
+export function stepsFor(guide: LarkGuide, keys: readonly string[]): readonly LarkStep[] {
+  return keys.flatMap((key) => guide.steps.filter((one) => one.key === key));
+}
+
+// ------------------------------------------------------------------ the wiki's spaces
+
+export type DeclaredSpaces = components["schemas"]["DeclaredSpacesView"];
+export type DeclaredSpace = components["schemas"]["DeclaredSpaceView"];
+export type SpacesDeclared = components["schemas"]["SpacesDeclaredView"];
+export type LarkSpace = components["schemas"]["LarkSpaceView"];
+
+/** The wiki spaces declared on this install, and where more are declared. */
+export const LARK_WIKI_SPACES_API_PATH = "/connectors/lark-app/wiki-spaces";
+
+/** One space the administrator is about to declare: what was chosen or pasted, and its reach. */
+export interface SpaceChoice {
+  /** The space's id, or the settings link that was pasted for it; the API reads the id out. */
+  readonly space: string;
+  /** What the row is called on the screen: Lark's name for it, or what was pasted. */
+  readonly label: string;
+  /** "company", "department", or "" for a space not being declared in this save. */
+  readonly reach: string;
+  readonly department: string;
+}
+
+/** The spaces a test saw, as rows to declare, leaving out any already declared. */
+export function spaceChoices(tested: LarkTested | null, declared: readonly DeclaredSpace[]): SpaceChoice[] {
+  const already = new Set(declared.map((one) => one.space_id));
+  const seen = tested?.uses.find((one) => one.name === "knowledge_wiki")?.spaces ?? [];
+  return seen
+    .filter((one) => !already.has(one.space_id))
+    .map((one) => ({ space: one.space_id, label: one.name === "" ? one.space_id : one.name, reach: "", department: "" }));
+}
+
+/** The rows a save sends: every row given a reach, in the order drawn. */
+export function spacesBody(choices: readonly SpaceChoice[]): { spaces: { space: string; reach: string; department: string }[] } {
+  return {
+    spaces: choices
+      .filter((one) => one.reach !== "")
+      .map((one) => ({ space: one.space, reach: one.reach, department: one.reach === "department" ? one.department : "" })),
+  };
+}
+
+// ------------------------------------------------------------------ pages the Wiki skipped
+
+/** How many wiki pages questions matched and did not read, and why, for an administrator. */
+export interface SkippedPages {
+  readonly count: number;
+  readonly note: string;
+}
+
+/** The sentence the count is shown in. A number and nothing else: never a page's name. */
+export function skippedWords(count: number): string {
+  return count === 1 ? "1 wiki page a question matched was not read." : `${String(count)} wiki pages questions matched were not read.`;
+}
+
+/**
+ * The count of wiki pages skipped, or null when there is nothing to show.
+ *
+ * Sent only to a reader who may switch the Wiki on, and null for anybody else, because to a person
+ * asking a skipped page must read exactly as a page that is not there. Nought shows nothing either.
+ * Read through the body's own fields rather than the generated type: the count arrives with the
+ * Lark Wiki reader (M11.6.4), and a guide from before it has neither field. A cast at the boundary,
+ * where proving the structural match buys nothing; each field is checked for its type below.
+ */
+export function skippedPages(guide: LarkGuide): SkippedPages | null {
+  const fields = guide as unknown as Readonly<Record<string, unknown>>;
+  const count = fields["wiki_pages_skipped"];
+  if (typeof count !== "number" || !Number.isInteger(count) || count <= 0) {
+    return null;
+  }
+  const note = fields["wiki_pages_skipped_note"];
+  return { count, note: typeof note === "string" ? note : "" };
 }

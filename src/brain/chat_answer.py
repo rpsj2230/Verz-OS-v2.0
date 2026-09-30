@@ -43,7 +43,12 @@ by `brain.channels.room.revalidate`; the asker's aside, which only they read, st
 leaves (M10.4.5). A room that cannot be read at all is a room whose floor is unknown, and it is
 answered as a floor of nothing.
 
+**A person's messages in one chat are one thread, kept as the web keeps its own (M9.1.2).** The
+asker's own answer is written through `brain.chat.remember` under a thread named for the chat, so
+the web lists and continues it; a room's floor answer is never kept. See `THIS_CHAT_IS_ONE_THREAD`.
+
 Task ids: M10.2.2, M10.2.5, M10.2.6, M10.4.1, M10.4.2, M10.4.3, M10.4.4, M2.3.1, M1.8.5, M38.2.2.3
+Task ids: M9.1.2
 """
 
 from __future__ import annotations
@@ -63,6 +68,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.api_routes import Answering, Question, answered_for, field_policies, wiring_of
 from brain.attribution import trace_of_request
 from brain.channels.adapter import (
+    BOT_ID,
     ChannelCapabilities,
     ChannelTransport,
     Conversation,
@@ -275,6 +281,15 @@ def ask_link() -> str:
 # ------------------------------------------------------------------------ the answerer
 
 
+#: Why a chat's messages from one person are one thread, and a room's floor is never kept.
+THIS_CHAT_IS_ONE_THREAD: Final = (
+    "A chat message carries no thread id, so a person's messages in one vendor conversation are "
+    "one thread, named by the channel, the person and the conversation, and listed with their "
+    "web threads so the web continues it. Only the asker's own answer is kept; an answer "
+    "computed at a room's floor is the room's, at a reach that is not theirs."
+)
+
+
 class ChatAnswerer:
     """`brain.channels.inbound.ChannelAnswerer`: the gate, run as the bound person.
 
@@ -327,7 +342,7 @@ class ChatAnswerer:
         reach = admit(nominal, event.channel, Assurance.BOUND)
         capabilities = adapter_for(event.channel).capabilities()
         if conversation is None:
-            reply = await self._ask(person, reach, inbound, now)
+            reply = await self._ask(person, reach, inbound, now, keep=True)
             return (self._outgoing(reply, reply_to, record, event, person, nominal, capabilities),)
         return await self._planned(
             inbound, conversation, person, nominal, reach, record, reply_to, capabilities, now
@@ -350,9 +365,19 @@ class ChatAnswerer:
         return resolved.entitlements
 
     async def _ask(
-        self, person: Principal, reach: EntitlementSet, inbound: Inbound, now: datetime
+        self,
+        person: Principal,
+        reach: EntitlementSet,
+        inbound: Inbound,
+        now: datetime,
+        *,
+        keep: bool = False,
     ) -> ChatReply:
-        """The web's answer to this question for this person at this reach. See the constant."""
+        """The web's answer to this question for this person at this reach. See the constant.
+
+        `keep` writes the exchange to the person's thread for this chat (M9.1.1, M9.1.2), which is
+        the asker's own answer and never a room's floor, computed at a reach that is not theirs.
+        """
         channel = inbound.event.channel
         try:
             asked = Question(question=inbound.address.question, agent=inbound.address.agent_id)
@@ -381,7 +406,43 @@ class ChatAnswerer:
             **(field_policies(registry) if isinstance(registry, ToolRegistry) else {}),
             **tables.policies,
         }
+        if keep:
+            await self._kept(person, inbound, asked, outcome, policies, now)
         return ChatReply(text, payload, highest_in(payload, policies), outcome.composed is not None)
+
+    async def _kept(
+        self,
+        person: Principal,
+        inbound: Inbound,
+        asked: Question,
+        outcome: Answered,
+        policies: Mapping[str, FieldPolicy],
+        now: datetime,
+    ) -> None:
+        """This exchange, in the person's thread for this chat. See `THIS_CHAT_IS_ONE_THREAD`."""
+        from brain.chat.remember import remember, threads_of
+        from brain.chat.thread_store import chat_thread_id
+
+        channel = inbound.event.channel
+        where = (
+            inbound.conversation.conversation_id
+            if inbound.conversation is not None
+            else identity_hash(channel, inbound.event.channel_identity)
+        )
+        try:
+            await remember(
+                threads_of(self._request.app.state),
+                principal_id=person.id,
+                thread_id=chat_thread_id(channel, person.id, where),
+                channel=channel,
+                question=asked.question,
+                answered=outcome,
+                policies=policies,
+                now=now,
+            )
+        except Exception as exc:
+            # The reply still goes out: losing its transcript is no reason to withhold it.
+            log.warning("thread.not_kept", error=type(exc).__name__)
 
     # ------------------------------------------------------------------ the plan
 
@@ -400,7 +461,7 @@ class ChatAnswerer:
         """A conversation's answer through `plan_delivery`: direct, or at the room's floor."""
         event = inbound.event
         asker = Member(principal_id=person.id, entitlement=reach)
-        mine = await self._ask(person, reach, inbound, now)
+        mine = await self._ask(person, reach, inbound, now, keep=True)
         link = ask_link()
         if not conversation.shared:
             plan = plan_delivery(
@@ -487,7 +548,13 @@ class ChatAnswerer:
     async def _present(
         self, record: ChannelRecord, conversation: Conversation
     ) -> frozenset[str] | None:
-        """The digests of everybody in the conversation, or None when it cannot be read whole."""
+        """The digests of everybody in the conversation, or None when it cannot be read whole.
+
+        The bot the record names is not a reader: it is the one sending. Lark leaves bots out of
+        its list and Slack lists the app's own bot user among the members, so the digest of the
+        record's `BOT_ID` is taken out here, for every channel alike, rather than counted as a
+        person bound to nobody, which would make every room's floor nothing.
+        """
         # Typed as an object: whether a wire can read a room is a question about its class.
         wire: object = channel_wires().get(record.channel)
         if not isinstance(wire, RoomReader):
@@ -517,7 +584,8 @@ class ChatAnswerer:
             if len(found) > MAX_ROOM_MEMBERS:
                 return None
             if not page:
-                return frozenset(found)
+                bot = record.tenant.get(BOT_ID, "")
+                return frozenset(found - {identity_hash(record.channel, bot)} if bot else found)
         return None
 
     async def _members(

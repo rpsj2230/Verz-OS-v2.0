@@ -73,6 +73,10 @@ if TYPE_CHECKING:
 
 A, B = RESERVED_DEPARTMENTS
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 270
+
 # ------------------------------------------------------------------------ the figures
 #: How a rule the check writes asks for a price, around a word nothing else holds. The hole is
 #: the slot `name`, the price list's key column.

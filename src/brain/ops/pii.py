@@ -147,9 +147,12 @@ exist. `budget_gaps` is called by tests only.
 
 Task ids: M32.2.1.1, M32.2.1.2, M32.2.1.3, M32.2.1.4, M32.2.2.1, M32.2.2.2, M32.2.2.3, M0.4.2
 
-Not claimed: M32.2.2.4. The budget is declared, the harness exists and one measurement has
-been taken, and the leaf asks for a measurement on the client's CPU, which has not happened
-and cannot happen from here. `budget_gaps` says so on every call.
+M32.2.2.4 is claimed by the install's own check rather than here. The budget is declared and the
+harness is this module's, and the leaf asks for a measurement on the client's CPU, which cannot
+be taken from here and is taken on the install:
+`brain.ops.acceptance_checks_deployment.the_scrub_meets_its_budget_on_this_install_s_processor`
+runs `measure_scrub` on the processor the suite runs on and holds it to `budget_gaps`.
+`SCRUB_COST_ON_THE_BUILD_MACHINE` stays the build machine's, and `budget_gaps` says so of it.
 """
 
 from __future__ import annotations
@@ -208,7 +211,11 @@ THE_BUDGET_IS_NOT_MEASURED_ON_THE_MACHINE_IT_IS_ABOUT: Final = (
     "reported both was the same overstatement this repository keeps finding elsewhere, a "
     "check credited with applying a rule it does not apply, and it mattered here because "
     "budget_gaps returning empty is the shape of the edit that closes M32.2.2.4: a permanent "
-    "second finding would mean the leaf could never be seen to close."
+    "second finding would mean the leaf could never be seen to close. The harness is now run "
+    "where the software is installed: since 2026-09-29 the install's acceptance suite runs "
+    "measure_scrub on its own processor on every deploy, marks that cost as the client's, and "
+    "fails when budget_gaps finds anything in it, so the figure recorded here stays the build "
+    "machine's and the one that decides is taken on the install."
 )
 
 
