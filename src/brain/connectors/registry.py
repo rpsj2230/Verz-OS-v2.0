@@ -74,6 +74,7 @@ Task ids: M11.1.6, M11.1.7, M11.2.6, M33.5.1.1, M33.5.1.2
 from __future__ import annotations
 
 import enum
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Final
@@ -247,6 +248,15 @@ class RegisteredConnector:
         return self.state is ConnectorState.ENABLED
 
 
+#: Why an agent's readiness is read from the connections rather than from an install act.
+CONNECTED_IS_WHAT_AN_AGENT_INSTALL_READS: Final = (
+    "On an install a source is connected on the Connectors screen, and the connection row is the "
+    "record that it is there. An agent that needs a source asks whether it is connected and "
+    "serving under this release's declaration, so the registry an install reads is built from "
+    "those rows on each request, and a source connected or disconnected is seen at once."
+)
+
+
 @dataclass
 class ConnectorRegistry:
     """Every connector that has been installed, and the door each one came through.
@@ -258,6 +268,22 @@ class ConnectorRegistry:
     """
 
     _entries: dict[str, RegisteredConnector] = field(default_factory=dict)
+
+    @classmethod
+    def of_connected(cls, entries: Iterable[RegisteredConnector]) -> ConnectorRegistry:
+        """A registry reading what this install has connected, for readiness and nothing else.
+
+        Every entry is a connection an administrator made through the Connectors screen's routes,
+        which asked their own authority when the row was written, so reading it back installs
+        nothing and needs no installer. The caller decides each entry's state from the pin: a
+        connection whose stored digest is this release's declaration serves, and one whose digest
+        differs is quarantined, which is what the pin exists to say. See
+        `CONNECTED_IS_WHAT_AN_AGENT_INSTALL_READS`.
+        """
+        registry = cls()
+        for one in entries:
+            registry._entries[one.name] = one
+        return registry
 
     # ------------------------------------------------------------------ installing
     def register(

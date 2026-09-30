@@ -291,6 +291,17 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="unset",
     ),
+    Setting(
+        name="INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "Comma-separated employment types whose people the staff sync gives a sign-in "
+            "account: regular, intern, outsourced, labour_dispatch, consultant, contractor and "
+            "other, or none for nobody. Somebody whose type the source does not record is let "
+            "in. Outsourced is left out unless an administrator adds it (needs-rupash 115)."
+        ),
+        default="regular,intern,labour_dispatch,consultant,contractor,other",
+    ),
     # --- models and providers, M41.1.6
     Setting(
         name="INSTALL_MODEL_PROFILE",

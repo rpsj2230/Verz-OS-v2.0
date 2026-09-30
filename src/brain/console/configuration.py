@@ -74,6 +74,8 @@ from typing import Final
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
+from brain.identity.staff_accounts import NOBODY
+from brain.identity.staff_source import EmploymentType
 from brain.install import BY_NAME, INSTALLATION, Belongs, Setting, saved_values
 from brain.knowledge.search import vector_store_refusal
 from brain.locale import CURRENCY_PATTERN, SHIPPED_TAGS, LocaleError, accent_set, rules_for
@@ -218,6 +220,7 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_BROKERED_CLIENT_ID": Section.SIGN_IN,
         "INSTALL_STAFF_SOURCE": Section.STAFF,
         "INSTALL_STAFF_SOURCE_LOCATION": Section.STAFF,
+        "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": Section.STAFF,
         "INSTALL_OBJECT_STORE_URL": Section.FILES,
         "INSTALL_OBJECT_STORE_PREFIX": Section.FILES,
         "INSTALL_OBJECT_STORE_BACKEND": Section.FILES,
@@ -255,6 +258,7 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_BROKERED_CLIENT_ID": "App registered with that directory",
         "INSTALL_STAFF_SOURCE": "Where the staff list comes from",
         "INSTALL_STAFF_SOURCE_LOCATION": "Where that staff list is",
+        "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": "Employment types that may use the Brain",
         "INSTALL_OBJECT_STORE_URL": "File store address",
         "INSTALL_OBJECT_STORE_PREFIX": "Folder in the file store",
         "INSTALL_OBJECT_STORE_BACKEND": "Kind of file store",
@@ -281,6 +285,7 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_TIME_ZONE",
         "INSTALL_MODEL_PROFILE",
         "INSTALL_LARK_CARD_APPROVALS",
+        "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
     }
 )
 
@@ -365,7 +370,12 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LOGO_URL": ("brain.console_static",),
     "INSTALL_ACCENT_COLOUR": ("brain.console_static",),
     "INSTALL_SENDER_ADDRESS": ("brain.notification_routes",),
-    "INSTALL_OIDC_ISSUER": ("brain.identity.keycloak_tokens", "brain.console_static"),
+    "INSTALL_OIDC_ISSUER": (
+        "brain.identity.keycloak_tokens",
+        "brain.console_static",
+        "brain.ops.staff_accounts_run",
+        "brain.ops.accounts_key",
+    ),
     "INSTALL_OIDC_REALM": (
         "brain.ops.realm_import",
         "brain.ops.handover_run",
@@ -377,6 +387,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_BROKERED_CLIENT_ID": ("brain.ops.realm_import",),
     "INSTALL_STAFF_SOURCE": ("brain.identity.staff_source", "brain.ops.realm_import"),
     "INSTALL_STAFF_SOURCE_LOCATION": ("brain.identity.staff_source", "brain.ops.realm_import"),
+    "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": ("brain.ops.staff_accounts_run",),
     "INSTALL_MODEL_PROFILE": ("brain.ops.model_service", "brain.app"),
     "INSTALL_MODEL_ENDPOINT": ("brain.knowledge.embed_policy",),
     "INSTALL_EMBEDDING_DIMENSIONS": ("brain.knowledge.search",),
@@ -649,6 +660,8 @@ def setting_problem(name: str, value: str) -> str:
         return _currency_problem(written)
     if name == "INSTALL_TIME_ZONE":
         return _zone_problem(written)
+    if name == "INSTALL_ACCOUNT_EMPLOYMENT_TYPES":
+        return _employment_types_problem(written)
     if name == "INSTALL_MODEL_PROFILE" and written not in MODEL_PROFILES:
         return (
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "
@@ -687,6 +700,26 @@ def _locales_problem(value: str) -> str:
         tags = []
     if not tags:
         return f"Use language tags this product ships, separated by commas: {shipped}."
+    return ""
+
+
+def _employment_types_problem(value: str) -> str:
+    """Every word a type the staff readers know, and at least one of them, or `none` alone.
+
+    A word the readers know no type by is refused rather than saved and ignored, because a
+    misspelt `contractr` would otherwise quietly close every contractor's account on the next run.
+    `none` beside a type is refused for the same reason: it is ambiguous, and one reading of it
+    closes every account the sync made.
+    """
+    known = [one.value for one in EmploymentType]
+    words = [one.strip().casefold() for one in value.split(",") if one.strip()]
+    if words == [NOBODY]:
+        return ""
+    if not words or any(one not in known for one in words):
+        return (
+            f"Use employment types separated by commas, from: {', '.join(known)}; "
+            f"or {NOBODY} for nobody."
+        )
     return ""
 
 

@@ -25,7 +25,7 @@ import { PROVIDERS_LEDE, readProviderRows } from "../src/pages/models/ProvidersP
 import { ANSWERED_LABEL, COST_LABEL, FAILURES_LABEL, NO_SUCH_PROVIDER } from "../src/pages/models/ProviderDetailPage";
 import { lastTestWords } from "../src/pages/models/providerWords";
 import { HELD_HEADING } from "../src/pages/models/RoutingPage";
-import { editorTitle } from "../src/pages/models/RungEditor";
+import { editorTitle, LAST_STEP_WAITS_LONGER } from "../src/pages/models/RungEditor";
 import { ADD_A_GOLDEN_QUESTION, HELD_UNTIL_A_GOLDEN_QUESTION, matrixLines } from "../src/pages/models/routingWords";
 import type { RungRow } from "../src/pages/matrixQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
@@ -575,6 +575,26 @@ describe("the routing page", () => {
     });
     expect(within(drawer).getByRole("heading", { level: 2 }).textContent).toBe(editorTitle(matrixLines(MATRIX_ROWS, [], [])[2] as never));
     expect(matrixRowsOf(container)[2]?.getAttribute("data-state")).toBe("selected");
+  });
+
+  test("a step's editor says in one line that a level's last step may wait longer than its seconds", async () => {
+    // What breaks if this is deleted: a reader who set four seconds on a level's last step and saw a
+    // call wait twenty taking the screen for wrong, because nothing on it says a question that reaches
+    // the last step gives it the rest of the answer's time.
+    await consoleAt(`/routing/${RUNG_B}`, matrixAnswers());
+    const drawer = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('[data-slot="drawer"]');
+      if (found === null) {
+        throw new Error("the drawer has not opened");
+      }
+      return found;
+    });
+    const numbers = drawer.querySelector('form[aria-label^="Numbers for step 2"]') as HTMLFormElement;
+    const note = numbers.querySelectorAll('[data-slot="last-step-note"]');
+    expect(note).toHaveLength(1);
+    expect(note[0]?.textContent).toBe(LAST_STEP_WAITS_LONGER);
+    expect(LAST_STEP_WAITS_LONGER).toMatch(/^A level's last step may wait longer than its seconds/);
+    expect(LAST_STEP_WAITS_LONGER).not.toMatch(/\b(rungs?|ladders?|tiers?|lanes?|slots?|budget)\b/i);
   });
 
   test("a step's two forms in the drawer, submitted blank, ask nothing and say what to fill in", async () => {

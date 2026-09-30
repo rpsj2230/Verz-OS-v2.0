@@ -198,3 +198,35 @@ export function spacesBody(choices: readonly SpaceChoice[]): { spaces: { space: 
       .map((one) => ({ space: one.space, reach: one.reach, department: one.reach === "department" ? one.department : "" })),
   };
 }
+
+// ------------------------------------------------------------------ pages the Wiki skipped
+
+/** How many wiki pages questions matched and did not read, and why, for an administrator. */
+export interface SkippedPages {
+  readonly count: number;
+  readonly note: string;
+}
+
+/** The sentence the count is shown in. A number and nothing else: never a page's name. */
+export function skippedWords(count: number): string {
+  return count === 1 ? "1 wiki page a question matched was not read." : `${String(count)} wiki pages questions matched were not read.`;
+}
+
+/**
+ * The count of wiki pages skipped, or null when there is nothing to show.
+ *
+ * Sent only to a reader who may switch the Wiki on, and null for anybody else, because to a person
+ * asking a skipped page must read exactly as a page that is not there. Nought shows nothing either.
+ * Read through the body's own fields rather than the generated type: the count arrives with the
+ * Lark Wiki reader (M11.6.4), and a guide from before it has neither field. A cast at the boundary,
+ * where proving the structural match buys nothing; each field is checked for its type below.
+ */
+export function skippedPages(guide: LarkGuide): SkippedPages | null {
+  const fields = guide as unknown as Readonly<Record<string, unknown>>;
+  const count = fields["wiki_pages_skipped"];
+  if (typeof count !== "number" || !Number.isInteger(count) || count <= 0) {
+    return null;
+  }
+  const note = fields["wiki_pages_skipped_note"];
+  return { count, note: typeof note === "string" ? note : "" };
+}

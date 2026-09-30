@@ -442,7 +442,7 @@ async def receive(
     try:
         # What verified is what is read: the same bytes, or, for a vendor that encrypts, the
         # body opened with the secret. Nothing below sees the request as it arrived.
-        opened = wire.verify(Arrived(headers=headers, body=raw), secret, now)
+        opened = wire.verify(Arrived(headers=headers, body=raw, tenant=record.tenant), secret, now)
     except WebhookRefusedError:
         return await _refuse(deliveries, channel, RefusedBecause.BAD_SIGNATURE)
     del secret
@@ -450,7 +450,23 @@ async def receive(
     handshake = wire.handshake(opened)
     if handshake is not None:
         return Receipt(kind=ReceiptKind.HANDSHAKE, handshake=handshake)
+    return await accept(wire, opened=opened, claims=claims, deliveries=deliveries)
 
+
+async def accept(
+    wire: ChannelWire,
+    *,
+    opened: Arrived,
+    claims: EventClaims,
+    deliveries: DeliveryRecords,
+) -> Receipt:
+    """A request past its checks, read, claimed and recorded: the half of `receive` after verify.
+
+    Its own function for a message that arrives by no request, such as mail
+    `brain.mailbox_read` read from a mailbox, whose check is made where it is read; everything
+    from reading on is the same for it as for a post, so it is not written twice.
+    """
+    channel = wire.channel
     try:
         received = wire.read(opened)
         first = await claims.first(received.event)

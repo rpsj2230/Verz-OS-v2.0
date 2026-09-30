@@ -11,7 +11,11 @@
  * level is offered all come from `GET /knowledge/uploads/options`, the same answer the Add a document
  * card is drawn from.
  *
- * Task ids: M7.1.2, M7.1.5, M22.2.4
+ * **A file queued behind others is told its place and expected wait** (M22.1.4). The answer to the
+ * upload carries both as numbers and in its sentence, which is what the form shows; a later look at
+ * the ticket carries neither, because a place is true when it is given and nothing keeps it current.
+ *
+ * Task ids: M7.1.2, M7.1.5, M22.2.4, M22.1.4
  */
 
 import { UPLOADS_API_PATH, type UploadLevel } from "./knowledgeQuery";
@@ -91,10 +95,31 @@ export interface Queued {
   readonly ticket: string;
   readonly name: string;
   readonly state: QueuedState;
-  /** The API's own sentence about the file, the cause included when it was not added. */
+  /** The API's own sentence about the file, the cause included when it was not added, and its
+   * place and expected wait when it was just queued behind others. */
   readonly said: string;
   readonly itemId: string | null;
+  /** Where it stood in line when it was sent, or null when it starts as soon as the worker is free. */
+  readonly position: number | null;
+  /** The expected wait before it starts, in seconds, beside `position`. An estimate, not a promise. */
+  readonly expectedWaitSeconds: number | null;
 }
+
+/**
+ * Every field `brain.knowledge_intake_routes.QueuedView` sends, held against the Python so a new
+ * one is noticed rather than dropped. `readQueued` reads all of them but `passages`, a count of the
+ * sender's own document that the form does not show.
+ */
+export const QUEUED_FIELDS = [
+  "ticket",
+  "name",
+  "state",
+  "said",
+  "item_id",
+  "passages",
+  "position",
+  "expected_wait_seconds",
+] as const;
 
 /** Read `QueuedView` out of a response body, or null when it is not one. */
 export function readQueued(payload: unknown): Queued | null {
@@ -112,5 +137,7 @@ export function readQueued(payload: unknown): Queued | null {
     state,
     said: body.said,
     itemId: typeof body.item_id === "string" ? body.item_id : null,
+    position: typeof body.position === "number" ? body.position : null,
+    expectedWaitSeconds: typeof body.expected_wait_seconds === "number" ? body.expected_wait_seconds : null,
   };
 }

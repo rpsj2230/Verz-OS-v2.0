@@ -39,6 +39,7 @@ import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
   ConnectFlow,
+  copied,
   Fact,
   FactList,
   FailureState,
@@ -64,6 +65,7 @@ import {
   LARK_FLOW,
   LARK_TEST_API_PATH,
   larkBody,
+  skippedPages,
   startingUses,
   stepsFor,
   toggled,
@@ -169,20 +171,6 @@ function EventsPanel({ events }: { readonly events: LarkEvents }) {
       </FactList>
     </section>
   );
-}
-
-/** Copy a text to the clipboard, answering whether the browser allowed it. */
-async function copied(text: string): Promise<boolean> {
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-  if (clipboard === undefined) {
-    return false;
-  }
-  try {
-    await clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** The steps a result sends somebody back to, each with its picture and a way there. */
@@ -620,7 +608,11 @@ function Flow({
       </div>
     ),
     wiki_spaces: (
-      <WikiSpaces tested={tested} may={guide.uses.some((one) => one.name === "knowledge_wiki" && one.may_switch_on)} />
+      <WikiSpaces
+        tested={tested}
+        may={guide.uses.some((one) => one.name === "knowledge_wiki" && one.may_switch_on)}
+        skipped={skippedPages(guide)}
+      />
     ),
     base_access: (
       <div className="flex min-w-0 flex-wrap gap-2">

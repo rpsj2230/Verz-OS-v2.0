@@ -49,6 +49,7 @@ from brain.channels.adapter import (
     channel_adapters,
     channel_wires,
 )
+from brain.channels.email import WIRE as EMAIL_WIRE
 from brain.channels.inbound import (
     MAX_BODY_BYTES,
     Inbound,
@@ -63,6 +64,7 @@ from brain.channels.outbound import (
     Outgoing,
     deliver,
 )
+from brain.channels.slack import WIRE as SLACK_WIRE
 from brain.channels.webhook import (
     REPLY_URL,
     SIGNATURE_HEADER,
@@ -73,6 +75,7 @@ from brain.channels.webhook import (
     sign,
     verify,
 )
+from brain.channels.whatsapp import WIRE as WHATSAPP_WIRE
 from brain.connectors.registry import INSTALL_AUTHORITY
 from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -468,7 +471,13 @@ def test_every_adapter_in_the_package_is_registered_once_in_channel_order() -> N
         Channel.WHATSAPP,
     }
     assert channel_adapters() == CHANNEL_ADAPTERS
-    assert dict(channel_wires()) == {Channel.LARK: LARK_WIRE, Channel.WEBHOOK: WIRE}
+    assert dict(channel_wires()) == {
+        Channel.EMAIL: EMAIL_WIRE,
+        Channel.LARK: LARK_WIRE,
+        Channel.SLACK: SLACK_WIRE,
+        Channel.WEBHOOK: WIRE,
+        Channel.WHATSAPP: WHATSAPP_WIRE,
+    }
 
 
 PROBE_MODULE = """
@@ -940,7 +949,7 @@ def test_a_name_that_is_no_channel_and_a_switched_off_channel_are_one_answer(
     raw, sent = signed(message())
     off = post_event(client, raw, sent)
     nothing = post_event(client, raw, sent, name="carrier-pigeon")
-    unreceived = post_event(client, raw, sent, name="whatsapp")
+    unreceived = post_event(client, raw, sent, name="telegram")
     assert off.status_code == nothing.status_code == unreceived.status_code == 404
     assert body_of(off) == body_of(nothing) == body_of(unreceived)
     assert world.deliveries.seen() == [("inbound", "refused", "switched_off")]

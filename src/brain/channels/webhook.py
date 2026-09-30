@@ -336,6 +336,11 @@ class SignedWebhookWire:
     def tenant_fields(self) -> tuple[str, ...]:
         return (REPLY_URL,)
 
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """One secret, so no parts."""
+        return ()
+
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
         """`verify` over the exact bytes, the signed time and the signature, and nothing read.
 

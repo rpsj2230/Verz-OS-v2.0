@@ -29,17 +29,19 @@ chose is a decision nobody has made for them. See
 `ANOTHER_PROVIDERS_DEFAULT_IS_ONE_PRIMARY_PER_TIER`.
 
 **The numbers.** Each tier's first step is `seed_chain`'s primary for that tier, read from it
-rather than restated: Medium one attempt at twelve seconds, Complex two at ninety because nobody
-is watching a task. Simple has no seed row and a person waits on it as on Medium, so it takes
+rather than restated: Medium one attempt at twelve seconds, Complex two at ninety because nobody is
+watching a task. Simple has no seed row and a person waits on it as on Medium, so it takes
 Medium's. A failover on Complex is `seed_chain`'s own Complex failover. **A failover on a tier a
 person waits on is one attempt at four seconds**, because the answer lane's wall clock
-(`ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS`, 25) bounds the whole walk and the call path enforces no
-deadline of its own: twelve for the first step and four for each of the three after it is 24,
-inside the budget, and `check_answer_lane_budget` holds it. Rejected: a deadline inside the walk,
-which would let a failover reached after a fast failure use the whole remainder; it is the better
-behaviour and a change to the executor every call goes through, and the four seconds need no
-change there. See `A_WAITED_ON_WALK_FITS_THE_ANSWER_BUDGET`. The install's own inference server
-answers one request at a time, so its steps carry a concurrency of one.
+(`ANSWER_LANE_WALL_CLOCK_BUDGET_SECONDS`, 25) bounds the whole walk: twelve for the first step and
+four for each of the three after it is 24, inside the budget, and `check_answer_lane_budget` holds
+it. **The last step's four seconds are a floor rather than its limit.** Since 2026-09-29 the
+executor gives the last step a walk can try the rest of the budget, because nothing comes after it
+(`brain.models.calls.THE_LAST_STEP_IS_GIVEN_THE_REST_OF_THE_ANSWER_BUDGET`), which is the deadline
+inside the walk this module once rejected as a change to the executor every call goes through;
+Moonshot, last in every level, needed it. The failovers before it keep four seconds, because what
+they save is the later steps' time. See `A_WAITED_ON_WALK_FITS_THE_ANSWER_BUDGET`. The install's
+own inference server answers one request at a time, so its steps carry a concurrency of one.
 
 **The model names are the product's and they are stated, not discovered.** The Anthropic primaries
 of Medium and Complex are `seed_chain`'s, and a test holds the owner's matrix to them. The rest
@@ -126,10 +128,11 @@ ANOTHER_PROVIDERS_DEFAULT_IS_ONE_PRIMARY_PER_TIER: Final = (
 #: Why a failover on a tier somebody waits on is given four seconds.
 A_WAITED_ON_WALK_FITS_THE_ANSWER_BUDGET: Final = (
     "A person waits on Simple and Medium, and the answer lane's wall-clock budget bounds the "
-    "whole walk, not each step, because the call path has no deadline of its own. The first step "
-    "keeps the seed's twelve seconds so a legitimately slow question is not cut off, and each of "
-    "the three failovers gets one attempt at four seconds, which is 24 seconds in all. A failover "
-    "is mostly reached after a fast failure, a refused connection or an overloaded provider."
+    "whole walk, not each step. The first step keeps the seed's twelve seconds so a legitimately "
+    "slow question is not cut off, and each of the three failovers gets one attempt at four "
+    "seconds, which is 24 seconds in all. A failover is mostly reached after a fast failure, a "
+    "refused connection or an overloaded provider, and the last step is given whatever of the "
+    "budget is left when it is reached, never less than its four seconds."
 )
 
 #: Why a ladder that ever held a rung is left alone.

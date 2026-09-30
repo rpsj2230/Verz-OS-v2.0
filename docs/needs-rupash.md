@@ -2,10 +2,501 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**1 item is open: 91,** the checks only you can do on your install; it waits for the Knowledge
-upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and every step.
+**15 items are open: 134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
+vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
+it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
+that names a table library, and the automation canvas, each with my recommendation, **and 91,** the
+checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
+Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 134. Connect the Slack channel (ready now)
+
+**In plain terms:** people can now ask the Brain in Slack, in a direct message or by naming it in a
+channel, the second channel in item 126's order. Only do this if Verz uses Slack. In the console open
+**Channels**, **Slack**, **Connect Slack**, which shows each step with a picture:
+
+1. **Create the Slack app from its manifest.** On Slack's site open **Your Apps**, click **Create New
+   App**, choose **From a manifest**, pick your workspace, choose **JSON**, replace what is there with
+   the manifest the console copies for you, then **Next** and **Create**. Slack saying the address is
+   not verified yet is expected until the last step.
+2. **Install the app and copy its bot token.** In the app's menu open **OAuth & Permissions**, click
+   **Install to Workspace**, then **Allow**, and copy the **Bot User OAuth Token** (it starts with
+   xoxb-).
+3. **Copy the signing secret.** Open **Basic Information**, find **App Credentials**, click **Show**
+   beside **Signing Secret** and copy it.
+4. **Copy the app's member ID.** In Slack itself, open the app under **Apps**, click its name to open
+   its profile, click the three dots and choose **Copy member ID** (it starts with U).
+5. **Save them in the console.** Paste the member ID, the signing secret and the bot token into their
+   fields, tick **Switched on** and press **Save set-up**. The secrets go to the vault and are never
+   shown again.
+6. **Let Slack check the address.** Back in the app's **Event Subscriptions**, click **Retry** beside
+   the Request URL until it says **Verified**, then **Save Changes**. Now message the app: the first
+   answer asks you to link your Slack account to your Brain account.
+
+Tell me "connected Slack" afterwards and I prove it on your install.
+
+## 133. Search Console's indexing issues: counts from the sitemaps, not a page-by-page report
+
+**In plain terms:** your task for Search Console (M11.7.2) asks for a site's indexing issues.
+Google's Search Console API has no Page indexing report: the only way to ask about one page is a
+separate inspection call per page, which is slow and rationed. So the connector reports indexing
+issues as the error and warning counts Google gives for each of the site's sitemaps, and the answer
+says that is what it is. Everything else in the task (queries, pages, clicks and impressions, for
+any range you name) is read in full.
+
+**Option A: accept the sitemap counts,** with the answer naming them as sitemap counts.
+**Option B: also inspect named pages on request,** one call per page, only when somebody asks about
+specific pages, slower and within Google's daily allowance.
+
+**My recommendation: A now.** It answers "is anything wrong with indexing" straight away, and B can
+be added the day someone needs page-by-page detail.
+
+**What I need from you:** reply "133: A" or "133: B".
+
+## 132. Connect the email channel (ready now, with any mail provider)
+
+**In plain terms:** people can email the Brain and get an answer back by email, the first of the
+channels in item 126's order. Answers go out through the install's own mail relay. Mail comes in
+either from an ordinary mailbox the Brain reads once a minute (Google, Microsoft 365, Lark Mail or
+any provider with IMAP), or, if your domain's mail runs through Cloudflare, from Cloudflare Email
+Routing. **Use the mailbox route unless you already use Cloudflare Email Routing:** it needs only a
+mailbox.
+
+**What you do,** in the console under **Channels**, **Email**, **Connect Email**, which shows each
+step with a picture:
+
+1. **Choose the route.** At "Is your domain's mail on Cloudflare?" choose **No: read a mailbox**.
+2. **Set up the mail relay first.** Open **Notifications**, fill in **Email relay** with your mail
+   provider's sending details (host, port, sender address, user name and password) and send its
+   test message. These are the same details item 131 asks for, so do this once for both.
+3. **Make a mailbox only the Brain uses** (for example one named ask, at your company's domain) and
+   turn on IMAP for it:
+   - Google Workspace: in Gmail open **Settings**, **Forwarding and POP/IMAP**, **Enable IMAP**, and
+     make an app password if the mailbox signs in with two steps.
+   - Microsoft 365: in the admin centre open the mailbox, then **Mail**, **Manage email apps**, and
+     tick **IMAP**.
+   - Write down the IMAP server your provider names (the console's step names Google's and
+     Microsoft's) and port 993. Nobody should read this mailbox by hand: the Brain reads what is
+     unread and marks it read, and never deletes anything.
+4. **Find the name your provider stamps on arriving mail.** From your own work address send the new
+   mailbox a message, open it there and choose **Show original** (or **View source**). Find the
+   topmost line starting Authentication-Results: and copy the name before its first semicolon. On
+   Microsoft 365 that line names nobody, so the name is simply the word exchange.
+5. **Save it in the console.** Back in **Connect Email** type the mailbox's address, its IMAP
+   server, port 993 and user name, the name from step 4 in **receiver**, and your staff's email
+   domains in **domains**, separated by commas. Paste the mailbox's password (or its app password)
+   into the secret field, tick **Switched on** and press **Save set-up**. The password goes to the
+   vault and is never shown again.
+6. **Try it.** Write to the mailbox from your own work address. Within a minute the Brain answers,
+   and the first answer asks you to link your address to your Brain account.
+
+**If you use Cloudflare Email Routing instead,** choose **Yes** at step 1 and follow the Cloudflare
+steps the console shows: a subdomain just for the Brain, a Worker named company-brain-mail with the
+script the console gives you, and a routing rule sending that address's mail to the Worker.
+
+**What only your real mailbox proves:** that your provider stamps the name you copied, that the
+password signs in, and that the answer arrives. Tell me "connected email" afterwards and I prove it
+on your install.
+
+## 130. Does a staff list anybody with its link can edit give people sign-in accounts?
+
+**In plain terms:** item 115's B is built: the staff sync gives each active person a sign-in account
+and sends nobody anything. One case I decided the safe way and need you to confirm. A spreadsheet or
+a Google Sheet can be edited by anybody who has its link, so a row somebody adds would become a real
+way into the Brain for whatever address they typed, as long as they can read that mailbox and press
+Forgot password. Lark, Google Workspace, Microsoft Entra and LDAP are changed only by your
+administrators, and they give accounts as you asked.
+
+**Option A: only a company directory gives accounts.** A sheet still lists people, places them in
+departments and marks leavers; it makes no accounts, and the Staff sources page says so. People on a
+sheet are given their sign-in by an administrator in Keycloak, as today.
+
+**Option B: a sheet gives accounts too.** Anybody who can edit the sheet can then let somebody in.
+Only sensible for a sheet you have locked to one or two people.
+
+**My recommendation: A.** It is what is built, and it matches the rule the product already keeps: a
+sheet is trusted to say who exists and nothing more.
+
+**What I need from you:** reply "130: A" or "130: B". Until then A holds, which is the safe side: B
+only adds accounts.
+
+## 131. Make staff accounts work on your install (after #281 is deployed)
+
+**In plain terms:** item 115's accounts are built (#281): each active person on the staff list gets
+a Brain account with no email sent, and gets in by pressing **Forgot password** on the sign-in page.
+Two things on your install have to be in place first, one of them only you can do.
+
+**Part 1, yours: the sign-in service's email settings.** Forgot password sends its link by email,
+so the sign-in service (Keycloak) needs an email account to send from. Without it nobody can set a
+password. You need the details of a mailbox that may send mail: its server address (SMTP host),
+port, and a username and password; your email provider's help pages list them.
+
+1. Open the Keycloak admin console (the same place you added users for item 91) and sign in.
+2. Choose your realm, then **Realm settings**, then the **Email** tab.
+3. Fill in **From** (for example no-reply at your domain), **Host**, **Port**, **Encryption**
+   (usually StartTLS on port 587), turn on **Authentication** and fill in the **Username** and
+   **Password**.
+4. Press **Test connection**; Keycloak sends a test mail to your own address. Then **Save**.
+
+**Part 2, mine with your go-ahead: three server steps.**
+
+- Install the updated deploy script, so releases set up the accounts client and apply their own
+  vault changes (this is also item 129's prerequisite).
+- Run the accounts-client setup once, which creates the sign-in service client the sync uses and
+  puts its secret straight into the vault; nobody sees it.
+- Add one setting the worker needs (the sign-in address, `INSTALL_OIDC_ISSUER`) to the worker in the
+  hosting panel's stored configuration.
+
+**What you do:** fill in Part 1 whenever suits you, and reply "131: do the server steps" for Part 2.
+I tell you when both are done and the next staff sync has made the accounts; then you can tell
+people: "Your account is ready. Go to the sign-in page, press Forgot password and enter your work
+email."
+
+## 129. Let the vault open itself after a restart (item 114's switch, still to do)
+
+**In plain terms:** item 114 decided that the secrets vault opens itself when the server restarts.
+The switch has not been run yet: on 30 September the vault still reported the old kind of lock
+(Shamir), so if the server restarted today the vault would need three of its five key pieces typed
+in before the Brain could read any key again. The pieces are safe in the root-only file the
+2026-09-21 setup wrote, so nothing is lost, but a restart would stop the Brain until someone does it.
+
+**My recommendation: let me run it for you.** It takes about two minutes, during which the vault is
+unavailable, and it keeps a dated copy of the vault's data so it can be put back.
+
+**What you do:**
+
+1. Reply "129: do it". I run the switch over the server connection I already use, check that the
+   vault reports it opens itself, and tell you it is done.
+2. Afterwards, on the server as root: copy `/etc/brain-vault/seal.key` into your password manager as
+   its own entry; move `/etc/brain-vault/recovery.key` into your password manager and delete that
+   file; delete `/root/brain-vault-init-20260921.txt`, whose pieces open nothing after the switch.
+   Keys are yours to hold: I never read or copy them.
+
+## 128. Connect Xero, HubSpot and Freshdesk (ready now)
+
+**In plain terms:** item 126 decided every service is made connectable from the console, one at a
+time. These three are ready today. Each takes about ten minutes. In the console open
+**Connectors**, press **Connect a source**, choose the service and follow its screens, which show a
+picture of each step. Paste keys only into the console, never into chat.
+
+**Xero** (invoices and contacts, read only)
+
+1. Sign in to Xero's developer portal (developer.xero.com, **My Apps**) with an account that
+   administers your organisation, and press **New app** (Xero may offer it as a custom connection).
+   Name it "Company Brain". Give it exactly two scopes, `accounting.transactions.read` and
+   `accounting.contacts.read`, and nothing ending in `.write`.
+2. Press **Authorise** for the one Xero organisation the Brain should read, then copy that
+   organisation's id (Xero may call it the tenant id) and the key Xero issues.
+3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
+   **Connect Xero**.
+
+**HubSpot** (contacts and deals, read only)
+
+1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
+   (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
+   Name it "Company Brain".
+2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
+   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
+   account's settings) and the token, and press **Connect HubSpot**.
+
+**Freshdesk** (tickets, read live)
+
+1. Choose the Freshdesk agent the Brain reads as: someone who sees the tickets it should answer
+   about and no more, and never an administrator.
+2. Sign in to Freshdesk as that agent, press the profile picture at the top right, open **Profile
+   settings**, and press **View API key**. Copy it.
+3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
+   `.freshdesk.com`), the short name of the one department whose people may be granted its
+   tickets, paste the key, and press **Connect Freshdesk**.
+
+**After each one,** press **Test** on its card, then tell me "connected Xero" (or whichever). I
+prove it on your install and close its tasks. The next services (Google Drive, then Laravel, then
+the chat channels) are added here as each becomes connectable.
+
+## 127. Switch on the Lark app's chat channel, then add the bot to your digest group
+
+**In plain terms:** on 30 September the Brain's Lark app did not appear under **Add bot**, because
+it was connected for the staff list only. The bot, its permissions and its events belong to the
+**Chat channel** use, which the console walks you through. This is also what lets the evening digest
+(item 125), approval cards (items 117 and 118) and linked people's questions reach Lark.
+
+**What you do:**
+
+1. In the console, open **Connectors** and find the Lark card. Press **Manage Lark**, then **Add a
+   use to Lark**, tick **Chat channel**, and continue.
+2. **Turn on the bot.** In Lark's developer console, open your app, go to **Add Features** (or
+   **Features**), choose **Bot** and turn it on. This is the setting that was missing.
+3. **Add the permissions.** Press **Copy all permissions** in the console. Then in Lark, open
+   **Permissions & Scopes**, click **Batch import**, paste and confirm. Every permission is read-only
+   except `im:message:send_as_bot`, which lets the bot send its own replies.
+4. **Copy the two keys, then save.** In Lark, open **Events & Callbacks**, then the **Encryption
+   Strategy** tab. If the Encrypt Key is empty, click **Reset** to make one. Paste the **Encrypt
+   Key** and **Verification Token** into the console and press **Save the chat channel now**. Do
+   this before step 5, because Lark checks the address as soon as it is entered.
+5. **Point Lark's events at your install.** Still in **Events & Callbacks**, open **Event
+   Configuration**, choose **Request URL**, paste the events address the console shows you, and
+   save; Lark should show it as verified. Then click **Add Events**, find **Message received**
+   (`im.message.receive_v1`), tick it and add it.
+6. **Release a new version.** In Lark, open **Version Management & Release**, then **Create a
+   version**: use a version number such as 1.0.3, set who can use it to All members, then **Submit
+   for release**. It must be approved, as with 1.0.2.
+7. Back in the console, press **Test connection**, then **Save and switch on**.
+
+After that, open your "Brain daily" group, go to **Settings**, **Bots**, **Add bot**, and the
+Brain's app will appear.
+
+**Later, when I tell you approval cards are live (item 117):** in the Lark Admin console confirm that
+two-step verification is required for all members, then in the Brain's console open **Install**,
+**Settings**, the **Lark** section, and set **Approve from Lark cards** to on.
+
+## 124. Switch on the automation canvas?
+
+**In plain terms:** the automation canvas is an optional drawing board for fixed, step-by-step
+automations (a trigger, then set steps, with no model deciding what happens next). It runs in a
+sandboxed container of its own that needs about 512 MiB of memory, and memory on your server is
+the question in item 120. Three install tasks wait on it being switched on (M32.6.1.1, M32.6.1.2
+and M32.6.1.4); everything behind it is built and tested.
+
+**Option A: not now.** Its three install tasks move to Wave 4, and it is switched on once item 120
+leaves room. **Option B: switch it on now**, and it takes 512 MiB from what item 120 is sharing out.
+
+**My recommendation: A.** Nothing you have asked for today needs it, and memory is the scarcest
+thing on the server.
+
+**What I need from you:** reply "124: A" or "124: B".
+
+## 123. May a task that names a table library be marked done by what it is for?
+
+**In plain terms:** task M32.5.2.1 says every grid in the console uses a particular table library
+(TanStack Table) with paging and filtering on the server. The console's own table deliberately
+does not use that library, to keep the pages small and fast, and every list does page and filter
+on the server, which is your requirement GAP2-24 and is tested. The library was a means; the
+paging is the end.
+
+**My recommendation: yes.** The task is marked decided by what it is for, and the requirement it
+serves stays exactly as it is.
+
+**What I need from you:** reply "123: yes", or "123: no" if you want the library used.
+
+## 122. Where are your uploaded documents stored?
+
+**In plain terms:** your requirement LIVE-01 says your install runs an object store: the place
+uploaded files, exports and backups are kept as files. Yours has none yet, so four tasks wait on it
+(M32.3.1.1 to M32.3.2.2), and everything else about it is built and tested. The product supports
+three kinds.
+
+**Option A: on your own server (SeaweedFS).** Your documents never leave your server. It needs
+about 256 MiB of memory, which is part of item 120's picture. **Option B: Cloudflare R2**, a
+bucket in a Cloudflare account, which costs a little each month and uses no memory on your server,
+but your documents are then held by Cloudflare. **Option C: Amazon S3**, the same as B at Amazon.
+
+**My recommendation: A.** The Brain is built so that your data stays on your server, and 256 MiB
+is small beside the rest of item 120.
+
+**What you do:** reply "122: A", and I add it to the server myself over the connection I already
+use, then tell you when the Health page shows it ready. For B or C, reply with the letter and I
+give you the steps to create the bucket and paste its key into the console.
+
+## 121. On an agent's page, whose conversations are listed?
+
+**In plain terms:** each agent's page is getting a Conversations list. Today every conversation
+belongs to one person: the Brain keeps a separate thread for each person, even when several people
+talk to the same agent in one Lark group, and nobody can see anybody else's. Your reference design
+(the AnyGen screenshot, requirement ANY-028) shows the list "narrowed to threads related to me",
+which implies the full list includes other people's conversations too. That would be a privacy
+change, so it is yours to decide.
+
+**Option A: each person sees only their own conversations with the agent.** Exactly how the Brain
+works today. The "related to me" filter is not needed, because everything listed is already yours.
+
+**Option B: the agent's owner and administrators also see that other people's conversations
+happened**: who, when, and whether the agent failed, but never the question or the answer. Useful
+for spotting an agent that keeps failing. The words stay private because another person's answer
+was built from what *they* may see, which may be more than the viewer may.
+
+What is **not** offered: showing other people's questions and answers. It would let anyone who can
+open an agent's page read answers built from somebody else's access, which breaks the rule that
+nobody sees through the Brain what they could not see themselves.
+
+**My recommendation: A now**, and B later if you want owners to watch an agent's failures.
+
+**What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
+safe either way: B only ever adds to it.
+
+## 120. Memory on your server: what is waiting for it, and in what order
+
+**In plain terms:** four things the Brain needs are waiting for memory on your server. Together
+they need **7,424 MB**, and up to 2,048 MB more if you choose option B in item 119. Your server has
+**248 MB** that nothing has claimed. This is the one memory question: how to make room, and which
+of the four gets it first. (The automation canvas in item 124 would need another 512 MB, and I
+recommend it waits.)
+
+**What is waiting, in the order I would give it memory:**
+
+| | What | Memory | What it unblocks |
+|---|---|---|---|
+| 1 | **The personal-data detector** (Presidio) | 1,536 MB | Your requirement GAP-23: before a question or passage goes to an outside model, names, ID numbers, phone numbers and email addresses in it are replaced with placeholders, and put back in the answer. Today text goes to the model provider as written. How it works is settled; only the memory is yours to decide. Task M32.2.1.1 |
+| 2 | **The model server**, with the document worker and the file store | 3,840 MB (3,072 + 512 + 256) | Ten document tasks: tables and page layout in PDFs, scanned pages, Excel and PowerPoint, and search by meaning (M7.2.1, M7.2.3, M7.2.4, M7.2.6, M7.3.3, M7.3.4, M7.3.5, M7.7.8, M7.7.9, M7.7.10). Also the rest of GAP-23: the model server finds the names and details the detector's standard rules miss (M32.2.1.2). Also item 119's option A. The file store is item 122's option A |
+| 3 | **Langfuse**, the screen engineers use to inspect each model call | 2,048 MB | M32.1.1.1 and M32.1.1.2. The Brain already records every call in its own ledger; Langfuse adds the screen. It keeps its files in the file store from row 2 (256 MB more if row 2 is not there) |
+| 4 | **More memory for the Brain's program**, so it reads larger uploads itself | 512 to 2,048 MB | Item 119's option B. Not needed once row 2 runs, which reads every file people may upload |
+
+**Why that order.** Row 1 first: it is a requirement you set, it is unmet on every question asked
+today, and it is the cheapest. Row 2 next: eleven tasks, and the rest of GAP-23. Row 3 after: it
+helps engineers, and the Brain already keeps its own record of every call. Row 4 last, and I would
+not spend memory on it: row 2 does the same job and reads far larger files.
+
+**What I measured (29 and 30 September), read-only, on the live server.** The machine has 11,960
+MB. The figure that decides this is not what is free at this moment but what each container is
+allowed to take, because a container can take its allowance the moment it gets busy. Those
+allowances add up to 11,456 MB:
+
+| Whose | Containers | Allowed |
+|---|---|---|
+| The Company Brain | 9: the program, its database, cache, worker, two connection poolers, the vault, and Keycloak with its database | 5,440 MB |
+| Your other project: Dify | 10 | 3,712 MB |
+| Your other project: the old Langfuse | 2 | 1,280 MB |
+| Your other project: the old v1 worker (`verz-brain-worker-1`) | 1 | 1,024 MB |
+
+The other project's three rows are the same 6,016 MB as in item 25. Two more have no allowance and
+use real memory: Activepieces (827 MB) and Coolify with its proxy (about 600 MB), about 1,430 MB
+together. The server keeps 256 MB for itself, so 11,960 less 11,456 less 256 leaves the 248 MB
+above. It is also using 1,233 MB of its 2,047 MB of swap, which means it has already run short of
+real memory at some point. None of the four rows has run on your server yet, so their figures are
+the product's own sizes; I measure each one once it runs.
+
+**Which of the other project's containers are in use.** Lines each wrote to its log in the last 24
+hours: Dify's API 0, the old Langfuse 0, the old v1 worker 1 (a timeout warning), Activepieces
+17,414. So Activepieces is in use and I leave it out of every option below. v1's nightly Laravel
+sync is a separate run at 02:15, allowed 768 MB for the few minutes it runs, and does not use the
+old worker.
+
+**Option A: take down Dify, the old Langfuse and the old v1 worker.** That frees their 6,016 MB, so
+6,264 MB is unclaimed; after what Activepieces and Coolify really use, about 4,830 MB is there. That
+is room for rows 1 and 3 with the file store (3,840 MB, about 990 to spare), or for row 2 alone (the
+same 3,840), but **not rows 1 and 2 together**: 5,376 MB would be about 550 MB short on a server
+that is already using swap. It costs nothing and can be undone: their data stays on disk, and one
+command brings each back. Only you know whether anything of v1 still needs them.
+
+**Option B: a larger server, for example 24 GB instead of 12.** About 12,000 MB more. Rows 1 to 3
+all fit with about 3,400 MB to spare even without A, and the other project is untouched. It costs a
+monthly fee and a restart of a few minutes while your provider resizes it.
+
+**Option C: nothing now.** The fourteen tasks above move to a later wave and GAP-23 stays unmet.
+Until then the console reads plain text, Markdown, PDF and Word as text only (item 119 says how
+large), and Excel and PowerPoint are not accepted.
+
+**My recommendation: A now, then B.** A is free and makes room today for the detector (row 1), so
+GAP-23 is met for everything but the names only the model server finds, and for Langfuse (row 3).
+B then makes room for the model server (row 2) beside them, with a margin, so the ten document tasks
+run without pushing the server into swap. If you would rather not pay for a larger server, reply A
+alone: rows 1 and 3 go ahead and row 2 waits. If you are not sure about v1, choose B alone rather
+than C. Building every one of these is my work and needs nothing more from you than the room.
+
+**What I need from you:** reply "120: A then B", "120: A", "120: B" or "120: C".
+
+For A (about five minutes):
+
+1. On your Mac, open **Terminal**.
+2. Type `ssh verz-vps` and press Return. You are now on your server.
+3. Take down Dify: type `cd /opt/verz-dify/dify/docker && docker compose down` and press Return. It
+   stops and removes Dify's ten containers. Its data stays in that folder.
+4. Take down the old Langfuse: type `cd /opt/verz-langfuse && docker compose down` and press Return.
+5. Stop the old v1 worker, and only the worker: type `cd /opt/verz-brain/infra/vps && docker compose
+   stop worker` and press Return. The nightly Laravel sync in the same folder carries on as before.
+6. Type `exit` and press Return.
+7. Tell me "120: A done". I measure the server again and record the new figure in the product's
+   budget, so each service is sized against what is really there.
+
+To undo any of it later, run `docker compose up -d` in the same folder (or `docker compose start
+worker` for step 5).
+
+For B:
+
+1. Sign in to the control panel of the company you rent the server from.
+2. Open this server (6 cores, 12 GB of memory, 193 GB of disk) and choose the option to upgrade or
+   resize its plan.
+3. Choose a plan with 24 GB of memory. Keep the same disk and the same address.
+4. Confirm. The server restarts, and the Brain is offline for those few minutes.
+5. Tell me "120: B done". I measure the server again, as for A.
+
+## 119. How large a file may people upload?
+
+**In plain terms:** the door to Knowledge accepts PDFs up to 50 MB, Word files up to 25 MB, and plain
+text and Markdown up to 5 MB. The console cannot read files anywhere near that size today, because it
+reads them inside the Brain's own program, which has little memory to spare. Two things are for you to
+choose: how the console reads larger files now, and the size limit once the model server (item 120,
+row 2) runs.
+
+**What was measured (29 September), read-only.** The Brain's program is allowed 1,024 MB. It runs four
+copies of itself so it can answer several people at once. Each copy holds up to 218 MB at its peak,
+which is when the four start together, and the process that looks after them holds 82 MB, so the
+program has used at most 955 MB. Almost all of that is the program's own memory; less than 1 MB is
+file cache. Reading a file takes several times its size (the product's rule is four times for text,
+six for a PDF, eight for Word), and each of the four copies may be reading a file at the same moment.
+
+**What changes on its own with the next release.** Two fixes in the product need nothing from you:
+
+- Until now the Brain checked each file against the wrong budget, so a large PDF could have run the
+  program out of memory (pull request 265). It now checks against the program's own spare memory:
+  48 MB, shared among the four copies, so **12 MB for each file**. The console then reads **text and
+  Markdown up to 3 MB, PDFs up to 2 MB and Word files up to 1.5 MB**, and refuses anything larger
+  with a message asking for it to be split.
+- The program chose how many copies to start from its memory, allowing 180 MB a copy when each really
+  needs 218. So "just give it more memory" was unsafe until now: at 1,536 MB it would have started
+  seven copies, which need about 1,608 MB at start, and it would have been killed every time it
+  started. Each copy is now sized at 220 MB (pull request 269), so more memory is safe, but it buys
+  little, as option B shows.
+
+**Question 1: how should the console read larger files?**
+
+**Option A: send larger files to the document worker.** The document worker is a separate part built
+for exactly this, with 448 MB to read one file, which is enough for everything the door accepts:
+**text 5 MB, PDF 50 MB, Word 25 MB.** It needs row 2 of item 120 (512 MB for the worker and 256 MB for
+the file store) and some building by me to hand it the console's uploads.
+
+**Option B: give the program more memory.** More memory makes it start more copies, up to ten (the
+most its database connections allow), and each copy may read a file at the same moment, so each gets
+only a share of what is added:
+
+| The program's memory | Copies | Room for one file | Largest PDF | Largest Word | Largest text |
+|---|---|---|---|---|---|
+| 1,024 MB (today) | 4 | 12 MB | 2.0 MB | 1.5 MB | 3.0 MB |
+| 1,536 MB | 6 | 20 MB | 3.3 MB | 2.5 MB | 5 MB |
+| 2,048 MB | 8 | 24 MB | 4.0 MB | 3.0 MB | 5 MB |
+| 3,072 MB | 10 | 77 MB | 12.9 MB | 9.7 MB | 5 MB |
+
+Text stops at 5 MB because that is the door's own limit. The extra memory is row 4 of item 120.
+
+**Option C: read one file at a time across the whole program.** One file gets all 48 MB instead of a
+quarter: **text 5 MB, PDF 8 MB, Word 6 MB**, with no memory and no server change. The cost is that two
+people adding documents at the same moment wait for each other, a few seconds each. A small build for
+me.
+
+**My recommendation: C now, then A once row 2 of item 120 runs.** C quadruples the largest PDF this
+week at no cost, and uploads are rare enough that a few seconds' wait is seldom noticed. A then reads
+everything the door accepts. B is the poorest use of memory: 2,048 MB more buys PDFs of 12.9 MB, while
+A's 768 MB reads PDFs of 50.
+
+**Question 2: the size limit once the model server runs.** The model server (item 120, row 2) reads
+PDFs with their tables and scanned pages, and Excel and PowerPoint. As sized it has 64 MB to read one
+file, which is a PDF of about 10 MB or an Office file of about 8 MB. Reading bigger files means a
+bigger model server:
+
+- **25 MB for every document type:** it grows by 136 MB, to 3,208 MB. Word and Excel stay where they
+  are; PDF and PowerPoint come down from 50.
+- **Keep 50 MB:** it grows by 336 MB, to 3,408 MB.
+- **10 MB (8 MB for Office files):** no extra memory, and ordinary PDFs of 15 to 30 MB are refused.
+
+**My recommendation: 25 MB.** One figure for every document is easy for people to remember, it covers
+nearly all everyday documents, and it costs the least memory of the choices that do not refuse
+ordinary files.
+
+**What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
+in MB). Nothing on your server changes for either answer.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
@@ -50,11 +541,104 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 7. **The remaining rows (M1.8.8, M2.3.2, M24.3.6).** On **Requirement checks**, open the
    Permissions, Departments and Observability areas. Each row still "Not checked yet" says what it
    needs; try it and record it.
+8. **Health of the vault and the worker (M32.7.2).** On **Overview**, read the health strip, then
+   open **Govern > Staff sources**: the secrets vault and the worker both show healthy and the last
+   Lark sync shows when it ran. Record what you see.
 
 The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 125. Where the evening build digest is sent - DECIDED 2026-09-30: a group with just you, on any channel
+
+**Your answer, 2026-09-30:** "I will go with your recommendation which is a new group with just you
+in it, so the digest never lands in a chat other people use for work. But you also need to consider
+that currently you connected so you are sending it to Lark but when you connect other Channels then
+where will you send the Digest?"
+
+**What that means, and how it is built:** the digest is not tied to Lark. Where it goes is one
+setting in the console, **Send the evening digest to**, which offers every channel connected at the
+time and a conversation in it: a Lark group today, and a Slack channel, a Teams channel or an email
+address once those are connected (item 126). You change it whenever you like, it is off until
+somebody chooses, and the change is recorded with your name. Every company that installs the Brain
+chooses its own in the same place.
+
+**What you do:**
+
+1. **Switch on the Lark app's chat channel first**, or the app does not appear under Add bot (you
+   found this on 2026-09-30: the app was set up for the staff list only). In the console open
+   **Connectors**, press **Manage Lark** on the Lark card, then **Add a use to Lark**, tick **Chat
+   channel**, and follow its screens: turn on the app's **Bot** feature in Lark, batch-import the
+   permissions, paste the **Encrypt Key** and **Verification Token** and save, point Lark's
+   **Request URL** at the address the console shows and add the **Message received** event,
+   release a new version and have it approved, then **Test connection** and **Save and switch on**.
+   This also lets linked people ask the Brain in Lark.
+2. In Lark, create a group chat with just you in it, for example "Brain daily".
+3. Open the group's settings, choose **Bots**, then **Add bot**, and pick the Brain's Lark app.
+4. When the digest is built I tell you, and you choose that group under **Send the evening digest
+   to** in the console. Nothing to reply with now.
+
+## 126. Every service connectable from the console, one at a time - DECIDED 2026-09-30
+
+**Your answer, 2026-09-30:** "You need to do all one by one so that I can login to console and connect
+them through step by step instructions/screens provided in the backend console itself."
+
+So every service in the list is made connectable from **Connectors**, **Connect a source**, with its
+own step screens, one at a time, and I tell you each time one is ready. You connect it yourself and
+paste its key only into the console. **The order:**
+
+1. **Ready now:** Xero, HubSpot, Freshdesk (steps below, and on their Connect screens).
+2. **Next:** Google Drive, then your Laravel system (task M11.7.7: their last step moves from the
+   server into the console).
+3. **Then the channels:** email, Slack, Microsoft Teams, Telegram, WhatsApp (task M10.6.1 wires each
+   one end to end, and each gets its own Connect screens).
+4. **Then the new sources:** Google Workspace, Google Analytics, Google Search Console, Cloudflare,
+   your domain registrar and hosting, and Slack as a source.
+
+After you connect one, press **Test** on its card and tell me "connected Xero" (or whichever); I prove
+it on your install and close its tasks.
+
+**Ready now: Xero, HubSpot and Freshdesk.**
+
+Each takes about ten minutes. In the console open **Connectors**, press
+**Connect a source**, choose the service, and follow its screens, which show a picture of each step;
+the same steps in words:
+
+**Xero** (invoices and contacts, read only)
+
+1. Sign in to Xero's developer portal (developer.xero.com, **My Apps**) with an account that
+   administers your organisation, and press **New app** (Xero may offer it as a custom connection).
+   Name it "Company Brain". Give it exactly two scopes, `accounting.transactions.read` and
+   `accounting.contacts.read`, and nothing ending in `.write`.
+2. Press **Authorise** for the one Xero organisation the Brain should read, then copy that
+   organisation's id (Xero may call it the tenant id) and the key Xero issues.
+3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
+   **Connect Xero**. The key goes straight to the vault and is never shown again.
+
+**HubSpot** (contacts and deals, read only)
+
+1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
+   (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
+   Name it "Company Brain".
+2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
+   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
+   account's settings) and the token, and press **Connect HubSpot**.
+
+**Freshdesk** (tickets, read live)
+
+1. Choose the Freshdesk agent the Brain reads as: someone who sees the tickets it should answer
+   about and no more, and never an administrator.
+2. Sign in to Freshdesk as that agent, press the profile picture at the top right, open **Profile
+   settings**, and press **View API key**. Copy it.
+3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
+   `.freshdesk.com`), the short name of the one department whose people may be granted its
+   tickets, paste the key, and press **Connect Freshdesk**.
+
+After each one, press **Test** on its card, then tell me "126: connected Xero" (or whichever), and
+I prove it on your install and close its tasks.
+
 
 ## 118. An approval card reaches the approver in Lark as soon as it is raised - DECIDED 2026-09-29: B
 
