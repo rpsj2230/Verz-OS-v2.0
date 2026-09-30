@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**14 items are open: 133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**15 items are open: 134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,32 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 134. Connect the Slack channel (ready now)
+
+**In plain terms:** people can now ask the Brain in Slack, in a direct message or by naming it in a
+channel, the second channel in item 126's order. Only do this if Verz uses Slack. In the console open
+**Channels**, **Slack**, **Connect Slack**, which shows each step with a picture:
+
+1. **Create the Slack app from its manifest.** On Slack's site open **Your Apps**, click **Create New
+   App**, choose **From a manifest**, pick your workspace, choose **JSON**, replace what is there with
+   the manifest the console copies for you, then **Next** and **Create**. Slack saying the address is
+   not verified yet is expected until the last step.
+2. **Install the app and copy its bot token.** In the app's menu open **OAuth & Permissions**, click
+   **Install to Workspace**, then **Allow**, and copy the **Bot User OAuth Token** (it starts with
+   xoxb-).
+3. **Copy the signing secret.** Open **Basic Information**, find **App Credentials**, click **Show**
+   beside **Signing Secret** and copy it.
+4. **Copy the app's member ID.** In Slack itself, open the app under **Apps**, click its name to open
+   its profile, click the three dots and choose **Copy member ID** (it starts with U).
+5. **Save them in the console.** Paste the member ID, the signing secret and the bot token into their
+   fields, tick **Switched on** and press **Save set-up**. The secrets go to the vault and are never
+   shown again.
+6. **Let Slack check the address.** Back in the app's **Event Subscriptions**, click **Retry** beside
+   the Request URL until it says **Verified**, then **Save Changes**. Now message the app: the first
+   answer asks you to link your Slack account to your Brain account.
+
+Tell me "connected Slack" afterwards and I prove it on your install.
 
 ## 133. Search Console's indexing issues: counts from the sitemaps, not a page-by-page report
 

@@ -765,6 +765,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.channel_store:EventClaims.first": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.channel_store:ChannelSecrets.read": Repeat.READS,
         "brain.ops.channel_store:ChannelSecrets.held": Repeat.READS,
+        # The email channel's mailbox. A read peeks and sets no flag; marking read twice leaves the
+        # message read; signing out a second time does nothing. Nothing here deletes.
+        "brain.channels.mailbox:MailboxReader.unseen": Repeat.READS,
+        "brain.channels.mailbox:MailboxReader.mark_handled": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.channels.mailbox:MailboxReader.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The Lark chat channel (L1). A GET through the transport is the one read a group's
         # floor needs, who is in the conversation, and it changes nothing at the vendor.
         "brain.channels.adapter:ChannelTransport.read": Repeat.READS,

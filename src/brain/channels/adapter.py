@@ -284,10 +284,12 @@ SEVERAL_PARTS_ARE_WRITTEN_AS_ONE: Final = (
 
 #: Why a channel's steps hold its record's form once, and ask for nothing else.
 A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE: Final = (
-    "A channel's connect steps hold one screen that saves its record, asking for exactly the "
-    "fields its wire takes and its secret, so a field the wire gains is a field the steps ask for "
-    "too; every other screen asks for nothing but to be shown the events address. The form need "
-    "not be last: a vendor that checks the address as it is saved is told to check it after."
+    "A channel's connect steps hold one screen that saves its record, asking for the fields its "
+    "wire takes and its secret, so a field the wire gains is a field the steps ask for too; every "
+    "other screen asks for nothing but to be shown the events address. Where the steps branch, "
+    "each path holds one such form, asking the fields that path needs, and every field is asked "
+    "on some path. The form need not be last: a vendor that checks the address as it is saved is "
+    "told to check it after."
 )
 
 #: The adapter methods a class needs to be read as an adapter. `ChannelAdapter`'s, by name.
@@ -382,6 +384,43 @@ def channel_wires() -> Mapping[Channel, ChannelWire]:
     return MappingProxyType(found)
 
 
+def guide_problem(steps: tuple[GuideStep, ...], wire: ChannelWire) -> str:
+    """What is wrong with a channel's steps, or empty; see the rule it names.
+
+    `A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE` is the rule.
+
+    With no choice among them, the one form asks every field the record takes. With a choice,
+    each path, the steps on no path and the steps on it, holds one form asking some of the fields,
+    and the paths' forms together ask every field.
+    """
+    secret = tuple(wire.secret_parts or (SECRET_ASK,))
+    fields = set(wire.tenant_fields)
+    paths = [key for one in steps for key, _ in one.choices]
+    unknown = sorted({one.path for one in steps if one.path} - set(paths))
+    if unknown:
+        return f"name paths no step offers: {unknown}"
+
+    def is_form(step: GuideStep) -> bool:
+        asked = tuple(step.asks)
+        leading = asked[: len(asked) - len(secret)]
+        return asked[len(asked) - len(secret) :] == secret and set(leading) <= fields
+
+    asked_somewhere: set[str] = set()
+    for path in paths or [""]:
+        seen = [one for one in steps if one.path in ("", path)]
+        forms = [one for one in seen if is_form(one)]
+        stray = sorted(
+            {ask for one in seen if not is_form(one) for ask in one.asks} - {EVENTS_ADDRESS_ASK}
+        )
+        if len(forms) != 1 or stray:
+            where = f"on path {path!r} " if path else ""
+            return f"{where}hold {len(forms)} form(s) and ask for {stray}"
+        asked_somewhere |= set(forms[0].asks[: len(forms[0].asks) - len(secret)])
+    if asked_somewhere != fields:
+        return f"ask {sorted(asked_somewhere)} of the record's {sorted(fields)}"
+    return ""
+
+
 def channel_guides() -> Mapping[Channel, tuple[GuideStep, ...]]:
     """Every channel's connect steps, by channel: a module's `GUIDE`, beside its `WIRE`.
 
@@ -401,17 +440,9 @@ def channel_guides() -> Mapping[Channel, tuple[GuideStep, ...]]:
             msg = f"{module.__name__} declares connect steps and no wire they could set up"
             raise ChannelRegistryError(msg)
         steps = tuple(guide)
-        wanted = (*wire.tenant_fields, *(wire.secret_parts or (SECRET_ASK,)))
-        forms = [one.key for one in steps if tuple(one.asks) == wanted]
-        stray = sorted(
-            {ask for one in steps if tuple(one.asks) != wanted for ask in one.asks}
-            - {EVENTS_ADDRESS_ASK}
-        )
-        if len(forms) != 1 or stray:
-            msg = (
-                f"{wire.channel}'s steps hold {len(forms)} form(s) and ask for {stray}, and its "
-                f"record takes {list(wanted)}. {A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE}"
-            )
+        problem = guide_problem(steps, wire)
+        if problem:
+            msg = f"{wire.channel}'s steps {problem}. {A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE}"
             raise ChannelRegistryError(msg)
         found[wire.channel] = steps
     return MappingProxyType(found)
@@ -430,6 +461,8 @@ class Arrived:
 
     headers: Mapping[str, str]
     body: bytes = field(repr=False)
+    #: The record's identifiers, for a wire whose check depends on how the record is set up.
+    tenant: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
