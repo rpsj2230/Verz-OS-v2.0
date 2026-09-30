@@ -72,7 +72,15 @@ whether or not anything waits on them, so asking cannot learn whether an approva
 that reads one returns `Received.press` beside an event of its own, which `receive` claims as it
 claims a message, so a replayed press is refused by the database before anything reads its value.
 
+**A bound sender's address is kept as their message arrives (M10.3.5).** Every accepted message
+from a bound sender, and the code that binds one, offers the sender's identity to the
+`AddressBook`, which keeps it on the binding it is the fingerprint of where the channel keeps
+addresses at all. That is how an approval card can reach a person the moment it is raised
+(needs-rupash 118), and how a binding made before addresses were kept gains one: the next time its
+person writes.
+
 Task ids: M3.2.2, M3.9.8, M10.2.1, M10.2.6, M10.3.3, M10.6.1, M10.6.3, M1.8.5, M10.7.1, M10.2.3
+Task ids: M10.3.5
 """
 
 from __future__ import annotations
@@ -291,6 +299,19 @@ class ChatBinder(Protocol):
 
     async def redeem(self, event: ChannelEvent, text: str, *, now: datetime) -> Redeemed:
         """Bind this event's sender with the code in `text`, or say why nothing was bound."""
+        ...
+
+
+class AddressBook(Protocol):
+    """Where a bound person's own address is kept when a verified event from them arrives.
+
+    `brain.ops.binding_store.StoredAddresses`. Told the channel and the identity the event came
+    from, and nothing about what it said; the store decides whether that channel keeps addresses
+    and keeps one only on the binding it is the fingerprint of (needs-rupash 118).
+    """
+
+    async def remember(self, channel: Channel, identity: str) -> bool:
+        """Keep this identity as its binding's address; True when a row changed."""
         ...
 
 
@@ -521,13 +542,16 @@ async def reply_for(
     now: datetime,
     binder: ChatBinder | None = None,
     offerer: ApprovalOfferer | None = None,
+    addresses: AddressBook | None = None,
 ) -> tuple[Outgoing, ...] | None:
     """What to send back to an accepted message: None when nothing on this install answers it,
     and nothing at all for a shared conversation's message that was not for the bot.
 
     A sender bound to nobody may be binding: a message in a conversation they alone read is
     offered to `binder` first (M1.8.5). Otherwise they are sent the unrecognised prompt, once and
-    to them alone (M10.3.3). A bound sender's decision word is `offerer`'s, or with none wired is
+    to them alone (M10.3.3). A bound sender's own address is offered to `addresses` on every message
+    and on the code that binds them, which is how a binding made before addresses were kept gains
+    one (M10.3.5). A bound sender's decision word is `offerer`'s, or with none wired is
     told `DECIDE_WHERE_TOLD` alone, in a conversation only they read (M10.7.1). Any other message
     from a bound sender is the answerer's; with none wired the caller records `not_answerable`.
     """
@@ -548,6 +572,8 @@ async def reply_for(
         private = conversation is None or not conversation.shared
         if binder is not None and private:
             redeemed = await binder.redeem(event, event.text.strip(), now=now)
+            if redeemed is Redeemed.BOUND and addresses is not None:
+                await addresses.remember(event.channel, event.channel_identity)
             if redeemed is not Redeemed.NOT_A_CODE:
                 told = LINKED_TOLD if redeemed is Redeemed.BOUND else CODE_REFUSED_TOLD
                 return (
@@ -566,6 +592,8 @@ async def reply_for(
                 text=Unrecognised(channel=event.channel).prompt,
             ),
         )
+    if addresses is not None:
+        await addresses.remember(event.channel, event.channel_identity)
     if is_decision_reply(inbound.address.question):
         # Never the answerer's, and never a decision. See `A_MESSAGE_NEVER_DECIDES_AN_APPROVAL`.
         if offerer is not None:

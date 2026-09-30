@@ -1314,6 +1314,11 @@ class LarkWire:
         """Where a reply goes to replace the card in this message."""
         return _address(EDIT_ADDRESS, message_id)
 
+    def person_address(self, identity: str) -> str:
+        """A person's own chat with the bot: `user:`, which `card_request` posts to by open id in
+        the body and names only as `receive_id_type` in the URL."""
+        return _address(SENDER_ADDRESS, identity)
+
     def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:
         """Lark's callback answer: a toast, and the card replaced when `closed` says with what."""
         answer: dict[str, Any] = {

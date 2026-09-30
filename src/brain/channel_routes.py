@@ -88,7 +88,7 @@ that already names this install's public address, as Lark's is; both are empty f
 none, so the console draws a flow only where one was declared.
 
 Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5, M10.5.6, M10.5.1
-Task ids: M10.2.3, M10.2.4, M10.7.1
+Task ids: M10.2.3, M10.2.4, M10.7.1, M10.3.5
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ from brain.install import InstallError, value_of
 from brain.install_routes import settings_of
 from brain.notification_routes import mail_password_of
 from brain.notification_routes import transport_of as mail_transport_of
-from brain.ops.binding_store import StoredBinder, StoredBindings
+from brain.ops.binding_store import StoredAddresses, StoredBinder, StoredBindings
 from brain.ops.channel_store import (
     ChannelRecord,
     ChannelRecords,
@@ -704,6 +704,19 @@ def binder_of(request: Request) -> ChatBinder | None:
     return None if sessions is None else StoredBinder(sessions, trace_id=trace_of_request())
 
 
+def addresses_of(request: Request) -> StoredAddresses | None:
+    """`app.state.channel_addresses` when a test put one there, `auth.principal_identity`'s kept
+    Lark addresses through `brain.ops.binding_store.StoredAddresses` otherwise, and None with no
+    database, which keeps no address and sends no card on a raise (needs-rupash 118)."""
+    found = getattr(request.app.state, "channel_addresses", None)
+    if found is not None:
+        # A cast at the boundary of a test's state, where proving the structural match buys
+        # nothing: a stand-in answers `remember` and `addressed` as the store does.
+        return cast("StoredAddresses", found)
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredAddresses(sessions)
+
+
 def _approval_cards(request: Request) -> object | None:
     """`app.state.approval_cards` when a test put one there; otherwise the cards over this
     process's gate, directory and suspension store, for this request's trace; otherwise None.
@@ -993,6 +1006,7 @@ async def answer_receipt(
             answerer=answerer_of(request),
             binder=binder_of(request),
             offerer=approval_cards_of(request),
+            addresses=addresses_of(request),
             now=now,
         )
     except Exception as exc:

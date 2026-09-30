@@ -35,7 +35,13 @@ the first is what `a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alo
 is awaited as it stands rather than copied, then the ceiling is asked of the install's one send
 step, and the card clause is the first check here, which names M10.7.4 as well.
 
-Task ids: M10.2.3, M10.2.4, M10.7.1, M10.7.4
+**A card sent when an approval is raised is proved over the install's own address store.** The
+bindings `bound` writes carry no address, as every binding made before `0166` does; the approver
+and the bystander each write once to the bot, which is when an address is kept, and the second
+approver does not. Then the approval is raised and `brain.approval_cards.send_raised`, the function
+the promotion route schedules, is run on the check's application. See the fourth check.
+
+Task ids: M10.2.3, M10.2.4, M10.7.1, M10.7.4, M10.2.7, M10.3.5
 """
 
 from __future__ import annotations
@@ -634,3 +640,58 @@ async def group_chat_and_channel_policy_hold_on_one_install(h: Harness) -> None:
         raise CheckFailedError(
             "a reply above Lark's ceiling was not recorded as one it cannot carry"
         )
+
+
+# ------------------------------------------------------------------ 4. sent when raised
+@check(
+    leaves=("M10.2.7", "M10.3.5"),
+    sentence=(
+        "Bound in Lark with no address kept, an approver and a bystander each write once to the "
+        "Brain and their addresses are kept; another approver does not write. When a promotion is "
+        "raised, its card is sent to the first approver's own chat and to nobody else, and the "
+        "address is in no request's URL."
+    ),
+)
+async def a_raised_approval_is_sent_to_its_approver_s_kept_address(h: Harness) -> None:
+    from sqlalchemy import text
+
+    from brain.approval_cards import send_raised
+    from brain.gate.admission import admit_card_press
+    from brain.gate.context import Channel
+    from brain.gate.suspension_store import StoredSuspensions
+
+    made = await desk(h)
+
+    async def kept(principal: str) -> bool:
+        found = await h.execute(
+            text(
+                "SELECT count(*) FROM auth.principal_identity WHERE principal_id = :p "
+                "AND channel = 'lark' AND deleted_at IS NULL AND channel_address IS NOT NULL"
+            ).bindparams(p=principal)
+        )
+        return bool(found.scalar_one())
+
+    if any([await kept(one) for one in (made.approver, made.second, made.bystander)]):
+        raise CheckFailedError("a binding made with no address was found holding one")
+    for writing in (made.approver, made.bystander):
+        await made.says(writing, "approvals")
+    if not await kept(made.approver) or not await kept(made.bystander):
+        raise CheckFailedError("a bound person who wrote to the Brain had no address kept")
+    if await kept(made.second):
+        raise CheckFailedError("an address was kept for somebody who never wrote to the Brain")
+
+    card, _ = await made.promotion()
+    reach = admit_card_press(await h.reach(made.approver), Channel.LARK, switched_on=True)
+    raised = await StoredSuspensions(h.sessions).reading_as(reach, h.now).suspension(card)
+    if raised is None:
+        raise CheckFailedError("the approver could not read the promotion that was raised")
+    before = len(made.lark.sent)
+    await send_raised(made.chat.request(), raised)
+    sent = made.lark.sent[before:]
+    posted = made.lark.posted()[-len(sent) :] if sent else []
+    if [(kind, where) for kind, where, _, _ in posted] != [
+        ("open_id", made.ids[made.approver])
+    ] or list(_cards(posted)) != [card]:
+        raise CheckFailedError("the card was not sent to the approver's kept address alone")
+    if any(address in one.url for one in sent for address in made.ids.values()):
+        raise CheckFailedError("a Lark address was put in a request's URL")
