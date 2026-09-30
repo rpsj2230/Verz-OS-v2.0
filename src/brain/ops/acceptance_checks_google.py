@@ -539,7 +539,9 @@ class _SearchConsole:
     other_site: str
     clicks_on: str
     clicks: int
+    range_clicks: int = 0
     report_calls: int = 0
+    ranges: list[tuple[str, str]] = field(default_factory=list)
     tokens: list[bytes] = field(default_factory=list, repr=False)
     headers: list[dict[str, str]] = field(default_factory=list, repr=False)
 
@@ -588,10 +590,14 @@ class _SearchConsole:
         if not url.endswith("/searchAnalytics/query"):
             return SourceAnswer(status=404, headers={}, body=b"{}")
         self.report_calls += 1
-        dimension = json.loads(body)["dimensions"][0]
+        asked = json.loads(body)
+        dimension = (asked.get("dimensions") or [None])[0]
         rows: list[dict[str, Any]] = []
         if dimension == "date":
             rows = [{"keys": [self.clicks_on], "clicks": self.clicks, "impressions": self.clicks}]
+        elif dimension is None:
+            self.ranges.append((asked["startDate"], asked["endDate"]))
+            rows = [{"clicks": self.range_clicks, "impressions": self.range_clicks}]
         answered = {"rows": rows} if rows else {}
         return SourceAnswer(status=200, headers={}, body=json.dumps(answered).encode())
 
@@ -600,10 +606,9 @@ class _SearchConsole:
     leaves=("M11.7.2",),
     sentence=(
         "A Search Console site made up for the check is connected and its name read by the worker "
-        "from the account's site list with a token its key file bought. Asked on Ask, readers "
-        "without the site are told what a missing site is told, the granted reader is told the "
-        "clicks for the last 28 days from four calls made when asked, and that figure is in no "
-        "table."
+        "from the account's site list with a token its key file bought. On Ask, and through its "
+        "figure tool for last month, readers without the site get what a missing site gets, the "
+        "granted reader gets clicks read when asked, and no figure is in any table."
     ),
 )
 async def a_search_console_site_answers_its_figures_live_and_keeps_none(h: Harness) -> None:
@@ -621,9 +626,12 @@ async def a_search_console_site_answers_its_figures_live_and_keeps_none(h: Harne
     name = f"{h.word().lower()}.example"
     site = f"{search_console.DOMAIN_PROPERTY_PREFIX}{name}"
     canary = 10**14 + secrets.randbelow(9 * 10**14)
+    ranged = 10**14 + secrets.randbelow(9 * 10**14)
     clicked = (h.now.date() - timedelta(days=2)).isoformat()
     other = f"{search_console.DOMAIN_PROPERTY_PREFIX}{h.word().lower()}.example"
-    google = _SearchConsole(site=site, other_site=other, clicks_on=clicked, clicks=canary)
+    google = _SearchConsole(
+        site=site, other_site=other, clicks_on=clicked, clicks=canary, range_clicks=ranged
+    )
     keys = _KeyFiles(a_key_file())
     connection = _connection(
         h,
@@ -673,6 +681,26 @@ async def a_search_console_site_answers_its_figures_live_and_keeps_none(h: Harne
     ):
         raise CheckFailedError("the site's figures were not read from Google when they were asked")
 
-    # Nothing the report returned was kept anywhere.
-    if await _search(h, str(canary)):
+    # The figure tool, as a workflow's step calls it: last month, read live, at the caller's reach.
+    from brain.connectors.date_range import RangeRequest, window_of
+    from brain.knowledge.connector_figures import FIGURE_TOOL_NAMES
+
+    tool = _figure_tool(h, connection, keys, google, FIGURE_TOOL_NAMES[source])
+    for reader in (without, elsewhere):
+        found = await tool(
+            RangeRequest(period=TOOL_PERIOD), entitlement=await _reach(h, reader), now=h.now
+        )
+        if found.records:
+            raise CheckFailedError("the figure tool read a site for a reader not granted it")
+    found = await tool(
+        RangeRequest(period=TOOL_PERIOD), entitlement=await _reach(h, granted), now=h.now
+    )
+    period = window_of(TOOL_PERIOD, today=h.now.date())
+    if google.ranges != [(period.start.isoformat(), period.end.isoformat())]:
+        raise CheckFailedError("the site's figure tool did not ask for the range it was given")
+    if [one.model_dump().get("clicks") for one in found.records] != [str(ranged)]:
+        raise CheckFailedError("the site's figure tool did not hand back the range's clicks")
+
+    # Nothing either report returned was kept anywhere.
+    if await _search(h, str(canary)) or await _search(h, str(ranged)):
         raise CheckFailedError("a search figure read live was found in a table")

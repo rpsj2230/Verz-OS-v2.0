@@ -9,8 +9,8 @@ token per read (`brain.connectors.google_token`), a minimal index of the one thi
 **This connector keeps a minimal index and reads every value live.** What the worker keeps is the
 one site it was connected to: its address, the name a person asks for it by, the permission the
 service account holds on it, and the department its readers are in. Clicks, impressions, the top
-query, the top page and the sitemaps' errors and warnings are read from the Search Console API
-while the asker waits, and are never stored, embedded or logged.
+queries and pages and the sitemaps' errors and warnings are read from the Search Console API when
+they are asked for, and are never stored, embedded or logged.
 
 **The index is read from the account's site list, and only the connected site is kept.** A service
 account can be added to several properties, and the list is the one call that says both that the
@@ -18,22 +18,23 @@ connected site is there and with what permission. Every other site it names is d
 row is built, which is why the recorded list carries the canary as another site's address. See
 `ONE_SITE_IS_KEPT_WHATEVER_THE_ACCOUNT_CAN_SEE`.
 
-**A report here is four calls, made at once.** The totals by day over the last 90 days, the top
-query and the top page over the last 28, and the site's sitemaps, which is where the API reports
-indexing errors and warnings. They are sent together, so a question waits for the slowest of them
-after one token exchange, and a report any of whose calls did not answer is not answered
-(`declaration.A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER`).
+**A question's report is two calls, and a figure tool's is four, each made at once.** On Ask the
+day-by-day totals over the last 90 days (summed into the last 7, 28 and 90 days, each ending
+yesterday) and the site's sitemaps, which is where the API reports indexing errors and warnings.
+Through `search_console.read_performance`, for the one range a workflow or an agent's step names
+(`brain.connectors.date_range`, within sixteen months): that range's clicks and impressions, its
+ten most clicked queries and its ten most clicked pages in the order Google gave, and the sitemaps.
+They are sent together, so a read waits for the slowest after one token exchange, and a report any
+of whose calls did not answer is not answered
+(`declaration.A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER`). See
+`THE_RANGES_ARE_THREE_AND_ONE_CALL_ANSWERS_ALL_THREE` and
+`THE_TOP_TEN_ARE_GOOGLE_S_ORDER_FOR_THE_RANGE_ASKED`.
 
-**The date range is named in the question, from a closed set of three, each ending yesterday.**
-`last_7_days`, `last_28_days` and `last_90_days`: clicks and impressions for each are summed from
-the one day-by-day call, so three ranges cost one call. The top query and top page are for the
-last 28 days, which is the range Search Console itself opens on. See
-`THE_RANGES_ARE_THREE_AND_ONE_CALL_ANSWERS_ALL_THREE`. **This narrows the leaf in three ways, and
-each is the owner's question rather than this module's decision**: an arbitrary range is not
-askable; queries and pages are the one top query and the one top page for 28 days, not a list for
-any range, because a question's answer is one field; and indexing issues are the sitemaps' own
-error and warning counts, because the API exposes no Page indexing report (only per-address URL
-inspection, one call per page, which no question's budget holds).
+**Indexing issues are the sitemaps' own counts, and that is Google's limit, not this module's
+choice.** The Search Console API exposes no Page indexing report; the one per-page source is URL
+inspection, one call per address, which no question's budget holds. So the indexing issues read
+are the errors and warnings Search Console reports for each submitted sitemap, and whether that is
+enough is put to the owner as needs-rupash 133.
 
 **The site's record is named by a digest of its address.** A record id's grammar has no room for a
 colon or a slash, so the index keeps the site under a digest of its Search Console name and keeps
@@ -128,8 +129,8 @@ ONE_SITE_IS_KEPT_WHATEVER_THE_ACCOUNT_CAN_SEE: Final = (
 THE_RANGES_ARE_THREE_AND_ONE_CALL_ANSWERS_ALL_THREE: Final = (
     "A question names its range from a closed set: the last 7, 28 or 90 days, each ending "
     "yesterday. Clicks and impressions for all three are summed from one call reading the last 90 "
-    "days day by day, and the top query and top page are for the last 28 days, so a report is the "
-    "same four calls whichever range is asked about. A range outside the three is not a field."
+    "days day by day, so a question's report is that call and the sitemaps whichever range it "
+    "names. Any other range is a figure tool's argument, never a question's."
 )
 
 #: Why a report is only ever asked of the connected site.
@@ -145,6 +146,14 @@ A_SITE_IS_NAMED_BY_A_DIGEST_OF_ITS_ADDRESS: Final = (
     "slashes, cannot be one. The index names the site by a digest of its Search Console name, "
     "which no two sites share, and keeps the name a person asks by beside it; the report is built "
     "from the connection's own site, never from an id."
+)
+
+#: Why the top queries and pages are ten, in Google's order, for the range a tool asked for.
+THE_TOP_TEN_ARE_GOOGLE_S_ORDER_FOR_THE_RANGE_ASKED: Final = (
+    "The owner asked for a site's queries and pages, in the plural, for a named date range. A "
+    "figure tool asks Search Console for the ten most clicked of each over the window it was "
+    "given and hands them back in the order Google gave, each with its clicks, so the first is "
+    "the most clicked and nothing is re-ranked here."
 )
 
 #: Why a figure that is not a count is refused.
@@ -216,9 +225,6 @@ RANGES: Final[tuple[NamedWindow, ...]] = (
     NamedWindow("last_90_days", 90),
 )
 
-#: The range the top query and the top page are read over.
-TOP_RANGE: Final = RANGES[1]
-
 #: The longest range, which is how far back the one day-by-day call reads.
 LONGEST: Final = max(RANGES, key=lambda one: one.days)
 
@@ -234,14 +240,43 @@ def figure_field(label: str, named: str) -> str:
 #: The counts summed per range, by the name Search Console gives them.
 COUNTS: Final[tuple[str, ...]] = ("clicks", "impressions")
 
-#: Every figure a report can answer.
+#: Every figure a question on Ask can be answered with: each count over each named range, and the
+#: sitemaps' own problems. The top queries and pages are a list, which no one field answers, so they
+#: are a figure tool's (`RANGE_FIGURE_FIELDS`).
 FIGURE_FIELDS: Final[tuple[str, ...]] = (
     *(figure_field(label, one.name) for label in COUNTS for one in RANGES),
-    figure_field("top_query", TOP_RANGE.name),
-    figure_field("top_page", TOP_RANGE.name),
     "sitemap_errors",
     "sitemap_warnings",
 )
+
+#: How many queries and pages a figure tool hands back, most clicked first: Search Console's own
+#: performance report opens on ten rows. See `THE_TOP_TEN_ARE_GOOGLE_S_ORDER_FOR_THE_RANGE_ASKED`.
+TOP_ROWS: Final = 10
+
+
+def top_field(label: str, rank: int) -> str:
+    """The field one ranked query or page is answered as: `top_query_1`, and its clicks beside."""
+    return f"{label}_{rank}"
+
+
+#: Every figure a figure tool answers for the window it was asked for.
+RANGE_FIGURE_FIELDS: Final[tuple[str, ...]] = (
+    "start_date",
+    "end_date",
+    *COUNTS,
+    *(
+        name
+        for label in ("top_query", "top_page")
+        for rank in range(1, TOP_ROWS + 1)
+        for name in (top_field(label, rank), f"{top_field(label, rank)}_clicks")
+    ),
+    "sitemap_errors",
+    "sitemap_warnings",
+)
+
+#: What each kind of report asks, in order: a question's two calls, a figure tool's four.
+ASK_CALLS: Final = ("days", "sitemaps")
+RANGE_CALLS: Final = ("totals", "queries", "pages", "sitemaps")
 
 _WHOLE_RE: Final = re.compile(r"^[0-9]{1,18}$")
 _DAY_RE: Final = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
@@ -428,9 +463,9 @@ def manifest(
             ToolDeclaration(
                 name="search_console.read_performance",
                 description=(
-                    "Read the connected site's clicks and impressions for the last 7, 28 or 90 "
-                    "days, its top query and page, and its sitemaps' errors and warnings, live "
-                    "from Search Console. Nothing is stored."
+                    "Read the connected site's clicks, impressions, top ten queries and top ten "
+                    "pages for any range within the last sixteen months, and its sitemaps' errors "
+                    "and warnings, live from Search Console. Nothing is stored."
                 ),
                 entity=ENTITY_SITE,
                 identity_mode=IdentityMode.SERVICE,
@@ -554,13 +589,15 @@ def _assert_site(entity: str) -> None:
 
 
 # ------------------------------------------------------------------------ the report
-def _query(start: date, end: date, dimension: str, rows: int) -> bytes:
-    body = {
+def _query(start: date, end: date, dimension: str | None, rows: int) -> bytes:
+    """One search: its days, the one dimension its rows are by (none for totals), and its rows."""
+    body: dict[str, Any] = {
         "startDate": start.isoformat(),
         "endDate": end.isoformat(),
-        "dimensions": [dimension],
         "rowLimit": rows,
     }
+    if dimension is not None:
+        body["dimensions"] = [dimension]
     return json.dumps(body, separators=(",", ":")).encode("utf-8")
 
 
@@ -578,30 +615,31 @@ def _count(value: Any) -> int:
     raise SearchConsoleShapeError(A_COUNT_IS_A_NUMBER)
 
 
-def _top(body: Any) -> str | None:
-    """The first row's one key, which Google orders by clicks, or None when there is no row."""
-    rows = body.get("rows", ())
-    if not rows:
-        return None
-    key = rows[0]["keys"][0]
-    if not isinstance(key, str) or not key:
-        raise SearchConsoleShapeError(A_COUNT_IS_A_NUMBER)
-    return key[:MAX_LABEL_CHARS]
+def _sitemap_counts(sitemaps: Any) -> dict[str, str]:
+    """The sitemaps' own errors and warnings, summed, or nothing when the site has none."""
+    listed = sitemaps.get("sitemap", ())
+    if not listed:
+        return {}
+    return {
+        "sitemap_errors": str(sum(_count(one["errors"]) for one in listed)),
+        "sitemap_warnings": str(sum(_count(one["warnings"]) for one in listed)),
+    }
 
 
 def figures_of(
     answers: tuple[Any, ...], *, source_id: str, today: date, fetched_at: str
 ) -> TypedResult[SourceRecord]:
-    """The four answers as one record: the site's id and every figure the answers carried.
+    """A question's two answers as one record: the site's id, each count in each range, and the
+    sitemaps' problems.
 
     The day-by-day totals are summed into each range by the day each row names, counting back from
     `today`; a range with no row contributes nothing rather than a nought. A reply this does not
     read is refused whole.
     """
-    if len(answers) != 4:
-        msg = "a Search Console report is four calls"
+    if len(answers) != len(ASK_CALLS):
+        msg = "a question's Search Console report is two calls"
         raise SearchConsoleShapeError(msg)
-    days, queries, pages, sitemaps = answers
+    days, sitemaps = answers
     figures: dict[str, str] = {}
     try:
         rows = days.get("rows", ())
@@ -619,14 +657,55 @@ def figures_of(
                         for label in COUNTS:
                             sums[figure_field(label, one.name)] += counts[label]
             figures.update({name: str(value) for name, value in sums.items()})
-        for label, body in (("top_query", queries), ("top_page", pages)):
-            top = _top(body)
-            if top is not None:
-                figures[figure_field(label, TOP_RANGE.name)] = top
-        listed = sitemaps.get("sitemap", ())
-        if listed:
-            figures["sitemap_errors"] = str(sum(_count(one["errors"]) for one in listed))
-            figures["sitemap_warnings"] = str(sum(_count(one["warnings"]) for one in listed))
+        figures.update(_sitemap_counts(sitemaps))
+    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+        msg = "the report is not the shape Google documents"
+        raise SearchConsoleShapeError(msg) from None
+    return normalise(
+        ENTITY_SITE, ({"id": source_id, **figures},), source=SEARCH_CONSOLE, fetched_at=fetched_at
+    )
+
+
+def _ranked(body: Any, label: str) -> dict[str, str]:
+    """The rows of a search by query or by page, in the order Google gave them, as ranked fields.
+
+    Google orders a search's rows by clicks, most first, and the order is kept as it came: the
+    first row is `<label>_1`, and its clicks are `<label>_1_clicks`. A row with no key is refused.
+    """
+    ranked: dict[str, str] = {}
+    for rank, row in enumerate(body.get("rows", ())[:TOP_ROWS], start=1):
+        key = row["keys"][0]
+        if not isinstance(key, str) or not key:
+            msg = "a ranked row names no query or page"
+            raise SearchConsoleShapeError(msg)
+        ranked[top_field(label, rank)] = key[:MAX_LABEL_CHARS]
+        ranked[f"{top_field(label, rank)}_clicks"] = str(_count(row["clicks"]))
+    return ranked
+
+
+def range_figures_of(
+    answers: tuple[Any, ...], *, source_id: str, window: DateWindow, fetched_at: str
+) -> TypedResult[SourceRecord]:
+    """A figure tool's four answers as one record: the window's days, its clicks and impressions,
+    its top ten queries and top ten pages in Google's order, and the sitemaps' problems."""
+    if len(answers) != len(RANGE_CALLS):
+        msg = "a figure tool's Search Console report is four calls"
+        raise SearchConsoleShapeError(msg)
+    totals, queries, pages, sitemaps = answers
+    figures: dict[str, str] = {
+        "start_date": window.start.isoformat(),
+        "end_date": window.end.isoformat(),
+    }
+    try:
+        rows = totals.get("rows", ())
+        if len(rows) > 1:
+            msg = "a search with no dimension is one row of totals"
+            raise SearchConsoleShapeError(msg)
+        for row in rows:
+            figures.update({label: str(_count(row[label])) for label in COUNTS})
+        figures.update(_ranked(queries, "top_query"))
+        figures.update(_ranked(pages, "top_page"))
+        figures.update(_sitemap_counts(sitemaps))
     except (AttributeError, KeyError, IndexError, TypeError, ValueError):
         msg = "the report is not the shape Google documents"
         raise SearchConsoleShapeError(msg) from None
@@ -636,7 +715,8 @@ def figures_of(
 
 
 class SearchConsoleReport:
-    """The site's figures for every named range, read by four calls made at once."""
+    """The site's figures: for a question, every named range in two calls; for a figure tool, one
+    window in four, made at once."""
 
     def entities(self) -> tuple[str, ...]:
         return (ENTITY_SITE,)
@@ -654,24 +734,28 @@ class SearchConsoleReport:
         today: date,
         window: DateWindow | None,
     ) -> tuple[ReportCall, ...]:
-        """The four calls, for the connected site only. See
-        `A_REPORT_READS_ONLY_THE_CONNECTED_SITE`. No figure tool reads this source yet, so no
-        window is ever handed in."""
-        del window
+        """The calls, for the connected site only (`A_REPORT_READS_ONLY_THE_CONNECTED_SITE`).
+
+        With no window, a question's two: the last 90 days day by day, and the sitemaps. With a
+        window, a figure tool's four: the window's totals, its top ten queries, its top ten pages,
+        and the sitemaps.
+        """
         _assert_site(entity)
         connected = SearchConsoleConnection.from_settings(settings).site
         if source_id != site_id_of(connected):
             raise SearchConsoleShapeError(A_REPORT_READS_ONLY_THE_CONNECTED_SITE)
         base = f"{SEARCH_CONSOLE_API_URL}/sites/{_encoded(connected)}"
         query = f"{base}/searchAnalytics/query"
-        yesterday = today - timedelta(days=1)
+        sitemaps = ReportCall(url=f"{base}/sitemaps")
+        if window is None:
+            yesterday = today - timedelta(days=1)
+            days = _query(LONGEST.first_day(today), yesterday, "date", DAY_ROWS)
+            return (ReportCall(url=query, body=days), sitemaps)
         return (
-            ReportCall(
-                url=query, body=_query(LONGEST.first_day(today), yesterday, "date", DAY_ROWS)
-            ),
-            ReportCall(url=query, body=_query(TOP_RANGE.first_day(today), yesterday, "query", 1)),
-            ReportCall(url=query, body=_query(TOP_RANGE.first_day(today), yesterday, "page", 1)),
-            ReportCall(url=f"{base}/sitemaps"),
+            ReportCall(url=query, body=_query(window.start, window.end, None, 1)),
+            ReportCall(url=query, body=_query(window.start, window.end, "query", TOP_ROWS)),
+            ReportCall(url=query, body=_query(window.start, window.end, "page", TOP_ROWS)),
+            sitemaps,
         )
 
     def interpret(
@@ -684,13 +768,17 @@ class SearchConsoleReport:
         window: DateWindow | None,
         fetched_at: str,
     ) -> PageReply:
-        """The four answers as the site's figures, counted back from the day they were asked."""
-        del window
+        """The answers as the site's figures: counted back from the day asked for a question, or
+        for the window a figure tool named."""
         _assert_site(entity)
-        return PageReply(
-            call=CallOutcome.OK,
-            rows=figures_of(answers, source_id=source_id, today=today, fetched_at=fetched_at),
+        rows = (
+            figures_of(answers, source_id=source_id, today=today, fetched_at=fetched_at)
+            if window is None
+            else range_figures_of(
+                answers, source_id=source_id, window=window, fetched_at=fetched_at
+            )
         )
+        return PageReply(call=CallOutcome.OK, rows=rows)
 
 
 # ------------------------------------------------- connecting from the console (M11.7.2)
@@ -852,8 +940,9 @@ CONNECTOR: Final = ConnectorDeclaration(
         recorded=(
             "SC-200-sites",
             "SC-200-days",
-            "SC-200-top-query",
-            "SC-200-top-page",
+            "SC-200-totals",
+            "SC-200-top-queries",
+            "SC-200-top-pages",
             "SC-200-sitemaps",
             "SC-403-site",
             "SC-429-query",

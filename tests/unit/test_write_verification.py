@@ -272,8 +272,9 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     # A report's calls and every refusal hold no site list, and a list without the connected site
     # never proves it gone: see `search_console.A_SITE_LIST_CANNOT_PROVE_ABSENCE`.
     ("search_console", "SC-200-days"): Verification.INCONCLUSIVE,
-    ("search_console", "SC-200-top-query"): Verification.INCONCLUSIVE,
-    ("search_console", "SC-200-top-page"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-totals"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-queries"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-pages"): Verification.INCONCLUSIVE,
     ("search_console", "SC-200-sitemaps"): Verification.INCONCLUSIVE,
     ("search_console", "SC-403-site"): Verification.INCONCLUSIVE,
     ("search_console", "SC-429-query"): Verification.INCONCLUSIVE,

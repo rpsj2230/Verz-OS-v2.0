@@ -9,10 +9,11 @@ Task ids: M11.7.2
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, Final
 
 from brain.connectors import search_console
+from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import CallOutcome, classify
 from tests.fixtures.cassettes._types import (
@@ -56,6 +57,11 @@ def _day(back: int, clicks: int, impressions: int) -> dict[str, Any]:
         "ctr": clicks / impressions,
         "position": 8.4,
     }
+
+
+def _ranked(key: str, clicks: int) -> dict[str, Any]:
+    """One row of a search by query or by page."""
+    return {"keys": [key], "clicks": clicks, "impressions": clicks * 20, "ctr": 0.05, "position": 4}
 
 
 def _error(code: int, status: str, message: str) -> dict[str, object]:
@@ -102,23 +108,15 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         reference=QUERY_DOC,
     ),
     Cassette(
-        cid="SC-200-top-query",
+        cid="SC-200-totals",
         source=SOURCE,
-        request=f"{QUERY} dimensions=query",
+        request=f"{QUERY} no dimension",
         status=200,
         body={
-            "rows": [
-                {
-                    "keys": ["example widgets"],
-                    "clicks": 40,
-                    "impressions": 900,
-                    "ctr": 0.044,
-                    "position": 3.1,
-                }
-            ],
+            "rows": [{"clicks": 1840, "impressions": 52000, "ctr": 0.035, "position": 9.1}],
             "responseAggregationType": "byProperty",
         },
-        why="The top query over 28 days: Google orders rows by clicks, and one row is asked for.",
+        why="A search with no dimension is one row of the window's totals, with no keys.",
         kind=Kind.READ,
         tools=("search_console.read_performance",),
         expect=Expect.ANSWERED,
@@ -126,23 +124,36 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         reference=QUERY_DOC,
     ),
     Cassette(
-        cid="SC-200-top-page",
+        cid="SC-200-top-queries",
+        source=SOURCE,
+        request=f"{QUERY} dimensions=query",
+        status=200,
+        body={
+            "rows": [_ranked(f"example query {rank}", 400 - rank * 30) for rank in range(1, 11)],
+            "responseAggregationType": "byProperty",
+        },
+        why="The ten most clicked queries in the window, most first, which is Google's own order "
+        "for a search's rows.",
+        kind=Kind.READ,
+        tools=("search_console.read_performance",),
+        expect=Expect.ANSWERED,
+        origin=DOCUMENTED,
+        reference=QUERY_DOC,
+    ),
+    Cassette(
+        cid="SC-200-top-pages",
         source=SOURCE,
         request=f"{QUERY} dimensions=page",
         status=200,
         body={
             "rows": [
-                {
-                    "keys": ["https://www.example.com/widgets/"],
-                    "clicks": 35,
-                    "impressions": 700,
-                    "ctr": 0.05,
-                    "position": 2.7,
-                }
+                _ranked(f"https://www.example.com/page-{rank}/", 300 - rank * 20)
+                for rank in range(1, 11)
             ],
             "responseAggregationType": "byPage",
         },
-        why="The top page over 28 days, aggregated by page as Google does for a page dimension.",
+        why="The ten most clicked pages in the window, aggregated by page as Google does for a "
+        "page dimension, most first.",
         kind=Kind.READ,
         tools=("search_console.read_performance",),
         expect=Expect.ANSWERED,
@@ -233,12 +244,13 @@ RATE_LIMIT: Final = RateLimit(
     False,
 )
 
-#: Where each kind of report call sits among the four `request_for` builds.
-SLOTS: Final = {"dimensions=date": 0, "dimensions=query": 1, "dimensions=page": 2, "/sitemaps": 3}
+#: Where each kind of report call sits among the calls `request_for` builds: a question's two, and a
+#: figure tool's four.
+ASK_SLOTS: Final = {"dimensions=date": 0, "/sitemaps": 1}
+RANGE_SLOTS: Final = {"no dimension": 0, "dimensions=query": 1, "dimensions=page": 2}
 
-
-def _slot(request: str) -> int:
-    return next(index for marker, index in SLOTS.items() if marker in request)
+#: The window the recorded figure-tool searches were asked for.
+ONE_RANGE: Final = DateWindow(start=date(2019, 5, 1), end=date(2019, 5, 28))
 
 
 def replay(recorded: Cassette) -> Replayed:
@@ -264,19 +276,27 @@ def replay(recorded: Cassette) -> Replayed:
     call = classify(status=recorded.status)
     if call is not CallOutcome.OK:
         return Replayed(_failed(call))
-    answers: list[Any] = [{}, {}, {}, {}]
-    answers[_slot(recorded.request)] = recorded.body
+    ranged = next(
+        (slot for marker, slot in RANGE_SLOTS.items() if marker in recorded.request), None
+    )
+    answers: list[Any] = [{}] * (4 if ranged is not None else 2)
+    if ranged is not None:
+        answers[ranged] = recorded.body
+    else:
+        answers[next(slot for marker, slot in ASK_SLOTS.items() if marker in recorded.request)] = (
+            recorded.body
+        )
     page = search_console.SearchConsoleReport().interpret(
         search_console.ENTITY_SITE,
-        SITE,
+        search_console.site_id_of(SITE),
         answers=tuple(answers),
         today=ASKED_ON,
-        window=None,
+        window=ONE_RANGE if ranged is not None else None,
         fetched_at=FETCHED_AT,
     )
     assert page.rows is not None
     (row,) = page.rows.records
-    figures = row.model_dump(exclude={"entity", "id"})
+    figures = row.model_dump(exclude={"entity", "id", "start_date", "end_date"})
     return Replayed(Expect.ANSWERED if figures else Expect.ABSENT)
 
 

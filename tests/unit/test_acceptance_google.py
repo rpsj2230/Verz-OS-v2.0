@@ -193,16 +193,17 @@ def test_the_google_check_steps_aside_where_the_install_has_the_property_connect
         ("live", "a connected site's clicks were not told to a reader granted them"),
         ("reach", "a site's figure was told to a reader not granted it"),
         ("every_site", "the worker did not keep the connected site alone from its list"),
+        ("range", "the site's figure tool did not ask for the range it was given"),
     ],
 )
 def test_the_search_console_check_fails_where_the_path_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
-    """Four breaks, one per property: the account made to act as a person, a live reader that never
-    reads, the site's department rule moved to the other department, and the site list kept whole
-    rather than the connected site alone. Each fails the check with its own sentence; the kept
-    figure is the Analytics check's break, over the same search. Delete this and the check can
-    pass with the property gone."""
+    """Five breaks, one per property: the account made to act as a person, a live reader that never
+    reads, the site's department rule moved to the other department, the site list kept whole
+    rather than the connected site alone, and the figure tool's range dropped. Each fails the check
+    with its own sentence; the kept figure is the Analytics check's break, over the same search.
+    Delete this and the check can pass with the property gone."""
     import brain.connectors.google_service_account as google_service_account
     import brain.connectors.search_console as search_console
     import brain.ops.live_records as live_records
@@ -226,6 +227,13 @@ def test_the_search_console_check_fails_where_the_path_is_broken(
             search_console.SearchConsoleConnection,
             "visibility",
             lambda self: Scope.department("acceptance_b"),
+        )
+    elif broken == "range":
+        # The tool's range dropped on the way, and the last 28 days asked for instead.
+        from brain.connectors.date_range import RangeRequest, window_of
+
+        monkeypatch.setattr(
+            RangeRequest, "window", lambda self, *, today: window_of("last 28 days", today=today)
         )
     else:
         # Every site on the account's list kept, the connected one and any other.

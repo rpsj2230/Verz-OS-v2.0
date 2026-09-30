@@ -202,7 +202,9 @@ def search_console_classifications() -> tuple[TableClassification, ...]:
             search_console.SEARCH_CONSOLE,
             search_console.ENTITY_SITE,
             tuple(one.name for one in search_console.SITE_FIELDS),
-            search_console.FIGURE_FIELDS,
+            tuple(
+                dict.fromkeys((*search_console.FIGURE_FIELDS, *search_console.RANGE_FIGURE_FIELDS))
+            ),
         ),
     )
 
@@ -274,6 +276,10 @@ LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
             *google_analytics.FIGURE_FIELDS,
             *google_analytics.RANGE_FIGURE_FIELDS,
         ),
+        search_console.ENTITY_SITE: (
+            *search_console.FIGURE_FIELDS,
+            *search_console.RANGE_FIGURE_FIELDS,
+        ),
     }
 )
 
@@ -283,6 +289,9 @@ UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = MappingProxyType(
     {
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): frozenset(
             google_analytics.RANGE_FIGURE_FIELDS
+        ),
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): frozenset(
+            set(search_console.RANGE_FIGURE_FIELDS) - set(search_console.FIGURE_FIELDS)
         ),
     }
 )

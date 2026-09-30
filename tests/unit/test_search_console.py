@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from brain.connectors import search_console
 from brain.connectors.contract import FetchRequest
+from brain.connectors.date_range import DateWindow, RangeRequest
 from brain.connectors.declaration import KeyScheme, SettingRefusedError
 from brain.connectors.google_token import GOOGLE_TOKEN_URL, checked_scopes
 from brain.connectors.live_read import LiveReply
@@ -38,10 +39,13 @@ from brain.connectors.search_console import (
     ENTITY_SITE,
     FIGURE_FIELDS,
     ONE_SITE_IS_KEPT_WHATEVER_THE_ACCOUNT_CAN_SEE,
+    RANGE_FIGURE_FIELDS,
     RANGES,
     SCOPE,
     SEARCH_CONSOLE_API_URL,
     SITE_SETTING,
+    THE_TOP_TEN_ARE_GOOGLE_S_ORDER_FOR_THE_RANGE_ASKED,
+    TOP_ROWS,
     Reply,
     SearchConsoleConnection,
     SearchConsoleReading,
@@ -49,6 +53,7 @@ from brain.connectors.search_console import (
     SearchConsoleShapeError,
     figures_of,
     listing_for,
+    range_figures_of,
     read_back_reading,
     site_id_of,
     site_name_of,
@@ -94,16 +99,30 @@ def answer_for(cid: str) -> SourceAnswer:
     )
 
 
-def the_four(**changed: Any) -> tuple[Any, ...]:
-    """The four recorded answers in the order `request_for` asks, any of them replaced."""
+def the_two(**changed: Any) -> tuple[Any, ...]:
+    """A question's two recorded answers in the order `request_for` asks, any of them replaced."""
     answers = {
         "days": recorded("SC-200-days").body,
-        "queries": recorded("SC-200-top-query").body,
-        "pages": recorded("SC-200-top-page").body,
         "sitemaps": recorded("SC-200-sitemaps").body,
         **changed,
     }
-    return (answers["days"], answers["queries"], answers["pages"], answers["sitemaps"])
+    return (answers["days"], answers["sitemaps"])
+
+
+def the_four(**changed: Any) -> tuple[Any, ...]:
+    """A figure tool's four recorded answers in the order `request_for` asks, any replaced."""
+    answers = {
+        "totals": recorded("SC-200-totals").body,
+        "queries": recorded("SC-200-top-queries").body,
+        "pages": recorded("SC-200-top-pages").body,
+        "sitemaps": recorded("SC-200-sitemaps").body,
+        **changed,
+    }
+    return (answers["totals"], answers["queries"], answers["pages"], answers["sitemaps"])
+
+
+#: The window the recorded figure-tool searches stand for.
+WINDOW: Final = DateWindow(start=date(2019, 5, 1), end=date(2019, 5, 28))
 
 
 @pytest.fixture(scope="module")
@@ -243,31 +262,37 @@ def test_the_reading_is_a_google_service_account_s_with_a_read_only_scope() -> N
 
 
 # ------------------------------------------------------------------------ the report
-def test_a_report_is_four_calls_for_the_connected_site_only() -> None:
-    """`A_REPORT_READS_ONLY_THE_CONNECTED_SITE`, with its positive case: three searches (by day over
-    90 days, the top query and top page over 28) and the sitemaps, each at the site's own address,
-    and any other site refused.
+def test_a_question_s_report_is_two_calls_and_a_tool_s_four_for_the_connected_site_only() -> None:
+    """`A_REPORT_READS_ONLY_THE_CONNECTED_SITE`, with its positive cases: a question's report is the
+    last 90 days by day and the sitemaps; a figure tool's is the window's totals, its ten top
+    queries and ten top pages, and the sitemaps, each at the site's own address; any other site is
+    refused.
 
-    Delete this and an index row naming another site the account can reach would be read."""
+    Delete this and an index row naming another site the account can reach would be read, or a
+    tool's window be read as the last 90 days."""
     today = date(2999, 1, 1)
-    calls = SearchConsoleReport().request_for(
-        ENTITY_SITE, site_id_of(SITE), settings=SETTINGS, today=today, window=None
+    site = site_id_of(SITE)
+    ask = SearchConsoleReport().request_for(
+        ENTITY_SITE, site, settings=SETTINGS, today=today, window=None
+    )
+    ranged = SearchConsoleReport().request_for(
+        ENTITY_SITE, site, settings=SETTINGS, today=today, window=WINDOW
     )
 
     base = f"{SEARCH_CONSOLE_API_URL}/sites/sc-domain%3Aexample.com"
-    assert [one.url for one in calls] == [
-        f"{base}/searchAnalytics/query",
-        f"{base}/searchAnalytics/query",
-        f"{base}/searchAnalytics/query",
-        f"{base}/sitemaps",
-    ]
-    asked = [json.loads(one.body) for one in calls if one.body is not None]
-    assert [one["dimensions"] for one in asked] == [["date"], ["query"], ["page"]]
-    assert asked[0]["startDate"] == (today - timedelta(days=90)).isoformat()
-    assert asked[1]["startDate"] == (today - timedelta(days=28)).isoformat()
-    assert {one["endDate"] for one in asked} == {(today - timedelta(days=1)).isoformat()}
-    assert (asked[0]["rowLimit"], asked[1]["rowLimit"]) == (90, 1)
-    assert calls[3].body is None
+    query, sitemaps = f"{base}/searchAnalytics/query", f"{base}/sitemaps"
+    assert [one.url for one in ask] == [query, sitemaps]
+    assert [one.url for one in ranged] == [query, query, query, sitemaps]
+    assert ask[1].body is None and ranged[3].body is None
+    days = json.loads(ask[0].body or b"")
+    assert (days["dimensions"], days["rowLimit"]) == (["date"], 90)
+    assert (days["startDate"], days["endDate"]) == ("2998-10-03", "2998-12-31")
+    searched = [json.loads(one.body or b"") for one in ranged[:3]]
+    assert [one.get("dimensions") for one in searched] == [None, ["query"], ["page"]]
+    assert [one["rowLimit"] for one in searched] == [1, 10, 10]
+    assert {(one["startDate"], one["endDate"]) for one in searched} == {
+        ("2019-05-01", "2019-05-28")
+    }
     with pytest.raises(SearchConsoleShapeError, match="connection was made with"):
         SearchConsoleReport().request_for(
             ENTITY_SITE,
@@ -280,11 +305,11 @@ def test_a_report_is_four_calls_for_the_connected_site_only() -> None:
 
 
 def test_the_recorded_answers_are_one_record_of_every_figure_counted_into_its_range() -> None:
-    """The four recorded answers: clicks and impressions summed into each range by the day each
-    row names, the top query and page, and the sitemaps' errors and warnings.
+    """A question's two recorded answers: clicks and impressions summed into each range by the day
+    each row names, and the sitemaps' errors and warnings.
 
     Delete this and a day could be counted into the wrong range, or a count read as text."""
-    (row,) = figures_of(the_four(), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT).records
+    (row,) = figures_of(the_two(), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT).records
     figures = row.model_dump(exclude={"entity", "id"})
 
     assert row.id == SITE
@@ -292,8 +317,6 @@ def test_the_recorded_answers_are_one_record_of_every_figure_counted_into_its_ra
     assert (figures["clicks_last_7_days"], figures["impressions_last_7_days"]) == ("12", "300")
     assert (figures["clicks_last_28_days"], figures["impressions_last_28_days"]) == ("42", "1200")
     assert (figures["clicks_last_90_days"], figures["impressions_last_90_days"]) == ("142", "5200")
-    assert figures["top_query_last_28_days"] == "example widgets"
-    assert figures["top_page_last_28_days"] == "https://www.example.com/widgets/"
     assert (figures["sitemap_errors"], figures["sitemap_warnings"]) == ("1", "2")
     assert [one.days for one in RANGES] == [7, 28, 90]
 
@@ -310,7 +333,7 @@ def test_a_day_is_counted_from_the_first_day_of_its_range_to_yesterday_and_not_t
 
     days = {"rows": [day(0), day(7), day(8), day(91)]}
     (row,) = figures_of(
-        the_four(days=days), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT
+        the_two(days=days), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT
     ).records
     figures = row.model_dump()
     assert (figures["clicks_last_7_days"], figures["clicks_last_90_days"]) == ("1", "2")
@@ -326,8 +349,6 @@ def test_a_day_is_counted_from_the_first_day_of_its_range_to_yesterday_and_not_t
         {"days": {"rows": [{"keys": ["yesterday"], "clicks": 1, "impressions": 1}]}},
         {"days": {"rows": [{"keys": ["2019-02-30"], "clicks": 1, "impressions": 1}]}},
         {"sitemaps": {"sitemap": [{"errors": "one", "warnings": "0"}]}},
-        {"queries": {"rows": [{"keys": [""]}]}},
-        {"pages": {"rows": [{}]}},
     ],
 )
 def test_a_report_this_does_not_read_is_refused_whole(changed: Mapping[str, Any]) -> None:
@@ -337,15 +358,15 @@ def test_a_report_this_does_not_read_is_refused_whole(changed: Mapping[str, Any]
 
     Delete this and a malformed count could be shown to a person as a figure."""
     with pytest.raises(SearchConsoleShapeError):
-        figures_of(the_four(**changed), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT)
+        figures_of(the_two(**changed), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT)
     whole = {"rows": [{"keys": ["2019-05-30"], "clicks": 3.0, "impressions": 4}]}
     (row,) = figures_of(
-        the_four(days=whole), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT
+        the_two(days=whole), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT
     ).records
     assert row.model_dump()["clicks_last_7_days"] == "3"
     assert "whole" in A_COUNT_IS_A_NUMBER
     with pytest.raises(SearchConsoleShapeError):
-        figures_of(the_four()[:3], source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT)
+        figures_of(the_two()[:1], source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT)
 
 
 def test_answers_with_no_rows_and_no_sitemaps_contribute_nothing_rather_than_noughts() -> None:
@@ -353,9 +374,7 @@ def test_answers_with_no_rows_and_no_sitemaps_contribute_nothing_rather_than_nou
     rather than zeros nobody sent.
 
     Delete this and a site nobody has searched for yet would be reported as having had none."""
-    (row,) = figures_of(
-        ({}, {}, {}, {}), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT
-    ).records
+    (row,) = figures_of(({}, {}), source_id=SITE, today=ASKED_ON, fetched_at=FETCHED_AT).records
     assert row.model_dump(exclude={"entity", "id"}) == {}
 
 
@@ -406,12 +425,16 @@ class KeyFiles:
 
 @dataclass
 class Google:
-    """Google's token endpoint and Search Console as recordings, the report's calls held at a
-    barrier that opens only when all four are in flight together."""
+    """Google's token endpoint and Search Console as recordings, a report's calls held at a
+    barrier that opens only when all of them are in flight together."""
 
     sitemaps: str = "SC-200-sitemaps"
-    barrier: threading.Barrier = field(default_factory=lambda: threading.Barrier(4, timeout=5))
+    together: int = 2
     asked: list[tuple[str, str, dict[str, str]]] = field(default_factory=list)
+    searched: list[dict[str, Any]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.barrier = threading.Barrier(self.together, timeout=5)
 
     def _meet(self) -> None:
         self.barrier.wait()
@@ -428,8 +451,15 @@ class Google:
                 body=json.dumps({"access_token": "ya29.sc", "token_type": "Bearer"}).encode(),
             )
         self._meet()
-        dimension = json.loads(body)["dimensions"][0]
-        cid = {"date": "SC-200-days", "query": "SC-200-top-query", "page": "SC-200-top-page"}
+        asked = json.loads(body)
+        self.searched.append(asked)
+        dimension = (asked.get("dimensions") or [None])[0]
+        cid = {
+            "date": "SC-200-days",
+            None: "SC-200-totals",
+            "query": "SC-200-top-queries",
+            "page": "SC-200-top-pages",
+        }
         return answer_for(cid[dimension])
 
     def get(
@@ -482,10 +512,10 @@ def read(sources: ConnectedSources) -> LiveReply:
     return asyncio.run(once())
 
 
-def test_a_question_reads_the_site_s_figures_in_four_calls_made_at_once(
+def test_a_question_reads_the_site_s_figures_in_two_calls_made_at_once(
     key: rsa.RSAPrivateKey,
 ) -> None:
-    """End to end over the recordings: one token for the read, then the four calls, which reach
+    """End to end over the recordings: one token for the read, then the two calls, which reach
     the barrier together (a report made one call at a time never opens it), each carrying the
     token and never the key file, and the figures come back as the site's record.
 
@@ -500,7 +530,7 @@ def test_a_question_reads_the_site_s_figures_in_four_calls_made_at_once(
     assert (row.id, row.model_dump()["clicks_last_28_days"]) == (site_id_of(SITE), "42")
     token, *calls = google.asked
     assert token[1] == GOOGLE_TOKEN_URL
-    assert sorted(method for method, _, _ in calls) == ["GET", "POST", "POST", "POST"]
+    assert sorted(method for method, _, _ in calls) == ["GET", "POST"]
     assert {headers["Authorization"] for _, _, headers in calls} == {"Bearer ya29.sc"}
     assert [lease.closed for lease in keys.leases] == [[ASKED_AT]]
 
@@ -508,8 +538,8 @@ def test_a_question_reads_the_site_s_figures_in_four_calls_made_at_once(
 def test_a_report_one_of_whose_calls_is_refused_is_the_refusal_with_no_figures(
     key: rsa.RSAPrivateKey,
 ) -> None:
-    """`A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER`: the sitemaps refused and the three
-    searches answered is the refusal, with none of the searches' figures shown.
+    """`A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER`: the sitemaps refused and the search
+    answered is the refusal, with none of the search's figures shown.
 
     Delete this and a report could be shown with its sitemaps' counts missing, which reads as a
     site with no indexing problems."""
@@ -547,3 +577,110 @@ def test_a_site_s_record_is_named_by_a_digest_the_redactor_admits_and_no_two_sit
     assert all(re.match(_RECORD_ID_RE, one) for one in ids)
     assert not any(re.match(_RECORD_ID_RE, one) for one in names)
     assert len(set(ids)) == len(names)
+
+
+# ------------------------------------------------------------------ the figure tool
+def test_a_window_s_ten_top_queries_and_pages_come_back_in_the_order_google_gave() -> None:
+    """`THE_TOP_TEN_ARE_GOOGLE_S_ORDER_FOR_THE_RANGE_ASKED`: the recorded searches' ten rows each
+    become ranked fields in the order they came, each with its clicks, beside the window's totals,
+    its days and the sitemaps; a ranked row with no key refuses the report.
+
+    Delete this and the queries could be re-ranked, cut short, or answered for another range."""
+    (row,) = range_figures_of(
+        the_four(), source_id=SITE, window=WINDOW, fetched_at=FETCHED_AT
+    ).records
+    figures = row.model_dump(exclude={"entity", "id"})
+
+    assert TOP_ROWS == 10
+    assert set(figures) == set(RANGE_FIGURE_FIELDS)
+    assert [figures[f"top_query_{rank}"] for rank in range(1, 11)] == [
+        f"example query {rank}" for rank in range(1, 11)
+    ]
+    assert [figures[f"top_page_{rank}"] for rank in range(1, 11)] == [
+        f"https://www.example.com/page-{rank}/" for rank in range(1, 11)
+    ]
+    assert (figures["top_query_1_clicks"], figures["top_query_10_clicks"]) == ("370", "100")
+    assert (figures["start_date"], figures["end_date"]) == ("2019-05-01", "2019-05-28")
+    assert (figures["clicks"], figures["impressions"]) == ("1840", "52000")
+    assert "Google gave" in THE_TOP_TEN_ARE_GOOGLE_S_ORDER_FOR_THE_RANGE_ASKED
+    with pytest.raises(SearchConsoleShapeError):
+        range_figures_of(
+            the_four(queries={"rows": [{"keys": [""], "clicks": 1}]}),
+            source_id=SITE,
+            window=WINDOW,
+            fetched_at=FETCHED_AT,
+        )
+
+
+@dataclass
+class IndexedSite:
+    """A row source holding the connected site's index row."""
+
+    async def rows(self, query: Any) -> list[dict[str, Any]]:
+        row = {
+            "entity": ENTITY_SITE,
+            "id": site_id_of(SITE),
+            "site_name": "example.com",
+            "department": "marketing",
+        }
+        return [{name: row.get(name) for name in ("entity", "id", *query.columns, *query.carried)}]
+
+
+def the_tool(google: Google, keys: KeyFiles) -> Any:
+    from brain.ops.live_records import SourceRecords
+    from brain.tools.startup import build_registry
+
+    sources = connected(google, keys)
+
+    async def connected_now() -> Any:
+        return sources
+
+    figures = SourceRecords(connected=connected_now, clock=lambda: ASKED_AT)
+    registry = build_registry(source="local", records=IndexedSite(), figures=figures)
+    return registry.get("search_console.read_performance").handler
+
+
+def a_reader() -> Any:
+    from brain.core.entitlement import Capability, EntitlementSet, Grant
+
+    reads = (f"read:{ENTITY_SITE}", f"read:{ENTITY_SITE}.site_name")
+    return EntitlementSet(
+        principal_id="p_reader",
+        grants=tuple(
+            Grant(capability=Capability(value=one), scope=Scope.department("marketing"))
+            for one in reads
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("asked", "start", "end"),
+    [
+        ({"start": "2019-04-01", "end": "2019-04-30"}, "2019-04-01", "2019-04-30"),
+        ({"period": "last month"}, "2019-05-01", "2019-05-31"),
+        ({"period": "since 2019-03-10"}, "2019-03-10", "2019-06-01"),
+    ],
+)
+def test_a_figure_tool_reads_the_site_for_the_range_it_is_asked_for_in_four_calls_at_once(
+    key: rsa.RSAPrivateKey, asked: dict[str, str], start: str, end: str
+) -> None:
+    """The tool path, end to end: a first and last day, "last month" and "since a date" each reach
+    all three searches as their days, the four calls meet at the barrier together, and the site's
+    record comes back with its ten top queries for that range.
+
+    Delete this and a workflow's range could be dropped on the way to Search Console, or the
+    four calls made one after another."""
+    google = Google(together=4)
+    read = the_tool(google, KeyFiles(key_file(key)))
+
+    result = asyncio.run(
+        read(RangeRequest.model_validate(asked), entitlement=a_reader(), now=ASKED_AT)
+    )
+
+    assert {(one["startDate"], one["endDate"]) for one in google.searched} == {(start, end)}
+    assert len(google.searched) == 3
+    (row,) = result.records
+    figures = row.model_dump()
+    assert (figures["start_date"], figures["end_date"]) == (start, end)
+    assert figures["top_query_1"] == "example query 1"
+    assert figures["top_page_10"] == "https://www.example.com/page-10/"
