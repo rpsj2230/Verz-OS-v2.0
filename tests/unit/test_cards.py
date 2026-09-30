@@ -231,6 +231,7 @@ def test_a_live_press_by_the_reader_naming_this_action_is_admitted() -> None:
         "suspension_id": "susp_1",
         "action_digest": DIGEST,
         "decision": "approved",
+        "rendered_for": "u_approver",
     }
 
 

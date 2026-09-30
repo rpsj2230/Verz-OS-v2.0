@@ -263,6 +263,68 @@ describe("saving branding", () => {
   });
 });
 
+describe("approving from Lark cards", () => {
+  const SWITCH = "INSTALL_LARK_CARD_APPROVALS";
+  const SAVE_SWITCH = `PUT /api/v1${SETTINGS_API_PATH}/${SWITCH}`;
+
+  function withSwitch(value: string): Record<string, unknown> {
+    const body = page();
+    return {
+      ...body,
+      groups: [
+        ...(body["groups"] as unknown[]),
+        {
+          group: "lark",
+          title: "Lark",
+          editable: true,
+          settings: [
+            row({
+              name: SWITCH,
+              label: "Approve from Lark cards",
+              value,
+              source: value === "off" ? "default" : "saved",
+              default: "off",
+              without_saved: "off",
+            }),
+          ],
+        },
+      ],
+    };
+  }
+
+  test("is offered as off or on in words, says what a press relies on, and is saved from its confirmation", async () => {
+    // What breaks if this is deleted: the switch the owner decides needs-rupash 117 with drawn as a
+    // field to type into, with nothing saying a press carries no second factor, or saved unconfirmed.
+    const { container, sent } = await settingsPage({
+      [READ]: () => json(withSwitch("off")),
+      [SAVE_SWITCH]: (body) => json(withSwitch((body as { value: string }).value)),
+    });
+
+    const choice = container.querySelector(`select[name="${SWITCH}"]`) as HTMLSelectElement;
+    expect([...choice.options].map((one) => [one.value, one.textContent])).toEqual([
+      ["off", "Off: decide approvals in the console"],
+      ["on", "On: approve from Lark cards"],
+    ]);
+    expect(choice.value).toBe("off");
+    expect(container.textContent).toContain(FORMATS[SWITCH]);
+    expect(FORMATS[SWITCH]).toContain("no second factor");
+    expect(FORMATS[SWITCH]).toContain("two-step verification");
+
+    fireEvent.change(choice, { target: { value: "on" } });
+    fireEvent.click(button(container, `${SAVE}: Approve from Lark cards`));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain('Approve from Lark cards becomes "On: approve from Lark cards".');
+    expect(sent.filter((one) => one.method === "PUT")).toEqual([]);
+    await confirmIn(SAVE_CHANGE);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(SAVED);
+    });
+    expect(sent.filter((one) => one.method === "PUT").map((one) => one.body)).toEqual([{ value: "on" }]);
+    expect((container.querySelector(`select[name="${SWITCH}"]`) as HTMLSelectElement).value).toBe("on");
+  });
+});
+
 describe("returning a value to its default", () => {
   test("is offered only where a value is saved, names what it returns to, and sends nothing until confirmed", async () => {
     // What breaks if this is deleted: the only way back to the default is typing it, which saves a

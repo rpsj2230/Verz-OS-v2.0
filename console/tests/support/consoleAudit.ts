@@ -348,6 +348,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills",
       "/api/v1/skills/library",
       "/api/v1/skills/imports",
+      "/api/v1/skills/procedures",
       "/api/v1/skills/{digest}/versions",
       "/api/v1/skills/{digest}/categories",
       "/api/v1/skills/{digest}/review",
@@ -461,7 +462,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "er.identifier",
       "er.link",
     ],
-    installation: ["INSTALL_LARK_USES", "INSTALL_LARK_PLATFORM", "INSTALL_LARK_BASE"],
+    installation: ["INSTALL_LARK_USES", "INSTALL_LARK_PLATFORM", "INSTALL_LARK_BASE", "INSTALL_LARK_CARD_APPROVALS"],
     gaps: [
       {
         what: "A connected source is read and kept, and no question is answered from what is kept.",

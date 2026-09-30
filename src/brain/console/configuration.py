@@ -25,7 +25,9 @@ answer for every setting.
 why not on their own row** (since 2026-09-28; until then only branding was, and the owner opened
 Install, Settings to find nothing he could change). Safe means a wrong value is visible and
 recoverable from this same screen: the company's name and branding, the languages, the currency
-and the time zone, and where answers are made. Each is checked by the setting's own rule before
+and the time zone, where answers are made, and whether approvals may be decided from Lark cards
+(a switch on what a card may do rather than on how Lark is connected, so a wrong value is visible
+on this row and put right here). Each is checked by the setting's own rule before
 it is saved (`setting_problem`), confirmed in the console, saved by the wizard's writer inside the
 audit attribution, and held by this process at once. Not safe, and read only here with the reason
 drawn on the row (`READ_ONLY_BECAUSE`): sign-in (an issuer, realm, client or redirect changed from
@@ -58,7 +60,7 @@ realm will not broker is a finding, with `brain.identity.brokering`'s reason. A 
 release whose inference server serves no model that answers is said in the profile sentence,
 which until 2026-09-21 told the reader questions were "answered by the inference server alone".
 
-Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M27.12.7
+Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M27.12.7, M10.7.1
 """
 
 from __future__ import annotations
@@ -153,6 +155,10 @@ A_REQUIRED_SETTING_NOBODY_SUPPLIED: Final = (
 #: The longest branding value accepted, the setup wizard's own ceiling on one answer.
 MAX_BRANDING_CHARS: Final = 200
 
+#: The two values the Approve from Lark cards switch takes. `brain.approval_cards` reads `on` as
+#: switched on and anything else as off, so a value this screen refused could never switch it on.
+CARD_APPROVAL_CHOICES: Final[frozenset[str]] = frozenset({"on", "off"})
+
 #: The declared code meaning no currency, which the screen never offers as a choice: an install
 #: that has chosen none shows an amount with no code (see `console/src/pages/spendQuery.ts`).
 UNSET_CURRENCY: Final = BY_NAME["INSTALL_CURRENCY"].default
@@ -223,6 +229,7 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_LARK_USES": Section.LARK,
         "INSTALL_LARK_PLATFORM": Section.LARK,
         "INSTALL_LARK_BASE": Section.LARK,
+        "INSTALL_LARK_CARD_APPROVALS": Section.LARK,
         "INSTALL_KNOWLEDGE_SCANNER": Section.FILES,
         "INSTALL_CLAMAV_ADDRESS": Section.FILES,
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": Section.CHECKS,
@@ -262,6 +269,7 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_LARK_USES": "What Lark is used for",
         "INSTALL_LARK_PLATFORM": "Lark or Feishu",
         "INSTALL_LARK_BASE": "Lark Base that is read",
+        "INSTALL_LARK_CARD_APPROVALS": "Approve from Lark cards",
         "INSTALL_KNOWLEDGE_SCANNER": "What checks a file before it is read",
         "INSTALL_CLAMAV_ADDRESS": "Antivirus address",
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": "Public skills the install check imports",
@@ -282,6 +290,7 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_CURRENCY",
         "INSTALL_TIME_ZONE",
         "INSTALL_MODEL_PROFILE",
+        "INSTALL_LARK_CARD_APPROVALS",
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
         "INSTALL_DIGEST_TIME",
     }
@@ -404,6 +413,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LARK_USES": ("brain.lark_connect_routes",),
     "INSTALL_LARK_PLATFORM": ("brain.lark_connect_routes",),
     "INSTALL_LARK_BASE": ("brain.lark_connect_routes",),
+    "INSTALL_LARK_CARD_APPROVALS": ("brain.approval_cards",),
     "INSTALL_KNOWLEDGE_SCANNER": ("brain.knowledge.scanners",),
     "INSTALL_CLAMAV_ADDRESS": ("brain.knowledge.scanners",),
     "INSTALL_ACCEPTANCE_SKILL_SOURCE": ("brain.ops.acceptance_checks_skills",),
@@ -672,6 +682,8 @@ def setting_problem(name: str, value: str) -> str:
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "
             "allow online providers."
         )
+    if name == "INSTALL_LARK_CARD_APPROVALS" and written not in CARD_APPROVAL_CHOICES:
+        return "Choose off, to decide approvals in the console, or on, to allow Lark cards."
     return ""
 
 
