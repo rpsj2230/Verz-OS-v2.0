@@ -143,6 +143,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: `queue_redrive` and `side_effect_resume` joined on 2026-09-30 from `KNOWN_ORPHANS`:
 #: `brain.ops.recovery_run` re-drives what a dead worker or a transient failure left behind, and
 #: reads back an interrupted side effect where its connector can answer, listing the rest.
+#:
+#: `evening_digest` joined on 2026-09-30 the day it was registered, sent once a day at the install's
+#: own hour to the conversation it chose, through `brain.ops.digest_run`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -161,6 +164,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "acceptance_run",
         "queue_redrive",
         "side_effect_resume",
+        "evening_digest",
     }
 )
 

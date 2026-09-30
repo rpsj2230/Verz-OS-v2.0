@@ -611,6 +611,38 @@ def side_effect_resume(now: datetime, report_only: bool, database_url: str) -> s
     return run_side_effect_resume_now(database_url, now=now, loop_factory=_loop_factory()).summary()
 
 
+#: Why the evening digest sends nothing in report-only mode.
+A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and a message removes nothing, so "
+    "brain.ops.schedule never asks for it. A runner that sent anyway when told to report would "
+    "ignore the mode it was given."
+)
+
+
+def evening_digest(now: datetime, report_only: bool, database_url: str) -> str:
+    """Send today's build digest once, to the conversation the install chose, or say why not.
+
+    `brain.ops.digest_run.run_evening_digest_now` is the literal call the registry reads, with the
+    worker's vault for the send's borrowed key (`brain.ops.channel_lease`). The schedule owes it
+    once a day at `INSTALL_DIGEST_TIME` in the install's zone (`Control.daily_at`). Declines in
+    report-only mode, see `A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING`, and takes the worker's
+    event loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return f"report only: no digest was sent. {A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING}"
+    from brain.ops.digest_run import run_evening_digest_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_evening_digest_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -737,6 +769,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="vault_audit_ship", run=vault_audit_ship),
     # Wired on 2026-09-28 with `ops.acceptance_result`. See `brain.ops.acceptance_run`.
     Runner(name="acceptance_run", run=acceptance_run),
+    # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
+    # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
+    Runner(name="evening_digest", run=evening_digest),
 )
 
 
@@ -795,6 +830,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return queue_redrive(now, report_only, database_url)
         case "side_effect_resume":
             return side_effect_resume(now, report_only, database_url)
+        case "evening_digest":
+            return evening_digest(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (
