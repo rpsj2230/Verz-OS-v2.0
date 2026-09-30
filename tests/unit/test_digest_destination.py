@@ -88,7 +88,7 @@ class Secrets:
 
     def read(self, ref: SecretRef) -> str | None:
         if self.unreadable:
-            from brain.ops.channel_store import VaultState
+            from brain.ops.credentials import VaultState
 
             raise ChannelSecretsUnavailableError(VaultState.UNREACHABLE)
         return self.value

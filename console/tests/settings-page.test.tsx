@@ -27,6 +27,14 @@ import {
   SOURCE_WORDS,
   UNREADABLE_SETTINGS,
 } from "../src/pages/settingsQuery";
+import {
+  CHOOSE,
+  DESTINATION_SAVED,
+  DIGEST_DESTINATION_API_PATH,
+  DIGEST_DESTINATION_SETTING,
+  OFF_LABEL,
+  OFF_VALUE,
+} from "../src/pages/digestDestinationQuery";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
 import { button, json, mountPage, type Answer } from "./support/pageHarness";
 import { backendModelFields } from "./support/python";
@@ -307,5 +315,100 @@ describe("the currency and time zone", () => {
       expect(sent.filter((one) => one.method === "PUT").map((one) => one.body)).toEqual([{ value: "sgd" }]);
     });
     expect(NOT_SET_YET).not.toContain("XXX");
+  });
+});
+
+describe("where the evening digest goes", () => {
+  const DESTINATION = `GET /api/v1${DIGEST_DESTINATION_API_PATH}`;
+  const CHOOSE_ONE = `PUT /api/v1${DIGEST_DESTINATION_API_PATH}`;
+
+  function destination(channel: string | null, conversation: string | null, stopped = ""): Record<string, unknown> {
+    return {
+      channel,
+      conversation,
+      stopped_because: stopped,
+      offers: [
+        {
+          channel: "lark",
+          conversations: [
+            { channel: "lark", conversation: "oc_1", name: "Brain daily" },
+            { channel: "lark", conversation: "oc_2", name: "Ops" },
+          ],
+          why_none: "",
+        },
+      ],
+    };
+  }
+
+  function withDestinationRow(): Record<string, unknown> {
+    const body = page();
+    (body.groups as Record<string, unknown>[]).push({
+      group: "messages",
+      title: "Messages this install sends",
+      editable: false,
+      settings: [
+        row({
+          name: DIGEST_DESTINATION_SETTING,
+          label: "Send the evening digest to",
+          value: "unset",
+          source: "default",
+          editable: false,
+          read_only_because: "CHOSEN-FROM-THE-LIST",
+        }),
+      ],
+    });
+    return body;
+  }
+
+  test("offers each conversation a connected channel lists, off until chosen, and saves only from its confirmation", async () => {
+    // What breaks if this is deleted: the row falls back to a read-only value nobody can change, or
+    // a choice is sent from one press, or sent as something other than a listed conversation.
+    const { container, sent } = await settingsPage({
+      [READ]: () => json(withDestinationRow()),
+      [DESTINATION]: () => json(destination(null, null, "Off: nobody has chosen where the evening digest goes.")),
+      [CHOOSE_ONE]: (body) => {
+        const chosen = body as { conversation: string };
+        return json(destination("lark", chosen.conversation));
+      },
+    });
+
+    const select = (await waitFor(() => {
+      const found = container.querySelector('select[name="digest_destination"]');
+      expect(found).not.toBeNull();
+      return found;
+    })) as HTMLSelectElement;
+    expect(select.value).toBe(OFF_VALUE);
+    expect([...select.options].map((one) => one.textContent)).toEqual([OFF_LABEL, "Brain daily", "Ops"]);
+    expect(container.textContent).toContain("Off: nobody has chosen");
+    expect(container.textContent).not.toContain("CHOSEN-FROM-THE-LIST");
+
+    fireEvent.change(select, { target: { value: "lark:oc_2" } });
+    fireEvent.click(button(container, CHOOSE));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Ops (lark)");
+    expect(sent.filter((one) => one.method === "PUT")).toEqual([]);
+    fireEvent.click(within(dialog).getByRole("button", { name: CHOOSE }));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(DESTINATION_SAVED);
+    });
+    expect(sent.filter((one) => one.method === "PUT").map((one) => one.body)).toEqual([
+      { off: false, channel: "lark", conversation: "oc_2" },
+    ]);
+  });
+
+  test("a chosen channel that stopped says why on the row", async () => {
+    // What breaks if this is deleted: the row shows a destination while the digest has stopped.
+    const { container } = await settingsPage({
+      [READ]: () => json(withDestinationRow()),
+      [DESTINATION]: () => json(destination("lark", "oc_1", "Stopped: This channel is switched off.")),
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Stopped: This channel is switched off.");
+    });
+    expect((container.querySelector('select[name="digest_destination"]') as HTMLSelectElement).value).toBe(
+      "lark:oc_1",
+    );
   });
 });

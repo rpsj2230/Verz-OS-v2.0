@@ -13,7 +13,15 @@
 # the same engine holds the model providers' keys and the mail relay's password, and a send needs
 # neither. A channel wire added to brain.channels is added here too, and
 # tests/unit/test_vault_policies.py holds the two lists equal. No write, no delete and no metadata.
+path "providers/data/channel_email" {
+  capabilities = ["read"]
+}
+
 path "providers/data/channel_lark" {
+  capabilities = ["read"]
+}
+
+path "providers/data/channel_slack" {
   capabilities = ["read"]
 }
 

@@ -15,7 +15,8 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from brain.console.configuration import setting_problem
-from brain.ops.controls import Control, Invocation, Severity
+from brain.ops.alerting import Severity
+from brain.ops.controls import Control, Invocation
 from brain.ops.schedule import AtTime, owed, time_of_day
 from brain.ops.schedule_runner import times_of_day
 
