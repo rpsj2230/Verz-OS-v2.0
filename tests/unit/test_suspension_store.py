@@ -113,6 +113,7 @@ TABLES: tuple[str, ...] = ("gate.suspension",)
 VERSIONS = ROOT / "migrations" / "versions"
 MIGRATION = VERSIONS / "0042_suspension.py"
 DECISION_MIGRATION = VERSIONS / "0083_suspension_decision.py"
+TAKEOVER_MIGRATION = VERSIONS / "0172_takeover_instants.py"
 LEDGER_MIGRATION = VERSIONS / "0003_resolver_and_tables.py"
 APPROVAL_ACTION_MIGRATION = VERSIONS / "0023_approval_action.py"
 
@@ -1223,15 +1224,16 @@ def test_the_table_refuses_a_decision_with_nobody_on_it_or_a_window_past_the_lea
 
 
 def test_the_migrations_build_exactly_what_the_model_declares() -> None:
-    """Every constraint, index and column, compared between `0042` with `0083` and the model, with
-    row-level security on.
+    """Every constraint, index and column, compared between `0042` with `0083` and `0172` and the
+    model, with row-level security on. `0172` adds the partial index the takeover read uses.
 
-    Delete this and the migrations and the model can disagree about a constraint, a column or the
+    Delete this and the migrations and the model can disagree about a constraint, a column or an
     index."""
     with (
         suspensions("brain_ap_shape") as url,
         modelled("brain_ap_shape_modelled", TABLES) as from_models,
     ):
+        upgraded("brain_ap_shape", TAKEOVER_MIGRATION)
         assert shape(url, TABLES) == shape(from_models, TABLES)
         assert secured(url, TABLES) == dict.fromkeys(TABLES, True)
 

@@ -90,6 +90,7 @@ from brain.gate.resolve import EntitlementCache
 from brain.gate.roster import AgentRoster
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
+from brain.gate.takeover_store import StoredTakeovers
 from brain.identity.administration_reconciliation import (
     TRACE_PREFIX as RECONCILIATION_TRACE,
 )
@@ -620,6 +621,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Approvals are read and decided on the database, whose trigger keeps each decision's ledger
     # entry. See `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions)
+    # Where the autonomy breaker reads when an agent's work was taken over (M8.3.5), through the
+    # one function `0172` grants past the suspension policy. See `brain.gate.takeover_store`.
+    app.state.takeovers = (
+        StoredTakeovers(app.state.db_sessions) if app.state.db_sessions is not None else None
+    )
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
@@ -1008,6 +1014,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.first_administrators = None
     # The same, for where approvals are read from and decided. See `suspension_store_for`.
     app.state.suspensions = None
+    # The same, for where the autonomy breaker reads takeovers. Built beside `suspensions`.
+    app.state.takeovers = None
     # The same, for an automation's registration and its owner's standing. Built beside `gate`
     # and never without it: see `wirings_for`.
     app.state.automation = None

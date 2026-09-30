@@ -44,7 +44,7 @@ import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
 import type { ModelChoice } from "../agentModelPinQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
-import { LEVEL_WORDS, RUNGS_EXPLAINED, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
+import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
 import { LeashPill } from "./pills";
 
@@ -62,6 +62,23 @@ export const ADD_A_SOURCE = "Add a source to this agent, through a draft";
 export const CHANGE_PERMISSIONS = "Change permissions";
 export const CHANGE_THROUGH_A_DRAFT =
   "Starts a draft of this agent. A wider change waits for a second person to approve it, and starts at Shadow.";
+
+/** A day as the leash list says it: a date, never a time, which is all a week's window needs. */
+function onDay(at: string): string {
+  return new Date(at).toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
+/**
+ * Why an action stands where it does after people took it over (M8.3.5): lowered, from what, and on
+ * which days, or taken over and not yet lowered. When and nothing else, which is all the API sends.
+ */
+export function takenOverWords(rung: string, loweredTo: string | undefined, at: readonly string[]): string {
+  const days = at.map(onDay).join(", ");
+  return loweredTo === undefined
+    ? `People did this themselves on ${days}. Three times inside a week holds it a step lower.`
+    : `Held at ${rungWords(loweredTo)} rather than ${rungWords(rung)}: people did this themselves on ${days}. ` +
+        "It goes back once fewer than three of those are inside the last week.";
+}
 
 /** The id the leash list carries, which the About view links to. */
 export const LEASH_ANCHOR = "leash";
@@ -331,8 +348,11 @@ function ModelAndAutonomy({
                   }
                 >
                   <span className="min-w-0 text-[13px] text-ink [overflow-wrap:anywhere]">{tool?.description ?? one.target}</span>
-                  <LeashPill rung={one.rung} />
+                  <LeashPill rung={one.loweredTo ?? one.rung} />
                   {one.configured ? null : <span className="col-span-2 text-[11.5px] text-dim">No setting, so it only practises.</span>}
+                  {one.takenOverAt.length === 0 ? null : (
+                    <span className="col-span-2 text-[11.5px] text-dim">{takenOverWords(one.rung, one.loweredTo, one.takenOverAt)}</span>
+                  )}
                 </li>
               );
             })}
