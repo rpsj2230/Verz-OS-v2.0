@@ -161,11 +161,12 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
     ),
     InboundChannel(
         channel=Channel.WHATSAPP,
-        verification=Verification.NOT_WRITTEN,
-        check="",
+        verification=Verification.WRITTEN,
+        check="brain.channels.whatsapp:verify_signature",
         how=(
-            "Meta signs each request with the app secret. Nothing here checks that signature yet, "
-            "so a request claiming to be from WhatsApp could not be told apart from a forged one."
+            "Meta signs each request with the app secret over its exact bytes; the check compares "
+            "that signature in constant time and refuses a request about another phone number. It "
+            "is received at its channel's events address while its record is switched on."
         ),
     ),
 )

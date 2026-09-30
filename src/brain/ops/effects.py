@@ -752,6 +752,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.adapter:ChannelWire.request_for": Repeat.READS,
         "brain.channels.adapter:ChannelWire.judge": Repeat.READS,
         "brain.channels.adapter:KeyedWire.key_set_of": Repeat.READS,
+        "brain.channels.adapter:BatchedWire.parts": Repeat.READS,
+        "brain.channels.adapter:SubscribedWire.subscription_answer": Repeat.READS,
         "brain.channels.adapter:RegisteredWire.registration_for": Repeat.READS,
         "brain.channels.adapter:RegisteredWire.judge": Repeat.READS,
         "brain.channels.adapter:ChannelTransport.send": Repeat.ISSUES,

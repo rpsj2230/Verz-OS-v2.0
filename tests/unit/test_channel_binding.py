@@ -899,7 +899,7 @@ def test_the_channels_screen_shows_what_each_channel_declares_and_how_it_is_doin
     assert found["can_carry_label"] is declared.can_carry_label
     assert (found["receives"], found["health"], found["last_fault"]) == (True, "working", None)
     whatsapp = client.get(API_PREFIX + "/channels/whatsapp/health", headers=as_("u_admin")).json()
-    assert (whatsapp["receives"], whatsapp["health"]) == (False, "not_set_up")
+    assert (whatsapp["receives"], whatsapp["health"]) == (True, "not_set_up")
     declared_whatsapp = adapter_for(Channel.WHATSAPP).capabilities().max_classification
     assert whatsapp["max_classification"] == declared_whatsapp
     refused = client.get(API_PREFIX + "/channels/webhook/health", headers=as_("u_narrow"))
@@ -942,7 +942,7 @@ def test_the_module_list_is_every_channel_the_reader_manages_with_its_state_and_
         "none",
         "not_set_up",
     )
-    assert (whatsapp["receives"], whatsapp["tenant"], whatsapp["changed_by"]) == (False, {}, None)
+    assert (whatsapp["receives"], whatsapp["tenant"], whatsapp["changed_by"]) == (True, {}, None)
     # A channel's connect steps ride on its row, so its page and its flow read one answer: email
     # has its own and ends in its form, a channel with none has none, and with no public address
     # named on this install there is no events address to paste yet.
@@ -1005,12 +1005,13 @@ def test_every_declared_channel_has_a_label_and_a_line_in_the_verbs_table() -> N
 
 
 def test_each_channel_says_the_verbs_it_carries_and_how_a_group_is_answered(
-    client: TestClient, place: Place
+    client: TestClient, place: Place, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """**M27.15.43.** The verbs are the admission rule's for the channel, and how a group is
     answered follows the wire: at the floor on one that reads who is present (Lark, Slack), as a
-    floor of nothing on one that cannot (the webhook, Teams, Telegram), and not at all where
-    nothing is received (WhatsApp).
+    floor of nothing on one that cannot (the webhook, Teams, Telegram, WhatsApp), and not at all
+    where nothing is received, which since WhatsApp's wire is no declared channel, so it is shown
+    with WhatsApp's wire taken away.
 
     Delete this and the screen can say a channel approves what admission refuses, or that a room
     is answered at its floor on a wire that never reads one."""
@@ -1026,12 +1027,21 @@ def test_each_channel_says_the_verbs_it_carries_and_how_a_group_is_answered(
         "slack": "at_the_floor",
         "teams": "as_nothing",
         "telegram": "as_nothing",
-        "whatsapp": "not_received",
+        "whatsapp": "as_nothing",
     }
     assert isinstance(channel_wires()[Channel.LARK], RoomReader)
     assert isinstance(channel_wires()[Channel.SLACK], RoomReader)
     assert not isinstance(channel_wires()[Channel.WEBHOOK], RoomReader)
-    assert {one["rooms_told"] for one in found.values()} == set(binding_routes.ROOMS_TOLD.values())
+    wires = dict(channel_wires())
+    monkeypatch.setattr(
+        binding_routes,
+        "channel_wires",
+        lambda: {one: wire for one, wire in wires.items() if one is not Channel.WHATSAPP},
+    )
+    unwired = client.get(f"{API_PREFIX}/channels/whatsapp/health", headers=as_("u_admin")).json()
+    assert unwired["rooms"] == "not_received"
+    told = {one["rooms_told"] for one in (*found.values(), unwired)}
+    assert told == set(binding_routes.ROOMS_TOLD.values())
 
 
 # ======================================================================== the migration

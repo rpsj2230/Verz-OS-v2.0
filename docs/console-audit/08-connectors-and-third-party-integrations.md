@@ -3,13 +3,14 @@
 - **Screens:** `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/channels`, `/channels/:name`, `/channels/:name/:view`
 - **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`
-- **Measured here:** 34 routes, 3 called by no screen; 16 write routes, 11 with all three proofs; 4 gaps.
+- **Measured here:** 35 routes, 4 called by no screen; 16 write routes, 11 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/channels` | **no screen** |
 | `GET /api/v1/channels/{name}/bindings` | `/channels/:name` |
 | `GET /api/v1/channels/{name}/deliveries` | `/channels/:name/:view` |
+| `GET /api/v1/channels/{name}/events` | **no screen** |
 | `GET /api/v1/channels/{name}/health` | `/channels/:name`, `/channels/:name/:view` |
 | `GET /api/v1/connectors` | `/`, `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
 | `GET /api/v1/connectors/lark-app` | `/connectors`, `/staff_sources` |
