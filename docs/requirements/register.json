@@ -18579,6 +18579,19 @@
     "M1.10.3"
    ],
    "decision": null
+  },
+  {
+   "id": "OWN5-3",
+   "source": "owner, 2026-09-30 (chat): duplicates are detected by email address, which is unique per person, and never by name",
+   "area": "Identity",
+   "requirement": "A person made by hand before the staff list, such as the first administrator, can be given their work email on their own People page, and the person the staff list made for that address is then joined into them, automatically when that person has never signed in and holds nothing but what the sync wrote, and after a confirmation otherwise; a duplicate is never found by name.",
+   "leaves": [
+    "M1.10.4"
+   ],
+   "proof": [
+    "M1.10.5"
+   ],
+   "decision": null
   }
  ]
 }
