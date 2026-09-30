@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 from tests.unit.test_acceptance_sources import run_checks
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +51,15 @@ def test_the_cloudflare_checks_are_registered_with_the_leaf_they_prove() -> None
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
     assert {leaf for one in mine().values() for leaf in one.leaves} <= leaves
+
+
+def test_the_cloudflare_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them: the read and
+    the held change first, then the allowed change sent and read back. Held here, beside the
+    module's other tests, so a package adding a check edits its own file and never a list every
+    package appends to. Delete this and a check can drop out of the module with the page simply
+    listing one fewer row."""
+    assert checks_in(MODULE) == [HELD, SENT]
 
 
 @pytest.mark.needs_db

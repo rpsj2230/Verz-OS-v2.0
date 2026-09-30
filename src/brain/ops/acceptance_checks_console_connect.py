@@ -37,6 +37,10 @@ from brain.ops.acceptance_checks_connector_framework import _credential, _form
 from brain.ops.acceptance_checks_connectors import _nothing_kept
 from brain.ops.acceptance_run import SET_UP_REACH, Harness
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 270
+
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons

@@ -32,7 +32,7 @@ import pytest
 
 from brain.ops import acceptance_checks_tables as tables
 from brain.ops.acceptance import FAILED, PASSED, Check, registered
-from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head
+from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head, checks_in
 
 MODULE = "brain.ops.acceptance_checks_tables"
 
@@ -899,3 +899,15 @@ def test_every_other_guard_fails_its_check_with_its_own_sentence(
     breaks(monkeypatch)
 
     assert refused(database, name) == (FAILED, reason)
+
+
+def test_the_tables_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_tables") == [
+        "a_price_list_upload_classifies_every_column",
+        "a_reader_without_the_cost_grant_is_told_the_sell_price_alone",
+        "an_applied_mark_is_in_the_ledger_under_the_administrator",
+    ]

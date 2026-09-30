@@ -27,6 +27,10 @@ from typing import Final
 from brain.ops.acceptance import CheckFailedError, check
 from brain.ops.acceptance_run import Harness
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 260
+
 #: The one host no install serves, under which the check's origin is named.
 RESERVED_HOST_SUFFIX: Final = ".acceptance.invalid"
 

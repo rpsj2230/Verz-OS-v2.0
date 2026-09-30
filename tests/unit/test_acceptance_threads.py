@@ -36,7 +36,7 @@ from brain.gate.provenance import Provenance
 from brain.ops import acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import INSTALL, at_head, counts
+from tests.unit.test_acceptance import INSTALL, at_head, checks_in, counts
 from tests.unit.test_acceptance_models import Providers
 
 MODULE = "brain.ops.acceptance_threads"
@@ -305,3 +305,16 @@ def test_a_chat_thread_named_by_the_message_fails_the_lark_check(
         thread_store, "chat_thread_id", lambda channel, principal, where: str(uuid.uuid4())
     )
     assert "Lark chat" in _failed(install, LARK)
+
+
+def test_the_threads_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_threads") == [
+        "a_question_is_kept_in_its_askers_thread_and_searched_by_them",
+        "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
+        "a_follow_up_is_answered_from_what_its_thread_cited",
+        "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it",
+    ]

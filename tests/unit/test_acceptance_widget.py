@@ -22,7 +22,7 @@ import pytest
 
 from brain.ops.acceptance import FAILED, PASSED, Check, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import INSTALL, at_head
+from tests.unit.test_acceptance import INSTALL, at_head, checks_in
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_widget"
@@ -39,6 +39,14 @@ def test_the_check_is_registered_with_the_leaf_it_proves() -> None:
     assert {name: one.leaves for name, one in mine().items()} == {NAME: ("M10.5.5",)}
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     assert "M10.5.5" in {one for module in wbs["modules"] for one in module["leaf_ids"]}
+
+
+def test_the_widget_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here
+    since 2026-09-30, so a package adding a check edits its own file and never a list every
+    package appends to. Delete this and a check can drop out of the module with the page simply
+    listing one fewer row."""
+    assert checks_in(MODULE) == [NAME]
 
 
 def run_check(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:
