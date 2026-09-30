@@ -656,6 +656,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.queue:QueueDriver.fetch": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.complete": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.fail": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The recovery sweeps. Putting a job back is work on this system's own queue, whose
+        # effects go through the doors classified here; a second put-back of a job already
+        # waiting is refused by the driver, and so is a second set-aside or settle of a row that
+        # has already moved, which each door answers as the race it is.
+        "brain.ops.recovery_run:QueueRows.running": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.failed": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.run_again": Repeat.ENQUEUES_WORK,
+        "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
+        "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
@@ -755,6 +765,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.channel_store:EventClaims.first": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.channel_store:ChannelSecrets.read": Repeat.READS,
         "brain.ops.channel_store:ChannelSecrets.held": Repeat.READS,
+        # The email channel's mailbox. A read peeks and sets no flag; marking read twice leaves the
+        # message read; signing out a second time does nothing. Nothing here deletes.
+        "brain.channels.mailbox:MailboxReader.unseen": Repeat.READS,
+        "brain.channels.mailbox:MailboxReader.mark_handled": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.channels.mailbox:MailboxReader.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The Lark chat channel (L1). A GET through the transport is the one read a group's
         # floor needs, who is in the conversation, and it changes nothing at the vendor.
         "brain.channels.adapter:ChannelTransport.read": Repeat.READS,

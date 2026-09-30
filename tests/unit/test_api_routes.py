@@ -62,6 +62,7 @@ from brain.identity.bearer import SECOND_FACTOR_METHODS, TokenAuthority
 from brain.identity.oidc import SIGN_IN_PROMPT, KeySet, SigningKey
 from brain.knowledge.rows import ID_KEY, RowQuery
 from brain.tools.startup import build_registry
+from brain.widget_routes import MINTED_FOR_NOBODY
 from tests.fixtures.http_client import Response
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
@@ -910,17 +911,23 @@ def test_every_route_under_the_prefix_authenticates_its_caller() -> None:
     authentication. The first PATCH mounted under this prefix found it. A write is the route
     where this matters most, and it was the one shape the check could not see.
 
-    **One written exception, `brain.channel_routes.SIGNED_NOT_SIGNED_IN`**: the address a vendor
+    **Two written exceptions.** `brain.channel_routes.SIGNED_NOT_SIGNED_IN`: the address a vendor
     posts a channel's message to, which has no sign-in to present and proves the channel's
-    signature instead. It is held to exactly that one path here, and its refusal of an unsigned
-    request is driven in `tests/unit/test_channel_pipeline.py`.
+    signature instead; its refusal of an unsigned request is driven in
+    `tests/unit/test_channel_pipeline.py`. And `brain.widget_routes.MINTED_FOR_NOBODY`: where a
+    website visitor's browser asks for a session, which has nobody to sign in and proves the
+    site is on the install's list instead, and hands out a session that holds no entitlement
+    set; its refusals are driven in `tests/unit/test_widget_routes.py`. Each is held to exactly
+    its one path here.
 
     Delete this and the next route under this prefix is public until somebody notices."""
     app: FastAPI = create_app(Settings(env="development"))
     document = app.openapi()["paths"]
     assert {f"{API_PREFIX}/channels/{{name}}/events"} == SIGNED_NOT_SIGNED_IN
-    assert set(document) >= SIGNED_NOT_SIGNED_IN
-    paths = [p for p in document if p.startswith(API_PREFIX) and p not in SIGNED_NOT_SIGNED_IN]
+    assert {f"{API_PREFIX}/widget/sessions"} == MINTED_FOR_NOBODY
+    excepted = SIGNED_NOT_SIGNED_IN | MINTED_FOR_NOBODY
+    assert set(document) >= excepted
+    paths = [p for p in document if p.startswith(API_PREFIX) and p not in excepted]
 
     assert paths, "no route is mounted under the API prefix"
 

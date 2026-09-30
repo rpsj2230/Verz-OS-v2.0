@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 
 from brain.ops import acceptance_run
-from brain.ops.acceptance import CHECK_MODULES, NOT_RUN, PASSED, Check, registered
+from brain.ops.acceptance import NOT_RUN, PASSED, Check, check_modules, registered
 from brain.ops.acceptance_checks_chat import (
     BINDING_A_CHAT_ACCOUNT_IS_NOT_DEPLOYED,
     lark_message,
@@ -34,7 +34,7 @@ from brain.ops.acceptance_checks_chat import (
     sealed,
 )
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head
+from tests.unit.test_acceptance import at_head, checks_in
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "src" / "brain" / "ops" / "acceptance_checks_chat.py"
@@ -72,11 +72,11 @@ def chat_checks() -> list[Check]:
 
 # ------------------------------------------------------------------------ the pure half
 def test_the_three_chat_checks_are_in_the_suite_the_worker_runs() -> None:
-    """Named in `CHECK_MODULES`, which is what `registered` imports and the worker runs, rather
+    """Found by `check_modules`, which is what `registered` imports and the worker runs, rather
     than registered by this test importing the module. Delete this and the module can be dropped
     from the list with the Install page simply showing three fewer rows."""
-    assert "brain.ops.acceptance_checks_chat" in CHECK_MODULES
-    names = [one.name for one in registered(CHECK_MODULES)]
+    assert "brain.ops.acceptance_checks_chat" in check_modules()
+    names = [one.name for one in registered()]
     assert [one for one in names if one in (MENTIONS, DIRECT, ROOMS)] == [MENTIONS, DIRECT, ROOMS]
 
 
@@ -264,3 +264,15 @@ def test_on_a_real_database_the_chat_checks_pass_where_bindings_are_read_and_wai
     }, waited_log
     assert bound == {MENTIONS: (PASSED, ""), DIRECT: (PASSED, ""), ROOMS: (PASSED, "")}, bound_log
     assert after == before
+
+
+def test_the_chat_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_chat") == [
+        "a_lark_group_message_is_answered_only_when_it_names_the_bot",
+        "a_person_bound_in_lark_is_given_their_web_answer_directly",
+        "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
+    ]

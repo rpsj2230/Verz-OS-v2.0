@@ -22,6 +22,7 @@ Task ids: M38.5.1, M27.7.4, M1.6.12
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Final
 
 from sqlalchemy import insert, select
 
@@ -37,6 +38,10 @@ from brain.tables.audit import AuditEntryRow
 from brain.tables.gate import DepartmentRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.staff import StaffMemberRow
+
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 220
 
 #: The staff source the checks list people from. No install chooses a source by this name.
 SOURCE = "acceptance"

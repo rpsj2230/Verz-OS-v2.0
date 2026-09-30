@@ -272,6 +272,10 @@ from brain.notification_routes import router as notification_router
 # refuses a reader who could not see everybody's. See `brain.operate_routes`.
 from brain.operate_routes import router as operate_router
 
+# The interrupted actions: every side effect a stopped worker left unconfirmed and what the
+# recovery sweep learnt about it, for a reader who may see that sweep. See `brain.operation_routes`.
+from brain.operation_routes import router as operation_router
+
 # Disabling a person and enabling them again, from the Departments and teams screen, behind the
 # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
 from brain.principal_state_routes import router as principal_state_router
@@ -388,6 +392,10 @@ from brain.vault_routes import router as vault_router
 # `admin:webhook_subscriber`. Built on `NoEchoRoute`, because two of its writes carry a
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
+
+# The website widget's front door: a stranger's browser is handed a session that holds nothing, or
+# told why not, with no sign-in and the origin proved instead. See `brain.widget_routes`.
+from brain.widget_routes import router as widget_router
 
 
 def routers_in(namespace: Mapping[str, object]) -> tuple[APIRouter, ...]:
