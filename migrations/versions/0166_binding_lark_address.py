@@ -41,7 +41,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0166"
-down_revision = "0150"
+# The head of origin/main when this was last merged. Re-pointed at whichever migration is the head
+# when it lands: nothing here depends on a table a later migration builds.
+down_revision = "0156"
 branch_labels = None
 depends_on = None
 
