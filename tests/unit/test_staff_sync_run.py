@@ -25,12 +25,14 @@ from brain.connectors import ldap_directory
 from brain.connectors.staff_directories import Answer, Fetch, Outbound
 from brain.identity.staff_roster import Application, RunOutcome, StoredMember, digest_of
 from brain.identity.staff_source import STAFF_SOURCE_LOCATION_SETTING, STAFF_SOURCE_SETTING
+from brain.identity.standing import StandingPlan
 from brain.ops import staff_sync_run
 from brain.ops.connectable import READING_ROLE
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_sync import NO_KEY
 from brain.ops.connector_sync_run import ConnectorKeyAbsentError
 from brain.ops.secrets import SecretRef, SecretsUnavailableError
+from brain.ops.staff_accounts_run import NO_ISSUER
 from brain.ops.staff_sync_run import (
     CREDENTIAL_REFUSED_PREFIX,
     NOBODY_CHANGED,
@@ -153,6 +155,17 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Store:
     monkeypatch.setattr(staff_sync_run, "read_last_applied", read_last_applied)
     monkeypatch.setattr(staff_sync_run, "write_application", write_application)
     monkeypatch.setattr(staff_sync_run, "run_row", lambda record: ("run", record))
+
+    # The standing step reads principals and the ledger, which a recording session cannot answer;
+    # `tests/unit/test_standing_run.py` runs it against a real database.
+    async def plan_standing(*_: object, **__: object) -> StandingPlan:
+        return StandingPlan()
+
+    async def apply_standing(*_: object, **__: object) -> None:
+        return None
+
+    monkeypatch.setattr(staff_sync_run, "plan_standing", plan_standing)
+    monkeypatch.setattr(staff_sync_run, "apply_standing", apply_standing)
     return held
 
 
@@ -163,6 +176,7 @@ def run(
     fetch: Fetch | None = None,
     sessions: Sessions | None = None,
     saved: Mapping[str, str] | None = None,
+    trial: bool = False,
 ) -> tuple[staff_sync_run.StaffSyncRun, Sessions]:
     recording = sessions or Sessions()
     clock = iter(NOW + timedelta(seconds=n) for n in range(1000))
@@ -175,6 +189,7 @@ def run(
             fetch=fetch or Directory(),
             clock=lambda: next(clock),
             saved=saved,
+            trial=trial,
         )
     )
     return ran, recording
@@ -661,3 +676,145 @@ def test_microsoft_entra_is_read_on_a_schedule_with_its_managers_and_groups(stor
     assert any("transitiveMembers" in one.url for one in reads)
     ((application, _),) = store.written
     assert sorted(application.added) == ["Ada Lovelace", "Katherine Johnson"]
+
+
+# ------------------------------------------------------------ what a run says it read
+class NamelessDepartments(Directory):
+    """Lark answering an app without `contact:department.base:readonly`: the walk succeeds and
+    every department arrives with no `name`, which is what the owner's install read."""
+
+    async def __call__(self, outbound: Outbound) -> Answer:
+        answer = await super().__call__(outbound)
+        if "departments/0/children" not in outbound.url:
+            return answer
+        data = answer.body["data"]
+        items = [{k: v for k, v in one.items() if k != "name"} for one in data["items"]]
+        return Answer(answer.status, {**answer.body, "data": {**data, "items": items}})
+
+
+def test_a_run_that_read_puts_what_it_read_on_its_row_and_in_the_job_history(
+    store: Store,
+) -> None:
+    """The run row and the control's summary carry the reading's report: departments read and
+    named, people read and placed. Delete this and a run that placed everybody and one that placed
+    nobody are the same row on the Staff sources screen."""
+    ran, _ = run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")))
+
+    ((_, record),) = store.written
+    assert record.report == (
+        "Read 2 departments, 2 with a name, and 3 people; 3 placed in a department.",
+        NO_ISSUER,
+    )
+    assert ran.report == record.report
+    assert record.report[0] in ran.summary()
+
+
+def test_a_lark_read_without_department_names_says_nobody_was_placed_and_which_scope_to_add(
+    store: Store,
+) -> None:
+    """The owner's install on 2026-09-29, at the run: 123 people added, none placed, and a row
+    that said only "applied". The row now says why and what to change.
+
+    Delete this and the run can go back to applying a list that placed nobody in silence."""
+    ran, _ = run(
+        env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), fetch=NamelessDepartments()
+    )
+
+    ((application, record),) = store.written
+    assert {one.department for one in application.writes} == {None}
+    said = " ".join(record.report)
+    assert "Read 2 departments, 0 with a name, and 3 people; 0 placed in a department." in said
+    assert "Not placed: 3 in a department that came back with no name." in said
+    assert "contact:department.base:readonly" in said
+    for name in ("Ada Lovelace", "Katherine Johnson", "ada@example.com"):
+        assert name not in said
+    assert "contact:department.base:readonly" in ran.summary()
+
+
+def test_a_trial_reads_as_the_run_would_and_writes_no_member_and_stops_nobody(
+    store: Store,
+) -> None:
+    """A trial is the night's run with nothing applied: the same lease and read, one `tried` row
+    with the counts a run would change and the report, no member written and no agent stopped.
+
+    Delete this and Try a read can start applying the list it was pressed to preview."""
+    keys = Keys(Lease(f"{APP_ID}:{APP_SECRET}"))
+    ran, sessions = run(env=LARK_ENV, keys=keys, trial=True)
+
+    assert store.written == []
+    assert not [one for one in sessions.executed if is_the_stop(one)]
+    (record,) = records_of(sessions)
+    assert record.outcome is RunOutcome.TRIED
+    assert ran.outcome is RunOutcome.TRIED
+    assert record.detail == (
+        # Two, because Grace has left and a first run adds only the people still here.
+        "Trial read. Read lark. A run now would add 2, mark 0 as having left and move 0 to a new "
+        f"address. {NOBODY_CHANGED}"
+    )
+    assert (record.added, record.marked_left, record.renamed) == ((), (), ())
+    assert record.report[0].startswith("Read 2 departments, 2 with a name, and 3 people")
+    assert keys.lease_given.closed == [NOW]
+
+
+def test_a_trial_that_could_not_read_says_it_was_a_trial(store: Store) -> None:
+    """A trial refused by the source is recorded as the refusal it is, opened so nobody reads it
+    as a failed night. Delete this and a pressed button reads as the nightly sync breaking."""
+    refused = Directory(token_answer=Answer(200, {"code": 10014, "msg": "app secret invalid"}))
+
+    ran, sessions = run(
+        env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), fetch=refused, trial=True
+    )
+
+    (record,) = records_of(sessions)
+    assert record.outcome is RunOutcome.CREDENTIAL_REFUSED
+    assert record.detail.startswith(f"Trial read. {CREDENTIAL_REFUSED_PREFIX}")
+    assert ran.outcome is RunOutcome.CREDENTIAL_REFUSED
+    assert record.report == ()
+
+
+def test_a_scheduled_run_is_not_opened_as_a_trial(store: Store) -> None:
+    """The sibling: a night's refusal opens with the refusal, not with the trial's words. Delete
+    this and every failed night would claim to have been a trial somebody pressed."""
+    refused = Directory(token_answer=Answer(200, {"code": 10014, "msg": "app secret invalid"}))
+
+    _, sessions = run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), fetch=refused)
+
+    (record,) = records_of(sessions)
+    assert record.detail.startswith(CREDENTIAL_REFUSED_PREFIX)
+
+
+def test_an_applied_run_places_its_people_in_the_organisation_and_a_trial_does_not(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every applied run hands its roster to `apply_organisation` with the last applied run it read
+    before applying, so a first run ends no placement; a trial applies nothing and places nobody.
+    Delete this and the organisation plan goes back to being applied by nothing on any install."""
+    from brain.identity.organisation_sync import OrganisationPlan
+
+    handed: list[tuple[str, datetime | None]] = []
+
+    async def apply(sessions: object, roster: object, **kwargs: Any) -> OrganisationPlan:
+        handed.append((getattr(roster, "source", ""), kwargs["last_applied"]))
+        return OrganisationPlan(
+            source="lark",
+            to_join=(),
+            to_leave=(),
+            to_appoint=(),
+            to_stand_down=(),
+            unregistered=(),
+            contested=(),
+            withheld=(),
+            refusals=(),
+        )
+
+    async def principals(sessions: object, roster: object) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(staff_sync_run, "apply_organisation", apply)
+    monkeypatch.setattr(staff_sync_run, "roster_principals", principals)
+    store.last_applied = NOW - timedelta(days=1)
+
+    run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), trial=True)
+    assert handed == []
+    run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")))
+    assert handed == [("lark", NOW - timedelta(days=1))]

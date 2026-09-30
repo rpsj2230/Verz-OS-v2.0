@@ -66,10 +66,10 @@ export interface RequestOptions {
   readonly body?: unknown;
   /**
    * A file sent as the whole request body, raw, under its own media type, with its name in
-   * `x-upload-name`, percent-encoded. The one route that takes one is `POST
-   * /api/v1/knowledge/uploads`, which reads the body as it arrives so a size ceiling applies
-   * before the whole file is held; a JSON body carrying the file as text could not be read that
-   * way. The name travels in a header rather than the URL because a URL is written into every
+   * `x-upload-name`, percent-encoded. The routes that take one are `POST
+   * /api/v1/knowledge/uploads` and `POST /api/v1/skills/procedures`, which read the body as it
+   * arrives so a size ceiling applies before the whole file is held; a JSON body carrying the file
+   * as text could not be read that way. The name travels in a header rather than the URL because a URL is written into every
    * access log and a filename is where a client's name appears. Never set together with `body`.
    */
   readonly file?: { readonly body: Blob; readonly type: string; readonly name: string };

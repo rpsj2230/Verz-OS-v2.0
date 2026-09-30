@@ -159,3 +159,74 @@ export function redoSteps(guide: LarkGuide, tested: LarkTested | null): readonly
 export function stepsFor(guide: LarkGuide, keys: readonly string[]): readonly LarkStep[] {
   return keys.flatMap((key) => guide.steps.filter((one) => one.key === key));
 }
+
+// ------------------------------------------------------------------ the wiki's spaces
+
+export type DeclaredSpaces = components["schemas"]["DeclaredSpacesView"];
+export type DeclaredSpace = components["schemas"]["DeclaredSpaceView"];
+export type SpacesDeclared = components["schemas"]["SpacesDeclaredView"];
+export type LarkSpace = components["schemas"]["LarkSpaceView"];
+
+/** The wiki spaces declared on this install, and where more are declared. */
+export const LARK_WIKI_SPACES_API_PATH = "/connectors/lark-app/wiki-spaces";
+
+/** One space the administrator is about to declare: what was chosen or pasted, and its reach. */
+export interface SpaceChoice {
+  /** The space's id, or the settings link that was pasted for it; the API reads the id out. */
+  readonly space: string;
+  /** What the row is called on the screen: Lark's name for it, or what was pasted. */
+  readonly label: string;
+  /** "company", "department", or "" for a space not being declared in this save. */
+  readonly reach: string;
+  readonly department: string;
+}
+
+/** The spaces a test saw, as rows to declare, leaving out any already declared. */
+export function spaceChoices(tested: LarkTested | null, declared: readonly DeclaredSpace[]): SpaceChoice[] {
+  const already = new Set(declared.map((one) => one.space_id));
+  const seen = tested?.uses.find((one) => one.name === "knowledge_wiki")?.spaces ?? [];
+  return seen
+    .filter((one) => !already.has(one.space_id))
+    .map((one) => ({ space: one.space_id, label: one.name === "" ? one.space_id : one.name, reach: "", department: "" }));
+}
+
+/** The rows a save sends: every row given a reach, in the order drawn. */
+export function spacesBody(choices: readonly SpaceChoice[]): { spaces: { space: string; reach: string; department: string }[] } {
+  return {
+    spaces: choices
+      .filter((one) => one.reach !== "")
+      .map((one) => ({ space: one.space, reach: one.reach, department: one.reach === "department" ? one.department : "" })),
+  };
+}
+
+// ------------------------------------------------------------------ pages the Wiki skipped
+
+/** How many wiki pages questions matched and did not read, and why, for an administrator. */
+export interface SkippedPages {
+  readonly count: number;
+  readonly note: string;
+}
+
+/** The sentence the count is shown in. A number and nothing else: never a page's name. */
+export function skippedWords(count: number): string {
+  return count === 1 ? "1 wiki page a question matched was not read." : `${String(count)} wiki pages questions matched were not read.`;
+}
+
+/**
+ * The count of wiki pages skipped, or null when there is nothing to show.
+ *
+ * Sent only to a reader who may switch the Wiki on, and null for anybody else, because to a person
+ * asking a skipped page must read exactly as a page that is not there. Nought shows nothing either.
+ * Read through the body's own fields rather than the generated type: the count arrives with the
+ * Lark Wiki reader (M11.6.4), and a guide from before it has neither field. A cast at the boundary,
+ * where proving the structural match buys nothing; each field is checked for its type below.
+ */
+export function skippedPages(guide: LarkGuide): SkippedPages | null {
+  const fields = guide as unknown as Readonly<Record<string, unknown>>;
+  const count = fields["wiki_pages_skipped"];
+  if (typeof count !== "number" || !Number.isInteger(count) || count <= 0) {
+    return null;
+  }
+  const note = fields["wiki_pages_skipped_note"];
+  return { count, note: typeof note === "string" ? note : "" };
+}

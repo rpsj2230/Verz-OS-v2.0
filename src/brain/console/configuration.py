@@ -25,7 +25,9 @@ answer for every setting.
 why not on their own row** (since 2026-09-28; until then only branding was, and the owner opened
 Install, Settings to find nothing he could change). Safe means a wrong value is visible and
 recoverable from this same screen: the company's name and branding, the languages, the currency
-and the time zone, and where answers are made. Each is checked by the setting's own rule before
+and the time zone, where answers are made, and whether approvals may be decided from Lark cards
+(a switch on what a card may do rather than on how Lark is connected, so a wrong value is visible
+on this row and put right here). Each is checked by the setting's own rule before
 it is saved (`setting_problem`), confirmed in the console, saved by the wizard's writer inside the
 audit attribution, and held by this process at once. Not safe, and read only here with the reason
 drawn on the row (`READ_ONLY_BECAUSE`): sign-in (an issuer, realm, client or redirect changed from
@@ -58,7 +60,7 @@ realm will not broker is a finding, with `brain.identity.brokering`'s reason. A 
 release whose inference server serves no model that answers is said in the profile sentence,
 which until 2026-09-21 told the reader questions were "answered by the inference server alone".
 
-Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M27.12.7
+Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M27.12.7, M10.7.1
 """
 
 from __future__ import annotations
@@ -72,6 +74,8 @@ from typing import Final
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
+from brain.identity.staff_accounts import NOBODY
+from brain.identity.staff_source import EmploymentType
 from brain.install import BY_NAME, INSTALLATION, Belongs, Setting, saved_values
 from brain.knowledge.search import vector_store_refusal
 from brain.locale import CURRENCY_PATTERN, SHIPPED_TAGS, LocaleError, accent_set, rules_for
@@ -151,6 +155,10 @@ A_REQUIRED_SETTING_NOBODY_SUPPLIED: Final = (
 #: The longest branding value accepted, the setup wizard's own ceiling on one answer.
 MAX_BRANDING_CHARS: Final = 200
 
+#: The two values the Approve from Lark cards switch takes. `brain.approval_cards` reads `on` as
+#: switched on and anything else as off, so a value this screen refused could never switch it on.
+CARD_APPROVAL_CHOICES: Final[frozenset[str]] = frozenset({"on", "off"})
+
 #: The declared code meaning no currency, which the screen never offers as a choice: an install
 #: that has chosen none shows an amount with no code (see `console/src/pages/spendQuery.ts`).
 UNSET_CURRENCY: Final = BY_NAME["INSTALL_CURRENCY"].default
@@ -212,12 +220,14 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_BROKERED_CLIENT_ID": Section.SIGN_IN,
         "INSTALL_STAFF_SOURCE": Section.STAFF,
         "INSTALL_STAFF_SOURCE_LOCATION": Section.STAFF,
+        "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": Section.STAFF,
         "INSTALL_OBJECT_STORE_URL": Section.FILES,
         "INSTALL_OBJECT_STORE_PREFIX": Section.FILES,
         "INSTALL_OBJECT_STORE_BACKEND": Section.FILES,
         "INSTALL_LARK_USES": Section.LARK,
         "INSTALL_LARK_PLATFORM": Section.LARK,
         "INSTALL_LARK_BASE": Section.LARK,
+        "INSTALL_LARK_CARD_APPROVALS": Section.LARK,
         "INSTALL_KNOWLEDGE_SCANNER": Section.FILES,
         "INSTALL_CLAMAV_ADDRESS": Section.FILES,
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": Section.CHECKS,
@@ -248,12 +258,14 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_BROKERED_CLIENT_ID": "App registered with that directory",
         "INSTALL_STAFF_SOURCE": "Where the staff list comes from",
         "INSTALL_STAFF_SOURCE_LOCATION": "Where that staff list is",
+        "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": "Employment types that may use the Brain",
         "INSTALL_OBJECT_STORE_URL": "File store address",
         "INSTALL_OBJECT_STORE_PREFIX": "Folder in the file store",
         "INSTALL_OBJECT_STORE_BACKEND": "Kind of file store",
         "INSTALL_LARK_USES": "What Lark is used for",
         "INSTALL_LARK_PLATFORM": "Lark or Feishu",
         "INSTALL_LARK_BASE": "Lark Base that is read",
+        "INSTALL_LARK_CARD_APPROVALS": "Approve from Lark cards",
         "INSTALL_KNOWLEDGE_SCANNER": "What checks a file before it is read",
         "INSTALL_CLAMAV_ADDRESS": "Antivirus address",
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": "Public skills the install check imports",
@@ -272,6 +284,8 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_CURRENCY",
         "INSTALL_TIME_ZONE",
         "INSTALL_MODEL_PROFILE",
+        "INSTALL_LARK_CARD_APPROVALS",
+        "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
     }
 )
 
@@ -356,7 +370,12 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LOGO_URL": ("brain.console_static",),
     "INSTALL_ACCENT_COLOUR": ("brain.console_static",),
     "INSTALL_SENDER_ADDRESS": ("brain.notification_routes",),
-    "INSTALL_OIDC_ISSUER": ("brain.identity.keycloak_tokens", "brain.console_static"),
+    "INSTALL_OIDC_ISSUER": (
+        "brain.identity.keycloak_tokens",
+        "brain.console_static",
+        "brain.ops.staff_accounts_run",
+        "brain.ops.accounts_key",
+    ),
     "INSTALL_OIDC_REALM": (
         "brain.ops.realm_import",
         "brain.ops.handover_run",
@@ -368,6 +387,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_BROKERED_CLIENT_ID": ("brain.ops.realm_import",),
     "INSTALL_STAFF_SOURCE": ("brain.identity.staff_source", "brain.ops.realm_import"),
     "INSTALL_STAFF_SOURCE_LOCATION": ("brain.identity.staff_source", "brain.ops.realm_import"),
+    "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": ("brain.ops.staff_accounts_run",),
     "INSTALL_MODEL_PROFILE": ("brain.ops.model_service", "brain.app"),
     "INSTALL_MODEL_ENDPOINT": ("brain.knowledge.embed_policy",),
     "INSTALL_EMBEDDING_DIMENSIONS": ("brain.knowledge.search",),
@@ -382,6 +402,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LARK_USES": ("brain.lark_connect_routes",),
     "INSTALL_LARK_PLATFORM": ("brain.lark_connect_routes",),
     "INSTALL_LARK_BASE": ("brain.lark_connect_routes",),
+    "INSTALL_LARK_CARD_APPROVALS": ("brain.approval_cards",),
     "INSTALL_KNOWLEDGE_SCANNER": ("brain.knowledge.scanners",),
     "INSTALL_CLAMAV_ADDRESS": ("brain.knowledge.scanners",),
     "INSTALL_ACCEPTANCE_SKILL_SOURCE": ("brain.ops.acceptance_checks_skills",),
@@ -639,11 +660,15 @@ def setting_problem(name: str, value: str) -> str:
         return _currency_problem(written)
     if name == "INSTALL_TIME_ZONE":
         return _zone_problem(written)
+    if name == "INSTALL_ACCOUNT_EMPLOYMENT_TYPES":
+        return _employment_types_problem(written)
     if name == "INSTALL_MODEL_PROFILE" and written not in MODEL_PROFILES:
         return (
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "
             "allow online providers."
         )
+    if name == "INSTALL_LARK_CARD_APPROVALS" and written not in CARD_APPROVAL_CHOICES:
+        return "Choose off, to decide approvals in the console, or on, to allow Lark cards."
     return ""
 
 
@@ -675,6 +700,26 @@ def _locales_problem(value: str) -> str:
         tags = []
     if not tags:
         return f"Use language tags this product ships, separated by commas: {shipped}."
+    return ""
+
+
+def _employment_types_problem(value: str) -> str:
+    """Every word a type the staff readers know, and at least one of them, or `none` alone.
+
+    A word the readers know no type by is refused rather than saved and ignored, because a
+    misspelt `contractr` would otherwise quietly close every contractor's account on the next run.
+    `none` beside a type is refused for the same reason: it is ambiguous, and one reading of it
+    closes every account the sync made.
+    """
+    known = [one.value for one in EmploymentType]
+    words = [one.strip().casefold() for one in value.split(",") if one.strip()]
+    if words == [NOBODY]:
+        return ""
+    if not words or any(one not in known for one in words):
+        return (
+            f"Use employment types separated by commas, from: {', '.join(known)}; "
+            f"or {NOBODY} for nobody."
+        )
     return ""
 
 

@@ -32,12 +32,14 @@
 
 import { Copy } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
   ConnectFlow,
+  copied,
   Fact,
   FactList,
   FailureState,
@@ -63,6 +65,7 @@ import {
   LARK_FLOW,
   LARK_TEST_API_PATH,
   larkBody,
+  skippedPages,
   startingUses,
   stepsFor,
   toggled,
@@ -73,6 +76,7 @@ import {
   type LarkStep,
   type LarkTested,
 } from "../larkConnectQuery";
+import { WikiSpaces } from "./WikiSpaces";
 
 export const CONNECT_LARK = "Connect Lark";
 export const ADD_A_USE = "Add a use to Lark";
@@ -106,6 +110,12 @@ export const SECRET_SUPPLIED = "Supplied, and never shown again";
 export const TESTING = "Asking Lark.";
 export const TEST_RESULTS = "Test results";
 export const LOADING_GUIDE = "Reading how Lark is connected.";
+export const OPEN_CAPABILITIES = "Open Capabilities";
+export const OPEN_PEOPLE = "Open People";
+
+/** Where a Base's tables are listed by title, and where a person is granted them. */
+export const CAPABILITIES_SCREEN = "/capabilities";
+export const PEOPLE_SCREEN = "/people";
 
 export function goTo(position: number): string {
   return `Go to step ${position}`;
@@ -161,20 +171,6 @@ function EventsPanel({ events }: { readonly events: LarkEvents }) {
       </FactList>
     </section>
   );
-}
-
-/** Copy a text to the clipboard, answering whether the browser allowed it. */
-async function copied(text: string): Promise<boolean> {
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-  if (clipboard === undefined) {
-    return false;
-  }
-  try {
-    await clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** The steps a result sends somebody back to, each with its picture and a way there. */
@@ -609,6 +605,23 @@ function Flow({
           </div>
         )}
         {guide.events === null || guide.events === undefined ? null : <EventsPanel events={guide.events} />}
+      </div>
+    ),
+    wiki_spaces: (
+      <WikiSpaces
+        tested={tested}
+        may={guide.uses.some((one) => one.name === "knowledge_wiki" && one.may_switch_on)}
+        skipped={skippedPages(guide)}
+      />
+    ),
+    base_access: (
+      <div className="flex min-w-0 flex-wrap gap-2">
+        <Link to={CAPABILITIES_SCREEN} className="text-[13px] text-acc-text underline underline-offset-4">
+          {OPEN_CAPABILITIES}
+        </Link>
+        <Link to={PEOPLE_SCREEN} className="text-[13px] text-acc-text underline underline-offset-4">
+          {OPEN_PEOPLE}
+        </Link>
       </div>
     ),
     test: (

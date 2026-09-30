@@ -25,12 +25,17 @@ the product's own colours. Three things follow and each was the reason:
 Rejected: SVG files beside the console, one per step. The picture and the step's words would live
 in two trees, and a step reworded here would keep an old picture there.
 
+**A step may carry one text to copy**, such as a script or an app manifest the vendor accepts
+pasted whole (`copy_text`, with `copy_label` on its button), so a screen that would otherwise be ten
+clicks through a vendor's form is one paste. The text is the product's, the same on every install,
+and never a secret: a secret is typed into the console's own field and nowhere else.
+
 **A step says which values it collects and nothing about how they are typed.** `asks` names the
 fields a screen gathers (an App ID, a key, a setting); the console owns the inputs and the secret
 field, and the route that receives them judges them. So a step definition can never become a
 second validator.
 
-Task ids: M11.9.4, M27.11.9
+Task ids: M11.9.4, M27.11.9, M10.5.6
 """
 
 from __future__ import annotations
@@ -51,6 +56,14 @@ A_PICTURE_IS_AN_OUTLINE_THAT_NAMES_WHERE_TO_PRESS: Final = (
 
 #: The longest text a picture's element holds. A picture labels, it does not explain.
 MAX_SKETCH_WORDS: Final = 48
+
+#: The longest text a step offers to copy. A script or a manifest, not a document.
+MAX_COPY_CHARS: Final = 8000
+
+#: Where a text to copy names this install's events address. The route serving the step writes
+#: the address in its place, and leaves it for the person to replace on an install that names no
+#: public address yet, where the step shows no address either.
+EVENTS_ADDRESS_MARK: Final = "PASTE_THE_EVENTS_ADDRESS_HERE"
 
 
 class LineKind(enum.StrEnum):
@@ -136,6 +149,14 @@ class GuideStep:
     link: str = ""
     link_label: str = ""
     asks: tuple[str, ...] = ()
+    #: A text the person pastes into the vendor whole, and what its button says. Never a secret.
+    copy_text: str = ""
+    copy_label: str = ""
+    #: The path this step belongs to, where the steps branch; empty for a step on every path.
+    path: str = ""
+    #: The paths this step offers, as the path's key and the words of its button. A step that
+    #: offers a choice asks for nothing else.
+    choices: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not (self.key.strip() and self.title.strip() and self.text.strip()):
@@ -146,6 +167,23 @@ class GuideStep:
             raise ValueError(msg)
         if bool(self.link) != bool(self.link_label.strip()):
             msg = f"step {self.key!r} must say what its link opens, and only when it has one"
+            raise ValueError(msg)
+        if bool(self.copy_text) != bool(self.copy_label.strip()):
+            msg = (
+                f"step {self.key!r} must say what its copy button copies, and only when it has one"
+            )
+            raise ValueError(msg)
+        if len(self.copy_text) > MAX_COPY_CHARS:
+            msg = f"step {self.key!r} offers {len(self.copy_text)} characters to copy"
+            raise ValueError(msg)
+        keys = [key for key, _ in self.choices]
+        if any(not key.strip() or not label.strip() for key, label in self.choices) or len(
+            keys
+        ) != len(set(keys)):
+            msg = f"step {self.key!r} offers a choice with a blank or repeated path"
+            raise ValueError(msg)
+        if self.choices and (self.asks or self.path):
+            msg = f"step {self.key!r} offers a choice and so asks for nothing and is on every path"
             raise ValueError(msg)
 
 

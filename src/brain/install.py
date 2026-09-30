@@ -291,6 +291,17 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="unset",
     ),
+    Setting(
+        name="INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "Comma-separated employment types whose people the staff sync gives a sign-in "
+            "account: regular, intern, outsourced, labour_dispatch, consultant, contractor and "
+            "other, or none for nobody. Somebody whose type the source does not record is let "
+            "in. Outsourced is left out unless an administrator adds it (needs-rupash 115)."
+        ),
+        default="regular,intern,labour_dispatch,consultant,contractor,other",
+    ),
     # --- models and providers, M41.1.6
     Setting(
         name="INSTALL_MODEL_PROFILE",
@@ -448,6 +459,19 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
             "in the Base's link after /base/. `unset` means no Base is named, and nothing is read."
         ),
         default="unset",
+    ),
+    # --- approval cards in Lark, M10.2.3 (brain.approval_cards), needs-rupash 117
+    Setting(
+        name="INSTALL_LARK_CARD_APPROVALS",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Whether an approver may approve or reject with the buttons on an approval card in "
+            "Lark: `on` or `off`. A press on a card relies on Lark's own sign-in and carries no "
+            "second factor from the Brain, where a decision in the console asks for one, so switch "
+            "it on only if the company's Lark requires two-step verification. `off`, the default, "
+            "still sends the card, with no buttons and a link to decide it in the console."
+        ),
+        default="off",
     ),
     # --- the knowledge scanner, M7.1.3 (brain.knowledge.scanners)
     Setting(

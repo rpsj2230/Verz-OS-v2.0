@@ -368,6 +368,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # second keep writes over the first and reading them changes nothing.
         "brain.lark_connect_routes:LarkFactStore.read": Repeat.READS,
         "brain.lark_connect_routes:LarkFactStore.keep": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The declared wiki spaces: one `ops.setting` row a space, upserted on its live key, so a
+        # second declaration of a space writes over the first.
+        "brain.lark_connect_routes:WikiSpaceStore.declared": Repeat.READS,
+        "brain.lark_connect_routes:WikiSpaceStore.declare": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.knowledge.scanning:Parser.parse": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.member.connections:TokenRevoker.revoke": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The model executor: the ladder is read on every call, and each attempt is one row in
@@ -568,6 +572,19 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The Limits screen's walk over the windows, which writes nothing.
         "brain.ops.limit_store:WindowClient.scan_iter": Repeat.READS,
         "brain.ops.limit_store:WindowClient.zrange": Repeat.READS,
+        # The capacity ledger's slots and places: a count kept in the cache, where a slot taken
+        # twice under one name is one slot and a slot taken twice under two lapses with its lease.
+        # See `brain.ops.capacity_ledger.A_SLOT_NOBODY_GAVE_BACK_IS_FREED_BY_ITS_LEASE`.
+        "brain.ops.capacity_ledger:LedgerPipeline.watch": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.multi": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.execute": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrange": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerPipeline.zremrangebyscore": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zadd": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrem": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.capacity_ledger:LedgerPipeline.expire": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerClient.pipeline": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerClient.zrange": Repeat.READS,
         # The denial alerts kept for each recipient: every write is a put by content, so a pass
         # run twice leaves the store as one pass did. See `brain.ops.denial_alert_store`.
         "brain.ops.denial_alert_store:AlertClient.scan_iter": Repeat.READS,
@@ -640,6 +657,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.queue:QueueDriver.fetch": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.complete": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.fail": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The recovery sweeps. Putting a job back is work on this system's own queue, whose
+        # effects go through the doors classified here; a second put-back of a job already
+        # waiting is refused by the driver, and so is a second set-aside or settle of a row that
+        # has already moved, which each door answers as the race it is.
+        "brain.ops.recovery_run:QueueRows.running": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.failed": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.run_again": Repeat.ENQUEUES_WORK,
+        "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
+        "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
@@ -739,6 +766,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.channel_store:EventClaims.first": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.channel_store:ChannelSecrets.read": Repeat.READS,
         "brain.ops.channel_store:ChannelSecrets.held": Repeat.READS,
+        # The email channel's mailbox. A read peeks and sets no flag; marking read twice leaves the
+        # message read; signing out a second time does nothing. Nothing here deletes.
+        "brain.channels.mailbox:MailboxReader.unseen": Repeat.READS,
+        "brain.channels.mailbox:MailboxReader.mark_handled": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.channels.mailbox:MailboxReader.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The Lark chat channel (L1). A GET through the transport is the one read a group's
         # floor needs, who is in the conversation, and it changes nothing at the vendor.
         "brain.channels.adapter:ChannelTransport.read": Repeat.READS,
@@ -759,6 +791,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.binding:BindingTable.on_channel": Repeat.READS,
         "brain.channels.binding:BindingTable.bind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.channels.binding:BindingTable.unbind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Approval cards in a chat (M10.2.3). A wire builds a card's request and its press answer
+        # from bytes and a secret; the send is `deliver`'s, through the transport, keyed. An offer
+        # reads approvals and counts one hit in the card ceiling's open window per card; a press
+        # decides through `brain.approval_routes.take_decision`, whose update names the pending
+        # row, so a second press on a decided row changes nothing.
+        "brain.channels.adapter:CardWire.card_request": Repeat.READS,
+        "brain.channels.adapter:CardWire.edit_address": Repeat.READS,
+        "brain.channels.adapter:CardWire.press_answer": Repeat.READS,
+        "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
+        "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
     }
 )
 

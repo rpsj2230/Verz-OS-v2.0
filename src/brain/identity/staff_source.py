@@ -157,6 +157,42 @@ A_SPREADSHEET_CANNOT_BE_AUTHENTICATED_AGAINST: Final = (
 )
 
 
+class EmploymentStatus(enum.StrEnum):
+    """Where somebody the source lists stands, as every source can say it. Mirrored by
+    `brain.tables.staff.EMPLOYMENT_STATUSES`.
+
+    Four and not a bool, because the owner asked on 2026-09-29 that the People list show it and
+    that anybody not active be refused, and "suspended" and "has left" are different things to the
+    administrator reading why somebody cannot sign in.
+    """
+
+    #: Working here today.
+    ACTIVE = "active"
+    #: The source has paused the account: Lark's frozen, a disabled directory account.
+    SUSPENDED = "suspended"
+    #: The source says they left, or left of their own accord.
+    LEFT = "left"
+    #: Invited and never activated, or never joined.
+    NOT_ACTIVATED = "not_activated"
+
+
+class EmploymentType(enum.StrEnum):
+    """What kind of employment the source records. Mirrored by `tables.staff.EMPLOYMENT_TYPES`.
+
+    Lark's five and a contractor, which Microsoft Entra and LDAP write as free text, and `OTHER`
+    for anything a source records that none of these names: a company's own custom type, which is
+    still a type and still needs a decision about whether it may use the Brain.
+    """
+
+    REGULAR = "regular"
+    INTERN = "intern"
+    OUTSOURCED = "outsourced"
+    LABOUR_DISPATCH = "labour_dispatch"
+    CONSULTANT = "consultant"
+    CONTRACTOR = "contractor"
+    OTHER = "other"
+
+
 class Asserts(enum.StrEnum):
     """What a roster source is trusted to say. Three members and deliberately no fourth.
 
@@ -224,8 +260,28 @@ class StaffRecord:
     teams: tuple[str, ...] = ()
     #: True when the source names this person as the lead of `department`. See `leads_from`.
     leads: bool = False
+    #: Where the source says they stand, for a source that says more than here or gone. None for
+    #: one that says only `active`, which `standing` reads.
+    status: EmploymentStatus | None = None
+    #: What kind of employment the source records, or None where it records none.
+    employment_type: EmploymentType | None = None
+
+    @property
+    def standing(self) -> EmploymentStatus:
+        """Where they stand: the source's own word, or active and left read off `active`."""
+        if self.status is not None:
+            return self.status
+        return EmploymentStatus.ACTIVE if self.active else EmploymentStatus.LEFT
 
     def __post_init__(self) -> None:
+        if self.status is not None and (self.status is EmploymentStatus.ACTIVE) != self.active:
+            msg = (
+                f"{self.work_address} is {self.status.value} and "
+                f"{'active' if self.active else 'not active'}; a source says one thing about "
+                "whether somebody works here, and a record saying both would be removed by one "
+                "reading and kept by another"
+            )
+            raise ValueError(msg)
         if "@" not in self.work_address or not self.work_address.strip():
             msg = (
                 f"{self.work_address!r} is not a work address, and the address is the only "
