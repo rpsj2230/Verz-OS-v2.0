@@ -38,7 +38,7 @@ from brain.ops.acceptance_ingest import (
 from brain.settings import settings_from
 from brain.tools.fetch import FetchedBytes
 from tests.fixtures.memory_store import MemoryStore
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_ingest"
 
@@ -291,3 +291,19 @@ def test_a_spreadsheet_read_as_a_document_fails_the_offer_check(
     for module in (knowledge_routes, knowledge_intake_routes):
         monkeypatch.setattr(module, "offer_a_table_file", lambda *args: None)
     assert "not offered" in _failed(install, OFFER)
+
+
+def test_the_ingest_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_ingest") == [
+        "a_file_carrying_script_or_macros_is_refused_before_it_is_read",
+        "the_antivirus_test_file_is_refused_as_malware",
+        "a_link_is_fetched_read_and_found_in_its_department",
+        "a_full_ingestion_queue_refuses_with_a_retry_hint",
+        "a_queued_file_is_kept_in_the_store_and_read_by_the_worker",
+        "the_embedding_width_is_the_installs_and_held_under_vectors",
+        "a_price_list_sent_as_a_document_is_offered_to_classification",
+    ]

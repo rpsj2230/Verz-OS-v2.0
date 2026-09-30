@@ -29,19 +29,20 @@ to a sentinel that appears nowhere else, and the whole response body and every l
 searched for it. That is the check `brain.console.staff_source_view.staff_source_gaps` makes
 about the rows and this file makes about the bytes that leave the process.
 
-**The trial's success path is exercised against a source built here and never against a
-directory.** Nothing in this repository fetches a roster, so a gatherer is attached to
-`app.state` and the plan it produces is compared with `dry_run`'s own answer over the same
-inputs, which is what stops this file agreeing with a projection that dropped a field.
+**The trial is a request to the worker, and what is tested here is the asking.** Since
+2026-09-29 Try a read writes when it was asked and the worker reads the source
+(`brain.ops.staff_trial`); the read itself is `tests/unit/test_staff_sync_run.py`'s. The session
+factory and the two statements are replaced here, because this file runs with no database, so what
+is held is who may ask, what is refused in words, and that the asking is attributed before it is
+written.
 
 Task ids: none
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -49,6 +50,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
 
+from brain import staff_source_routes
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
 from brain.console.reads import Plane, plane_capability
@@ -59,17 +61,16 @@ from brain.core.scope import Clause, Op, Scope
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
     STAFF_SOURCE_SETTING,
-    Roster,
-    StaffRecord,
     selectable_names,
     selected_source,
 )
-from brain.identity.staff_sync import dry_run
 from brain.install import hold_saved, value_of
 from brain.ops.jobs import hidden_count_fields
+from brain.ops.staff_trial import TRIAL_WAITING
 from brain.staff_source_routes import (
     ADDRESSES,
-    NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE,
+    NOT_READ_BY_THE_WORKER,
+    NOTHING_TO_TRY,
     SCREEN_PATH,
     WHERE_A_SOURCE_IS_CHOSEN,
     RoleAssertionView,
@@ -77,7 +78,7 @@ from brain.staff_source_routes import (
     SelectionView,
     SourceOptionView,
     StaffSourcesView,
-    TrialInputs,
+    StaffTrialView,
     TrialPlanView,
     TrialRunView,
     TrialView,
@@ -117,9 +118,13 @@ STAFF_SOURCE_CAPABILITY = "read:staff_source"
 #: `INSTALL_STAFF_SOURCE_LOCATION` carries on a real install.
 SENTINEL_LOCATION = "zzsentinel-location-9f2c"
 
-#: The one source that needs no setting at all, so a trial can be run without pointing anything
-#: anywhere. `brain.identity.staff_source.SELECTABLE` declares it with `needs=()`.
+#: The one source that needs no setting at all, so the screen answers without pointing anything
+#: anywhere. `brain.identity.staff_source.SELECTABLE` declares it with `needs=()`. The worker has
+#: nothing to read for it, which is one of the trial's refusals.
 SPREADSHEET = "spreadsheet"
+
+#: A source the worker reads, for the trial that is accepted.
+LARK = "lark"
 
 #: A source that needs a setting, for the refusal a chosen-and-unpointed install meets.
 GOOGLE_SHEET = "google_sheet"
@@ -170,64 +175,6 @@ class StaffStore:
 
     async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return EntitlementSet(principal_id=principal_id, grants=STAFF_GRANTS[principal_id])
-
-
-# ------------------------------------------------------------------ the source and the inputs
-
-
-@dataclass
-class Sheet:
-    """A staff source that answers from rows this test wrote, and counts how often it was asked.
-
-    A real `brain.identity.staff_source.StaffSource` rather than a mock, because the protocol
-    has exactly one method and a double of it would be the same code with a library between.
-    The count is what makes the ordering property assertable: a reader who may not run a trial
-    must not cause the source to be read, and the only evidence of that is that nothing asked.
-    """
-
-    people: tuple[StaffRecord, ...]
-    source: str = SPREADSHEET
-    complete: bool = False
-    asked: int = 0
-
-    def roster(self) -> Roster:
-        self.asked += 1
-        return Roster(source=self.source, people=self.people, complete=self.complete)
-
-
-@dataclass
-class Gatherer:
-    """A stand-in for whatever a wired process would attach, counting how often it was called.
-
-    The count is the second half of the ordering property. `trial_source_of` returning the
-    gatherer is cheap; calling it is what opens a connection and contacts the source on a real
-    install, so a reader who reaches nothing must not reach this either.
-    """
-
-    sheet: Sheet
-    known: Mapping[str, str]
-    last_applied: datetime | None = None
-    called: int = 0
-
-    def __call__(self, now: datetime) -> TrialInputs:
-        self.called += 1
-        return TrialInputs(
-            source=self.sheet,
-            known=self.known,
-            last_applied=self.last_applied,
-        )
-
-
-ADA = StaffRecord(work_address="ada@example.test", display_name="Ada", department="maintenance")
-GRACE = StaffRecord(work_address="grace@example.test", display_name="Grace")
-
-
-def _gatherer() -> Gatherer:
-    """One person the system already holds and one it does not, which is a plan with both halves."""
-    return Gatherer(
-        sheet=Sheet(people=(ADA, GRACE)),
-        known={"grace@example.test": "u_2", "hopper@example.test": "u_3"},
-    )
 
 
 # ------------------------------------------------------------------------- the wiring
@@ -424,6 +371,7 @@ def test_no_shape_on_this_screen_can_carry_a_count_of_what_was_withheld() -> Non
                 TrialPlanView,
                 TrialRunView,
                 TrialView,
+                StaffTrialView,
             )
         )
         == ()
@@ -445,17 +393,16 @@ def test_the_screen_says_a_source_is_chosen_on_it_and_that_the_server_needs_no_e
     assert "not_written_here" not in page
 
 
-@pytest.mark.parametrize("path", [PAGE_PATH, TRIAL_PATH])
-def test_neither_address_answers_a_verb_that_could_write(client: TestClient, path: str) -> None:
-    """Delete this and a write can be added to a screen whose whole subject is a read.
+def test_the_page_answers_no_verb_that_could_write(client: TestClient) -> None:
+    """Delete this and a write can be added to the page whose whole subject is a read.
 
-    A trial reads a source and changes nothing, and applying what one proposes is a different
-    authority: the first sync, at its own address, under the two authorities a connection needs.
-    The property is that there is no verb on these two addresses at all rather than a verb that
-    refuses, so this asserts the method is not allowed rather than that a POST is refused.
+    Applying a plan is a different authority: the first sync, at its own address, under the two
+    authorities a connection needs. The trial's address takes a POST since 2026-09-29, and what it
+    writes is when it was asked and nothing else, which the trial's tests below hold. The property
+    here is that the page's own address has no verb at all rather than one that refuses.
     """
     token = token_for("u_admin", claims={"amr": ["otp"]})
-    answer = client.post(path, headers={"authorization": f"Bearer {token}"}, json={})
+    answer = client.post(PAGE_PATH, headers={"authorization": f"Bearer {token}"}, json={})
 
     assert answer.status_code == 405
 
@@ -520,139 +467,177 @@ def test_a_source_this_install_can_read_is_shown_as_ready(client: TestClient) ->
 
 
 # ----------------------------------------------------------------------------- the trial
+def post(c: TestClient, path: str, pid: str) -> Response:
+    token = token_for(pid, claims={"amr": ["otp"]})
+    response: Response = c.post(path, headers={"authorization": f"Bearer {token}"}, json={})
+    return response
 
 
-def test_a_trial_nothing_can_gather_answers_a_sentence_and_not_an_empty_plan(
-    client: TestClient,
-) -> None:
-    """Delete this and an install that never looked reports that nobody would be added.
+class Session:
+    """The one transaction a trial request is written in, recording what was done in it."""
 
-    `brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE` asked about a roster, and the
-    direction matters: a plan computed from no roster is a statement about this install rendered
-    as a statement about a client's directory, and it would be believed.
-    """
-    answer = body(client, TRIAL_PATH, "u_admin")
+    def __init__(self, done: list[str]) -> None:
+        self.done = done
 
-    assert answer["trial"] is None
-    assert answer["unread"] == NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE
+    async def __aenter__(self) -> Session:
+        return self
 
+    async def __aexit__(self, *_: object) -> None:
+        return None
 
-def test_a_reader_who_may_not_run_a_trial_is_answered_what_an_unwired_install_answers(
-    client: TestClient,
-) -> None:
-    """Delete this and the trial's refusal becomes distinguishable from its absence.
-
-    `u_wide` holds the screen's capability and the configuration plane, which is the whole of
-    the page and none of the trial, because naming who would be added is a content disclosure.
-    The install is wired here, so the difference between this reader and `u_admin` is a grant and
-    nothing else, and the two answers must not differ in a way that says so.
-
-    The gatherer's own count is the second half: a refused reader must not cause the source to be
-    contacted at all, which is why the check is asked before anything is assembled.
-    """
-    gathers = _gatherer()
-    client.app.state.staff_trial_source = gathers  # type: ignore[attr-defined]
-
-    refused = body(client, TRIAL_PATH, "u_wide")
-
-    assert refused["trial"] is None
-    assert refused["unread"] == NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE
-    assert (gathers.called, gathers.sheet.asked) == (0, 0)
-    assert body(client, TRIAL_PATH, "u_admin")["trial"] is not None
+    def begin(self) -> Session:
+        return self
 
 
-def test_a_gatherer_that_is_not_callable_is_the_same_as_no_gatherer(client: TestClient) -> None:
-    """Delete this and a string on `app.state` is invoked and reaches a caller as a 500.
+class Asking:
+    """Stands in for the database a trial request is written to and read back from."""
 
-    The `callable` check in `trial_source_of` is the whole of the structural match, which the
-    module says out loud rather than pretending an `isinstance` against a single-method protocol
-    would have been stronger. This is the test that makes that comment true.
-    """
-    client.app.state.staff_trial_source = "not a gatherer"  # type: ignore[attr-defined]
+    def __init__(self, requested: datetime | None = None, started: datetime | None = None):
+        self.done: list[str] = []
+        self.asked_at: list[datetime] = []
+        self.requested = requested
+        self.started = started
 
-    assert body(client, TRIAL_PATH, "u_admin")["unread"] == NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def attribute(session: Session, asked: object) -> None:
+            session.done.append("attributed")
+
+        async def request_trial(session: Session, *, at: datetime, by: str) -> None:
+            session.done.append(f"asked by {by}")
+            self.asked_at.append(at)
+
+        async def trial_requested(session: Session) -> datetime | None:
+            return self.requested
+
+        async def read_last_started(session: Session) -> datetime | None:
+            return self.started
+
+        monkeypatch.setattr(
+            staff_source_routes, "sessions_of", lambda _: lambda: Session(self.done)
+        )
+        monkeypatch.setattr(staff_source_routes, "attribute", attribute)
+        monkeypatch.setattr(staff_source_routes, "request_trial", request_trial)
+        monkeypatch.setattr(staff_source_routes, "trial_requested", trial_requested)
+        monkeypatch.setattr(staff_source_routes, "read_last_started", read_last_started)
 
 
-def test_a_trial_is_the_plan_the_sync_would_compute_over_the_same_inputs(
-    client: TestClient,
-) -> None:
-    """Delete this and a projection can drop half of what a run would do and still read well.
-
-    The plan is compared with `dry_run`'s own answer over the same roster and the same holdings,
-    rather than with fields typed here: a trial assembled any other way is a rehearsal of a
-    different performance, which is `brain.identity.staff_sync`'s opening sentence, and a test
-    that built the expected lists by hand would be agreeing with whatever the projection did.
-
-    Grace is held already and Ada is not, so the plan has both halves: somebody who would be
-    added and somebody the system holds whom the sheet did not mention. Nothing is removed,
-    because a spreadsheet never promises completeness and this source has never been applied,
-    and both of those reasons are carried in `withheld` rather than inferred.
-    """
-    gathers = _gatherer()
-    client.app.state.staff_trial_source = gathers  # type: ignore[attr-defined]
-
-    answer = body(client, TRIAL_PATH, "u_admin")
-    expected = dry_run(
-        Roster(source=SPREADSHEET, people=(ADA, GRACE), complete=False),
-        known=gathers.known,
-        last_applied=None,
+@pytest.fixture
+def reads_lark() -> Iterator[None]:
+    """This install set to a source the worker reads, pointed at its platform."""
+    before = hold_saved(
+        {STAFF_SOURCE_SETTING: LARK, STAFF_SOURCE_LOCATION_SETTING: "larksuite.com"}
     )
-
-    assert answer["trial"]["source"] == SPREADSHEET
-    assert answer["trial"]["plan"]["would_add"] == [
-        {
-            "work_address": one.work_address,
-            "display_name": one.display_name,
-            "department": one.department,
-            "groups": list(one.groups),
-            "active": one.active,
-        }
-        for one in expected.would_add
-    ]
-    assert answer["trial"]["plan"]["absent"] == list(expected.absent)
-    assert answer["trial"]["plan"]["would_remove"] == list(expected.would_remove)
-    assert answer["trial"]["plan"]["withheld"] == list(expected.withheld)
-    assert answer["trial"]["plan"]["gaps"] == list(expected.gaps)
-    assert answer["trial"]["safe_to_apply"] is expected.safe_to_apply
+    yield
+    hold_saved(before)
 
 
-def test_a_trial_reads_the_source_once_and_writes_nothing(client: TestClient) -> None:
-    """Delete this and a screen somebody presses repeatedly can start asking twice per press.
-
-    A trial is a read and the count is the only evidence of how many. It also pins that the
-    route reaches the source through `roster_from` rather than through a second path of its own:
-    two readings would be two rosters, and a diff computed against the second of them is a diff
-    nobody looked at.
-    """
-    gathers = _gatherer()
-    client.app.state.staff_trial_source = gathers  # type: ignore[attr-defined]
-
-    body(client, TRIAL_PATH, "u_admin")
-
-    assert (gathers.called, gathers.sheet.asked) == (1, 1)
-    assert client.app.state.db_sessions is None  # type: ignore[attr-defined]
-
-
-def test_a_roster_from_somewhere_else_is_carried_as_a_refusal_and_not_as_a_plan(
-    client: TestClient,
+def test_a_trial_asked_for_is_written_attributed_and_the_screen_is_told_it_waits(
+    client: TestClient, reads_lark: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Delete this and a source answering for a different install reads as a working trial.
+    """Try a read writes when it was asked, after attributing the transaction so the ledger names
+    who pressed it, and answers that the worker reads it next. Delete this and the button can go
+    back to saying nothing here reads a staff list while the worker reads one every night."""
+    asking = Asking()
+    asking.install(monkeypatch)
 
-    `roster_from` refuses a roster whose source is not the one this install chose, because
-    reconciliation compares a source's rows against that same source's previous rows and the two
-    would delete each other's assertions on every run. A trial is read at exactly the moment
-    somebody is finding out whether a source is wired correctly, so the refusal is reported
-    rather than raised, and the shape that carries it is a run with no plan.
-    """
-    gathers = _gatherer()
-    gathers.sheet.source = GOOGLE_SHEET
-    client.app.state.staff_trial_source = gathers  # type: ignore[attr-defined]
+    answer = post(client, TRIAL_PATH, "u_admin")
 
-    answer = body(client, TRIAL_PATH, "u_admin")
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["waiting"] is True
+    assert answer.json()["told"] == TRIAL_WAITING
+    assert asking.done == ["attributed", "asked by u_admin"]
+    assert len(asking.asked_at) == 1
 
-    assert answer["trial"]["plan"] is None
-    assert answer["trial"]["refusals"] != []
-    assert answer["trial"]["safe_to_apply"] is False
+
+def test_a_reader_who_may_not_run_a_trial_cannot_ask_for_one(
+    client: TestClient, reads_lark: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`u_wide` holds the page and not the trial, because what a trial reads names the company's
+    staff. Delete this and anybody who can open the page can make the worker read the directory.
+    The sibling above is the reader who may."""
+    asking = Asking()
+    asking.install(monkeypatch)
+
+    answer = post(client, TRIAL_PATH, "u_wide")
+
+    assert answer.status_code == 404
+    assert asking.done == []
+
+
+@pytest.mark.parametrize(
+    ("chosen", "told"), [("none", NOTHING_TO_TRY), (SPREADSHEET, NOT_READ_BY_THE_WORKER)]
+)
+def test_a_source_the_worker_cannot_read_is_refused_in_words_and_nothing_is_asked(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, chosen: str, told: str
+) -> None:
+    """No list chosen, and a hand-kept spreadsheet, which is read when uploaded, give the worker
+    nothing to read. Delete this and a press waits a quarter of an hour for a read that cannot
+    happen."""
+    asking = Asking()
+    asking.install(monkeypatch)
+    before = hold_saved({STAFF_SOURCE_SETTING: chosen})
+    try:
+        answer = post(client, TRIAL_PATH, "u_admin")
+    finally:
+        hold_saved(before)
+
+    assert answer.status_code == 422
+    assert answer.json()["message"] == told
+    assert asking.done == []
+
+
+def test_a_source_pointed_nowhere_is_refused_with_the_selection_s_own_words(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A chosen source missing its location is refused with `selected_source`'s sentence, the
+    one the page already shows. Delete this and a trial is asked of a source the worker will
+    refuse, and the person finds out from a failed row a minute later."""
+    asking = Asking()
+    asking.install(monkeypatch)
+    before = hold_saved({STAFF_SOURCE_SETTING: GOOGLE_SHEET})
+    try:
+        with pytest.raises(Exception) as why:
+            selected_source()
+        answer = post(client, TRIAL_PATH, "u_admin")
+    finally:
+        hold_saved(before)
+
+    assert answer.status_code == 422
+    assert answer.json()["message"] == str(why.value)
+    assert asking.done == []
+
+
+def test_the_screen_is_told_a_trial_waits_until_a_run_starts_after_the_press(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`GET` says a press is waiting while no run has started since it, and not once one has.
+    Delete this and the page cannot say the worker has not read yet, or says so for ever."""
+    pressed = datetime.now(tz=UTC) - timedelta(seconds=5)
+    Asking(requested=pressed).install(monkeypatch)
+    waiting = body(client, TRIAL_PATH, "u_admin")
+    Asking(requested=pressed, started=pressed + timedelta(seconds=1)).install(monkeypatch)
+    answered = body(client, TRIAL_PATH, "u_admin")
+
+    assert waiting["waiting"] is True
+    assert waiting["told"] == TRIAL_WAITING
+    assert answered == {"requested_at": None, "waiting": False, "told": ""}
+
+
+def test_a_reader_who_may_not_run_a_trial_is_told_nothing_waits_as_on_an_install_never_asked(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A live request is answered to `u_admin` and not to `u_wide`, who is answered exactly what
+    an install with no request is. Delete this and whether a trial is waiting tells a reader
+    something about a read they may not see."""
+    Asking(requested=datetime.now(tz=UTC)).install(monkeypatch)
+
+    assert body(client, TRIAL_PATH, "u_wide") == body(client, TRIAL_PATH, "u_none")
+    assert body(client, TRIAL_PATH, "u_wide") == {
+        "requested_at": None,
+        "waiting": False,
+        "told": "",
+    }
+    assert body(client, TRIAL_PATH, "u_admin")["waiting"] is True
 
 
 def test_a_trial_carries_a_plan_or_a_refusal_and_never_neither() -> None:
@@ -668,5 +653,27 @@ def test_a_trial_carries_a_plan_or_a_refusal_and_never_neither() -> None:
     with pytest.raises(ValueError, match="never both and never neither"):
         TrialView(
             trial=TrialRunView(source=SPREADSHEET, plan=None, refusals=["no"], safe_to_apply=False),
-            unread=NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE,
+            unread="There is no trial.",
         )
+
+
+def test_the_screen_says_how_people_first_sign_in_and_what_stops_them_with_nothing_sent(
+    client: TestClient,
+) -> None:
+    """The owner's flow, on the page an administrator connects the list from: nobody is sent
+    anything, a person presses Forgot password, and without the sign-in service's email settings
+    nobody can, with what to fill in. Delete this and the screen can promise invitations the sync
+    never sends, or leave an install with no email settings wondering why nobody can sign in."""
+    page = body(client, PAGE_PATH, "u_admin")
+
+    assert "sends nobody anything" in page["accounts"]
+    assert "Forgot password" in page["accounts"]
+    assert page["email_settings"].startswith(
+        "If the sign-in service has no email settings, nobody can set a password yet"
+    )
+    for field in ("Realm settings", "Email", "From address", "Host", "Port", "Test connection"):
+        assert field in page["email_settings"]
+    assert page["account_ready"] == (
+        "Your account is ready. Go to the sign-in page, press Forgot password and enter your "
+        "work email."
+    )

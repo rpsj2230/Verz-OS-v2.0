@@ -45,6 +45,10 @@ from brain.ops.acceptance_run import Harness
 if TYPE_CHECKING:
     from brain.console.skill_library import LibrarySkill
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 290
+
 # ------------------------------------------------------------------------ the figures
 #: The steps each file holds, in the order the document gives them.
 WORD_STEPS: Final[tuple[str, ...]] = (

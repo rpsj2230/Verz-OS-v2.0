@@ -24,12 +24,12 @@ import pytest
 from brain.console import skill_library
 from brain.console.skill_library import added, procedure_package, read_procedure_file
 from brain.ops import acceptance_checks_procedures as procedures
-from brain.ops.acceptance import CHECK_MODULES, FAILED, PASSED, Check, registered
+from brain.ops.acceptance import FAILED, PASSED, Check, check_modules, registered
 from brain.tools import sop_files
 from brain.tools.sop_files import MAX_PROCEDURE_BYTES
 from brain.tools.sop_import import Concern
 from tests.fixtures.scratch_postgres import sql
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 from tests.unit.test_acceptance_skills import run_checks, skill_counts
 
 NAME = "a_written_procedure_lands_as_a_draft_skill_with_its_findings"
@@ -47,8 +47,16 @@ def test_the_procedure_check_is_in_the_suite_and_proves_the_procedure_import_lea
     """The module is one the registry imports and its one check names M12.2.10. Delete this and
     the check can fall out of the run with the Install page listing one fewer row, or prove a
     leaf it does not exercise."""
-    assert "brain.ops.acceptance_checks_procedures" in CHECK_MODULES
+    assert "brain.ops.acceptance_checks_procedures" in check_modules()
     assert [(one.name, one.leaves) for one in mine()] == [(NAME, ("M12.2.10",))]
+
+
+def test_the_procedures_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them: the one that
+    imports a Word document and a Confluence page. Held here, beside the module's other tests, so a
+    package adding a check edits its own file and never a list every package appends to. Delete
+    this and a check can drop out of the module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_procedures") == [NAME]
 
 
 @pytest.mark.parametrize(

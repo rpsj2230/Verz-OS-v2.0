@@ -10,12 +10,18 @@ Task ids: M27.7.4
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
+from brain.console.organisation import founded
+from brain.core.department import SLUG_PATTERN
 from brain.identity.organisation_sync import (
+    SLUG_CHARS,
     HeldLead,
     HeldMembership,
     Placement,
+    department_slug,
+    departments_to_found,
     organisation_plan,
     sync_actor,
 )
@@ -26,6 +32,7 @@ from brain.identity.staff_source import (
     leads_from,
     teams_from,
 )
+from brain.identity.starter_pack_sync import registered_by_name
 from brain.tables.organisation import SYNC_ACTOR_PREFIX
 
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
@@ -218,3 +225,73 @@ def test_teams_and_leads_are_read_from_active_people_in_their_own_department() -
         pass
     else:
         raise AssertionError("a team with no department was accepted")
+
+
+# ------------------------------------------------------------ a source's spelling of a department
+def test_a_department_the_source_spells_its_own_way_is_matched_to_the_registered_one() -> None:
+    """Lark says `Web Development`, the install's slug is `web`, registered under that name: the
+    team and the lead are the registered department's. Delete this and a department whose name
+    has a space in it places nobody, which is what the plan did until 2026-09-29."""
+    people = (
+        StaffRecord("wei@example.test", "Wei", department="Web Development", teams=("design",)),
+        StaffRecord("new@example.test", "New", department="web  development", leads=True),
+    )
+    matched = organisation_plan(
+        roster(*people),
+        known=KNOWN,
+        teams=TEAMS,
+        departments=DEPARTMENTS,
+        last_applied=None,
+        slug_of=registered_by_name({"web": "Web Development", "finance": "Finance"}),
+    )
+    spelled = organisation_plan(
+        roster(*people), known=KNOWN, teams=TEAMS, departments=DEPARTMENTS, last_applied=None
+    )
+
+    assert matched.to_join == (Placement(where="web.design", principal_id="u_wei"),)
+    assert matched.to_appoint == (Placement(where="web", principal_id="u_new"),)
+    assert matched.unregistered == ()
+    assert spelled.to_join == ()
+    assert set(spelled.unregistered) == {"Web Development.design", "web  development"}
+
+
+def test_a_name_becomes_a_slug_of_its_words_and_a_name_with_none_a_digest() -> None:
+    """Held against slugs written out here rather than against the function. Delete this and a
+    Chinese department name, or one starting with a year, becomes a slug the type refuses and the
+    founding fails for the whole press."""
+    assert department_slug("Web Development") == "web_development"
+    assert department_slug("R&D  / Labs") == "r_d_labs"
+    assert department_slug("2024 Interns") == "department_2024_interns"
+    chinese = department_slug("设计部")
+    assert chinese.startswith("department_") and len(chinese) == len("department_") + 8
+    assert department_slug("设计部") == chinese
+    assert department_slug("设计部") != department_slug("市场部")
+    assert len(department_slug("A very long department name " * 5)) <= SLUG_CHARS
+    # One letter matches the slug grammar and is refused by the department type, which wants two.
+    assert department_slug("x").startswith("department_")
+    for name in ("Web Development", "R&D", "2024 Interns", "设计部", "x"):
+        assert re.fullmatch(SLUG_PATTERN, department_slug(name)), name
+        founded(department_slug(name), name)
+
+
+def test_what_is_offered_leaves_out_every_registered_name_and_numbers_a_taken_slug() -> None:
+    """A name a registered department answers to is not offered again, two spellings of one name
+    are one department, and a slug already taken is numbered. Delete this and a second press
+    founds `Finance` twice, or two departments get one slug and the second press fails."""
+    registered = {"finance": "Finance", "web": "Web"}
+    named = departments_to_found(
+        ["Finance", "FINANCE", "Web Dev", "web  dev", "Web!", "Design", " "],
+        registered,
+        registered_by_name(registered),
+    )
+
+    # `Web!` is not how the registered `web` is spelled, so it is offered, and numbered because
+    # its slug is taken; `Finance` and `FINANCE` are one name a registered department answers to.
+    assert [(one.name, one.slug) for one in named.to_found] == [
+        ("Design", "design"),
+        ("Web Dev", "web_dev"),
+        ("Web!", "web_2"),
+    ]
+    assert named.registered == ("FINANCE",)
+    numbered = departments_to_found(["Web-Dev", "Web Dev"], {"web_dev": "Web development team"}, {})
+    assert [one.slug for one in numbered.to_found] == ["web_dev_2", "web_dev_3"]

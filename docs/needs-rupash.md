@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**11 items are open: 131,** making staff accounts work on your install, **127 to 129,** things
+**14 items are open: 133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,78 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 133. Search Console's indexing issues: counts from the sitemaps, not a page-by-page report
+
+**In plain terms:** your task for Search Console (M11.7.2) asks for a site's indexing issues.
+Google's Search Console API has no Page indexing report: the only way to ask about one page is a
+separate inspection call per page, which is slow and rationed. So the connector reports indexing
+issues as the error and warning counts Google gives for each of the site's sitemaps, and the answer
+says that is what it is. Everything else in the task (queries, pages, clicks and impressions, for
+any range you name) is read in full.
+
+**Option A: accept the sitemap counts,** with the answer naming them as sitemap counts.
+**Option B: also inspect named pages on request,** one call per page, only when somebody asks about
+specific pages, slower and within Google's daily allowance.
+
+**My recommendation: A now.** It answers "is anything wrong with indexing" straight away, and B can
+be added the day someone needs page-by-page detail.
+
+**What I need from you:** reply "133: A" or "133: B".
+
+## 132. Connect the email channel (ready now if your domain is on Cloudflare)
+
+**In plain terms:** people can now email the Brain and get an answer back by email (item 126's
+order: the first of the channels). Answers go out through the install's own mail relay; mail comes
+in, today, through Cloudflare. **If your company's domain is not on Cloudflare, wait:** a version
+that reads an ordinary mailbox (Google, Microsoft 365, Lark Mail or any other provider) is being
+built next, and I will tell you when it is ready.
+
+**What you do,** in the console under **Channels**, **Email**, **Connect Email**, which shows each
+step:
+
+1. **Set up the mail relay first.** Open **Notifications**, fill in **Email relay** with your mail
+   provider's sending details (host, port, sender address, user name and password) and send its
+   test message. These can be the same details item 131 asks for.
+2. **Give the Brain an address of its own.** In Cloudflare open your domain, then **Email Routing**.
+   Use a subdomain of your domain just for the Brain, never the domain your staff's mailboxes use: open
+   **Settings** and add the subdomain under **Subdomains**. If Cloudflare asks to turn Email Routing
+   on for the whole domain, stop and ask whoever runs your company's mail.
+3. **Create the Worker that hands mail to the Brain.** Open **Workers & Pages**, create a Worker from
+   the Hello World start named company-brain-mail, replace its code with the script the console
+   gives you, and deploy. Under the Worker's **Settings**, **Variables and Secrets**, add
+   BRAIN_EVENTS_URL (the address the console shows), BRAIN_DOMAINS (your staff's email domains) and
+   BRAIN_SECRET, as a secret, a long random value you make up now.
+4. **Send the address's mail to the Worker.** In **Email Routing**, **Routing rules**, create an
+   address on that subdomain (for example one named ask), choose **Send to a Worker**, pick
+   company-brain-mail and save.
+5. **Save it in the console.** Type that address, paste the BRAIN_SECRET value, tick **Switched on**
+   and press **Save set-up**. Then write to the address from your own mailbox: the first answer asks
+   you to link your address to your account.
+
+Tell me "connected email" afterwards and I prove it on your install.
+
+## 130. Does a staff list anybody with its link can edit give people sign-in accounts?
+
+**In plain terms:** item 115's B is built: the staff sync gives each active person a sign-in account
+and sends nobody anything. One case I decided the safe way and need you to confirm. A spreadsheet or
+a Google Sheet can be edited by anybody who has its link, so a row somebody adds would become a real
+way into the Brain for whatever address they typed, as long as they can read that mailbox and press
+Forgot password. Lark, Google Workspace, Microsoft Entra and LDAP are changed only by your
+administrators, and they give accounts as you asked.
+
+**Option A: only a company directory gives accounts.** A sheet still lists people, places them in
+departments and marks leavers; it makes no accounts, and the Staff sources page says so. People on a
+sheet are given their sign-in by an administrator in Keycloak, as today.
+
+**Option B: a sheet gives accounts too.** Anybody who can edit the sheet can then let somebody in.
+Only sensible for a sheet you have locked to one or two people.
+
+**My recommendation: A.** It is what is built, and it matches the rule the product already keeps: a
+sheet is trusted to say who exists and nothing more.
+
+**What I need from you:** reply "130: A" or "130: B". Until then A holds, which is the safe side: B
+only adds accounts.
 
 ## 131. Make staff accounts work on your install (after #281 is deployed)
 
