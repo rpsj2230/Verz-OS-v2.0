@@ -38,16 +38,30 @@ application zone (a view holding local times converts them with `CONVERT_TZ` in 
 One connection is opened for one read and closed in a `finally`, whatever the read came to, so no
 session of ours sits idle in the company's connection pool.
 
+**TLS is required and the server's certificate verified, by name and chain.** The read-only user's
+password crosses whatever network lies between (`laravel.A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL`),
+so `tls_context` builds the standard library's default client context, which requires a certificate
+and checks the host name, over the authorities this server trusts or over the one certificate
+authority the connection names, and the driver is given it as required rather than preferred: a
+server that offers no TLS, or a certificate that does not verify, is a read that is not made. The
+socket is opened to the address `laravel.checked_address` resolved, and the name the certificate
+must carry is the host the connection names, so pinning the address does not cost the name check.
+Only a connection on a private network may say none, which is the tunnel's case
+(`laravel.NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE`), and then TLS is switched off rather than left to the
+driver's preference, which would encrypt without checking anything.
+
 **What the driver is told beside the statement.** `autocommit`, so no transaction of ours stays
-open; `local_infile` off, so a server asking for a file from this machine is refused by the driver;
-and PyMySQL's own preferred TLS, so the connection is encrypted where the server offers it. The
-server's certificate is not verified, because MySQL's own certificates are self-signed and a
-verified connection needs a certificate authority the operator would supply; that is not built.
+open, and `local_infile` off, so a server asking for a file from this machine is refused by the
+driver.
 
 Rejected: `mysqlclient`, which is faster and is a C extension that needs the MySQL client library
 in the image; the reads here are bounded to a few thousand rows and speed is not what limits them.
 And an `init_command` carrying the session statements, which runs them before the driver has said
 whether the server knew them, so MariaDB's refusal could not be answered with its own variable.
+
+Rejected, for TLS: the driver's preferred mode, which encrypts when the server offers it and
+checks nothing, so whoever answers on the path is sent the password over an encrypted channel to
+themselves.
 
 Task ids: M11.6.1
 """
@@ -55,6 +69,8 @@ Task ids: M11.6.1
 from __future__ import annotations
 
 import contextlib
+import socket
+import ssl
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -68,7 +84,14 @@ from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
 from sqlalchemy.sql.compiler import SQLCompiler
 
 from brain.connectors.declaration import DatabaseLogin
-from brain.connectors.laravel import ID_COLUMN, BoundedRead, ViewReply, fault_for_mysql_error
+from brain.connectors.laravel import (
+    ID_COLUMN,
+    BoundedRead,
+    DatabaseTls,
+    TlsMode,
+    ViewReply,
+    fault_for_mysql_error,
+)
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why no statement here is a composed string.
@@ -164,13 +187,19 @@ class Session(Protocol):
 
 
 class Driver(Protocol):
-    """Opens one connection, or raises the driver's own error with MySQL's number in it."""
+    """Opens one connection, or raises the driver's own error with MySQL's number in it.
+
+    `host` is the address the socket is opened to, `server_name` the name the certificate must
+    carry, and `tls` the context the connection must be encrypted under, or None for none.
+    """
 
     def __call__(
         self,
         *,
         host: str,
         port: int,
+        server_name: str,
+        tls: ssl.SSLContext | None,
         user: str,
         password: str,
         connect_timeout: float,
@@ -179,19 +208,41 @@ class Driver(Protocol):
     ) -> Session: ...
 
 
+def tls_context(tls: DatabaseTls) -> ssl.SSLContext | None:
+    """The context a connection is encrypted under, or None for a tunnel's connection.
+
+    The standard library's default client context, unchanged: it requires a certificate and
+    checks the host name, over the authorities this server trusts or, where the connection names
+    its own, over that one alone. See `laravel.A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL`.
+    """
+    if tls.mode is TlsMode.NONE:
+        return None
+    if tls.mode is TlsMode.OWN_AUTHORITY:
+        return ssl.create_default_context(cadata=tls.ca_certificate)
+    return ssl.create_default_context()
+
+
 def pymysql_driver(
     *,
     host: str,
     port: int,
+    server_name: str,
+    tls: ssl.SSLContext | None,
     user: str,
     password: str,
     connect_timeout: float,
     read_timeout: float,
     write_timeout: float,
 ) -> Session:
-    """PyMySQL, told everything the module docstring lists and nothing else."""
+    """PyMySQL, told everything the module docstring lists, over a socket to the checked address.
+
+    The connection is made with the server's name and started over a socket this function opened
+    to `host`, so the certificate is checked against the name while the bytes go to the address
+    that passed the address rule. A context handed over is required: PyMySQL refuses a server that
+    offers no TLS rather than falling back.
+    """
     connection = pymysql.connect(
-        host=host,
+        host=server_name,
         port=port,
         user=user,
         password=password,
@@ -202,7 +253,16 @@ def pymysql_driver(
         charset=CHARSET,
         cursorclass=DictCursor,
         local_infile=False,
+        ssl=tls,
+        ssl_disabled=tls is None,
+        defer_connect=True,
     )
+    try:
+        opened = socket.create_connection((host, port), timeout=connect_timeout)
+    except OSError as unreached:
+        # The number MySQL's own client gives a server it cannot reach, so the fault table reads it.
+        raise pymysql.err.OperationalError(2003, "the database did not answer") from unreached
+    connection.connect(opened)
     # A cast at the library boundary: PyMySQL's connection over a `DictCursor` is this protocol,
     # and its stubs declare `execute` as two overloads a protocol cannot name as one.
     return cast(Session, connection)
@@ -262,11 +322,15 @@ class MySqlViewReader:
         address: str,
         port: int,
         login: DatabaseLogin,
+        server_name: str,
+        tls: DatabaseTls,
         driver: Driver = pymysql_driver,
     ) -> None:
         self._address = address
         self._port = port
         self._login = login
+        self._server_name = server_name
+        self._tls = tls
         self._driver = driver
 
     def __repr__(self) -> str:
@@ -282,6 +346,8 @@ class MySqlViewReader:
             session = self._driver(
                 host=self._address,
                 port=self._port,
+                server_name=self._server_name,
+                tls=tls_context(self._tls),
                 user=self._login.user,
                 password=self._login.password.reveal(),
                 connect_timeout=seconds,

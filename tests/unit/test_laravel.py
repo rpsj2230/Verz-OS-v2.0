@@ -68,12 +68,14 @@ from brain.connectors.laravel import (
     REASON_FOR_FAULT,
     BoundedRead,
     DatabaseFault,
+    DatabaseTls,
     LaravelConnection,
     LaravelDegraded,
     LaravelError,
     LaravelOutcome,
     LaravelReply,
     ReadBounds,
+    TlsMode,
     ViewReply,
     assert_builds_no_sql,
     assert_columns_are_selectable,
@@ -147,6 +149,7 @@ def connection(**overrides: Any) -> LaravelConnection:
         "host": HOST,
         "port": 3306,
         "private_network": False,
+        "tls": DatabaseTls(TlsMode.VERIFIED),
     }
     settings.update(overrides)
     return LaravelConnection(**settings)

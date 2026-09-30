@@ -50,7 +50,7 @@ from brain.ops.acceptance_run import SET_UP_REACH, Harness
 
 if TYPE_CHECKING:
     from brain.connectors.declaration import DatabaseLogin
-    from brain.connectors.laravel import LaravelReading, ViewReader
+    from brain.connectors.laravel import LaravelConnection, LaravelReading, ViewReader
     from brain.core.entitlement import EntitlementSet
     from brain.gate.answer import Answered
     from brain.ops.connector_store import Connection
@@ -107,11 +107,20 @@ class _Views:
         del kwargs
         return _Session(self)
 
-    def opener(self, address: str, port: int, login: DatabaseLogin) -> ViewReader:
+    def opener(
+        self, address: str, connection: LaravelConnection, login: DatabaseLogin
+    ) -> ViewReader:
         """The product's executor, driving this recording."""
         from brain.ops.laravel_reader import MySqlViewReader
 
-        return MySqlViewReader(address=address, port=port, login=login, driver=self)
+        return MySqlViewReader(
+            address=address,
+            port=connection.port,
+            login=login,
+            server_name=connection.host,
+            tls=connection.tls,
+            driver=self,
+        )
 
 
 @dataclass
@@ -269,6 +278,7 @@ async def a_laravel_database_answers_on_ask_from_its_views(h: Harness) -> None:
         laravel.HOST_SETTING: HOST,
         laravel.PORT_SETTING: str(laravel.MYSQL_PORT),
         laravel.PRIVATE_NETWORK_SETTING: "no",
+        laravel.TLS_SETTING: laravel.VERIFY_WORD,
         laravel.CLIENT_RULE_SETTING: f"department = {A}",
         laravel.USER_RULE_SETTING: f"department = {A}",
         laravel.MAX_ROWS_SETTING: str(MAX_ROWS),

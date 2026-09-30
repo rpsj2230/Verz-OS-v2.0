@@ -192,6 +192,7 @@ FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
             "host": f"acceptance-{secrets.token_hex(4)}.invalid",
             "port": "3306",
             "private_network": "no",
+            "tls": "verify",
             "client_rule": f"department = {RESERVED_DEPARTMENTS[0]}",
             "user_rule": f"department = {RESERVED_DEPARTMENTS[0]}",
             "max_rows": "500",

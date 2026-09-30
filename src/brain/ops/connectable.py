@@ -236,6 +236,11 @@ def key_reference(name: str) -> SecretRef:
     return SecretRef(path=connector_key_slot(name).path, role=READING_ROLE)
 
 
+def max_chars_of(setting: Setting) -> int:
+    """The longest value a setting takes: its own bound where it declares one, else the form's."""
+    return setting.max_chars or MAX_SETTING_CHARS
+
+
 def blank_sentence(setting: Setting) -> str:
     """What a person is told when this setting is left blank. Served beside the form as well, so a
     console can say it before the confirmation opens without a second copy of the words."""
@@ -272,13 +277,13 @@ def settings_problems(kind: Connectable, settings: Mapping[str, str]) -> tuple[S
         value = settings.get(one.name, "").strip()
         if not value:
             found.append(SettingProblem(field=one.name, code="blank", message=blank_sentence(one)))
-        elif len(value) > MAX_SETTING_CHARS:
+        elif len(value) > max_chars_of(one):
             found.append(
                 SettingProblem(
                     field=one.name,
                     code="too_long",
                     message=(
-                        f"That is longer than {MAX_SETTING_CHARS} characters, which is longer "
+                        f"That is longer than {max_chars_of(one)} characters, which is longer "
                         f"than any {one.label.lower()}. Check what was copied."
                     ),
                 )

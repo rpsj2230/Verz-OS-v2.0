@@ -230,6 +230,9 @@ class Setting:
     #: Whether the value is a person's id here, which the connect route checks names somebody live
     #: on this install before anything is written (M11.7.7). A connector cannot: it reads no table.
     names_a_person: bool = False
+    #: The longest value this setting takes, where it is longer than every other setting's: a
+    #: certificate authority's certificate (M11.6.1). Zero is `brain.ops.connectable`'s own bound.
+    max_chars: int = 0
 
 
 @dataclass(frozen=True)

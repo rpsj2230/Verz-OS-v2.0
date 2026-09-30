@@ -40,6 +40,7 @@ from brain.connectors.laravel import (
     ENTITY_CLIENT,
     ENTITY_USER,
     PROJECTED_FIELDS,
+    LaravelConnection,
     LaravelError,
     LaravelReading,
     ViewReader,
@@ -114,6 +115,7 @@ SETTINGS: Final[Mapping[str, str]] = {
     "host": "db.example.invalid",
     "port": "3306",
     "private_network": "no",
+    "tls": "verify",
     "client_rule": f"department = {DEPARTMENT}",
     "user_rule": f"department = {DEPARTMENT}",
     "max_rows": "200",
@@ -155,9 +157,18 @@ class Views:
         self.opened.append(kwargs)
         return _Session(self)
 
-    def opener(self, address: str, port: int, login: DatabaseLogin) -> ViewReader:
+    def opener(
+        self, address: str, connection: LaravelConnection, login: DatabaseLogin
+    ) -> ViewReader:
         """`laravel.ViewReaderOpener` over the real executor, driving this recording."""
-        return MySqlViewReader(address=address, port=port, login=login, driver=self)
+        return MySqlViewReader(
+            address=address,
+            port=connection.port,
+            login=login,
+            server_name=connection.host,
+            tls=connection.tls,
+            driver=self,
+        )
 
 
 @dataclass

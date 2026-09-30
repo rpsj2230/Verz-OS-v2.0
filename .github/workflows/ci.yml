@@ -222,26 +222,19 @@ jobs:
 
   # The Laravel executor against a real MySQL 8 server (M11.6.1): the one read this product makes of
   # a company's own database, run where a database exists rather than only over a recorded driver.
-  # One job and not a matrix: it starts MySQL, makes one schema with its views, a second schema the
-  # reader has no grant on, a third whose view sleeps, and a read-only user, and runs the tests
-  # marked `needs_mysql`, which every other job skips. It fails when they skip here too, because a
-  # green job that read nothing is the one result this job exists to rule out.
+  # One job and not a matrix. It makes a certificate authority and a server certificate for this
+  # run (never committed), starts MySQL with them, makes one schema of views, one the reader has no
+  # grant on, one whose view sleeps, and a read-only user, and runs the tests marked `needs_mysql`,
+  # which every other job skips: verified TLS against the run's own authority, a certificate no
+  # trusted authority signed refused before the login is sent, and the tunnel's unencrypted case.
+  # MySQL is started by `docker run` rather than as a service because a service starts before the
+  # checkout, so it could not be handed the certificates. It fails when the tests skip here too,
+  # because a green job that read nothing is the one result this job exists to rule out.
   laravel_mysql:
     name: Laravel read against MySQL
     runs-on: ubuntu-latest
     needs: changes
     if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: ci-root
-        ports: ["3306:3306"]
-        options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 30
     env:
       LARAVEL_TEST_MYSQL_URL: mysql://brain_reader:ci-reader@127.0.0.1:3306/portal
     steps:
@@ -251,6 +244,25 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
       - run: uv sync --locked
+      - name: A certificate authority and a server certificate for this run
+        run: uv run python -m tests.fixtures.tls "$RUNNER_TEMP/mysql-tls"
+      - name: MySQL 8.4, presenting the run's certificate
+        run: |
+          docker run -d --name laravel-mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=ci-root \
+            -v "$RUNNER_TEMP/mysql-tls:/etc/mysql-tls:ro" mysql:8.4 \
+            --ssl-ca=/etc/mysql-tls/ca.pem --ssl-cert=/etc/mysql-tls/server.pem \
+            --ssl-key=/etc/mysql-tls/server-key.pem
+          # Over TCP, which the image's first, temporary server does not listen on, so this waits
+          # for the server that stays.
+          for attempt in $(seq 1 90); do
+            if mysql --protocol=tcp -h 127.0.0.1 -P 3306 -uroot -pci-root -e "SELECT 1" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs laravel-mysql
+          echo "::error::MySQL did not start"
+          exit 1
       - name: A schema of views, one not granted, one that sleeps, and a read-only user
         run: |
           mysql --protocol=tcp -h 127.0.0.1 -P 3306 -uroot -pci-root <<'SQL'
@@ -283,6 +295,8 @@ jobs:
           GRANT SELECT ON slow.v_client TO 'brain_reader'@'%';
           SQL
       - name: The executor's reads of the real server
+        env:
+          LARAVEL_TEST_MYSQL_CA: ${{ runner.temp }}/mysql-tls/ca.pem
         run: uv run pytest tests/unit/test_laravel_reader.py -m needs_mysql --junitxml=laravel-mysql.xml
       - name: Every real-server test ran and none was skipped
         run: |
@@ -290,7 +304,7 @@ jobs:
           import xml.etree.ElementTree as ElementTree
           suite = ElementTree.parse("laravel-mysql.xml").getroot().find("testsuite")
           ran, skipped = int(suite.get("tests")), int(suite.get("skipped"))
-          assert ran >= 5 and skipped == 0, f"{ran} ran and {skipped} skipped: nothing was read"
+          assert ran >= 7 and skipped == 0, f"{ran} ran and {skipped} skipped: nothing was read"
           PY
 
   # The coverage floor, over every shard's data at once. It carries the name the single job had,

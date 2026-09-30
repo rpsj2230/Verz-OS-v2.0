@@ -15,6 +15,10 @@ from __future__ import annotations
 
 import ast
 import os
+import socket
+import ssl
+import tempfile
+import threading
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -34,10 +38,13 @@ from brain.connectors.laravel import (
     ENTITY_CLIENT,
     ENTITY_USER,
     DatabaseFault,
+    DatabaseTls,
     LaravelConnection,
     LaravelOutcome,
     ReadBounds,
+    TlsMode,
     ViewReply,
+    ca_certificate_of,
     interpret,
     read_plan,
 )
@@ -51,8 +58,10 @@ from brain.ops.laravel_reader import (
     UNKNOWN_SYSTEM_VARIABLE,
     MySqlViewReader,
     statement_for,
+    tls_context,
 )
 from brain.ops.leases import SealedSecret
+from tests.fixtures.tls import Issued, issued
 
 SRC: Final = Path(__file__).resolve().parents[2] / "src" / "brain"
 
@@ -70,6 +79,10 @@ needs_mysql = pytest.mark.skipif(
 )
 
 
+VERIFIED: Final = DatabaseTls(TlsMode.VERIFIED)
+NO_ENCRYPTION: Final = DatabaseTls(TlsMode.NONE)
+
+
 def a_connection(*, schema: str = "portal", max_rows: int = 200, seconds: float = 5.0) -> Any:
     return LaravelConnection(
         schema=schema,
@@ -77,6 +90,7 @@ def a_connection(*, schema: str = "portal", max_rows: int = 200, seconds: float 
         host="db.example.invalid",
         port=3306,
         private_network=False,
+        tls=VERIFIED,
     )
 
 
@@ -136,9 +150,16 @@ class _Cursor:
         return tuple(self.driver.rows)
 
 
-def reader(driver: Recorded, login: DatabaseLogin | None = None) -> MySqlViewReader:
+def reader(
+    driver: Recorded, login: DatabaseLogin | None = None, tls: DatabaseTls = VERIFIED
+) -> MySqlViewReader:
     return MySqlViewReader(
-        address=ADDRESS, port=3306, login=a_login() if login is None else login, driver=driver
+        address=ADDRESS,
+        port=3306,
+        login=a_login() if login is None else login,
+        server_name="db.example.invalid",
+        tls=tls,
+        driver=driver,
     )
 
 
@@ -363,6 +384,164 @@ def test_a_value_comes_back_as_the_rest_of_the_product_reads_one() -> None:
     assert executor._plain(7) == 7
 
 
+# ------------------------------------------------------------------ the encryption
+
+
+def handshake(made: Issued, context: ssl.SSLContext, server_name: str) -> None:
+    """One TLS handshake with a local server presenting `made`'s certificate, or its refusal."""
+    served = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    with tempfile.TemporaryDirectory() as held:
+        certificate, key = Path(held) / "server.pem", Path(held) / "server-key.pem"
+        certificate.write_text(made.certificate, encoding="ascii")
+        key.write_text(made.key, encoding="ascii")
+        served.load_cert_chain(certificate, key)
+    with socket.create_server(("127.0.0.1", 0)) as listener:
+        port = listener.getsockname()[1]
+
+        def answer() -> None:
+            accepted, _ = listener.accept()
+            try:
+                with served.wrap_socket(accepted, server_side=True) as wrapped:
+                    wrapped.recv(1)
+            except (ssl.SSLError, OSError):
+                pass
+
+        thread = threading.Thread(target=answer, daemon=True)
+        thread.start()
+        try:
+            with (
+                socket.create_connection(("127.0.0.1", port), timeout=5) as raw,
+                context.wrap_socket(raw, server_hostname=server_name),
+            ):
+                pass
+        finally:
+            thread.join(timeout=5)
+
+
+def test_by_default_every_connection_is_encrypted_and_its_certificate_checked_by_name() -> None:
+    """`A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL`, against a real TLS handshake. The default context
+    requires a certificate and checks the name, so a server whose certificate this server's
+    authorities did not sign is refused; the same server with its own authority handed over is
+    accepted under its name and refused under another. Delete this and a context that encrypts
+    without checking anything hands the password to whoever answers on the path."""
+    made = issued()
+    verified = tls_context(VERIFIED)
+    assert verified is not None
+    assert (verified.verify_mode, verified.check_hostname) == (ssl.CERT_REQUIRED, True)
+    with pytest.raises(ssl.SSLCertVerificationError):
+        handshake(made, verified, "127.0.0.1")
+
+    own = tls_context(DatabaseTls(TlsMode.OWN_AUTHORITY, ca_certificate_of(made.authority)))
+    assert own is not None
+    assert (own.verify_mode, own.check_hostname) == (ssl.CERT_REQUIRED, True)
+    handshake(made, own, "127.0.0.1")
+    with pytest.raises(ssl.SSLCertVerificationError):
+        handshake(made, own, "db.example.invalid")
+
+
+def test_the_driver_is_given_the_context_and_the_name_and_a_tunnel_s_connection_none() -> None:
+    """The executor hands the driver the connection's own name to check the certificate against,
+    beside the address it connects to, and a context that verifies; a tunnel's connection is handed
+    no context at all. Delete this and the executor could open a verified context and never pass
+    it, or check the certificate against the address."""
+    driver = Recorded(rows=(a_row(),))
+    reader(driver).rows(read_plan(a_connection(), ENTITY_CLIENT))
+    [opened] = driver.opened
+    assert (opened["host"], opened["server_name"]) == (ADDRESS, "db.example.invalid")
+    assert isinstance(opened["tls"], ssl.SSLContext)
+    assert opened["tls"].verify_mode is ssl.CERT_REQUIRED and opened["tls"].check_hostname
+
+    tunnel = Recorded(rows=(a_row(),))
+    reader(tunnel, tls=NO_ENCRYPTION).rows(read_plan(a_connection(), ENTITY_CLIENT))
+    assert tunnel.opened[0]["tls"] is None
+
+
+def test_the_real_driver_requires_the_context_and_connects_to_the_checked_address_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PyMySQL is told the name, the context as required, and to wait; the socket is opened to the
+    checked address and handed over. A tunnel's connection switches TLS off rather than leaving it
+    to PyMySQL's preference, which encrypts and checks nothing. A socket that cannot be opened is
+    MySQL's own number for a server it cannot reach. Delete this and the driver can fall back to
+    an unverified connection, or resolve the name a second time past the address rule."""
+    told: list[dict[str, Any]] = []
+    opened: list[tuple[str, int]] = []
+
+    class Held:
+        def connect(self, sock: object) -> None:
+            assert sock == "socket"
+
+    def connect(**kwargs: Any) -> Held:
+        told.append(kwargs)
+        return Held()
+
+    def create_connection(address: tuple[str, int], timeout: float) -> str:
+        opened.append(address)
+        return "socket"
+
+    monkeypatch.setattr(pymysql, "connect", connect)
+    monkeypatch.setattr(socket, "create_connection", create_connection)
+    context = ssl.create_default_context()
+    for tls in (context, None):
+        executor.pymysql_driver(
+            host=ADDRESS,
+            port=3306,
+            server_name="db.example.invalid",
+            tls=tls,
+            user="brain_reader",
+            password=PASSWORD,
+            connect_timeout=5.0,
+            read_timeout=6.0,
+            write_timeout=6.0,
+        )
+    assert [
+        (one["host"], one["ssl"], one["ssl_disabled"], one["defer_connect"]) for one in told
+    ] == [
+        ("db.example.invalid", context, False, True),
+        ("db.example.invalid", None, True, True),
+    ]
+    assert opened == [(ADDRESS, 3306), (ADDRESS, 3306)]
+
+    def unreachable(address: tuple[str, int], timeout: float) -> str:
+        raise ConnectionRefusedError
+
+    monkeypatch.setattr(socket, "create_connection", unreachable)
+    with pytest.raises(pymysql.err.OperationalError) as raised:
+        executor.pymysql_driver(
+            host=ADDRESS,
+            port=3306,
+            server_name="db.example.invalid",
+            tls=context,
+            user="brain_reader",
+            password=PASSWORD,
+            connect_timeout=5.0,
+            read_timeout=6.0,
+            write_timeout=6.0,
+        )
+    assert laravel.fault_for_mysql_error(raised.value.args[0]) is DatabaseFault.UNAVAILABLE
+
+
+def test_a_certificate_authority_is_read_on_one_line_or_many_and_anything_else_is_refused() -> None:
+    """A text box turns a pasted certificate into one line, so the body is read whatever its line
+    breaks and written back in the standard shape; a private key, text past the bound, text that
+    is not only certificates and a block that does not parse are each refused. Delete this and a
+    company's own authority cannot be pasted, or a private key is kept as configuration."""
+    made = issued()
+    one_line = made.authority.replace("\n", "")
+    assert ca_certificate_of(one_line) == ca_certificate_of(made.authority) == made.authority
+    refused = (
+        made.key,
+        made.authority + made.key,
+        "not a certificate",
+        made.authority + " and something else",
+        "-----BEGIN CERTIFICATE-----AAAA-----END CERTIFICATE-----",
+        made.authority * (laravel.MAX_CA_CERTIFICATE_CHARS // len(made.authority) + 1),
+    )
+    for text in refused:
+        with pytest.raises(laravel.LaravelError):
+            ca_certificate_of(text)
+
+
 # ------------------------------------------------------------------ a real server
 
 
@@ -378,18 +557,37 @@ def real_login() -> tuple[str, int, DatabaseLogin, str]:
     )
 
 
-def real(entity: str, *, max_rows: int = 200, seconds: float = 5.0, schema: str = "") -> ViewReply:
+def real_authority() -> DatabaseTls:
+    """The CI job's own certificate authority, which signed the server's certificate."""
+    text = Path(os.environ.get("LARAVEL_TEST_MYSQL_CA", "")).read_text(encoding="ascii")
+    return DatabaseTls(TlsMode.OWN_AUTHORITY, ca_certificate_of(text))
+
+
+def real(
+    entity: str,
+    *,
+    max_rows: int = 200,
+    seconds: float = 5.0,
+    schema: str = "",
+    tls: DatabaseTls | None = None,
+) -> ViewReply:
     host, port, login, named = real_login()
     connection = a_connection(schema=schema or named, max_rows=max_rows, seconds=seconds)
-    return MySqlViewReader(address=host, port=port, login=login).rows(read_plan(connection, entity))
+    return MySqlViewReader(
+        address=host,
+        port=port,
+        login=login,
+        server_name=host,
+        tls=real_authority() if tls is None else tls,
+    ).rows(read_plan(connection, entity))
 
 
 @pytest.mark.needs_mysql
 @needs_mysql
 def test_on_a_real_server_a_view_is_read_capped_ordered_and_in_utc() -> None:
-    """**The real read.** The CI job's view holds three clients; a read capped at two returns the
-    first two by id, with a zoned timestamp and exact money. Delete this and the executor is proved
-    only against a driver somebody recorded."""
+    """**The real read**, over TLS verified against the CI job's own authority. The view holds three
+    clients; a read capped at two returns the first two by id, with a zoned timestamp and exact
+    money. Delete this and the executor is proved only against a driver somebody recorded."""
     reply = real(ENTITY_CLIENT, max_rows=2)
     assert reply.fault is None
     assert [row["id"] for row in reply.rows] == [1, 2]
@@ -415,9 +613,9 @@ def test_on_a_real_server_a_closed_port_is_unreachable() -> None:
     """Nothing listens on port 1. Delete this and a server that is not there could read as
     absent."""
     _, _, login, schema = real_login()
-    reply = MySqlViewReader(address="127.0.0.1", port=1, login=login).rows(
-        read_plan(a_connection(schema=schema, seconds=2.0), ENTITY_CLIENT)
-    )
+    reply = MySqlViewReader(
+        address="127.0.0.1", port=1, login=login, server_name="127.0.0.1", tls=real_authority()
+    ).rows(read_plan(a_connection(schema=schema, seconds=2.0), ENTITY_CLIENT))
     assert reply.fault is DatabaseFault.UNAVAILABLE
 
 
@@ -444,6 +642,8 @@ def test_on_a_real_server_the_session_the_executor_opens_is_read_only() -> None:
     session = executor.pymysql_driver(
         host=host,
         port=port,
+        server_name=host,
+        tls=tls_context(real_authority()),
         user=login.user,
         password=login.password.reveal(),
         connect_timeout=5.0,
@@ -457,3 +657,26 @@ def test_on_a_real_server_the_session_the_executor_opens_is_read_only() -> None:
         assert cursor.fetchall() == ({"read_only": 1},)
     finally:
         session.close()
+
+
+@pytest.mark.needs_mysql
+@needs_mysql
+def test_on_a_real_server_a_certificate_no_trusted_authority_signed_is_never_sent_the_login() -> (
+    None
+):
+    """The CI job's server presents a certificate its own authority signed, which none of this
+    runner's authorities did, so the default connection refuses it before the login is sent, and
+    the same server is read with that authority named. Delete this and verification is proved only
+    against a local socket, never against MySQL's own handshake."""
+    assert real(ENTITY_CLIENT, tls=VERIFIED).fault is DatabaseFault.UNAVAILABLE
+    assert real(ENTITY_CLIENT).fault is None
+
+
+@pytest.mark.needs_mysql
+@needs_mysql
+def test_on_a_real_server_a_tunnel_s_connection_reads_without_encryption() -> None:
+    """The tunnel's case, which the form allows only with the private network setting on: TLS is
+    switched off and the read is made. Delete this and the one case that may not encrypt could be
+    one that cannot connect at all."""
+    reply = real(ENTITY_CLIENT, tls=NO_ENCRYPTION)
+    assert reply.fault is None and len(reply.rows) == 3

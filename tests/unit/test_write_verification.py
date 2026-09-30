@@ -119,6 +119,7 @@ def laravel_answer(reply: laravel.ViewReply) -> Verification:
         host="db.example.invalid",
         port=3306,
         private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     read = laravel.read_plan(connection, laravel.ENTITY_CLIENT)
     answered = laravel.interpret(read, reply, fetched_at=FETCHED_AT)
@@ -541,6 +542,7 @@ def test_the_two_connectors_recorded_as_read_only_really_are() -> None:
         host="db.example.invalid",
         port=3306,
         private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     visibility = {entity: brain_scope() for entity in laravel.ENTITIES}
     built = laravel.laravel_manifest(connection, ref=ref, visibility=visibility)

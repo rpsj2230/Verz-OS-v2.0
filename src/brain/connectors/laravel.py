@@ -85,6 +85,15 @@ refused like any other source's. A connection whose database is on a private net
 directly or through a tunnel the operator runs, says so in its own setting, and only that
 connection may name a private address. See `A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION`.
 
+**The password crosses only a channel whose other end has proved who it is.** The read-only user's
+password reaches the company's database over whatever network lies between, which for a database
+allowed through a firewall is the internet. So every connection is encrypted and the server's
+certificate is checked, against the certificate authorities this server trusts or against the
+company's own when the form is handed one, and a connection that cannot check it is not made. The
+one exception is a tunnel: with the private network setting on, `none` may be typed, because the
+tunnel carries the encryption, and with it off `none` is refused where it is typed. See
+`A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL` and `NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE`.
+
 **This connector reads, on a schedule and while somebody waits (M11.6.1).** `LaravelReading` is
 the worker's `ViewReading`: one bounded read of each view per run, written into the minimal index.
 `LaravelLiveLookup` narrows the same read to one record's id while somebody waits. Both run the
@@ -293,6 +302,24 @@ A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION = (
     "operator runs, says so in this connection's own setting, and only that connection may then "
     "name a private address. The setting is off unless yes is typed, and with it on nothing else "
     "about the read changes: the same user, the same views, the same bounds."
+)
+
+#: Why every connection is encrypted and its server's certificate checked.
+A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL = (
+    "The read-only user's password is sent to the company's database over whatever network lies "
+    "between, and for a database reached through a firewall that is the internet. An encrypted "
+    "connection whose certificate nobody checks protects nothing from whoever sits on the path, "
+    "because that is who would answer. So TLS is required and the server's certificate is "
+    "verified, name and chain, against the authorities this server trusts or the company's own "
+    "certificate authority, and a connection that cannot be verified is not made."
+)
+
+#: Why no encryption is allowed only on a private network.
+NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE = (
+    "A database reached through an SSH tunnel is connected to at the tunnel's local end, which "
+    "has no certificate for its name, and the tunnel already encrypts everything it carries. So "
+    "a connection that says its database is on a private network may say none, and one that does "
+    "not say so is refused none where it is typed, naming that setting."
 )
 
 #: Why a view's rule is one value.
@@ -808,6 +835,90 @@ class _NoNames:
         return ()
 
 
+class TlsMode(enum.StrEnum):
+    """How one connection to the database is encrypted. See `A_LOGIN_CROSSES_ONLY_A_VERIFIED_...`.
+
+    Closed, because each member is a way a password is sent and a way to be wrong about who
+    received it.
+    """
+
+    #: Encrypted, and the certificate checked against the authorities this server trusts.
+    VERIFIED = "verified"
+    #: Encrypted, and the certificate checked against the company's own certificate authority.
+    OWN_AUTHORITY = "own_authority"
+    #: Not encrypted by this connection, because a tunnel carries it. Private network only.
+    NONE = "none"
+
+
+#: The longest certificate text the form takes: a certificate authority's, or a short chain of
+#: them, and never a document. A typical certificate is under two thousand characters.
+MAX_CA_CERTIFICATE_CHARS: Final = 8_000
+
+_PEM_BLOCK: Final = re.compile(
+    r"-----BEGIN CERTIFICATE-----(?P<body>[A-Za-z0-9+/=\s]+?)-----END CERTIFICATE-----"
+)
+
+
+def ca_certificate_of(text: str) -> str:
+    """The certificate text as PEM, one line or many, or `LaravelError` when it is not one.
+
+    A text box on the form turns a pasted certificate into one line, so the body is read whatever
+    its line breaks and written back out in the standard shape. Refused: text past the bound,
+    anything carrying a private key (a certificate authority is public, and a key pasted here
+    would be kept as configuration), text with nothing but certificates in it, and a certificate
+    the library cannot read.
+    """
+    if len(text) > MAX_CA_CERTIFICATE_CHARS:
+        msg = (
+            f"a certificate of {len(text)} characters is past the {MAX_CA_CERTIFICATE_CHARS} taken"
+        )
+        raise LaravelError(msg)
+    if "PRIVATE KEY" in text:
+        msg = (
+            "this is a private key, and a certificate authority is only ever its public certificate"
+        )
+        raise LaravelError(msg)
+    blocks = [re.sub(r"\s+", "", one.group("body")) for one in _PEM_BLOCK.finditer(text)]
+    rest = _PEM_BLOCK.sub("", text).strip()
+    if not blocks or rest:
+        msg = "this is not a certificate in PEM, between BEGIN CERTIFICATE and END CERTIFICATE"
+        raise LaravelError(msg)
+    pem = "".join(
+        "-----BEGIN CERTIFICATE-----\n"
+        + "\n".join(body[i : i + 64] for i in range(0, len(body), 64))
+        + "\n-----END CERTIFICATE-----\n"
+        for body in blocks
+    )
+    from cryptography import x509
+
+    try:
+        x509.load_pem_x509_certificates(pem.encode("ascii"))
+    except ValueError as unreadable:
+        msg = "this is not a certificate the library can read"
+        raise LaravelError(msg) from unreadable
+    return pem
+
+
+@dataclass(frozen=True)
+class DatabaseTls:
+    """How a connection is encrypted, and the certificate authority it trusts when it has its own.
+
+    A certificate authority's certificate is public, so it is configuration like the host, kept
+    with the connection's settings and never in the vault.
+    """
+
+    mode: TlsMode
+    ca_certificate: str = ""
+
+    def __post_init__(self) -> None:
+        if (self.mode is TlsMode.OWN_AUTHORITY) != bool(self.ca_certificate):
+            msg = "a certificate authority is given exactly when the connection trusts its own"
+            raise LaravelError(msg)
+        if self.ca_certificate and ca_certificate_of(self.ca_certificate) != self.ca_certificate:
+            msg = "a certificate authority is kept in the shape `ca_certificate_of` writes it"
+            raise LaravelError(msg)
+
+
 @dataclass(frozen=True)
 class LaravelConnection:
     """One database server, one schema, one set of views, one bound on a read. Decided at connect.
@@ -836,9 +947,16 @@ class LaravelConnection:
     host: str
     port: int
     private_network: bool
+    tls: DatabaseTls
 
     def __post_init__(self) -> None:
         assert_holds_no_credential(type(self))
+        if self.tls.mode is TlsMode.NONE and not self.private_network:
+            msg = (
+                "this connection sends its password unencrypted and does not say its database is "
+                f"on a private network. {NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE}"
+            )
+            raise LaravelError(msg)
         if not _is_host(self.host):
             msg = (
                 f"host {self.host!r} is not a server name or address; it is where the database "
@@ -1749,6 +1867,7 @@ SCHEMA_SETTING: Final = "schema"
 HOST_SETTING: Final = "host"
 PORT_SETTING: Final = "port"
 PRIVATE_NETWORK_SETTING: Final = "private_network"
+TLS_SETTING: Final = "tls"
 CLIENT_RULE_SETTING: Final = "client_rule"
 USER_RULE_SETTING: Final = "user_rule"
 MAX_ROWS_SETTING: Final = "max_rows"
@@ -1756,6 +1875,10 @@ TIMEOUT_SETTING: Final = "timeout_seconds"
 
 #: What the private network setting takes, in words, and nothing else. `yes` turns it on.
 PRIVATE_NETWORK_ANSWERS: Final[Mapping[str, bool]] = MappingProxyType({"yes": True, "no": False})
+
+#: The two words the encryption setting takes besides a pasted certificate authority.
+VERIFY_WORD: Final = "verify"
+NO_ENCRYPTION_WORD: Final = "none"
 
 #: The port MySQL listens on when nobody chose another. Said in the form's words and never filled
 #: in for the person: every setting on this form is typed, so a connection is where somebody said.
@@ -1815,6 +1938,26 @@ def _whole(settings: Mapping[str, str], name: str, *, most: int) -> int:
     return int(given)
 
 
+def tls_of(typed: str) -> DatabaseTls:
+    """What the encryption setting says: verify, none, or a certificate authority's certificate.
+
+    The words are read in any case; anything else is read as a certificate, and refused naming the
+    setting when it is not one. Whether none is allowed is `connection_of`'s question, because it
+    depends on the private network setting beside it.
+    """
+    word = typed.strip().lower()
+    if word == VERIFY_WORD:
+        return DatabaseTls(TlsMode.VERIFIED)
+    if word == NO_ENCRYPTION_WORD:
+        return DatabaseTls(TlsMode.NONE)
+    try:
+        return DatabaseTls(TlsMode.OWN_AUTHORITY, ca_certificate_of(typed.strip()))
+    except LaravelError as refused:
+        raise SettingRefusedError(
+            "not verify, none or a certificate", setting=TLS_SETTING
+        ) from refused
+
+
 def connection_of(settings: Mapping[str, str]) -> LaravelConnection:
     """The connection these settings name, or the refusal naming the setting that was wrong.
 
@@ -1832,6 +1975,9 @@ def connection_of(settings: Mapping[str, str]) -> LaravelConnection:
     private = PRIVATE_NETWORK_ANSWERS.get(answer)
     if private is None:
         raise SettingRefusedError("not yes or no", setting=PRIVATE_NETWORK_SETTING)
+    tls = tls_of(settings.get(TLS_SETTING, ""))
+    if tls.mode is TlsMode.NONE and not private:
+        raise SettingRefusedError(NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE, setting=TLS_SETTING)
     host = settings.get(HOST_SETTING, "").strip().lower().removeprefix("[").removesuffix("]")
     if not _is_host(host):
         raise SettingRefusedError("not a server name or address", setting=HOST_SETTING)
@@ -1842,7 +1988,7 @@ def connection_of(settings: Mapping[str, str]) -> LaravelConnection:
     )
     try:
         return LaravelConnection(
-            schema=schema, bounds=bounds, host=host, port=port, private_network=private
+            schema=schema, bounds=bounds, host=host, port=port, private_network=private, tls=tls
         )
     except ConnectorContractError as refused:
         if _address_literal(host) is not None and not private:
@@ -1883,11 +2029,12 @@ REFRESH_EVERY: Final = timedelta(hours=1)
 #: an id never reaches the database at all.
 LIVE_ID_PATTERN: Final = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
-#: What opens one reader for one read: the checked address, the port and the login.
-ViewReaderOpener = Callable[[str, int, DatabaseLogin], ViewReader]
+#: What opens one reader for one read: the checked address, the connection it is for (its port,
+#: the name its certificate must carry and how it is encrypted) and the login.
+ViewReaderOpener = Callable[[str, LaravelConnection, DatabaseLogin], ViewReader]
 
 
-def open_mysql(address: str, port: int, login: DatabaseLogin) -> ViewReader:
+def open_mysql(address: str, connection: LaravelConnection, login: DatabaseLogin) -> ViewReader:
     """The executor, opened for one read. Imported here so importing this module imports no driver.
 
     See `brain.ops.laravel_reader`, which is the only module that imports the driver, and the
@@ -1895,7 +2042,13 @@ def open_mysql(address: str, port: int, login: DatabaseLogin) -> ViewReader:
     """
     from brain.ops.laravel_reader import MySqlViewReader
 
-    return MySqlViewReader(address=address, port=port, login=login)
+    return MySqlViewReader(
+        address=address,
+        port=connection.port,
+        login=login,
+        server_name=connection.host,
+        tls=connection.tls,
+    )
 
 
 @dataclass(frozen=True)
@@ -1931,7 +2084,7 @@ class LaravelReading:
         fetch = connector_fetch(
             connection,
             request.entity,
-            reader=self.opener(address, connection.port, login),
+            reader=self.opener(address, connection, login),
             fetched_at=fetched_at,
         )
         try:
@@ -2028,6 +2181,24 @@ CONSOLE: Final = ConsoleForm(
                 "never be used to reach this server's own network."
             ),
             refused="Type yes or no.",
+        ),
+        Setting(
+            name=TLS_SETTING,
+            label="Encryption to the database",
+            hint=(
+                f"Type {VERIFY_WORD} to encrypt the connection and check the server's certificate "
+                "against the certificate authorities this system's server trusts. If your "
+                "database's certificate comes from your own certificate authority, paste that "
+                f"authority's certificate here instead. Type {NO_ENCRYPTION_WORD} only with the "
+                "private network setting at yes, when an SSH tunnel carries the encryption: "
+                "otherwise the password would cross the network in the clear."
+            ),
+            refused=(
+                f"Type {VERIFY_WORD}, or paste your certificate authority's certificate, or type "
+                f"{NO_ENCRYPTION_WORD} only when the database is on a private network through a "
+                "tunnel."
+            ),
+            max_chars=MAX_CA_CERTIFICATE_CHARS,
         ),
         Setting(
             name=CLIENT_RULE_SETTING,
@@ -2134,8 +2305,9 @@ GUIDE: Final = keyed(
                 "provider lists it, in the database's firewall or security group. Where the "
                 "database is on a private network instead, run an SSH tunnel from this system's "
                 "server to a machine that reaches it, and type the tunnel's local end as the "
-                "server's address with private network set to yes. The tunnel is yours to run and "
-                "keep up: this system does not start one."
+                "server's address with private network set to yes and encryption none, because the "
+                "tunnel encrypts. The tunnel is yours to run and keep up: this system does not "
+                "start one."
             ),
             sketch=Sketch(
                 place="Your database's firewall",
@@ -2151,10 +2323,11 @@ GUIDE: Final = keyed(
             key="connect",
             title="Say where the database is, write each view's rule and give the user here",
             text=(
-                "Type the database server's address and port and whether it is on a private "
-                "network, the database the views are in, the rule each view is kept under as its "
-                "definition says, and the most rows and seconds one read may take, then the "
-                "read-only user's name and password, and press Connect Laravel database views."
+                "Type the database server's address and port, whether it is on a private network "
+                "and how the connection is encrypted, the database the views are in, the rule "
+                "each view is kept under as its definition says, and the most rows and seconds "
+                "one read may take, then the read-only user's name and password, and press "
+                "Connect Laravel database views."
             ),
             sketch=Sketch(
                 place="Company Brain",
@@ -2165,6 +2338,7 @@ GUIDE: Final = keyed(
                         LineKind.FIELD, "Server and port", "db.example.com, 3306", mark=True
                     ),
                     SketchLine(LineKind.FIELD, "Private network", "no", mark=True),
+                    SketchLine(LineKind.FIELD, "Encryption", VERIFY_WORD, mark=True),
                     SketchLine(LineKind.FIELD, "Clients", "department = sales", mark=True),
                     SketchLine(LineKind.FIELD, "Staff", "department = operations", mark=True),
                     SketchLine(LineKind.FIELD, "Most rows, seconds", "500, 10", mark=True),
@@ -2177,6 +2351,7 @@ GUIDE: Final = keyed(
                 HOST_SETTING,
                 PORT_SETTING,
                 PRIVATE_NETWORK_SETTING,
+                TLS_SETTING,
                 CLIENT_RULE_SETTING,
                 USER_RULE_SETTING,
                 MAX_ROWS_SETTING,

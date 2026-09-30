@@ -34,7 +34,13 @@ from brain.connectors.freshdesk import manifest as freshdesk_manifest
 from brain.connectors.google_drive import DriveConnection
 from brain.connectors.google_drive import manifest as drive_manifest
 from brain.connectors.hubspot import HubSpotConnection, hubspot_manifest
-from brain.connectors.laravel import LaravelConnection, ReadBounds, laravel_manifest
+from brain.connectors.laravel import (
+    DatabaseTls,
+    LaravelConnection,
+    ReadBounds,
+    TlsMode,
+    laravel_manifest,
+)
 from brain.connectors.lark_base import FieldBinding, FieldKind, LarkBaseTable
 from brain.connectors.lark_base import manifest as lark_base_manifest
 from brain.connectors.lark_wiki import SpaceDeclaration
@@ -233,6 +239,7 @@ def manifests() -> tuple[ConnectorManifest, ...]:
                 host="db.example.invalid",
                 port=3306,
                 private_network=False,
+                tls=DatabaseTls(TlsMode.VERIFIED),
             ),
             ref=ref("connectors/creds/laravel_readonly"),
             visibility={"client": VISIBILITY, "user": VISIBILITY},

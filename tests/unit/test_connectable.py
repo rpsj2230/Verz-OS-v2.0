@@ -67,6 +67,7 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
         "host": "db.example.invalid",
         "port": "3306",
         "private_network": "no",
+        "tls": "verify",
         "client_rule": "department = sales",
         "user_rule": "department = operations",
         "max_rows": "500",

@@ -53,6 +53,7 @@ LARAVEL = {
     "host": "db.example.invalid",
     "port": "3306",
     "private_network": "no",
+    "tls": "verify",
     "client_rule": "department = sales",
     "user_rule": "department = operations",
     "max_rows": "500",
@@ -228,6 +229,10 @@ def test_anything_but_a_field_and_its_values_is_not_a_view_rule(written: str) ->
         ("port", "mysql"),
         ("private_network", "maybe"),
         ("private_network", "true"),
+        ("tls", "maybe"),
+        ("tls", "none"),
+        ("tls", "-----BEGIN PRIVATE KEY-----MIIB-----END PRIVATE KEY-----"),
+        ("tls", "-----BEGIN CERTIFICATE-----AAAA-----END CERTIFICATE-----"),
         ("max_rows", "0"),
         ("max_rows", f"{laravel.MAX_ROWS_EVER + 1}"),
         ("timeout_seconds", "31"),
@@ -292,3 +297,41 @@ def test_a_laravel_connection_keeps_each_view_under_the_rule_written_for_it() ->
         laravel.ENTITY_USER: laravel.rule_of(LARAVEL["user_rule"]),
     }
     assert manifest.scope.selectors == ("portal.v_client", "portal.v_user")
+
+
+def test_encryption_verifies_by_default_takes_an_authority_and_allows_none_in_a_tunnel() -> None:
+    """`A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL` and `NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE`, at the
+    form. `verify` in any case is the verified default; a certificate authority pasted on one line,
+    past the form's usual bound, is taken as the connection's own; `none` is refused naming the
+    setting unless the database is on a private network, and taken when it is. Delete this and the
+    form could take none on the internet, or refuse the tunnel and the company's own authority."""
+    from tests.fixtures.tls import issued
+
+    authority = issued().authority
+    pasted = authority.replace("\n", "")
+    assert len(pasted) > 200
+    form = DECLARED_FORMS["laravel"]
+    assert settings_problems(form, {**LARAVEL, "tls": pasted}) == ()
+    assert settings_problems(form, {**LARAVEL, "schema": "p" * 201})[0].code == "too_long"
+
+    verified = laravel.connection_of({**LARAVEL, "tls": " VERIFY "})
+    assert verified.tls == laravel.DatabaseTls(laravel.TlsMode.VERIFIED)
+    own = laravel.connection_of({**LARAVEL, "tls": pasted})
+    assert own.tls == laravel.DatabaseTls(laravel.TlsMode.OWN_AUTHORITY, authority)
+
+    with pytest.raises(SettingRefusedError) as refused:
+        laravel.connection_of({**LARAVEL, "tls": "none"})
+    assert refused.value.setting == "tls"
+    tunnel = laravel.connection_of(
+        {**LARAVEL, "tls": "none", "private_network": "yes", "host": "127.0.0.1"}
+    )
+    assert (tunnel.tls.mode, tunnel.private_network) == (laravel.TlsMode.NONE, True)
+    with pytest.raises(laravel.LaravelError):
+        laravel.LaravelConnection(
+            schema="portal",
+            bounds=laravel.ReadBounds(max_rows=10, timeout_seconds=5.0),
+            host="db.example.invalid",
+            port=3306,
+            private_network=False,
+            tls=laravel.DatabaseTls(laravel.TlsMode.NONE),
+        )

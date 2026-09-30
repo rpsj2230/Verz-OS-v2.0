@@ -169,7 +169,6 @@ from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.connectable import (
     CONNECTABLE,
-    MAX_SETTING_CHARS,
     NOT_FROM_THE_CONSOLE,
     NotConnectableError,
     SettingProblem,
@@ -177,6 +176,7 @@ from brain.ops.connectable import (
     given,
     key_reference,
     manifest_for,
+    max_chars_of,
     settings_problems,
 )
 from brain.ops.connector_admin import (
@@ -980,7 +980,7 @@ def _page(
                         name=one.name,
                         label=one.label,
                         hint=one.hint,
-                        max_chars=MAX_SETTING_CHARS,
+                        max_chars=max_chars_of(one),
                         blank=blank_sentence(one),
                     )
                     for one in kind.settings
