@@ -38,7 +38,14 @@ nothing of the message.
 delivery posts once. A delivery whose key was already used is answered with what the first
 attempt came to and records nothing, because that attempt recorded itself.
 
-Task ids: M10.6.1, M10.6.3, M10.4.5, M10.1.5
+**A card is a message with controls, sent by the same step (M10.2.3).** An `Outgoing` marked
+`card`, with its `actions` or none, is built by the wire's `CardWire.card_request` instead of
+`request_for`, after every
+check above, so a card is held to its reader's reach, the channel's ceiling and its label exactly
+as a message is, and sent once and recorded the same way. A wire with no cards is refused one as
+`cannot_carry`, before its secret is borrowed.
+
+Task ids: M10.6.1, M10.6.3, M10.4.5, M10.1.5, M10.2.3
 """
 
 from __future__ import annotations
@@ -50,6 +57,8 @@ from datetime import datetime
 from typing import Final
 
 from brain.channels.adapter import (
+    CardAction,
+    CardWire,
     ChannelTransport,
     DeliveryRefusedError,
     VendorAnswer,
@@ -129,10 +138,16 @@ class Outgoing:
     highest: Classification = Classification.INTERNAL
     recipient: str = ""
     planned_hash: str = ""
+    #: True when this message is a card rather than text, with or without controls on it.
+    card: bool = False
+    #: The controls on a card a person can press; empty for a card with nothing to press.
+    actions: tuple[CardAction, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.to.strip():
             raise ValueError("a message is sent to somewhere")
+        if self.actions and not self.card:
+            raise ValueError("controls go on a card, and this message is not one")
         if bool(self.recipient) != bool(self.planned_hash):
             msg = (
                 "a message made for somebody names them and the reach it was made at, and a "
@@ -260,6 +275,8 @@ async def _attempt(
         assert_label_survives(text, outgoing.payload)
     except (DeliveryRefusedError, CardRefusedError):
         return _refused(RefusedBecause.CANNOT_CARRY)
+    if outgoing.card and not isinstance(wire, CardWire):
+        return _refused(RefusedBecause.CANNOT_CARRY)
 
     try:
         secret = await asyncio.to_thread(secrets.read, record.secret)
@@ -269,9 +286,18 @@ async def _attempt(
         return _refused(RefusedBecause.NO_SECRET)
 
     try:
-        request = wire.request_for(
-            to=outgoing.to, text=text, secret=secret, tenant=record.tenant, now=now
-        )
+        if outgoing.card and isinstance(wire, CardWire):
+            request = wire.card_request(
+                to=outgoing.to,
+                text=text,
+                actions=outgoing.actions,
+                secret=secret,
+                tenant=record.tenant,
+            )
+        else:
+            request = wire.request_for(
+                to=outgoing.to, text=text, secret=secret, tenant=record.tenant, now=now
+            )
     except ValueError:
         return _refused(RefusedBecause.INCOMPLETE)
     del secret

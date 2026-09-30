@@ -44,6 +44,10 @@ if TYPE_CHECKING:
     from brain.ops.connector_sync_run import SourceAnswer
     from brain.ops.secrets import SecretRef
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 310
+
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------------ the figures

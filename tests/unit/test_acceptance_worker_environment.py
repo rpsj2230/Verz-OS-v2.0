@@ -14,6 +14,11 @@ check that starts reading another is held to it the day `READ_BY` says so. They 
 composition the product runs in which the scheduling worker is one of our processes, and the worker
 must be given each with the application's own expression, so the two read one value.
 
+**And the staff sync's accounts step, since the same day.** It runs in the same worker and reads
+the install's sign-in issuer to know which realm to manage, and only the application was given it,
+so every run would have said the issuer was unset. A setting the screen saves in `ops.setting`
+reaches the worker from the database and is left out: `EDITABLE_SETTINGS` is that list.
+
 **What this does not see.** A deployment panel's stored copy of the files keeps the missing line
 until somebody pastes the change in (`docs/install/coolify.md`, Updating).
 
@@ -25,8 +30,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Final
 
-from brain.console.configuration import READ_BY
-from brain.ops.acceptance import CHECK_MODULES
+from brain.console.configuration import EDITABLE_SETTINGS, READ_BY
+from brain.ops.acceptance import check_modules
 from tests.unit.test_compose_cache_address import APPLICATION, ours_with_a_database
 from tests.unit.test_compose_networks import compositions, load
 
@@ -34,10 +39,26 @@ from tests.unit.test_compose_networks import compositions, load
 SCHEDULING_WORKER: Final = "brain-worker"
 
 
+#: The other runs the scheduling worker makes that read an installation value from its environment.
+WORKER_RUNS: Final = ("brain.ops.staff_accounts_run",)
+
+
 def read_by_a_check() -> tuple[str, ...]:
     """Every installation setting an acceptance check module is named as reading."""
     return tuple(
-        sorted(name for name, readers in READ_BY.items() if set(readers) & set(CHECK_MODULES))
+        sorted(name for name, readers in READ_BY.items() if set(readers) & set(check_modules()))
+    )
+
+
+def read_in_the_worker() -> tuple[str, ...]:
+    """Every setting a check or another worker run reads, less those the worker reads saved."""
+    runs = set(check_modules()) | set(WORKER_RUNS)
+    return tuple(
+        sorted(
+            name
+            for name, readers in READ_BY.items()
+            if set(readers) & runs and name not in EDITABLE_SETTINGS
+        )
     )
 
 
@@ -50,7 +71,7 @@ def worker_gaps(documents: Mapping[str, Mapping[str, Any]]) -> tuple[str, ...]:
     application = processes.get(APPLICATION, {})
     return tuple(
         f"{SCHEDULING_WORKER} is not given {name} as {APPLICATION} is"
-        for name in read_by_a_check()
+        for name in read_in_the_worker()
         if name not in worker or worker[name] != application.get(name, worker[name])
     )
 
@@ -89,3 +110,13 @@ def test_a_worker_left_without_the_setting_is_reported() -> None:
     assert worker_gaps({FULL_PROFILE_FILE: document}) == (
         f"{SCHEDULING_WORKER} is not given INSTALL_ACCEPTANCE_SKILL_SOURCE as {APPLICATION} is",
     )
+
+
+def test_the_staff_accounts_run_is_given_the_sign_in_issuer_and_not_what_the_screen_saves() -> None:
+    """The accounts step's reading: the issuer is among the values the worker must be given, and the
+    employment types, which the Settings screen saves, are not. Delete this and the worker can lose
+    the issuer with the property above still green because it stopped asking, or be required to
+    carry a value the screen owns."""
+    assert "INSTALL_OIDC_ISSUER" in read_in_the_worker()
+    assert "INSTALL_ACCOUNT_EMPLOYMENT_TYPES" not in read_in_the_worker()
+    assert set(read_by_a_check()) <= set(read_in_the_worker())

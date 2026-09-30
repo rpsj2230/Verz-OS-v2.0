@@ -18,6 +18,10 @@ import pytest
 
 from brain.tools.skills import Skill
 from brain.tools.sop_import import (
+    COMMENT_NOTE,
+    HIDDEN_TEXT_NOTE,
+    NOT_READ_NOTE,
+    TRACKED_CHANGE_NOTE,
     Concern,
     SopDraft,
     SopError,
@@ -246,3 +250,70 @@ def test_the_draft_becomes_a_skill_that_validates() -> None:
     assert isinstance(skill, Skill)
     assert skill.name == draft.name
     assert "Check the hours logged" in skill.body
+
+
+# --------------------------------------------------------------- text that marks its headings
+def test_a_numbered_line_under_marked_headings_stays_a_step() -> None:
+    """`A_NUMBERED_LINE_UNDER_MARKED_HEADINGS_IS_A_STEP`: told the headings are already hashes,
+    the reader leaves `1. Open the job` a step and takes the title from the hashed line, while the
+    same text read without the flag still turns numbered lines into headings. Delete this and
+    every step of an imported Word document becomes a section, the first one its title."""
+    marked = read_procedure(ORDINARY, source=SourceFormat.WORD, headings_marked=True)
+    plain = read_procedure("1. Purpose\nWhy.\n1.1 Scope\nWhat.\n", source=SourceFormat.WORD)
+
+    assert marked.name == "raising-a-maintenance-invoice"
+    assert "1. Open the job in the maintenance board." in marked.body.splitlines()
+    assert not [line for line in marked.body.splitlines() if line.startswith("## ")]
+    assert "## Purpose" in plain.body.splitlines()
+
+
+def test_a_dotted_word_outside_the_tool_grammar_is_not_a_named_tool() -> None:
+    """`e.g`, a file name and a web address are dotted and are not `source.verb_noun`; only the
+    real tool name is reported. Delete this and every real procedure lists its punctuation as
+    systems it asks for, and the one real request is lost among them."""
+    text = ORDINARY + "\nAttach report.pdf, e.g. from intranet.example, and see i.e. the job.\n"
+
+    draft = read_procedure(text, source=PLAIN)
+
+    assert draft.requested_tools == ("xero.create_invoice",)
+    assert [f.excerpt for f in draft.findings if f.concern is Concern.NAMED_TOOL] == [
+        "3. Raise the invoice in Xero with xero.create_invoice."
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "note", "concern"),
+    [
+        (SourceFormat.WORD, TRACKED_CHANGE_NOTE, Concern.HIDDEN_CONTENT),
+        (SourceFormat.WORD, COMMENT_NOTE, Concern.HIDDEN_CONTENT),
+        (SourceFormat.WORD, HIDDEN_TEXT_NOTE, Concern.HIDDEN_CONTENT),
+        (SourceFormat.WORD, f"{NOT_READ_NOTE}the number of this step]", Concern.LOST_STRUCTURE),
+        (SourceFormat.CONFLUENCE, f"{NOT_READ_NOTE}Confluence macro jira]", Concern.LOST_STRUCTURE),
+    ],
+)
+def test_each_note_the_file_reader_writes_is_a_finding_of_its_kind(
+    source: SourceFormat, note: str, concern: Concern
+) -> None:
+    """The vocabulary `brain.tools.sop_files` writes, read back as the finding it stands for, on
+    the line it sits on, and a pasted text is never searched for it. Delete this and a note can be
+    renamed on one side only, and what the file held unseen reaches the reviewer as plain text."""
+    text = ORDINARY + f"\nSend it. {note}\n"
+
+    found = read_procedure(text, source=source, headings_marked=True).findings
+    pasted = read_procedure(text, source=PLAIN, headings_marked=True).findings
+
+    assert [(f.concern, f.excerpt) for f in found if f.concern is concern] == [
+        (concern, f"Send it. {note}")
+    ]
+    assert [f for f in pasted if f.concern is concern] == []
+
+
+def test_a_title_no_skill_could_be_called_falls_back_to_the_file_s_name() -> None:
+    """A title opening with a digit slugs to a name the skill grammar refuses, so the fallback is
+    asked rather than the import refused. Delete this and "2024 onboarding" cannot be imported
+    at all."""
+    draft = read_procedure(
+        "# 2024 onboarding\n\nOpen the job.\n", source=PLAIN, fallback_name="onboarding"
+    )
+
+    assert draft.name == "onboarding"

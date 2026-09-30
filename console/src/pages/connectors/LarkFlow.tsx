@@ -39,6 +39,7 @@ import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
   ConnectFlow,
+  copied,
   Fact,
   FactList,
   FailureState,
@@ -170,20 +171,6 @@ function EventsPanel({ events }: { readonly events: LarkEvents }) {
       </FactList>
     </section>
   );
-}
-
-/** Copy a text to the clipboard, answering whether the browser allowed it. */
-async function copied(text: string): Promise<boolean> {
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-  if (clipboard === undefined) {
-    return false;
-  }
-  try {
-    await clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** The steps a result sends somebody back to, each with its picture and a way there. */

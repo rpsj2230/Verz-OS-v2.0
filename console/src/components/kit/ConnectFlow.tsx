@@ -17,15 +17,19 @@
  * test that sends somebody back to one step, should not have to press Next through the rest. A step
  * a test flagged is marked there.
  *
- * Task ids: M11.9.4, M27.11.9
+ * **A step can offer one text to paste into the vendor whole**, such as the script email's steps
+ * ask for, as a copy button with the text beside it; a step offering none draws nothing extra.
+ *
+ * Task ids: M11.9.4, M27.11.9, M10.5.6
  */
 
-import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowLeft, ArrowRight, Copy, ExternalLink } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { components } from "../../api/schema";
 import { cn } from "../../lib/utils";
 import { Button, buttonVariants } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
+import { copied } from "./copyText";
 import { sketchMarks, StepSketch } from "./StepSketch";
 
 export type FlowStep = components["schemas"]["GuideStepView"];
@@ -34,6 +38,9 @@ export const BACK = "Back";
 export const NEXT = "Next";
 export const STEPS_LABEL = "Steps";
 export const FLAGGED = "The test sent you back here";
+export const COPIED_TEXT = "Copied. Paste it where this step says.";
+export const NOT_COPIED_TEXT = "Your browser did not allow copying. Select the text below, copy it and paste it where this step says.";
+export const SHOW_TEXT = "Show what is copied";
 
 export function stepOf(index: number, total: number): string {
   return `Step ${index + 1} of ${total}`;
@@ -62,6 +69,55 @@ function Marks({ step }: { readonly step: FlowStep }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * A text the step asks somebody to paste into the vendor whole, such as a script: a button that
+ * copies it, and the text itself to read first or to copy by hand when the browser will not. Never
+ * a secret, which `brain.ops.connect_steps.GuideStep` says of every text a step carries.
+ */
+function CopyText({ step }: { readonly step: FlowStep }) {
+  const [said, setSaid] = useState<"done" | "failed" | null>(null);
+  if (step.copy_text === "") {
+    return null;
+  }
+  const text = (
+    <textarea
+      readOnly
+      aria-label={step.copy_label}
+      value={step.copy_text}
+      className="mt-2 min-h-40 w-full rounded-md border border-input bg-ground p-2 font-mono text-[11.5px] leading-snug text-ink"
+    />
+  );
+  return (
+    <div data-slot="copy-text" className="flex min-w-0 flex-col gap-2">
+      <Button
+        type="button"
+        className="min-h-11 self-start sm:min-h-9"
+        onClick={() => {
+          void (async () => {
+            setSaid((await copied(step.copy_text)) ? "done" : "failed");
+          })();
+        }}
+      >
+        <Copy aria-hidden />
+        {step.copy_label}
+      </Button>
+      {said === null ? null : (
+        <p role="status" className="m-0 text-[12.5px] text-dim">
+          {said === "done" ? COPIED_TEXT : NOT_COPIED_TEXT}
+        </p>
+      )}
+      {said === "failed" ? (
+        text
+      ) : (
+        <details className="min-w-0">
+          <summary className="min-h-11 cursor-pointer py-2 text-[12.5px] text-acc-text sm:min-h-0 sm:py-0">{SHOW_TEXT}</summary>
+          {text}
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -164,6 +220,7 @@ export function ConnectFlow({
               <ExternalLink aria-hidden />
             </a>
           )}
+          <CopyText key={step.key} step={step} />
           {shared}
           {steps.map((one) => (
             <div key={one.key} data-panel={one.key} hidden={one.key !== step.key} className="min-w-0">

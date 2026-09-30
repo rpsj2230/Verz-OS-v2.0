@@ -36,7 +36,7 @@
  * Task ids: M27.10.2
  */
 
-import { useId, useMemo, useRef, type RefObject } from "react";
+import { createRef, useId, useMemo, useRef, type RefObject } from "react";
 import { cn } from "../../lib/utils";
 import { Input } from "./input";
 import { Label } from "./label";
@@ -66,26 +66,32 @@ export interface SecretHandle {
 
 export function useSecret(): SecretHandle {
   const ref = useRef<HTMLInputElement | null>(null);
-  return useMemo(
-    () => ({
-      ref,
-      take() {
-        const input = ref.current;
-        if (input === null) {
-          return "";
-        }
-        const value = input.value;
-        input.value = "";
-        // So `onPresenceChange` hears that the field is empty again, as it would from typing.
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        return value;
-      },
-      peek() {
-        return ref.current?.value ?? "";
-      },
-    }),
-    [],
-  );
+  return useMemo(() => secretHandle(ref), []);
+}
+
+/**
+ * A handle over a field's ref, for a form with a number of secret fields known only when it is
+ * drawn, such as a channel whose secret has parts: one per part, made together rather than by a
+ * hook called in a loop. `useSecret` is this over a ref of its own.
+ */
+export function secretHandle(ref: RefObject<HTMLInputElement | null> = createRef<HTMLInputElement>()): SecretHandle {
+  return {
+    ref,
+    take() {
+      const input = ref.current;
+      if (input === null) {
+        return "";
+      }
+      const value = input.value;
+      input.value = "";
+      // So `onPresenceChange` hears that the field is empty again, as it would from typing.
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      return value;
+    },
+    peek() {
+      return ref.current?.value ?? "";
+    },
+  };
 }
 
 function SecretField({
