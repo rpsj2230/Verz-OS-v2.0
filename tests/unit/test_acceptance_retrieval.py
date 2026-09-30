@@ -31,7 +31,7 @@ from brain.knowledge import document_tools, search
 from brain.ops import acceptance_retrieval, acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_retrieval"
 
@@ -259,3 +259,19 @@ def test_a_reach_widened_to_every_department_fails_the_three_readers_check(
 
     monkeypatch.setattr(document_tools, "reach_for", everywhere)
     assert "outside their scope" in _failed(install, REACH)
+
+
+def test_the_retrieval_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_retrieval") == [
+        "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
+        "a_word_in_a_title_outranks_a_word_in_passing",
+        "a_documents_passages_come_back_together_in_reading_order",
+        "a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd",
+        "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
+        "the_database_withholds_passages_the_statement_did_not_filter",
+        "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]

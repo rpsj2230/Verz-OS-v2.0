@@ -121,8 +121,14 @@ class FakeLark:
     def __init__(self) -> None:
         self.seen: list[tuple[str, str, bytes]] = []
         self.refuse: dict[str, dict[str, Any]] = {}
+        #: The HTTP status a refused prefix answers with, 200 unless named: Lark refuses most
+        #: calls inside a 200 and a department outside the data range with a 403.
+        self.refuse_status: dict[str, int] = {}
         self.accept_secret = SECRET
         self.empty_directory = False
+        #: False for an app without `contact:department.base:readonly`, which Lark answers by
+        #: leaving each department's `name` out of an otherwise successful walk.
+        self.department_names = True
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -158,7 +164,7 @@ class FakeLark:
                     return
                 for prefix, envelope in fake.refuse.items():
                     if path.startswith(prefix):
-                        self._answer(envelope)
+                        self._answer(envelope, fake.refuse_status.get(prefix, 200))
                         return
                 self._answer(fake.success(path))
 
@@ -185,7 +191,10 @@ class FakeLark:
         if path.endswith("/users/find_by_department"):
             items = [] if self.empty_directory else [{"union_id": "on_1", "name": "A"}]
         elif path.endswith("/departments/0/children"):
-            items = [] if self.empty_directory else [{"open_department_id": "od_1"}]
+            department = {"open_department_id": "od_1", "name": "Operations"}
+            if not self.department_names:
+                del department["name"]
+            items = [] if self.empty_directory else [department]
         elif path == "/open-apis/wiki/v2/spaces":
             items = [{"space_id": "7000000000000000001", "name": "Handbook"}]
         elif path.endswith("/nodes"):
@@ -385,6 +394,34 @@ def test_nothing_granted_at_all_reads_as_a_version_not_released(lark: FakeLark) 
 def test_a_directory_the_app_cannot_see_asks_for_the_data_range(lark: FakeLark) -> None:
     """Delete this and an app whose contacts range is empty is reported working over nobody."""
     lark.empty_directory = True
+    (staff,) = probe(lark, Use.STAFF_LIST).uses
+    assert staff.verdict is Verdict.NOT_SHARED
+    assert "All members" in staff.told
+
+
+def test_an_app_that_reads_departments_without_their_names_is_told_the_scope_that_shows_them(
+    lark: FakeLark,
+) -> None:
+    """Lark admits the department walk without `contact:department.base:readonly` and leaves out
+    each name, so the call succeeds and the sync places nobody: the owner's install, 2026-09-29,
+    which this test called working because it had read one person. Delete this and the test goes
+    back to passing an app one scope short. The positive case is the working app above."""
+    lark.department_names = False
+    (staff,) = probe(lark, Use.STAFF_LIST).uses
+    assert staff.verdict is Verdict.MISSING_SCOPE
+    assert staff.missing == ("contact:department.base:readonly",)
+    assert "contact:department.base:readonly" in staff.told
+
+
+def test_a_department_walk_the_range_refuses_is_the_data_range_even_when_a_person_was_read(
+    lark: FakeLark,
+) -> None:
+    """The owner's first sync met "no dept authority" on the department walk while the root could
+    list people, and this test had already said working. The walk is the sync's first call, so a
+    refusal there is the data range. Delete this and a test passes an app the night's run fails."""
+    refused = "/open-apis/contact/v3/departments/"
+    lark.refuse[refused] = {"code": 40004, "msg": "no dept authority error"}
+    lark.refuse_status[refused] = 403
     (staff,) = probe(lark, Use.STAFF_LIST).uses
     assert staff.verdict is Verdict.NOT_SHARED
     assert "All members" in staff.told

@@ -461,11 +461,20 @@ class MailPassword:
 # ------------------------------------------------------------------------ the send
 @dataclass(frozen=True)
 class Message:
-    """One message: a recipient, a subject and a plain-text body."""
+    """One message: a recipient, a subject and a plain-text body.
+
+    A reply on the email channel adds three headers, and they are named fields rather than a
+    mapping of headers, so no caller can add a `Cc` or a `Bcc` by passing one more key: see
+    `brain.channels.email.A_REPLY_IS_ADDRESSED_TO_THE_PERSON_THE_ANSWER_WAS_COMPUTED_FOR`.
+    `in_reply_to` is also written as `References`, which is what threads a reply in most clients.
+    """
 
     to: str
     subject: str
     body: str
+    reply_to: str = ""
+    in_reply_to: str = ""
+    auto_submitted: str = ""
 
 
 @dataclass(frozen=True)
@@ -527,6 +536,13 @@ class SmtpTransport:
         built["From"] = settings.sender
         built["To"] = message.to
         built["Subject"] = message.subject
+        if message.reply_to:
+            built["Reply-To"] = message.reply_to
+        if message.in_reply_to:
+            built["In-Reply-To"] = message.in_reply_to
+            built["References"] = message.in_reply_to
+        if message.auto_submitted:
+            built["Auto-Submitted"] = message.auto_submitted
         built.set_content(message.body)
         try:
             connection = self._connect()
