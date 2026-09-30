@@ -760,6 +760,45 @@ class RegisteredWire(Protocol):
     def judge(self, answer: VendorAnswer) -> CallOutcome: ...
 
 
+#: Why a vendor that posts several messages at once is read one message at a time.
+A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL: Final = (
+    "A vendor that batches posts messages from different people in one request. After the "
+    "request is verified it is split into one request per message, and each is read, claimed and "
+    "answered alone, so no message is lost behind the first and none answers for another."
+)
+
+
+@runtime_checkable
+class BatchedWire(Protocol):
+    """A wire whose vendor may post several messages in one verified request.
+
+    `parts` splits the request, as `verify` returned it, into one per message, each read by
+    `read` as though it had arrived alone; see `A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL`.
+    """
+
+    def parts(self, arrived: Arrived) -> tuple[Arrived, ...]: ...
+
+
+#: Why a vendor's check of the address by a GET is answered only for the agreed word.
+AN_ADDRESS_CHECK_BY_GET_IS_ANSWERED_ONLY_FOR_THE_AGREED_WORD: Final = (
+    "A vendor that checks the events address with a GET, before it posts anything, names a word "
+    "the person saving the set-up chose; the address answers with the vendor's challenge only "
+    "when that word matches the one in the vault, and with one refusal otherwise."
+)
+
+
+@runtime_checkable
+class SubscribedWire(Protocol):
+    """A wire whose vendor checks the events address with a GET before it posts to it.
+
+    `subscription_answer` is handed the query and the channel's secret as the vault keeps it, and
+    answers the body to send back, or None to refuse; see
+    `AN_ADDRESS_CHECK_BY_GET_IS_ANSWERED_ONLY_FOR_THE_AGREED_WORD`.
+    """
+
+    def subscription_answer(self, query: Mapping[str, str], secret: str) -> str | None: ...
+
+
 class ChannelTransport(Protocol):
     """Whatever puts a `VendorRequest` on the network. `brain.channel_routes.HttpsTransport`.
 

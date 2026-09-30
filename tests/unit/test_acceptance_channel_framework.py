@@ -113,24 +113,40 @@ def test_the_whatsapp_bytes_a_check_posts_are_one_message_the_install_verifies_a
     broken, or bytes Meta could never send."""
     from brain.channels.adapter import Arrived
     from brain.channels.webhook import WebhookRefusedError
-    from brain.channels.whatsapp import SIGNATURE_HEADER, WIRE, signature_for
+    from brain.channels.whatsapp import (
+        ACCESS_TOKEN,
+        APP_SECRET,
+        PHONE_NUMBER_ID,
+        SIGNATURE_HEADER,
+        VERIFY_TOKEN,
+        WIRE,
+        signature_for,
+    )
     from brain.gate.context import Channel
 
+    kept = json.dumps({APP_SECRET: "k" * 32, ACCESS_TOKEN: "t" * 24, VERIFY_TOKEN: "v"})
+    tenant = {PHONE_NUMBER_ID: "0"}
     sender = a_number()
     message = whatsapp_message(sender, "QZWORDONE")
     raw = json.dumps(message).encode()
-    arrived = Arrived(headers={SIGNATURE_HEADER: signature_for("k" * 32, raw)}, body=raw)
-    received = WIRE.read(WIRE.verify(arrived, "k" * 32, datetime.now(UTC)))
+    arrived = Arrived(
+        headers={SIGNATURE_HEADER: signature_for("k" * 32, raw)}, body=raw, tenant=tenant
+    )
+    (part,) = WIRE.parts(WIRE.verify(arrived, kept, datetime.now(UTC)))
+    received = WIRE.read(part)
     sent = message["entry"][0]["changes"][0]["value"]["messages"][0]
     assert (received.event.channel, received.event.channel_identity) == (Channel.WHATSAPP, sender)
     assert (received.event.external_id, received.event.text) == (sent["id"], "QZWORDONE")
-    assert received.reply_to == sender and received.conversation is None
+    assert received.reply_to == sender
+    assert received.conversation is not None and not received.conversation.shared
     again = json.dumps(message, separators=(",", ":")).encode()
     assert again != raw
     with pytest.raises(WebhookRefusedError):
         WIRE.verify(
-            Arrived(headers={SIGNATURE_HEADER: signature_for("k" * 32, again)}, body=raw),
-            "k" * 32,
+            Arrived(
+                headers={SIGNATURE_HEADER: signature_for("k" * 32, again)}, body=raw, tenant=tenant
+            ),
+            kept,
             datetime.now(UTC),
         )
     assert sender.startswith("999") and sender.isdigit() and len(sender) == 12
