@@ -30,6 +30,7 @@ import yaml
 
 from brain.deployment.compatibility import (
     A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING,
+    A_REVOKE_ON_A_FUNCTION_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING,
     MOST_UNROLLED_ROWS,
     VERSIONS,
     WHAT_THIS_CHECK_CANNOT_SEE,
@@ -317,6 +318,52 @@ def test_a_restriction_on_a_table_this_migration_created_is_not_a_restriction() 
     found = breaking_changes(existing)
     assert [one.rule for one in found] == ["restriction on a table that was already there"]
     assert A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING in found[0].detail
+
+
+#: A definer function as `0172` writes one, and the revoke that closes its default grant.
+_A_NEW_FUNCTION = (
+    '    op.execute("""CREATE FUNCTION gate.f(p integer) RETURNS integer LANGUAGE sql '
+    'SECURITY DEFINER SET search_path = pg_catalog, gate AS $f$ SELECT p; $f$""")\n'
+)
+_REVOKE_FROM_PUBLIC = '    op.execute("REVOKE EXECUTE ON FUNCTION gate.f(integer) FROM PUBLIC")'
+
+
+def test_a_revoke_on_a_function_this_migration_created_is_not_a_narrowing() -> None:
+    """The rule `0172` needed to close a definer function's default grant, and its counter-case.
+
+    PostgreSQL grants EXECUTE to PUBLIC on every function it creates, and until 2026-09-30 this
+    check read every REVOKE as a removal, so `0036` and `0040` left the default grant on their
+    definer functions rather than turn the gate red. Delete this and either the rule goes and
+    every definer function is left callable by any role with USAGE on its schema, or it widens
+    and a revoke on a function the previous release was calling passes as safe.
+    """
+    fresh = _migration(_A_NEW_FUNCTION + _REVOKE_FROM_PUBLIC)
+    existing = _migration(_REVOKE_FROM_PUBLIC)
+    replaced = _migration(
+        _A_NEW_FUNCTION.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")
+        + _REVOKE_FROM_PUBLIC
+    )
+
+    assert not breaking_changes(fresh)
+    kept = [
+        one
+        for one in changes_in(fresh)
+        if one.rule == "privilege taken from a function created here"
+    ]
+    assert len(kept) == 1
+    assert A_REVOKE_ON_A_FUNCTION_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING in kept[0].detail
+    assert [one.rule for one in breaking_changes(existing)] == ["statement removes something"]
+    # A function replaced in place was there for the previous release to call.
+    assert [one.rule for one in breaking_changes(replaced)] == ["statement removes something"]
+
+
+def test_a_revoke_on_another_function_than_the_one_created_is_still_a_finding() -> None:
+    """A body that creates one function and revokes on another has taken something away from a
+    function the previous release could call. Delete this and the rule can be satisfied by any
+    `CREATE FUNCTION` anywhere in the body."""
+    other = _migration(_A_NEW_FUNCTION + _REVOKE_FROM_PUBLIC.replace("gate.f(", "gate.g("))
+
+    assert [one.rule for one in breaking_changes(other)] == ["statement removes something"]
 
 
 def test_row_level_security_switched_on_over_an_existing_table_is_a_finding() -> None:

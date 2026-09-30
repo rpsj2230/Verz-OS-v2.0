@@ -15,13 +15,20 @@
  * `A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT`. A rejection needs one of the route's reasons
  * and its button stays disabled until one is chosen.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M27.16.1
+ * **Take over, on an agent's prepared action only, and confirmed.** The card says whether it is
+ * offered (`mayTakeOver`), which is the API's answer and never this console's. Taking over means the
+ * agent does not do it and the approver does it by hand, and it counts against the agent's rung on
+ * that action, so it asks for a reason and then asks once more, in words, before it is sent. See
+ * `TAKING_OVER_IS_CONFIRMED_BECAUSE_IT_LOWERS_THE_AGENT`.
+ *
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M27.16.1, M33.6.1.3
  */
 
 import { useCallback, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
+import { ConfirmAction } from "../../components/ConfirmAction";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../../ui/FieldProblems";
 import {
@@ -29,8 +36,10 @@ import {
   decisionBody,
   readDecision,
   REJECTION_REASONS,
+  TAKEOVER_REASONS,
   type ApprovalCardView,
   type Decision,
+  type Verdict,
 } from "../approvalsQuery";
 import { nameOf } from "../review/parts";
 
@@ -51,6 +60,21 @@ export const REASON_LABEL = "Reason for rejecting";
 export const NO_REASON_CHOSEN = "Choose a reason";
 export const APPROVED_SENTENCE = "Approved.";
 export const REJECTED_SENTENCE = "Rejected.";
+export const TAKE_OVER_LABEL = "Take over";
+export const TAKE_OVER_REASON_LABEL = "Reason for taking it over";
+export const TAKEN_OVER_SENTENCE = "Taken over. The agent will not do it; it is yours to do.";
+export const TAKE_OVER_QUESTION = "Take this over and do it yourself?";
+export const TAKE_OVER_CONSEQUENCE =
+  "The agent will not do it, and nothing it prepared is sent or changed. It is recorded as taken " +
+  "over, and three takeovers of the same kind of action inside a week hold this agent a step lower " +
+  "on it, so a person sees more of its work first.";
+export const KEEP_IT_LABEL = "Keep it waiting";
+
+/** Written down because a take-over button that sends on one press is the easy version. */
+export const TAKING_OVER_IS_CONFIRMED_BECAUSE_IT_LOWERS_THE_AGENT =
+  "Taking over is recorded against the agent and three in a week lower its rung on that action, " +
+  "which is more than one approval's worth of consequence. So it is offered only where the API says " +
+  "it may be, asks why, and says what it does before anything is sent.";
 
 /** The console address of the queue. */
 export const APPROVALS_ADDRESS = "/approvals";
@@ -60,10 +84,17 @@ export function approvalAddress(suspensionId: string): string {
   return `${APPROVALS_ADDRESS}/${encodeURIComponent(suspensionId)}`;
 }
 
-export type Verdict = "approved" | "rejected";
+export type { Verdict } from "../approvalsQuery";
 
 export function said(verdict: Verdict): string {
-  return verdict === "approved" ? APPROVED_SENTENCE : REJECTED_SENTENCE;
+  switch (verdict) {
+    case "approved":
+      return APPROVED_SENTENCE;
+    case "rejected":
+      return REJECTED_SENTENCE;
+    case "taken_over":
+      return TAKEN_OVER_SENTENCE;
+  }
 }
 
 function When({ at }: { readonly at: string }) {
@@ -112,12 +143,16 @@ export function ApprovalCard({
  */
 export function DecisionControls({
   suspensionId,
+  mayTakeOver = false,
   onDecided,
 }: {
   readonly suspensionId: string;
+  readonly mayTakeOver?: boolean;
   readonly onDecided: (verdict: Verdict) => void;
 }) {
   const [reason, setReason] = useState("");
+  const [takeoverReason, setTakeoverReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const problems = failure?.problems ?? [];
@@ -180,6 +215,47 @@ export function DecisionControls({
       >
         {REJECT_LABEL}
       </button>
+      {mayTakeOver ? (
+        confirming ? (
+          <ConfirmAction
+            question={TAKE_OVER_QUESTION}
+            consequence={TAKE_OVER_CONSEQUENCE}
+            confirmLabel={TAKE_OVER_LABEL}
+            cancelLabel={KEEP_IT_LABEL}
+            busy={busy}
+            onConfirm={() => send({ verdict: "taken_over", reasonCode: takeoverReason })}
+            onCancel={() => setConfirming(false)}
+          />
+        ) : (
+          <>
+            <label className="approval-card__reason">
+              <span>{TAKE_OVER_REASON_LABEL}</span>
+              <select
+                className="form-control approval-card__choice"
+                name="takeover_reason"
+                value={takeoverReason}
+                disabled={busy}
+                onChange={(event) => setTakeoverReason(event.target.value)}
+              >
+                <option value="">{NO_REASON_CHOSEN}</option>
+                {Object.entries(TAKEOVER_REASONS).map(([code, words]) => (
+                  <option key={code} value={code}>
+                    {words}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="button approval-card__action"
+              disabled={busy || takeoverReason === ""}
+              onClick={() => setConfirming(true)}
+            >
+              {TAKE_OVER_LABEL}
+            </button>
+          </>
+        )
+      ) : null}
       {failure ? <FailureNotice failure={failure} fields={["reason_code"]} /> : null}
     </div>
   );
