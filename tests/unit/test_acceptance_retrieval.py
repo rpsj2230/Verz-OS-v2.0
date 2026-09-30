@@ -31,7 +31,7 @@ from brain.knowledge import document_tools, search
 from brain.ops import acceptance_retrieval, acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_retrieval"
 
@@ -195,6 +195,20 @@ def test_a_projection_left_wide_fails_the_typed_tool_check(
 
 
 @pytest.mark.needs_db
+def test_records_built_without_the_scope_s_fields_fail_the_typed_tool_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The row plane back as it was before 2026-09-29: records built from the projection alone,
+    so a department-scoped reader's redactor has no department to judge and withholds every
+    field. Delete this and the check can go back to reading the tool's records and never the
+    redacted answer, which is how that defect passed it."""
+    from brain.knowledge import rows
+
+    monkeypatch.setattr(rows, "scope_carried", lambda scope, columns: ())
+    assert "redactor did not show" in _failed(install, TOOL)
+
+
+@pytest.mark.needs_db
 def test_fusion_that_drops_the_vector_leg_fails_the_fusion_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -245,3 +259,19 @@ def test_a_reach_widened_to_every_department_fails_the_three_readers_check(
 
     monkeypatch.setattr(document_tools, "reach_for", everywhere)
     assert "outside their scope" in _failed(install, REACH)
+
+
+def test_the_retrieval_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_retrieval") == [
+        "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
+        "a_word_in_a_title_outranks_a_word_in_passing",
+        "a_documents_passages_come_back_together_in_reading_order",
+        "a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd",
+        "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
+        "the_database_withholds_passages_the_statement_did_not_filter",
+        "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]

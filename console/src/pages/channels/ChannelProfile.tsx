@@ -21,20 +21,21 @@
  * Task ids: M27.13.1, M10.3.3, M10.2.1, M27.16.1
  */
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
 import { ConfirmDialog, Fact, FactList, NotOffered, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { SecretField, useSecret } from "../../components/ui/secret-field";
+import { SecretField, secretHandle, useSecret, type SecretHandle } from "../../components/ui/secret-field";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../../ui/FieldProblems";
 import {
   TENANT_FORMAT,
   TEST_OUTCOMES,
   channelApiPath,
+  partProblems,
   setupBody,
   setupProblems,
   testApiPath,
@@ -49,6 +50,13 @@ export const SETUP_LEDE = "The identifiers its vendor gave this install, and the
 export const NO_IDENTIFIERS = "This channel takes no identifiers: its secret and its switch are all it needs.";
 export const SECRET_LABEL = "Secret (write only)";
 export const SECRET_FORMAT = "Kept in the vault and never shown again. Leave it empty to keep the secret held now.";
+export const PARTS_FORMAT =
+  "Kept in the vault together and never shown again. Paste every part to replace them, or leave them all empty to keep the ones held.";
+
+/** The label of one part of a channel's secret. */
+export function partLabel(part: string): string {
+  return `${part} (write only)`;
+}
 export const ENABLED_LABEL = "Switched on";
 export const EVENTS_LABEL = "Vendor posts to";
 export const EVENTS_FORMAT = "Give this address to the vendor, under this install's own web address.";
@@ -79,10 +87,16 @@ function readTold(payload: unknown): string {
   return typeof told === "string" ? told : "";
 }
 
-function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChanged: (told: string) => void }) {
+/** The set-up form: its identifiers, its write-only secret and its switch. The connect flow's last screen too. */
+export function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChanged: (told: string) => void }) {
   const [values, setValues] = useState<Record<string, string>>({ ...row.tenant });
   const [enabled, setEnabled] = useState(row.status === "on");
   const secret = useSecret();
+  const partNames = row.secret_parts.join("\n");
+  const parts = useMemo<readonly (readonly [string, SecretHandle])[]>(
+    () => (partNames === "" ? [] : partNames.split("\n").map((name) => [name, secretHandle()] as const)),
+    [partNames],
+  );
   const [blank, setBlank] = useState<FieldProblem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [asking, setAsking] = useState(false);
@@ -92,7 +106,8 @@ function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChange
   const ask = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFailure(null);
-    const found = setupProblems(row.tenant_fields, values);
+    const typed = Object.fromEntries(parts.map(([name, handle]) => [name, handle.peek()]));
+    const found = [...setupProblems(row.tenant_fields, values), ...partProblems(row.secret_parts, typed)];
     setBlank(found);
     setAsking(found.length === 0);
   };
@@ -100,7 +115,8 @@ function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChange
   const sendSetUp = () => {
     // Read from the field only now, and the field emptied in the same call: the secret is sent once
     // and kept nowhere here.
-    const body = setupBody(enabled, row.tenant_fields, values, secret.take());
+    const typed = Object.fromEntries(parts.map(([name, handle]) => [name, handle.take()]));
+    const body = setupBody(enabled, row.tenant_fields, values, secret.take(), typed);
     setBusy(true);
     void (async () => {
       const result = await request<unknown>(channelApiPath(row.channel), { method: "PUT", body });
@@ -144,14 +160,19 @@ function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChange
             <FieldProblems problems={problems} form={SETUP_FORM} names={[field, `tenant.${field}`]} />
           </div>
         ))}
-        <SecretField
-          secret={secret}
-          label={SECRET_LABEL}
-          stored={row.secret === "held"}
-          description={SECRET_FORMAT}
-          disabled={busy}
-        />
-        <FieldProblems problems={problems} form={SETUP_FORM} names="secret" />
+        {parts.length === 0 ? (
+          <>
+            <SecretField secret={secret} label={SECRET_LABEL} stored={row.secret === "held"} description={SECRET_FORMAT} disabled={busy} />
+            <FieldProblems problems={problems} form={SETUP_FORM} names="secret" />
+          </>
+        ) : (
+          parts.map(([name, handle]) => (
+            <div key={name} className="flex min-w-0 flex-col gap-2">
+              <SecretField secret={handle} label={partLabel(name)} stored={row.secret === "held"} description={PARTS_FORMAT} disabled={busy} />
+              <FieldProblems problems={problems} form={SETUP_FORM} names={name} />
+            </div>
+          ))
+        )}
         <label className="flex min-h-11 items-center gap-2 text-[13px] text-ink sm:min-h-8">
           <input
             type="checkbox"
@@ -173,7 +194,7 @@ function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChange
       </form>
       {failure === null ? null : (
         <div className="mt-3">
-          <FailureNotice failure={failure} title={NOT_SAVED} fields={[...row.tenant_fields, "secret"]} />
+          <FailureNotice failure={failure} title={NOT_SAVED} fields={[...row.tenant_fields, "secret", ...row.secret_parts]} />
         </div>
       )}
       <ConfirmDialog
@@ -192,7 +213,8 @@ function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChange
   );
 }
 
-function TestMessage({ row }: { readonly row: ChannelRow }) {
+/** One product sentence through the vendor to one destination. The connect flow offers it once saved. */
+export function TestMessage({ row }: { readonly row: ChannelRow }) {
   const [to, setTo] = useState("");
   const [blank, setBlank] = useState<FieldProblem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);

@@ -32,7 +32,33 @@ stop: it answers from whatever it already has in context and from its own traini
 that answer looks exactly like a researched one. The abstention path exists for this and is
 reached deliberately rather than by falling through.
 
-Task ids: M3.8.1
+**The configured leash becomes the leash a run is held to here, and nowhere else (M12.1.3).**
+`ToolRegistry.tighten` holds every entry on a registered tool to that tool's leash ceiling, the
+rung its side effect allows, so an entry somebody set to Autonomous on a tool that drafts,
+writes or sends runs Assisted, and one on a tool that moves money runs in Shadow. It was built,
+tested and shown on the Tools screen, and until 2026-09-30 nothing called it: every run was
+held to the rung its leash said, whatever its tools did. The held leash is what `Invocation`
+carries, so a step governed inside the run is governed by it and never by the configured one.
+See `A_RUN_IS_HELD_TO_THE_RUNG_ITS_TOOLS_SIDE_EFFECTS_ALLOW`.
+
+*Rejected: tightening in `brain.agent_routes.leash_of`*, which is what an agent's page reads.
+The page would then show a rung nobody configured as though somebody had, and a person raising
+a rung past its ceiling would see it not move and be told nothing. The page shows the
+configured leash and a run may only be held lower, which is
+`brain.console.agent_profile.THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER`.
+
+*Rejected: tightening per action in `brain.gate.leash.effective_tier`.* The registry imports
+that module, so it cannot import the registry, and computing the ceiling from the action's own
+definition there would be a second copy of `leash_ceiling`. Two copies of a rule about how
+far a tool may run unsupervised disagree eventually, and the one that disagrees permissively
+is the one nobody notices.
+
+*Rejected: tightening at each caller.* Three call sites assemble a run today (the builder's
+rehearsal, the reach preview and an automation's piece call), and the fourth, an agent
+runtime, is the one that would forget. Every one of them hands this function the registry
+already, so the one place that can hold them all is the place they all pass through.
+
+Task ids: M3.8.1, M12.1.3
 """
 
 from __future__ import annotations
@@ -40,12 +66,22 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Final
 
 from brain.core.entitlement import EntitlementSet
 from brain.gate.catalogue import AgentCeiling, EmptyCatalogueError, ProjectedCatalogue, project
 from brain.gate.injection import AutonomyTier, RiskAssessment, autonomy_ceiling
 from brain.gate.leash import MISSING_ENTRY_RUNG, Leash
 from brain.tools.registry import ToolRegistry
+
+#: Why a run's rung is not always the rung its leash was configured at.
+A_RUN_IS_HELD_TO_THE_RUNG_ITS_TOOLS_SIDE_EFFECTS_ALLOW: Final = (
+    "A leash entry set to Autonomous on a tool that drafts, writes or sends runs Assisted, and "
+    "one on a tool that moves money runs in Shadow, on every run, because the run is assembled "
+    "in one place and that place holds the configured leash to each tool's leash ceiling with "
+    "ToolRegistry.tighten. It only lowers a rung, a read keeps the rung it was given, and the "
+    "configured leash, which is what a page shows, is never rewritten."
+)
 
 
 class InvocationRefusedError(Exception):
@@ -68,6 +104,11 @@ class Invocation:
     #: rather than per tool call: a run that could discover it was more trusted than it
     #: thought, half way through, is a run whose ceiling is advisory.
     ceiling_rung: AutonomyTier
+    #: The leash this run is held to: the configured one with every entry on a registered
+    #: tool held to that tool's leash ceiling. A step inside the run is governed by this one
+    #: and never by the leash it was configured with. See
+    #: `A_RUN_IS_HELD_TO_THE_RUNG_ITS_TOOLS_SIDE_EFFECTS_ALLOW`.
+    leash: Leash
     ent_hash: str
     #: Names only. There is nowhere here to put a row, an argument or a record.
     reachable: tuple[str, ...] = ()
@@ -114,9 +155,11 @@ def invoke(
     """Assemble one agent run, or refuse it.
 
     The order is the point and it is not rearrangeable: project first, so the tool list is
-    the intersection and not the registry; then the rung, computed over that intersection so
-    a tool the caller cannot reach cannot influence how much the run is trusted; then the
-    injection assessment, which may only tighten.
+    the intersection and not the registry; then the leash held to what each tool's side
+    effect allows, by the registry that declares the tools; then the rung, computed over the
+    intersection from the held leash, so a tool the caller cannot reach cannot influence how
+    much the run is trusted and a configured rung cannot outrun its tool; then the injection
+    assessment, which may only tighten.
 
     Raises rather than returning an empty invocation. A caller that got an `Invocation` with
     no tools would have to remember to check, and the check that must be remembered is the
@@ -138,7 +181,10 @@ def invoke(
         )
         raise InvocationRefusedError(msg)
 
-    rung = _strictest_rung(leash, agent_id, catalogue, row or {})
+    # The configured leash held to each tool's leash ceiling. `tighten` is `min` per entry, so
+    # it only ever lowers a rung. See `A_RUN_IS_HELD_TO_THE_RUNG_ITS_TOOLS_SIDE_EFFECTS_ALLOW`.
+    held = registry.tighten(leash)
+    rung = _strictest_rung(held, agent_id, catalogue, row or {})
 
     # `autonomy_ceiling` takes the rung the leash allows and can only lower it: there is no
     # branch in it that returns something higher than what it was given. The `min` here is
@@ -157,6 +203,7 @@ def invoke(
         agent_id=agent_id,
         catalogue=catalogue,
         ceiling_rung=tightened,
+        leash=held,
         ent_hash=entitlement.ent_hash(),
         reachable=catalogue.names,
         notes=tuple(notes),

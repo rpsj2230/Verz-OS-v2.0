@@ -24,13 +24,13 @@ from typing import Any
 import pytest
 
 from brain.ops import acceptance_workspace as workspace_checks
-from brain.ops.acceptance import CHECK_MODULES, FAILED, PASSED, REASON_CHARS, Check, registered
-from tests.unit.test_acceptance import at_head
+from brain.ops.acceptance import FAILED, PASSED, REASON_CHARS, Check, check_modules, registered
+from tests.unit.test_acceptance import at_head, checks_in
 from tests.unit.test_acceptance_lifecycle import every_count
 
 ROOT = Path(__file__).resolve().parents[2]
 
-#: The module under test, by the name `CHECK_MODULES` carries it under.
+#: The module under test, by the name `check_modules` finds it under.
 MODULE = "brain.ops.acceptance_workspace"
 
 #: Each check and the leaves it proves.
@@ -64,7 +64,14 @@ def test_the_workspace_checks_are_registered_with_the_leaves_they_prove() -> Non
     the suite runs it. Delete this and a check can fall out of the module or out of the suite with
     the Install page simply listing one fewer row, or close a leaf its flow does not exercise."""
     assert [(one.name, one.leaves) for one in mine()] == list(LEAVES.items())
-    assert MODULE in CHECK_MODULES
+    assert MODULE in check_modules()
+
+
+def test_the_workspace_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them, held here
+    beside the module's other tests rather than in a list every package appends to (#287). Delete
+    this and a check can drop out of the module with the page simply listing one fewer row."""
+    assert checks_in(MODULE) == list(LEAVES)
 
 
 def test_every_leaf_the_workspace_checks_name_is_a_leaf_of_the_work_breakdown() -> None:

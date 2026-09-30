@@ -150,8 +150,9 @@ def test_the_screen_shows_every_setting_grouped_with_its_source_and_the_starter_
     served: tuple[TestClient, Stub],
 ) -> None:
     """The owner's view: branding, identity, models, storage and locale, each value with where it
-    came from, and what the install was furnished with, standard agents stated as not installed
-    with the exact reason. Delete this and the screen can omit a group or claim agents it lacks."""
+    came from, the staff section editable for who may use the Brain, and what the install was
+    furnished with, standard agents stated as not installed with the exact reason. Delete this and
+    the screen can omit a group or claim agents it lacks."""
     client, _ = served
     answer = get(client, "u_admin", SCREEN)
 
@@ -164,6 +165,7 @@ def test_the_screen_shows_every_setting_grouped_with_its_source_and_the_starter_
         "company",
         "locale",
         "models",
+        "staff",
     }
     settings = [row for group in body["groups"] for row in group["settings"]]
     assert all(row["label"] for row in settings)

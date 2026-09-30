@@ -660,6 +660,8 @@ def test_a_department_scoped_reader_is_answered_no_throttling_rows_and_no_count_
         "unread",
         "unusual",
         "unusual_unread",
+        "deferred",
+        "deferred_unread",
     }
 
 

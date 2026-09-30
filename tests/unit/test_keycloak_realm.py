@@ -871,40 +871,69 @@ def test_the_account_console_s_tokens_carry_the_roles_and_audience_the_account_a
     )
 
 
-def test_no_client_of_the_product_s_own_reaches_a_mapper_that_writes_roles_into_its_tokens() -> (
-    None
-):
-    """**The other half: the repair gave the Account Console roles and gave nobody else anything.**
-    `brain.identity` reads groups and department and never a Keycloak role, so a role claim in a
-    product token is a claim nothing asked for, and an audience worked out from roles is an `aud`
-    this system's `validate_token` was never written to expect.
+def test_the_only_role_a_product_token_can_carry_is_the_payload_role() -> None:
+    """**The other half: the repair gave the Account Console roles and gave the product one.**
+    `brain.identity` reads groups and department, and one Keycloak role, `tracing.PAYLOAD_ROLE`,
+    for a trace read (`brain.trace_routes.payload_roles_of`). So of the product's clients only
+    `brain-console` reaches a mapper that writes roles, that mapper is the realm-role mapper and
+    nothing that writes client roles or an audience worked out from roles, the client does not
+    carry its holder's full scope, and every scope it reaches maps the payload role and no other.
+    Any other role in a product token is a claim nothing asked for.
 
     Walked with the same function as the test above, realm default scopes included, so the likely
-    wrong fix is covered: declaring a `roles` scope as a realm default so that the Account Console
-    gets it would hand it to every product client that names no scope of its own. And the walk is
-    shown to reach something, so an empty walk cannot pass: `brain-console` reaches its own
-    subject mapper through it.
+    wrong fix is covered: declaring a `roles` scope as a realm default would hand the account
+    mappers to every product client that names no scope of its own. And the walk is shown to reach
+    something, so an empty walk cannot pass: `brain-console` reaches its own subject mapper.
 
-    Delete this and the account roles mapper can be moved onto `brain-identity`, where it would
-    run for every console token, with every other test here green."""
+    Delete this and the account roles mapper can be moved onto `brain-identity`, or
+    `fullScopeAllowed` switched back on, and every realm role a person holds is in every console
+    token, with every other test here green."""
+    from brain.ops.tracing import PAYLOAD_ROLE
+
     realm = _realm()
     product = [c for c in realm["clients"] if c["clientId"] not in KEYCLOAKS_OWN_CLIENTS]
     assert {"brain-console", "brain-api", "brain-sync"} <= {c["clientId"] for c in product}
 
     widened = {
         client["clientId"]: sorted(
-            str(m.get("name"))
+            str(m.get("protocolMapper"))
             for m in _mappers_minting_for(client, realm)
             if m.get("protocolMapper") in ROLE_WRITING_MAPPERS
         )
         for client in product
     }
-    assert not any(widened.values()), f"product clients reach role mappers: {widened}"
+    assert {name: found for name, found in widened.items() if found} == {
+        "brain-console": ["oidc-usermodel-realm-role-mapper"]
+    }
 
     console = next(c for c in product if c["clientId"] == "brain-console")
+    assert console.get("fullScopeAllowed") is False
+    reached = set(console.get("defaultClientScopes") or [])
+    mapped = [
+        role
+        for mapping in realm.get("scopeMappings") or []
+        if mapping.get("clientScope") in reached or mapping.get("client") == "brain-console"
+        for role in mapping.get("roles") or []
+    ]
+    assert mapped == [PAYLOAD_ROLE]
     assert "oidc-sub-mapper" in {
         m.get("protocolMapper") for m in _mappers_minting_for(console, realm)
     }
+
+
+def test_the_realm_declares_the_payload_role_and_nobody_holds_it_by_default() -> None:
+    """The role a trace read asks for exists on every install that imports this realm, as a role
+    of its own that nothing contains: not the default role everybody is given, and no composite.
+    Delete this and the role can be left out, so a fresh install has nobody who could ever read a
+    trace, or folded into the default role, so everybody can."""
+    from brain.ops.tracing import PAYLOAD_ROLE
+
+    realm = _realm()
+    roles = {one["name"]: one for one in realm["roles"]["realm"]}
+    assert PAYLOAD_ROLE in roles
+    assert not roles[PAYLOAD_ROLE].get("composite")
+    for one in roles.values():
+        assert PAYLOAD_ROLE not in (one.get("composites", {}).get("realm") or []), one["name"]
 
 
 def test_the_account_client_and_its_console_are_declared_together_with_every_role_they_name() -> (

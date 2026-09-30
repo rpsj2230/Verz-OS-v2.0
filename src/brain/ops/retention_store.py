@@ -221,12 +221,26 @@ class ReleaseRefusedError(RetentionStoreError):
 
 # --------------------------------------------------------------------------- declarations
 #: Tables in a schema more than one store shares, and the store each belongs to.
+#:
+#: **`0150` added two tables to `obs` and neither was here, which refused four stores at once.**
+#: `store_tables` raises for an unattributed table in a shared schema, so from the deploy of
+#: `0150` the retention sweep would have reported the ledger, trace, payload and audit stores as
+#: not reached, and `brain.ops.erasure_store`, which asks the same function, would have refused
+#: every erasure over them. `obs.trace_step` is the trace store's: a run's graph of calls, every
+#: payload one of `brain.ops.tracing.mask`'s four shapes, which is what `Store.TRACE` holds
+#: ("the shape of each of their runs") and not what `Store.PAYLOAD` holds ("in the clear").
+#: `obs.trace_read` is the audit store's, as `brain.ops.erasure_store.RETAINED` already argues:
+#: who read a trace, under the separate role, is the reader's accountability and outlives the
+#: trace. `test_every_table_in_a_shared_schema_is_attributed` now reads the tables from the
+#: models, so the next one fails a test rather than a sweep on somebody's server.
 ATTRIBUTED: Final[Mapping[str, Store]] = MappingProxyType(
     {
         "obs.application_log": Store.TRACE,
         "obs.audit_entry": Store.AUDIT,
         "obs.legal_hold": Store.AUDIT,
         "obs.request_telemetry": Store.LEDGER,
+        "obs.trace_read": Store.AUDIT,
+        "obs.trace_step": Store.TRACE,
     }
 )
 
@@ -237,6 +251,8 @@ CLOCKS: Final[Mapping[str, str]] = MappingProxyType(
         "obs.audit_entry": "at",
         "obs.legal_hold": "placed_at",
         "obs.request_telemetry": "received_at",
+        "obs.trace_read": "at",
+        "obs.trace_step": "recorded_at",
     }
 )
 
