@@ -1,7 +1,7 @@
 """The evening digest joins the control-run names, so the worker can record its scheduled run.
 
 **One supersession and nothing else.** The control-run names gain `evening_digest`, replacing
-`0133`'s, which is the newest list in the database. No table: where the digest goes and when are
+`0168`'s, which is the newest list in the database. No table: where the digest goes and when are
 install settings in `ops.setting`, and what the last digest saw is one row there too
 (`brain.ops.digest_run`), so the database is otherwise unchanged.
 
@@ -16,30 +16,31 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0169"
-# The newest migration on origin/main when this was written. Nothing after 0133 touches the
-# control-run names. The coordinator re-points it at landing, behind whatever took 0158 to 0168.
-down_revision = "0156"
+# Lands straight after 0168 (#316), whose control-run names (with
+# `escalation_expiry`) this one supersedes.
+down_revision = "0168"
 branch_labels = None
 depends_on = None
 
-#: The control-run names, with and without `evening_digest`. The second is `0133`'s.
+#: The control-run names, with and without `evening_digest`. The second is `0168`'s.
 WITH_EVENING_DIGEST = (
     "name IN ('acceptance_run', 'audit_anchor', 'automation_run', 'backup_exposure', "
     "'canary_run', 'connector_sync', 'denial_digest', 'directory_sync', 'erasure_queue', "
-    "'evening_digest', 'knowledge_reverification', 'model_health_probes', 'outbox_dispatch', "
-    "'queue_redrive', 'resolution_calibration', 'restore_drill', 'retention_sweep', "
-    "'side_effect_resume', 'spend_correction', 'spend_report_refresh', 'vault_audit_ship', "
-    "'vault_token_renewal')"
+    "'escalation_expiry', 'evening_digest', 'knowledge_reverification', 'model_health_probes', "
+    "'outbox_dispatch', 'queue_redrive', 'resolution_calibration', 'restore_drill', "
+    "'retention_sweep', 'side_effect_resume', 'spend_correction', 'spend_report_refresh', "
+    "'vault_audit_ship', 'vault_token_renewal')"
 )
 WITHOUT_EVENING_DIGEST = (
     "name IN ('acceptance_run', 'audit_anchor', 'automation_run', 'backup_exposure', "
     "'canary_run', 'connector_sync', 'denial_digest', 'directory_sync', 'erasure_queue', "
-    "'knowledge_reverification', 'model_health_probes', 'outbox_dispatch', 'queue_redrive', "
-    "'resolution_calibration', 'restore_drill', 'retention_sweep', 'side_effect_resume', "
-    "'spend_correction', 'spend_report_refresh', 'vault_audit_ship', 'vault_token_renewal')"
+    "'escalation_expiry', 'knowledge_reverification', 'model_health_probes', 'outbox_dispatch', "
+    "'queue_redrive', 'resolution_calibration', 'restore_drill', 'retention_sweep', "
+    "'side_effect_resume', 'spend_correction', 'spend_report_refresh', 'vault_audit_ship', "
+    "'vault_token_renewal')"
 )
 
-#: What this migration replaces: `0133`'s control-run names.
+#: What this migration replaces: `0168`'s control-run names.
 SUPERSEDES: dict[str, str] = {WITHOUT_EVENING_DIGEST: WITH_EVENING_DIGEST}
 
 #: Drops the control-run name constraint by whichever name it has. See `0030`, which `0133` copies.

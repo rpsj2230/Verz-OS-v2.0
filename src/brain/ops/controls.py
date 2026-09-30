@@ -97,6 +97,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
+from brain.gate.abstain import EXPIRY_EVERY as ESCALATION_EXPIRY_EVERY
 from brain.identity.staff_sync import SYNC_INTERVAL
 from brain.knowledge.verification import DEFAULT_CADENCE
 from brain.models.health import PROBE_INTERVAL_SECONDS
@@ -608,6 +609,29 @@ CONTROLS: Final[tuple[Control, ...]] = (
         invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
+        name="escalation_expiry",
+        # Since 2026-09-30 (`0168`, M8.3.4). The worker's schedule starts `run_expiry_now`, which
+        # runs `expire_overdue` as the worker's login; the install acceptance check calls
+        # `expire_overdue` itself, inside its rolled-back transaction, rather than waiting a day.
+        symbols=(
+            "brain.ops.escalation_store:run_expiry_now",
+            "brain.ops.escalation_store:expire_overdue",
+        ),
+        guards=(
+            "that a question handed to a person does not stay open for ever once nobody picked "
+            "it up, and that the person who asked is told so"
+        ),
+        lost_silently=(
+            "The asker was told a person would look and goes on waiting. Nobody picked it up, and "
+            "nothing turns that into an event: the question silently stops existing, which is "
+            "the failure an expiry exists to make visible."
+        ),
+        every=ESCALATION_EXPIRY_EVERY,
+        cadence_from="brain.gate.abstain:EXPIRY_EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
         name="resolution_calibration",
         symbols=("brain.resolution.calibration:due", "brain.resolution.calibration:drift"),
         guards=(
@@ -881,6 +905,8 @@ CONTROLS: Final[tuple[Control, ...]] = (
             "brain.ops.connector_sync_run:run_connector_sync_now",
             "brain.ops.connector_sync:plan_for",
             "brain.ops.connector_sync:after_attempt",
+            # The switched-on Lark Base's minimal index, read on the same schedule (M11.6.3).
+            "brain.ops.lark_base_index:index_if_due",
         ),
         guards=(
             "that every source an administrator connected is read on its own interval under its "
