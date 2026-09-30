@@ -520,10 +520,11 @@ class VendorRequest:
 
     `repr=False` on the headers and the body, because this object is built with the secret in
     hand and the commonest way a key reaches a log is an exception handler formatting the object
-    it was holding; see `brain.ops.secrets.Lease`.
+    it was holding; see `brain.ops.secrets.Lease`. On the address too, because one vendor puts
+    the credential in it: Telegram's Bot API takes the bot token in the path.
     """
 
-    url: str
+    url: str = field(repr=False)
     headers: Mapping[str, str] = field(repr=False)
     body: bytes = field(repr=False)
     #: `POST` to deliver; `GET` for the one read a chat needs, who is in a conversation.
@@ -650,6 +651,40 @@ class KeyedWire(Protocol):
     def keys_address(self) -> str: ...
 
     def key_set_of(self, metadata: bytes, keys: bytes, now: datetime) -> KeySet: ...
+
+
+#: Why a set-up that the vendor must be told about is told before it is saved.
+A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE: Final = (
+    "A vendor that sends only to an address the install registered with it, rather than one a "
+    "person pastes into its dashboard, is told this install's events address, and the secret "
+    "it is to send, when the set-up is saved. A set-up the vendor did not accept is not saved, "
+    "so a record never claims a connection the vendor was never told about."
+)
+
+
+class RegistrationRefusedError(ValueError):
+    """A set-up the vendor cannot be told about, said in words for the person saving it.
+
+    A `ValueError`, so a caller of `RegisteredWire.registration_for` that catches the protocol's
+    error still catches it; its own class, so the route may show its sentence and shows no other
+    exception's text.
+    """
+
+
+@runtime_checkable
+class RegisteredWire(Protocol):
+    """A wire whose vendor is told where to send by a call the install makes, not by a person.
+
+    `registration_for` builds that call from the events address, the channel's secret as the
+    vault keeps it and the record's fields; the route sends it when the set-up is saved and asks
+    `judge` what the answer said. See `A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE`.
+    """
+
+    def registration_for(
+        self, *, address: str, secret: str, tenant: Mapping[str, str]
+    ) -> VendorRequest: ...
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome: ...
 
 
 class ChannelTransport(Protocol):

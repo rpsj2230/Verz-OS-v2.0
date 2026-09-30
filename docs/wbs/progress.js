@@ -184,9 +184,14 @@ const PROGRESS = {
     why: "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (#296), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
     updated: "2026-09-30",
   },
+  "M10.5.4": {
+    status: "READY FOR TESTING",
+    why: "Telegram is connectable (M10/channel-telegram): saving the bot's username and token registers this install's events address with Telegram, updates carry a header made from the token, answers go out with sendMessage, and an install check; the owner's bot proves the vendor's half",
+    updated: "2026-09-30",
+  },
   "M10.6.1": {
     status: "IN PROGRESS",
-    why: "the webhook, Lark, email, Slack and Teams wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams); Telegram and WhatsApp each come with their own package",
+    why: "the webhook, Lark, email, Slack, Teams and Telegram wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams; M10/channel-telegram); WhatsApp comes with its own package",
     updated: "2026-09-30",
   },
   "M10.6.3": {
