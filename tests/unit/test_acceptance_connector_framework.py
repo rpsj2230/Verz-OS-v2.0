@@ -37,7 +37,7 @@ from brain.ops import acceptance_checks_connector_framework as framework
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, reason_for, registered
 from brain.ops.acceptance_run import Harness
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 from tests.unit.test_acceptance_connectors import run_checks
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -530,3 +530,21 @@ def test_the_calls_check_fails_when_the_page_misreads_the_calls(
     else:
         monkeypatch.setattr(stats, "calls_of", lambda state, connector, now: None)
     assert ran("a_source_s_live_calls_are_measured_on_its_page") == (FAILED, reason)
+
+
+def test_the_connector_framework_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_connector_framework") == [
+        "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
+        "a_rest_read_is_built_from_a_spec_and_refused_before_a_call",
+        "a_source_is_connected_to_one_named_thing_and_never_to_everything",
+        "a_run_leases_its_key_and_the_next_run_reads_a_replaced_one",
+        "a_live_read_uses_the_service_key_ends_on_time_and_is_made_once",
+        "a_burst_is_paced_by_the_source_s_documented_ceiling",
+        "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
+        "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
+        "a_source_s_live_calls_are_measured_on_its_page",
+    ]

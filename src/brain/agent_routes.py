@@ -269,6 +269,7 @@ from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.registry import ModelPin
 from brain.models.routing import Tier
+from brain.ops.builtin_templates import is_built_in
 from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
@@ -762,14 +763,15 @@ class WorkspaceView(BaseModel):
 
 
 class Origin(enum.StrEnum):
-    """Where a template in the gallery came from. Two, and the difference is who signed it.
+    """Where a template in the gallery came from. Two, and the difference is who wrote it.
 
-    A built-in template is one of the twenty-three this product ships, and
-    `brain.agents.catalogue` says plainly that nothing publishes them: they hold no
-    signature, because a signature is a claim about who published and nobody has. A published
-    one is a row this installation signed with its own key. Saying which is which is the
-    difference between "this is what the product offers" and "this is what we have made", and
-    a gallery that merged them would let the second wear the first's authority.
+    A built-in template is one of the twenty-three this product ships. Since 2026-09-29 each start
+    holding the install's key signs them under the product's own name
+    (`brain.ops.builtin_templates`), so a built-in version can be on file and installable and is
+    still the product's: `origin_of` tells it apart by its content, not by its row. A published
+    one is a document somebody at this install made and signed. Saying which is which is the
+    difference between "this is what the product offers" and "this is what we have made", and a
+    gallery that merged them would let the second wear the first's authority.
     """
 
     BUILT_IN = "built_in"
@@ -1121,6 +1123,13 @@ def template_entry(manifest: TemplateManifest, origin: Origin) -> TemplateEntry:
     )
 
 
+def origin_of(published: TemplateManifest) -> Origin:
+    """Where a version on file came from: built in when it is exactly the template this product
+    ships under its id and number, which `brain.ops.builtin_templates` signed with this install's
+    key at start, and published otherwise. See `brain.ops.builtin_templates.is_built_in`."""
+    return Origin.BUILT_IN if is_built_in(published) else Origin.PUBLISHED
+
+
 def gallery(
     published: Sequence[TemplateManifest], plan: Plan[TemplateEntry] | None = None
 ) -> TemplateGallery:
@@ -1143,7 +1152,7 @@ def gallery(
         held = highest.get(identity.template_id)
         if held is None or identity.version > held.identity.version:
             highest[identity.template_id] = one
-    cards = [template_entry(one, Origin.PUBLISHED) for one in highest.values()]
+    cards = [template_entry(one, origin_of(one)) for one in highest.values()]
     cards.extend(
         template_entry(one, Origin.BUILT_IN)
         for one in CATALOGUE
@@ -1176,6 +1185,8 @@ def template_detail(
     if chosen is None:
         origin = Origin.BUILT_IN
         chosen = next((one for one in CATALOGUE if one.identity.template_id == template_id), None)
+    elif origin_of(chosen) is Origin.BUILT_IN:
+        origin = Origin.BUILT_IN
     if chosen is None:
         return None
     return TemplateDetailView(

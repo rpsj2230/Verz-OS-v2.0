@@ -473,6 +473,15 @@ def deployment_mib(files: ComposeFiles) -> int:
     return sum(_service_mib(files, service) for service in declared_services(files))
 
 
+def service_mib(files: ComposeFiles, service: str) -> int:
+    """The memory limit one service declares in this set, in MiB, refusing one that declares none.
+
+    The same reading `deployment_mib` costs every service by, for a figure elsewhere that has to
+    match one service rather than the total: `brain.knowledge.app_parse_budget.APP_MEMORY_MIB`.
+    """
+    return _service_mib(files, service)
+
+
 def undeployed_mib(profile: str, files: ComposeFiles) -> int:
     """What this profile budgets for components that have no service in this set."""
     assert_known_profile(profile)

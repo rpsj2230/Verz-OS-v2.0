@@ -14,7 +14,7 @@
  * module used to read (`GET /govern/library`, three facts a row) is no longer drawn: the list reads
  * `GET /knowledge/documents`, which answers every column SCREEN 7 draws for the rows a reader may open.
  *
- * Task ids: M7.6.1, M7.6.3, M27.15.40
+ * Task ids: M7.6.1, M7.6.3, M27.15.40, M7.7.3
  */
 
 /** The console address of the Knowledge list, at the screen's own key in `brain.console.screens`. */
@@ -85,6 +85,8 @@ export interface UploadOptions {
   readonly types: readonly TypeChoice[];
   readonly foundBy: string;
   readonly checkedBy: string;
+  /** The endings of files offered to Classification rather than added as a document (M7.7.3). */
+  readonly offeredAsTables: readonly string[];
 }
 
 function strings(value: unknown): string[] {
@@ -126,7 +128,18 @@ export function readUploadOptions(payload: unknown): UploadOptions | null {
     types,
     foundBy: typeof body.found_by === "string" ? body.found_by : "",
     checkedBy: typeof body.checked_by === "string" ? body.checked_by : "",
+    offeredAsTables: strings(body.offered_as_tables),
   };
+}
+
+/**
+ * Whether a chosen file is a spreadsheet the API offers to Classification rather than adding as
+ * a document (M7.7.3), by the endings the options named. The API makes the same offer by the
+ * file's name and declared type, so a file this misses is still never read as text.
+ */
+export function isOfferedAsTable(fileName: string, options: UploadOptions): boolean {
+  const lower = fileName.toLowerCase();
+  return options.offeredAsTables.some((ending) => lower.endsWith(ending));
 }
 
 /**

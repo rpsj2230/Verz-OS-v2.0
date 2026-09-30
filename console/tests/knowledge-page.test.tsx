@@ -11,7 +11,7 @@
  * **Names, not identifiers.** A steward and a verifier are drawn by the names the API sent; the
  * principal ids and the document's reference appear only inside Advanced.
  *
- * Task ids: M27.15.40, M27.16.1, M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.6.3, M7.1.2, M7.1.5
+ * Task ids: M7.7.3, M7.6.1, M27.15.40, M27.16.1, M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.6.3, M7.1.2, M7.1.5
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -22,12 +22,15 @@ import { ADVANCED_LABEL, UNAVAILABLE_MARK } from "../src/components/kit/parts";
 import { AddFileForm, AddLinkForm, AddManyForm } from "../src/pages/knowledge/addForms";
 import { HandOverForm, NewVersionForm, ProposeForm, VerifyForm } from "../src/pages/knowledge/actForms";
 import {
+  ADD_IT_ON_CLASSIFICATION,
   ADD_VERSION,
-  acceptsWords,
   HAND_OVER,
   HAND_OVER_CONSEQUENCE,
   NEW_VERSION_CONSEQUENCE,
+  NOT_SENT_TABLE,
+  OFFERED_AS_A_TABLE,
   PROBLEMS,
+  acceptsWords,
 } from "../src/pages/knowledge/formParts";
 import { UNAVAILABLE } from "../src/pages/knowledge/knowledgeActions";
 import {
@@ -41,7 +44,7 @@ import {
 } from "../src/pages/knowledge/knowledgeDocuments";
 import { ADD_LABEL, KNOWLEDGE_HEADING, NO_DOCUMENTS } from "../src/pages/knowledge/KnowledgePage";
 import { CAPTURE, CAPTURE_PROBLEMS } from "../src/pages/knowledge/SolutionsPage";
-import { QUEUED_STATES, readQueued } from "../src/pages/knowledgeIntakeQuery";
+import { QUEUED_FIELDS, QUEUED_STATES, queuedPath, readQueued } from "../src/pages/knowledgeIntakeQuery";
 import {
   instantOf,
   isAfterToday,
@@ -56,10 +59,17 @@ import {
   taskDonePath,
   verificationPath,
 } from "../src/pages/knowledgeLifecycleQuery";
-import { KIND_WORDS, readUploadOptions, UPLOAD_OPTIONS_API_PATH, uploadPath } from "../src/pages/knowledgeQuery";
+import { CLASSIFICATION_PATH } from "../src/pages/classificationQuery";
+import {
+  isOfferedAsTable,
+  KIND_WORDS,
+  readUploadOptions,
+  UPLOAD_OPTIONS_API_PATH,
+  uploadPath,
+} from "../src/pages/knowledgeQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument } from "./support/openapi";
-import { backendEnumMembers } from "./support/python";
+import { backendEnumMembers, backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 
@@ -134,6 +144,7 @@ const OPTIONS = {
   ],
   found_by: "text search",
   checked_by: "structural check",
+  offered_as_tables: [".csv", ".xlsx"],
 };
 
 const HISTORY = {
@@ -284,6 +295,27 @@ describe("the Knowledge list", () => {
     });
   });
 
+  test("the Kind filter offers each kind the rows carry, in the library's words, and asks the route for one (M7.6.1)", async () => {
+    // What breaks if this is deleted: a library whose documents carry a kind nobody can narrow by,
+    // or a filter sending the label rather than the stored word, which the route matches nothing on.
+    const idp = api({ ...LIST, [UPLOAD_OPTIONS_API_PATH]: 404, [TASKS_API_PATH]: { items: [] } });
+    const container = await page("/library", idp);
+    const kind = await waitFor(() => {
+      const found = [...container.querySelectorAll("select")].find((one) => one.labels?.[0]?.textContent === "Kind");
+      if (found === undefined) {
+        throw new Error("the Kind filter is not drawn");
+      }
+      return found;
+    });
+
+    expect([...kind.options].map((one) => [one.value, one.textContent])).toContainEqual(["sop", KIND_WORDS["sop"]]);
+    fireEvent.change(kind, { target: { value: "sop" } });
+    await waitFor(() => {
+      const asked = idp.calls.map((call) => new URL(call.url, ORIGIN)).filter((url) => url.pathname === `${API}${DOCUMENTS_API_PATH}`);
+      expect(asked.some((url) => url.searchParams.getAll("filter").includes("kind:sop"))).toBe(true);
+    });
+  });
+
   test("ticked documents are verified with one review date, after a confirmation, as one request of each id", async () => {
     // What breaks if this is deleted: M27.15.40's bulk re-verify, or several vouches sent on one press
     // with no confirmation saying what they are.
@@ -427,6 +459,35 @@ describe("the forms", () => {
     expect(sent?.init.body).toBe(file);
   });
 
+  test("a spreadsheet chosen as a document is offered to Classification with a link, and is not sent", async () => {
+    // What breaks if this is deleted: a price list sent to be indexed as text, cost and margin in
+    // passages a department's readers are shown, or refused as an unknown type with no word of where
+    // it belongs (M7.7.3). The batch form says the same of each spreadsheet in it.
+    const idp = api({});
+    const container = await alone(idp, <AddFileForm options={options} onAdded={() => undefined} />);
+    const sheet = new File(["name,sell,cost"], "Price list.csv", { type: "text/csv" });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [sheet] } });
+    setField(container, "kind", "sop");
+    setField(container, "department", "web");
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    expect(container.textContent).toContain(OFFERED_AS_A_TABLE);
+    expect(container.textContent).not.toContain(PROBLEMS.type);
+    expect(container.querySelector(`a[href="${CLASSIFICATION_PATH}"]`)?.textContent).toBe(ADD_IT_ON_CLASSIFICATION);
+    expect(writes(idp)).toEqual([]);
+
+    const many = api({});
+    const manyForm = await alone(many, <AddManyForm options={options} onAdded={() => undefined} />);
+    const notes = new File(["# Notes"], "Notes.md", { type: "" });
+    const workbook = new File(["x"], "Prices.XLSX", { type: "" });
+    fireEvent.change(manyForm.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [workbook] } });
+    setField(manyForm, "kind", "sop");
+    setField(manyForm, "department", "web");
+    fireEvent.submit(manyForm.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(manyForm.textContent).toContain(`Prices.XLSX: ${NOT_SENT_TABLE}`));
+    expect(writes(many)).toEqual([]);
+    expect(isOfferedAsTable(notes.name, options)).toBe(false);
+  });
+
   test("a blank web page or a blank batch sends nothing and says what to fill in", async () => {
     // What breaks if this is deleted: a fetch of nothing, or a queue asked to read no files.
     const link = api({});
@@ -440,6 +501,39 @@ describe("the forms", () => {
     fireEvent.submit(manyForm.querySelector("form") as HTMLFormElement);
     expect(manyForm.textContent).toContain(PROBLEMS.files);
     expect(writes(many)).toEqual([]);
+  });
+
+  test("a file queued behind others is shown its place in line and expected wait, as the API said them", async () => {
+    // M22.1.4. What breaks if this is deleted: the queued upload's place and wait sent by the API
+    // and dropped by the form, which is every queued file told only that it is queued, or a field
+    // added to `QueuedView` that the form never reads.
+    expect([...QUEUED_FIELDS].sort()).toEqual(backendModelFields("src/brain/knowledge_intake_routes.py", "QueuedView").sort());
+    const said = "Notes.md is queued to be read, number 3 in line, and should start in about 90 seconds.";
+    const view = {
+      ticket: "a".repeat(40),
+      name: "Notes.md",
+      state: "queued",
+      said,
+      item_id: null,
+      passages: 0,
+      position: 3,
+      expected_wait_seconds: 90,
+    };
+    expect(Object.keys(view).sort()).toEqual([...QUEUED_FIELDS].sort());
+    const read = readQueued(view);
+    expect([read?.position, read?.expectedWaitSeconds]).toEqual([3, 90]);
+    expect(readQueued({ ...view, position: null, expected_wait_seconds: null })?.position).toBeNull();
+
+    const idp = api({}, view);
+    const container = await alone(idp, <AddManyForm options={options} onAdded={() => undefined} />);
+    const file = new File(["# Notes"], "Notes.md", { type: "" });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+    setField(container, "kind", "sop");
+    setField(container, "department", "web");
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(container.textContent).toContain(said));
+    const [sent] = writes(idp);
+    expect(`${sent?.url.pathname}${sent?.url.search}`).toBe(`${API}${queuedPath("sop", "department", "web")}`);
   });
 
   test("verifying refuses a day that is not after today before sending, and sends a later one as noon UTC", async () => {

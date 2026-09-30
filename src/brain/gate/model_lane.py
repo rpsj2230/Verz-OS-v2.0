@@ -143,8 +143,25 @@ from the payload alone, so an answer cannot cite a memory. The attempt row names
 `DataCategory.MEMORY_HINTS` when a prompt carried any. See
 `A_MEMORY_IS_A_HINT_THE_MODEL_READS_AND_NEVER_A_PASSAGE_IT_CITES`.
 
+**A follow-up brings its thread's questions and the passages its thread cited, re-read now, and
+never an earlier answer (M9.2.3).** `ModelLane.follow_up` carries the person's own earlier
+questions in the thread and the chunk ids its earlier answers cited; the draft recalls those
+passages through the same search tool at the reader's reach today, ahead of the fresh search, so a
+passage whose grant has since gone is simply not recalled. The cheaper design replays the earlier
+answer as conversation history, and it was rejected twice over: an answer is text a model wrote,
+so replaying it lets one ungrounded sentence become the next answer's source, and it is text read
+under yesterday's grants, so replaying it shows a reader what they may no longer read. See
+`A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW`.
+
+**A request longer than the largest model reads is answered from fewer passages, and says so
+(M15.4.1).** The executor climbs a tier on a provider's context-length refusal; when the top tier
+refuses too it raises with that failure, and the draft halves the passages it shows and asks
+again, down to one, before giving up. The answer then carries `TRIMMED_TEXT`: how many of the
+passages found it drew on, both counts of passages the reader could read. See
+`A_REQUEST_TOO_LONG_FOR_EVERY_MODEL_IS_ANSWERED_FROM_FEWER_PASSAGES_AND_SAYS_SO`.
+
 Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1, M8.1.2
-Task ids: M27.15.9, M15.4.3, M16.6.3
+Task ids: M27.15.9, M15.4.3, M16.6.3, M9.2.3, M15.4.1
 """
 
 from __future__ import annotations
@@ -198,6 +215,7 @@ from brain.knowledge.document_tools import (
     KnowledgePassage,
 )
 from brain.knowledge.item import KnowledgeItem
+from brain.knowledge.kinds import KnowledgeKind
 from brain.models.adapter import is_refusal
 from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverMessage, DriverResponse, ProviderUnavailable, Role
@@ -553,11 +571,17 @@ class DocumentSearchTool:
     """
 
     handler: Callable[..., Awaitable[TypedResult[KnowledgePassage]]]
+    #: The kinds of item this question is narrowed to, or none for every kind (M7.6.1). A
+    #: narrowing of the question the asker chose and never of the reach, which the handler
+    #: decides; see `brain.knowledge.document_tools`, whose reason says so.
+    kinds: tuple[KnowledgeKind, ...] = ()
 
     async def passages(
         self, question: str, *, entitlement: EntitlementSet, now: datetime
     ) -> TypedResult[KnowledgePassage]:
-        request = DocumentSearch(question=question[:QUESTION_CHARS], limit=PASSAGES_SHOWN)
+        request = DocumentSearch(
+            question=question[:QUESTION_CHARS], limit=PASSAGES_SHOWN, kinds=self.kinds
+        )
         return await self.handler(request, entitlement=entitlement, now=now)
 
 
@@ -679,6 +703,55 @@ class ModelLane:
     #: model as hints after the question and never in the payload, so nothing can cite one. See
     #: `A_MEMORY_IS_A_HINT_THE_MODEL_READS_AND_NEVER_A_PASSAGE_IT_CITES`.
     hints: AskerHints | None = None
+    #: What a question continuing a thread brings with it, or None for a question on its own.
+    follow_up: FollowUp | None = None
+
+
+#: Why a follow-up carries the person's earlier questions and the passages cited, and no answer.
+A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW: Final = (
+    "A follow-up such as 'and who signs it' names nothing a search can find, so it brings the "
+    "person's earlier questions, which are their own words, and the passages earlier answers "
+    "cited, re-checked with context_for and re-read under the reach held now. It never brings "
+    "an earlier answer's words: those were written at an earlier reach, and a model told them "
+    "would repeat what a revoked grant once allowed."
+)
+
+#: The most earlier questions a follow-up shows the model, and the characters of each. Inside the
+#: byte bound `THE_PROMPT_FITS_ITS_TIER_BY_ITS_BYTES` holds, which a test measures with them.
+EARLIER_SHOWN: Final = 3
+EARLIER_CHARS: Final = 1_000
+
+
+@dataclass(frozen=True)
+class FollowUp:
+    """What a question continuing a thread brings (M9.2.3). See
+    `A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW`.
+
+    `earlier` is the person's own earlier questions, oldest first. `cited` is the passages
+    earlier answers cited that `brain.chat.turns.context_for` still admits, and `recall` reads
+    them under the caller's reach, as `brain.knowledge.document_tools.recaller` does.
+    """
+
+    earlier: tuple[str, ...] = ()
+    cited: tuple[str, ...] = ()
+    recall: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
+
+
+def with_recalled(
+    recalled: TypedResult[KnowledgePassage], found: TypedResult[KnowledgePassage]
+) -> TypedResult[KnowledgePassage]:
+    """The passages recalled for a follow-up, then the search's, each passage once."""
+    if not recalled.records:
+        return found
+    seen = {one.id for one in recalled.records}
+    records = (*recalled.records, *(one for one in found.records if one.id not in seen))
+    return found.model_copy(
+        update={
+            "records": records,
+            "source": found.source or recalled.source,
+            "fetched_at": found.fetched_at or recalled.fetched_at,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -693,6 +766,51 @@ class Drafted:
     outcome: ComposedAnswer | Abstention
     asked: bool
     provenance: Provenance = NO_EVIDENCE
+    #: Set when the passages found were more than the largest model could read and the answer
+    #: was drawn from fewer (M15.4.1); the answer says so in `Trimmed.sentence`.
+    trimmed: Trimmed | None = None
+
+
+#: Why a request too long for every model is answered from fewer passages, and says so.
+A_REQUEST_TOO_LONG_FOR_EVERY_MODEL_IS_ANSWERED_FROM_FEWER_PASSAGES_AND_SAYS_SO: Final = (
+    "The prompt's byte bound keeps a prompt inside the answer tier's window as the tier table "
+    "states it, and a provider can still refuse one as longer than its model reads: a smaller "
+    "window than the table says, or a tokeniser that counts differently. The executor already "
+    "climbs to the next tier on that refusal; when the largest refuses too, the lane halves the "
+    "passages it shows and asks again, down to one, and the answer says how many of the "
+    "passages found it drew on. Rejected: cutting each passage shorter, which quotes every "
+    "source mid-sentence, and answering from fewer with nothing said, which is the silent "
+    "truncation the owner's requirement forbids."
+)
+
+#: What an answer drawn from fewer passages than were found says, after its evidence notice.
+#: Counts of passages the reader was shown and could read, so nothing withheld is counted.
+TRIMMED_TEXT: Final = (
+    "This answer drew on {shown} of the {found} passages found for you, because together they "
+    "were more than the largest model could read at once."
+)
+
+
+@dataclass(frozen=True)
+class Trimmed:
+    """How many passages an answer drew on, and how many were found and could be shown."""
+
+    shown: int
+    found: int
+
+    def sentence(self) -> str:
+        return TRIMMED_TEXT.format(shown=self.shown, found=self.found)
+
+
+def fewer(payload: ChannelPayload) -> ChannelPayload | None:
+    """The payload with half its passages, the first ones, or None when one is all it holds.
+
+    The first because a search returns its best first. The locks of the passages dropped go with
+    them, as `shown` drops them, so nothing is cited that the model was not shown.
+    """
+    if len(payload.records) <= 1:
+        return None
+    return _cut(payload, len(payload.records) // 2)
 
 
 # ------------------------------------------------------------------------------ the prompt
@@ -708,7 +826,12 @@ def shown(payload: ChannelPayload) -> ChannelPayload:
     """
     if len(payload.records) <= PASSAGES_SHOWN:
         return payload
-    kept = payload.records[:PASSAGES_SHOWN]
+    return _cut(payload, PASSAGES_SHOWN)
+
+
+def _cut(payload: ChannelPayload, keep: int) -> ChannelPayload:
+    """The first `keep` passages, with the locks of only those, marked as cut."""
+    kept = payload.records[:keep]
     ids = {str(_first(record, ID_KEYS)) for record in kept}
     return ChannelPayload(
         records=kept,
@@ -758,6 +881,8 @@ def prompt_for(
     payload: ChannelPayload,
     cards: Sequence[SkillCard] = (),
     hints: Sequence[str] = (),
+    *,
+    earlier: Sequence[str] = (),
 ) -> PromptLayout:
     """The whole prompt: the shared prefix, then the question, the hints, the passages, the length.
 
@@ -765,6 +890,8 @@ def prompt_for(
     walked. See `A_MODEL_IS_SHOWN_THE_REDACTED_PAYLOAD_AND_NOTHING_ELSE`. The hints are the asker's
     own words about themselves, admitted by recall at their reach, and sit after the breakpoint
     beside the question, so the shared prefix every caller's prompt starts with never changes.
+    `earlier` is the person's own earlier questions in this thread, the newest `EARLIER_SHOWN`,
+    each cut to `EARLIER_CHARS`, and never an earlier answer (M9.2.3).
     """
     passages = "\n\n".join(
         passage_block(number, record) for number, record in enumerate(payload.records, start=1)
@@ -773,6 +900,10 @@ def prompt_for(
     if hints:
         parts.append(hints_block(hints))
     parts.append(f"Passages:\n\n{passages}")
+    asked_before = [one[:EARLIER_CHARS] for one in list(earlier)[-EARLIER_SHOWN:]]
+    if asked_before:
+        listed = "\n".join(f"- {one}" for one in asked_before)
+        parts.insert(0, f"Earlier in this conversation the person asked:\n{listed}")
     if cards:
         parts.append(cards_block(cards))
     return lay_out(PREFIX, *parts, settings_for(Lane.ANSWER).instruction)
@@ -935,6 +1066,12 @@ async def draft(
     step(GateStep.INVOKE)
     searching()
     found = await lane.search.passages(question, entitlement=entitlement, now=now)
+    follow_up = lane.follow_up
+    if follow_up is not None and follow_up.cited and follow_up.recall is not None:
+        # A follow-up names nothing a search finds; the passages its thread cited are re-read
+        # under this reach and go first. See the reason constant beside `FollowUp`.
+        recalled = await follow_up.recall(follow_up.cited, entitlement=entitlement, now=now)
+        found = with_recalled(recalled, found)
     # The redactor's own trace travels to the sink with the payload, so what it withheld is
     # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
     step(GateStep.REDACT)
@@ -953,31 +1090,48 @@ async def draft(
     agent = lane.agent
     offered = () if agent is None else skills_offered(agent, caller=entitlement, now=now)
     cards = offered_cards(offered)
+    earlier = () if follow_up is None else follow_up.earlier
     hints = () if lane.hints is None else await lane.hints.hints()
-    messages = messages_of(prompt_for(question, payload, cards, hints))
     # The model writes the prose, so its call is the composing step and follows the redactor.
     step(GateStep.COMPOSE)
     if using is not None and cards:
         using(skill_uses(offered))
-    try:
-        response = await lane.model.complete(
-            messages,
-            routing=routing_for(messages, None if agent is None else agent.record.tier),
-            reach=reach_scopes(entitlement),
-            lane=Lane.ANSWER,
-            meter=meter,
-            trace_id=trace_id,
-            agent_version=lane.agent_version,
-            max_output_tokens=settings_for(Lane.ANSWER).max_output_tokens,
-            pin=None if agent is None else agent.record.model_pin,
-            categories=sent_categories(lane.question_category, payload, cards, hints),
-        )
-    except ProviderUnavailable as failed:
-        if not failed.failure.refused:
-            raise
-        # M5.4.1: the provider declined on content. Answered once, as the refusal a declining
-        # reply becomes, and never tried on another model: the chain already stopped on it.
-        return Drafted(outcome=refused(scope, detail="the model declined on content"), asked=True)
+    found_count = len(payload.records)
+    while True:
+        messages = messages_of(prompt_for(question, payload, cards, hints, earlier=earlier))
+        try:
+            response = await lane.model.complete(
+                messages,
+                routing=routing_for(messages, None if agent is None else agent.record.tier),
+                reach=reach_scopes(entitlement),
+                lane=Lane.ANSWER,
+                meter=meter,
+                trace_id=trace_id,
+                agent_version=lane.agent_version,
+                max_output_tokens=settings_for(Lane.ANSWER).max_output_tokens,
+                pin=None if agent is None else agent.record.model_pin,
+                categories=sent_categories(lane.question_category, payload, cards, hints),
+            )
+        except ProviderUnavailable as failed:
+            if failed.failure.refused:
+                # M5.4.1: the provider declined on content. Answered once, as the refusal a
+                # declining reply becomes, and never tried on another model.
+                return Drafted(
+                    outcome=refused(scope, detail="the model declined on content"), asked=True
+                )
+            # M15.4.1: longer than the largest model reads, after the executor climbed every
+            # tier. See the reason constant beside `Trimmed`.
+            smaller = fewer(payload) if failed.failure.context_exceeded else None
+            if smaller is None:
+                raise
+            payload = smaller
+            continue
+        break
+    trimmed = (
+        None
+        if len(payload.records) == found_count
+        else Trimmed(shown=len(payload.records), found=found_count)
+    )
     if is_refusal(response.finish_reason):
         return Drafted(outcome=refused(scope, detail="the model declined on content"), asked=True)
     text = response.text.strip()
@@ -995,4 +1149,4 @@ async def draft(
     uncited = abstain_if_uncited(provenance, scope=scope, policy=lane.citations)
     if uncited is not None:
         return Drafted(outcome=uncited, asked=True)
-    return Drafted(outcome=composed, asked=True, provenance=provenance)
+    return Drafted(outcome=composed, asked=True, provenance=provenance, trimmed=trimmed)

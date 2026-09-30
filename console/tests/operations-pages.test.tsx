@@ -28,7 +28,12 @@ import { filtersFrom, logsApiPath, logsExportApiPath, LOGS_PAGE_SIZE } from "../
 import { UNAVAILABLE } from "../src/pages/operations/operationsActions";
 import { jobName } from "../src/pages/operations/parts";
 import { NOTHING_LOOKED as NOTHING_LOOKED_AT_COPIES } from "../src/pages/operations/RecoveryPage";
-import { NOTHING_LOOKED as NOTHING_LOOKED_AT_WINDOWS } from "../src/pages/operations/LimitsPage";
+import {
+  DEFERRED_HEADING,
+  NOTHING_COUNTS_WORK,
+  NOTHING_IS_DEFERRED,
+  NOTHING_LOOKED as NOTHING_LOOKED_AT_WINDOWS,
+} from "../src/pages/operations/LimitsPage";
 import { CHANGE_LIMIT, KEEP_LIMIT, SAVE_LIMIT, TUNING_HEADING } from "../src/pages/tuningQuery";
 import { NOTHING_RECORDED } from "../src/pages/operations/ArtifactsPage";
 import { EXPORT_LABEL, KEEP_LABEL, NOT_A_WINDOW, NOT_EXPORTABLE } from "../src/pages/operations/DataTransferPage";
@@ -526,6 +531,8 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
       unread: "NOTHING-COUNTS",
       unusual: null,
       unusual_unread: "",
+      deferred: null,
+      deferred_unread: "NO-CACHE-COUNTS-WORK",
     };
     expect(Object.keys(body).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "LimitsView").sort());
     const { container } = await open("/limits", { "GET /api/v1/install/limits": () => ({ body }) });
@@ -536,6 +543,46 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(text).toContain("REFUSES-WHEN-UNREACHABLE");
     expect(text).not.toMatch(/\btrue\b|\bfalse\b/);
     expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)).toBeNull();
+    // M22.1.5: a process that counts no work in progress says so under the heading, never an empty
+    // table. What breaks if deleted: nothing having counted drawn as nothing being deferred.
+    expect(text).toContain(DEFERRED_HEADING);
+    expect(text).toContain(NOTHING_COUNTS_WORK);
+    expect(text).toContain("NO-CACHE-COUNTS-WORK");
+    expect(text).not.toContain(NOTHING_IS_DEFERRED);
+  });
+
+  test("the kinds of work deferred now are named with their budget and share, in the order the API sent them", async () => {
+    // M22.1.5. What breaks if this is deleted: the shed plan reachable from no screen again, the rows
+    // redrawn in an order the page chose rather than the order the kinds give way, or an empty list
+    // drawn the same as one nothing counted.
+    const row = (workloadClass: string, work: string, share: number) => ({
+      workload_class: workloadClass,
+      work,
+      budget: "Documents read at once",
+      share,
+      limit: 4,
+      said: `${work} are deferred on documents read at once.`,
+    });
+    const rows = [row("batch", "BATCH-WORK", 2), row("background", "BACKGROUND-WORK", 3)];
+    expect(Object.keys(rows[0] ?? {}).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "DeferredView").sort());
+    const body = { ...LIMITS_BODY, deferred: rows, deferred_unread: "" };
+    const { container } = await open("/limits", {
+      "GET /api/v1/install/limits": () => ({ body }),
+      "GET /api/v1/install/tuning": () => ({ body: tuningBody(false) }),
+    });
+    const text = mainText(container);
+    expect(text).toContain(DEFERRED_HEADING);
+    expect(text.indexOf("BATCH-WORK")).toBeGreaterThan(-1);
+    expect(text.indexOf("BATCH-WORK")).toBeLessThan(text.indexOf("BACKGROUND-WORK"));
+    expect(text).toContain("Documents read at once");
+    expect(text).toContain("2 of 4");
+    expect(text).not.toContain(NOTHING_COUNTS_WORK);
+
+    const idle = await open("/limits", {
+      "GET /api/v1/install/limits": () => ({ body: { ...LIMITS_BODY, deferred: [], deferred_unread: "" } }),
+      "GET /api/v1/install/tuning": () => ({ body: tuningBody(false) }),
+    });
+    expect(mainText(idle.container)).toContain(NOTHING_IS_DEFERRED);
   });
 
   test("a reserved figure nobody read is not recorded yet, and a finding is the API's own sentence", async () => {

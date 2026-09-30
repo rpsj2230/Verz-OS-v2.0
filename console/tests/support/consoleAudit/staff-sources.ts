@@ -16,13 +16,16 @@ import {
   transferApiPath,
   TRIAL_API_PATH,
 } from "../../../src/pages/staffSourcesQuery";
-import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
+import { A_SETTING_ENTRY_NO_TEST_FOLLOWS, at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
 
 export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
   "GET /api/v1/govern/staff_sources/trial": { screen: "/staff_sources", spelled: "TRIAL_API_PATH", built: TRIAL_API_PATH },
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/staff-sources/StaffSourcesPage.tsx TRIAL_API_PATH": [
+    at("POST /api/v1/govern/staff_sources/trial", "TRIAL_API_PATH", TRIAL_API_PATH),
+  ],
   "src/pages/staff-sources/SyncCredential.tsx CREDENTIAL_API_PATH": [
     at("PUT /api/v1/govern/staff_sources/credential", "CREDENTIAL_API_PATH", CREDENTIAL_API_PATH),
   ],
@@ -42,6 +45,11 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/govern/staff_sources/trial": {
+    row: t("test_staff_trial", "test_a_press_is_one_row_whose_second_press_moves_the_instant_and_a_run_answers_it", true),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_staff_sync_run", "test_a_trial_reads_as_the_run_would_and_writes_no_member_and_stops_nobody"),
+  },
   "PUT /api/v1/govern/staff_sources/credential": {
     row: t("test_staff_sync_routes", "test_the_credential_is_replaced_into_its_slot_recorded_and_never_sent_back"),
     audit: t(

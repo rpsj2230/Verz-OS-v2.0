@@ -9,7 +9,7 @@
  * address; a review date says it must be after today. A draft a form can already tell the API would
  * refuse is said beside its field and never sent.
  *
- * Task ids: M27.15.40, M27.16.1
+ * Task ids: M27.15.40, M27.16.1, M7.7.3
  */
 
 import { useId, type ReactNode } from "react";
@@ -71,6 +71,11 @@ export const HAND_OVER_CONSEQUENCE =
 
 /** Said for a file the bulk form did not send, and why. */
 export const NOT_SENT_TYPE = "not sent: it is not one of the types listed.";
+/** A spreadsheet chosen as a document: offered to Classification, and never sent here (M7.7.3). */
+export const OFFERED_AS_A_TABLE =
+  "A spreadsheet is kept as a table whose columns are classified, so each person reads only the columns they may, and is not added as a document.";
+export const ADD_IT_ON_CLASSIFICATION = "Add it on Classification";
+export const NOT_SENT_TABLE = "not sent: a spreadsheet is added on Classification, which keeps it as a classified table.";
 export const NOT_SENT_SIZE = "not sent: it is larger than this install accepts for its type.";
 export const NOT_SENT_QUEUE_FULL = "not sent, because the queue was full. Send it again later.";
 
