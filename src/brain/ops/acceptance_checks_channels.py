@@ -47,6 +47,10 @@ from brain.ops.acceptance import CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_checks import _HeldLedger, _Kept, _Secret
 from brain.ops.acceptance_run import Harness
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 240
+
 #: Why nothing the email check sends reaches a relay, a vault slot or a person.
 NOTHING_THE_EMAIL_CHECK_SENDS_LEAVES_THE_PROCESS: Final = (
     "The email channel the check sets up has a secret made in memory and a record in the check's "

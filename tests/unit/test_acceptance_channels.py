@@ -22,7 +22,7 @@ import pytest
 from brain.ops import acceptance_checks_channels as channels
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
 from brain.ops.mail import RELAY_CREDENTIAL_FIELD, RELAY_CREDENTIAL_SLOT, MailPassword
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 from tests.unit.test_acceptance_automation import run_check
 from tests.unit.test_channel_pipeline import KeptVault
 
@@ -49,6 +49,15 @@ def test_each_channel_check_is_registered_with_the_leaf_it_proves() -> None:
     assert {"M10.5.6", "M10.5.1"} <= {
         one for module in wbs["modules"] for one in module["leaf_ids"]
     }
+
+
+def test_the_channels_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them: one per
+    way a vendor connects, email then Slack, then email read from a mailbox. Held here, beside the
+    module's other tests, since 2026-09-30, so a package adding a check edits its own file and
+    never a list every package appends to. Delete this and a check can drop out of the module with
+    the page simply listing one fewer row."""
+    assert checks_in(MODULE) == [EMAIL, SLACK, MAILBOX]
 
 
 def lends(password: str | None) -> MailPassword:
