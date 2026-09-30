@@ -668,6 +668,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
+    assert outcomes.pop("mail_in_the_mailbox_is_read_answered_and_marked") == (
+        NOT_RUN,
+        acceptance_checks_channels.NO_RELAY_IS_SAVED_FOR_THE_MAILBOX,
+    )
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.

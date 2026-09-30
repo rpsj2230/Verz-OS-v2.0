@@ -915,14 +915,14 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         return JSONResponse(
             status_code=200,
             content=view.model_dump(),
-            background=BackgroundTask(_reply, request, receipt, record, now),
+            background=BackgroundTask(answer_receipt, request, receipt, record, now),
         )
-    outcome = await _reply(request, receipt, record, now)
+    outcome = await answer_receipt(request, receipt, record, now)
     view = EventView(status=receipt.kind, reply=outcome)
     return JSONResponse(status_code=200, content=view.model_dump())
 
 
-async def _reply(
+async def answer_receipt(
     request: Request, receipt: Receipt, record: ChannelRecord, now: datetime
 ) -> DeliveryOutcome | None:
     """Make and send the reply to an accepted message; what the first message sent came to.
