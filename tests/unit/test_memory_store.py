@@ -146,11 +146,52 @@ def test_the_trigger_writes_the_subject_actor_and_details_the_recorder_writes() 
     )
 
 
-def test_the_recorders_change_words_are_the_corrections_own_words() -> None:
+def test_the_recorders_change_words_are_the_corrections_own_words_and_a_confirmation() -> None:
     """`MemoryChange` restates `Correction` because the audit package may not import the memory
-    plane. Delete this and one can gain or rename a member alone, after which the trigger writes a
-    word the recorder has no member for."""
-    assert {one.value for one in MemoryChange} == {one.value for one in Correction}
+    plane, and adds the one change that is not a correction. Delete this and one can gain or rename
+    a member alone, after which a trigger writes a word the recorder has no member for."""
+    assert {one.value for one in MemoryChange} == {one.value for one in Correction} | {"confirmed"}
+
+
+def test_the_confirmation_trigger_writes_the_subject_actor_and_details_the_recorder_writes() -> (
+    None
+):
+    """`0163`'s entry, read off the migration that executes it: the memory's subject, the person
+    the row is about as the actor, and the one word, with nothing of the statement. Delete this and
+    the trigger can put what the memory says into the ledger, or name another actor, with every
+    stubbed test green."""
+    confirmed = recorder().memory(memory_id="m_1", change=MemoryChange.CONFIRMED)
+    module = migration_module(VERSIONS / "0163_memory_confirmation.py")
+    body = " ".join(module.CONFIRMATION_TRIGGER_FUNCTION.split())
+    trigger = " ".join(module.CONFIRMATION_TRIGGER.split())
+
+    assert (confirmed.subject, confirmed.details) == ("memory:m_1", {"change": "confirmed"})
+    assert "v_subject text := 'memory:' || NEW.id;" in body
+    assert "v_details jsonb := jsonb_build_object('change', 'confirmed');" in body
+    assert "v_seq, v_at, NEW.principal_id, 'memory', v_subject, v_ent_hash," in body
+    assert "statement" not in body
+    assert "AFTER UPDATE OF last_confirmed_at ON mem.adaptive" in trigger
+    assert "WHEN (NEW.last_confirmed_at IS DISTINCT FROM OLD.last_confirmed_at)" in trigger
+    assert module.GRANTS == ("GRANT UPDATE (last_confirmed_at) ON mem.adaptive TO brain_app",)
+
+
+def test_a_confirmation_stamps_one_column_of_the_persons_own_rows_by_the_databases_clock() -> None:
+    """The statement `StoredFormations.form` sends for an inference said again: one column, set to
+    the statement's own time, on the named rows of that person only. Delete this and a confirmation
+    could set another column, a time the application chose, or somebody else's memory, and the
+    policy would be the only thing refusing it."""
+    from brain.ops.memory_store import confirmation
+    from tests.unit.test_tables import DIALECT
+
+    compiled = confirmation("u_person", ["m_2", "m_1", "m_2"]).compile(
+        dialect=DIALECT, compile_kwargs={"literal_binds": True}
+    )
+    sql_text = " ".join(str(compiled).split())
+
+    assert sql_text == (
+        "UPDATE mem.adaptive SET last_confirmed_at=statement_timestamp() "
+        "WHERE mem.adaptive.id IN ('m_1', 'm_2') AND mem.adaptive.principal_id = 'u_person'"
+    )
 
 
 def test_the_migration_holds_the_live_grammars_widths_and_predicates_it_copied() -> None:
@@ -267,7 +308,8 @@ class _Session:
         if "pg_advisory_xact_lock" in text:
             self.log.append(f"lock {params['lock_class']} {params['memory_id']}")
             return _Result(None)
-        if text.startswith("SELECT now()"):
+        if text.startswith("SELECT statement_timestamp()"):
+            # Read after the lock: `A_REVISION_IS_STAMPED_WHEN_IT_IS_DECIDED`.
             self.log.append("clock")
             return _Result(LATER)
         if text.startswith("SELECT") and "FROM mem.correction" in text:
@@ -775,6 +817,63 @@ def test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next() -> None:
     assert AuditChain(chain).verify() is None
     assert after == ["m_before"]
     assert (may_update, may_delete) == (False, False)
+
+
+def test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next() -> None:
+    """A person's own Edit followed to the system, through the store `brain.mine_routes.edited`
+    writes through, as the role the application uses.
+
+    The replacement is a row of its own with a learning record naming what it replaced, the edited
+    memory is marked as replaced by it and stays on the record, the mark is a `memory` ledger entry
+    under the person and the request's trace, and recall returns the replacement in the edited
+    memory's place. Delete this and the edit control can answer success while the database kept
+    none of it. **Skips without a server.**"""
+    with through_0061("brain_memory_edit") as url:
+        seed(url)
+
+        async def walk() -> bool:
+            engine = app_engine(url)
+            try:
+                store = StoredMemoryRecords(make_session_factory(engine))
+                edited = await store.edit(
+                    learning("m_alone"),
+                    learning("m_edited", replaced_id="m_alone", at=LONG_AGO + timedelta(hours=1)),
+                    "Asks on Tuesdays.",
+                    prompted_by=Signal.REJECTED,
+                    actor="u_subject",
+                    trace_id="trace-edit",
+                    ent_hash="c" * 32,
+                )
+                return edited.took_effect
+            finally:
+                await engine.dispose()
+
+        took = run(walk)
+        kept = sql(url, "SELECT id, statement FROM mem.adaptive ORDER BY id")
+        record = sql(url, "SELECT replaced_id FROM mem.learning WHERE memory_id = 'm_edited'")
+        marks = sql(
+            url,
+            "SELECT memory_id, correction, by_id, recorded_by FROM mem.correction"
+            " WHERE memory_id = 'm_alone'",
+        )
+        chain = entries(url)
+        after = recalled_now(url)
+
+    assert took is True
+    assert kept == [
+        ("m_alone", "Asks on Mondays."),
+        ("m_edited", "Asks on Tuesdays."),
+        ("m_learnt", "Prefers the short answer."),
+    ]
+    assert record == [("m_alone",)]
+    assert marks == [("m_alone", "superseded", "m_edited", "u_subject")]
+    assert (chain[-1].subject, chain[-1].actor_id, chain[-1].trace_id) == (
+        "memory:m_alone",
+        "u_subject",
+        "trace-edit",
+    )
+    assert AuditChain(chain).verify() is None
+    assert after == ["m_edited", "m_learnt"]
 
 
 def test_the_table_refuses_a_lowered_tier_and_a_correction_of_the_wrong_shape() -> None:

@@ -216,6 +216,7 @@ from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.learning_signal_store import StoredMarks
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -1254,14 +1255,19 @@ def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
 
 
 def caching_of(
-    state: Any, policies: Mapping[str, FieldPolicy], sources: Sequence[str]
+    state: Any,
+    policies: Mapping[str, FieldPolicy],
+    sources: Sequence[str],
+    epochs: Mapping[str, int] | None = None,
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
     `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
-    uncacheable rather than a cached answer stale.
+    uncacheable rather than a cached answer stale. `epochs` are the uploaded tables' versions
+    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`); no connector
+    source records one yet, so for those the answer's age bounds staleness.
     """
     store: AnswerStore | None = getattr(state, "answer_store", None)
     if store is None:
@@ -1269,8 +1275,7 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        # No source records an epoch yet, so the key holds none and the TTL bounds staleness.
-        source_epochs={},
+        source_epochs=dict(epochs or {}),
         sources=frozenset(sources),
     )
 
@@ -1552,7 +1557,12 @@ async def answered_for(
     caching = (
         None
         if referral is not None or ask.kinds or follow_up is not None
-        else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
+        else caching_of(
+            request.app.state,
+            policies,
+            sources_at(registry, asking.reach, asking.now),
+            tables.epochs,
+        )
     )
 
     try:
@@ -1638,6 +1648,20 @@ async def answered_for(
             live=live_records_of(request.app.state),
             source_policies=source_field_policies(registry),
         )
+        # An abstention under a skill that declares a queue is handed to the person named for it,
+        # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
+        # here because `brain.escalation_routes` sends through `brain.channel_routes`, which
+        # imports this module.
+        from brain.escalation_routes import escalated
+
+        answered = await escalated(
+            request,
+            answered,
+            agent=agent,
+            asking=asking,
+            question=address.question,
+            trace_id=recorder.trace_id,
+        )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own
             # lookup used (M3.5.2). A hit, a refusal and a fault carry no text and are not kept.
@@ -1685,6 +1709,74 @@ async def answered_for(
     )
 
     return answered
+
+
+# ------------------------------------------------------------------- a mark (M16.6.4)
+#: What a person is told once their mark is counted. The same sentence either way.
+MARK_COUNTED: Final = (
+    "Thank you. Your mark is counted against this answer; on its own it changes nothing the "
+    "system answers, and a correction you give is what a person reviews."
+)
+
+#: Why a mark changes nothing by itself.
+A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF: Final = (
+    "A helpful or unhelpful mark is one bit from one person about one answer, and acting on it "
+    "would let one click reorder what everybody is told. So it is stored against the answer's "
+    "trace and counted, and no retrieval, memory, rule, knowledge item or agent setting reads "
+    "it; what changes behaviour is a correction a person reviews."
+)
+
+
+class MarkAsked(BaseModel):
+    """One mark on one answer: the trace it ran under and whether it helped. Nothing else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trace_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    helpful: bool
+
+
+class MarkedView(BaseModel):
+    """What a mark came to: counted, and the one sentence a person is told."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    counted: bool
+    told: str
+
+
+def marks_of(state: Any) -> StoredMarks | None:
+    """Where marks are written: `app.state.answer_marks`, or the database's, or None."""
+    found = getattr(state, "answer_marks", None)
+    if isinstance(found, StoredMarks):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredMarks(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+@router.post("/answer/mark", response_model=MarkedView, responses=COMMON_RESPONSES)
+async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> MarkedView:
+    """Mark one answer the caller was given helpful or unhelpful, with one action (M16.6.4).
+
+    Written against the trace and counted, and read by nothing that decides an answer, which is
+    `A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF`. An answer given to somebody else, one that
+    never ran and one past `brain.ops.learning_signal_store.MARKABLE_FOR` are the one 404, which
+    is `A_MARK_IS_ON_AN_ANSWER_THE_MARKER_WAS_GIVEN`.
+    """
+    marks = marks_of(request.app.state)
+    if marks is None:
+        raise Failed("no database on this process")
+    counted = await marks.mark(
+        principal_id=asked.caller.principal.id,
+        trace_id=body.trace_id,
+        helpful=body.helpful,
+        now=asked.now,
+    )
+    if not counted:
+        log.info("mark not answerable", principal=asked.caller.principal.id)
+        raise Absent("that answer cannot be marked by this caller")
+    log.info("answer marked", principal=asked.caller.principal.id, helpful=body.helpful)
+    return MarkedView(counted=True, told=MARK_COUNTED)
 
 
 async def remembered(

@@ -252,6 +252,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "gate.capability_pack_assignment": "principal_id",
         "gate.department_lead": "principal_id",
         "gate.elevation_request": "principal_id",
+        # A question handed to a person, in the asker's words (`0168`). `0168` grants no way for a
+        # row to leave, so an erasure keeps these and reports them kept, as it does a referral.
+        "gate.escalation": "asker_id",
         "gate.grants_version": "principal_id",
         "gate.review_decision": "principal_id",
         # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
@@ -266,6 +269,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "know.solution": "captured_by",
         "know.steward_task": "principal_id",
         "mem.adaptive": "principal_id",
+        # A helpful or unhelpful mark on an answer the person was given, and nothing they said
+        # (`0154`). `0154` grants no way for a row to leave, so an erasure keeps these and reports
+        # them kept.
+        "mem.mark": "principal_id",
         "mem.persistent": "principal_id",
         "obs.request_telemetry": "principal",
         # A budget's subject is a person, a department or an agent; only a person's id matches.
@@ -330,6 +337,9 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
 #: Tables in a PostgreSQL store no row of which is a person's own. See `AN_ACTOR_IS_NOT_AN_OWNER`.
 ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     {
+        # Whether an agent's runs may teach it, and why (`0154`): about an agent, and the person
+        # named is the steward who switched it, an actor and not an owner.
+        "agent.learning_pause",
         # An uploaded table and its rows (`0116`): a price list is the company's, and the people
         # named on the table row are the administrators who uploaded and marked it, actors and not
         # owners.

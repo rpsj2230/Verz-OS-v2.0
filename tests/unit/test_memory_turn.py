@@ -6,7 +6,7 @@ learning record. The first half here holds the rules; the second builds the memo
 the migrations that ship and writes a turn through the store. **The second half skips when there is
 no server**, and CI always has one.
 
-Task ids: M16.1.2, M16.1.3, M38.2.2.4, M16.7.12, M16.6.3
+Task ids: M16.7.2, M16.1.2, M16.1.3, M38.2.2.4, M16.7.12, M16.6.3
 """
 
 from __future__ import annotations
@@ -358,6 +358,36 @@ def test_a_statement_the_person_already_has_standing_is_not_formed_twice() -> No
     assert twice.skipped == (NotFormed.ALREADY_REMEMBERED,)
 
 
+def test_a_standing_inference_said_again_is_confirmed_rather_than_formed_twice() -> None:
+    """In passing or stated outright, the words said again name the inference confirmed, once;
+    a stated memory said again confirms nothing, since it does not decay. Delete this and saying
+    a preference again would leave it fading as if the person never had (M16.7.2)."""
+    inferred = [held_memory("I prefer short answers", MemoryKind.ADAPTIVE, memory="m_inferred")]
+    stated = [held_memory("I prefer short answers", MemoryKind.PERSISTENT, memory="m_stated")]
+
+    again = propose_memories(a_turn("I prefer short answers. I prefer short answers."), inferred)
+    outright = propose_memories(a_turn("Remember that I prefer short answers."), inferred)
+    of_a_statement = propose_memories(a_turn("I prefer short answers."), stated)
+
+    assert (again.formed, again.confirmed) == ((), ("m_inferred",))
+    assert (outright.formed, outright.confirmed) == ((), ("m_inferred",))
+    assert (of_a_statement.formed, of_a_statement.confirmed) == ((), ())
+
+
+def test_only_a_standing_inference_in_an_answered_turn_is_confirmed() -> None:
+    """A corrected inference said again is still the correction's, and a passing preference in a
+    turn nothing answered forms and confirms nothing. Delete this and saying it again would undo
+    an undo, or a refused question would keep an inference alive."""
+    inferred = [held_memory("I prefer short answers", MemoryKind.ADAPTIVE, memory="m_inferred")]
+    demoted = [Demotion(memory_id="m_inferred", field="answer.length", at=NOW - timedelta(days=1))]
+
+    corrected = propose_memories(a_turn("I prefer short answers."), inferred, demotions=demoted)
+    unanswered = propose_memories(a_turn("I prefer short answers.", answered=False), inferred)
+
+    assert (corrected.confirmed, corrected.skipped) == ((), (NotFormed.CORRECTED,))
+    assert (unanswered.confirmed, unanswered.skipped) == ((), (NotFormed.NOT_ANSWERED,))
+
+
 def test_a_corrected_inference_is_not_inferred_again_and_a_statement_of_it_is_still_kept() -> None:
     """Undone by a demotion, the next conversation's same inference forms nothing; the person saying
     it outright forms a stated memory. A supersession marks the same way.
@@ -424,17 +454,29 @@ def form(url: str, turn: Turn) -> object:
     return run(go)
 
 
-def test_a_turn_writes_each_memory_with_its_learning_record_and_a_repeat_writes_nothing() -> None:
-    """As the application role: a stated and an extracted memory, each beside its learning record,
-    and the same turn formed again writes nothing new.
+def test_a_turn_writes_each_memory_with_its_learning_record_and_a_repeat_writes_no_second() -> None:
+    """A stated and an extracted memory, each beside its learning record, and the same turn formed
+    again writes no second memory: it stamps the inference confirmed, once, with one ledger entry
+    naming the person, and leaves the stated memory as it was (M16.7.2).
 
     Delete this and a memory could reach the table with no revision record the Memory screen reads,
-    or the same words twice."""
+    the same words twice, or a restatement that confirms nothing."""
     with through_0061("brain_memory_turn_store") as url:
         turn = a_turn("Remember that I work from Penang on Fridays. I prefer short answers.")
         first = form(url, turn)
         second = form(url, turn)
         found = rows(url)
+        stamped = sql(url, "SELECT id FROM mem.adaptive WHERE last_confirmed_at IS NOT NULL")
+        ledger = sql(
+            url,
+            "SELECT actor_id, subject, details->>'change' FROM obs.audit_entry"
+            " WHERE action = 'memory' ORDER BY seq",
+        )
+
+    [inferred] = [one[0] for one in found if one[1] == "adaptive"]
+    assert second.confirmed == (inferred,)  # type: ignore[attr-defined]
+    assert [one[0] for one in stamped] == [inferred]
+    assert ledger == [(PERSON, f"memory:{inferred}", "confirmed")]
 
     assert [(one[1], one[2], one[3], one[4], one[5], one[6]) for one in found] == [
         ("adaptive", "I prefer short answers", PERSON, "preference", 1, "desk"),

@@ -93,7 +93,16 @@ Scope: nothing here opens a connection. A `RowSource` is passed in, for the reas
 `brain.ops.limits` gives about holding no client: a query builder that owns a socket cannot
 be tested on the cases that matter, and the cases that matter here are the empty ones.
 
-Task ids: M15.1.1, M15.1.2, M15.1.3, M15.1.4
+**A read made for the fast lane says so, and a source that runs SQL reads it as the lane's own
+role (M6.1.3).** `brain.gate.fast_lane.respond` makes every read inside `read_as_the_fast_lane`,
+and `brain.knowledge.row_store.SessionRowSource` takes `brain_fastlane` for the transaction of a
+read made there. A marker on the read rather than a second set of readers, because the fast lane
+is handed the very handlers the registry holds, each behind the switch that stops a tool
+(`brain.tools.registry`), and readers rebuilt for the lane would answer from a tool somebody had
+switched off. A model's tool call is made outside the marker and reads as the application. See
+`A_FAST_LANE_READ_IS_MARKED_ON_THE_READ_AND_NOT_ON_THE_READER`.
+
+Task ids: M15.1.1, M15.1.2, M15.1.3, M15.1.4, M6.1.3
 """
 
 from __future__ import annotations
@@ -101,7 +110,9 @@ from __future__ import annotations
 import ast
 import inspect
 import re
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from types import ModuleType
@@ -228,6 +239,40 @@ class RowRecord(Entity):
     model_config = ConfigDict(extra="allow")
 
 
+#: Why the fast lane marks its reads rather than being handed readers of its own.
+A_FAST_LANE_READ_IS_MARKED_ON_THE_READ_AND_NOT_ON_THE_READER: Final = (
+    "The fast lane is handed the handlers the tool registry holds, each wrapped in the switch "
+    "an administrator stops a tool with. Rebuilding readers for the lane over a source of its "
+    "own would take the switch off: a tool switched off would go on answering on the fast lane. "
+    "So the reader stays the registry's and the read carries the fact that the fast lane made "
+    "it, in a context variable the lane sets around its reads and a source reads when it runs "
+    "SQL, and a stand-in source that runs none has nothing to take a role for."
+)
+
+#: Whether the read running now was made by the fast lane. Set by `read_as_the_fast_lane` only.
+_FAST_LANE_READ: ContextVar[bool] = ContextVar("fast_lane_read", default=False)
+
+
+@contextmanager
+def read_as_the_fast_lane() -> Iterator[None]:
+    """Mark every read this task makes inside the block as the fast lane's (M6.1.3).
+
+    A context variable, which asyncio copies into a task when the task is made, so the marker
+    reaches exactly the reads the lane awaits and nothing another request is doing. Reset on the
+    way out whatever happened. See `A_FAST_LANE_READ_IS_MARKED_ON_THE_READ_AND_NOT_ON_THE_READER`.
+    """
+    token = _FAST_LANE_READ.set(True)
+    try:
+        yield
+    finally:
+        _FAST_LANE_READ.reset(token)
+
+
+def is_a_fast_lane_read() -> bool:
+    """Whether the read running now was made by the fast lane."""
+    return _FAST_LANE_READ.get()
+
+
 class RowSource(Protocol):
     """Whatever runs a statement and hands back mappings keyed by the labels.
 
@@ -253,6 +298,9 @@ class RowSource(Protocol):
     nothing the statement can read, and a policy reading them fails closed without an error.
     A stand-in that evaluates no SQL has nothing to run them against and may ignore them. See
     `RowQuery.settings`.
+
+    **And one that runs SQL for a read `is_a_fast_lane_read` says the fast lane made takes the
+    fast lane's role first**, for the reason `brain.knowledge.row_store` gives.
     """
 
     async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]: ...

@@ -613,8 +613,9 @@ class AuditAction(enum.StrEnum):
     #: incomplete. Which is in the details, and never whose data it was. Written by `0060`'s
     #: trigger on `ops.erasure_request`.
     ERASURE = "erasure"
-    #: A memory was marked by a correction: superseded by another, or demoted. Which is in the
-    #: details, and never what either memory says. Written by `0061`'s trigger on `mem.correction`.
+    #: A memory was marked by a correction: superseded by another, or demoted; or the person
+    #: confirmed an inference by saying it again. Which is in the details, and never what any
+    #: memory says. Written by `0061`'s trigger on `mem.correction` and `0163`'s on `mem.adaptive`.
     MEMORY = "memory"
     #: A person was placed in a team or taken out of one, or appointed to lead a department or
     #: stood down. Which is in the details, with the team's path or the department's slug. Written
