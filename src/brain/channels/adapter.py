@@ -47,6 +47,7 @@ vendor like Lark asks before every request, and `verify` hands back the request 
 vendor that encrypts. All three arrived with the Lark channel and change nothing for a wire that
 declares none of them.
 
+<<<<<<< HEAD
 **A card is a message with controls on it, and a press is read like a message (M10.2.3).**
 `CardAction` is one control: its words and the identifiers a press sends back, which are
 identifiers and never a value. `CardPress` is what a press carried, handed back on
@@ -57,6 +58,16 @@ A wire that declares none is asked for none, and a card planned for it is refuse
 cannot carry.
 
 Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6, M10.2.3
+=======
+**A channel's connect steps sit beside its wire, and hold its own form once.** A module with a
+`WIRE` may declare `GUIDE`, the `brain.ops.connect_steps.GuideStep` screens that walk a person
+through the vendor, and `channel_guides` finds them as `channel_wires` finds the wires. One step
+asks for exactly the wire's tenant fields and its secret, or the secret's parts, which is what the
+channel's record takes, so a flow cannot hold a form that saves something else. See
+`A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE`.
+
+Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6, M10.5.6
+>>>>>>> origin/main
 """
 
 from __future__ import annotations
@@ -76,6 +87,7 @@ from brain.core.field_policy import Classification
 from brain.core.redaction import OPAQUE_LABEL, ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent
+from brain.ops.connect_steps import GuideStep
 from brain.ops.idempotency import Intent, Operation, operation_for
 
 
@@ -267,6 +279,30 @@ A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE: Final = (
 #: The name a channel module gives its wire, so discovery reads one attribute and guesses nothing.
 WIRE_NAME: Final = "WIRE"
 
+#: The module attribute a channel's connect steps are declared under, beside its `WIRE`.
+GUIDE_NAME: Final = "GUIDE"
+
+#: What a channel's form step asks for besides its record's fields: its one secret.
+SECRET_ASK: Final = "secret"  # noqa: S105  a field name, not a secret
+
+#: The ask a step names to show this install's events address, which it shows and never collects.
+EVENTS_ADDRESS_ASK: Final = "events_address"
+
+#: Why a secret of several parts is written as a whole.
+SEVERAL_PARTS_ARE_WRITTEN_AS_ONE: Final = (
+    "A channel whose vendor needs more than one secret keeps them together in its one vault "
+    "slot, written as a whole: every part is given at once or none is, so a record never holds "
+    "one part new and another from before, and the route never reads a secret back to merge it."
+)
+
+#: Why a channel's steps hold its record's form once, and ask for nothing else.
+A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE: Final = (
+    "A channel's connect steps hold one screen that saves its record, asking for exactly the "
+    "fields its wire takes and its secret, so a field the wire gains is a field the steps ask for "
+    "too; every other screen asks for nothing but to be shown the events address. The form need "
+    "not be last: a vendor that checks the address as it is saved is told to check it after."
+)
+
 #: The adapter methods a class needs to be read as an adapter. `ChannelAdapter`'s, by name.
 _ADAPTER_METHODS: Final = ("capabilities", "normalise", "send", "healthy")
 
@@ -356,6 +392,41 @@ def channel_wires() -> Mapping[Channel, ChannelWire]:
             msg = f"{channel} has a wire and no adapter to declare what it may carry"
             raise ChannelRegistryError(msg)
         found[channel] = wire
+    return MappingProxyType(found)
+
+
+def channel_guides() -> Mapping[Channel, tuple[GuideStep, ...]]:
+    """Every channel's connect steps, by channel: a module's `GUIDE`, beside its `WIRE`.
+
+    A guide in a module with no wire is refused, since there is nothing its form could save, and
+    so is one without exactly one step asking for the wire's fields and its secret, or with a step
+    asking for anything else. See `A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE`.
+    """
+    wires = channel_wires()
+    found: dict[Channel, tuple[GuideStep, ...]] = {}
+    for module in _channel_modules():
+        guide = getattr(module, GUIDE_NAME, None)
+        if guide is None:
+            continue
+        declared: object = getattr(module, WIRE_NAME, None)
+        wire = next((one for one in wires.values() if one is declared), None)
+        if wire is None:
+            msg = f"{module.__name__} declares connect steps and no wire they could set up"
+            raise ChannelRegistryError(msg)
+        steps = tuple(guide)
+        wanted = (*wire.tenant_fields, *(wire.secret_parts or (SECRET_ASK,)))
+        forms = [one.key for one in steps if tuple(one.asks) == wanted]
+        stray = sorted(
+            {ask for one in steps if tuple(one.asks) != wanted for ask in one.asks}
+            - {EVENTS_ADDRESS_ASK}
+        )
+        if len(forms) != 1 or stray:
+            msg = (
+                f"{wire.channel}'s steps hold {len(forms)} form(s) and ask for {stray}, and its "
+                f"record takes {list(wanted)}. {A_CHANNEL_S_STEPS_HOLD_ITS_OWN_FORM_ONCE}"
+            )
+            raise ChannelRegistryError(msg)
+        found[wire.channel] = steps
     return MappingProxyType(found)
 
 
@@ -514,6 +585,17 @@ class ChannelWire(Protocol):
     @property
     def tenant_fields(self) -> tuple[str, ...]:
         """The tenant identifiers a record for this channel must hold, by name."""
+        ...
+
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """The named values this channel's secret holds, or empty when it is one value.
+
+        A vendor that signs what it sends with one secret and takes its replies on another has
+        two, and both belong in the vault: the route keeps them together, as one JSON object in
+        the channel's one slot, and `verify` and `request_for` each read the part they need. See
+        `SEVERAL_PARTS_ARE_WRITTEN_AS_ONE`.
+        """
         ...
 
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:

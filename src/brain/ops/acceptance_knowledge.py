@@ -40,6 +40,10 @@ if TYPE_CHECKING:
     from brain.gate.answer import Answered
     from brain.gate.provenance import Evidence
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 200
+
 A, B = RESERVED_DEPARTMENTS
 
 #: Why this check exists beside the checks of each stage, and why it fails in the flow's words.

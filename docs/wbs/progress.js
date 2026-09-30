@@ -44,6 +44,16 @@ const PROGRESS = {
     why: "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
     updated: "2026-09-28",
   },
+  "M1.6.16": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
+    updated: "2026-09-30",
+  },
+  "M1.6.17": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
+    updated: "2026-09-30",
+  },
   "M1.8.3": {
     status: "READY FOR TESTING",
     why: "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",
@@ -149,10 +159,20 @@ const PROGRESS = {
     why: "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
     updated: "2026-09-28",
   },
+  "M10.5.1": {
+    status: "READY FOR TESTING",
+    why: "Slack is connectable (M10/channel-slack): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
+    updated: "2026-09-30",
+  },
+  "M10.5.6": {
+    status: "READY FOR TESTING",
+    why: "email is connectable (#285): a signed envelope in, a reply out by the install's own relay, Connect Email steps with the receiving script, and an install check; the owner's real mail proves the vendor's half",
+    updated: "2026-09-30",
+  },
   "M10.6.1": {
     status: "IN PROGRESS",
-    why: "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
-    updated: "2026-09-28",
+    why: "the webhook, Lark, email and Slack wires are live (PR #105; L1, merged d426e3d3; #285; M10/channel-slack); Teams, Telegram and WhatsApp each come with their own package",
+    updated: "2026-09-30",
   },
   "M10.6.3": {
     status: "READY FOR TESTING",

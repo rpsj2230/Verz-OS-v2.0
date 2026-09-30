@@ -1003,3 +1003,45 @@ def test_a_deploy_is_recorded_with_the_commit_the_running_process_reports() -> N
     assert "$(running_commit)" in deployed, (
         f"the deploy record does not ask the container what it is running: {deployed.strip()}"
     )
+
+
+def test_every_file_the_dockerfile_copies_from_the_build_context_is_let_into_it() -> None:
+    """**The class, not the file.** `.dockerignore` excludes `ops` and lets named files back in, so
+    every new file a COPY names needs its own `!` line, and a missing one fails only on the build
+    machine with "not found" while every local test passes: Docker is not installed on the
+    development machine. It happened for the realm, which the test above now guards, and again on
+    2026-09-30 for `ops/keycloak/accounts-client.sh`, which failed CI's image build. Delete this and
+    the next file added to the image fails the same way, one file at a time.
+
+    A COPY from another stage (`--from=`) reads no build context and is skipped, and so is a source
+    with a wildcard, which is how this Dockerfile marks a file as optional (`RELEASE.jso[n]`). A
+    directory passes when at least one file in it is let in, which is what Docker needs to copy it.
+    """
+    from tests.unit.test_console_served import _excluded
+
+    rules = [
+        line.strip()
+        for line in (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    shut_out: list[str] = []
+    for line in (REPO / "Dockerfile").read_text(encoding="utf-8").splitlines():
+        words = line.split()
+        if not words or words[0] != "COPY" or any(w.startswith("--from=") for w in words):
+            continue
+        sources = [w for w in words[1:] if not w.startswith("--")][:-1]
+        for source in sources:
+            if any(mark in source for mark in "*?["):
+                continue
+            path = REPO / source.rstrip("/")
+            files = (
+                [one.relative_to(REPO).as_posix() for one in path.rglob("*") if one.is_file()]
+                if path.is_dir()
+                else [source]
+            )
+            if not any(not _excluded(one, rules) for one in files):
+                shut_out.append(source)
+    assert shut_out == [], (
+        f".dockerignore keeps {shut_out} out of the build context, so the Dockerfile's "
+        "COPY of them fails on the build machine; add a `!` line for each"
+    )

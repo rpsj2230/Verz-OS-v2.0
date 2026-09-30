@@ -20,6 +20,10 @@ those pages held. See `A_TEST_IS_A_READ_WITH_NOWHERE_TO_WRITE`.
 console: a credential the directory refused is never kept, so a save cannot leave the nightly sync
 holding a secret that fails every night.
 
+**A test says what the pages it read held**: departments read and named, people placed and why
+not, from the reading's `ReadReport`, so a Lark app missing the scope that shows a department's
+name is told at the test rather than after a night that placed nobody.
+
 **The first sync is the nightly run, started now, with the credential the person just typed.** The
 application may write the vault slot and never read it, so it cannot read back the credential it
 kept; the browser still holds what was typed, and posts it again for the dry run and for the apply.
@@ -59,6 +63,7 @@ from brain.identity.staff_adapters import (
     GOOGLE_WORKSPACE,
     LARK,
     MICROSOFT_ENTRA,
+    ReadReport,
     RosterUnavailableError,
 )
 from brain.identity.staff_roster import Application, application_for
@@ -200,13 +205,13 @@ async def read_source(
         raise ConnectRefusedError(_words(str(refused))) from refused
 
 
-def _reading(source: StaffSource) -> tuple[Roster, int]:
-    """The roster and how many entries did not become a person."""
+def _reading(source: StaffSource) -> tuple[Roster, ReadReport | None]:
+    """The roster and the reading's report of what was read, for a source that can say."""
     reading = getattr(source, "reading", None)
     if callable(reading):
         read = reading()
-        return read.roster, len(read.dropped)
-    return source.roster(), 0
+        return read.roster, read.report
+    return source.roster(), None
 
 
 async def check_connection(
@@ -225,7 +230,7 @@ async def check_connection(
     """
     try:
         source = await read_source(guide, values, fetch, pages=pages, readers=readers, paged=paged)
-        roster, skipped = _reading(source)
+        roster, report = _reading(source)
     except ConnectRefusedError as refused:
         return ConnectionTest(source=guide.source, read=False, told=str(refused))
     except ValueError as refused:
@@ -238,11 +243,16 @@ async def check_connection(
             f"Connected. The first pages listed {people} people. There are more: the first "
             "sync reads them all."
         )
+    skipped = 0 if report is None else report.skipped
     if skipped:
         told += (
             f" {skipped} entries could not be read as a person, usually because they have no "
             "work email address; check the permissions in the steps above."
         )
+    if report is not None:
+        # What the pages held, in counts: departments named, people placed and why not, and the
+        # scope to add. The owner's Lark connection would have said "0 with a name" here.
+        told += " " + " ".join(report.sentences())
     return ConnectionTest(
         source=guide.source,
         read=True,

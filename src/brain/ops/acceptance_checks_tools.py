@@ -1,13 +1,23 @@
-"""The install acceptance checks for tools: the catalogue table, the sensitive effects, the switch.
+"""The install acceptance checks for tools: catalogue, sensitive effects, switch and leash.
 
-Three checks, split where the leaves split. The first builds the install's registry through
+Four checks, split where the leaves split. The first builds the install's registry through
 `brain.tools.startup.build_registry`, the one builder the application calls, writes it to
 `agent.tool_definition` through the function the application calls at start, and reads every row
 back beside the registration that produced it, then asks the table itself to take a name the
 grammar refuses. The second registers tools the check declares into the install's own registry
 class, whose rules are the ones every tool meets. The third switches one of the install's own
 tools off and on through the functions the Tools screen's route calls, and calls it as reserved
-principals of both reserved departments between each switch.
+principals of both reserved departments between each switch. The fourth sets an agent's leash to
+Autonomous on a tool and assembles its run for a reserved principal through `brain.gate.invoke`.
+
+**The leash check declares its acting tools, because the install registers none.** Every tool
+`build_registry` gives an install today only reads, so a tool that drafts, writes, sends or moves
+money is declared into the install's own registry class, as the second check's are, and the read
+tool is the install's own. The agent's page leash is `brain.agent_routes.leash_of` over a registry,
+which is what the page and every run read, and the run is `brain.gate.invoke.invoke`, which every
+path that runs an agent goes through, so the check proves the hold where a run is assembled and
+proves the page still shows what was configured. See
+`brain.gate.invoke.A_RUN_IS_HELD_TO_THE_RUNG_ITS_TOOLS_SIDE_EFFECTS_ALLOW`.
 
 **The catalogue check writes the rows the application writes at start, and reads them back.**
 `brain.app` calls `record_catalogue` once per process start and survives its failure, so on an
@@ -57,6 +67,10 @@ if TYPE_CHECKING:
     from brain.core.envelope import ToolDefinition, TypedResult
     from brain.knowledge.rows import RowRecord
     from brain.tools.registry import SensitiveEffect, ToolRegistry, ToolSwitchedOffError
+
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 90
 
 A, B = RESERVED_DEPARTMENTS
 
@@ -474,3 +488,154 @@ async def a_switched_off_tool_is_refused_and_a_department_stops_its_own(
         entries = await _ledgered(h, subject)
         if [(who, d.get("change")) for who, d in entries] != [(actor, one) for one in changes]:
             raise CheckFailedError("a switch did not reach the ledger naming who threw it")
+
+
+# ------------------------------------------------ 4. a side effect holds the rung (M12.1.3)
+#: Each side effect a tool can have that changes something, the tool the check declares for it,
+#: and the rung a run holds an Autonomous leash entry on it to, as the owner reads the rule: a
+#: person sees a draft, a write and a send before it happens, and money is only ever rehearsed.
+#: Written out rather than read from `brain.tools.registry.default_rung`, so a change to that
+#: mapping fails the check instead of moving with it.
+HELD_AT: Final = (
+    ("draft", "acceptance.draft_note", "assisted"),
+    ("write", "acceptance.update_note", "assisted"),
+    ("send", "acceptance.share_note", "assisted"),
+    ("money", "acceptance.transfer_funds", "shadow"),
+)
+
+#: The rung every leash entry the check configures is set at.
+CONFIGURED: Final = "autonomous"
+
+
+async def _held(
+    h: Harness, reach: EntitlementSet, registry: ToolRegistry, tool: ToolDefinition
+) -> tuple[str, str, str]:
+    """One agent that may call `tool`, its leash set Autonomous on it, and a run of it as `reach`.
+
+    The rung its page shows, the rung the run is held to and the rung the run's own leash gives a
+    step on the tool, each as `AutonomyTier`'s lower-case name. The page's leash is
+    `brain.agent_routes.leash_of`, which the agent's page and every run read, and the run is
+    assembled by `brain.gate.invoke.invoke` over the reach `brain.console.reach_view.run_reach`
+    computes, so nothing here decides a rung.
+    """
+    from brain.agent_routes import Install, leash_of
+    from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord, tool_ceiling
+    from brain.console.reach_view import run_reach
+    from brain.core.entitlement import Capability
+    from brain.gate.injection import AutonomyTier
+    from brain.gate.invoke import InvocationRefusedError, invoke
+    from brain.gate.leash import Leash, LeashEntry
+    from brain.gate.screening import NOTHING_MATCHED
+    from brain.knowledge.visibility import Visibility
+
+    agent = f"acceptance_leash_{h.run}"
+    record = AgentRecord(
+        agent_id=agent,
+        display_name="Acceptance check leash",
+        persona="An agent built by an install acceptance check and never asked anything.",
+        audience=AgentAudience(level=Visibility.PERSONAL, owner_id=reach.principal_id),
+        authority=AgentAuthority(
+            capabilities=(Capability(value=tool.required_capability),),
+            allowed_tools=frozenset({tool.name}),
+            max_side_effect=tool.side_effect,
+        ),
+        created_by=reach.principal_id,
+    )
+    configured = Leash(
+        entries=(
+            LeashEntry(
+                agent_id=agent,
+                target=tool.name,
+                scope=Scope.unrestricted(),
+                rung=AutonomyTier[CONFIGURED.upper()],
+            ),
+        )
+    )
+    install = Install(
+        template_id="acceptance",
+        template_version=1,
+        summary="Built by an install acceptance check",
+        composition=(),
+        divergent=(),
+        skills=(),
+        connectors=(),
+        leash=configured,
+        declared_tools=(tool.name,),
+    )
+    shown = leash_of(install, registry)
+    try:
+        run = invoke(
+            principal_id=reach.principal_id,
+            agent_id=agent,
+            registry=registry,
+            entitlement=run_reach(reach, record),
+            ceiling=tool_ceiling(record),
+            leash=shown,
+            assessment=NOTHING_MATCHED,
+            now=h.now,
+        )
+    except InvocationRefusedError as refused:
+        raise CheckFailedError(
+            "a run through an agent allowed one tool its person holds did not start"
+        ) from refused
+    return (
+        shown.rung_for(agent, tool.name, {}).name.lower(),
+        run.ceiling_rung.name.lower(),
+        run.leash.rung_for(agent, tool.name, {}).name.lower(),
+    )
+
+
+@check(
+    leaves=("M12.1.3",),
+    sentence=(
+        "An agent whose leash is set to Autonomous on a tool that drafts, writes or sends runs "
+        "Assisted, and on a tool that moves money runs in Shadow, on the run the gate assembles "
+        "for a person; set to Autonomous on the install's own read tool it runs Autonomous, and "
+        "the leash its page shows still says Autonomous."
+    ),
+)
+async def a_tool_s_side_effect_holds_the_rung_an_agent_runs_at(h: Harness) -> None:
+    from brain.core.envelope import SideEffect
+    from brain.tools.registry import ToolRegistry
+
+    if {effect for effect, _, _ in HELD_AT} | {SideEffect.NONE.value} != {
+        one.value for one in SideEffect
+    }:
+        raise CheckFailedError("the check holds no rung for a side effect a tool can have")
+    installed = _install_registry(h)
+    reads = [one for one in installed.definitions() if one.side_effect is SideEffect.NONE]
+    if not reads:
+        raise CheckFailedError("the install's builder registered no tool that only reads")
+    acting = ToolRegistry()
+    for effect, name, _ in HELD_AT:
+        acting.register(_definition(name, side_effect=effect), _declared_handler)
+    acting.freeze()
+
+    await h.found_departments()
+    person = h.principal(A, "leash")
+    await h.person(person, department=A, grants=_in(A, WRITES, reads[0].required_capability))
+    reach = await h.reach(person)
+
+    # The positive case first: a tool that only reads keeps every rung it is given.
+    shown, ran, stepped = await _held(h, reach, installed, reads[0])
+    if (shown, ran, stepped) != (CONFIGURED, CONFIGURED, CONFIGURED):
+        raise CheckFailedError(
+            "the install's own read tool set to Autonomous did not run Autonomous"
+        )
+
+    for _, name, rung in HELD_AT:
+        shown, ran, stepped = await _held(h, reach, acting, acting.get(name).definition)
+        if shown != CONFIGURED:
+            raise CheckFailedError(
+                "the leash an agent's page shows is not the one configured for it"
+            )
+        if ran != rung:
+            raise CheckFailedError(
+                "a leash set to Autonomous on a tool that acts ran above the rung its side effect "
+                "allows"
+            )
+        if stepped != rung:
+            raise CheckFailedError(
+                "a run carries a leash that lets a step on a tool that acts run above its side "
+                "effect's rung"
+            )
