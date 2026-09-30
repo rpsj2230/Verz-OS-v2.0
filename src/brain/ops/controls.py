@@ -877,6 +877,8 @@ CONTROLS: Final[tuple[Control, ...]] = (
             "brain.ops.connector_sync_run:run_connector_sync_now",
             "brain.ops.connector_sync:plan_for",
             "brain.ops.connector_sync:after_attempt",
+            # The switched-on Lark Base's minimal index, read on the same schedule (M11.6.3).
+            "brain.ops.lark_base_index:index_if_due",
         ),
         guards=(
             "that every source an administrator connected is read on its own interval under its "
