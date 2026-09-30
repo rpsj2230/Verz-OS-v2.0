@@ -56,10 +56,24 @@ that holds its form, asking for exactly the form's settings and its key, so the 
 form cannot drift apart; a source connected at the server ends with the hand-over and asks for
 nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
 
+**A source that is views in a company's own database is read by a `ViewReading`, which is a small
+typed branch of the one worker loop rather than a second loop (M11.6.1).** A REST reading hands the
+worker an operation, a page's arguments and one header, and the worker makes the call. A database
+has no operation, no page and no header: one read of one view is one bounded statement, and what the
+worker holds for it is a user and a password. So `reading` is either shape, the worker, the test
+of a connection and the live read each branch on which it is, and everything else about a reading
+(the entities, the interval, the projection into the minimal index, the ceiling admitting each read,
+the lease on the credential) is the same code for both. The login is a `DatabaseLogin` the worker
+builds from the lease for one attempt, sealed so a traceback prints no password. See
+`A_DATABASE_IS_READ_BY_THE_SAME_LOOP`. Rejected: a second worker loop for databases, which would
+be a second copy of the admission, the lease, the page write and the backoff, each free to drift
+from the first; and a `RestOperation` that pretended a view read was a GET, which would put a
+statement's parts in a URL.
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.6.1
 """
 
 from __future__ import annotations
@@ -74,10 +88,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
-from brain.connectors.contract import ConnectorContractError
+from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import RestOperation
@@ -86,6 +100,7 @@ from brain.connectors.transports import SourceRecord
 from brain.connectors.write_verification import ReadBack, builds_a_manifest
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.ops.connect_steps import GuideStep
+from brain.ops.leases import SealedSecret
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -126,6 +141,16 @@ A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED: Final = (
     "that screen asks for exactly the form's settings and its key, so a setting added to the "
     "form is a step's field too. A source connected at the server ends with the hand-over and "
     "asks for nothing, because this screen has nothing to take."
+)
+
+#: Why a database's views are read by a branch of the one worker loop, not by a loop of their own.
+A_DATABASE_IS_READ_BY_THE_SAME_LOOP: Final = (
+    "A source that is views in a company's own database is read one bounded statement per view, "
+    "with a user and a password rather than a key in a header. Everything else about reading it is "
+    "what every source has: the ceiling admits each read, the credential is leased for the attempt "
+    "and given back, each record is held to the minimal index before it is written, and a failure "
+    "backs off. So the worker, the connection test and the live read each take one typed branch "
+    "for it, and a second loop that would copy all of that is not written."
 )
 
 #: What the last screen of a console source's guide asks for besides its settings.
@@ -362,6 +387,74 @@ class LiveLookup(Protocol):
         ...
 
 
+# ------------------------------------------------------------ reading a database's views
+class DatabaseLogin:
+    """A database user's name and password, for the reads of one attempt, and nothing else.
+
+    Built by whoever holds the lease, from the slot's two fields
+    (`brain.ops.credentials.user_and_password`), and handed to a `ViewReading` for as long as the
+    attempt's reads take. The password stays a `SealedSecret` until the one line that opens the
+    connection reveals it, and this object has no rendering of its own that could show it, so a
+    traceback or a log line holding one prints the user and not the password. Not a dataclass, for
+    `SealedSecret`'s reason: a generated `__repr__` is a rendering nobody chose.
+    """
+
+    __slots__ = ("password", "user")
+
+    def __init__(self, user: str, password: SealedSecret) -> None:
+        if not user.strip():
+            msg = "a database login names no user; the vault holds the password beside a user"
+            raise ConnectorContractError(msg)
+        self.user = user
+        self.password = password
+
+    def __repr__(self) -> str:
+        return f"DatabaseLogin(user={self.user!r})"
+
+    __str__ = __repr__
+
+
+@runtime_checkable
+class ViewReading(Protocol):
+    """How the worker reads a source that is views in a company's own database (M11.6.1).
+
+    One bounded read per entity: the connector's `read` builds the read from the connection's
+    settings, checks the address the connection names, runs it through its own executor and
+    classifies the answer, so the worker holds no statement, no address and no driver. A failure the
+    database gave is a `PageReply` whose call is REJECTED or UNAVAILABLE; an address the rule
+    refuses raises `brain.tools.fetch.UnsafeAddressError`, as a REST reading's operation does.
+    See `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+
+    **There is no method returning a document**, for `SourceReading`'s reason.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind the source projects, in the order a run reads them."""
+        ...
+
+    def refresh_interval(self) -> timedelta:
+        """How often a healthy source is read, which is the interval its freshness is judged by."""
+        ...
+
+    def read(
+        self,
+        request: FetchRequest,
+        *,
+        settings: Mapping[str, str],
+        login: DatabaseLogin,
+        resolver: Resolver,
+        fetched_at: str,
+    ) -> PageReply:
+        """One bounded read of the view this request's entity is kept in, as the source answered."""
+        ...
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """The index entry kept for one row, or None for a row with nothing to keep."""
+        ...
+
+
 # ------------------------------------------------------------------------ the declaration
 @dataclass(frozen=True)
 class ConnectorDeclaration:
@@ -380,8 +473,9 @@ class ConnectorDeclaration:
     console: ConsoleForm | None = None
     #: Why the console cannot connect this source yet. Empty exactly when `console` is set.
     not_from_the_console: str = ""
-    #: How the worker reads it on a schedule, or None when nothing does.
-    reading: SourceReading | None = None
+    #: How the worker reads it on a schedule, or None when nothing does. A REST source's reading
+    #: or a database's views (`ViewReading`); see `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+    reading: SourceReading | ViewReading | None = None
     #: How one of its records is read live at question time, or None when none is.
     live: LiveLookup | None = None
     #: The screens the console's connect flow shows for it. See the module docstring.

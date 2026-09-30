@@ -228,7 +228,11 @@ def manifests() -> tuple[ConnectorManifest, ...]:
         ),
         laravel_manifest(
             LaravelConnection(
-                schema="portal", bounds=ReadBounds(max_rows=200, timeout_seconds=5.0)
+                schema="portal",
+                bounds=ReadBounds(max_rows=200, timeout_seconds=5.0),
+                host="db.example.invalid",
+                port=3306,
+                private_network=False,
             ),
             ref=ref("connectors/creds/laravel_readonly"),
             visibility={"client": VISIBILITY, "user": VISIBILITY},

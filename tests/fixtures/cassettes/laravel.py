@@ -204,7 +204,14 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
     ),
 )
 
-RATE_LIMIT: Final = RateLimit(SOURCE, 0, "no ceiling", "Our own system.", True)
+RATE_LIMIT: Final = RateLimit(
+    SOURCE,
+    30,
+    "minute",
+    "This product's own pace against the company's own database, not a vendor's figure; "
+    "brain.ops.limits records it and laravel.THERE_IS_NO_MEASURED_CEILING_HERE says why.",
+    False,
+)
 
 
 def replay(recorded: Cassette) -> Replayed:

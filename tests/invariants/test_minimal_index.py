@@ -22,7 +22,7 @@ from dataclasses import replace
 import pytest
 
 from brain.connectors import declaration, xero
-from brain.connectors.declaration import SourceReading, declaration_gaps, shipped
+from brain.connectors.declaration import SourceReading, ViewReading, declaration_gaps, shipped
 from brain.connectors.minimal_index import (
     CANARY_MARK,
     assert_minimal_index,
@@ -112,8 +112,9 @@ def test_the_harness_sees_a_canary_planted_where_the_index_does_keep_it() -> Non
 
 def test_the_scheduled_sync_hands_nothing_to_the_knowledge_corpus() -> None:
     """**The document leg stays removed.** No module on the sync's path imports anything from
-    `brain.knowledge`, and a reading declares no method that could return a document. Read from
-    the source rather than from a flag, so it cannot be satisfied by a comment.
+    `brain.knowledge`, and a reading, a REST source's or a database's views', declares no method
+    that could return a document. Read from the source rather than from a flag, so it cannot be
+    satisfied by a comment.
 
     Delete this and the leg that embedded every body a source held into `know.chunk` can come
     back through one import, which is the bulk sync the owner has ruled out twice."""
@@ -128,10 +129,11 @@ def test_the_scheduled_sync_hands_nothing_to_the_knowledge_corpus() -> None:
             for alias in node.names
         }
         assert not {one for one in imported if one.startswith("brain.knowledge")}, module.__name__
-    methods = {
-        name
-        for name, member in inspect.getmembers(SourceReading)
-        if inspect.isfunction(member) and not name.startswith("_")
-    }
-    assert "projected" in methods, "the protocol was not read, so this checked nothing"
-    assert not {one for one in methods if "document" in one or "item" in one}
+    for protocol in (SourceReading, ViewReading):
+        methods = {
+            name
+            for name, member in inspect.getmembers(protocol)
+            if inspect.isfunction(member) and not name.startswith("_")
+        }
+        assert "projected" in methods, "the protocol was not read, so this checked nothing"
+        assert not {one for one in methods if "document" in one or "item" in one}, protocol
