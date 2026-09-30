@@ -23,8 +23,8 @@ from typing import Any
 
 import pytest
 
-from brain.ops.acceptance import CHECK_MODULES, FAILED, PASSED, Check, registered
-from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head
+from brain.ops.acceptance import FAILED, PASSED, Check, check_modules, registered
+from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head, checks_in
 
 MODULE = "brain.ops.acceptance_checks_speed"
 
@@ -77,7 +77,7 @@ def test_the_speed_checks_prove_the_speed_leaves_and_nothing_else() -> None:
     """Each check names the leaves it was scoped to, and the module is in the suite. Delete this
     and a check can close a leaf it does not exercise, or fall out of the run."""
     assert {check.name: check.leaves for check in mine()} == LEAVES
-    assert MODULE in CHECK_MODULES
+    assert MODULE in check_modules()
 
 
 def test_every_leaf_the_speed_checks_name_is_a_leaf_of_the_work_breakdown() -> None:
@@ -110,6 +110,19 @@ def test_a_frame_is_decoded_as_a_browser_dispatches_it_and_a_malformed_one_fails
     ]
     with pytest.raises(CheckFailedError):
         decoded(Answered(frames=("data: no event\n\n",)))
+
+
+def test_the_speed_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them, held here
+    beside the module's other tests so a package adding a check edits its own file and never a
+    list every package appends to. Delete this and a check can drop out of the module with the
+    page simply listing one fewer row."""
+    assert checks_in(MODULE) == [
+        "a_rule_row_answers_on_the_fast_lane_with_no_model",
+        "the_fast_lane_share_counts_people_and_not_machines",
+        "an_answer_streams_steps_then_citations_then_prose",
+        "every_prompt_opens_with_the_same_bytes_and_one_length",
+    ]
 
 
 # --------------------------------------------------------------------------- a real run

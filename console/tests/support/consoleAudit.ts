@@ -646,13 +646,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Scheduled jobs and background work": {
     screens: ["/jobs", "/jobs/:name", "/jobs/:name/:view", "/runs"],
-    routes: ["/api/v1/jobs*", "/api/v1/operate/runs"],
+    routes: ["/api/v1/jobs*", "/api/v1/operate/runs", "/api/v1/operations/interrupted"],
     tables: ["ops.control_run", "ops.operation", "ops.acceptance_result"],
     installation: [],
     gaps: [
       {
         what: "A run in progress cannot be stopped.",
         because: "The route says no_run_can_be_stopped: a control runs to its end inside the worker's tick and there is nothing to signal.",
+      },
+      {
+        what: "The interrupted actions a stopped worker left unconfirmed are served and no screen draws them or resolves one yet.",
+        leaf: "M27.15.46",
       },
     ],
   },
@@ -770,6 +774,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
   "mem.mark":
     "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
+  "POST /api/v1/widget/sessions":
+    "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
   "POST /api/v1/automation/tool-call":
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
   "chat.conversation":

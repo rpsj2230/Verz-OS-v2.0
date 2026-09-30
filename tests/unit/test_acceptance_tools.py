@@ -31,7 +31,7 @@ from brain.ops.acceptance import FAILED, PASSED, Check, reason_for, registered
 from brain.ops.acceptance_run import Harness
 from brain.ops.tool_store import stops_for_call
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_tools"
@@ -261,3 +261,16 @@ def test_the_catalogue_check_fails_when_the_table_no_longer_holds_the_grammar() 
         FAILED,
         "agent.tool_definition took a name outside the tool grammar",
     )
+
+
+def test_the_tools_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_tools") == [
+        "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
+        "a_tool_named_for_a_sensitive_effect_must_declare_it",
+        "a_switched_off_tool_is_refused_and_a_department_stops_its_own",
+        "a_tool_s_side_effect_holds_the_rung_an_agent_runs_at",
+    ]

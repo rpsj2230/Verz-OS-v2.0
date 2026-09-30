@@ -53,6 +53,10 @@ if TYPE_CHECKING:
 
 A, B = RESERVED_DEPARTMENTS
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 290
+
 #: The column the check's rule answers with: one a first upload holds restricted, so a reader of
 #: the table without its own grant is told nothing about it.
 ASKED: Final = "cost"

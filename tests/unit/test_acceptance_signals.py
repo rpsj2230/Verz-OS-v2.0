@@ -20,8 +20,8 @@ from typing import Any
 
 import pytest
 
-from brain.ops.acceptance import CHECK_MODULES, FAILED, PASSED, Check, registered
-from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head
+from brain.ops.acceptance import FAILED, PASSED, Check, check_modules, registered
+from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head, checks_in
 
 MODULE = "brain.ops.acceptance_checks_signals"
 
@@ -69,7 +69,7 @@ def one(name: str) -> Check:
 def test_the_signal_checks_prove_their_leaves_and_nothing_else() -> None:
     """Delete this and a check can close a leaf it does not exercise, or fall out of the run."""
     assert {check.name: check.leaves for check in mine()} == LEAVES
-    assert MODULE in CHECK_MODULES
+    assert MODULE in check_modules()
 
 
 def test_every_leaf_the_signal_checks_name_is_a_leaf_of_the_work_breakdown() -> None:
@@ -83,6 +83,17 @@ def test_every_table_the_signal_checks_write_is_one_the_suite_measures() -> None
     """Delete this and a table the checks write can be left out of the suite's count, so a
     check that committed a mark or a pause to a client's install would pass the suite."""
     assert set(WRITTEN_BY_SIGNAL_CHECKS) <= set(WRITTEN_BY_CHECKS)
+
+
+def test_the_signals_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them, held here
+    beside the module's other tests so a package adding a check edits its own file and never a
+    list every package appends to. Delete this and a check can drop out of the module with the
+    page simply listing one fewer row."""
+    assert checks_in(MODULE) == [
+        "a_mark_is_counted_and_changes_nothing",
+        "pausing_an_agent_stops_what_its_runs_teach",
+    ]
 
 
 # --------------------------------------------------------------------------- a real run

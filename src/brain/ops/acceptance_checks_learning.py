@@ -48,6 +48,10 @@ if TYPE_CHECKING:
 
 A, B = RESERVED_DEPARTMENTS
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 280
+
 #: The capability a Learning screen reader holds to open it, and the one that undoes.
 LEARNING_READ: Final = "read:learning"
 

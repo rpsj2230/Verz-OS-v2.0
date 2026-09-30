@@ -24,8 +24,8 @@ import pytest
 
 from brain.gate.cache_key import CachedAnswer
 from brain.ops import acceptance_checks_cache as cache
-from brain.ops.acceptance import CHECK_MODULES, FAILED, NOT_RUN, PASSED, Check, registered
-from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head
+from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, check_modules, registered
+from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head, checks_in
 
 MODULE = "brain.ops.acceptance_checks_cache"
 NAME = "a_cached_answer_reaches_only_the_reach_it_was_computed_for"
@@ -68,7 +68,7 @@ def mine() -> tuple[Check, ...]:
 def test_the_cache_check_proves_its_leaf_and_nothing_else() -> None:
     """Delete this and the check can close a leaf it does not exercise, or fall out of the run."""
     assert {check.name: check.leaves for check in mine()} == {NAME: ("M6.5.2",)}
-    assert MODULE in CHECK_MODULES
+    assert MODULE in check_modules()
 
 
 def test_the_cache_checks_leaf_is_a_leaf_of_the_work_breakdown() -> None:
@@ -95,6 +95,16 @@ def test_the_store_the_check_uses_keeps_every_key_it_writes_so_each_is_removed()
     kept.set("k2", answer, 60)
     assert kept.keys == ["k1", "k2"]
     assert kept.get("k1") == answer and kept.get("missing") is None
+
+
+def test_the_cache_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them, held here
+    beside the module's other tests so a package adding a check edits its own file and never a
+    list every package appends to. Delete this and a check can drop out of the module with the
+    page simply listing one fewer row."""
+    assert checks_in(MODULE) == [
+        "a_cached_answer_reaches_only_the_reach_it_was_computed_for",
+    ]
 
 
 # --------------------------------------------------------------------------- a real run
