@@ -1154,6 +1154,30 @@ def model_lane_of(state: Any) -> ModelLane | None:
 DEFAULT_AGENT: Final = "brain"
 
 
+#: Why a question narrowed to kinds of knowledge reads the library alone.
+A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE: Final = (
+    "A question narrowed to kinds of knowledge (M7.6.1) is answered from those kinds in the "
+    "company's own library and nothing else: the Lark Wiki and Slack read live beside the library "
+    "hold no kind, so they are left out of a narrowed question rather than asked and shown. Until "
+    "2026-09-30 a live source wrapped around the library hid it from the narrowing, and a question "
+    "narrowed to FAQs was shown every kind."
+)
+
+
+def narrowed_to(search: Any, kinds: tuple[KnowledgeKind, ...]) -> Any:
+    """The library's own search narrowed to `kinds`, unwrapped from any live source beside it.
+
+    See `A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`. A search that is not the library's, and
+    wraps none, is handed back as it is.
+    """
+    inner = search
+    while not isinstance(inner, DocumentSearchTool) and hasattr(inner, "library"):
+        inner = inner.library
+    if isinstance(inner, DocumentSearchTool):
+        return replace(inner, kinds=kinds)
+    return search
+
+
 def model_lane_for(
     state: Any,
     agent: AgentRecord | None,
@@ -1171,8 +1195,8 @@ def model_lane_for(
     lane = model_lane_of(state)
     if lane is None:
         return None
-    if kinds and isinstance(lane.search, DocumentSearchTool):
-        lane = replace(lane, search=replace(lane.search, kinds=kinds))
+    if kinds:
+        lane = replace(lane, search=narrowed_to(lane.search, kinds))
     if follow_up is not None:
         lane = replace(lane, follow_up=follow_up)
     if agent is None:

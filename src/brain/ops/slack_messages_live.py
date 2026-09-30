@@ -266,6 +266,11 @@ class Alongside:
         self._first = first
         self._second = second
 
+    @property
+    def library(self) -> Any:
+        """The search Slack was put beside, which a narrowed question reads alone."""
+        return self._first
+
     async def passages(
         self, question: str, *, entitlement: EntitlementSet, now: datetime
     ) -> TypedResult[KnowledgePassage]:

@@ -383,3 +383,33 @@ def test_the_worker_keeps_the_invited_channels_and_the_confirmed_members_digests
         (slack.MEMBER, MEMBER),
     ]
     assert MEMBER_EMAIL not in json.dumps([one[3] for one in kept])
+
+
+# ------------------------------------------------------------------ beside the library
+def test_a_question_narrowed_to_a_kind_reads_the_library_alone_through_every_wrapper() -> None:
+    """`A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`. The library's search is found under Slack
+    and under the Lark Wiki, narrowed to the kinds asked for, and neither live source is asked.
+    Delete this and a question narrowed to FAQs is shown every kind, and every Slack message, the
+    moment Slack is connected: which is what the install's own answer check caught."""
+    from brain.api_routes import narrowed_to
+    from brain.gate.model_lane import DocumentSearchTool
+    from brain.knowledge.kinds import KnowledgeKind
+    from brain.ops.lark_wiki_live import WithWiki
+    from brain.ops.slack_messages_live import Alongside
+
+    def handler(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("nothing is searched here")
+
+    library = DocumentSearchTool(handler=handler)
+    slack_beside = passages_over(Recorded(member_of=(), histories=HISTORIES))
+    kinds = (next(iter(KnowledgeKind)),)
+    for wrapped in (
+        Alongside(library, slack_beside),
+        Alongside(WithWiki(library, None), slack_beside),  # type: ignore[arg-type]
+    ):
+        narrowed = narrowed_to(wrapped, kinds)
+        assert isinstance(narrowed, DocumentSearchTool)
+        assert narrowed.kinds == kinds
+    # The positive sibling: a search that is not the library's, and wraps none, is left alone.
+    other = object()
+    assert narrowed_to(other, kinds) is other

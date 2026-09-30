@@ -105,8 +105,8 @@ def test_the_slack_check_fails_where_the_path_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
     """Three breaks, one per property: membership no longer asked of Slack, so a member is read
-    every channel the index lists; an asker whose address Slack does not know matched to a member the
-    index holds; and a member's address kept in the index beside its digest, as a label. Each
+    every channel the index lists; an asker whose address Slack does not know matched to a member
+    the index holds; and a member's address kept in the index beside its digest, as a label. Each
     fails the check with its own sentence. Delete this and the check can pass with the property
     gone."""
     import brain.connectors.slack_messages as slack
