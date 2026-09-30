@@ -128,6 +128,45 @@ def test_the_card_shows_the_artefact_exactly_as_it_was_rendered() -> None:
     assert shown.runs_as == suspension.principal_id
 
 
+def test_an_agent_s_action_offers_taking_over_and_a_person_s_own_request_does_not() -> None:
+    """M33.6.1.3. The card says whether the third choice is offered, and it is offered for an
+    agent's prepared action and never for a promotion, which is a person's own request with no
+    agent's rung behind it. Both halves, so a card that offered it for everything or for nothing
+    fails. Delete this and a takeover of somebody's own document lowers an agent that did nothing,
+    which `ONLY_AN_AGENT_S_WORK_IS_TAKEN_OVER` refuses."""
+    from brain.knowledge.promotion import PROMOTION_AGENT
+    from brain.knowledge.visibility import PROMOTION_CAPABILITY
+
+    agents = card(a_suspension(), an_approver(), NOW)
+    asked = an_action().model_copy(
+        update={
+            "agent_id": PROMOTION_AGENT,
+            "tool": an_action().tool.model_copy(
+                update={"required_capability": PROMOTION_CAPABILITY.value}
+            ),
+        }
+    )
+    approver = EntitlementSet(
+        principal_id="u_approver",
+        grants=(
+            Grant(
+                capability=PROMOTION_CAPABILITY,
+                scope=Scope(clauses=(Clause(field="department", op=Op.EQ, value=MAINTENANCE),)),
+            ),
+        ),
+    )
+    persons = card(a_suspension("sus_2", action=asked), approver, NOW)
+
+    assert agents is not None and agents.may_take_over is True
+    assert persons is not None and persons.may_take_over is False
+    assert (
+        Card(
+            suspension_id="sus_3", artefact="x", runs_as="u", raised_at=NOW, expires_at=NOW
+        ).may_take_over
+        is False
+    )
+
+
 def test_the_card_has_no_field_a_tool_call_could_arrive_in() -> None:
     """The other half of M33.6.1.2, asked of the class rather than of a reviewer. A tool call
     is a capability name and a row of arguments: the capability is a fact about the permission
