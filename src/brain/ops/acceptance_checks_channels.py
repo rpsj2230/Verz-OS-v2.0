@@ -28,7 +28,13 @@ events route, and the binding prompt it answers with is kept by a transport that
 documents a success. What only the owner's workspace proves is that Slack signs and delivers as
 documented and accepts the post.
 
-Task ids: M10.5.6, M10.5.1
+**Telegram: the address the install tells Telegram is the one it then believes.** A bot token
+made by the check is given to the wire's `setWebhook` call, and the header named in that call is
+the one a message is posted with: accepted, answered with the binding prompt on the token, and a
+header made any other way refused. What only the owner's bot proves is that Telegram accepts the
+registration and sends and delivers as documented.
+
+Task ids: M10.5.6, M10.5.1, M10.5.2, M10.5.4
 """
 
 from __future__ import annotations
@@ -577,3 +583,104 @@ async def a_teams_message_is_taken_signed_and_answered_in_its_chat(h: Harness) -
         raise CheckFailedError("the answer was not authorised at the tenant's own login")
     if json.loads(built.body).get("text") != Unrecognised(channel=Channel.TEAMS).prompt:
         raise CheckFailedError("the answer was not the binding prompt")
+
+
+# ------------------------------------------------------------------------------ telegram
+@dataclass
+class _TelegramKept(_Kept):
+    """The check's transport, answering each send as the Bot API documents a success."""
+
+    def send(self, request: Any) -> Any:
+        from brain.channels.adapter import VendorAnswer
+
+        self.sent.append(request)
+        return VendorAnswer(status=200, body=b'{"ok":true,"result":{}}')
+
+
+@check(
+    leaves=("M10.5.4",),
+    sentence=(
+        "A Telegram channel set up with a bot token the check made builds the setWebhook call "
+        "that names this install's events address and a header made from the token, accepts a "
+        "private message carrying that header, refuses one carrying any other, and answers the "
+        "sender with the binding prompt through sendMessage on the token, kept rather than sent."
+    ),
+)
+async def a_telegram_message_on_the_registered_header_is_answered(h: Harness) -> None:
+    import httpx
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.adapter import BOT_ID
+    from brain.channels.telegram import AUTHENTICATING_HEADER, TELEGRAM_API_URL, WIRE
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.ops.channel_store import StoredChannels
+
+    token = f"{secrets.randbelow(10**9) + 10**9}:{secrets.token_urlsafe(26)}"
+    tenant = {BOT_ID: f"acceptance_{h.run[:8]}_bot"}
+    await StoredChannels(h.sessions).save(
+        Channel.TELEGRAM,
+        enabled=True,
+        tenant=tenant,
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    events = f"/api/v1/channels/{Channel.TELEGRAM.value}/events"
+    address = f"https://acceptance.invalid{events}"
+    told = WIRE.registration_for(address=address, secret=token, tenant=tenant)
+    registered = json.loads(told.body)
+    if told.url != f"{TELEGRAM_API_URL}/bot{token}/setWebhook" or registered.get("url") != address:
+        raise CheckFailedError("the address was not registered with Telegram's own API")
+    header = registered.get("secret_token")
+    if not isinstance(header, str) or token in header:
+        raise CheckFailedError("the header Telegram is told to send is not made from the token")
+
+    kept = _TelegramKept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(token)
+    state.channel_transport = kept
+    state.operation_ledger = _HeldLedger()
+    sender = secrets.randbelow(10**9) + 10**9
+
+    async def post(n: int, presented: str) -> Any:
+        update = {
+            "update_id": n,
+            "message": {
+                "message_id": n,
+                "from": {"id": sender, "is_bot": False, "first_name": "Acceptance"},
+                "chat": {"id": sender, "type": "private"},
+                "date": int(time.time()),
+                "text": h.word(),
+            },
+        }
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="https://acceptance.invalid"
+        ) as c:
+            return await c.post(
+                events,
+                content=json.dumps(update).encode("utf-8"),
+                headers={AUTHENTICATING_HEADER: presented},
+            )
+
+    forged = await post(secrets.randbelow(10**9), secrets.token_hex(32))
+    if forged.status_code == 200 or kept.sent:
+        raise CheckFailedError("an update carrying another header was accepted")
+    accepted = await post(secrets.randbelow(10**9) + 1, header)
+    if accepted.status_code != 200 or accepted.json().get("status") != "accepted":
+        raise CheckFailedError("an update carrying the registered header was not accepted")
+    if len(kept.sent) != 1:
+        raise CheckFailedError(
+            "a private message from somebody bound to nobody was not answered once"
+        )
+    (built,) = kept.sent
+    if built.url != f"{TELEGRAM_API_URL}/bot{token}/sendMessage":
+        raise CheckFailedError("the answer was not built for Telegram's API on the bot's token")
+    body = json.loads(built.body)
+    if body != {"chat_id": sender, "text": Unrecognised(channel=Channel.TELEGRAM).prompt}:
+        raise CheckFailedError("the answer was not the binding prompt, to the sender alone")
