@@ -151,6 +151,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
@@ -179,7 +180,7 @@ from brain.gate.badge_store import item_lookup_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
-from brain.gate.fast_lane import RowReader
+from brain.gate.fast_lane import FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
 from brain.gate.live_records import LiveRecords
@@ -202,6 +203,7 @@ from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
+from brain.knowledge.connector_rows import connected_questions
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
 from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.rows import (
@@ -215,6 +217,7 @@ from brain.knowledge.search import KNOWLEDGE_READ
 from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
+from brain.ops.connector_store import StoredConnections
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
@@ -1006,6 +1009,26 @@ def source_field_policies(registry: ToolRegistry) -> dict[tuple[str, str], Field
     return policies
 
 
+async def connected_questions_of(state: Any) -> tuple[FastPathRule, ...]:
+    """The question shapes of the sources connected on this install now (M11.6.5, M11.6.2).
+
+    Read from the connection table on each question, as `classified_lane_of` reads the uploaded
+    tables, so a source connected on the Connectors screen answers from the next question and one
+    disconnected does not. None on a process with no database; a table that cannot be read is no
+    connected source rather than a failed question. See
+    `brain.knowledge.connector_rows.A_SOURCE_NOBODY_CONNECTED_ASKS_NOTHING`.
+    """
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return ()
+    try:
+        connected = await StoredConnections(sessions).connected()
+    except SQLAlchemyError as exc:
+        log.warning("connected sources unread for questions", error=type(exc).__name__)
+        return ()
+    return connected_questions(one.connector for one in connected)
+
+
 def live_records_of(state: Any) -> LiveRecords | None:
     """What reads a connected source's records live for this process, or None where nothing can.
 
@@ -1506,7 +1529,9 @@ async def answered_for(
     # Uploaded classified tables (Classification screen) join the fast lane beside the
     # built-in rules, each column answered only to who may read it.
     tables = await classified_lane_of(request.app.state)
-    rules = (*getattr(request.app.state, "fast_path_rules", ()), *tables.rules)
+    # And every connected source's records, asked in the same words (M11.6.5, M11.6.2).
+    sourced = await connected_questions_of(request.app.state)
+    rules = (*getattr(request.app.state, "fast_path_rules", ()), *tables.rules, *sourced)
     sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
     # What a finished request owes, installed by `brain.app.lifespan` through
     # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold

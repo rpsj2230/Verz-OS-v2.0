@@ -9,10 +9,16 @@
  * **This screen is SCREEN 6 of `docs/screens.html`.** A library of skills with their source,
  * version, reviewer and state; a review pane with Approve and Reject and the words that changed;
  * what each skill asks for; and the drift between agents pinned to different bytes of one skill.
- * `brain.skill_routes` serves all of it from the library `0056` and `0121` store, and six writes:
+ * `brain.skill_routes` serves all of it from the library `0056` and `0121` store, and seven writes:
  * add a pasted or chosen package, import from a GitHub repository at a commit or from an address
- * (the design's Connect repo and Paste URL), save an edit as a new version, set a skill's
- * categories, decide about one, and assign an approved one to an agent.
+ * (the design's Connect repo and Paste URL), import a written procedure from a Word document or a
+ * Confluence page (M12.2.10), save an edit as a new version, set a skill's categories, decide about
+ * one, and assign an approved one to an agent.
+ *
+ * **A written procedure is sent as the file itself**, raw, with its name in a header, as a knowledge
+ * upload is: the API reads it under a ceiling as it arrives. What its reader found for a reviewer
+ * comes back on the row as `findings`, read from the draft's own words, and `findingWords` says each
+ * one in a sentence.
  *
  * **The library list is `GET /skills/library`, searched and filtered by the route** (M27.11.8), and
  * one skill's page reads `GET /skills` narrowed to its name. The paths for the lifecycle writes,
@@ -28,7 +34,7 @@
  * on the page is the review queue's, which `brain.console.govern_estate.skill_queue` computes over
  * exactly the entries listed beneath it.
  *
- * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.16.1
+ * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.16.1, M12.2.10
  */
 
 import type { components } from "../api/schema";
@@ -63,12 +69,17 @@ export type LibraryRow = components["schemas"]["SkillVersionRowView"];
 export type Retired = components["schemas"]["RetirementView"];
 /** What a detachment answered, as `DetachedView` sends it (M27.15.55). */
 export type Detached = components["schemas"]["DetachedView"];
+/** One thing a reviewer should read in a written procedure's draft, as `ProcedureFindingView` sends it. */
+export type ProcedureFinding = components["schemas"]["ProcedureFindingView"];
 
 /** Where the API keeps this screen, and its writes. */
 export const SKILLS_API_PATH = "/skills";
 
 /** Where a repository or an address import is sent. */
 export const IMPORT_PATH = `${SKILLS_API_PATH}/imports`;
+
+/** Where a written procedure is sent, as the file itself (M12.2.10). */
+export const PROCEDURE_PATH = `${SKILLS_API_PATH}/procedures`;
 
 /** The searchable library: one row per version, searched and filtered by the route (M27.11.8). */
 export const LIBRARY_API_PATH = `${SKILLS_API_PATH}/library`;
@@ -112,6 +123,15 @@ export const SKILLS_PATH = "/skills";
  * which the page test reads out of the Python source.
  */
 export const MAX_PACKAGE_BYTES = 256 * 1024;
+
+/**
+ * The largest procedure the API reads, in bytes. `brain.tools.sop_files.MAX_PROCEDURE_BYTES`, which
+ * the page test reads out of the Python source.
+ */
+export const MAX_PROCEDURE_BYTES = 10 * 1024 * 1024;
+
+/** The file names a procedure is imported under, as `brain.tools.sop_files` reads them. */
+export const PROCEDURE_SUFFIXES: readonly string[] = Object.freeze([".docx", ".html", ".htm", ".xhtml", ".xml"]);
 
 /**
  * The request for one skill's row, when a skill is open: a filter on its name, so the skill is found
@@ -438,4 +458,50 @@ export function assignedSentence(done: Assigned, agent: AgentChoice | undefined)
       ? "Through that agent it can use none of the tools it names for you."
       : `Through that agent it can use, for you: ${done.reach.join(", ")}.`;
   return `${done.skill_name} was assigned to ${who}. ${reach}`;
+}
+
+// ------------------------------------------------------------------- written procedures (M12.2.10)
+
+/** Why a chosen file cannot be sent as a procedure yet, or null. The API decides everything else. */
+export function procedureProblem(file: { readonly name: string; readonly size: number } | null): string | null {
+  if (file === null) {
+    return "Choose a Word document (.docx) or a Confluence page exported as HTML.";
+  }
+  const lowered = file.name.toLowerCase();
+  if (lowered.endsWith(".doc")) {
+    return "This is Word's older .doc format. Open it in Word, save it as a .docx and choose that.";
+  }
+  if (!PROCEDURE_SUFFIXES.some((suffix) => lowered.endsWith(suffix))) {
+    return "A procedure is a Word document (.docx) or a Confluence page exported as HTML (.html).";
+  }
+  if (file.size === 0) {
+    return "That file is empty.";
+  }
+  if (file.size > MAX_PROCEDURE_BYTES) {
+    return `A procedure is at most ${String(MAX_PROCEDURE_BYTES / (1024 * 1024))} MB, and this file is larger.`;
+  }
+  return null;
+}
+
+/** What each kind of finding means, in words. `brain.tools.sop_import.Concern`, which the test reads. */
+export const CONCERN_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  addressed_to_the_system: "speaks to the AI rather than to a colleague; decide whether it belongs",
+  hidden_content: "holds something a reader of the original does not see",
+  lost_structure: "marks something the file holds that could not be carried across",
+  named_tool: "names a system the procedure uses; no tool was given to the skill",
+});
+
+/** One finding as a sentence: its line in the draft, what it is about, and the line itself. */
+export function findingWords(finding: ProcedureFinding): string {
+  const about = CONCERN_WORDS[finding.concern] ?? finding.concern;
+  return `Line ${String(finding.line_number)} ${about}: "${finding.excerpt}"`;
+}
+
+/** The sentence after a procedure was imported. The findings are listed beneath it. */
+export function procedureSentence(one: LibrarySkill): string {
+  const read =
+    one.findings.length === 0
+      ? "Nothing in it was found that a reviewer needs pointing to."
+      : "Read what is listed below before it is approved.";
+  return `${one.name} ${one.version} was imported as a draft and is waiting for review. ${read}`;
 }

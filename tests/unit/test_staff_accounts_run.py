@@ -26,7 +26,7 @@ from brain.connectors.staff_directories import Answer, Outbound
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
-from brain.identity.staff_accounts import AccountRefusal
+from brain.identity.staff_accounts import DEFAULT_ALLOWED, AccountRefusal
 from brain.identity.staff_roster import RunOutcome, digest_of
 from brain.identity.staff_source import (
     DEFAULT_TRUST,
@@ -35,6 +35,7 @@ from brain.identity.staff_source import (
     Roster,
     StaffRecord,
 )
+from brain.identity.standing import standings
 from brain.ops.connectable import key_reference
 from brain.ops.connector_sync_run import ConnectorKeyAbsentError
 from brain.ops.secrets import SecretRef
@@ -46,6 +47,7 @@ from brain.ops.staff_accounts_run import (
     provide_accounts,
 )
 from brain.ops.staff_sync_run import sync_staff_on
+from brain.ops.standing_run import apply_standing, plan_standing
 from brain.session import make_app_engine, make_session_factory
 from tests.fixtures.scratch_postgres import run, sql
 from tests.fixtures.stand_in_keycloak import ISSUER, SECRET, StandInKeycloak, User
@@ -119,9 +121,10 @@ def provide(
     absent_is_gone: bool = False,
     given: Keys | None = None,
 ) -> AccountRun:
-    return through(
-        url,
-        lambda sessions: provide_accounts(
+    """The accounts step, then the standing step the run applies after it (unless a trial)."""
+
+    async def both(sessions: async_sessionmaker[AsyncSession]) -> AccountRun:
+        ran = await provide_accounts(
             sessions=sessions,
             roster=roster,
             stable_ids=stable(*(one.work_address.split("@")[0] for one in roster.people)),
@@ -131,8 +134,16 @@ def provide(
             now=at,
             absent_is_gone=absent_is_gone,
             trial=trial,
-        ),
-    )
+        )
+        if not trial:
+            where = standings(members=(), writes=(), people=roster.people)
+            plan = await plan_standing(
+                sessions, source=roster.source, standings=where, allowed=DEFAULT_ALLOWED, now=at
+            )
+            await apply_standing(sessions, plan, source=roster.source, now=at)
+        return ran
+
+    return through(url, both)
 
 
 def signed_in_as(url: str, account_id: str) -> list[tuple[Any, ...]]:
@@ -225,9 +236,9 @@ def test_a_leaver_s_account_is_closed_their_sessions_ended_and_their_person_disa
     url: str,
 ) -> None:
     """The next sync after somebody leaves: the account the sync made is disabled and signed out,
-    and the Brain person behind it is disabled, which ends their Brain sessions. When the source
-    lists them as active again both are opened. Delete this and a leaver keeps a way in, or stays
-    locked out after they come back."""
+    and the standing step disables the Brain person behind it, which ends their Brain sessions.
+    When the source lists them as active again both are opened. Delete this and a leaver keeps a
+    way in, or stays locked out after they come back."""
     keycloak = StandInKeycloak()
     provide(url, keycloak, listed(person("di")))
     di = account_of(keycloak, "di@example.test")
@@ -246,8 +257,10 @@ def test_a_leaver_s_account_is_closed_their_sessions_ended_and_their_person_disa
 
 def test_an_account_somebody_made_by_hand_is_linked_once_and_never_closed(url: str) -> None:
     """The first administrator's account, or one made before the sync: linked to a Brain person and
-    marked with the source, not duplicated, and left open when the source says the person left.
-    Delete this and the sync can lock a company out of its own install."""
+    marked with the source, not duplicated, and left open at the sign-in service when the source
+    says the person left. Whether they may still use the Brain is the standing step's, which keeps
+    a leaver out (and never the last administrator: `tests/unit/test_standing_run.py`). Delete
+    this and the sync can close accounts it never made."""
     keycloak = StandInKeycloak()
     by_hand = User(id="by-hand", username="fe@example.test", email="fe@example.test")
     keycloak.users[by_hand.id] = by_hand
@@ -259,7 +272,7 @@ def test_an_account_somebody_made_by_hand_is_linked_once_and_never_closed(url: s
 
     provide(url, keycloak, listed(person("fe", status=EmploymentStatus.LEFT)), at=LATER)
     assert by_hand.enabled is True
-    assert [row[1] for row in signed_in_as(url, "by-hand")] == [False]
+    assert [row[1] for row in signed_in_as(url, "by-hand")] == [True]
 
 
 def test_a_trial_says_what_a_run_would_do_and_makes_nobody(url: str) -> None:

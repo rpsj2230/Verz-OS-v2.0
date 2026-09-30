@@ -35,6 +35,17 @@ a licence or a readme beside its `SKILL.md`, and refusing those would refuse mos
 they are left where they are and never stored, which is the same outcome by a gentler route: no
 byte the digest does not cover is kept. A `SKILL.md` that declares scripts is still refused.
 
+**A written procedure arrives as a draft skill, read by the importer's two readers and never
+believed (M12.2.10).** `read_procedure_file` hands a Word document or a Confluence page to
+`brain.tools.sop_files`, which refuses what is not what it says it is and writes the procedure as
+Markdown, and to `brain.tools.sop_import`, which names it and reads what a reviewer should see.
+`procedure_package` then makes it a skill through the same `SKILL.md` parser every other way in
+uses, so a procedure is held to every rule a package is, with the upload's source and the file's
+name, whose suffix is how the format is kept without a column for it. The findings are never
+stored: `procedure_findings` reads them from the body every time a row is shown, so what the
+importer is told and what a later reviewer is told are one list. See
+`A_PROCEDURE_IS_A_SKILL_DRAFT_AND_ITS_FINDINGS_ARE_READ_FROM_ITS_BODY`.
+
 **An administrator may approve a skill they imported, and the ledger says it was their own (D4,
 M12.4.6).** Until 2026-09-28 `decided` refused the importer whatever they held, and the table
 refused the row. The owner decided otherwise on 2026-09-18: the two-person rule stays for
@@ -90,6 +101,7 @@ Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the
 instant arrive as arguments.
 
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.15.55
+Task ids: M12.2.10
 """
 
 from __future__ import annotations
@@ -129,6 +141,7 @@ from brain.tools.skills import (
     SkillPin,
     SkillSource,
     SourceKind,
+    markdown_of,
     required_capabilities,
     safe_archive_member,
     safe_archive_members,
@@ -137,6 +150,8 @@ from brain.tools.skills import (
     unknown_tools,
     version_key,
 )
+from brain.tools.sop_files import format_of, kept_name, procedure_text
+from brain.tools.sop_import import Finding, SopDraft, SopError, read_procedure
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why adding a skill reads it and runs nothing.
@@ -220,6 +235,24 @@ A_DETACHMENT_IS_A_ROW_AND_THE_CURRENT_ASSIGNMENTS_ARE_WHAT_NO_ROW_ENDED: Final =
 )
 
 #: Why a refusal to add a skill says what to do.
+#: Why a procedure is a draft skill and where its findings come from.
+A_PROCEDURE_IS_A_SKILL_DRAFT_AND_ITS_FINDINGS_ARE_READ_FROM_ITS_BODY: Final = (
+    "A written procedure is instructions somebody with edit rights on a wiki wrote, so it lands "
+    "exactly as any other import does: undecided, withheld from every agent, and naming no tool, "
+    "whatever systems its text mentions. What the reader noticed (a line addressed to the "
+    "system, text nobody can see, a macro whose content was not in the file) is written into "
+    "the body as the line itself or as a note on it, and read again from the body whenever the "
+    "row is shown, so the reviewer who opens the draft later is shown what the importer was."
+)
+
+#: Why importing a procedure again is its next version.
+A_PROCEDURE_IMPORTED_AGAIN_IS_ITS_NEXT_VERSION: Final = (
+    "A procedure is named for its title, so the revised document imports under the name the "
+    "last one did. It lands as the next version of that name, compared with the version already "
+    "approved, and a document whose words match a version already held is refused, because a "
+    "second copy of the same words would be a second review of nothing."
+)
+
 A_PACKAGE_REFUSAL_SAYS_WHAT_TO_CHANGE: Final = (
     "The person adding a skill holds the authority to add it and is looking at the package, so "
     "nothing about the install is disclosed by telling them what is wrong with the file. Every "
@@ -279,6 +312,16 @@ CATEGORY_RE: Final = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 #: The longest address a URL import may name: `brain.tools.skills.SkillSource.location`'s bound,
 #: which a test holds this to, so an address the source would refuse is refused before the fetch.
 MAX_ADDRESS_CHARS: Final = 400
+
+#: The version a procedure's first import is given, and how a later one moves it.
+FIRST_PROCEDURE_VERSION: Final = "1.0.0"
+
+#: What a procedure's description says. A Word document has no line saying when to use it, and
+#: every skill's description has to open by saying so (M12.4.12).
+PROCEDURE_DESCRIPTION: Final = "Use when following the written procedure '{title}'"
+
+#: The longest title a description carries, so the description stays inside its 400 characters.
+MAX_TITLE_IN_DESCRIPTION: Final = 300
 
 #: The most categories one skill carries. Enough to file a skill several ways; a skill in every
 #: category is in none.
@@ -667,6 +710,103 @@ def read_github(source: SkillSource, tarball: bytes) -> Package:
     text = _markdown_text(raw)
     pinned = source.model_copy(update={"content_digest": hashlib.sha256(raw).hexdigest()})
     return Package(skill=_skill_of(text), source=pinned)
+
+
+# ------------------------------------------------------- from a written procedure (M12.2.10)
+@dataclass(frozen=True)
+class Procedure:
+    """A written procedure read out of its file: the draft, and where its bytes came from.
+
+    Not yet a skill, because its version is decided against the library the write reads. See
+    `A_PROCEDURE_IMPORTED_AGAIN_IS_ITS_NEXT_VERSION`.
+    """
+
+    draft: SopDraft
+    source: SkillSource
+
+
+def read_procedure_file(file_name: str, content: bytes) -> Procedure:
+    """A Word document or a Confluence page read as a procedure, or a refusal to act on.
+
+    `brain.tools.sop_files` refuses a file that is not what its name says, over its bound, or an
+    archive that expands past one, before any parser sees it, and writes the procedure with its
+    headings marked; `brain.tools.sop_import` reads that text as a draft. The source is an upload
+    kept under the file's own name in the archive-member grammar, with the digest of the bytes
+    that arrived, so the format is recorded by the suffix and nothing needs a new column.
+    """
+    try:
+        read = procedure_text(file_name, content)
+        draft = read_procedure(
+            read.text,
+            source=read.source,
+            fallback_name=read.fallback_name,
+            headings_marked=True,
+        )
+    except SopError as refused:
+        raise SkillLibraryError(str(refused)) from None
+    source = SkillSource(
+        kind=SourceKind.UPLOAD,
+        location=kept_name(file_name),
+        content_digest=hashlib.sha256(content).hexdigest(),
+    )
+    return Procedure(draft=draft, source=source)
+
+
+def procedure_package(procedure: Procedure, library: Iterable[LibrarySkill]) -> Package:
+    """The procedure as a package: named for its title, at the next version of that name.
+
+    See `A_PROCEDURE_IMPORTED_AGAIN_IS_ITS_NEXT_VERSION`. The skill is written out as the
+    `SKILL.md` it would be and read back through `_skill_of`, the parser a pasted package goes
+    through, so a procedure is refused for exactly what a package would be refused for. It names
+    no tools: see `brain.tools.sop_import.NAMING_A_TOOL_IS_ASKING_AND_NOT_HOLDING`.
+    """
+    draft = procedure.draft
+    title = " ".join(draft.description.split())[:MAX_TITLE_IN_DESCRIPTION]
+    description = PROCEDURE_DESCRIPTION.format(title=title or draft.name)
+    held = [one for one in library if one.name == draft.name]
+    for one in held:
+        same = one.imported.skill
+        if (same.description, same.body) == (description, draft.body):
+            raise _refused(
+                f"this procedure is already in the library as {same.name} {same.version}, word "
+                "for word"
+            )
+    version = FIRST_PROCEDURE_VERSION
+    if held:
+        newest = max(version_key(one.imported.skill.version) for one in held)
+        version = f"{newest[0]}.{newest[1] + 1}.0"
+    try:
+        text = markdown_of(
+            Skill(name=draft.name, description=description, version=version, body=draft.body)
+        )
+    except (SkillError, ValueError) as refused:
+        raise _refused(f"the procedure could not be written as a skill: {refused}") from None
+    return Package(skill=_skill_of(text), source=procedure.source)
+
+
+def procedure_findings(one: LibrarySkill) -> tuple[Finding, ...]:
+    """What a reviewer should see about a procedure's draft, read from its body now.
+
+    Empty for anything that did not arrive as a written procedure, which an upload's file name
+    says. See `A_PROCEDURE_IS_A_SKILL_DRAFT_AND_ITS_FINDINGS_ARE_READ_FROM_ITS_BODY`.
+    """
+    source = one.imported.source
+    if source.kind is not SourceKind.UPLOAD:
+        return ()
+    read_as = format_of(source.location)
+    if read_as is None:
+        return ()
+    try:
+        draft = read_procedure(
+            one.imported.skill.body,
+            source=read_as,
+            fallback_name=one.name,
+            headings_marked=True,
+        )
+    except SopError:
+        # A body edited down to nothing: there is no line left to point a reviewer at.
+        return ()
+    return draft.findings
 
 
 def added(package: Package, *, by: str, at: datetime) -> LibrarySkill:

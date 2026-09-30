@@ -88,7 +88,19 @@ function readTold(payload: unknown): string {
 }
 
 /** The set-up form: its identifiers, its write-only secret and its switch. The connect flow's last screen too. */
-export function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChanged: (told: string) => void }) {
+export function SetUp({
+  row,
+  onChanged,
+  fields = row.tenant_fields,
+  required = fields,
+}: {
+  readonly row: ChannelRow;
+  readonly onChanged: (told: string) => void;
+  /** The record fields drawn, all of them unless a connect flow's path asks for some. */
+  readonly fields?: readonly string[];
+  /** The fields that may not be left blank; a blank one that is not is left out of the save. */
+  readonly required?: readonly string[];
+}) {
   const [values, setValues] = useState<Record<string, string>>({ ...row.tenant });
   const [enabled, setEnabled] = useState(row.status === "on");
   const secret = useSecret();
@@ -107,7 +119,7 @@ export function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly o
     event.preventDefault();
     setFailure(null);
     const typed = Object.fromEntries(parts.map(([name, handle]) => [name, handle.peek()]));
-    const found = [...setupProblems(row.tenant_fields, values), ...partProblems(row.secret_parts, typed)];
+    const found = [...setupProblems(required, values), ...partProblems(row.secret_parts, typed)];
     setBlank(found);
     setAsking(found.length === 0);
   };
@@ -116,7 +128,7 @@ export function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly o
     // Read from the field only now, and the field emptied in the same call: the secret is sent once
     // and kept nowhere here.
     const typed = Object.fromEntries(parts.map(([name, handle]) => [name, handle.take()]));
-    const body = setupBody(enabled, row.tenant_fields, values, secret.take(), typed);
+    const body = setupBody(enabled, fields, values, secret.take(), typed, required);
     setBusy(true);
     void (async () => {
       const result = await request<unknown>(channelApiPath(row.channel), { method: "PUT", body });
@@ -140,8 +152,8 @@ export function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly o
         autoComplete="off"
         onSubmit={ask}
       >
-        {row.tenant_fields.length === 0 ? <p className="m-0 text-[12.5px] text-dim">{NO_IDENTIFIERS}</p> : null}
-        {row.tenant_fields.map((field) => (
+        {fields.length === 0 ? <p className="m-0 text-[12.5px] text-dim">{NO_IDENTIFIERS}</p> : null}
+        {fields.map((field) => (
           <div key={field} className="flex min-w-0 flex-col gap-2">
             <Label htmlFor={`${SETUP_FORM}-${field}`}>{field}</Label>
             <Input
@@ -194,7 +206,7 @@ export function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly o
       </form>
       {failure === null ? null : (
         <div className="mt-3">
-          <FailureNotice failure={failure} title={NOT_SAVED} fields={[...row.tenant_fields, "secret", ...row.secret_parts]} />
+          <FailureNotice failure={failure} title={NOT_SAVED} fields={[...fields, "secret", ...row.secret_parts]} />
         </div>
       )}
       <ConfirmDialog
@@ -297,7 +309,12 @@ export function ChannelProfile({ row, onChanged }: { readonly row: ChannelRow; r
           </Fact>
         </FactList>
       </SectionCard>
-      <SetUp key={`${row.changed_at ?? "never"}-${row.status}`} row={row} onChanged={onChanged} />
+      <SetUp
+        key={`${row.changed_at ?? "never"}-${row.status}`}
+        row={row}
+        onChanged={onChanged}
+        required={row.steps.some((one) => one.choices.length > 0) ? [] : row.tenant_fields}
+      />
       {row.status === "not_set_up" ? <Note>{SAVE_FIRST}</Note> : <TestMessage row={row} />}
     </div>
   );

@@ -158,8 +158,10 @@ NOTICES: Final[tuple[Notice, ...]] = (
         told="Whoever may approve an action an agent is holding.",
         about="That the action is waiting for them, and until when.",
         how=(
-            "A card in the approver's chat channel. Nothing sends it yet: an approver opens the "
-            "Approvals screen."
+            "A card in the approver's own Lark chat with the Brain, offered when they write to it "
+            "about deciding an approval, and decided by pressing it. Nothing sends one when an "
+            "approval is raised yet, because a chat binding keeps no address to send to: an "
+            "approver opens the Approvals screen, or writes approve to the Brain in Lark."
         ),
         composed_by="brain.channels.cards:build_approval_card",
     ),
