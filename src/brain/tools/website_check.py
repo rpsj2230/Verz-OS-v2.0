@@ -50,10 +50,10 @@ decision made here.
 Not built here, and said: the transport. `Prober` is the seam, as `Fetcher` is fetch's, because a
 module that owned a socket could not be tested on the redirect chain, which is the part that is
 ever wrong. `brain.ops.webhook_delivery` holds the pieces one is made from: `SystemResolver`, and
-a connection opened to the checked address that speaks TLS and HTTP as the name. No prober has
-contacted a website, so the tool is registered by a test and not by
-`brain.tools.startup.build_registry`, for the reason that module gives about a row tool with no
-source: a tool that is present and cannot answer is worse than one that is absent. The other side
+a connection opened to the checked address that speaks TLS and HTTP as the name, and
+`brain.ops.website_probe.HttpsProber` is the prober built from them. The application hands it to
+`brain.tools.startup.build_registry`, which registers the check; a caller with no prober registers
+none, for the reason that module gives about a row tool with no source. The other side
 of `ReadOnlyBrowser` is the worker half `brain.browsing.launcher` says is not built either. No
 field policy for `website_check` ships, as none ships for `skill_script` or `browser_surface`,
 so default-deny withholds its fields until an administrator classifies them.
