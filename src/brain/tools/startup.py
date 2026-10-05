@@ -146,6 +146,7 @@ from typing import Final
 
 from brain import demo
 from brain.connectors.declaration import shipped
+from brain.core.field_policy import FieldPolicy
 from brain.knowledge.columns import PRICE_LIST, TableClassification
 from brain.knowledge.connector_figures import LiveFigures, figure_tools
 from brain.knowledge.connector_rows import CONNECTOR_ROW_DESCRIPTIONS, CONNECTOR_ROW_ENTITIES
@@ -268,6 +269,22 @@ def classification_for(entity: str, *, source: str | None = None) -> TableClassi
     """
     known = every_row_classification() if source is None else row_entities_for(source)
     return next((c for c in known if c.entity == entity), None)
+
+
+def field_policy_for(entity: str, *, source: str | None) -> FieldPolicy:
+    """The field policy an action on `entity` is decided under, for the leash's mask check.
+
+    The read classification `classification_for` finds, and the fields `source`'s write grants
+    declare their tools write (`brain.connectors.declaration.written_fields`). A grant field that
+    contradicts a read rule is a `PolicyConflictError` here rather than either one winning. With
+    nothing classifying the entity, the empty policy, which withholds every field.
+    """
+    from brain.connectors.declaration import written_fields
+
+    found = classification_for(entity, source=source)
+    read = () if found is None else found.policy().rules
+    written = () if source is None else written_fields(source, entity)
+    return FieldPolicy(rules=(*read, *written))
 
 
 def description_for(source: str, entity: str) -> str:

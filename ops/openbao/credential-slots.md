@@ -214,6 +214,7 @@ is the catalogue, and a test holds this table to it):
 | `connector_keys/cloudflare` | cloudflare | Zone Read; DNS Read; Analytics Read | DNS Write; any Edit permission; the Global API Key |
 | `connector_keys/cloudflare_dns_changes` | cloudflare_dns_changes | DNS Edit | Zone Edit; any Account permission; the Global API Key |
 | `connector_keys/freshdesk` | freshdesk | an agent API key with read access | an admin key, which can change SLAs and delete tickets |
+| `connector_keys/freshdesk_ticket_replies` | freshdesk_ticket_replies | an agent API key whose role may reply to tickets | an admin key, which can delete tickets and change SLAs |
 | `connector_keys/google_analytics` | google_analytics | analytics.readonly; Viewer on the one property | analytics.edit; domain-wide delegation |
 | `connector_keys/google_drive` | google_drive | Viewer on the one folder shared with it | domain-wide delegation |
 | `connector_keys/hubspot` | hubspot | crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read | crm.objects.*.write; anything touching settings |

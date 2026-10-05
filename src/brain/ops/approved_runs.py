@@ -183,11 +183,11 @@ def assessment_of(action: Action) -> RiskAssessment:
 
 
 def policy_of(action: Action) -> FieldPolicy:
-    """The classification the action's target is read under, its own source's first."""
-    from brain.tools.startup import classification_for
+    """The field policy the action's target is decided under: its source's read classification,
+    and the fields that source's write grants declare (`brain.tools.startup.field_policy_for`)."""
+    from brain.tools.startup import field_policy_for
 
-    found = classification_for(action.target, source=action.tool.source or None)
-    return found.policy() if found is not None else FieldPolicy(rules=())
+    return field_policy_for(action.target, source=action.tool.source or None)
 
 
 async def approved_to_run(

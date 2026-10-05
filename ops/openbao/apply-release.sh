@@ -109,6 +109,12 @@ if ! slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs an
   fi
   slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs and delete tickets scopes:an agent API key with read access]' || missing "the credential slot for freshdesk"
 fi
+if ! slot_ok freshdesk_ticket_replies 'map[not_requested:an admin key, which can delete tickets and change SLAs scopes:an agent API key whose role may reply to tickets]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=an agent API key whose role may reply to tickets' -custom-metadata='not_requested=an admin key, which can delete tickets and change SLAs' freshdesk_ticket_replies >/dev/null || fail "the vault would not define the credential slot for freshdesk_ticket_replies"
+  fi
+  slot_ok freshdesk_ticket_replies 'map[not_requested:an admin key, which can delete tickets and change SLAs scopes:an agent API key whose role may reply to tickets]' || missing "the credential slot for freshdesk_ticket_replies"
+fi
 if ! slot_ok google_analytics 'map[not_requested:analytics.edit; domain-wide delegation scopes:analytics.readonly; Viewer on the one property]'; then
   if test "$CHECK_ONLY" = no; then
     bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=analytics.readonly; Viewer on the one property' -custom-metadata='not_requested=analytics.edit; domain-wide delegation' google_analytics >/dev/null || fail "the vault would not define the credential slot for google_analytics"
@@ -177,4 +183,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 13 credential slots"
+say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 14 credential slots"
