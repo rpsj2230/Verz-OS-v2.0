@@ -131,6 +131,9 @@ def skill_values(one: LibrarySkill) -> dict[str, Any]:
         "source_commit": source.commit or None,
         "source_path": source.path or None,
         "edited_from": one.edited_from,
+        "escalate_to": skill.escalate_to or None,
+        "escalation_needs": skill.escalation_needs or None,
+        "escalate_within": skill.escalate_within,
     }
 
 
@@ -307,6 +310,9 @@ def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySki
             version=row.version,
             tools=tuple(row.tools),
             body=row.body,
+            escalate_to=row.escalate_to or "",
+            escalation_needs=row.escalation_needs or "",
+            escalate_within=row.escalate_within,
         )
         source = SkillSource(
             kind=SourceKind(row.source_kind),

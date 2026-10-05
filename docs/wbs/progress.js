@@ -684,6 +684,26 @@ const PROGRESS = {
     why: "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
     updated: "2026-09-28",
   },
+  "M8.3.1": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.3.2": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.3.4": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.4.1": {
+    status: "READY FOR TESTING",
+    why: "escalation and sensitive topics (migration 0168): proved when both install checks in brain.ops.acceptance_escalation pass after deploy, and on a real channel once a queue's person is named on the Compliance screen",
+    updated: "2026-09-30",
+  },
 };
 
 //: Wave number to the deployed commit it closed at: {commit, recorded, note}. Empty until a
