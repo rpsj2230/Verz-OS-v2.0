@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**18 items are open: 140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**19 items are open: 141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,27 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 141. Connect Telegram (ready now)
+
+**In plain terms:** people can now ask the Brain in Telegram, the next channel in item 126's order.
+Only do this if your company uses Telegram. In a group the bot only answers a message that names it,
+and then with a link to Ask, so nothing private lands where others read. In the console open
+**Channels**, **Telegram**, **Connect**, which shows each step:
+
+1. **Make the bot.** In Telegram open **BotFather** (the console's step links to it), send /newbot,
+   give it a display name (for example Company Brain) and a username ending in bot (for example
+   company_brain_bot). BotFather replies with the bot's token: keep it private.
+2. **Optional: keep it out of groups.** Send BotFather /setjoingroups, pick the bot and choose
+   **Disable**.
+3. **Save it in the console.** Type the bot's username without the @ into **bot_id**, paste the
+   token into the secret field, tick **Switched on** and press **Save set-up**. The Brain tells
+   Telegram where to send messages by itself; if Telegram refuses, nothing is saved and the console
+   says why. The token goes to the vault and is never shown again.
+4. **Try it.** Open the bot in Telegram, press **Start** and write to it: the first answer asks you to
+   link your Telegram account to your Brain account.
+
+Tell me "connected Telegram" afterwards and I prove it on your install.
 
 ## 140. Connect Microsoft Teams (ready now)
 
