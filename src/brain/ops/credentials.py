@@ -112,7 +112,10 @@ one as `keep` judges a key, and `keep` is `keep_fields` with the one field start
 **A refresh token a person's consent bought is kept in a slot of its own (M11.8.6)**, at
 `connector_keys/oauth_refresh/<source>`, one path segment deeper than every key, so the one vault
 role that writes a rotated token back can be granted that directory and nothing a key is kept in.
-See `connector_oauth_slot` and `brain.ops.connector_lease`.
+See `connector_oauth_slot` and `brain.ops.connector_lease`. **A person's own consent is kept one
+segment deeper again**, at `connector_keys/oauth_refresh/<source>/<person>`, named by a digest of
+their principal (`connector_person_oauth_slot`), so the policy line that reads a source's refresh
+token reaches no person's, and the role that reads a person's reaches no source's.
 
 Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50, M11.7.7, M11.7.3, M11.8.6
 """
@@ -121,6 +124,7 @@ from __future__ import annotations
 
 import asyncio
 import enum
+import hashlib
 import re
 from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 from dataclasses import dataclass
@@ -130,6 +134,7 @@ from typing import Any, Final, Protocol
 
 import structlog
 
+from brain.audit.ledger import IDENTIFIER
 from brain.ops.openbao import (
     CONNECTOR_KEY_PREFIX,
     OpenBaoVault,
@@ -413,6 +418,53 @@ def connector_oauth_slot(connector: str) -> ConnectorKeySlot:
     return ConnectorKeySlot(
         path=f"{CONNECTOR_KEY_PREFIX}{OAUTH_REFRESH_DIRECTORY}/{connector}",
         description=f"The refresh token a person's consent to {connector} bought.",
+        connector=connector,
+    )
+
+
+#: How many hex characters of a principal's digest name their slot: 128 bits, so two people never
+#: share one, and short enough that the longest source name's slot is still a credential slot
+#: (`brain.audit.record.CREDENTIAL_SLOT_CHARS`).
+PERSON_SEGMENT_HEX: Final = 32
+
+#: What a person's segment starts with, so it begins with a letter as a credential slot's must.
+PERSON_SEGMENT_PREFIX: Final = "p"
+
+#: Why a person's slot is named by a digest of their principal and not by the principal.
+A_PERSONS_SLOT_IS_NAMED_BY_A_DIGEST_OF_THEM: Final = (
+    "A person's refresh token slot is named by a digest of their principal id rather than by the "
+    "id, because an id may hold '.', '@' and capitals, which no credential slot the ledger records "
+    "may, and because a vault listing then names nobody in words. The digest is not a secret: "
+    "erasure and every read compute it from the same id."
+)
+
+
+#: A principal id as the ledger spells one (`brain.audit.ledger.IDENTIFIER`).
+_PRINCIPAL_RE: Final = re.compile(IDENTIFIER)
+
+
+def person_segment(principal_id: str) -> str:
+    """The path segment a person's own slots are kept under. See
+    `A_PERSONS_SLOT_IS_NAMED_BY_A_DIGEST_OF_THEM`. Refuses anything that is not a principal id."""
+    if not _PRINCIPAL_RE.fullmatch(principal_id):
+        msg = "a person's slot is built from a principal id, and this is not one"
+        raise ValueError(msg)
+    digest = hashlib.sha256(principal_id.encode("utf-8")).hexdigest()[:PERSON_SEGMENT_HEX]
+    return f"{PERSON_SEGMENT_PREFIX}{digest}"
+
+
+def connector_person_oauth_slot(connector: str, principal_id: str) -> ConnectorKeySlot:
+    """Where the refresh token one person's own consent to a source bought is kept (M11.8.6).
+
+    `connector_keys/oauth_refresh/<source>/<person>`: one segment deeper than the source's own
+    refresh token, so no policy line that reaches a source's token reaches a person's, and the
+    vault can be told that a token minted with nobody present reads no person's at all. See
+    `brain.connectors.oauth.A_PERSONS_CONSENT_READS_ONLY_FOR_THAT_PERSON`.
+    """
+    source = connector_oauth_slot(connector)
+    return ConnectorKeySlot(
+        path=f"{source.path}/{person_segment(principal_id)}",
+        description=f"The refresh token one person's own consent to {connector} bought.",
         connector=connector,
     )
 

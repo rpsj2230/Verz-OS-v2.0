@@ -8,6 +8,8 @@
  * carries neither, and says what the API said: kept, or the consent withdrawn, in the API's words.
  * A refusal the API made is drawn whole by `FailureNotice`, as every refusal on this console is.
  *
+ * A person's own consent is answered with My workspace as where to go next, and the link says so.
+ *
  * Task ids: M11.8.6
  */
 
@@ -24,6 +26,10 @@ export const CONSENT_WAITING = "Handing the vendor's answer to this install.";
 export const CONSENT_NOT_KEPT = "The consent was not kept";
 export const CONSENT_NOTHING_TO_HAND = "There is no answer from a vendor in this address.";
 export const GO_TO_SOURCE = "Go to the source";
+export const GO_TO_MY_WORKSPACE = "Go to My workspace";
+
+/** `brain.connector_routes.MY_WORKSPACE_PAGE`: where a person's own consent sends them on to. */
+export const MY_WORKSPACE_PAGE = "/me";
 
 export function ConnectorConsent() {
   const location = useLocation();
@@ -69,7 +75,7 @@ export function ConnectorConsent() {
         <Notice title={done.kept ? "Consent kept" : CONSENT_NOT_KEPT} withoutTrace="">
           <p>{done.told}</p>
           <Button asChild variant="outline">
-            <Link to={done.back_to}>{GO_TO_SOURCE}</Link>
+            <Link to={done.back_to}>{done.back_to === MY_WORKSPACE_PAGE ? GO_TO_MY_WORKSPACE : GO_TO_SOURCE}</Link>
           </Button>
         </Notice>
       )}

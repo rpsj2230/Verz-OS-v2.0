@@ -87,8 +87,10 @@ from brain.ops.erasure_store import drain_erasure_queue
 from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
+from brain.ops.openbao import OpenBaoVault
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, AtTime, Owed, owed, schedulable, time_of_day
+from brain.ops.secrets import VaultRole
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
@@ -364,9 +366,21 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
     On the worker's own connection, which is the database owner's: `brain.ops.erasure_store` refuses
     a connection row-level security narrows, because a row a policy hides is a row the erasure
     would neither count nor retire. `prepare_threshold=None` for the reason `retention_sweep` gives.
+    The vault is the worker's own, read from this process's settings, and removes the refresh tokens
+    a person's own consents bought (`brain.ops.erasure_store.
+    ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`); a worker with none says so in the report.
     """
+    settings = settings_from(process_environment())
+    vault: OpenBaoVault | None = None
+    if settings.vault_address and settings.vault_token:
+        try:
+            vault = OpenBaoVault(
+                settings.vault_address, settings.vault_token, role=VaultRole.WORKER
+            )
+        except ValueError:
+            vault = None
     with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
-        return drain_erasure_queue(conn, now=now, report_only=report_only)
+        return drain_erasure_queue(conn, now=now, report_only=report_only, own_tokens=vault)
 
 
 def canary_run(now: datetime, report_only: bool, database_url: str) -> str:

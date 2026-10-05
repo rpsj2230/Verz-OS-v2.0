@@ -117,6 +117,16 @@ down with `brain.connectors.oauth.CONSENT_WITHDRAWN`. Both halves are module fun
 (`start_consent`, `finish_consent`) beside the routes, so the install check drives the same code
 with a declaration of its own. See `brain.connectors.oauth`.
 
+**And a person consents for their own account from My workspace (M11.8.6).** A source whose
+consent is `ConsentKind.PERSON` is never consented to by the connect authority: `POST
+/me/accounts/{connector}/consent` is asked of the person themselves, who must hold the source's
+declared read capability in the connection's department (`may_consent_for_themselves`), and the
+same callback keeps the answer in that person's own slot (`connector_person_oauth_slot`). A vendor
+refusing it is said to that person alone, `YOUR_CONSENT_WITHDRAWN`, and marks nothing on the
+source, which everybody else still reads. `GET /me/accounts` lists the sources a person may
+connect for themselves and whether they have; one they may not is absent, as a source not
+connected is. See `brain.connectors.oauth.A_PERSONS_CONSENT_READS_ONLY_FOR_THAT_PERSON`.
+
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
 Task ids: M7.7.2
 Task ids: M11.7.3, M11.8.6
@@ -151,6 +161,7 @@ from brain.api_routes import Asked, Asking
 from brain.audit.record import ConnectorChange
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import (
+    PERSONAL_DEPARTMENT_SETTING,
     ConnectorDeclaration,
     CredentialShape,
     WriteGrant,
@@ -161,6 +172,9 @@ from brain.connectors.manifest import ConnectorManifest, digest_input, manifest_
 from brain.connectors.oauth import (
     CONSENT_WITHDRAWN,
     MAX_RETURN_ADDRESS_CHARS,
+    YOUR_CONSENT_WITHDRAWN,
+    ConsentKind,
+    OAuthConsent,
     code_exchange,
     consent_address,
     consent_return_address,
@@ -295,6 +309,7 @@ from brain.ops.credentials import (
     VaultState,
     connector_key_slot,
     connector_oauth_slot,
+    connector_person_oauth_slot,
     connector_write_slot,
     key_file_problems,
     user_and_password,
@@ -1194,8 +1209,8 @@ def _page(
                 may_connect=may_connect_source(reach, kind.name, now),
                 steps=[step_view(step) for step in kind.guide],
                 writes=[write_grant_view(one) for one in kind.writes],
-                consent_with="" if kind.oauth is None else kind.label,
-                consent_told="" if kind.oauth is None else CONSENTING_AT_THE_VENDOR,
+                consent_with=kind.label if _consented_once(kind.oauth) else "",
+                consent_told=CONSENTING_AT_THE_VENDOR if _consented_once(kind.oauth) else "",
             )
             for kind in CONNECTABLE.values()
         ],
@@ -2198,6 +2213,27 @@ CONNECT_IT_FIRST: Final = (
 #: What the start route says of a source that is not consented to by OAuth.
 NOT_CONSENTED_BY_OAUTH: Final = "This source is not connected by signing in at its vendor."
 
+#: What the connect authority's start route says of a source each person consents to for themselves.
+CONSENTED_BY_EACH_PERSON: Final = (
+    "Each person connects their own account with this source from My workspace; it is not "
+    "consented to once for everybody."
+)
+
+#: What a person is told once their own consent's refresh token is kept.
+YOUR_CONSENT_KEPT: Final = (
+    "Your account is connected. Your own questions read it from now on, and nobody else's do."
+)
+
+#: What My workspace says about connecting an account, beside the button.
+CONNECTING_YOUR_OWN_ACCOUNT: Final = (
+    "You will be sent to the vendor to sign in to your own account and agree to what this install "
+    "reads from it. It is read only for your own questions, never for anybody else's, and this "
+    "install keeps only the refresh token the vendor issues, in its vault."
+)
+
+#: Where the person is sent on to once their own consent is answered.
+MY_WORKSPACE_PAGE: Final = "/me"
+
 
 class ConsentAsked(BaseModel):
     """Where the vendor should send the person back: the console's own consent page."""
@@ -2235,6 +2271,8 @@ class ConsentAnswer:
     connector: str
     kept: bool
     told: str
+    #: A person's own consent, whose answer sends them back to My workspace.
+    personal: bool = False
 
 
 class ConsentRefusedError(Exception):
@@ -2329,8 +2367,32 @@ async def start_consent(
         start=start,
         return_address=back,
         now=now,
+        kind=consent.kind,
     )
     return address
+
+
+def _consented_once(consent: OAuthConsent | None) -> bool:
+    """Whether a source is consented to once, for the source, by somebody who may connect it."""
+    return consent is not None and consent.kind is ConsentKind.SOURCE
+
+
+def may_consent_for_themselves(
+    reach: EntitlementSet, declared: ConnectorDeclaration, connection: Connection, now: datetime
+) -> bool:
+    """Whether this person may connect their own account with a connected source.
+
+    A source each person consents to for themselves, and a person holding its declared read
+    capability in the department the connection answers to: without that capability nothing
+    would ever be read from their account for them, so there is nothing to consent to. Asked of
+    the person's own reach and of nobody's authority to connect the source.
+    """
+    consent = declared.oauth
+    if consent is None or consent.kind is not ConsentKind.PERSON:
+        return False
+    scope = reach.scope_for(Capability(value=consent.reader), now)
+    department = connection.settings.get(PERSONAL_DEPARTMENT_SETTING, "")
+    return scope is not None and bool(department) and scope.matches({"department": department})
 
 
 async def finish_consent(
@@ -2340,6 +2402,7 @@ async def finish_consent(
     vendor_refused: bool,
     principal_id: str,
     may_connect: Callable[[str], bool],
+    may_consent_personally: Callable[[ConnectorDeclaration, Connection], bool],
     declarations: Mapping[str, ConnectorDeclaration],
     connected: Callable[[str], Awaitable[Connection | None]],
     consents: ConsentStates,
@@ -2360,15 +2423,25 @@ async def finish_consent(
     records the write in the ledger. Raises `ConsentRefusedError` with the sentence to show.
     """
     taken = await consents.take(state=state, principal_id=principal_id, now=now)
-    if taken is None or not may_connect(taken.connector):
+    if taken is None:
+        raise ConsentRefusedError(CONSENT_NOT_YOURS_HERE, status=404)
+    personal = taken.kind is ConsentKind.PERSON
+    if not personal and not may_connect(taken.connector):
         raise ConsentRefusedError(CONSENT_NOT_YOURS_HERE, status=404)
     declared = declarations.get(taken.connector)
     consent = None if declared is None else declared.oauth
     connection = await connected(taken.connector)
-    if declared is None or consent is None or connection is None:
+    if declared is None or consent is None or connection is None or consent.kind is not taken.kind:
+        raise ConsentRefusedError(CONSENT_NOT_YOURS_HERE, status=404)
+    if personal and not may_consent_personally(declared, connection):
         raise ConsentRefusedError(CONSENT_NOT_YOURS_HERE, status=404)
 
     async def withdrawn() -> ConsentAnswer:
+        if personal:
+            # Said to this person alone: the source stays up for everybody else.
+            return ConsentAnswer(
+                connector=taken.connector, kept=False, told=YOUR_CONSENT_WITHDRAWN, personal=True
+            )
         reading, health = declared.reading, exchange.health
         latest = None if health is None else await health.latest(taken.connector)
         if health is not None and latest is not None and reading is not None:
@@ -2422,9 +2495,14 @@ async def finish_consent(
         raise ConsentRefusedError(VENDOR_DID_NOT_ANSWER, status=503) from None
     if tokens.refresh is None:
         raise ConsentRefusedError(NO_REFRESH_GRANTED, status=409)
+    slot = (
+        connector_person_oauth_slot(taken.connector, principal_id)
+        if personal
+        else connector_oauth_slot(taken.connector)
+    )
     try:
         await credentials.keep(
-            connector_oauth_slot(taken.connector),
+            slot,
             tokens.refresh,
             actor=principal_id,
             trace_id=trace_id,
@@ -2436,7 +2514,8 @@ async def finish_consent(
         raise ConsentRefusedError(
             TOLD[unavailable.state], status=NOT_KEPT_STATUS[unavailable.state]
         ) from None
-    return ConsentAnswer(connector=taken.connector, kept=True, told=CONSENT_KEPT)
+    told = YOUR_CONSENT_KEPT if personal else CONSENT_KEPT
+    return ConsentAnswer(connector=taken.connector, kept=True, told=told, personal=personal)
 
 
 def source_page(connector: str) -> str:
@@ -2461,6 +2540,14 @@ async def start_consent_route(
     if declared is None or declared.oauth is None:
         return _problems(
             (SettingProblem(field=SOURCE_FIELD, code="not_oauth", message=NOT_CONSENTED_BY_OAUTH),)
+        )
+    if not _consented_once(declared.oauth):
+        return _problems(
+            (
+                SettingProblem(
+                    field=SOURCE_FIELD, code="each_person", message=CONSENTED_BY_EACH_PERSON
+                ),
+            )
         )
     connection = await _live_connection(request, connector)
     if connection is None:
@@ -2536,6 +2623,9 @@ async def consent_callback(
             vendor_refused=bool(error),
             principal_id=asked.reach.principal_id,
             may_connect=lambda name: may_connect_source(asked.reach, name, asked.now),
+            may_consent_personally=lambda declared, connection: may_consent_for_themselves(
+                asked.reach, declared, connection, asked.now
+            ),
             declarations=declarations_of(request),
             connected=connected,
             consents=consents,
@@ -2560,9 +2650,156 @@ async def consent_callback(
         connector=done.connector,
         kept=done.kept,
         told=done.told,
-        back_to=source_page(done.connector),
+        back_to=MY_WORKSPACE_PAGE if done.personal else source_page(done.connector),
     )
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+# ------------------------------------------------------------------ a person's own accounts
+#: Where a person sees which sources they may connect their own account with, and starts one.
+MY_ACCOUNTS_PATH: Final = "/me/accounts"
+MY_CONSENT_PATH: Final = MY_ACCOUNTS_PATH + "/{connector}/consent"
+
+#: What My workspace says of an account whose standing the vault could not be asked.
+NOT_ASKED_OF_THE_VAULT: Final = "Whether your account is connected could not be asked just now."
+
+
+class MyAccountView(BaseModel):
+    """One source a person may connect their own account with, and whether they have."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    label: str
+    #: Whether their own refresh token is kept; None when the vault could not be asked.
+    connected: bool | None
+    told: str = ""
+
+
+class MyAccountsView(BaseModel):
+    """The sources this person may connect their own account with. Nothing about anybody else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    accounts: list[MyAccountView]
+    told: str
+
+
+async def _personal_sources(
+    request: Request, reach: EntitlementSet, now: datetime
+) -> list[tuple[ConnectorDeclaration, Connection]]:
+    """Every connected source this person may connect their own account with, by name."""
+    records = records_of(request)
+    if records is None:
+        return []
+    declared = declarations_of(request)
+    found: list[tuple[ConnectorDeclaration, Connection]] = []
+    for connection in await records.connected():
+        one = declared.get(connection.connector)
+        if one is not None and may_consent_for_themselves(reach, one, connection, now):
+            found.append((one, connection))
+    return sorted(found, key=lambda pair: pair[0].name)
+
+
+def _connected_for(credentials: Credentials, connector: str, principal_id: str) -> bool | None:
+    """Whether this person's own refresh token for a source is kept; None if it cannot be asked."""
+    if not credentials.configured:
+        return None
+    try:
+        return credentials.held(connector_person_oauth_slot(connector, principal_id)).held
+    except CredentialsUnavailableError:
+        return None
+
+
+@router.get(MY_ACCOUNTS_PATH, response_model=MyAccountsView, responses=COMMON_RESPONSES)
+async def my_accounts(request: Request, asked: Asked) -> MyAccountsView:
+    """The sources the asker may connect their own account with, and whether each is connected.
+
+    Only sources the asker holds the reader capability for are listed, so a source they may not
+    read is absent exactly as a source nobody connected is, and nothing is counted.
+    """
+    me = asked.reach.principal_id
+    credentials = credentials_of(request)
+    accounts = []
+    for declared, _ in await _personal_sources(request, asked.reach, asked.now):
+        connected = _connected_for(credentials, declared.name, me)
+        accounts.append(
+            MyAccountView(
+                connector=declared.name,
+                label=declared.label,
+                connected=connected,
+                told=NOT_ASKED_OF_THE_VAULT if connected is None else "",
+            )
+        )
+    return MyAccountsView(accounts=accounts, told=CONNECTING_YOUR_OWN_ACCOUNT)
+
+
+@router.post(MY_CONSENT_PATH, response_model=ConsentStartedView, responses=_WRITE_RESPONSES)
+async def start_my_consent_route(
+    request: Request, connector: str, body: ConsentAsked, asked: Asked
+) -> JSONResponse:
+    """Start a consent at the vendor for the asker's own account, and answer the vendor's address.
+
+    Asked of the person themselves: a source each person consents to, connected, whose reader
+    capability they hold in its department. Anything else is the router's one refusal, whichever
+    it is. The source's client secret must be kept, because the code is exchanged with it, and
+    nothing is written but the consent's own row, which names them.
+    """
+    pairs = {
+        one.name: (one, connection)
+        for one, connection in await _personal_sources(request, asked.reach, asked.now)
+    }
+    found = pairs.get(connector)
+    if found is None:
+        log.info("starting an own consent not answerable", principal=asked.reach.principal_id)
+        raise _not_answerable("own consent")
+    declared, connection = found
+    credentials = credentials_of(request)
+    if not credentials.configured:
+        return _not_kept(VaultState.ABSENT)
+    try:
+        held = credentials.held(connector_key_slot(connector))
+    except CredentialsUnavailableError as unavailable:
+        return _not_kept(unavailable.state)
+    if not held.held:
+        body_told = ErrorBody(message=OWN_ACCOUNT_NOT_READY, trace_id=_trace_id())
+        return JSONResponse(status_code=409, content=body_told.model_dump())
+    consents = consents_of(request)
+    if consents is None:
+        raise Failed("no database on this process")
+    try:
+        address = await start_consent(
+            declared,
+            connection,
+            consents=consents,
+            principal_id=asked.reach.principal_id,
+            return_address=body.return_address,
+            now=asked.now,
+        )
+    except ConnectorContractError:
+        return _problems(
+            (
+                SettingProblem(
+                    field="return_address",
+                    code="not_the_consent_page",
+                    message=(
+                        "The vendor can send you back only to this console's consent page, over "
+                        "https."
+                    ),
+                ),
+            )
+        )
+    log.info("own consent started", connector=connector, principal=asked.reach.principal_id)
+    answered = ConsentStartedView(connector=connector, address=address)
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+#: What a person is told when the source's own client secret is not kept yet, so nothing they
+#: consent to could be exchanged. About the source, which is not theirs to fix.
+OWN_ACCOUNT_NOT_READY: Final = (
+    "This source is not ready for you to connect your account yet: whoever connected it has not "
+    "kept its client secret. Ask them to finish connecting it."
+)
 
 
 # ------------------------------------------------------------------ testing a connection

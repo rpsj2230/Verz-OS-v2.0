@@ -531,6 +531,27 @@ class OpenBaoVault:
             raise
         return True
 
+    def remove_static_kv(self, path: str) -> None:
+        """Remove one slot and every version it ever held, under `STATIC_PREFIX` only.
+
+        kv version 2's DELETE on `<mount>/metadata/<rest>`, which destroys every version and the
+        slot's record, so nothing an `undelete` could bring back is left: what erasing a person
+        asks of the refresh tokens their own consents bought
+        (`brain.ops.erasure_store.ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`). A slot that
+        holds nothing is already removed, so a 404 is not an error and a second call changes
+        nothing. Refuses the template key, which is never written over and never removed here.
+        """
+        assert_static_path(path)
+        if path.startswith(TEMPLATE_KEY_PREFIX):
+            msg = f"{path!r} is written once and never removed"
+            raise SecretsUnavailableError(msg)
+        mount, _, rest = path.partition("/")
+        try:
+            self._call("DELETE", f"{mount}/metadata/{rest}")
+        except VaultRefusedError as refused:
+            if refused.status != 404:
+                raise
+
     def static_kv_version(self, path: str) -> StaticVersion | None:
         """The slot's current version, or None when it holds nothing.
 

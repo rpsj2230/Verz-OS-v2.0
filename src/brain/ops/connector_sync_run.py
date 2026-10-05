@@ -126,6 +126,8 @@ from brain.connectors.google_token import (
 from brain.connectors.oauth import (
     A_CONSENTED_SOURCE_IS_SENT_ONLY_ITS_ACCESS,
     CONSENT_WITHDRAWN,
+    NOT_CONNECTED_FOR_YOU,
+    YOUR_CONSENT_WITHDRAWN,
     ConsentNotHeldError,
     ConsentWithdrawnError,
     OAuthConsent,
@@ -136,12 +138,21 @@ from brain.connectors.oauth import (
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import MAX_RESPONSE_BYTES, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
-from brain.ops.connectable import READING_ROLE, refresh_reference
+from brain.ops.connectable import (
+    READING_ROLE,
+    key_reference,
+    person_refresh_reference,
+    refresh_reference,
+)
 from brain.ops.connector_lease import (
+    PERSON_LEASE_TTL,
+    PERSON_POLICY,
+    PERSON_TOKEN_ROLE,
     ROTATE_LEASE_TTL,
     ROTATE_POLICY,
     ROTATE_TOKEN_ROLE,
     RUN_LEASE_TTL,
+    RUN_POLICY,
     RUN_TOKEN_ROLE,
     LeaseOutcome,
     judge_minted,
@@ -425,11 +436,21 @@ class Consenting:
     The source's name, which names the slot its refresh token is kept in; the connection's settings,
     one of which is the client id; and the keys the attempt leases from, which lease the refresh
     token and, where they can, write a rotated one back. Built by whoever holds the attempt's lease.
+    `principal_id` names the person whose own consent is renewed, for a source each person consents
+    to for themselves, and is empty for a source's own consent; `personal_access` is the one place
+    that sets it, with keys that admit that person's slot alone.
     """
 
     connector: str
     settings: Mapping[str, str]
     keys: ConnectorKeys
+    principal_id: str = ""
+
+    def refresh(self) -> SecretRef:
+        """Where the refresh token this renewal posts is kept: the source's, or the person's."""
+        if self.principal_id:
+            return person_refresh_reference(self.connector, self.principal_id)
+        return refresh_reference(self.connector)
 
 
 @runtime_checkable
@@ -464,7 +485,7 @@ def renewed_access(
     `UnsafeAddressError` when the token endpoint resolved inside this network. See
     `brain.connectors.oauth.ACCESS_IS_RENEWED_BY_THE_READ_THAT_NEEDS_IT`.
     """
-    ref = refresh_reference(consenting.connector)
+    ref = consenting.refresh()
     lease = consenting.keys.lease(ref, now=now)
     try:
         refresh = lease.key()
@@ -555,6 +576,119 @@ def presented(
                 resolver=resolver,
                 now=now,
             )
+
+
+# ------------------------------------------------------------------ a person's own consent
+#: The refresh token directory a person's own slots sit under, one segment below each source's.
+_REFRESH_DIRECTORY: Final = f"{CONNECTOR_KEY_PREFIX}{OAUTH_REFRESH_DIRECTORY}/"
+
+
+def is_person_slot(path: str) -> bool:
+    """Whether a path is a person's own refresh token slot: two segments under the directory."""
+    if not path.startswith(_REFRESH_DIRECTORY):
+        return False
+    parts = path.removeprefix(_REFRESH_DIRECTORY).split("/")
+    return len(parts) == 2 and all(parts)
+
+
+class PersonalKeys:
+    """`ConnectorKeys` for one person's read of one source: its client secret and their own slot.
+
+    The only keys a read made for a person's question is handed, so the one reference to a person's
+    refresh token any such read can lease is the one built from that person. Every other path, a
+    second person's slot or the source's own refresh token among them, is refused before the vault
+    is asked, as a lease that holds its refusal; a rotation is written back to their slot alone. See
+    `brain.connectors.oauth.A_PERSONS_CONSENT_READS_ONLY_FOR_THAT_PERSON`. The vault's half is that
+    only the application may mint the role a person's slot is read under:
+    `brain.ops.connector_lease.NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT`.
+    """
+
+    def __init__(self, keys: ConnectorKeys, *, connector: str, principal_id: str) -> None:
+        self._keys = keys
+        self._admitted = frozenset(
+            {
+                key_reference(connector).path,
+                person_refresh_reference(connector, principal_id).path,
+            }
+        )
+
+    def __repr__(self) -> str:
+        return "PersonalKeys()"
+
+    __str__ = __repr__
+
+    def lease(self, ref: SecretRef, *, now: datetime) -> KeyLease:
+        if ref.path not in self._admitted:
+            return _Held(failure=SecretsUnavailableError(NOT_THIS_PERSONS_SLOT))
+        return self._keys.lease(ref, now=now)
+
+    def rotate(self, ref: SecretRef, token: str, *, now: datetime) -> None:
+        """Write a rotated refresh token back to this person's own slot, and to no other."""
+        if ref.path not in self._admitted or not is_person_slot(ref.path):
+            raise SecretsUnavailableError(NOT_THIS_PERSONS_SLOT)
+        if not isinstance(self._keys, RotatesRefreshTokens):
+            raise SecretsUnavailableError(NOT_THIS_PERSONS_SLOT)
+        self._keys.rotate(ref, token, now=now)
+
+
+#: What a lease of any slot but the asker's own says. Names neither the slot nor whose it is.
+NOT_THIS_PERSONS_SLOT: Final = (
+    "a read made for one person's question leases that person's own refresh token and the "
+    "source's client secret, and nothing else"
+)
+
+
+def personal_access(
+    consent: OAuthConsent,
+    *,
+    connector: str,
+    principal_id: str,
+    settings: Mapping[str, str],
+    keys: ConnectorKeys,
+    poster: SourcePoster,
+    resolver: Resolver,
+    now: datetime,
+) -> AccessToken:
+    """Access for one person's own read, renewed from the refresh token their consent bought.
+
+    The source's client secret and the person's refresh token are each leased through
+    `PersonalKeys` built from `principal_id`, and given back before anything is posted; a rotated
+    token is written back to their slot. Raises what `renewed_access` raises, and
+    `SecretsUnavailableError` when the client secret could not be leased. Nothing here touches the
+    source's own health: a withdrawn personal consent is that person's reads down, said in
+    `brain.connectors.oauth.YOUR_CONSENT_WITHDRAWN` by `personal_words`, and nobody else's.
+    """
+    own = PersonalKeys(keys, connector=connector, principal_id=principal_id)
+    lease = own.lease(key_reference(connector), now=now)
+    try:
+        secret = lease.key()
+    finally:
+        lease.close(now)
+    return renewed_access(
+        consent,
+        secret,
+        consenting=Consenting(connector, settings, own, principal_id=principal_id),
+        poster=poster,
+        resolver=resolver,
+        now=now,
+    )
+
+
+def personal_words(refused: Exception) -> str:
+    """What a person is told when their own read could not be made, by kind and never by value.
+
+    Their consent refused at the vendor, and no consent of theirs, are each said to them in words;
+    anything else is the vendor or the vault not answering, said as a refused key is.
+    """
+    if isinstance(refused, ConsentWithdrawnError):
+        return YOUR_CONSENT_WITHDRAWN
+    if isinstance(refused, ConsentNotHeldError):
+        return NOT_CONNECTED_FOR_YOU
+    if isinstance(refused, TokenNotIssuedError):
+        return failure_detail(refused.call, timed_out=refused.timed_out)
+    if isinstance(refused, SecretsUnavailableError):
+        return key_detail(refused)
+    return ADDRESS_REFUSED
 
 
 def presenting_detail(refused: TokenNotIssuedError, *, poster: SourcePoster | None) -> str:
@@ -721,11 +855,21 @@ class WorkerConnectorKeys:
             return _Held(failure=SecretsUnavailableError(msg))
         if self._vault is None:
             return _Held(failure=SecretsUnavailableError(NO_VAULT))
+        # A person's own refresh token is read under the role only the application may mint, and
+        # the person is never named in the token's metadata. See `brain.ops.connector_lease.
+        # NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT`.
+        personal = is_person_slot(ref.path)
+        role, policy, ttl = (
+            (PERSON_TOKEN_ROLE, PERSON_POLICY, PERSON_LEASE_TTL)
+            if personal
+            else (RUN_TOKEN_ROLE, RUN_POLICY, RUN_LEASE_TTL)
+        )
+        slot_name = ref.path.removeprefix(CONNECTOR_KEY_PREFIX)
         try:
             minted = self._vault.mint_role_token(
-                RUN_TOKEN_ROLE,
-                ttl=RUN_LEASE_TTL,
-                meta={"connector": ref.path.removeprefix(CONNECTOR_KEY_PREFIX)},
+                role,
+                ttl=ttl,
+                meta={"connector": slot_name.rsplit("/", 1)[0] if personal else slot_name},
             )
         except SecretsUnavailableError as unavailable:
             return _Held(failure=unavailable)
@@ -735,7 +879,8 @@ class WorkerConnectorKeys:
             renewable=minted.renewable,
             policies=minted.policies,
             lease_seconds=minted.lease_seconds,
-            asked=RUN_LEASE_TTL,
+            asked=ttl,
+            policy=policy,
         )
         if verdict:
             # Held so `close` revokes it at the attempt's end like any other, and never read with.
@@ -784,7 +929,7 @@ class WorkerConnectorKeys:
         minted = self._vault.mint_role_token(
             ROTATE_TOKEN_ROLE,
             ttl=ROTATE_LEASE_TTL,
-            meta={"connector": ref.path.removeprefix(directory)},
+            meta={"connector": ref.path.removeprefix(directory).split("/", 1)[0]},
         )
         writer = self._vault.holding(minted)
         try:

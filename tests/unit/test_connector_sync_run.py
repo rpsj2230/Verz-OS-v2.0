@@ -990,7 +990,10 @@ def test_the_run_policy_grants_read_on_the_path_the_reader_calls_and_the_worker_
         ["read"]
     ]
     assert not [rule for rule in run if _matches(rule, f"{mount}/metadata/{rest}")]
-    assert not [rule for rule in worker if rule.startswith(mount)]
+    key_paths = (f"{mount}/data/{rest}", f"{mount}/metadata/{rest}")
+    assert not [rule for rule in worker if any(_matches(rule, one) for one in key_paths)]
+    # Its one rule under the engine removes a person's own refresh token on erasure (M11.8.6).
+    assert not [caps for rule, caps in worker.items() if rule.startswith(mount) and "read" in caps]
     assert "worker" in THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES
 
 

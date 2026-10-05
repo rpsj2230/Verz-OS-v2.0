@@ -89,6 +89,15 @@ path "auth/token/create/connector-rotate" {
   capabilities = ["create", "update"]
 }
 
+# Erasing a person removes the refresh tokens their own consents bought (M11.8.6): the erasure queue
+# runs here, and deleting a slot's metadata removes every version of it. Delete alone: no read, no
+# write, and nothing a source's key or a source's own refresh token is kept at, each a segment
+# shorter. This process may not mint the connector-person role, so it never reads one. See
+# brain.ops.erasure_store.ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS.
+path "connector_keys/metadata/oauth_refresh/+/+" {
+  capabilities = ["delete"]
+}
+
 path "sys/leases/revoke" {
   capabilities = ["update"]
 }

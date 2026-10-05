@@ -18,16 +18,20 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import * as client from "../src/api/client";
 import { CONSENT_LATER, ConnectSource, connectLabel } from "../src/components/ConnectSource";
+import { MyAccounts } from "../src/components/MyAccounts";
 import {
   CONSENT_CALLBACK_API_PATH,
   CONSENT_RETURN_PATH,
+  MY_ACCOUNTS_API_PATH,
   callbackPath,
+  connectMyAccountLabel,
   connectWithLabel,
   consentPath,
+  myConsentPath,
   returnAddress,
   vendorAnswer,
 } from "../src/pages/connectors/consentAtVendor";
-import { ConnectorConsent, GO_TO_SOURCE } from "../src/pages/ConnectorConsent";
+import { ConnectorConsent, GO_TO_MY_WORKSPACE, GO_TO_SOURCE, MY_WORKSPACE_PAGE } from "../src/pages/ConnectorConsent";
 import type { Connectable } from "../src/pages/connectorsQuery";
 import { declaredQueryParameters, declaredRequestBodySchema, declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
 import { backendModelFields } from "./support/python";
@@ -163,5 +167,69 @@ describe("the page the vendor sends the person back to", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith(`${CONSENT_CALLBACK_API_PATH}?state=ONCE-1&code=C1`);
     expect(router.state.location.search).toBe("");
+  });
+});
+
+describe("a person's own account, connected from My workspace", () => {
+  test("the paths are the ones the Python routes serve, and the answer's fields are the API's", () => {
+    const routes = readRepoFile(ROUTES);
+    expect(extractOne(routes, /^MY_ACCOUNTS_PATH: Final = "([^"]+)"$/m, "the accounts path")).toBe(MY_ACCOUNTS_API_PATH);
+    expect(extractOne(routes, /^MY_CONSENT_PATH: Final = MY_ACCOUNTS_PATH \+ "([^"]+)"$/m, "the own consent path")).toBe(
+      myConsentPath("{connector}").replace(MY_ACCOUNTS_API_PATH, "").replace("%7Bconnector%7D", "{connector}"),
+    );
+    expect(extractOne(routes, /^MY_WORKSPACE_PAGE: Final = "([^"]+)"$/m, "where it sends a person on")).toBe(MY_WORKSPACE_PAGE);
+    const listed = declaredPropertyNames(declaredResponseSchema(`/api/v1${MY_ACCOUNTS_API_PATH}`, "get"));
+    expect(listed).toEqual(["accounts", "told"]);
+    expect(backendModelFields(ROUTES, "MyAccountView")).toEqual(
+      expect.arrayContaining(["connector", "label", "connected", "told"]),
+    );
+    const start = declaredRequestBodySchema("/api/v1/me/accounts/{connector}/consent", "post");
+    expect(declaredPropertyNames(start)).toEqual(["return_address"]);
+  });
+
+  test("a source the person may connect is listed and its button sends them to the vendor", async () => {
+    const asked: Array<[string, unknown]> = [];
+    vi.spyOn(client, "request").mockImplementation(async (path: string, options?: client.RequestOptions) => {
+      asked.push([path, options?.body]);
+      if (path === MY_ACCOUNTS_API_PATH) {
+        return ok({
+          accounts: [{ connector: "xero", label: "Xero", connected: false, told: "" }],
+          told: "Read only for your own questions.",
+        });
+      }
+      return ok({ connector: "xero", address: VENDOR_PAGE });
+    });
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign, origin: "https://console.example" });
+    render(<MyAccounts />);
+    const go = await screen.findByRole("button", { name: connectMyAccountLabel("Xero") });
+    expect(screen.getByText(/Not connected\./)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(go);
+    });
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith(VENDOR_PAGE);
+    });
+    expect(asked.at(-1)).toEqual([myConsentPath("xero"), { return_address: `https://console.example${CONSENT_RETURN_PATH}` }]);
+    vi.unstubAllGlobals();
+  });
+
+  test("a person with no source to connect is told so and offered no button", async () => {
+    vi.spyOn(client, "request").mockResolvedValue(ok({ accounts: [], told: "Read only for your own questions." }));
+    render(<MyAccounts />);
+    expect(await screen.findByText(/No source here is connected by each person/)).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  test("the return page sends a person's own consent on to My workspace", async () => {
+    vi.spyOn(client, "request").mockResolvedValue(
+      ok({ connector: "xero", kept: true, told: "Your account is connected.", back_to: MY_WORKSPACE_PAGE }),
+    );
+    const router = createMemoryRouter([{ path: CONSENT_RETURN_PATH, element: <ConnectorConsent /> }], {
+      initialEntries: [`${CONSENT_RETURN_PATH}?state=OWN-1&code=C1`],
+    });
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByText("Your account is connected.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: GO_TO_MY_WORKSPACE }).getAttribute("href")).toBe(MY_WORKSPACE_PAGE);
   });
 });

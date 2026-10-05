@@ -24,6 +24,7 @@ from tests.unit.test_acceptance_sources import run_checks, written
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_oauth"
 NAME = "a_consented_source_is_renewed_by_its_read_and_a_refusal_is_said"
+OWN = "a_persons_own_consent_is_read_for_them_alone"
 
 
 def mine() -> dict[str, Check]:
@@ -33,16 +34,20 @@ def mine() -> dict[str, Check]:
 def test_the_oauth_check_is_registered_with_the_leaf_it_proves() -> None:
     """Delete this and the check can close a leaf it does not exercise, or name an id no task
     has."""
-    assert {name: one.leaves for name, one in mine().items()} == {NAME: ("M11.8.6",)}
+    assert {name: one.leaves for name, one in mine().items()} == {
+        NAME: ("M11.8.6",),
+        OWN: ("M11.8.6",),
+    }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
-    assert set(mine()[NAME].leaves) <= leaves
+    assert set(mine()[NAME].leaves) | set(mine()[OWN].leaves) <= leaves
 
 
 def test_the_oauth_checks_are_listed_in_their_page_order() -> None:
-    """One check, the consented source from consent to refusal. Delete this and a check can drop
-    out of the module with the page simply listing one fewer row."""
-    assert checks_in(MODULE) == [NAME]
+    """Two checks, the consented source from consent to refusal and then a person's own consent.
+    Delete this and a check can drop out of the module with the page simply listing one fewer
+    row."""
+    assert checks_in(MODULE) == [NAME, OWN]
 
 
 def test_the_check_says_no_shipped_source_authorises_by_oauth_yet() -> None:
@@ -85,7 +90,7 @@ def test_on_a_real_database_a_consented_source_is_kept_renewed_and_refused_in_wo
         before = (counts(url), written(url))
         outcome = run_checks(url, tuple(mine().values()))
         after = (counts(url), written(url))
-    assert outcome == {NAME: (PASSED, "")}
+    assert outcome == {NAME: (PASSED, ""), OWN: (PASSED, "")}
     assert after == before
 
 
@@ -173,3 +178,91 @@ def test_the_oauth_check_steps_aside_where_the_install_has_xero_connected() -> N
         )
         outcome = run_checks(url, (mine()[NAME],))
     assert outcome[NAME] == (NOT_RUN, XERO_IS_CONNECTED_HERE_ALREADY)
+
+
+# ------------------------------------------------------------------ a person's own consent
+def test_the_personal_declaration_is_one_the_platform_accepts_and_renews_no_scheduled_read() -> (
+    None
+):
+    """The declaration the personal check builds passes every rule a shipped one meets: a personal
+    consent naming its reader capability, the form asking for the client id and the department,
+    and a scheduled reading that renews by no consent. Delete this and the check can be driving a
+    declaration no connector module could ship."""
+    from brain.connectors.declaration import PERSONAL_DEPARTMENT_SETTING, KeyScheme, ViewReading
+    from brain.connectors.oauth import ConsentKind
+    from brain.ops.acceptance_checks_oauth import (
+        CLIENT_ID_SETTING,
+        PERSONAL_READER,
+        consented_personally,
+    )
+
+    declared = consented_personally()
+    assert declared.oauth is not None and declared.console is not None
+    assert (declared.oauth.kind, declared.oauth.reader) == (ConsentKind.PERSON, PERSONAL_READER)
+    asked = {one.name for one in declared.console.settings}
+    assert {CLIENT_ID_SETTING, PERSONAL_DEPARTMENT_SETTING} <= asked
+    reading = declared.reading
+    assert reading is not None and not isinstance(reading, ViewReading)
+    assert reading.key_scheme() is not KeyScheme.OAUTH_REFRESH
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("source_slot", "a person's refresh token is not in their own slot"),
+        ("other_slot", "a person's keys leased another person's slot"),
+        ("withdrawn", "a withdrawn consent was not said in words"),
+        ("erasure", "erasing a person did not remove their own token and only theirs"),
+    ],
+)
+def test_the_personal_check_fails_where_the_path_is_broken(
+    monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """Four breaks, one per property: a person's consent kept in the source's own slot, a person's
+    keys that lease anybody's slot, a withdrawn consent said as the source's refusal rather than to
+    the person, and an erasure that removes nothing. Each fails the check with its own sentence.
+    Delete this and the check can pass with any of them gone."""
+    import brain.connector_routes as connector_routes
+    import brain.ops.connector_sync_run as connector_sync_run
+    import brain.ops.erasure_store as erasure_store
+
+    if broken == "source_slot":
+        from brain.ops.credentials import connector_oauth_slot
+
+        def the_sources(connector: str, principal_id: str) -> Any:
+            del principal_id
+            return connector_oauth_slot(connector)
+
+        monkeypatch.setattr(connector_routes, "connector_person_oauth_slot", the_sources)
+    elif broken == "other_slot":
+
+        def anybodys(self: Any, ref: Any, *, now: Any) -> Any:
+            return self._keys.lease(ref, now=now)
+
+        monkeypatch.setattr(connector_sync_run.PersonalKeys, "lease", anybodys)
+    elif broken == "withdrawn":
+        from brain.connectors.oauth import CONSENT_WITHDRAWN, ConsentWithdrawnError
+
+        words = connector_sync_run.personal_words
+
+        def the_sources_words(refused: Exception) -> str:
+            # A withdrawal said in the source's sentence, as if the source were down for everybody.
+            if isinstance(refused, ConsentWithdrawnError):
+                return CONSENT_WITHDRAWN
+            return words(refused)
+
+        monkeypatch.setattr(connector_sync_run, "personal_words", the_sources_words)
+    else:
+
+        def keeps(vault: Any, subject_id: str, connectors: Any) -> int:
+            del vault, subject_id
+            return len(connectors)
+
+        monkeypatch.setattr(erasure_store, "erase_own_refresh_tokens", keeps)
+    with at_head(f"brain_acceptance_own_{broken}") as url:
+        before = written(url)
+        outcome = run_checks(url, (mine()[OWN],))
+        after = written(url)
+    assert outcome[OWN] == (FAILED, reason)
+    assert after == before

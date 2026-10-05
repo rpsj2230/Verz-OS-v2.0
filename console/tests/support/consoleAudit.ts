@@ -444,6 +444,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors",
       "/api/v1/connectors/{connector}/consent",
       "/api/v1/connectors/consent/callback",
+      // A person's own accounts, listed and consented to from My workspace (M11.8.6).
+      "/api/v1/me/accounts",
+      "/api/v1/me/accounts/{connector}/consent",
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",

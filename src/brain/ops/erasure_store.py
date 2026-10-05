@@ -74,7 +74,16 @@ person did but the way to reach them, so `CLEARED` names it and the executor nul
 about the person, retired rows included, before the row's own rule runs. See
 `A_RETIRED_ROW_KEEPS_NO_ADDRESS`.
 
-Task ids: M27.7.24, M10.3.5
+**Erasing a person removes the refresh tokens their own consents bought (M11.8.6).** A source each
+person consents to for themselves keeps that person's refresh token in the vault, not in a table,
+so no store above reaches it. `erase_own_refresh_tokens` removes the person's slot for every source
+declared that way, every version of it, inside the request's transaction: a vault that refuses
+raises, the transaction rolls back and the request stays open to be carried out again, and removing
+a slot that holds nothing changes nothing, so a second run is harmless. The worker's policy may
+delete those slots and nothing else under the connector key engine. See
+`ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`.
+
+Task ids: M27.7.24, M10.3.5, M11.8.6
 """
 
 from __future__ import annotations
@@ -283,6 +292,11 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # person it is asked as; `0097` grants no way for a row to leave, so an erasure keeps these
         # and reports them kept, and a question asked as nobody is refused by the resolver.
         "ops.golden_question": "asked_as",
+        # A consent a person started at a vendor (`0180`), theirs whatever its kind. `0180` grants
+        # no way for a row to leave, so an erasure keeps these and reports them kept; a row holds
+        # a state's digest and a sealed verifier, and no token. The refresh token a person's own
+        # consent bought is in the vault and is removed: `erase_own_refresh_tokens`.
+        "ops.oauth_consent": "principal_id",
         "ops.operation": "principal_id",
         "ops.question_asked": "principal_id",
         # A sensitive question referred, for the person who asked it, and never what they asked
@@ -759,6 +773,62 @@ class EstateEraser:
         return self._executor(store).erase(store, subject_id)
 
 
+# ------------------------------------------------------- a person's own refresh tokens (M11.8.6)
+#: Why an erasure reaches into the vault.
+ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS: Final = (
+    "A refresh token a person's own consent bought opens their account at the vendor for as long "
+    "as it is kept, and it is kept in the vault rather than in any table an erasure walks. So "
+    "erasing the person removes their slot for every source each person consents to, every "
+    "version of it, before the request is finished; a vault that refuses leaves the request open "
+    "rather than finished with a token still standing."
+)
+
+#: What the drain says of a request whose person's refresh tokens no vault was there to remove.
+OWN_TOKENS_NOT_REACHED: Final = (
+    "the refresh tokens of sources each person consents to were not reached: this worker has no "
+    "vault to remove them from"
+)
+
+
+@runtime_checkable
+class RemovesSlots(Protocol):
+    """The vault as the worker's own token presents to it, for removing one slot outright."""
+
+    def remove_static_kv(self, path: str) -> None:
+        """Remove the slot and every version of it, or raise a `SecretsUnavailableError`."""
+        ...
+
+
+def personally_consented() -> tuple[str, ...]:
+    """Every shipped source each person consents to for themselves, by name."""
+    from brain.connectors.declaration import shipped
+    from brain.connectors.oauth import ConsentKind
+
+    return tuple(
+        sorted(
+            name
+            for name, one in shipped().items()
+            if one.oauth is not None and one.oauth.kind is ConsentKind.PERSON
+        )
+    )
+
+
+def erase_own_refresh_tokens(
+    vault: RemovesSlots, subject_id: str, connectors: Sequence[str]
+) -> int:
+    """Remove this person's own refresh token slot for each source, and say how many were asked.
+
+    Every source is asked whether or not the person ever consented, because whether a slot is held
+    is a read this worker is not granted; a slot never written is removed as nothing. Raises the
+    vault's `SecretsUnavailableError`. See `ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`.
+    """
+    from brain.ops.credentials import connector_person_oauth_slot
+
+    for connector in connectors:
+        vault.remove_static_kv(connector_person_oauth_slot(connector, subject_id).path)
+    return len(connectors)
+
+
 # ---------------------------------------------------------------------------- the drain
 def stores_document(deletion: Deletion) -> list[dict[str, Any]]:
     """What a finished request records about each store. Counts and sentences, never a value."""
@@ -787,6 +857,8 @@ def drain_erasure_queue(
     report_only: bool = False,
     limit: int = DRAIN_LIMIT,
     objects: StoreEraser | None = None,
+    own_tokens: RemovesSlots | None = None,
+    consented: Sequence[str] | None = None,
 ) -> str:
     """Carry out the oldest open requests filed by `now`, one transaction each, as report lines.
 
@@ -800,6 +872,10 @@ def drain_erasure_queue(
     The session's actor is the queue's name and its trace the request's, so every entry the
     erasure's own writes append, the revokes a retired grant writes among them, is attributed to
     the queue working on this request.
+
+    `own_tokens` is the vault the person's own refresh tokens are removed from, for every source in
+    `consented` (each shipped source each person consents to, when not given); handed none, the
+    report line says they were not reached. See `erase_own_refresh_tokens`.
 
     In report-only mode nothing is carried out, and the count of open requests is the report.
     The queue is not in `brain.ops.schedule.DESTRUCTIVE`, see
@@ -815,6 +891,7 @@ def drain_erasure_queue(
         waiting = 0 if row is None else int(row[0])
         return f"report only: {waiting} erasure request(s) open and none carried out"
     lines: list[str] = []
+    sources = personally_consented() if consented is None else tuple(consented)
     for _ in range(limit):
         with conn.transaction():
             taken = conn.execute(
@@ -839,9 +916,11 @@ def drain_erasure_queue(
                 )
             except HeldError as held:
                 outcome, stores, held_by = ErasureOutcome.HELD, [], list(held.hold_ids)
+                tokens = ""
             else:
                 outcome = ErasureOutcome.ERASED if deletion.complete else ErasureOutcome.INCOMPLETE
                 stores, held_by = stores_document(deletion), []
+                tokens = _own_tokens(own_tokens, subject_id, sources)
             conn.execute(
                 "UPDATE ops.erasure_request SET finished_at = %s, finished_by = %s, outcome = %s, "
                 "stores = %s, holds = %s WHERE request_id = %s",
@@ -854,8 +933,18 @@ def drain_erasure_queue(
                     request_id,
                 ),
             )
-        lines.append(f"erasure request {request_id}: {outcome.value}")
+        lines.append(f"erasure request {request_id}: {outcome.value}{tokens}")
     return "\n".join(lines) if lines else "no erasure request was open"
+
+
+def _own_tokens(vault: RemovesSlots | None, subject_id: str, sources: Sequence[str]) -> str:
+    """Remove the person's own refresh tokens, and what the report line says of it."""
+    if not sources:
+        return ""
+    if vault is None:
+        return f"; {OWN_TOKENS_NOT_REACHED}"
+    asked = erase_own_refresh_tokens(vault, subject_id, sources)
+    return f"; their own refresh token removed from {asked} source(s)"
 
 
 # --------------------------------------------------------------------------- the console

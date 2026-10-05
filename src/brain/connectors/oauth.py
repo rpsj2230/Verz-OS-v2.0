@@ -59,12 +59,26 @@ checked here, kept with the consent, and sent again with the code, because a ven
 exchange whose address differs from the one the consent was asked with. See
 `consent_return_address`.
 
+**A source's consent is given once for the source, or by each person for themselves.** A source
+whose vendor holds one company account (Xero's organisation) is consented to once, by somebody
+holding the authority to connect it, and every read uses that one refresh token. A source whose
+vendor holds each person's own account (their mailbox, their calendar) cannot be: the company has
+no account there to consent with, and one person's consent reading for everybody would be that
+person's mailbox told to whoever asks. So `OAuthConsent.kind` says which, and a `ConsentKind.PERSON`
+consent is started by the person themselves, kept in a slot of their own
+(`brain.ops.credentials.connector_person_oauth_slot`), and read only for that person's own
+questions. See `A_PERSONS_CONSENT_READS_ONLY_FOR_THAT_PERSON`. The client id and secret stay the
+source's: they are the application the company registered at the vendor, which every person
+consents to. Rejected: a second declaration field beside `oauth` for the personal case, which would
+let a source declare both and leave which one a read used to whichever path came first.
+
 Task ids: M11.8.6
 """
 
 from __future__ import annotations
 
 import base64
+import enum
 import hashlib
 import json
 import re
@@ -72,6 +86,8 @@ import secrets
 from dataclasses import dataclass, field
 from typing import Any, Final
 from urllib.parse import urlencode, urlsplit
+
+from pydantic import ValidationError
 
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.google_token import (
@@ -81,6 +97,7 @@ from brain.connectors.google_token import (
     TokenNotIssuedError,
 )
 from brain.connectors.throttle import CallOutcome, classify
+from brain.core.entitlement import Capability
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the console never asks for a vendor password or decides what was consented to.
@@ -132,6 +149,29 @@ A_KEPT_VERIFIER_IS_SEALED_UNDER_THE_STATE_THE_TABLE_NEVER_HOLDS: Final = (
     "who also read the table."
 )
 
+#: Why a person's own consent is read for nobody but them.
+A_PERSONS_CONSENT_READS_ONLY_FOR_THAT_PERSON: Final = (
+    "A consent a person gives for their own account at a vendor reaches what that account holds, "
+    "their mail and their calendar, which is theirs and nobody else's. So it is started by that "
+    "person, kept in a slot of their own, and leased only for a read made for their own question: "
+    "a read for anybody else never names their slot, and no process reading with nobody present "
+    "can lease it at all."
+)
+
+#: What a person is told when the vendor refused the consent they gave for their own account.
+#: Constant, for `CONSENT_WITHDRAWN`'s reason, and about their reads alone.
+YOUR_CONSENT_WITHDRAWN: Final = (
+    "The vendor refused the consent you gave for your own account: it was revoked or it expired. "
+    "Nothing was read from it for you. Connect your account again from My workspace; nobody "
+    "else's reads are affected."
+)
+
+#: What a person is told when they have not consented for their own account yet.
+NOT_CONNECTED_FOR_YOU: Final = (
+    "You have not connected your own account with this source, so nothing was read from it for "
+    "you. Connect it from My workspace."
+)
+
 #: Where the vendor sends the person back: one page of the console, the same on every install.
 CONSENT_RETURN_PATH: Final = "/connector-consent"
 
@@ -178,6 +218,16 @@ def _https(url: str, what: str) -> str:
     return url
 
 
+class ConsentKind(enum.StrEnum):
+    """Whose consent a source's access is renewed from. `ops.oauth_consent.kind` holds one."""
+
+    #: Once for the source, by somebody who may connect it; every read uses it.
+    SOURCE = "source"
+    #: By each person for their own account; a read uses only the asker's. See
+    #: `A_PERSONS_CONSENT_READS_ONLY_FOR_THAT_PERSON`.
+    PERSON = "person"
+
+
 @dataclass(frozen=True)
 class OAuthConsent:
     """How one source is consented to and renewed: the vendor's two addresses and what is asked.
@@ -194,6 +244,11 @@ class OAuthConsent:
     #: The console setting the application's client id is typed into. The client secret is the
     #: connection's credential, kept in its vault slot like any pasted key.
     client_id_setting: str = "client_id"
+    #: Whether the source is consented to once, or by each person for themselves.
+    kind: ConsentKind = ConsentKind.SOURCE
+    #: For a personal consent, the capability a person holds in the connection's department to be
+    #: read anything from the source, and so to consent for themselves at all; empty otherwise.
+    reader: str = ""
 
     def __post_init__(self) -> None:
         _https(self.authorize_url, "consent page")
@@ -201,6 +256,7 @@ class OAuthConsent:
         if not _SETTING_RE.match(self.client_id_setting):
             msg = f"{self.client_id_setting!r} is not a setting a client id can be typed into"
             raise ConnectorContractError(msg)
+        self._reader_matches_kind()
         if not self.scopes:
             msg = "an OAuth consent asks for at least one scope, or it can read nothing"
             raise ConnectorContractError(msg)
@@ -214,6 +270,29 @@ class OAuthConsent:
             if name in reserved:
                 msg = f"{name!r} is set by the consent itself and is not the vendor's to declare"
                 raise ConnectorContractError(msg)
+
+    def _reader_matches_kind(self) -> None:
+        """A personal consent names the read capability a person must hold; a source's names none.
+
+        Without one, anybody who can sign in could keep a refresh token for an account no read
+        would ever use for them; with one on a source's consent, the capability would read as a
+        rule the source-wide renewal never asks.
+        """
+        if self.kind is ConsentKind.SOURCE:
+            if self.reader:
+                msg = "a source's own consent is given by its connector, so it names no reader"
+                raise ConnectorContractError(msg)
+            return
+        try:
+            verb = Capability(value=self.reader).verb
+        except ValidationError:
+            verb = ""
+        if verb != "read":
+            msg = (
+                f"a personal consent names the read capability a person needs, and "
+                f"{self.reader!r} is not one"
+            )
+            raise ConnectorContractError(msg)
 
 
 # ----------------------------------------------------------------------- starting consent

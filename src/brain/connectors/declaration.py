@@ -114,7 +114,10 @@ it is kept in a slot of its own (`brain.ops.credentials.connector_oauth_slot`), 
 `brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`
 gives. Its reading names `KeyScheme.OAUTH_REFRESH` and is a `ConsentedReading` presenting the same
 consent, so the worker's run, which is shared by every source, renews access with the source's own
-consent and nobody else's. See `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`.
+consent and nobody else's. See `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`. A
+source each person consents to for themselves (`ConsentKind.PERSON`) also asks for the department
+its readers are held to (`PERSONAL_DEPARTMENT_SETTING`), which is where a person must hold the
+consent's reader capability to connect their own account.
 
 Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4, M11.6.1
 Task ids: M11.7.3, M11.7.1, M11.8.6
@@ -139,7 +142,7 @@ from brain.connectors.ask import AskRows
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
-from brain.connectors.oauth import OAuthConsent
+from brain.connectors.oauth import ConsentKind, OAuthConsent
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome
@@ -220,6 +223,10 @@ A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR: Final = (
     "declaration, and a reading naming the Google scheme without one is refused before any key "
     "is read."
 )
+
+#: The setting naming the department a source each person consents to answers to: a person may
+#: consent for themselves only while holding its declared reader capability there (M11.8.6).
+PERSONAL_DEPARTMENT_SETTING: Final = "department"
 
 #: Why an OAuth source's reading presents the consent its declaration asks for, and nothing else.
 A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR: Final = (
@@ -1142,12 +1149,28 @@ class ConnectorDeclaration:
                 "the application's client secret as one pasted key"
             )
             raise DeclarationError(msg)
-        if self.oauth.client_id_setting not in {one.name for one in form.settings}:
+        asked = {one.name for one in form.settings}
+        if self.oauth.kind is ConsentKind.PERSON and PERSONAL_DEPARTMENT_SETTING not in asked:
+            msg = (
+                f"connector {self.name!r} is consented to by each person for themselves, so its "
+                f"form asks for the {PERSONAL_DEPARTMENT_SETTING!r} its readers are held to"
+            )
+            raise DeclarationError(msg)
+        if self.oauth.client_id_setting not in asked:
             msg = (
                 f"connector {self.name!r} reads its client id from the "
                 f"{self.oauth.client_id_setting!r} setting, which its form does not ask for"
             )
             raise DeclarationError(msg)
+        if self.oauth.kind is ConsentKind.PERSON:
+            if renews:
+                msg = (
+                    f"connector {self.name!r} is consented to by each person for themselves, so no "
+                    "read made with nobody present can renew by a consent; its scheduled reading, "
+                    "if any, is keyed some other way"
+                )
+                raise DeclarationError(msg)
+            return
         # Asked of the reading as an object: a protocol check over the union of the two reading
         # shapes is one mypy reads as never true, and at run time it is the question asked.
         reading: object = self.reading

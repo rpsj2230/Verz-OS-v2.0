@@ -78,7 +78,11 @@ from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.oauth import OAuthConsent
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
-from brain.ops.credentials import connector_key_slot, connector_oauth_slot
+from brain.ops.credentials import (
+    connector_key_slot,
+    connector_oauth_slot,
+    connector_person_oauth_slot,
+)
 from brain.ops.limits import connector_ceiling
 from brain.ops.secrets import SecretRef, VaultRole
 
@@ -275,6 +279,15 @@ def refresh_reference(name: str) -> SecretRef:
     """Where the refresh token a person's consent to a source bought is kept, read by the worker's
     role like the source's key (M11.8.6). See `brain.ops.credentials.connector_oauth_slot`."""
     return SecretRef(path=connector_oauth_slot(name).path, role=READING_ROLE)
+
+
+def person_refresh_reference(name: str, principal_id: str) -> SecretRef:
+    """Where the refresh token one person's own consent to a source bought is kept (M11.8.6).
+
+    Read only by `brain.ops.connector_sync_run.PersonalKeys`, for that person's own question. See
+    `brain.ops.credentials.connector_person_oauth_slot`.
+    """
+    return SecretRef(path=connector_person_oauth_slot(name, principal_id).path, role=READING_ROLE)
 
 
 def blank_sentence(setting: Setting) -> str:

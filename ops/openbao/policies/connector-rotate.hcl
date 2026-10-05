@@ -21,6 +21,14 @@ path "connector_keys/data/oauth_refresh/+" {
   capabilities = ["patch"]
 }
 
+# And a person's own refresh token (M11.8.6), one segment deeper, rotated by the read made for that
+# person's question: the same patch and nothing more, so this token cannot read the person's token it
+# replaces either. Which person's slot is patched is the code's to hold, as it is for the read
+# (brain.ops.connector_sync_run.PersonalKeys).
+path "connector_keys/data/oauth_refresh/+/+" {
+  capabilities = ["patch"]
+}
+
 # Giving the token back at the end of the write. Granted here because the token carries no default
 # policy, which is where revoke-self would otherwise come from.
 path "auth/token/revoke-self" {
