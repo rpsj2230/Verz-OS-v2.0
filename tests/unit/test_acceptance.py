@@ -583,6 +583,10 @@ WRITTEN_BY_CHECKS = (
     "obs.trace_read",
     "ops.operation",
     "ops.budget_version",
+    "gate.capability_registry",
+    "gate.capability_pack",
+    "gate.capability_pack_assignment",
+    "gate.role_grant",
 )
 
 
