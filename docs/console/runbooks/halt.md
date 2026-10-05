@@ -21,7 +21,7 @@ The stop button, and everything currently stopped. Stopping needs no approval; r
 
 The stop button, and everything currently stopped (`operate.stopped_for`): each halt with its scope, target, who declared it, when, why and what it does. Stopping needs no approval. Resuming needs a stated reason. A halt never expires on its own.
 
-**This screen cannot be opened yet.** The registry declares it and no console tool named `console.halt` is registered, so there is no page to go to. Everything below describes what the module behind it decides, which is what the screen will show once the tool exists.
+The page is at `/stop`, under Operations, and every console page's header carries a Stop control for a reader who may stop something: one press stops everything, or for a department administrator their own department, with nothing to confirm and nothing to type. The table's last row is about agent tools, and no console tool named `console.halt` is registered, as none is for any screen.
 
 ## Who may see it
 

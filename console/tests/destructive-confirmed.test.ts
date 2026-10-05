@@ -39,6 +39,13 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  // The owner's rule (needs-rupash 38 (2)): stopping is one press, with no confirmation and no
+  // second signature, because a stop that can be held up by a dialog fails at the moment it is
+  // needed. It ends no work and loses none; resuming is the guarded act, and it is confirmed.
+  "src/pages/operations/StopControl.tsx HALTS_API_PATH":
+    "Stopping is the owner's one-press control: it starts nothing, loses nothing that is waiting, and is lifted by a resume, which is confirmed and needs a written reason.",
+  "src/pages/operations/StopPage.tsx HALTS_API_PATH":
+    "The same stop as the header's control, from the Stop screen's form: one press by the owner's rule, losing nothing, lifted by a confirmed resume with a written reason.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
     "Adding a work email binds an address to a person who has none. It retires the staff list's " +
     "person for that address only when they have never signed in and hold nothing but what the sync " +
