@@ -93,6 +93,17 @@ A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING: Final = (
     "here and one with thirteen of twenty three migrations flagged for building a schema."
 )
 
+#: Why a permissive policy on a table that was already there is a widening and not a narrowing.
+A_PERMISSIVE_POLICY_CAN_ONLY_WIDEN: Final = (
+    "PostgreSQL ORs every permissive policy for a command and role together, and permissive is "
+    "what CREATE POLICY writes unless it says AS RESTRICTIVE. So a permissive policy added to a "
+    "table that was already there admits every row the table's policies admitted before and "
+    "possibly more: the previous release's queries return what they returned and its writes pass "
+    "the checks they passed. Only a restrictive policy, which is ANDed with the rest, takes "
+    "anything away, and it stays a finding. 0162 and 0163 were refused for a permissive read "
+    "and a permissive update until this was read."
+)
+
 #: Why taking a privilege on a brand new function away from PUBLIC is not a narrowing.
 A_REVOKE_ON_A_FUNCTION_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING: Final = (
     "PostgreSQL grants EXECUTE to PUBLIC on every function it creates, so a SECURITY DEFINER "
@@ -227,6 +238,8 @@ _CREATE_TABLE = re.compile(
 )
 _ALTER_TABLE = re.compile(rf"^ALTER\s+TABLE\s+(?:ONLY\s+)?({_QUALIFIED})\s+(?P<rest>.*)$", re.I)
 _ON_TABLE = re.compile(rf"\bON\s+({_QUALIFIED})\b", re.IGNORECASE)
+#: The clause that makes a policy restrictive. Its absence is permissive, PostgreSQL's default.
+_RESTRICTIVE = re.compile(r"\bAS\s+RESTRICTIVE\b", re.IGNORECASE)
 #: A function a body creates, and the function a REVOKE takes a privilege from. `CREATE OR REPLACE`
 #: is not the first: a function it replaces was already there for the previous release to call.
 _CREATE_FUNCTION = re.compile(rf"^CREATE\s+FUNCTION\s+({_QUALIFIED})\s*\(", re.I)
@@ -754,6 +767,12 @@ def _from_statement(
                     Verdict.UNREADABLE,
                     "policy replaced",
                     f"{statement}. {A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED}",
+                )
+            if head == "CREATE POLICY" and _RESTRICTIVE.search(statement) is None:
+                return Change(
+                    Verdict.SAFE,
+                    "permissive policy, which only widens",
+                    f"{statement}. {A_PERMISSIVE_POLICY_CAN_ONLY_WIDEN}",
                 )
             return Change(
                 Verdict.BREAKING,

@@ -94,10 +94,10 @@ Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Final
+from typing import Annotated, Final, cast
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -118,7 +118,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute, Page
 from brain.api_routes import Asked, Asking
 from brain.audit.record import ConnectorChange
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import ConnectorManifest, digest_input, manifest_digest
 from brain.connectors.registry import may_install
 from brain.console.connector_detail import (
@@ -164,6 +164,7 @@ from brain.core.errors import Absent, BrainError, Failed
 from brain.credential_routes import credentials_of
 from brain.guide_views import GuideStepView, step_view
 from brain.identity.data_steward import declared_capabilities
+from brain.identity.principal_store import StoredPrincipals
 from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.connectable import (
@@ -195,8 +196,9 @@ from brain.ops.connector_admin import (
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
     connection_problems,
-    key_problems,
+    credential_problems,
     may_connect_source,
+    people_problems,
 )
 from brain.ops.connector_probe import TESTING_A_SOURCE, ProbeStatus, untestable
 from brain.ops.connector_recordings import recorded_in_words
@@ -216,14 +218,20 @@ from brain.ops.connector_sync_store import (
     StoredProbes,
     StoredSyncStates,
 )
+from brain.ops.credentials import KEY_FIELD as SLOT_KEY_FIELD
 from brain.ops.credentials import (
     MAX_CREDENTIAL_CHARS,
+    MAX_KEY_FILE_CHARS,
     CredentialProblemError,
     Credentials,
     CredentialsUnavailableError,
     Held,
+    Kept,
+    KeySlot,
     VaultState,
     connector_key_slot,
+    key_file_problems,
+    user_and_password,
 )
 from brain.ops.lark_connect import uses_switched_on
 from brain.routing_routes import sessions_of
@@ -369,6 +377,11 @@ class ConnectableView(BaseModel):
     settings: list[SettingView]
     credential_label: str
     credential_hint: str
+    #: How the credential is asked for: `key`, `key_file` or `database_user` (M11.7.7). See
+    #: `brain.connectors.declaration.CredentialShape`.
+    credential_shape: str
+    #: The longest credential, or each half of a database user, the API accepts for this source.
+    credential_max_chars: int
     #: Whether this reader may connect it. Their own grant over this source.
     may_connect: bool
     #: The screens of its connect flow, the form last. The same on every install.
@@ -974,6 +987,12 @@ def _page(
                 ],
                 credential_label=kind.credential_label,
                 credential_hint=kind.credential_hint,
+                credential_shape=kind.credential_shape.value,
+                credential_max_chars=(
+                    MAX_KEY_FILE_CHARS
+                    if kind.credential_shape is CredentialShape.KEY_FILE
+                    else MAX_CREDENTIAL_CHARS
+                ),
                 may_connect=may_connect_source(reach, kind.name, now),
                 steps=[step_view(step) for step in kind.guide],
             )
@@ -1039,6 +1058,66 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     )
 
 
+def _person_is_live(request: Request) -> Callable[[str], Awaitable[bool]]:
+    """Whether an id names somebody live on this install, for a setting that names a person.
+
+    Asked of `app.state.people_are_live` when a test put a lookup there, and otherwise of the
+    principal store. A process with no database has nobody to name and answers no for everybody,
+    so a setting naming a person is refused there rather than written unchecked.
+    """
+    found = getattr(request.app.state, "people_are_live", None)
+    if callable(found):
+        # `app.state` is untyped, and a test's lookup is the only thing put there under this name.
+        return cast("Callable[[str], Awaitable[bool]]", found)
+    sessions = sessions_of(request)
+
+    async def is_live(principal_id: str) -> bool:
+        if sessions is None:
+            return False
+        return await StoredPrincipals(sessions).live_principal(principal_id) is not None
+
+    return is_live
+
+
+async def keep_credential(
+    credentials: Credentials,
+    slot: KeySlot,
+    shape: CredentialShape,
+    value: str,
+    *,
+    actor: str,
+    trace_id: str,
+    ent_hash: str,
+) -> Kept:
+    """Keep a source's credential in its slot, whole, in the shape its source takes it (M11.7.7).
+
+    A key is kept as the slot's key. A key file is kept as the slot's key too, judged as a file
+    rather than as one unbroken run of characters. A database user is kept as two fields, the
+    password as the key and the name beside it, so a reader asking the slot for its key is handed
+    the secret half. See
+    `brain.connectors.declaration.A_CREDENTIAL_IS_ASKED_FOR_IN_THE_SHAPE_THE_SOURCE_ISSUES_IT`.
+    """
+    match shape:
+        case CredentialShape.KEY:
+            return await credentials.keep(
+                slot, value, actor=actor, trace_id=trace_id, ent_hash=ent_hash
+            )
+        case CredentialShape.KEY_FILE:
+            return await credentials.keep_fields(
+                slot,
+                {SLOT_KEY_FIELD: value},
+                actor=actor,
+                trace_id=trace_id,
+                ent_hash=ent_hash,
+                judge=key_file_problems,
+            )
+        case CredentialShape.DATABASE_USER:
+            fields, _ = user_and_password(value)
+            return await credentials.keep_fields(
+                slot, fields, actor=actor, trace_id=trace_id, ent_hash=ent_hash
+            )
+
+
 @router.post(CONNECTORS_PATH, response_model=ConnectorChangedView, responses=_WRITE_RESPONSES)
 async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONResponse:
     """Connect a source and keep its key, or write nothing and say why."""
@@ -1046,6 +1125,11 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
         log.info("connecting a source not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("connect")
     found = connection_problems(body.connector, body.settings, body.credential)
+    if found:
+        return _problems(found)
+    found = await people_problems(
+        CONNECTABLE[body.connector], body.settings, is_live=_person_is_live(request)
+    )
     if found:
         return _problems(found)
     credentials = credentials_of(request)
@@ -1065,8 +1149,14 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     written: list[datetime | None] = []
 
     async def keep_key() -> datetime | None:
-        kept = await credentials.keep(
-            slot, body.credential, actor=actor, trace_id=trace_id, ent_hash=ent_hash
+        kept = await keep_credential(
+            credentials,
+            slot,
+            kind.credential_shape,
+            body.credential,
+            actor=actor,
+            trace_id=trace_id,
+            ent_hash=ent_hash,
         )
         written.append(kept.set_at)
         return kept.set_at
@@ -1099,7 +1189,7 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     except CredentialProblemError:
         # Judged above, so this is unreachable unless the two judgements part company; answered
         # in this router's words rather than as a fault, because nothing was written.
-        return _problems(key_problems(body.credential))
+        return _problems(credential_problems(kind.credential_shape, body.credential))
     except CredentialsUnavailableError as unavailable:
         return _not_kept(unavailable.state)
     except BrainError:
@@ -1513,7 +1603,9 @@ async def edit(
         # `connection_problems`' own answer for a source this screen cannot connect, which is the
         # first problem it finds and the only one it judges.
         return _problems(connection_problems(connector, body.settings, ""))
-    found = settings_problems(kind, body.settings)
+    found = settings_problems(kind, body.settings) or await people_problems(
+        kind, body.settings, is_live=_person_is_live(request)
+    )
     if found:
         return _problems(found)
     changes = changes_of(request)
@@ -1694,7 +1786,9 @@ async def replace_key(
     if not may_connect_source(asked.reach, connector, asked.now):
         log.info("replacing a key not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("replace key")
-    found = key_problems(body.credential)
+    kind = CONNECTABLE.get(connector)
+    shape = CredentialShape.KEY if kind is None else kind.credential_shape
+    found = credential_problems(shape, body.credential)
     if found:
         return _problems(found)
     credentials = credentials_of(request)
@@ -1704,15 +1798,17 @@ async def replace_key(
         raise _not_answerable("replace key")
     actor = asked.reach.principal_id
     try:
-        kept = await credentials.keep(
+        kept = await keep_credential(
+            credentials,
             connector_key_slot(connector),
+            shape,
             body.credential,
             actor=actor,
             trace_id=_trace_id(),
             ent_hash=asked.reach.ent_hash(),
         )
     except CredentialProblemError:
-        return _problems(key_problems(body.credential))
+        return _problems(credential_problems(shape, body.credential))
     except CredentialsUnavailableError as unavailable:
         return _not_kept(unavailable.state)
     log.info("source key replaced", connector=connector, principal=actor)

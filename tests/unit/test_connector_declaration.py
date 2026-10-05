@@ -31,7 +31,13 @@ from brain.connectors.declaration import (
     read_backs,
     shipped,
 )
-from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
+from brain.ops.connectable import (
+    CONNECTABLE,
+    DECLARED_FORMS,
+    NOT_FROM_THE_CONSOLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
+    reads,
+)
 from brain.ops.connector_recordings import RECORDINGS
 from brain.ops.connector_sync import READINGS
 
@@ -53,7 +59,7 @@ def a_package(root: Path, name: str, modules: dict[str, str]) -> ModuleType:
 
 
 def test_every_connector_that_ships_declares_itself_under_its_own_module_name() -> None:
-    """The seven connectors this release ships, each found by the `CONNECTOR` its module states.
+    """The eight connectors this release ships, each found by the `CONNECTOR` its module states.
     The count is asserted so an empty discovery cannot pass, and each name is compared with the
     module's own constant rather than with the key it was found under.
 
@@ -63,6 +69,7 @@ def test_every_connector_that_ships_declares_itself_under_its_own_module_name() 
 
     assert set(found) == {
         "freshdesk",
+        "google_analytics",
         "google_drive",
         "hubspot",
         "laravel",
@@ -84,22 +91,24 @@ def test_every_registry_that_used_to_be_a_list_is_read_off_the_declarations() ->
     connector added after that is missing from whichever list nobody remembered."""
     declared = shipped()
 
-    assert set(CONNECTABLE) == {name for name, one in declared.items() if one.console is not None}
-    assert set(NOT_FROM_THE_CONSOLE) == {
-        name for name, one in declared.items() if one.console is None
-    }
+    assert set(DECLARED_FORMS) == {name for name, one in declared.items() if one.console}
+    assert set(CONNECTABLE) == {name for name in DECLARED_FORMS if reads(declared[name])}
+    assert set(NOT_FROM_THE_CONSOLE) == set(declared) - set(CONNECTABLE)
     assert {name: kind.label for name, kind in CONNECTABLE.items()} == {
         name: declared[name].label for name in CONNECTABLE
     }
+    # A source with no form says why in its own declaration's words; a form not offered yet says
+    # this install cannot read it (`brain.ops.connectable.THIS_INSTALL_CANNOT_READ_IT_YET`).
     assert {name: one.why for name, one in NOT_FROM_THE_CONSOLE.items()} == {
-        name: declared[name].not_from_the_console for name in NOT_FROM_THE_CONSOLE
+        name: declared[name].not_from_the_console or THIS_INSTALL_CANNOT_READ_IT_YET
+        for name in NOT_FROM_THE_CONSOLE
     }
     assert dict(READINGS) == {
         name: one.reading for name, one in declared.items() if one.reading is not None
     }
     assert dict(RECORDINGS) == {name: one.recorded for name, one in declared.items()}
     assert dict(read_backs()) == {name: one.read_back for name, one in declared.items()}
-    assert set(READINGS) == {"freshdesk", "hubspot", "xero"}
+    assert set(READINGS) == {"freshdesk", "google_analytics", "hubspot", "xero"}
 
 
 # ------------------------------------------------------------------ discovery

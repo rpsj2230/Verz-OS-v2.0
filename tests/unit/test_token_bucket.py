@@ -231,7 +231,7 @@ def test_an_unmeasured_connector_gets_no_bucket_rather_than_a_default() -> None:
     three that are, and is wrong in whichever direction somebody guessed. Delete this and a
     connector nobody has verified would run at whatever default was convenient."""
     with pytest.raises(TokenBucketError, match="not one of the verified sources"):
-        bucket_for("hubspot", now=T0)
+        bucket_for("nowhere", now=T0)
 
 
 def test_a_call_that_can_never_fit_is_refused_rather_than_waited_for() -> None:

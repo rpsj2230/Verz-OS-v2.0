@@ -8,6 +8,7 @@
  */
 
 import { BREACHES_API_PATH, breachStepApiPath, REGISTER_API_PATH, topicApiPath } from "../../../src/pages/complianceQuery";
+import { ESCALATION_ROUTES_API_PATH, escalationRouteApiPath } from "../../../src/pages/compliance/EscalationQueues";
 import { at, COMPLIANCE_CASE, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
 
 export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
@@ -16,6 +17,12 @@ export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> =
     screen: "/compliance/:view",
     spelled: "REGISTER_API_PATH",
     built: REGISTER_API_PATH,
+  },
+  // The escalation queues are read when a person opens their view, as the register is.
+  "GET /api/v1/govern/escalation-routes": {
+    screen: "/compliance/:view",
+    spelled: "ESCALATION_ROUTES_API_PATH",
+    built: ESCALATION_ROUTES_API_PATH,
   },
 };
 
@@ -39,6 +46,9 @@ const BREACH_STEP: Proofs = {
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/compliance/EscalationQueues.tsx escalationRouteApiPath(form.queue.trim())": [
+    at("PUT /api/v1/govern/escalation-routes/{queue}", "escalationRouteApiPath", escalationRouteApiPath("pricing")),
+  ],
   "src/pages/compliance/ComplianceActs.tsx topicApiPath(topic.topic)": [
     at("PUT /api/v1/govern/compliance/topics/{topic}", "topicApiPath", topicApiPath("grievance")),
   ],
@@ -73,6 +83,17 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: A_PERSON_NAMED_FOR_A_TOPIC,
     audit: A_PERSON_NAMED_FOR_A_TOPIC,
     behaviour: t("test_compliance_routes", "test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic"),
+  },
+  // Naming a queue's person: the setting row and its ledger entry through the route, and the next
+  // handoff routed to that person under 0168's policy (M8.3.2).
+  "PUT /api/v1/govern/escalation-routes/{queue}": {
+    row: t("test_escalation_routes_db", "test_a_queue_s_person_is_named_by_the_compliance_authority_and_nobody_else", true),
+    audit: t("test_escalation_routes_db", "test_a_queue_s_person_is_named_by_the_compliance_authority_and_nobody_else", true),
+    behaviour: t(
+      "test_escalation_store",
+      "test_a_handoff_goes_to_the_person_named_and_is_read_by_them_and_its_asker_alone",
+      true,
+    ),
   },
   "POST /api/v1/govern/compliance/breaches": BREACH_STEP,
   "POST /api/v1/govern/compliance/breaches/{case_id}/assessment": BREACH_STEP,

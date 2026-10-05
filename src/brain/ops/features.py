@@ -201,6 +201,8 @@ SCHEDULE_CONTROL: Final = Feature(
         "brain.jobs_routes:job_detail",
         "brain.jobs_routes:pause_job",
         "brain.jobs_routes:run_job",
+        # Sync now on Staff sources writes the same run request as Run now (M1.10.2).
+        "brain.staff_source_routes:ask_staff_sync_now",
     ),
 )
 

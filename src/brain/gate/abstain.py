@@ -590,6 +590,11 @@ ESCALATION_EXPIRED_TEXT: Final = "Nobody from {queue} has picked this up, so it 
 #: system cannot keep and does not admit to breaking.
 DEFAULT_ESCALATION_TTL: Final = timedelta(hours=4)
 
+#: How often the worker marks overdue escalations expired (`brain.ops.escalation_store`). A quarter
+#: of an hour, so an asker is told nobody picked their question up within fifteen minutes of the
+#: deadline, which is small beside the shortest deadline a skill may set, an hour.
+EXPIRY_EVERY: Final = timedelta(minutes=15)
+
 
 @dataclass(frozen=True)
 class Escalation:

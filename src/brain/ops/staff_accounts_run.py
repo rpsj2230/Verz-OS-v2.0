@@ -40,7 +40,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 
 import structlog
@@ -143,6 +143,28 @@ def employment_of(person: StaffRecord) -> Employment:
     return Employment.CONTRACTOR if person.employment_type in CONTRACTED else Employment.STAFF
 
 
+#: How long a contracted person the list brings in is engaged for, counted from the last run that
+#: still listed them. See `A_CONTRACTOR_ON_THE_LIST_STAYS_ENGAGED_WHILE_LISTED`.
+CONTRACTED_ENGAGEMENT_LASTS: Final = timedelta(days=90)
+
+#: Why a contracted person has an end date the source did not give, and why it keeps moving.
+A_CONTRACTOR_ON_THE_LIST_STAYS_ENGAGED_WHILE_LISTED: Final = (
+    "auth.principal refuses a contractor with no end date (bounded_engagement_expires), because "
+    "an unbounded contractor is how a permission model rots, and no staff source says when a "
+    "contract ends. So a contracted person the sync makes is engaged for "
+    "CONTRACTED_ENGAGEMENT_LASTS, and every run that still lists them active moves that end on "
+    "by the same span, never back: it lapses only once the list has stopped naming them for that "
+    "long. A date an administrator set later than that is left as it is."
+)
+
+
+def engaged_until(person: StaffRecord, now: datetime) -> datetime | None:
+    """The end date a person the sync makes starts with: a span from now for a contractor."""
+    if employment_of(person) is Employment.CONTRACTOR:
+        return now + CONTRACTED_ENGAGEMENT_LASTS
+    return None
+
+
 async def _bound(session: AsyncSession, channel: Channel, digest: str) -> str | None:
     found = (
         await session.execute(
@@ -189,6 +211,7 @@ async def person_for(
                     id=principal_id,
                     kind="human",
                     employment=employment_of(person).value,
+                    not_after=engaged_until(person, now),
                     display_name=person.display_name,
                     primary_department=registered_by_name(departments).get(
                         department_key(person.department)

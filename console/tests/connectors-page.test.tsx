@@ -91,6 +91,8 @@ function aSource(over: Partial<Connectable> = {}): Connectable {
     ],
     credential_label: "The key Xero issued for this connection",
     credential_hint: sentinel("key-hint"),
+    credential_shape: "key",
+    credential_max_chars: 1000,
     may_connect: true,
     steps: [aStep("create"), aStep("authorise"), aStep("connect", ["tenant_id", "credential"])],
     ...over,
@@ -416,7 +418,7 @@ describe("what this module agrees with the API about", () => {
     expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/key", "post"))).toEqual(["credential"]);
     const acts = readConsoleFile("src/pages/connectors/SourceActs.tsx");
     expect(acts).toContain("const body = { settings: Object.fromEntries(");
-    expect(acts).toContain("const body = { credential: secret.take() };");
+    expect(acts).toContain("const body = { credential: shaped ? credentialFor(form.credential_shape, held, secret) : secret.take() };");
   });
 
   test("no model the module reads carries a field that could hold a key or where one is kept", () => {

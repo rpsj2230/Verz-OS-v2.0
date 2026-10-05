@@ -21,12 +21,18 @@ asker's reach never reaches the approver (needs-rupash 14). Each card goes once 
 approval, keyed through the operation ledger, and every open draws on the open half of the card
 ceiling. See `A_CARD_IS_OFFERED_WHERE_ITS_READER_ALONE_READS_IT`.
 
-**No card is sent at the moment an approval is raised, and the reason is an address, not a
-choice.** A chat binding keeps the digest of the chat identity and never the identity
-(`brain.gate.ingress.Binding`, "a table of them is a phone book of the company"), so nothing on an
-install can address a bound person until they write to it. Sending at raise time needs an address
-kept per binding, which is a column, a migration and a reversal of that decision, and it is left
-for the owner. See `NO_CARD_IS_SENT_WHEN_AN_APPROVAL_IS_RAISED`.
+**A card is sent to each approver the moment an approval is raised, to the Lark address their
+binding keeps (M10.2.7, needs-rupash 118).** Until 2026-09-29 a chat binding kept the digest of
+the chat identity and never the identity, so nothing could address a bound person until they wrote
+to the bot. The owner decided that the card should arrive when the approval is raised, so since
+`0166` a Lark binding keeps its person's open id (`brain.ops.binding_store.StoredAddresses`), and
+`send_raised` asks every addressed Lark binding's person the Approvals screen's own question about
+the new approval, at the same listing reach the offer uses, and sends the card to the ones it would
+offer it to, in their own chat with the bot. Nothing is sent to a binding with no address: one made
+before `0166` gains its address the next time its person writes. Whether a press on the card
+decides it is still `INSTALL_LARK_CARD_APPROVALS`. The card is keyed as the offer's is, per
+approver and approval, so a raise retried sends it once. See
+`A_CARD_IS_SENT_WHEN_AN_APPROVAL_IS_RAISED_TO_WHOEVER_MAY_DECIDE_IT`.
 
 **A press decides only as the person the card was built for, only while it is open at its
 digest, and only as the permission allows (M10.2.3, needs-rupash 16).** The press value names the
@@ -77,7 +83,7 @@ lives in Valkey through `brain.ops.limit_store`, asked and recorded once through
 `brain.ops.limit_store.UNREACHABLE_POLICY` for a channel's window. A test or an install check puts
 `HeldCardWindows` on the application, because a check may not touch a key another caller uses.
 
-Task ids: M10.2.3, M10.2.4, M10.7.1
+Task ids: M10.2.3, M10.2.4, M10.7.1, M10.2.7
 """
 
 from __future__ import annotations
@@ -87,7 +93,7 @@ import hashlib
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Final, Protocol
 
 import structlog
@@ -163,12 +169,13 @@ A_CARD_IS_OFFERED_WHERE_ITS_READER_ALONE_READS_IT: Final = (
     "reader could not decide is a button that can only fail."
 )
 
-#: Why nothing is sent when an approval is raised.
-NO_CARD_IS_SENT_WHEN_AN_APPROVAL_IS_RAISED: Final = (
-    "A chat binding keeps the digest of a chat identity and never the identity, so nothing on "
-    "an install can address a bound person until they write to it. A card at the moment an "
-    "approval is raised needs an address kept for every binding, which reverses that decision "
-    "and is the owner's to take; until then a card is offered when its reader writes."
+#: Why a card goes out when an approval is raised, and to whom.
+A_CARD_IS_SENT_WHEN_AN_APPROVAL_IS_RAISED_TO_WHOEVER_MAY_DECIDE_IT: Final = (
+    "When an approval is raised, every person bound in Lark with an address kept is asked the "
+    "Approvals screen's own question about it at the reach a card is listed under, and each one "
+    "it would be offered to is sent its card in their own chat with the bot; nobody else is sent "
+    "anything, and a binding with no address is sent nothing until its person next writes "
+    "(needs-rupash 118)."
 )
 
 #: Why a press decides only as the person the card was built for.
@@ -601,6 +608,56 @@ class ApprovalCards:
             actions=controls,
         )
 
+    # ------------------------------------------------------------------ the raise
+
+    async def raised(
+        self,
+        suspension: SuspendedAction,
+        *,
+        channel: Channel,
+        addressed: tuple[tuple[str, str], ...],
+        now: datetime,
+    ) -> tuple[Outgoing, ...]:
+        """The card each addressed person who may decide this approval is sent as it is raised.
+
+        One question per person, the Approvals screen's (`shown_card`), at the listing reach the
+        offer uses, so a card goes to exactly the people that screen would offer it to and to no
+        one it would not. Each card draws on the open half of the card ceiling; a full window
+        sends no more, and the approval still waits on the screen. See
+        `A_CARD_IS_SENT_WHEN_AN_APPROVAL_IS_RAISED_TO_WHOEVER_MAY_DECIDE_IT`.
+        """
+        wire: object = channel_wires().get(channel)
+        if not carries_cards(channel) or not isinstance(wire, CardWire):
+            return ()
+        cards: list[Outgoing] = []
+        for principal_id, address in addressed:
+            person = await self.people.live(principal_id)
+            if person is None or not person.is_active(now):
+                continue
+            nominal = await self.reach_of(person.id, now)
+            reach = admit_card_press(nominal, channel, switched_on=True)
+            shown = shown_card(suspension, reach, now)
+            if shown is None:
+                continue
+            if not (await self.windows.spend(CardCall.OPEN, now)).allowed:
+                log.info("approval card not sent on raise: open window full")
+                break
+            try:
+                card = built(suspension, shown, reach=reach, channel=channel)
+            except CardRefusedError:
+                log.warning("approval card not built", suspension=suspension.id)
+                continue
+            cards.append(
+                self._offered(
+                    card,
+                    channel=channel,
+                    to=wire.person_address(address),
+                    person=person.id,
+                    nominal=nominal,
+                )
+            )
+        return tuple(cards)
+
     # ------------------------------------------------------------------ the press
 
     async def press(
@@ -720,6 +777,44 @@ class ApprovalCards:
             planned_hash=nominal.ent_hash(),
         )
         return Pressed(told=told, decided=True, patch=patch, fallback=fallback)
+
+
+async def send_raised(request: Request, suspension: SuspendedAction) -> int:
+    """Send the cards for an approval just raised, through the events route's own send step.
+
+    What a route calls once the approval is committed: the Lark channel's record, the addressed
+    bindings, `ApprovalCards.raised`, and `brain.channel_routes`' `deliver` with that request's
+    secrets, transport, ledger and deliveries, so each card is sent once and recorded as any reply
+    is. How many were delivered, for a test. Nothing is sent on an install whose Lark channel is
+    not switched on. Whatever fails is logged by its kind and never reaches the person who raised
+    the approval, whose request has already been answered.
+    """
+    # Imported here: `brain.channel_routes` imports this module to decide presses.
+    from brain.channel_routes import _deliver, addresses_of, bindings_of, records_of
+
+    try:
+        record = await records_of(request).get(Channel.LARK)
+        if record is None or not record.enabled:
+            return 0
+        book = addresses_of(request)
+        if book is None:
+            return 0
+        now = datetime.now(UTC)
+        cards = ApprovalCards.of(request, bindings=bindings_of(request))
+        planned = await cards.raised(
+            suspension,
+            channel=Channel.LARK,
+            addressed=await book.addressed(Channel.LARK),
+            now=now,
+        )
+        sent = 0
+        for one in planned:
+            delivered = await _deliver(request, one, record, datetime.now(UTC))
+            sent += delivered.outcome is DeliveryOutcome.SENT
+        return sent
+    except Exception as exc:
+        log.warning("approval cards not sent on raise", kind=type(exc).__name__)
+        return 0
 
 
 async def closed_after(

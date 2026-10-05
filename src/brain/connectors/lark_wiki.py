@@ -19,6 +19,11 @@ the page and for every page above it, because a page left open under a locked pa
 the parent's narrower membership. See `THE_LISTING_IS_NOT_WHERE_A_PAGES_PERMISSIONS_ARE` and
 `A_LOCKED_PAGE_NARROWS_EVERY_PAGE_UNDER_IT`.
 
+**Reading a page's lock is consistent with the owner's decision that who may see is the Brain's own
+grants (needs-rupash 116), because the lock only ever narrows.** A page restricted in Lark is not
+read at all; a page that follows its space is then told only to a reader the space's declared reach
+and the reader's grants admit. Lark's settings can take a page away and never add one.
+
 **A wiki page has its own permissions and they are the source's, not ours.** A page somebody
 cannot open in Lark must not become an answer they can read here. `brain.knowledge.visibility`
 already holds the model: three levels, one store, and a predicate recomputed from the level

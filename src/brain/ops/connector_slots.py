@@ -100,8 +100,13 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
                 refuse=("an admin key, which can change SLAs and delete tickets",),
             ),
             SlotScopes(
+                "google_analytics",
+                request=("analytics.readonly", "Viewer on the one property"),
+                refuse=("analytics.edit", "domain-wide delegation"),
+            ),
+            SlotScopes(
                 "google_drive",
-                request=("read on the named shared drive only",),
+                request=("Viewer on the one folder shared with it",),
                 refuse=("domain-wide delegation",),
             ),
             SlotScopes(
