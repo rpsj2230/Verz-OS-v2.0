@@ -96,18 +96,14 @@ arrives leaves behind, which is nothing. A cursor's failure is visible from the 
 this declares `UPDATED_SINCE`, pays the price named in `A_CURSOR_CANNOT_SEE_A_DELETION` by
 declaring an id sweep, and says so rather than claiming a push it may not receive.
 
-*Calling this connector's person entity something of its own.* `brain.core.field_policy` is
-keyed by entity name, so `contact` here and `contact` in `brain.connectors.xero` are one key
-and `FieldPolicy` raises rather than choosing between two opinions about it. Renaming would
-have made the two unjoinable in the entity registry, which is the thing that makes federation
-work at all. Instead every rule this module declares for `contact` is either a field Xero does
-not declare or is declared identically to Xero's, and `assert_policy_merges_with` is the check
-rather than the intention. See `TWO_SOURCES_ONE_ENTITY_NAME`.
-
-*Naming the company entity `company`.* The house noun for a customer organisation is `client`,
-and the canaries, the redaction invariants and the access route all classify `client.name`
-already. A CRM company and a ledger client are the same real organisation, and giving them two
-names would mean no answer could ever join them.
+*Sharing the house nouns `client` and `contact`, which this module did until 2026-09-30.* It
+argued that a CRM company and a ledger client are one organisation and should share one entity
+name, with `assert_policy_merges_with` keeping two sources' rules for one name in agreement.
+That held while HubSpot answered nothing. Once its records were classified for Ask, the records
+screen and the answer lane, which read one row tool per entity, met Xero's `contact` and the
+demo's `client` and answered neither. So the entities are named for HubSpot
+(`ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`); the join between a CRM company and a ledger client is
+the entity registry's, whose profiles name sources and fields rather than entity names.
 
 Scope: domain logic. Nothing here opens a connection, resolves a name, reads a clock or holds
 a credential. The resolver, the fetcher and `fetched_at` are all parameters, and
@@ -252,8 +248,9 @@ ONE_HOP_IS_WHAT_THE_ANSWER_LANE_CAN_AFFORD = (
 
 #: Why this connector runs against no ceiling at all rather than the recorded figure.
 A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING = (
-    "tests/fixtures/cassettes/ records 10,000 calls a day per app per account, and "
-    "brain.ops.limits does not carry that figure. The console, the admission ladder and "
+    "The ceiling this connector runs against is the row brain.ops.limits keeps under its name, "
+    "recorded on 2026-09-30 from HubSpot's documented figure; until then it had none. The "
+    "console, the admission ladder and "
     "throttle.limits_for all read brain.ops.limits, so a number restated here would be a "
     "second answer sitting beside three verified ones and looking exactly like them. This "
     "connector therefore names the ceiling it would run against and reads it rather than "
@@ -261,7 +258,7 @@ A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING = (
     "row. Refusing is the intended behaviour: brain.ops.limits returns nothing for an "
     "unknown source precisely so that nobody runs one against no limit at all. Naming the "
     "ceiling rather than leaving it empty is deliberate too, because it makes adding the "
-    "verified row the only edit anybody has to make."
+    "verified row the only edit anybody has to make, and it was."
 )
 
 #: Why an unreachable CRM is never reported as an empty one.
@@ -359,13 +356,23 @@ MANIFEST_VERSION: Final = "1.0.0"
 
 BASE_URL: Final = "https://api.hubapi.com"
 
-#: The house noun for a customer organisation, which is what a HubSpot company is. See the
-#: module docstring on why this is not called `company`.
-ENTITY_CLIENT: Final = "client"
-ENTITY_CONTACT: Final = "contact"
-ENTITY_DEAL: Final = "deal"
+#: HubSpot's entities, each named for HubSpot. See `ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`.
+ENTITY_CLIENT: Final = "hubspot_company"
+ENTITY_CONTACT: Final = "hubspot_contact"
+ENTITY_DEAL: Final = "hubspot_deal"
 #: An edge, and nothing on the far end of it. See `AN_ASSOCIATION_IS_A_SECOND_QUESTION`.
-ENTITY_ASSOCIATION: Final = "association"
+ENTITY_ASSOCIATION: Final = "hubspot_association"
+
+#: Why HubSpot's entities are not the house nouns `client` and `contact`.
+ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK: Final = (
+    "The records screen and the answer lane read one row tool per entity, and call two a "
+    "misconfigured install (brain.api_routes.records). HubSpot's companies and contacts were "
+    "called `client` and `contact`, the house nouns, and once HubSpot was answerable on Ask on "
+    "2026-09-30 its `contact` met Xero's and its `client` met the demo's, and both screens "
+    "answered neither. So each is named for HubSpot. Joining a CRM company to a ledger client is "
+    "the entity registry's work, whose profiles name sources and fields "
+    "(brain.resolution.entities), not entity names."
+)
 
 #: A filter key naming the account. Accepted so a caller may state which portal they believe
 #: they are addressing, and checked against the pin; never used to choose one.
@@ -379,6 +386,12 @@ CURSOR_PARAMETER: Final = "after"
 
 #: The parameter that decides whether a record comes back with anything on it at all.
 PROPERTIES_PARAMETER: Final = "properties"
+
+#: The path parameter a one-record read names its record by.
+RECORD_ID_PARAMETER: Final = "recordId"
+
+#: What a HubSpot CRM record id is: digits, as HubSpot issues them.
+RECORD_ID: Final = re.compile(r"^[0-9]{1,20}$")
 
 #: HubSpot's list endpoints refuse a page larger than this. Refused rather than clamped: a
 #: silently clamped page is an under-count that reads as a complete answer, which is the same
@@ -653,10 +666,26 @@ _LIST_PARAMETERS: Final[tuple[Mapping[str, Any], ...]] = (
 )
 
 
+def _one_record(name: str, item: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The GET that reads one CRM object by its id, answering with the object itself."""
+    return {
+        "get": {
+            "operationId": name,
+            "parameters": [
+                {"name": RECORD_ID_PARAMETER, "in": "path", "required": True},
+                {"name": PROPERTIES_PARAMETER, "in": "query", "required": False},
+            ],
+            "responses": {"200": {"content": {"application/json": {"schema": item}}}},
+        }
+    }
+
+
 def spec_document() -> Mapping[str, Any]:
     """The minimum OpenAPI this connector needs, as data.
 
-    Four operations and one server, because `load_spec` refuses a document listing several
+    Seven operations and one server: the three lists the worker indexes, the three one-record
+    reads a question makes live (`A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`), and the
+    associations. One server, because `load_spec` refuses a document listing several
     and the reason carries: a document naming production and a sandbox leaves which host is
     called to list order, and only one of them was checked.
 
@@ -704,6 +733,9 @@ def spec_document() -> Mapping[str, Any]:
                     "responses": _list_response(deal),
                 }
             },
+            "/crm/v3/objects/companies/{recordId}": _one_record("getCompany", company),
+            "/crm/v3/objects/contacts/{recordId}": _one_record("getContact", contact),
+            "/crm/v3/objects/deals/{recordId}": _one_record("getDeal", deal),
             "/crm/v3/objects/{objectType}/{objectId}/associations/{toObjectType}": {
                 "get": {
                     "operationId": "getAssociations",
@@ -789,6 +821,11 @@ _MAPPINGS: Final[Mapping[str, tuple[FieldMapping, ...]]] = MappingProxyType(
         ENTITY_DEAL: DEAL_FIELDS,
         ENTITY_ASSOCIATION: ASSOCIATION_FIELDS,
     }
+)
+
+#: The one-record read of each entity a question reads live.
+_ONE_RECORD_OPERATIONS: Final[Mapping[str, str]] = MappingProxyType(
+    {ENTITY_CLIENT: "getCompany", ENTITY_CONTACT: "getContact", ENTITY_DEAL: "getDeal"}
 )
 
 _OPERATIONS: Final[Mapping[str, str]] = MappingProxyType(
@@ -880,6 +917,24 @@ def operation_for(entity: str, *, resolver: Resolver) -> RestOperation:
         operation=operation_id,
         entity=entity,
         fields=_MAPPINGS[entity],
+    )
+    return load_hubspot_spec(resolver=resolver).bind(transport)
+
+
+def one_record_operation(entity: str, *, resolver: Resolver) -> RestOperation:
+    """The bound one-record read for an entity a question reads live (M11.9.2).
+
+    HubSpot's list answers a page and cannot be narrowed to one id, so a record read while
+    somebody waits is read by its own GET, with the same mapping the list is read with: the index
+    and the live read understand one record the same way, and only the address differs. See
+    `brain.connectors.declaration.A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+    """
+    operation_id = _ONE_RECORD_OPERATIONS.get(entity)
+    if operation_id is None:
+        msg = f"this connector reads {sorted(_ONE_RECORD_OPERATIONS)} live, not {entity!r}"
+        raise HubSpotError(msg)
+    transport = RestTransport(
+        spec_ref=SPEC_REF, operation=operation_id, entity=entity, fields=_MAPPINGS[entity]
     )
     return load_hubspot_spec(resolver=resolver).bind(transport)
 
@@ -1042,7 +1097,7 @@ CONTACT_PROJECTED: Final[tuple[ProjectedField, ...]] = (
 )
 
 #: A deal without its amount. Everything needed to find the deal and say where it is in the
-#: pipeline, and not the number, which is fetched live for whoever holds `read:deal.amount`.
+#: pipeline, and not the number, which is fetched live for whoever holds `read:hubspot_deal.amount`.
 DEAL_PROJECTED: Final[tuple[ProjectedField, ...]] = (
     ProjectedField(name="deal_name", shape=FieldShape.LABEL, uses=(HotUse.IDENTIFY,)),
     ProjectedField(name="stage", shape=FieldShape.STATUS, uses=(HotUse.FILTER, HotUse.COUNT)),
@@ -1340,7 +1395,7 @@ def traversal_plan(
 #:
 #: `deal.amount` is CONFIDENTIAL and it is the point of the table: see
 #: `A_PIPELINE_FIGURE_IS_NOT_A_PAYROLL_FIGURE`. It is returnable to somebody holding
-#: `read:deal.amount` and it is never storable, which `brain.core.field_policy` names as the
+#: `read:hubspot_deal.amount` and it is never storable, which `brain.core.field_policy` names as the
 #: ordinary case rather than the exception.
 #:
 #: `client.name` and `contact.updated_at` are spelled exactly as the house already spells
@@ -1355,29 +1410,55 @@ def traversal_plan(
 #: either be ignored or make the CRM unusable, which are the two ways a classification stops
 #: meaning anything.
 HUBSPOT_FIELD_RULES: Final[tuple[FieldRule, ...]] = (
-    FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "domain", "read:client.domain", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "name", "read:hubspot_company.name", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "domain", "read:hubspot_company.domain", Classification.INTERNAL),
     FieldRule.of(
-        ENTITY_CLIENT, "lifecycle_stage", "read:client.lifecycle_stage", Classification.INTERNAL
+        ENTITY_CLIENT,
+        "lifecycle_stage",
+        "read:hubspot_company.lifecycle_stage",
+        Classification.INTERNAL,
     ),
-    FieldRule.of(ENTITY_CLIENT, "owner_id", "read:client.owner_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "updated_at", "read:client.updated_at", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "first_name", "read:contact.first_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "last_name", "read:contact.last_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "job_title", "read:contact.job_title", Classification.INTERNAL),
     FieldRule.of(
-        ENTITY_CONTACT, "lifecycle_stage", "read:contact.lifecycle_stage", Classification.INTERNAL
+        ENTITY_CLIENT, "owner_id", "read:hubspot_company.owner_id", Classification.INTERNAL
     ),
-    FieldRule.of(ENTITY_CONTACT, "company_id", "read:contact.company_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "owner_id", "read:contact.owner_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "updated_at", "read:contact.updated_at", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "deal_name", "read:deal.deal_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "amount", "read:deal.amount", Classification.CONFIDENTIAL),
-    FieldRule.of(ENTITY_DEAL, "stage", "read:deal.stage", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "pipeline", "read:deal.pipeline", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "close_date", "read:deal.close_date", Classification.INTERNAL),
-    FieldRule.of(ENTITY_DEAL, "owner_id", "read:deal.owner_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_ASSOCIATION, "kind", "read:association.kind", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_CLIENT, "updated_at", "read:hubspot_company.updated_at", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "first_name", "read:hubspot_contact.first_name", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "last_name", "read:hubspot_contact.last_name", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "job_title", "read:hubspot_contact.job_title", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT,
+        "lifecycle_stage",
+        "read:hubspot_contact.lifecycle_stage",
+        Classification.INTERNAL,
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "company_id", "read:hubspot_contact.company_id", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "owner_id", "read:hubspot_contact.owner_id", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "updated_at", "read:hubspot_contact.updated_at", Classification.INTERNAL
+    ),
+    FieldRule.of(ENTITY_DEAL, "deal_name", "read:hubspot_deal.deal_name", Classification.INTERNAL),
+    FieldRule.of(ENTITY_DEAL, "amount", "read:hubspot_deal.amount", Classification.CONFIDENTIAL),
+    FieldRule.of(ENTITY_DEAL, "stage", "read:hubspot_deal.stage", Classification.INTERNAL),
+    FieldRule.of(ENTITY_DEAL, "pipeline", "read:hubspot_deal.pipeline", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_DEAL, "close_date", "read:hubspot_deal.close_date", Classification.INTERNAL
+    ),
+    FieldRule.of(ENTITY_DEAL, "owner_id", "read:hubspot_deal.owner_id", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_ASSOCIATION, "kind", "read:hubspot_association.kind", Classification.INTERNAL
+    ),
 )
 
 
@@ -1521,8 +1602,8 @@ def hubspot_manifest(
     and the whole of `A_WRITE_GRANT_NAMES_SOMEBODY`. A connector that could move a deal to
     closed-won is a different connector, approved by somebody named, and this is not it.
 
-    The ceiling is named and is not verified yet, so `throttle.limits_for` refuses this
-    manifest today. That is the intended behaviour: see
+    The ceiling is named, and `brain.ops.limits` holds HubSpot's documented figure under that
+    name, so `throttle.limits_for` sizes this manifest by it. See
     `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING`.
     """
     assert_declarations_agree()
@@ -1785,10 +1866,9 @@ class HubSpotReading:
 
     A method named after a module function calls that function, as `xero.XeroReading`'s do.
 
-    Not read on any install today, because `brain.ops.connector_sync.plan_for` stops at the
-    missing verified ceiling. It is here so the day the ceiling is recorded the source is read
-    with no other change, which is the edit `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING` says
-    should be the only one.
+    Read since 2026-09-30, when HubSpot's documented ceiling was recorded in `brain.ops.limits`:
+    that row was the only edit it needed, as `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING` said.
+    A record is read live by `HubSpotLiveLookup`, through the one-record GET.
     """
 
     def entities(self) -> tuple[str, ...]:
@@ -1843,6 +1923,48 @@ class HubSpotReading:
         self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
     ) -> ProjectedRecord | None:
         return projected_record(entity, row, last_seen_at=seen_at)
+
+
+class HubSpotLiveLookup:
+    """One company, contact or deal, read from HubSpot while somebody waits (M11.9.2).
+
+    Every value a question uses is read from the account when it is asked, the deal's amount
+    among them, which the index never holds
+    (`A_DEAL_AMOUNT_IS_A_CONTRACT_VALUE_IN_ANOTHER_VOCABULARY`). The service's credentials,
+    declared: a private app is one key for one account, and no person's own HubSpot key is held
+    for a read to run under.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return tuple(sorted(_ONE_RECORD_OPERATIONS))
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        del entity
+        return IdentityMode.SERVICE
+
+    def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
+        if entity not in _ONE_RECORD_OPERATIONS:
+            msg = f"this connector reads {sorted(_ONE_RECORD_OPERATIONS)} live, not {entity!r}"
+            raise HubSpotError(msg)
+        if not RECORD_ID.match(source_id):
+            msg = (
+                "a record id laid into HubSpot's address is digits, and this one is not; it is "
+                "refused rather than escaped"
+            )
+            raise HubSpotError(msg)
+        return MappingProxyType(
+            {
+                RECORD_ID_PARAMETER: source_id,
+                PROPERTIES_PARAMETER: ",".join(requested_properties(entity)),
+            }
+        )
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        # One fixed address for every connection; the portal is the key's, not the path's.
+        HubSpotConnection(portal_id=settings["portal_id"])
+        return one_record_operation(entity, resolver=resolver)
 
 
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
@@ -1953,6 +2075,7 @@ CONNECTOR: Final = ConnectorDeclaration(
             "HUBSPOT-200-companies-page",
             "HUBSPOT-200-contacts",
             "HUBSPOT-200-deals",
+            "HUBSPOT-200-deal",
             "HUBSPOT-200-associations",
             "HUBSPOT-429",
             "HUBSPOT-401",
@@ -1961,4 +2084,5 @@ CONNECTOR: Final = ConnectorDeclaration(
     ),
     recorded=Recorded(tested=True),
     reading=HubSpotReading(),
+    live=HubSpotLiveLookup(),
 )
