@@ -632,6 +632,10 @@ def test_a_lost_sentence_is_read_back_whole_and_any_other_sentence_says_nothing(
         f"Before. {FIELDS_LOST} ticket.status.",
         # Another sentence exactly as long as the prefix, whose tail reads as a field.
         f"{'x' * len(FIELDS_LOST)} ticket.status.",
+        # A name with no dot, and each half that is not one of the connector's identifiers.
+        f"{FIELDS_LOST} ticket.",
+        f"{FIELDS_LOST} Ticket.status.",
+        f"{FIELDS_LOST} ticket.Status.",
     ):
         assert fields_lost_of(other) == frozenset(), other
 

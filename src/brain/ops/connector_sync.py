@@ -564,8 +564,8 @@ A_SCHEDULED_READ_IS_THE_SCHEMA_CHECK_AND_RUNS_AT_LEAST_DAILY: Final = (
 #: The longest interval any reading may declare and still be checked every night.
 SCHEMA_CHECKED_AT_LEAST_EVERY: Final = timedelta(days=1)
 
-#: What one lost field is called: the connector's own entity and field names, never a value.
-_LOST_NAME: Final = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
+#: What each half of a lost field's name is: one of the connector's own lower-case identifiers.
+_IDENTIFIER: Final = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 
 
 def lost_fields(
@@ -598,6 +598,15 @@ def fields_lost_detail(lost: Iterable[str]) -> str:
     return f"{FIELDS_LOST} {', '.join(sorted(lost))}."
 
 
+def _is_lost_name(name: str) -> bool:
+    """Whether `name` is `entity.field`: two identifiers about one dot, and nothing else.
+
+    No check that the dot is there: without one the field is empty, which no identifier is.
+    """
+    owner, _, field = name.partition(".")
+    return bool(_IDENTIFIER.match(owner)) and bool(_IDENTIFIER.match(field))
+
+
 def fields_lost_of(detail: str) -> frozenset[str]:
     """The fields a read's sentence says it lost, or none for any other sentence.
 
@@ -608,7 +617,7 @@ def fields_lost_of(detail: str) -> frozenset[str]:
     if not detail.startswith(FIELDS_LOST + " ") or not detail.endswith("."):
         return frozenset()
     named = [one.strip() for one in detail[len(FIELDS_LOST) + 1 : -1].split(",")]
-    if not named or not all(_LOST_NAME.match(one) for one in named):
+    if not named or not all(_is_lost_name(one) for one in named):
         return frozenset()
     return frozenset(named)
 
