@@ -20,7 +20,7 @@ projection's `local_id`: today none does, which is what makes each invalidator's
 nothing the right answer, and a table that grows one fails this check on the install it is
 deployed to. See `brain.resolution.merge_store.THE_ANSWER_CACHE_HOLDS_NOTHING_KEYED_BY_AN_ENTITY`.
 
-Task ids: M14.5.1, M14.5.2, M14.5.3, M14.5.4, M14.5.5
+Task ids: M14.5.1, M14.5.2, M14.5.3, M14.5.4, M14.5.5, M14.1.5
 """
 
 from __future__ import annotations
@@ -352,7 +352,7 @@ async def a_merge_moves_one_pointer_and_changes_no_record_or_child_row(h: Harnes
 
 # -------------------------------------------------------------- M14.5.3 the unmerge
 @check(
-    leaves=("M14.5.3",),
+    leaves=("M14.5.3", "M14.1.5"),
     sentence=(
         "Two entities of the check's own are merged and the merge is reversed: every entity, "
         "link, alias and identifier is then exactly what the pre-image recorded, the merged "
