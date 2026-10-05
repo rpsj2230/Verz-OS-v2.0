@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**27 items are open: 148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**28 items are open: 150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,31 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 150. Connect Google Drive (ready now)
+
+**In plain terms:** the Brain can now answer from the documents in one Google Drive folder and every
+folder under it, reading each Google Doc's words when somebody asks and keeping only names. It reads
+as a service account that can only view that folder. A subfolder shared more narrowly than its
+parent, or shared by link, is left out with everything in it. In the console open **Knowledge and
+data**, **Connectors**, **Google Drive**, **Connect**:
+
+1. **Make a service account** in Google Cloud console, **IAM & Admin**, **Service Accounts**, with
+   **no role** and never domain-wide delegation (item 143's can be reused).
+2. **Switch on the Google Drive API**: **APIs & Services**, **Library**, **Google Drive API**,
+   **Enable**.
+3. **Share the one folder with it as a viewer.** In Google Drive right-click the folder, **Share**,
+   paste the service account's email address, choose **Viewer**. Share nothing else with it.
+4. **Make its key file** (skip if you reuse one you still have): the account, **Keys**, **Add key**,
+   **Create new key**, **JSON**, **Create**.
+5. **Connect it.** Paste the folder's link from Drive (or only the id after /folders/), your
+   company's email domain (the part after @), the department the folder belongs to, the id of the
+   person who answers for its contents (as **People** shows it), choose the key file and press
+   **Connect Google Drive**.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:drive_file`, scoped to that department, with a reason.
+
+Tell me "connected Google Drive" afterwards and I prove it on your install.
 
 ## 149. Your developer's part for the Laravel database
 

@@ -38,6 +38,14 @@ which an operator reads with the install's other logs. Timing in a thread keeps 
 and the heartbeat it writes, turning while a second of arithmetic runs. See
 `THE_SCRUB_IS_TIMED_WHERE_IT_WILL_RUN`.
 
+**It is timed on the thread's processor clock, not the wall, since 2026-10-05.** Timed on the
+wall, the check failed on three deploy runs of one install and passed on every other run of the
+same code on the same processor, because a deploy is exactly when the host is busiest and the
+worker's own jobs share the interpreter. Rejected: raising the budget, which would hide a slow
+scrubber as well as a busy host, and retrying a failure, which turns a measurement into a vote.
+`A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK` holds the figures, and the wall time of the
+same run is still logged, so contention is shown rather than judged.
+
 Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4
 """
 
@@ -98,10 +106,24 @@ SCRUB_SAMPLE_CHARS: Final = 16384
 #: `brain.ops.pii.MINIMUM_TIMED_SAMPLES` allows, so one slow sample is not the figure.
 SCRUB_SAMPLES: Final = 60
 
-#: The clock a scrub's timings are read from. A name of its own so the suite can hand the check a
-#: clock that ticks the same whatever else the machine running it is doing; on an install it is
-#: the processor's own.
-SCRUB_CLOCK: Callable[[], float] = time.perf_counter
+#: The clock a scrub's timings are read from: the processor time of the thread doing the scrub. A
+#: name of its own so the suite can hand the check a clock that ticks the same whatever else the
+#: machine running it is doing. See `A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK`.
+SCRUB_CLOCK: Callable[[], float] = time.thread_time
+
+#: Why the scrub is timed on the thread's processor clock and not on the wall.
+A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK: Final = (
+    "The budget is a cost: how much processor one kibibyte of scrubbing takes on this install's "
+    "machine. The check runs inside the worker straight after a deploy, while the new containers "
+    "start beside it on the same host and the worker's own jobs share its interpreter, so a wall "
+    "clock also counts every moment the thread waited for a core or for the interpreter lock. "
+    "Timed that way the same code on the same processor passed and failed by turns: 37 runs "
+    "passed and 3 failed on one install on 2026-10-05, every failure on a deploy run, and a "
+    "passing deploy run measured 1.549 ms per kibibyte at the ninety-fifth percentile against a "
+    "budget of 2.0 and 0.70 on the build machine. A clock that counts only the thread's own "
+    "processor time measures the scrubber, and the wall time of the same run is logged beside it "
+    "so the waiting stays visible rather than judged."
+)
 
 #: Why a check reads a trace, as `brain.ops.tracing.PayloadRead` requires a reason.
 TRACE_READ_REASON: Final = "An install acceptance check reading its own run's trace"
@@ -288,32 +310,46 @@ async def a_run_s_trace_is_stored_masked_and_read_only_after_its_row(h: Harness)
     ),
 )
 async def the_scrub_meets_its_budget_on_this_install_s_processor(h: Harness) -> None:
-    from brain.ops.pii import BUDGET_MS_PER_KIB, benchmark_text, budget_gaps, measure_scrub
+    from brain.ops.pii import (
+        BUDGET_MS_PER_KIB,
+        ScrubCost,
+        benchmark_text,
+        budget_gaps,
+        measure_scrub,
+    )
 
     _worker_environment()
-    cost = await asyncio.to_thread(
-        partial(
-            measure_scrub,
-            benchmark_text(SCRUB_SAMPLE_CHARS),
-            clock=SCRUB_CLOCK,
-            hardware=_this_processor(),
-            basis=(
-                "measure_scrub over benchmark_text(16384) by the install's acceptance check, "
-                "timed with time.perf_counter in a thread of the worker"
-            ),
-            excludes=(
-                "every leg that is not this process: a model leg is a call to another container "
-                "bounded by a timeout"
-            ),
-            taken_on=h.now.date(),
-            samples=SCRUB_SAMPLES,
-            on_the_client_cpu=True,
-        )
+    measure = partial(
+        measure_scrub,
+        benchmark_text(SCRUB_SAMPLE_CHARS),
+        clock=SCRUB_CLOCK,
+        hardware=_this_processor(),
+        basis=(
+            "measure_scrub over benchmark_text(16384) by the install's acceptance check, "
+            "timed with time.thread_time in a thread of the worker"
+        ),
+        excludes=(
+            "every leg that is not this process: a model leg is a call to another container "
+            "bounded by a timeout; and every moment the thread waited for a core or for the "
+            "interpreter lock, which the wall time logged beside it still shows"
+        ),
+        taken_on=h.now.date(),
+        samples=SCRUB_SAMPLES,
+        on_the_client_cpu=True,
     )
+
+    def timed() -> tuple[ScrubCost, float]:
+        started = time.perf_counter()
+        cost = measure()
+        return cost, (time.perf_counter() - started) * 1000.0
+
+    cost, wall_ms = await asyncio.to_thread(timed)
     log.info(
         "acceptance.scrub_measured",
         ms_per_kib=round(cost.ms_per_kib, 3),
         budget_ms_per_kib=BUDGET_MS_PER_KIB,
+        clock="thread_time",
+        wall_ms_all_samples=round(wall_ms, 1),
         chars=cost.chars,
         samples=cost.samples,
         cpus=os.cpu_count() or 0,
