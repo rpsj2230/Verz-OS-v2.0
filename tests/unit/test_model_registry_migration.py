@@ -86,16 +86,27 @@ def test_refused_joins_the_outcomes_the_attempt_table_and_the_health_layer_both_
 
 def test_the_columns_added_to_existing_tables_are_exactly_the_ones_the_fixture_excuses() -> None:
     """`tests.fixtures.amended_tables.ADDED_LATER` lets the creating migrations' comparisons ignore
-    these columns; this holds it to what `0097` adds and nothing else.
+    these columns; this holds it to what `0097` adds, and what `0186` and `0189` add, which their
+    own tests hold against the database, and nothing else.
 
     Delete this and the fixture can excuse a column no migration adds."""
     upgrade = rendered("upgrade")
     assert "ALTER TABLE ops.model_attempt ADD COLUMN data_categories JSONB" in upgrade
     assert "ALTER TABLE agent.agent ADD COLUMN model_pin_provider VARCHAR(60)" in upgrade
     assert "ALTER TABLE agent.agent ADD COLUMN model_pin_model VARCHAR(120)" in upgrade
+    versions = Path(__file__).parents[2] / "migrations" / "versions"
+    later = {
+        "connectors": "0186_agent_connectors_and_source_named_entities.py",
+        "channels": "0189_agent_channels_and_run_bounds.py",
+        "max_turns": "0189_agent_channels_and_run_bounds.py",
+        "max_tool_calls": "0189_agent_channels_and_run_bounds.py",
+    }
+    for column, file in later.items():
+        assert f"ADD COLUMN {column} " in (versions / file).read_text(encoding="utf-8")
     assert dict(ADDED_LATER) == {
         "ops.model_attempt": ("data_categories",),
-        "agent.agent": ("model_pin_provider", "model_pin_model"),
+        "agent.agent": ("model_pin_provider", "model_pin_model", *later),
+        "agent.manifest_act": ("channels",),
     }
 
 

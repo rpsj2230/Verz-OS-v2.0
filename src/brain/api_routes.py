@@ -1599,13 +1599,15 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
 
     The stored agents come from `brain.app.lifespan`'s `agent_roster`, read on each question so an
     agent disabled a moment ago cannot be selected; a process with no database has only the
-    default. `brain.gate.roster.answer_roster` decides which of them this person may use.
+    default. `brain.gate.roster.answer_roster` decides which of them this person may use on the
+    channel they asked on, so an agent not enabled there is absent from this roster (M13.7.4).
     """
     read: AgentRoster | None = getattr(state, "agent_roster", None)
     records = await read() if read is not None else ()
     return answer_roster(
         records,
         viewer_for(asked.principal),
+        channel=asked.channel,
         default=default_agents(registry),
         tool_names=(one.name for one in registry.definitions()),
     )

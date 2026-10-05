@@ -884,6 +884,11 @@ def record_of(row: AgentRow) -> AgentRecord | None:
             created_by=row.created_by,
             disabled_at=row.disabled_at,
             archived_at=row.archived_at,
+            # A row built in memory and never flushed holds None for a column it was not
+            # given, where the database would have written the empty default.
+            channels=tuple(row.channels or ()),
+            max_turns=row.max_turns,
+            max_tool_calls=row.max_tool_calls,
         )
     except ValueError as exc:
         # `ValidationError` is a `ValueError`, and so is an enum given a word it does not

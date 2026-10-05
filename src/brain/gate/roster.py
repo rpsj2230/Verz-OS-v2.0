@@ -23,10 +23,18 @@ change to its authority, tier, model pin or persona, or to the tools this proces
 is a different key, so an answer cached through yesterday's agent is not served through today's.
 Hashing only the ceiling was rejected: a changed persona is a different answer to the same words.
 
+**An agent not enabled on the request's channel is not in the roster either** (M13.7.4), for the
+same reason and by the same construction: it is filtered out before `runnable_agent_ids` is
+asked, so naming it on a channel it is not switched on for finds what a name nobody created finds,
+and the person is answered by the default in the same words. Refusing it after selection was
+rejected, because a refusal is a second path, and a second path is a second set of words that says
+the agent exists. The home page's list (`brain.member_activity`) is deliberately not narrowed by
+channel: it is the audience's answer, which this change does not move.
+
 What is not here, stated: a selected agent runs with no skill pins on this route, because the
 install rows the pins live on are not read yet; `brain.gate.model_lane.AgentRun` takes them.
 
-Task ids: M3.9.8
+Task ids: M3.9.8, M13.7.4
 """
 
 from __future__ import annotations
@@ -42,6 +50,7 @@ from brain.agents.template import config_hash
 from brain.console.workspace_capabilities import run_reach
 from brain.core.entitlement import EntitlementSet
 from brain.core.principal import Principal
+from brain.gate.context import Channel
 from brain.gate.front import AgentSetup
 
 #: How `brain.app.lifespan` hands the route the stored agents: one read per question, so an agent
@@ -94,15 +103,19 @@ def answer_roster(
     records: Iterable[AgentRecord],
     viewer: AgentViewer,
     *,
+    channel: Channel,
     default: Mapping[str, AgentSetup],
     tool_names: Iterable[str],
 ) -> AnswerRoster:
-    """The default agent plus every stored agent this viewer may run.
+    """The default agent plus every stored agent this viewer may run on this channel.
 
     A stored agent whose id is the default's replaces it. The replacement can only narrow, since a
     stored agent answers at the caller's reach intersected with its ceiling.
+
+    `channel` has no default: a caller that does not know which channel it is answering on cannot
+    say which agents answer there. See `AN_AGENT_ANSWERS_ONLY_ON_THE_CHANNELS_ENABLED_FOR_IT`.
     """
-    kept = list(records)
+    kept = [one for one in records if channel.value in one.channels]
     runnable = runnable_agent_ids(kept, viewer)
     usable = {one.agent_id: one for one in kept if one.agent_id in runnable}
     names = tuple(tool_names)
