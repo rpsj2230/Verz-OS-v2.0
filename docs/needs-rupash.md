@@ -619,6 +619,38 @@ cannot be done until Wave 2 builds the Lark chat channel; both moved there with 
 
 # Answered
 
+## 135. Google Drive: Viewer or Editor on the folder - DECIDED 2026-09-30: A, Viewer
+
+**In plain terms:** when you connect Google Drive (item 126's list; its steps come to this page when
+it can read), you share one folder with an account made just for the Brain. The Brain promises that
+a file shared outside your company is never read. The catch: Google only tells an account who a file
+is shared with if that account is allowed to share the file itself, and a Viewer is not. So with
+Viewer access the Brain cannot see, for most files, whether they have been shared outside.
+
+**Option A: Viewer on the folder.** If the Brain's key file ever leaked, whoever held it could read
+that one folder and change nothing.
+- A file whose sharing Google does not show is treated as the folder's, because you chose to share
+  the folder.
+- A file Google does show as shared by link or shared outside is never read.
+- A file with its own, narrower permissions is never read (a Viewer can see that much).
+- So the promise becomes "a file shared outside your company is left out wherever Google shows its
+  sharing".
+
+**Option B: Editor on the folder.** Every file's sharing is visible, so "a file shared outside is
+never read" holds for every file. The Brain still only ever asks Google to read, so it cannot change
+anything itself, but a leaked key file could be used to change or delete files in that folder.
+
+**My recommendation: A.** The folder is already your decision about what the Brain may read, and a
+key that can only read is the safer thing to keep on a server. A is what is being built; switching
+to B later is one small change and one step in the guide.
+
+**Your answer, 2026-09-30:** "135: A".
+
+**What that means:** the Brain's Google account is a Viewer on the one folder. Files Google shows
+as shared by link or outside your company, and files with their own narrower permissions, are never
+read; a file whose sharing Google does not show is read as the folder's. Drive's connect steps come
+to this page when it can read.
+
 ## 125. Where the evening build digest is sent - DECIDED 2026-09-30: a group with just you, on any channel
 
 **Your answer, 2026-09-30:** "I will go with your recommendation which is a new group with just you
