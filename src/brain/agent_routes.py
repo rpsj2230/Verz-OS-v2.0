@@ -879,6 +879,7 @@ def record_of(row: AgentRow) -> AgentRecord | None:
                 allowed_tools=frozenset(row.allowed_tools),
                 required_tools=frozenset(row.required_tools),
                 max_side_effect=SideEffect(row.max_side_effect),
+                connectors=tuple(row.connectors or ()),
             ),
             created_by=row.created_by,
             disabled_at=row.disabled_at,

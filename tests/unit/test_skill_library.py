@@ -622,6 +622,8 @@ def test_through_an_agent_a_skill_reaches_no_tool_its_caller_or_the_agent_does_n
                 Capability(value="read:ticket.status"),
             ),
             allowed_tools=frozenset({"crm.read_client", "desk.read_ticket"}),
+            # Bound to the helpdesk, as an agent reading tickets has to be.
+            connectors=("freshdesk",),
         ),
         created_by="u_builder",
     )

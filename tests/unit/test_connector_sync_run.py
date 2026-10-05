@@ -332,7 +332,7 @@ INVOICES: Final = RowTool(
     classification=TableClassification(
         entity=xero.ENTITY_INVOICE,
         rules=(
-            ColumnRule("tenant_id", Capability(value="read:invoice"), Classification.INTERNAL),
+            ColumnRule("tenant_id", Capability(value="read:xero_invoice"), Classification.INTERNAL),
             *(
                 ColumnRule(one.field, one.required_capability, one.classification)
                 for one in xero.XERO_FIELD_RULES
@@ -347,7 +347,7 @@ INVOICES: Final = RowTool(
 def a_reader(principal: str, scope: Scope) -> EntitlementSet:
     """Somebody holding the invoice row and every invoice column, all in one scope."""
     capabilities = [
-        "read:invoice",
+        "read:xero_invoice",
         *(one.required_capability.value for one in INVOICES.classification.rules),
     ]
     return EntitlementSet(
@@ -434,7 +434,7 @@ def test_a_synced_invoice_is_read_within_its_tenant_and_is_absent_for_everybody_
     assert invoices.headers["Accept"] == "application/json"
 
     ((source, entity, source_id, fields, last_seen_at, deleted_at),) = rows
-    assert (source, entity, source_id, deleted_at) == ("xero", "invoice", INVOICE_ID, None)
+    assert (source, entity, source_id, deleted_at) == ("xero", "xero_invoice", INVOICE_ID, None)
     assert fields["tenant_id"] == TENANT
     assert fields["status"] == "AUTHORISED"
     assert "amount_due" not in fields
@@ -455,7 +455,7 @@ def test_a_synced_invoice_is_read_within_its_tenant_and_is_absent_for_everybody_
     assert recorded_attempt == [(connection_id, "xero")]
 
     (seen,) = after["u_finance"]["records"]
-    assert (seen["entity"], seen["id"], seen["tenant_id"]) == ("invoice", INVOICE_ID, TENANT)
+    assert (seen["entity"], seen["id"], seen["tenant_id"]) == ("xero_invoice", INVOICE_ID, TENANT)
     assert seen["status"] == "AUTHORISED"
     assert before["u_finance"]["records"] == []
     for principal in ("u_elsewhere", "u_department", "u_nobody"):
@@ -670,7 +670,7 @@ def test_a_record_somebody_retired_stays_retired_whatever_the_source_still_says(
         sql(
             url,
             "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at, deleted_at) "
-            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            "VALUES ('xero', 'xero_invoice', %s, '{}'::jsonb, %s, %s)",
             INVOICE_ID,
             NOW - timedelta(days=30),
             NOW - timedelta(days=1),

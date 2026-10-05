@@ -129,7 +129,7 @@ def keep(url: str, *, fields: dict[str, object]) -> None:
     sql(
         url,
         "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at) "
-        "VALUES ('xero', 'invoice', 'b1f2-0447', %s, %s)",
+        "VALUES ('xero', 'xero_invoice', 'b1f2-0447', %s, %s)",
         json.dumps(fields),
         SEEN,
     )
