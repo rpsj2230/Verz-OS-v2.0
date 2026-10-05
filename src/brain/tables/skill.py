@@ -50,7 +50,7 @@ to review. Every constraint `0121` adds binds only a column it added, for
 that declares none, so every row written before them reads back as the skill it was. Nullable rather
 than defaulted, because a default of an empty queue would be a declaration nobody wrote.
 
-Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M8.3.1, M12.4.11
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M8.3.1, M12.4.11, M12.3.1
 """
 
 from __future__ import annotations
@@ -459,5 +459,32 @@ class SkillScriptRow(Base):
         CheckConstraint(
             f"octet_length(content) BETWEEN 1 AND {MAX_SCRIPT_BYTES}", name="content_bounded"
         ),
+        {"schema": "agent"},
+    )
+
+
+class SkillExportRow(Base):
+    """`agent.skill_export`. One approved version exported as a package, by one person. `0191`.
+
+    Written when the package is built, so the ledger records who took which version off the
+    install and when (M12.3.1); its insert trigger appends a `skill` entry with the change
+    `exported`. Keyed to `agent.skill` by the digest, because an export of bytes nobody added would
+    be a record of nothing. Insert-only: nothing un-exports a package somebody already holds.
+    """
+
+    __tablename__ = "skill_export"
+
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    digest: Mapped[str] = mapped_column(
+        String(DIGEST_CHARS), ForeignKey("agent.skill.digest"), nullable=False
+    )
+    #: Who exported it. The ledger entry's actor, read off this column by the trigger.
+    exported_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"exported_by ~ '{IDENTIFIER}'", name="exported_by_is_an_identifier"),
         {"schema": "agent"},
     )

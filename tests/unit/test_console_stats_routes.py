@@ -355,6 +355,13 @@ class Library:
     async def assignment_history(self, names: Sequence[str]) -> tuple[tuple[Any, ...], ...]:
         return (), ()
 
+    # The protocol's export half (`0191`), for the same reason as the half above.
+    async def script_bytes(self, digest: str) -> dict[str, bytes]:
+        return {}
+
+    async def export(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("a stats read wrote")
+
 
 @pytest.fixture
 def held() -> Held:

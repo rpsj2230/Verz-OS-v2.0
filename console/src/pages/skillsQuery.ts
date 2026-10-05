@@ -88,6 +88,62 @@ export function retirementPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/retirement`;
 }
 
+/** Where one approved version is exported (M12.3.1). */
+export function exportPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/export`;
+}
+
+/** `brain.skill_routes.ExportedSkillView`: the package, and which version it is. */
+export type ExportedSkill = components["schemas"]["ExportedSkillView"];
+
+export const EXPORT = "Export";
+export const EXPORT_NOT_SAVED =
+  "This browser could not save the package as a file. The export is recorded; take it again from a browser that can save files.";
+
+/** What an export says once the file is offered, naming the version and the file. */
+export function exportedSentence(exported: Pick<ExportedSkill, "name" | "version" | "file_name">): string {
+  return `${exported.name} ${exported.version} was exported as ${exported.file_name}. Another install adds it from its Skills page, where it waits for that install's own review.`;
+}
+
+/** `ExportedSkillView`, or null when the body is not one. */
+export function readExported(payload: unknown): ExportedSkill | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Record<string, unknown>;
+  for (const key of ["file_name", "content", "name", "version", "digest"]) {
+    if (typeof body[key] !== "string" || body[key] === "") {
+      return null;
+    }
+  }
+  return body.encoding === "base64" ? (body as unknown as ExportedSkill) : null;
+}
+
+/**
+ * Hand an exported package to the browser as a zip file. True when a file was offered.
+ *
+ * The object address is revoked as soon as the click has been dispatched, as `saveDocument` does.
+ */
+export function savePackage(exported: Pick<ExportedSkill, "file_name" | "content">, into: Document): boolean {
+  if (typeof URL.createObjectURL !== "function") {
+    return false;
+  }
+  const raw = atob(exported.content); // boundary-ok: the bytes of a skill package the API answered, never a token
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    bytes[index] = raw.charCodeAt(index);
+  }
+  const address = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+  const link = into.createElement("a");
+  link.href = address;
+  link.download = exported.file_name;
+  into.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(address);
+  return true;
+}
+
 export function reinstatementPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/reinstatement`;
 }

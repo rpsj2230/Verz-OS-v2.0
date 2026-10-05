@@ -140,6 +140,7 @@ from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
 from brain.tables.skill import (
     SkillAssignmentRow,
     SkillDetachmentRow,
+    SkillExportRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
@@ -449,6 +450,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
     # outlives both.
     "ops.agent_run",
+    # 0191_skill_export_and_rehearsal. An export points at the version it carried.
+    "agent.skill_export",
 )
 
 __all__ = [
@@ -561,6 +564,7 @@ __all__ = [
     "SettingType",
     "SkillAssignmentRow",
     "SkillDetachmentRow",
+    "SkillExportRow",
     "SkillInvocationRow",
     "SkillRetirementRow",
     "SkillReviewRow",

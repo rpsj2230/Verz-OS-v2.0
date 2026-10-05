@@ -11,6 +11,7 @@ import {
   assignPath,
   categoriesPath,
   detachPath,
+  exportPath,
   IMPORT_PATH,
   PROCEDURE_PATH,
   reinstatementPath,
@@ -43,12 +44,20 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/skills/{digest}/reinstatement", "reinstatementPath", reinstatementPath("d".repeat(64))),
     at("POST /api/v1/skills/{digest}/retirement", "retirementPath", retirementPath("d".repeat(64))),
   ],
+  "src/pages/skills/SkillProfile.tsx exportPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/export", "exportPath", exportPath("d".repeat(64))),
+  ],
   "src/pages/skills/SkillProfile.tsx detachPath(pin.digest)": [
     at("POST /api/v1/skills/{digest}/detachments", "detachPath", detachPath("d".repeat(64))),
   ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/skills/{digest}/export": {
+    row: t("test_skill_export", "test_on_a_real_database_an_export_is_a_row_and_a_ledger_entry_in_the_exporters_name", true),
+    audit: t("test_skill_export", "test_on_a_real_database_an_export_is_a_row_and_a_ledger_entry_in_the_exporters_name", true),
+    behaviour: t("test_skill_export", "test_an_administrator_exports_an_approved_version_and_another_install_takes_it_undecided"),
+  },
   "POST /api/v1/skills": {
     row: t("test_skill_store", "test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store", true),
     audit: t("test_skill_store", "test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store", true),
