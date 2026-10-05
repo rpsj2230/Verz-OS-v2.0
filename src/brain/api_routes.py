@@ -1393,6 +1393,7 @@ def caching_of(
     policies: Mapping[str, FieldPolicy],
     sources: Sequence[str],
     epochs: Mapping[str, int],
+    table_epochs: Mapping[str, int] | None = None,
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
@@ -1400,7 +1401,7 @@ def caching_of(
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
     uncacheable rather than a cached answer stale, and each carries its epoch from `epochs`
-    (M11.8.4): see `AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES`. `epochs` also carries
+    (M11.8.4): see `AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES`. `table_epochs` carries
     the uploaded tables' versions
     (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`), so a new upload
     moves the key as a connector's change does.
@@ -1411,7 +1412,10 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        source_epochs={**dict.fromkeys(sorted(set(sources)), 0), **epochs},
+        source_epochs={
+            **{name: epochs.get(name, 0) for name in sorted(set(sources))},
+            **(table_epochs or {}),
+        },
         sources=frozenset(sources),
     )
 
@@ -1725,7 +1729,8 @@ async def answered_for(
             request.app.state,
             policies,
             sources_at(registry, asking.reach, asking.now),
-            {**(await source_epochs_of(request.app.state)), **tables.epochs},
+            await source_epochs_of(request.app.state),
+            tables.epochs,
         )
     )
 
