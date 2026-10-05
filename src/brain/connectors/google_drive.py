@@ -462,7 +462,7 @@ GOOGLE_DRIVE: Final = "google_drive"
 CONNECTOR_NAME: Final = GOOGLE_DRIVE
 
 #: The one entity kind. A file's metadata, never its contents.
-FILE: Final = "file"
+FILE: Final = "drive_file"
 
 #: This connector's own version. Moves when anything in the manifest moves, because an
 #: upgrade is recognised by a version change and a pinned digest disagreeing with a connector
@@ -927,7 +927,7 @@ class DriveConnection:
         Drive the folder is the unit anybody actually shares, and the per-file part of the model
         is a resolved ACL by construction, so the folder is the only half of it that can be
         carried as a predicate at all. The department is this install's half: a row carries it,
-        so a grant of `read:file` scoped to that department reaches the folder's rows and one
+        so a grant of `read:drive_file` scoped to that department reaches the folder's rows and one
         scoped elsewhere does not, and a mover gets a different row set with no writes.
         """
         return Scope(

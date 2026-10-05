@@ -60,7 +60,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "page is read; a grantee's domain is never kept, which the canary proves.",
         kind=Kind.PAGINATION,
         tools=("google_drive.list_folder",),
-        projects="file",
+        projects="drive_file",
         expect=Expect.MORE_TO_READ,
         origin=DOCUMENTED,
         reference=DRIVE_LIST_DOC,

@@ -619,7 +619,7 @@ def test_the_visibility_predicate_is_the_folder_and_its_department_and_never_peo
     """A projection stored with a resolved ACL wearing a predicate's shape does not
     re-evaluate against the live entitlement set, so it is wrong from the next leaver
     onwards. The folder is the half of Drive's model that can be carried as a predicate at
-    all, the department is this install's half that a grant of `read:file` is scoped by, and
+    all, the department is this install's half that a grant of `read:drive_file` is scoped by, and
     the manifest refuses the other half rather than trusting this module. Delete this and the
     stored rows can lose the department a reader's grant is judged against."""
     connection = a_connection()

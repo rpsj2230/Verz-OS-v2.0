@@ -435,7 +435,7 @@ def test_a_nested_file_is_read_live_only_when_its_folder_is_one_the_walk_found()
 
 
 def test_the_folder_s_rows_carry_the_department_a_grant_is_scoped_by() -> None:
-    """The stored predicate is the folder and its department, so a `read:file` grant scoped to
+    """The stored predicate is the folder and its department, so a `read:drive_file` grant scoped to
     that department reaches the rows. Delete this and the rows carry no department, and a reader
     granted the folder's files in their department is refused every one."""
     clauses = {one.field: one.value for one in a_connection().visibility_predicate().clauses}

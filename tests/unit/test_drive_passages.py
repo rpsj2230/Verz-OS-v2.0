@@ -192,10 +192,10 @@ WORDS = {"docQuarterly01": "Mondays are staffed by two.", "docLocked00001": "Kep
 
 # ------------------------------------------------------------------ who is told
 def test_a_reader_granted_the_folder_is_told_a_doc_s_words_read_when_asked() -> None:
-    """The positive case: the asker holds `read:file` in the folder's department, so the Doc whose
-    name holds the question's word has its metadata read, then its words exported, under one token
-    minted for the question; the passage is personal to the asker. Delete this and a guard that
-    refuses everybody passes every test below."""
+    """The positive case: the asker holds `read:drive_file` in the folder's department, so the Doc
+    whose name holds the question's word has its metadata read, then its words exported, under one
+    token minted for the question; the passage is personal to the asker. Delete this and a guard
+    that refuses everybody passes every test below."""
     google = RecordedDrive(files={"docQuarterly01": DOC}, words=WORDS)
     told = ask(passages_over(google, index_of(DOC)), "Who is on the quarterly?", reader())
 
@@ -214,10 +214,10 @@ def test_a_reader_granted_the_folder_is_told_a_doc_s_words_read_when_asked() -> 
 def test_a_reader_without_the_folder_s_grant_is_told_what_nothing_tells_them(
     department: str | None,
 ) -> None:
-    """`A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW`: a reader with no `read:file`, and one
-    holding it in another department, are handed exactly what a question about no file hands them,
-    and Drive is asked nothing, not even for a token. Delete this and a file's words reach whoever
-    asks for it by name."""
+    """`A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW`: a reader with no `read:drive_file`,
+    and one holding it in another department, are handed exactly what a question about no file hands
+    them, and Drive is asked nothing, not even for a token. Delete this and a file's words reach
+    whoever asks for it by name."""
     google = RecordedDrive(files={"docQuarterly01": DOC}, words=WORDS)
     passages = passages_over(google, index_of(DOC))
 
@@ -226,7 +226,7 @@ def test_a_reader_without_the_folder_s_grant_is_told_what_nothing_tells_them(
 
     assert refused == nothing == ()
     assert google.calls() == 0
-    assert "read:file" in A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW
+    assert "read:drive_file" in A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW
 
 
 def test_a_file_locked_since_it_was_listed_is_looked_at_and_never_read() -> None:
@@ -411,9 +411,9 @@ def test_a_narrowed_question_reads_the_library_alone() -> None:
 
 
 def test_the_capability_is_the_one_the_folder_s_rows_are_granted_by() -> None:
-    """`read:file` is the row plane's capability for Drive's entity, so the grant a data steward
-    writes for the folder's rows is the one that admits its words. Delete this and the two could
-    drift apart, and a reader granted the rows be refused the words or the reverse."""
+    """`read:drive_file` is the row plane's capability for Drive's entity, so the grant a data
+    steward writes for the folder's rows is the one that admits its words. Delete this and the two
+    could drift apart, and a reader granted the rows be refused the words or the reverse."""
     from brain.knowledge.rows import entity_capability
 
     assert Capability(value=entity_capability(FILE).value) == READ_FILE

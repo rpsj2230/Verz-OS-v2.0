@@ -8,11 +8,11 @@ names hold the question's words in the index, reads each one's metadata from Dri
 again, reads the words of those that pass, and hands them to the answer lane's model step as
 passages.
 
-**Two gates before Drive is asked anything.** The asker must hold `read:file` in the department
-the folder was connected for, which is the grant the folder's index rows are judged by, and the
-question must hold a word a file's name can be matched on, by the Lark Wiki's rule for its titles
-(`brain.ops.lark_wiki_live.words_of`). Either missing is answered with no
-passage and no call, which is exactly what a person asking about a file that is not there is told.
+**Two gates before Drive is asked anything.** The asker must hold `read:drive_file` in the
+department the folder was connected for, which is the grant the folder's index rows are judged by,
+and the question must hold a word a file's name can be matched on, by the Lark Wiki's rule for its
+titles (`brain.ops.lark_wiki_live.words_of`). Either missing is answered with no passage and no
+call, which is exactly what a person asking about a file that is not there is told.
 See `A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW`.
 
 **Each file is checked again, live, before a word of it is read.** The index is up to an hour old,
@@ -25,7 +25,7 @@ tells them.
 **A passage is personal to its asker.** It is tagged with the asker as its owner at the personal
 level, as Slack's passages are, so the passage policy tells it to the person whose grant admitted
 it and to nobody else if the answer is shown again. A department tag would admit whoever may read
-that department's knowledge, which is a different grant from `read:file`.
+that department's knowledge, which is a different grant from `read:drive_file`.
 
 **Nothing is kept.** The words are passages for one question: not written to a table, not
 embedded, not logged. The index this reads holds names, types, dates and verdicts, never a word of
@@ -110,11 +110,11 @@ log = structlog.get_logger()
 # ------------------------------------------------------------------ written-down reasons
 #: Why a file's words reach only a reader of the folder's rows.
 A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW: Final = (
-    "A connected folder's files are indexed as rows of `file`, each carrying the department the "
-    "folder was connected for, and a grant of read:file scoped to that department is what reaches "
-    "them. A file's words are read for a question only when the asker holds that grant; anybody "
-    "else is answered with no passage and no call to Drive, as though the folder held nothing on "
-    "the subject."
+    "A connected folder's files are indexed as rows of `drive_file`, each carrying the department "
+    "the folder was connected for, and a grant of read:drive_file scoped to that department is "
+    "what reaches them. A file's words are read for a question only when the asker holds that "
+    "grant; anybody else is answered with no passage and no call to Drive, as though the folder "
+    "held nothing on the subject."
 )
 
 # ------------------------------------------------------------------------ the figures
