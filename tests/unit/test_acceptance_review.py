@@ -115,6 +115,20 @@ def _decision_unwritten(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(StoredReviews, "decide", nothing)
 
 
+def _rejection_unwritten(monkeypatch: pytest.MonkeyPatch) -> None:
+    from brain.resolution.review_store import StoredReviews
+    from brain.tables.resolution_review import ReviewState
+
+    kept = StoredReviews.decide
+
+    async def merges_only(self: Any, item_id: str, **kwargs: Any) -> bool:
+        if kwargs["state"] is ReviewState.REJECTED:
+            return True
+        return await kept(self, item_id, **kwargs)
+
+    monkeypatch.setattr(StoredReviews, "decide", merges_only)
+
+
 def _decided_twice(monkeypatch: pytest.MonkeyPatch) -> None:
     import brain.resolution_routes as routes
 
@@ -133,6 +147,7 @@ BREAKS: dict[str, tuple[Any, str]] = {
     "anybody_reviews": (_anybody_reviews, "SHOWN_WITHOUT_AUTHORITY"),
     "merge_skipped": (_merge_skipped, "NOT_MERGED"),
     "decision_unwritten": (_decision_unwritten, "NOT_MERGED"),
+    "rejection_unwritten": (_rejection_unwritten, "NOT_REJECTED"),
     "decided_twice": (_decided_twice, "DECIDED_TWICE"),
 }
 
