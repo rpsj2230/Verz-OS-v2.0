@@ -31,6 +31,7 @@ MODULE = "brain.ops.acceptance_checks_channels"
 EMAIL = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
 SLACK = "a_slack_message_is_taken_signed_and_answered_on_the_bot_token"
 MAILBOX = "mail_in_the_mailbox_is_read_answered_and_marked"
+TEAMS = "a_teams_message_is_taken_signed_and_answered_in_its_chat"
 
 
 def mine() -> dict[str, Check]:
@@ -44,20 +45,21 @@ def test_each_channel_check_is_registered_with_the_leaf_it_proves() -> None:
         EMAIL: ("M10.5.6",),
         SLACK: ("M10.5.1",),
         MAILBOX: ("M10.5.6",),
+        TEAMS: ("M10.5.2",),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
-    assert {"M10.5.6", "M10.5.1"} <= {
+    assert {"M10.5.6", "M10.5.1", "M10.5.2"} <= {
         one for module in wbs["modules"] for one in module["leaf_ids"]
     }
 
 
 def test_the_channels_checks_are_listed_in_their_page_order() -> None:
     """Every check this module registers, in the order the Install page lists them: one per
-    way a vendor connects, email then Slack, then email read from a mailbox. Held here, beside the
-    module's other tests, since 2026-09-30, so a package adding a check edits its own file and
+    way a vendor connects, email, Slack, email read from a mailbox, then Teams. Held here, beside
+    the module's other tests, since 2026-09-30, so a package adding a check edits its own file and
     never a list every package appends to. Delete this and a check can drop out of the module with
     the page simply listing one fewer row."""
-    assert checks_in(MODULE) == [EMAIL, SLACK, MAILBOX]
+    assert checks_in(MODULE) == [EMAIL, SLACK, MAILBOX, TEAMS]
 
 
 def lends(password: str | None) -> MailPassword:
@@ -273,3 +275,54 @@ def test_the_mailbox_check_fails_where_the_product_breaks(
     else:
         monkeypatch.setattr(mailbox_read, "MOST_PER_POLL", 1)
     assert run_check(install, (mine()[MAILBOX],)) == {MAILBOX: (FAILED, reason)}
+
+
+@pytest.mark.needs_db
+def test_the_teams_check_passes_on_a_real_schema_and_leaves_nothing_behind(install: str) -> None:
+    """**The Teams check as the worker runs it**, with a key the check made standing for
+    Microsoft's: it passes and every table it wrote to holds what it held before. Delete this and
+    a check that cannot pass on the real schema, or one that commits a Teams record, reaches the
+    owner's server."""
+    before = counts(install)
+    assert run_check(install, (mine()[TEAMS],)) == {TEAMS: (PASSED, "")}
+    assert counts(install) == before
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("signature", "a token no published key signed was accepted"),
+        ("tenant", "an activity from another tenant was accepted"),
+        ("login", "the answer was not authorised at the tenant's own login"),
+    ],
+)
+def test_the_teams_check_fails_where_the_product_breaks(
+    install: str, monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """Broken the way each would break: a signature check that passes anything, a tenant pin
+    that matches any tenant, and a token exchanged at Microsoft's common login. Delete this and
+    any of them could go with the check green."""
+    from brain.channels import teams
+    from brain.identity.keycloak_tokens import verify_rs256
+
+    if broken == "signature":
+        # The wire is a frozen dataclass; its verifier is swapped and put back below.
+        object.__setattr__(teams.WIRE, "signature", lambda **kwargs: True)
+    elif broken == "tenant":
+        monkeypatch.setattr(teams, "tenant_matches", lambda body, tenant_id: True)
+    else:
+        real = teams.TeamsWire.request_for
+
+        def common_login(self: Any, **kwargs: Any) -> Any:
+            made = real(self, **kwargs)
+            exchange = made.exchange
+            assert exchange is not None
+            common = f"{teams.MICROSOFT_LOGIN_URL}/common/oauth2/v2.0/token"
+            return replace(made, exchange=replace(exchange, url=common))
+
+        monkeypatch.setattr(teams.TeamsWire, "request_for", common_login)
+    try:
+        assert run_check(install, (mine()[TEAMS],)) == {TEAMS: (FAILED, reason)}
+    finally:
+        object.__setattr__(teams.WIRE, "signature", verify_rs256)
