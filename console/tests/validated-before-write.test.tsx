@@ -78,7 +78,14 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
-  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // The preview as a person is in the Permissions card, above the model card, so the pin's is second.
+  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 1, writes: true }],
+  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // A person's Access view: the preview through an agent, under the grants, roles and placements.
+  "src/pages/people/PersonPreview.tsx": [{ pattern: "/people/:personId/:view", index: 0, writes: true }],
+  // The Dashboard opens first, and its one form is the monthly budget, drawn for a reader of
+  // everybody's spend.
+  "src/pages/agents/AgentSpend.tsx": [{ pattern: "/agents/:agentId", index: 0, writes: true }],
   // A model's price opens on its row in the prices card, under the providers and the matrix, which
   // draw no form of their own (M27.12.5).
   "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
@@ -100,12 +107,21 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/agents/AgentMemory.tsx":
+    "The one form corrects a memory, opened from its row in the Memory section at its own address, " +
+    "which no page case mounts. tests/agent-memory.test.tsx submits it blank and holds that nothing " +
+    "is sent and what to type is said beside it, and a correction is sent only from its confirmation.",
   "src/pages/compliance/ComplianceActs.tsx":
     "Naming a person, opening a case and each step of a case are forms inside drawers opened from the " +
     "Compliance views and a case's own page, outside the main landmark these cases read. Each says what " +
     "its fields take before anything is sent, and tests/compliance-page.test.tsx submits the naming, " +
     "the opening, the assessment and a notification blank and holds that no confirmation opens and " +
     "nothing is sent.",
+  "src/pages/compliance/EscalationQueues.tsx":
+    "Naming who answers for an escalation queue is a form inside a drawer opened from the Escalation " +
+    "queues view, outside the main landmark these cases read. It says what each field takes before " +
+    "anything is sent, and tests/compliance-page.test.tsx submits it blank and holds that no " +
+    "confirmation opens and nothing is sent.",
   "src/pages/retention/RetentionActs.tsx":
     "The hold, lift and erasure forms are inside drawers opened from the Legal holds and Erasure " +
     "requests views, outside the main landmark these cases read. Each says what its fields take before " +
@@ -120,6 +136,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The export form is inside the drawer opened from the Access review header, outside the main " +
     "landmark these cases read. tests/review-pages.test.tsx submits it blank and holds that no " +
     "confirmation opens, nothing is sent and the reason and the reference are each said to be needed.",
+  "src/pages/people/WorkEmail.tsx":
+    "The work email form is inside the Add work email drawer opened from a person's Overview, outside " +
+    "the main landmark these cases read. tests/people-access-pages.test.tsx submits it blank and holds " +
+    "that nothing is sent and what to type is said beside the field.",
   "src/pages/access-requests/AccessRequestsPage.tsx":
     "The ask form is inside the Ask for access drawer opened from the page header, outside the main " +
     "landmark these cases read. tests/access-requests-page.test.tsx submits it blank and holds that " +
@@ -170,12 +190,6 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The connect form is inside the drawer opened from the page's Connect a source button, outside the " +
     "main landmark these cases read. tests/staff-sources-page.test.tsx opens the drawer, submits it " +
     "blank, and holds that no confirmation opens, nothing is sent and each empty box is named beside it.",
-  "src/components/ConnectLark.tsx":
-    "Its Test and Save buttons stay disabled until an App ID and an App Secret are typed, so a " +
-    "blank form cannot be sent. What is typed is judged by the API before anything reaches Lark: " +
-    "input_problems answers 422 by field for a malformed App ID, secret or Base link, which " +
-    "tests/unit/test_lark_connect.py holds with nothing sent to " +
-    "the fake Lark server, and tests/lark-connect.test.tsx drives the form.",
   "src/pages/settings/SettingsPage.tsx":
     "Each editable row's form sends one value, from a confirmation, and says under the field what it " +
     "accepts; the API judges it with setting_problem before anything is written, answering 422 with a " +
@@ -186,9 +200,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "Every form here opens behind a press the page cases do not make: Add a skill's drawer, Edit as a " +
     "new version, or the Profile's assign and categories cards. Each says what it accepts above its " +
     "fields, and a blank one cannot be sent: Add stays disabled until packageProblem accepts a package, " +
-    "Import until importProblem accepts the repository and commit or the address, and Save until the " +
-    "edit has text, which tests/skills-page.test.tsx holds for Add. The assign form only opens a " +
-    "confirmation naming an agent the API listed.",
+    "Import until importProblem accepts the repository and commit or the address, the written " +
+    "procedure's Import until procedureProblem accepts a chosen file, and Save until the edit has " +
+    "text, which tests/skills-page.test.tsx holds for Add and for the procedure. The assign form only " +
+    "opens a confirmation naming an agent the API listed.",
   "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",

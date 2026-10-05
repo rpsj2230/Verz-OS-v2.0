@@ -83,6 +83,10 @@ if TYPE_CHECKING:
     from brain.knowledge.columns import ColumnAccess
     from brain.ops.classification_store import ClassifiedTables
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 110
+
 A: Final = RESERVED_DEPARTMENTS[0]
 B: Final = RESERVED_DEPARTMENTS[1]
 

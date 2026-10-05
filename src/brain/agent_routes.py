@@ -223,6 +223,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, Asking, reachable_sources
 from brain.channels.adapter import ChannelAdapter, ChannelCapabilities, channel_adapters
 from brain.console.agent_profile import (
+    NOT_TAKEN_OVER,
     RUN_SPEND_IS_RECORDED,
     LeashRow,
     ToolRow,
@@ -230,6 +231,7 @@ from brain.console.agent_profile import (
     leash_rows,
     leash_up_to,
     rung_key,
+    taken_over,
     tool_rows,
 )
 from brain.console.agent_tabs import SKILL_SCREEN, rendering_profile
@@ -258,17 +260,20 @@ from brain.console.workspace_capabilities import (
 from brain.core.entitlement import Capability
 from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.errors import Absent, Failed
-from brain.core.field_policy import FieldPolicy
+from brain.core.field_policy import FieldPolicy, FieldRule
 from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.abstain import AutonomyBreaker
 from brain.gate.context import TrafficClass
 from brain.gate.leash import Leash
 from brain.gate.roster import viewer_for
+from brain.gate.takeover_store import TakeoverStandings
 from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.registry import ModelPin
 from brain.models.routing import Tier
+from brain.ops.builtin_templates import is_built_in
 from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
@@ -306,9 +311,12 @@ ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED: Final = (
     "tab_strip shows a tab that is permitted and populated, and a heading over an empty panel "
     "is a count of hidden things spelled out. This route holds the agent's record and its "
     "install, which is what the Settings tab reads, and the Automations tab always holds the "
-    "product's automation gallery, which its own route serves behind the same tab's read. "
-    "Marking the other five populated would draw five headings over nothing; marking Settings "
-    "empty would withhold a tab whose content is already in the response."
+    "product's automation gallery, which its own route serves behind the same tab's read. The "
+    "Memory tab always holds how the agent learns, its tiers and which are active, which "
+    "brain.agent_memory_routes serves behind the Memory tab's read for every agent alike, so it "
+    "says nothing about whether any memory exists. Marking the other four populated would draw "
+    "four headings over nothing; marking Settings empty would withhold a tab whose content is "
+    "already in the response."
 )
 
 #: Why a malformed row is refused as though it were missing.
@@ -410,7 +418,7 @@ THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS: Final
 MAX_ROSTER_ENTRIES: Final = 500
 
 #: The tabs with something in them for every agent. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
-POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB})
+POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB, Tab.MEMORY})
 
 #: The most templates one gallery answer carries. A resource bound, as the roster's is.
 MAX_TEMPLATE_ENTRIES: Final = 500
@@ -533,6 +541,12 @@ class AgentHeaderView(BaseModel):
     #: `brain.console.agent_profile.leash_up_to` says it. Sent where the Settings tab is, and null
     #: there too for an agent with no action, because a rung governs a side effect.
     leash_up_to: str | None = None
+    #: The department the audience names, or null for a company agent. Already on the roster entry
+    #: every reader of this header is sent, so the header's role line says no more than it.
+    department: str | None = None
+    #: The template's own name at the pinned version, beside `template_id`, so the lineage reads as
+    #: a name rather than a slug. Null exactly when the lineage is.
+    template_name: str | None = None
 
 
 class TabView(BaseModel):
@@ -691,6 +705,11 @@ class LeashRowView(BaseModel):
     configured: bool
     acts: bool
     entries: list[LeashEntryView] = []
+    #: The rung the autonomy breaker holds this target to, when lower than `rung` (M8.3.5).
+    lowered_to: str | None = None
+    #: When people took this agent's work on the target over inside the week, oldest first.
+    #: When and nothing else; see `A_LOWERED_RUNG_IS_SHOWN_WITH_THE_TAKEOVERS_BEHIND_IT`.
+    taken_over_at: list[datetime] = []
 
 
 class AgentCeilingView(BaseModel):
@@ -753,14 +772,15 @@ class WorkspaceView(BaseModel):
 
 
 class Origin(enum.StrEnum):
-    """Where a template in the gallery came from. Two, and the difference is who signed it.
+    """Where a template in the gallery came from. Two, and the difference is who wrote it.
 
-    A built-in template is one of the twenty-three this product ships, and
-    `brain.agents.catalogue` says plainly that nothing publishes them: they hold no
-    signature, because a signature is a claim about who published and nobody has. A published
-    one is a row this installation signed with its own key. Saying which is which is the
-    difference between "this is what the product offers" and "this is what we have made", and
-    a gallery that merged them would let the second wear the first's authority.
+    A built-in template is one of the twenty-three this product ships. Since 2026-09-29 each start
+    holding the install's key signs them under the product's own name
+    (`brain.ops.builtin_templates`), so a built-in version can be on file and installable and is
+    still the product's: `origin_of` tells it apart by its content, not by its row. A published
+    one is a document somebody at this install made and signed. Saying which is which is the
+    difference between "this is what the product offers" and "this is what we have made", and a
+    gallery that merged them would let the second wear the first's authority.
     """
 
     BUILT_IN = "built_in"
@@ -907,6 +927,8 @@ class Install:
     leash: Leash = field(default_factory=Leash)
     #: The tools the effective manifest declares, before this install bound them to its own.
     declared_tools: tuple[str, ...] = ()
+    #: The template's own display name at the pinned version, before any local overlay.
+    template_name: str = ""
 
 
 def install_of(
@@ -952,6 +974,7 @@ def install_of(
     return Install(
         template_id=instance.template_id,
         template_version=instance.template_version,
+        template_name=signed.manifest.identity.display_name,
         summary=effective.manifest.identity.summary,
         composition=tuple(CompositionRowView(**row.wire()) for row in rows),
         divergent=tuple(sorted(one.value for one in divergent_parts(instance))),
@@ -1109,6 +1132,13 @@ def template_entry(manifest: TemplateManifest, origin: Origin) -> TemplateEntry:
     )
 
 
+def origin_of(published: TemplateManifest) -> Origin:
+    """Where a version on file came from: built in when it is exactly the template this product
+    ships under its id and number, which `brain.ops.builtin_templates` signed with this install's
+    key at start, and published otherwise. See `brain.ops.builtin_templates.is_built_in`."""
+    return Origin.BUILT_IN if is_built_in(published) else Origin.PUBLISHED
+
+
 def gallery(
     published: Sequence[TemplateManifest], plan: Plan[TemplateEntry] | None = None
 ) -> TemplateGallery:
@@ -1131,7 +1161,7 @@ def gallery(
         held = highest.get(identity.template_id)
         if held is None or identity.version > held.identity.version:
             highest[identity.template_id] = one
-    cards = [template_entry(one, Origin.PUBLISHED) for one in highest.values()]
+    cards = [template_entry(one, origin_of(one)) for one in highest.values()]
     cards.extend(
         template_entry(one, Origin.BUILT_IN)
         for one in CATALOGUE
@@ -1164,6 +1194,8 @@ def template_detail(
     if chosen is None:
         origin = Origin.BUILT_IN
         chosen = next((one for one in CATALOGUE if one.identity.template_id == template_id), None)
+    elif origin_of(chosen) is Origin.BUILT_IN:
+        origin = Origin.BUILT_IN
     if chosen is None:
         return None
     return TemplateDetailView(
@@ -1203,12 +1235,23 @@ def product_field_policy() -> FieldPolicy:
     has to fail in: the policy decides the most sensitive thing a run could return, which
     decides which surfaces may carry it, so a policy missing a rule offers a channel that
     should not have been offered. `brain.tools.startup.every_row_classification` is the one
-    list of what this product classifies, and one classification per entity is pinned by that
-    module's own test, so the rules cannot collide here.
+    list of what this product classifies.
+
+    **Two sources may classify one field, and the stricter classification is kept.** Since
+    2026-09-30 the connected sources' entities are classified beside the demo's, and the demo's
+    `invoice.amount_due` is confidential where Xero's is restricted. Each source is still redacted
+    by its own rules (`brain.api_routes.source_field_policies`); this policy only decides which
+    surfaces a run could be carried on, so where two sources disagree the more sensitive reading
+    is the one that must decide, and keeping the first would offer a channel a restricted value
+    must not reach.
     """
-    return FieldPolicy(
-        rules=tuple(rule for one in every_row_classification() for rule in one.policy().rules)
-    )
+    strictest: dict[tuple[str, str], FieldRule] = {}
+    for one in every_row_classification():
+        for rule in one.policy().rules:
+            held = strictest.get(rule.key)
+            if held is None or rule.classification.rank > held.classification.rank:
+                strictest[rule.key] = rule
+    return FieldPolicy(rules=tuple(strictest.values()))
 
 
 def offered_surfaces(record: AgentRecord, asked: Asking) -> tuple[ChannelCapabilities, ...]:
@@ -1411,7 +1454,12 @@ def configured(
     return Configured(tools=tools, leash=rows)
 
 
-def profile_view(record: AgentRecord, setup: Configured, asked: Asking) -> ProfileView:
+def profile_view(
+    record: AgentRecord,
+    setup: Configured,
+    asked: Asking,
+    standings: Mapping[str, AutonomyBreaker] | None = None,
+) -> ProfileView:
     """The Profile block for a reader of the Settings tab (M27.11.15's content, not its page).
 
     The capability names are `ceiling_block`'s for this reader, whole or locked. See
@@ -1444,19 +1492,25 @@ def profile_view(record: AgentRecord, setup: Configured, asked: Asking) -> Profi
             for one in setup.tools
         ],
         leash=[
-            LeashRowView(
-                target=one.target,
-                rung=rung_key(one.highest),
-                rungs=[rung_key(rung) for rung in one.rungs],
-                configured=one.configured,
-                acts=one.acts,
-                entries=[
-                    LeashEntryView(rung=rung_key(entry.rung), where=entry.where)
-                    for entry in one.entries
-                ],
-            )
-            for one in setup.leash
+            leash_row_view(one, (standings or {}).get(one.target), asked.now) for one in setup.leash
         ],
+    )
+
+
+def leash_row_view(row: LeashRow, standing: AutonomyBreaker | None, now: datetime) -> LeashRowView:
+    """One leash row under the wire names, with the breaker's standing on its target at `now`."""
+    held = NOT_TAKEN_OVER if standing is None else taken_over(row, standing, now)
+    return LeashRowView(
+        target=row.target,
+        rung=rung_key(row.highest),
+        rungs=[rung_key(rung) for rung in row.rungs],
+        configured=row.configured,
+        acts=row.acts,
+        entries=[
+            LeashEntryView(rung=rung_key(entry.rung), where=entry.where) for entry in row.entries
+        ],
+        lowered_to=None if held.lowered_to is None else rung_key(held.lowered_to),
+        taken_over_at=list(held.at),
     )
 
 
@@ -1474,6 +1528,7 @@ def workspace(
     spend: Sequence[Actual] = (),
     created_at: datetime | None = None,
     owner_name: str | None = None,
+    standings: Mapping[str, AutonomyBreaker] | None = None,
 ) -> WorkspaceView:
     """One visible agent's workspace at this caller's reach.
 
@@ -1516,6 +1571,8 @@ def workspace(
             created_at=created_at,
             state=record.state.value if setup is not None else None,
             leash_up_to=None if highest is None else rung_key(highest),
+            department=record.audience.department or None,
+            template_name=(install.template_name or None) if install is not None else None,
         ),
         tabs=[tab_view(one) for one in strip],
         composition=list(settings.composition) if settings is not None else [],
@@ -1524,7 +1581,7 @@ def workspace(
         connectors=connector_view(install, record, registry, asked),
         channels=list(channel_views(record, asked)),
         headline=headline_view(record.agent_id, spend, asked),
-        profile=None if setup is None else profile_view(record, setup, asked),
+        profile=None if setup is None else profile_view(record, setup, asked, standings),
     )
 
 
@@ -1751,15 +1808,45 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
         names = await steward_names(session, [record.audience.owner_id])
     install = install_of(pair[0], pair[1], record) if pair is not None else None
     spend = [one for one in (actual_of(row) for row in costs) if one is not None]
+    registry = _tool_registry(request)
     return workspace(
         record,
         install,
         asked,
-        registry=_tool_registry(request),
+        registry=registry,
         spend=spend,
         created_at=created_at,
         owner_name=names.get(record.audience.owner_id),
+        standings=await standings_for(request, record, install, registry, asked),
     )
+
+
+async def standings_for(
+    request: Request,
+    record: AgentRecord,
+    install: Install | None,
+    registry: ToolRegistry | None,
+    asked: Asking,
+) -> Mapping[str, AutonomyBreaker]:
+    """The autonomy breaker's standing on each leash target, for a reader of the Settings tab.
+
+    Read only for a reader the Profile is sent to, at the request's own instant, and nothing on a
+    process with nowhere takeovers are kept. A read that fails is logged and drawn as no standing
+    rather than failing the whole page: the rung the agent is held to is decided by the leash,
+    and the page only describes it. See
+    `brain.console.agent_profile.A_LOWERED_RUNG_IS_SHOWN_WITH_THE_TAKEOVERS_BEHIND_IT`.
+    """
+    found = getattr(request.app.state, "takeovers", None)
+    if not isinstance(found, TakeoverStandings) or not may_read_settings(asked):
+        return {}
+    targets = [one.target for one in configured(record, install, registry).leash]
+    try:
+        return await found.standings(record.agent_id, targets, asked.now)
+    except Exception as exc:
+        # Broad for the reason `brain.app` gives about a table it cannot read at start: the
+        # page describes, and a description it cannot complete is still a page.
+        log.warning("takeover standings could not be read", error=type(exc).__name__)
+        return {}
 
 
 @router.get("/agent-templates", response_model=TemplateGallery, responses=COMMON_RESPONSES)

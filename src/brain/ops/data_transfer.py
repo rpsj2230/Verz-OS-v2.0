@@ -299,8 +299,9 @@ CATALOGUE: Final[tuple[DataSet, ...]] = (
         carries="A procedure from a word processor or a wiki, turned into a draft skill.",
         runs=False,
         told=(
-            "Not available yet. A procedure's text can be turned into a draft, and there is "
-            "nowhere to keep the draft for review."
+            "Imported on the Skills screen rather than here: a Word document or a Confluence "
+            "page becomes a draft skill that waits for review, with what a reviewer should see "
+            "in it listed beside it."
         ),
     ),
     DataSet(

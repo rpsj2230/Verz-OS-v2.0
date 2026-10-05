@@ -13,7 +13,13 @@
  * from the staff source and a local edit would be overwritten by the next sync. That is a sentence,
  * not a disabled control.
  *
- * Task ids: M27.11.2, M27.15.18, M27.16.1
+ * **What the staff list says about them**: their status and employment type, and, when the list keeps
+ * them from signing in or asking, why, in the API's words (M1.6.13, M1.6.14).
+ *
+ * **Add work email**, for a person the staff list does not name, binds their address and joins the
+ * list's own person for it into them (`WorkEmail.tsx`, M1.10.4).
+ *
+ * Task ids: M27.11.2, M27.15.18, M27.16.1, M1.6.13, M1.6.14, M1.10.4
  */
 
 import { Bot } from "lucide-react";
@@ -29,6 +35,7 @@ import {
   FactList,
   FailureState,
   LoadingState,
+  Note,
   NotOffered,
   SectionCard,
 } from "../../components/kit";
@@ -37,10 +44,12 @@ import { agentAddress } from "../agents/AgentsPage";
 import { StatePill } from "../agents/pills";
 import { dayWords } from "../access/formParts";
 import { EDITED_AT_THE_SOURCE } from "./peopleActions";
+import { WorkEmail } from "./WorkEmail";
 import { useLifecycleActs } from "../agents/LifecycleActs";
-import { SecondFactorPill, StandingPill } from "./pills";
+import { SecondFactorPill, StaffStatusPill, StandingPill } from "./pills";
 import {
   AGENTS_API_PATH,
+  EMPLOYMENT_TYPE_WORDS,
   TRANSFERS_API_PATH,
   aboutPerson,
   readOwnedAgents,
@@ -193,16 +202,35 @@ function Stewarded({ principalId }: { readonly principalId: string }) {
   );
 }
 
-export function PersonOverview({ detail }: { readonly detail: PersonDetail }) {
+export function PersonOverview({
+  detail,
+  told = "",
+  onWorkEmail = () => undefined,
+}: {
+  readonly detail: PersonDetail;
+  /** What the last Add work email was told, kept by the page across its reload. */
+  readonly told?: string;
+  /** Called with what Add work email was told and whether it wrote. */
+  readonly onWorkEmail?: (told: string, written: boolean) => void;
+}) {
   const { person, placements } = detail;
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <SectionCard title={ABOUT_HEADING} footer={<NotOffered>{EDITED_AT_THE_SOURCE}</NotOffered>}>
+        {detail.keptOut === undefined ? null : <Note kind="not-yet">{detail.keptOut}</Note>}
         <FactList>
           <Fact label="Department">{placements.department?.name ?? person.departmentName ?? person.department ?? "Not placed"}</Fact>
           {placements.teams.length === 0 ? null : <Fact label="Teams">{placements.teams.map((one) => one.name).join(", ")}</Fact>}
           {placements.leads.length === 0 ? null : <Fact label="Leads">{placements.leads.map((one) => one.name).join(", ")}</Fact>}
           {person.employment === undefined ? null : <Fact label="Employment"><span className="capitalize">{person.employment}</span></Fact>}
+          {person.staffStatus === undefined ? null : (
+            <Fact label="On the staff list">
+              <StaffStatusPill status={person.staffStatus} />
+            </Fact>
+          )}
+          {person.employmentType === undefined ? null : (
+            <Fact label="Employment type">{EMPLOYMENT_TYPE_WORDS[person.employmentType] ?? person.employmentType}</Fact>
+          )}
           <Fact label="Standing">
             <StandingPill standing={person.standing} />
           </Fact>
@@ -213,6 +241,12 @@ export function PersonOverview({ detail }: { readonly detail: PersonDetail }) {
             </Fact>
           )}
         </FactList>
+        {told === "" ? null : (
+          <div role="status">
+            <Note>{told}</Note>
+          </div>
+        )}
+        {detail.mayAddWorkEmail ? <WorkEmail principalId={person.principalId} onDone={onWorkEmail} /> : null}
       </SectionCard>
       <Stewarded principalId={person.principalId} />
       <Advanced>

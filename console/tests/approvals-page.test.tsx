@@ -45,7 +45,14 @@ import {
   readApprovalQueue,
   readDecision,
   REJECTION_REASONS,
+  TAKEOVER_REASONS,
 } from "../src/pages/approvalsQuery";
+import {
+  KEEP_IT_LABEL,
+  TAKE_OVER_CONSEQUENCE,
+  TAKE_OVER_LABEL,
+  TAKEN_OVER_SENTENCE,
+} from "../src/pages/approvals/ApprovalCard";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { asPythonName, backendHiddenCountNames, membersOf } from "./support/agentWorkspace";
 import { consoleRules, declared } from "./support/cascade";
@@ -561,11 +568,37 @@ describe("the approvals queue", () => {
     expect(container.textContent).not.toContain(NO_APPROVALS);
   });
 
+  test("a card whose approval would send nothing says why above its buttons, and one that would send says nothing", async () => {
+    // What breaks if this is deleted: an approver approving a DNS change on an install that never
+    // allowed DNS changes, told only afterwards, or never, that nothing was sent (M11.7.3). The
+    // sentence is drawn as the API sent it, between the facts and the decision, and the sibling
+    // card with no sentence draws no note at all, so the note cannot be a fixed caption.
+    const unsent = "UNSENT-SENTINEL: approving this sends nothing to the source.";
+    const { container } = await consoleAt(APPROVALS_ADDRESS, {
+      [QUEUE_API]: { body: { items: [wireCard("sus_held", { unsent_because: unsent }), wireCard("sus_sent")] } },
+    });
+    const [held, sent] = [...page(container).querySelectorAll("article.approval-card")];
+
+    expect([...(held as Element).children].map((child) => child.getAttribute("class"))).toEqual([
+      "approval-card__artefact",
+      "approval-card__facts",
+      "approval-card__unsent",
+      "approval-card__decision",
+      "approval-card__link",
+    ]);
+    expect(held?.querySelector(".approval-card__unsent")?.textContent).toBe(unsent);
+    expect(sent?.querySelector(".approval-card__unsent")).toBeNull();
+    expect(sent?.textContent).not.toContain(unsent);
+    expect(readApprovalCard(wireCard("sus_sent"))?.unsentBecause).toBe("");
+    expect(readApprovalCard(wireCard("sus_held", { unsent_because: unsent }))?.unsentBecause).toBe(unsent);
+    expect(baseRule(parseCss(readConsoleFile(SHEET)), "approval-card__unsent").declarations["overflow-wrap"]).toBe("anywhere");
+  });
+
   test("every name the page reads is a name the routes declare, and a card declares no more", () => {
     // What breaks if this is deleted: the page and the routes drifting apart on a name, or a
     // route that started sending a card's call or state. The card's set is exact.
     const queue = declaredResponseSchema(QUEUE_ROUTE, "get");
-    const card = ["artefact", "expires_at", "raised_at", "runs_as", "suspension_id"];
+    const card = ["artefact", "expires_at", "may_take_over", "raised_at", "runs_as", "suspension_id", "unsent_because"];
 
     expect(declaredPropertyNames(queue)).toEqual(expect.arrayContaining(["items", "truncated"]));
     expect(declaredPropertyNames(declaredProperty(queue, "items"))).toEqual(card);
@@ -724,15 +757,18 @@ describe("deciding an approval", () => {
     const reasons = Object.values(backendEnumMembers("src/brain/approval_routes.py", "RejectionReason")).sort();
     expect(Object.keys(REJECTION_REASONS).sort()).toEqual(reasons);
 
+    const takeovers = Object.values(backendEnumMembers("src/brain/approval_routes.py", "TakeoverReason")).sort();
+    expect(Object.keys(TAKEOVER_REASONS).sort()).toEqual(takeovers);
+
     const reasonSchema = declaredPropertySchema(DECISION_ROUTE, "post", "reason_code");
-    const reference = (reasonSchema["anyOf"] as Record<string, unknown>[] | undefined)?.find(
-      (one) => typeof one["$ref"] === "string",
-    );
-    expect(reference).toBeDefined();
-    expect([...(resolvedSchema(reference as Record<string, unknown>)["enum"] as string[])].sort()).toEqual(reasons);
+    const offered = (reasonSchema["anyOf"] as Record<string, unknown>[] | undefined)
+      ?.filter((one) => typeof one["$ref"] === "string")
+      .map((one) => [...(resolvedSchema(one)["enum"] as string[])].sort());
+    expect(offered).toEqual([reasons, takeovers]);
     expect([...(declaredPropertySchema(DECISION_ROUTE, "post", "verdict")["enum"] as string[])].sort()).toEqual([
       "approved",
       "rejected",
+      "taken_over",
     ]);
 
     const declared = declaredPropertyNames(declaredRequestBodySchema(DECISION_ROUTE, "post"));
@@ -740,15 +776,68 @@ describe("deciding an approval", () => {
       const body = decisionBody({ verdict: "rejected", reasonCode: reason });
       expect(body).toEqual({ verdict: "rejected", reason_code: reason });
       expect(Object.keys(body ?? {}).filter((key) => !declared.includes(key))).toEqual([]);
+      // A rejection's reason is not a takeover's.
+      expect(decisionBody({ verdict: "taken_over", reasonCode: reason })).toBeNull();
+    }
+    for (const reason of takeovers) {
+      expect(decisionBody({ verdict: "taken_over", reasonCode: reason })).toEqual({ verdict: "taken_over", reason_code: reason });
+      expect(decisionBody({ verdict: "rejected", reasonCode: reason })).toBeNull();
     }
     expect(decisionBody({ verdict: "approved" })).toEqual({ verdict: "approved" });
     expect(decisionBody({ verdict: "rejected", reasonCode: "" })).toBeNull();
     expect(decisionBody({ verdict: "rejected", reasonCode: "constructor" })).toBeNull();
+    expect(decisionBody({ verdict: "taken_over", reasonCode: "" })).toBeNull();
 
     expect(declaredPropertyNames(declaredResponseSchema(DECISION_ROUTE, "post"))).toEqual(["suspension_id", "verdict"]);
     expect(readDecision({ suspension_id: "sus_1", verdict: "approved" }, "sus_1")).toBe("approved");
     expect(readDecision({ suspension_id: "sus_2", verdict: "approved" }, "sus_1")).toBeNull();
-    expect(readDecision({ suspension_id: "sus_1", verdict: "taken_over" }, "sus_1")).toBeNull();
+    expect(readDecision({ suspension_id: "sus_1", verdict: "taken_over" }, "sus_1")).toBe("taken_over");
+    expect(readDecision({ suspension_id: "sus_1", verdict: "amended" }, "sus_1")).toBeNull();
+  });
+
+  test("an agent's action can be taken over after a reason and a second, worded confirmation", async () => {
+    // What breaks if this is deleted: a take-over button that sends on one press, with no why, or
+    // a confirmation that does not say the agent will not do it. Choosing a reason opens the
+    // confirmation, keeping it waiting sends nothing, and confirming sends the takeover.
+    const { container, idp } = await consoleAt(approvalAddress("sus_1"), {
+      [`${QUEUE_API}/sus_1`]: { body: wireCard("sus_1", { may_take_over: true }) },
+      [`${QUEUE_API}/sus_1/decision`]: { body: { suspension_id: "sus_1", verdict: "taken_over" } },
+    });
+    const card = page(container).querySelector("article.approval-card") as Element;
+    const takeover = card.querySelector<HTMLSelectElement>('select[name="takeover_reason"]') as HTMLSelectElement;
+
+    expect(button(card, TAKE_OVER_LABEL).disabled).toBe(true);
+    fireEvent.change(takeover, { target: { value: "needs_judgement" } });
+    fireEvent.click(button(card, TAKE_OVER_LABEL));
+    expect(card.textContent).toContain(TAKE_OVER_CONSEQUENCE);
+    fireEvent.click(button(card, KEEP_IT_LABEL));
+    expect(posts(idp)).toEqual([]);
+
+    fireEvent.click(button(card, TAKE_OVER_LABEL));
+    fireEvent.click(button(card, TAKE_OVER_LABEL));
+
+    await waitFor(() => {
+      expect(page(container).textContent).toContain(TAKEN_OVER_SENTENCE);
+    });
+    expect(posts(idp)).toEqual([
+      { path: `${QUEUE_API}/sus_1/decision`, body: { verdict: "taken_over", reason_code: "needs_judgement" } },
+    ]);
+  });
+
+  test("a card the API does not offer taking over for draws no take-over control at all", async () => {
+    // What breaks if this is deleted: a take-over control on a person's own request, which the route
+    // refuses, or on a card whose body says nothing either way. Only a literal true offers it.
+    const { container } = await consoleAt(approvalAddress("sus_1"), {
+      [`${QUEUE_API}/sus_1`]: { body: wireCard("sus_1", { may_take_over: false }) },
+    });
+    const card = page(container).querySelector("article.approval-card") as Element;
+
+    expect([...card.querySelectorAll("button")].map((one) => one.textContent)).not.toContain(TAKE_OVER_LABEL);
+    expect(card.querySelector('select[name="takeover_reason"]')).toBeNull();
+    expect(button(card, APPROVE_LABEL).disabled).toBe(false);
+    expect(readApprovalCard(wireCard("sus_1", { may_take_over: true }))?.mayTakeOver).toBe(true);
+    expect(readApprovalCard(wireCard("sus_1"))?.mayTakeOver).toBe(false);
+    expect(readApprovalCard(wireCard("sus_1", { may_take_over: "true" }))?.mayTakeOver).toBe(false);
   });
 
   test("the decision's controls are a thumb tall and wrap inside the card at a phone's width", async () => {

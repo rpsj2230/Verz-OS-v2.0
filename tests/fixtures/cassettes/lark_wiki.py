@@ -9,12 +9,16 @@ Task ids: M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 from brain.connectors import lark_wiki
 from brain.connectors.contract import FetchRequest
 from brain.connectors.manifest import ConnectorManifest
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -296,8 +300,37 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Lark Wiki's read-back reading, as the reply Lark sent."""
+    return answered(SOURCE, lark_wiki.LarkReply(status=recorded.status, body=recorded.body))
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "LARK-200-records": Verification.FOUND,
+        "LARK-200-code-permission": Verification.INCONCLUSIVE,
+        # A wiki node read, which read ABSENT until the reading required has_more.
+        "LARK-WIKI-200-node": Verification.INCONCLUSIVE,
+        "LARK-WIKI-200-nodes-page": Verification.FOUND,
+        "LARK-WIKI-200-code-permission": Verification.INCONCLUSIVE,
+        "LARK-WIKI-429": Verification.INCONCLUSIVE,
+        # A page's permission settings and its text are not listings, so they say nothing about
+        # more.
+        "LARK-WIKI-200-permission-follows": Verification.INCONCLUSIVE,
+        "LARK-WIKI-200-permission-locked": Verification.INCONCLUSIVE,
+        "LARK-WIKI-200-raw-content": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    wait_not_in_retry_after="x-ogw-ratelimit-reset",
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

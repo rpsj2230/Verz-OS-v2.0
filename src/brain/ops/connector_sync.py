@@ -99,6 +99,7 @@ from brain.connectors.contract import ConnectorContractError, HealthState
 from brain.connectors.declaration import ChangedSince, shipped
 from brain.connectors.declaration import PageReply as PageReply
 from brain.connectors.declaration import SourceReading as SourceReading
+from brain.connectors.declaration import ViewReading as ViewReading
 from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.connectors.minimal_index import MinimalIndexError, StoredRow, assert_minimal_index
 from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, ProjectedRecord
@@ -193,7 +194,7 @@ WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED: Final = (
     "asked only for changes, is the one view of the source that shows a record has gone: a live "
     "record it did not return is retired, stamped with when that was noticed. A read of changes "
     "cannot show it, because a deleted record is not changed, it stops being mentioned; and a read "
-    "cut short cannot, because the records past where it stopped were not asked for. Until 0152 "
+    "cut short cannot, because the records past where it stopped were not asked for. Until 0178 "
     "nothing was retired, because a retirement was final for the record, so a sweep that was "
     "wrong (a page the source skipped while another was deleted in front of it) would have kept a "
     "record out of every answer for good. Now a record the source returns again is a new live row "
@@ -309,6 +310,14 @@ KEY_DECLINED: Final = (
     "The source declined the key this install holds for it. Replace the key from this source's "
     "Manage menu."
 )
+#: What a database's refusal leaves, which a key's refusal does not describe: the password, the
+#: grant on the views and the views themselves are the database administrator's, and any of them
+#: moving is the same refusal to this install (M11.6.1).
+DATABASE_REFUSED: Final = (
+    "The database refused the read: the user's password, its grant on the views, or a view itself "
+    "is no longer what was connected. Its administrator can say which; replace the user from this "
+    "source's Manage menu if its password changed."
+)
 SHAPE_DISAGREED: Final = (
     "The source answered in a shape its declaration does not describe, so nothing from that answer "
     "was kept."
@@ -330,6 +339,11 @@ VAULT_REFUSED: Final = (
     "be loaded: ops/openbao/credential-slots.md has the steps."
 )
 VAULT_UNREACHABLE: Final = "The vault did not answer, so the source's key could not be read."
+#: A source whose key file is exchanged for a token, read by a process given no way to post for one.
+NO_KEY_FILE_EXCHANGE: Final = (
+    "This process was given no way to exchange the source's key file for a token, so the source "
+    "was not asked."
+)
 NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
 
 #: The screen's words for an attempt's outcome, by what follows it.
@@ -651,7 +665,7 @@ class SyncState:
     #: When the source was last read to the end, which may be long before this attempt.
     last_synced_at: datetime | None
     #: Where reading the source stood, from the newest attempt that recorded it. None before the
-    #: first read and on every row before `0152`.
+    #: first read and on every row before `0178`.
     read_state: ReadState | None = None
 
 
@@ -755,9 +769,9 @@ def kept_fields(record: ProjectedRecord, manifest: ConnectorManifest) -> dict[st
 
 
 #: Every source this release reads on a schedule, by connector name, read off each connector's
-#: `CONNECTOR` declaration at start-up. `PageReply` and `SourceReading` are
+#: `CONNECTOR` declaration at start-up. `PageReply`, `SourceReading` and `ViewReading` are
 #: `brain.connectors.declaration`'s, named here for the modules that read them from this one.
-READINGS: Final[Mapping[str, SourceReading]] = MappingProxyType(
+READINGS: Final[Mapping[str, SourceReading | ViewReading]] = MappingProxyType(
     {name: one.reading for name, one in shipped().items() if one.reading is not None}
 )
 
@@ -776,7 +790,7 @@ class SyncPlan:
     connector: str
     refused: str = ""
     manifest: ConnectorManifest | None = None
-    reading: SourceReading | None = None
+    reading: SourceReading | ViewReading | None = None
     limits: tuple[Limit, ...] = ()
     #: Whether its next attempt is owed now. False for a refused plan.
     due: bool = False
@@ -799,7 +813,7 @@ def plan_for(
     *,
     last: SyncState | None,
     now: datetime,
-    readings: Mapping[str, SourceReading] = READINGS,
+    readings: Mapping[str, SourceReading | ViewReading] = READINGS,
 ) -> SyncPlan:
     """Whether this connection may be read now, asked in the order the module docstring gives."""
     name = connection.connector
@@ -992,6 +1006,11 @@ def failure_detail(call: CallOutcome, *, timed_out: bool = False) -> str:
     if call is CallOutcome.REJECTED:
         return KEY_DECLINED
     return SOURCE_UNREACHABLE
+
+
+def database_failure_detail(call: CallOutcome) -> str:
+    """The sentence a failed read of a database's view leaves. See `DATABASE_REFUSED`."""
+    return DATABASE_REFUSED if call is CallOutcome.REJECTED else failure_detail(call)
 
 
 def sync_in_words(plan: SyncPlan | None, state: SyncState | None) -> str:

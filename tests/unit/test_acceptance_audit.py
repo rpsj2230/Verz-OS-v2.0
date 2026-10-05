@@ -10,7 +10,7 @@ export that carries the release history each fail it.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 The clock in the deploy recorded here is 2019, for the reason CLAUDE.md records about fixtures.
 
-Task ids: M38.5.1, M24.3.4
+Task ids: M38.5.1, M24.3.4, M32.1.2.4
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from brain.ops.acceptance_audit import (
     NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
 )
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_audit"
 NAME = "each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught"
@@ -233,6 +233,20 @@ def test_a_browser_session_the_ledger_does_not_record_fails_the_check() -> None:
 
 
 @pytest.mark.needs_db
+def test_a_trace_read_by_any_realm_role_fails_the_check(
+    deployed: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M32.1.2.4 broken: the trace route reads the payload role off any sign-in carrying a realm
+    role at all, so an administrator's token reads payloads. Delete this and the role that should
+    be held apart for an incident can become every administrator's with the check green."""
+    import brain.trace_routes as trace_routes
+    from brain.ops.tracing import PAYLOAD_ROLE
+
+    monkeypatch.setattr(trace_routes, "payload_roles_of", lambda claims: frozenset({PAYLOAD_ROLE}))
+    assert run_audit(deployed) == (FAILED, "a trace was read without the separate role")
+
+
+@pytest.mark.needs_db
 def test_a_trace_store_the_application_can_read_fails_the_check() -> None:
     """With SELECT granted to the application's own role the separation is gone, and the check
     fails before it reads anything. Delete this and a grant widened in a later migration passes."""
@@ -243,3 +257,13 @@ def test_a_trace_store_the_application_can_read_fails_the_check() -> None:
         sql(url, "GRANT SELECT ON obs.trace_step TO brain_app")
         said = run_audit(url)
     assert said == (FAILED, "a stored trace is readable by the application's own role")
+
+
+def test_the_audit_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_audit") == [
+        "each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught",
+    ]

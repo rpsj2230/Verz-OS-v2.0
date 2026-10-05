@@ -6,7 +6,7 @@
  * Task ids: none
  */
 
-import { type PageCase, UNBROKEN } from "../pageFixtures";
+import { DECLARATION_DRIFT, LARK_GUIDE, type PageCase, STAFF_RUNS, UNBROKEN } from "../pageFixtures";
 
 /** One source's figures as `brain.console_stats_routes.ConnectorStatsView` sends them. */
 const CONNECTOR_STATS = {
@@ -87,13 +87,20 @@ const CONNECTOR_SOURCE = {
 };
 
 /** A source's newest connection test, as `brain.connector_routes.ConnectorProbeView` sends it. */
+/**
+ * A source never tested. The header draws a test's result as a live region (`role="status"`),
+ * which the page harnesses read as a page still asking, so a result here made the page's settling
+ * a race between two answers: it passed only while the probe answered after the check, and so the
+ * result line was never actually held here. `tests/connectors-page.test.tsx` holds it, answered
+ * and waiting.
+ */
 const CONNECTOR_PROBE = {
   connector: "xero",
-  requested_at: "2019-03-04T10:00:00Z",
+  requested_at: null,
   pending: false,
-  verdict: "failed",
-  tested_at: "2019-03-04T10:00:40Z",
-  health: "down",
+  verdict: null,
+  tested_at: null,
+  health: null,
   said: UNBROKEN,
   confirm: UNBROKEN,
 };
@@ -146,10 +153,13 @@ const CONNECTORS_SCREEN = {
       settings: [{ name: "tenant_id", label: UNBROKEN, hint: UNBROKEN, max_chars: 200, blank: `Give the ${UNBROKEN}.` }],
       credential_label: UNBROKEN,
       credential_hint: UNBROKEN,
+      credential_shape: "key",
+      credential_max_chars: 1000,
       may_connect: true,
+      steps: [],
     },
   ],
-  not_connectable: [{ name: UNBROKEN, label: UNBROKEN, why: UNBROKEN }],
+  not_connectable: [{ name: UNBROKEN, label: UNBROKEN, why: UNBROKEN, steps: [] }],
   evidence: [
     {
       name: UNBROKEN,
@@ -182,34 +192,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     answers: {
       "/api/v1/console/connectors": { items: [CONNECTOR_ROW], next_cursor: null, total: null },
       "/api/v1/console/connectors/xero/stats": CONNECTOR_STATS,
-      // Connect Lark's guide, every drawn value the unbroken token.
-      "/api/v1/connectors/lark-app": {
-        uses: [
-          {
-            name: "staff_list",
-            label: UNBROKEN,
-            what: UNBROKEN,
-            scopes: [],
-            switched_on: true,
-            key_held: true,
-            status: UNBROKEN,
-            may_switch_on: true,
-          },
-        ],
-        chosen: ["staff_list"],
-        steps: [{ title: UNBROKEN, text: UNBROKEN }],
-        scopes: [{ name: UNBROKEN, what: UNBROKEN, read_only: true }],
-        platforms: ["larksuite.com"],
-        platform: "larksuite.com",
-        base: "",
-        developer_console: "https://open.larksuite.com/app",
-        events_address: "",
-        channel_note: UNBROKEN,
-        knowledge_note: UNBROKEN,
-        test_note: UNBROKEN,
-        staff_sources_screen: "/staff_sources",
-        vault_told: "",
-      },
+      // Connect Lark's guide with the staff list on, so Lark's connected card is drawn, and the
+      // staff list's runs the card's last sync reads.
+      "/api/v1/connectors/lark-app": LARK_GUIDE,
+      "/api/v1/govern/staff_sources/runs": STAFF_RUNS,
       "/api/v1/connectors": CONNECTORS_SCREEN,
     },
   },
@@ -224,6 +210,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/connectors": XERO_CONNECTED,
       "/api/v1/console/connectors/xero/stats": CONNECTOR_STATS,
       "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
+      // Its declaration changed, so the page shows what changed before it can be accepted.
+      "/api/v1/console/connectors/xero/drift": DECLARATION_DRIFT,
     },
   },
   // The Profile, the view with the most on it: settings, the index's fields, what it reads live,
@@ -236,6 +224,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/console/connectors/xero": CONNECTOR_SOURCE,
       "/api/v1/connectors": XERO_CONNECTED,
       "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
+      "/api/v1/console/connectors/xero/drift": DECLARATION_DRIFT,
     },
   },
 };

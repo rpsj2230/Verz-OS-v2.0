@@ -426,6 +426,49 @@ def test_a_card_on_the_wire_is_card_field_for_field_and_no_field_is_call_shaped(
     assert not set(ApprovalCardView.model_fields) & CALL_SHAPED
 
 
+# ------------------------------------------------------------ what approving would not send
+
+
+def test_a_card_says_approving_sends_nothing_where_the_install_has_not_allowed_the_write(
+    client: TestClient, source: MemorySource
+) -> None:
+    """**M11.7.3.** A card carries the sentence `unsent_of` gives for its tool, on the queue and on
+    its own page, and a card whose tool no grant sends carries none. Without a stand-in, a process
+    with no vault holds no grant's key, so a DNS change's card says the install has not allowed DNS
+    changes, and a vault holding the key says nothing. Delete this and an approver presses approve
+    believing DNS will change."""
+    from types import SimpleNamespace
+
+    from brain.approval_routes import unsent_of
+    from brain.connectors import cloudflare
+    from brain.ops.credentials import Credentials
+    from brain.ops.openbao import StaticVersion
+    from tests.unit.test_credentials import AT, Vault
+
+    source.held = [a_suspension("m_1")]
+    app = client.app
+    assert isinstance(app, FastAPI)
+    app.state.unsent_because = lambda tool: "NOT-SENT" if tool == "ticket.update_status" else ""
+
+    queue_card = get(client, "u_narrow", APPROVALS).json()["items"][0]
+    page = get(client, "u_narrow", f"{APPROVALS}/m_1").json()
+
+    assert queue_card["unsent_because"] == page["unsent_because"] == "NOT-SENT"
+    del app.state.unsent_because
+    assert get(client, "u_narrow", f"{APPROVALS}/m_1").json()["unsent_because"] == ""
+
+    def asked(vault: Vault | None) -> str:
+        request = SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(credentials=Credentials(vault, environ={})))
+        )
+        return unsent_of(request)(cloudflare.DNS_CHANGE_TOOL.name)  # type: ignore[arg-type]
+
+    said = cloudflare.THIS_INSTALL_HAS_NOT_ALLOWED_DNS_CHANGES
+    assert asked(None) == said
+    assert asked(Vault()) == said
+    assert asked(Vault(version=StaticVersion(written_at=AT))) == ""
+
+
 # ------------------------------------------------------------------------ the process
 
 

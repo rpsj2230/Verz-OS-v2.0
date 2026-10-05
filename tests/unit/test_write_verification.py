@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 from brain.connectors import (
+    cloudflare,
     freshdesk,
     google_drive,
     hubspot,
@@ -63,7 +64,7 @@ from brain.ops.idempotency import (
     verify,
 )
 from brain.ops.secrets import SecretRef, VaultRole
-from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
+from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, for_source
 
 #: Every shipped connector's read-back, as the declarations state it.
 READ_BACKS = read_backs()
@@ -103,9 +104,15 @@ def xero_answer(
 
 
 def hubspot_answer(
-    status: int | None, body: Any = None, *, entity: str = hubspot.ENTITY_CLIENT, **overrides: Any
+    status: int | None,
+    body: Any = None,
+    *,
+    entity: str = hubspot.ENTITY_CLIENT,
+    one_record: bool = False,
+    **overrides: Any,
 ) -> Verification:
-    operation = hubspot.operation_for(entity, resolver=Resolver())
+    build = hubspot.one_record_operation if one_record else hubspot.operation_for
+    operation = build(entity, resolver=Resolver())
     reply = hubspot.interpret(
         operation, status=status, body=body, fetched_at=FETCHED_AT, **overrides
     )
@@ -114,7 +121,12 @@ def hubspot_answer(
 
 def laravel_answer(reply: laravel.ViewReply) -> Verification:
     connection = laravel.LaravelConnection(
-        schema="portal", bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0)
+        schema="portal",
+        bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0),
+        host="db.example.invalid",
+        port=3306,
+        private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     read = laravel.read_plan(connection, laravel.ENTITY_CLIENT)
     answered = laravel.interpret(read, reply, fetched_at=FETCHED_AT)
@@ -126,6 +138,16 @@ def freshdesk_answer(reply: freshdesk.Reply) -> Verification:
         freshdesk.Endpoint.SEARCH_TICKETS, domain="helpdesk.example.invalid"
     )
     return verdict(reading("freshdesk")(operation, reply))
+
+
+def cloudflare_answer(recorded: Cassette) -> Verification:
+    """A Cloudflare reply read as the listing its request was made against."""
+    operation = (
+        cloudflare.dns_records_operation()
+        if "/dns_records" in recorded.request
+        else cloudflare.zones_operation()
+    )
+    return verdict(reading("cloudflare")(operation, status=recorded.status, body=recorded.body))
 
 
 def lark_table() -> LarkBaseTable:
@@ -203,112 +225,23 @@ def fresh_reply(cid: str) -> freshdesk.Reply:
     return freshdesk.Reply(status=recorded.status, headers=recorded.headers, body=recorded.body)
 
 
-#: How each recording a read-back names is answered, keyed by connector and recording. Written
-#: here rather than read from the module, so the table and the readings are two accounts that
-#: have to agree.
+#: How each recording a read-back names is answered, keyed by connector and recording. Each
+#: connector's cassette file carries its own (`CassetteFile.read_back`), written there rather than
+#: read from the module, so the table and the readings are two accounts that have to agree. Read
+#: off the files since 2026-10-05, when a table typed here was a block every connector PR edited.
 EXPECTED: Mapping[tuple[str, str], Verification] = {
-    ("xero", "XERO-200-invoices"): Verification.FOUND,
-    ("xero", "XERO-429"): Verification.INCONCLUSIVE,
-    ("xero", "XERO-401-expired"): Verification.INCONCLUSIVE,
-    ("hubspot", "HUBSPOT-200-empty"): Verification.ABSENT,
-    ("laravel", "LARAVEL-500"): Verification.INCONCLUSIVE,
-    ("freshdesk", "FRESH-200-search"): Verification.FOUND,
-    ("freshdesk", "FRESH-429"): Verification.INCONCLUSIVE,
-    ("lark_base", "LARK-200-records"): Verification.FOUND,
-    ("lark_base", "LARK-200-code-permission"): Verification.INCONCLUSIVE,
-    ("lark_wiki", "LARK-200-records"): Verification.FOUND,
-    ("lark_wiki", "LARK-200-code-permission"): Verification.INCONCLUSIVE,
-    ("xero", "XERO-200-contacts"): Verification.FOUND,
-    ("xero", "XERO-200-invoices-full-page"): Verification.FOUND,
-    ("hubspot", "HUBSPOT-200-companies-page"): Verification.FOUND,
-    ("hubspot", "HUBSPOT-200-contacts"): Verification.FOUND,
-    ("hubspot", "HUBSPOT-200-deals"): Verification.FOUND,
-    ("hubspot", "HUBSPOT-200-associations"): Verification.FOUND,
-    ("hubspot", "HUBSPOT-429"): Verification.INCONCLUSIVE,
-    ("hubspot", "HUBSPOT-401"): Verification.INCONCLUSIVE,
-    ("freshdesk", "FRESH-200-search-full-page"): Verification.FOUND,
-    ("freshdesk", "FRESH-200-list"): Verification.INCONCLUSIVE,
-    # The read-back reads a search page. A by-id object is not one, so it proves nothing there.
-    ("freshdesk", "FRESH-200-ticket"): Verification.INCONCLUSIVE,
-    ("freshdesk", "FRESH-200-contact"): Verification.INCONCLUSIVE,
-    ("freshdesk", "FRESH-401"): Verification.INCONCLUSIVE,
-    # One record under data.record says nothing about more, so it is unreadable as a listing.
-    ("lark_base", "LARK-200-record"): Verification.INCONCLUSIVE,
-    ("lark_base", "LARK-429"): Verification.INCONCLUSIVE,
-    # The same for a wiki node read, which read ABSENT until the reading required has_more.
-    ("lark_wiki", "LARK-WIKI-200-node"): Verification.INCONCLUSIVE,
-    ("lark_wiki", "LARK-WIKI-200-nodes-page"): Verification.FOUND,
-    ("lark_wiki", "LARK-WIKI-200-code-permission"): Verification.INCONCLUSIVE,
-    ("lark_wiki", "LARK-WIKI-429"): Verification.INCONCLUSIVE,
-    # A page's permission settings and its text are not listings, so they say nothing about more.
-    ("lark_wiki", "LARK-WIKI-200-permission-follows"): Verification.INCONCLUSIVE,
-    ("lark_wiki", "LARK-WIKI-200-permission-locked"): Verification.INCONCLUSIVE,
-    ("lark_wiki", "LARK-WIKI-200-raw-content"): Verification.INCONCLUSIVE,
-    # A Base's tables and fields carry no record id, so they are not a listing of its records.
-    ("lark_base", "LARK-200-tables"): Verification.INCONCLUSIVE,
-    ("lark_base", "LARK-200-fields"): Verification.INCONCLUSIVE,
-    ("google_drive", "DRIVE-200-files-page"): Verification.FOUND,
-    ("google_drive", "DRIVE-200-file"): Verification.FOUND,
-    ("google_drive", "DRIVE-403-user-rate-limit"): Verification.INCONCLUSIVE,
-    ("google_drive", "DRIVE-429"): Verification.INCONCLUSIVE,
-    ("google_drive", "DRIVE-401"): Verification.INCONCLUSIVE,
-    ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
-    ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
-    ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
-    ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
-    ("laravel", "LARAVEL-1142"): Verification.INCONCLUSIVE,
-    ("laravel", "LARAVEL-1146"): Verification.INCONCLUSIVE,
-    ("laravel", "LARAVEL-3024"): Verification.INCONCLUSIVE,
-    ("laravel", "LARAVEL-2006"): Verification.INCONCLUSIVE,
+    (name, cid): expected
+    for name, file in FILES.items()
+    for cid, expected in file.read_back.items()
 }
 
 
-def hubspot_entity(recorded: Cassette) -> str:
-    """Which operation a HubSpot recording was made against, read off its request line."""
-    for fragment, entity in (
-        ("/associations/", hubspot.ENTITY_ASSOCIATION),
-        ("/contacts", hubspot.ENTITY_CONTACT),
-        ("/deals", hubspot.ENTITY_DEAL),
-    ):
-        if fragment in recorded.request:
-            return entity
-    return hubspot.ENTITY_CLIENT
-
-
 def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
-    """Drive one recording through one connector's reading, in that connector's reply value."""
-    match connector:
-        case "xero":
-            entity = xero.ENTITY_CONTACT if "/Contacts" in recorded.request else xero.ENTITY_INVOICE
-            return xero_answer(recorded.status, recorded.body, entity=entity)
-        case "hubspot":
-            return hubspot_answer(recorded.status, recorded.body, entity=hubspot_entity(recorded))
-        case "laravel":
-            if recorded.protocol is Protocol.HTTP:
-                return laravel_answer(laravel.ViewReply(app_status=recorded.status))
-            if "errno" in recorded.body:
-                fault = laravel.fault_for_mysql_error(recorded.body["errno"])
-                return laravel_answer(laravel.ViewReply(fault=fault))
-            return laravel_answer(laravel.ViewReply(rows=tuple(recorded.body["rows"])))
-        case "google_drive":
-            endpoint = (
-                google_drive.Endpoint.GET_FILE
-                if recorded.kind is Kind.READ
-                else google_drive.Endpoint.LIST_FILES
-            )
-            reply = google_drive.Reply(
-                status=recorded.status, headers=recorded.headers, body=recorded.body
-            )
-            operation = google_drive.operation_for(endpoint)
-            return verdict(reading("google_drive")(operation, reply))
-        case "freshdesk":
-            return freshdesk_answer(fresh_reply(recorded.cid))
-        case "lark_base":
-            return lark_base_answer(lark_reply(recorded.cid))
-        case "lark_wiki":
-            return lark_wiki_answer(wiki_reply(recorded.cid))
-    msg = f"no way to drive {connector!r} from a recording is written in this test"
-    raise AssertionError(msg)
+    """Drive one recording through one connector's reading, by the driver its cassette file
+    declares, in that connector's reply value."""
+    drive = FILES[connector].read_back_answer
+    assert drive is not None, f"{connector}'s cassette file declares no way to drive a recording"
+    return drive(recorded)
 
 
 # ------------------------------------------------------------------ the verdict
@@ -397,6 +330,9 @@ def test_every_recording_a_read_back_names_reads_as_this_test_expects() -> None:
     for Lark is how a 91403 inside a 200 gets read as an empty table."""
     named = {(name, cid) for name, entry in READ_BACKS.items() for cid in entry.recorded}
     assert named == set(EXPECTED)
+    # The anchors: the one recorded absence, and a found page, so an empty read of the files fails.
+    assert EXPECTED[("hubspot", "HUBSPOT-200-empty")] is Verification.ABSENT
+    assert EXPECTED[("xero", "XERO-200-invoices")] is Verification.FOUND
     for (name, cid), expected in EXPECTED.items():
         assert answer_for_recording(name, cassette(cid)) is expected, (name, cid)
 
@@ -532,7 +468,12 @@ def test_the_two_connectors_recorded_as_read_only_really_are() -> None:
     finding is wrong in a test rather than in a file nobody rereads."""
     ref = SecretRef(path="connectors/creds/laravel", role=VaultRole.APPLICATION)
     connection = laravel.LaravelConnection(
-        schema="portal", bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0)
+        schema="portal",
+        bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0),
+        host="db.example.invalid",
+        port=3306,
+        private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     visibility = {entity: brain_scope() for entity in laravel.ENTITIES}
     built = laravel.laravel_manifest(connection, ref=ref, visibility=visibility)

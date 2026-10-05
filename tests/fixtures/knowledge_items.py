@@ -68,6 +68,31 @@ def add_item_kind(url: str) -> None:
     sql(url, f"ALTER TABLE know.item ADD CONSTRAINT ck_item_kind CHECK ({module.KIND_CHECK})")
 
 
+#: The migration adding `know.item`'s public marking. Its constants are read, not restated.
+PUBLIC_MIGRATION = ROOT / "migrations" / "versions" / "0171_public_knowledge.py"
+
+
+def add_item_public(url: str) -> None:
+    """`know.item.public_by` and `public_at` and their checks, as `0171` adds them.
+
+    From `0171`'s own constants, for `add_item_kind`'s reason: `0171` also creates a role and
+    policies over `know.chunk`, which a chain stopping at `0040` never built. Whether `0171`
+    itself builds exactly this is `tests/unit/test_public_knowledge.py`'s.
+    """
+    spec = importlib.util.spec_from_file_location("migration_0171_public", PUBLIC_MIGRATION)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sql(url, f"ALTER TABLE know.item ADD COLUMN public_by VARCHAR({module.PRINCIPAL_CHARS})")
+    sql(url, "ALTER TABLE know.item ADD COLUMN public_at TIMESTAMP WITH TIME ZONE")
+    for name, check in (
+        ("a_public_marking_names_a_person", module.A_MARKING_NAMES_A_PERSON),
+        ("a_public_marker_names_a_time", module.A_MARKER_NAMES_A_TIME),
+        ("a_personal_item_is_never_public", module.A_PERSONAL_ITEM_IS_NEVER_PUBLIC),
+    ):
+        sql(url, f"ALTER TABLE know.item ADD CONSTRAINT ck_item_{name} CHECK ({check})")
+
+
 @contextmanager
 def knowledge_items(database: str) -> Iterator[str]:
     """A fresh database holding the grant tables, the outbox, the run table and `know.item`."""
@@ -84,6 +109,7 @@ def knowledge_items(database: str) -> Iterator[str]:
         migrate(database, "stamp", predecessor())
         migrate(database, "upgrade", "0040")
         add_item_kind(scratch)
+        add_item_public(scratch)
         # `ops.setting`, which `0004` builds and this chain stamps past: the sweep asks whether an
         # administrator switched the request off before it records anything.
         add_modelled(scratch, SCHEDULE_CONTROL_TABLES)

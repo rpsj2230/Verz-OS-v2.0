@@ -176,7 +176,21 @@ def test_the_loader_reads_the_directory_rather_than_a_list_of_names() -> None:
 
 
 # ------------------------------------------- a slot per connector and provider (M38.4.1.3)
-@pytest.mark.parametrize("connector", sorted(c.name for c in SOURCE_CEILINGS))
+def _keyless() -> frozenset[str]:
+    """Sources that take no key, which have a ceiling and nothing to keep: domains, whose RDAP
+    records are published."""
+    from brain.connectors.declaration import CredentialShape, shipped
+
+    return frozenset(
+        name
+        for name, one in shipped().items()
+        if one.console is not None and one.console.credential_shape is CredentialShape.NONE
+    )
+
+
+@pytest.mark.parametrize(
+    "connector", sorted(c.name for c in SOURCE_CEILINGS if c.name not in _keyless())
+)
 def test_every_connector_the_code_knows_about_has_a_credential_slot(connector: str) -> None:
     """Parametrised from `SOURCE_CEILINGS`, which is the closed list of sources this system
     has measured a ceiling for. A connector in that list with no slot in the document is a
@@ -185,9 +199,17 @@ def test_every_connector_the_code_knows_about_has_a_credential_slot(connector: s
     That argument is cheap now and expensive later. Deleting this test means the scopes get
     decided during the hour somebody is trying to make the connector work, and "read and
     write, we can narrow it later" is the fastest thing to type in that hour.
+
+    Held to the key slot the installer defines and the document's key slot table since
+    2026-10-05, rather than to the prose table of leased `connectors/creds/` paths nothing reads:
+    the scopes are argued in the connector's own declaration now (`scopes`), and the key slot
+    table is held to them row for row by the test below.
     """
-    assert f"connectors/creds/{connector}" in _slot_paths(), (
-        f"{connector} has a measured rate limit and no credential slot"
+    from brain.ops.connector_slots import SLOT_SCOPES
+
+    assert connector in SLOT_SCOPES, f"{connector} has a measured rate limit and no credential slot"
+    assert SLOT_SCOPES[connector].path in _slot_paths(), (
+        f"{connector} has a measured rate limit and no row in the key slot table"
     )
 
 
@@ -403,15 +425,38 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
 
 def test_the_worker_reads_no_connector_key_itself_and_may_mint_only_the_run_token() -> None:
     """M31.3.2.3: the worker's own token, renewed for as long as the worker runs, reads nothing
-    under the connector key engine, and may mint a child against the `connector-run` role and no
-    other.
+    under the connector key engine, and may mint a child against the `connector-run` role, and
+    against the `channel-send` role for a message its schedule sends (M38.3.3.4), and no other.
     Delete this and the direct read comes back in a debugging session, which makes the worker's
     token a standing read of every source's key again, and nothing else reads the policy."""
     granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
     assert not [path for path in granted if path.startswith("connector_keys")]
     minting = {path: sorted(caps) for path, caps in granted.items() if "token/create" in path}
-    assert minting == {"auth/token/create/connector-run": ["create", "update"]}
+    assert minting == {
+        "auth/token/create/connector-run": ["create", "update"],
+        "auth/token/create/channel-send": ["create", "update"],
+    }
     assert not [path for path in granted if path.startswith("auth/token/roles")]
+    assert not [path for path in granted if path.startswith("providers/data/channel_")]
+
+
+def test_the_send_token_policy_reads_each_channel_wires_secret_and_revokes_itself() -> None:
+    """M38.3.3.4: the one policy that lets the worker read a channel's secret, carried only by a
+    token minted per send. Each channel wire's slot by name and nothing else under the provider
+    engine, which also holds the model keys and the mail relay's password; no renewal, no create,
+    no metadata, no write. Held to `channel_wires()`, so a wire added without its slot here is a
+    channel the worker cannot send on, and a slot here with no wire is a read nothing needs.
+
+    Delete this and the policy widens to `providers/data/+` in a debugging session, and a send
+    token reads every model key too."""
+    from brain.channels.adapter import channel_wires
+    from brain.ops.channel_lease import SEND_POLICY
+
+    granted = _granted_paths((POLICIES / f"{SEND_POLICY}.hcl").read_text(encoding="utf-8"))
+    assert {path: sorted(caps) for path, caps in granted.items()} == {
+        **{f"providers/data/channel_{one.value}": ["read"] for one in channel_wires()},
+        "auth/token/revoke-self": ["update"],
+    }
 
 
 def test_the_application_may_mint_only_the_run_token_a_question_borrows_a_key_with() -> None:

@@ -21,7 +21,7 @@ owner's rule: `brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
 No test here calls a live API. The key is a sentinel, the call is a replay, and the address is the
 one a stand-in resolver hands out.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.8.2, M11.9.1
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.8.2, M11.9.1, M32.7.1
 """
 
 from __future__ import annotations
@@ -185,6 +185,10 @@ class Leased:
             raise self.failure
         assert self.given is not None
         return self.given
+
+    def user(self) -> str:
+        # A key-shaped slot keeps no user; the database branch is tested in its own file.
+        raise AssertionError("a REST source's lease was asked for a user")
 
     def close(self, now: datetime) -> LeaseOutcome:
         self.closed.append(now)
@@ -619,11 +623,19 @@ def test_a_source_whose_name_resolves_inside_the_network_is_not_called() -> None
 
 
 @pytest.mark.needs_db
-def test_a_source_nothing_may_read_is_counted_as_such_and_never_called() -> None:
-    """HubSpot, whose ceiling nobody verified, is connected beside Xero: Xero is read and HubSpot is
-    not called, and no attempt is recorded for it, because an attempt is a call and none was made.
+def test_a_source_nothing_may_read_is_counted_as_such_and_never_called(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HubSpot with its recorded ceiling taken away is connected beside Xero: Xero is read and
+    HubSpot is not called, and no attempt is recorded for it, because an attempt is a call and none
+    was made. Since 2026-09-30 HubSpot's documented ceiling is recorded, so the unmeasured source
+    is HubSpot with that row removed.
 
     Delete this and a source with no verified ceiling is read against no limit at all."""
+    from brain.ops import limits
+
+    measured = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    monkeypatch.setattr(limits, "_BY_NAME", measured)
     with a_database("brain_connector_sync_unverified") as url:
         connect(url)
         settings = {"portal_id": "12345678"}
@@ -1173,9 +1185,9 @@ def test_hubspots_reading_would_follow_every_page_it_is_told_of_once_its_ceiling
         {"results": [], "paging": {"next": {"after": "c3"}}},
         {"results": []},
     ]
-    asked = [dict(reading.first_page("client"))]
+    asked = [dict(reading.first_page(hubspot.ENTITY_CLIENT))]
     for page in pages:
-        following = reading.next_page("client", asked[-1], page, 0)
+        following = reading.next_page(hubspot.ENTITY_CLIENT, asked[-1], page, 0)
         if following is None:
             break
         asked.append(dict(following))

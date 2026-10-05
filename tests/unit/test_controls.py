@@ -325,15 +325,19 @@ def test_a_control_is_in_process_only_when_every_part_of_it_is_called() -> None:
     """Delete this and a system asks whether a sweep is due, for ever, and never sweeps.
 
     A control is usually a predicate plus the work, and counting it as wired because one of
-    them has a caller is the failure being avoided. `verdict_for` genuinely has a caller and
-    `redrive`, the driver that asks it, does not, so the pair measures as unreached.
+    them has a caller is the failure being avoided. `verdict_for` genuinely has a caller and the
+    calibration's `drift` does not, so the pair measures as unreached.
 
     It named the re-verification pair until 2026-09-15, when `brain.knowledge.item_store`
-    became the outer function's caller and the pair stopped being an example of anything.
+    became the outer function's caller and the pair stopped being an example of anything, and
+    `redrive` with `verdict_for` until 2026-09-30, when `brain.ops.recovery_run` became the
+    caller `redrive` lacked. The pair is now built rather than borrowed from a real control,
+    because every real control with a half-called pair has since been wired or has no caller
+    at all.
     """
-    partly = _control(symbols=("brain.ops.crash:redrive", "brain.ops.queue:verdict_for"))
+    partly = _control(symbols=("brain.resolution.calibration:drift", "brain.ops.queue:verdict_for"))
     assert call_sites("brain.ops.queue:verdict_for") != ()
-    assert call_sites("brain.ops.crash:redrive") == ()
+    assert call_sites("brain.resolution.calibration:drift") == ()
     assert measured_invocation(partly) is Invocation.NOTHING
 
 
@@ -560,17 +564,17 @@ def test_an_acceptance_check_the_run_calls_is_reached_and_nothing_beside_it_is(
     tmp_path: Path,
 ) -> None:
     """`AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN`: a function decorated with
-    `check(leaves=..., sentence=...)` in a module `CHECK_MODULES` names is run by the acceptance
+    `check(leaves=..., sentence=...)` in a module `check_modules` finds is run by the acceptance
     run, and so is a helper it calls by name. Beside them, three that are not: an undecorated
     function in the same module, the same decorator in a module the registry does not name, and a
     decorator called check with other arguments.
 
     Delete this and either an acceptance check that asks a control's decision function reports a
     scheduled control as unreached, or the exception widens until any decorator hides a chain."""
-    from brain.ops.acceptance import CHECK_MODULES
+    from brain.ops.acceptance import check_modules
     from brain.ops.controls import chains_worth_checking
 
-    named = next(one for one in CHECK_MODULES if one.startswith("brain.ops."))
+    named = next(one for one in check_modules() if one.startswith("brain.ops."))
     decorated = '@check(leaves=("M1.1.1",), sentence="Said.")\n'
     _write_tree(
         tmp_path,

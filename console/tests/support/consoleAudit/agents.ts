@@ -14,6 +14,10 @@ import {
   automationPreviewApiPath,
 } from "../../../src/pages/automationGalleryQuery";
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
+import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
+import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/agents/agentMemoryQuery";
+import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
+import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
 import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
@@ -54,6 +58,23 @@ export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> =
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/agents/AgentCapabilities.tsx path": [
+    at("POST /api/v1/skills/{digest}/assignments", "skillAssignApiPath", skillAssignApiPath("d".repeat(64))),
+    at("POST /api/v1/skills/{digest}/detachments", "skillDetachApiPath", skillDetachApiPath("d".repeat(64))),
+  ],
+  "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentMemory.tsx memoryDeletionApiPath(agentId, one.item.memoryId)": [
+    at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion", "memoryDeletionApiPath", memoryDeletionApiPath("quote-helper", "m1")),
+  ],
+  "src/pages/agents/AgentMemory.tsx memoryEditApiPath(agentId, one.item.memoryId)": [
+    at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit", "memoryEditApiPath", memoryEditApiPath("quote-helper", "m1")),
+  ],
+  "src/pages/agents/AgentMemory.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
+  "src/pages/agents/AgentSpend.tsx agentBudgetApiPath(agentId)": [
+    at("PUT /api/v1/agents/{agent_id}/budget", "agentBudgetApiPath", agentBudgetApiPath("quote-helper")),
+  ],
   "src/components/AgentModelPin.tsx modelPinApiPath(agentId)": [
     at("PUT /api/v1/agents/{agent_id}/model-pin", "modelPinApiPath", modelPinApiPath("quote-helper")),
   ],
@@ -94,7 +115,41 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
 };
 
+/** An agent's monthly budget set twice over HTTP against PostgreSQL: two versions, two entries naming who. */
+const BUDGET_PRESSED = t(
+  "test_agent_workspace_routes",
+  "test_setting_a_budget_twice_writes_two_versions_and_two_ledger_entries",
+  true,
+);
+
+/** The steward's correction and the person's delete, pressed over HTTP against PostgreSQL. */
+const MEMORY_CHANGED = t(
+  "test_agent_memory_routes",
+  "test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion": {
+    row: MEMORY_CHANGED,
+    audit: MEMORY_CHANGED,
+    behaviour: t("test_agent_memory_routes", "test_a_memory_the_reader_is_not_shown_cannot_be_deleted_and_is_answered_as_missing"),
+  },
+  "POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit": {
+    row: MEMORY_CHANGED,
+    audit: MEMORY_CHANGED,
+    behaviour: t("test_agent_memory_routes", "test_a_colleague_shown_a_memory_they_may_not_change_is_told_who_may", true),
+  },
+  "POST /api/v1/agents/{agent_id}/preview": {
+    row: { notApplicable: "A preview writes no row: it asks the gate what one person's run would be handed and keeps nothing." },
+    audit: { notApplicable: "A preview changes nothing, so there is nothing for the ledger to record." },
+    behaviour: t("test_agent_capability_routes", "test_a_previewer_who_may_not_read_grants_is_answered_as_a_missing_agent"),
+  },
+  "PUT /api/v1/agents/{agent_id}/budget": {
+    row: BUDGET_PRESSED,
+    audit: BUDGET_PRESSED,
+    behaviour: t("test_agent_workspace_routes", "test_a_caller_without_the_budget_role_over_the_agents_department_is_told_which_role"),
+  },
   "PUT /api/v1/agents/{agent_id}/model-pin": {
     row: t("test_agent_model_routes", "test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent"),
     audit: {

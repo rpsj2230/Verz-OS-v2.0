@@ -8,10 +8,14 @@ Task ids: M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.connectors import freshdesk
 from brain.connectors.manifest import ConnectorManifest
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     SEEN_AT,
@@ -256,8 +260,36 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Freshdesk's read-back reading, which reads a search page."""
+    operation = freshdesk.operation_for(
+        freshdesk.Endpoint.SEARCH_TICKETS, domain="helpdesk.example.invalid"
+    )
+    reply = freshdesk.Reply(status=recorded.status, headers=recorded.headers, body=recorded.body)
+    return answered(SOURCE, operation, reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "FRESH-200-search": Verification.FOUND,
+        "FRESH-429": Verification.INCONCLUSIVE,
+        "FRESH-200-search-full-page": Verification.FOUND,
+        "FRESH-200-list": Verification.INCONCLUSIVE,
+        # The read-back reads a search page. A by-id object is not one, so it proves nothing there.
+        "FRESH-200-ticket": Verification.INCONCLUSIVE,
+        "FRESH-200-contact": Verification.INCONCLUSIVE,
+        "FRESH-401": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

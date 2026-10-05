@@ -18,7 +18,7 @@ was true when it was fetched. The tests that matter here are the ones asserting 
 is *still served* and *never silent*: either half on its own is a design somebody would
 recognise as wrong, and it is the pair that is easy to break one at a time.
 
-`0152` leaves `proj.record` as `0008` built it and adds two tables beside it: `proj.record_retired`,
+`0178` leaves `proj.record` as `0008` built it and adds two tables beside it: `proj.record_retired`,
 a retired row as it stood, and `proj.source_epoch`.
 
 Task ids: M11.4.1, M11.4.9, M11.8.11, M11.8.4
@@ -65,7 +65,7 @@ from brain.tables.projection import (
 REPO = Path(__file__).resolve().parents[2]
 VERSIONS = REPO / "migrations" / "versions"
 MIGRATION = VERSIONS / "0008_projection.py"
-LIVES = VERSIONS / "0152_record_lives_and_source_epochs.py"
+LIVES = VERSIONS / "0178_record_lives_and_source_epochs.py"
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
@@ -671,7 +671,7 @@ def test_a_retirement_is_kept_as_the_model_declares_it_and_never_changed_or_remo
     assert "GRANT SELECT, INSERT ON proj.record_retired TO brain_app" in lives.GRANTS
     assert not any("UPDATE ON proj.record_retired" in one for one in lives.GRANTS)
     assert "proj.record " not in upgrade.replace("proj.record_retired", "")
-    assert (lives.revision, lives.down_revision) == ("0152", "0150")
+    assert (lives.revision, lives.down_revision) == ("0178", "0171")
 
 
 def test_the_source_epoch_table_is_built_as_the_model_declares_it_and_never_deleted_from() -> None:

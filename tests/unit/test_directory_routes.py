@@ -38,6 +38,7 @@ from brain.core.entitlement import Capability, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Scope
 from brain.gate.admission import Assurance
+from brain.identity.standing import WHY_KEPT_OUT, KeptOut
 from brain.install import hold_saved
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.tables.gate import (
@@ -210,6 +211,12 @@ class Held:
         ]
         self.teams = [(MAINTENANCE, "boilers", "Boilers"), (FINANCE, "payroll", "Payroll")]
         self.leads = [(MAINTENANCE, "Maintenance"), (FINANCE, "Finance")]
+        #: Where the staff list names people, joined through the roster's email binding:
+        #: (whose, status, employment type, left at). Read only when a staff list is chosen.
+        self.standing: list[tuple[str, str, str | None, datetime | None]] = [
+            ("u_1", "suspended", "regular", None),
+            ("u_3", "active", "outsourced", None),
+        ]
         self.statements: list[str] = []
         self.commits = 0
 
@@ -225,6 +232,9 @@ class Held:
         if "FROM auth.session" in text:
             wanted = set(params.get("principal_id_1", ()))
             return Rows([one for one in self.sessions if one[0] in wanted])
+        if "JOIN auth.staff_member" in text:
+            wanted = set(params.get("principal_id_1", ()))
+            return Rows([one for one in self.standing if one[0] in wanted])
         if "FROM gate.team_membership" in text:
             return Rows(self.teams)
         if "FROM gate.department_lead" in text:
@@ -347,6 +357,8 @@ def test_every_person_is_listed_whether_or_not_they_hold_a_grant(
         "second_factor": True,
         "last_signed_in_at": LONG_AGO.isoformat().replace("+00:00", "Z"),
         "packs": ["helpdesk"],
+        "staff_status": None,
+        "employment_type": None,
     }
     assert (bob["standing"], bob["second_factor"], bob["last_signed_in_at"]) == (
         "disabled",
@@ -366,6 +378,7 @@ def test_every_person_is_listed_whether_or_not_they_hold_a_grant(
         False,
     )
     assert page["adding"] == routes.ADDING_A_PERSON_GRANTS_NOTHING
+    assert page["account_ready"] is None
     assert page["next_cursor"] is None
 
 
@@ -709,6 +722,11 @@ def test_beside_a_staff_list_nobody_is_added_and_a_holder_is_told_why(
     assert (nothing.status_code, nothing.json()["message"]) == (404, Absent.public_message)
     assert not [one for one in held.statements if one.startswith("INSERT")]
     assert (page["may_add"], page["adding"]) == (False, routes.PEOPLE_ARRIVE_FROM_THE_STAFF_SOURCE)
+    # The sentence the owner asked for, written out here so it cannot drift with its constant.
+    assert page["account_ready"] == (
+        "Your account is ready. Go to the sign-in page, press Forgot password and enter your "
+        "work email."
+    )
 
 
 def test_an_install_reading_no_list_is_told_apart_from_one_reading_any() -> None:
@@ -891,3 +909,55 @@ def test_the_minted_id_is_the_setup_wizards_and_the_statement_writes_a_human() -
     assert values["primary_department"] == MAINTENANCE
     assert new_principal_id().startswith(PRINCIPAL_PREFIX)
     assert PrincipalRow.__tablename__ == "principal"
+
+
+# ------------------------------------------------------------ what the staff list says (M1.6.13)
+def test_beside_a_staff_list_each_person_carries_their_status_and_type_and_filters_on_both(
+    client: TestClient, held: Held
+) -> None:
+    """M1.6.13: People shows where the list says each person stands and their employment type,
+    joined through the roster's email binding to the chosen source's rows, and filters on both;
+    somebody the list does not name carries neither. Delete this and People can stop saying why
+    somebody cannot sign in, or read another source's rows."""
+    before = hold_saved({"INSTALL_STAFF_SOURCE": "lark"})
+    try:
+        page = get(client, "u_admin").json()
+        suspended = get(client, "u_admin", filter="staff_status:suspended").json()
+        outsourced = get(client, "u_admin", filter="employment_type:outsourced").json()
+    finally:
+        hold_saved(before)
+
+    shown = {
+        one["principal_id"]: (one["staff_status"], one["employment_type"]) for one in page["items"]
+    }
+    assert shown == {
+        "u_1": ("suspended", "regular"),
+        "u_2": (None, None),
+        "u_3": ("active", "outsourced"),
+    }
+    assert ids(suspended) == ["u_1"]
+    assert ids(outsourced) == ["u_3"]
+    joined = [one for one in held.statements if "auth.staff_member" in one]
+    assert joined and all("staff_member.source = 'lark'" in one for one in joined)
+
+
+def test_a_person_the_list_keeps_out_says_why_on_their_page_and_one_it_lets_in_says_nothing(
+    client: TestClient, held: Held
+) -> None:
+    """M1.6.14's half an administrator reads: the suspended person's page says the list keeps
+    them from signing in or asking, and an outsourced person's says their type may not use the
+    Brain; with no staff list read, nobody's page says anything. Delete this and an administrator
+    sees a disabled person with no reason, and re-enables them to have them disabled again."""
+    before = hold_saved({"INSTALL_STAFF_SOURCE": "lark"})
+    try:
+        ada = get(client, "u_admin", f"{DIRECTORY}/u_1").json()
+        cara = get(client, "u_admin", f"{DIRECTORY}/u_3").json()
+        bob = get(client, "u_admin", f"{DIRECTORY}/u_2").json()
+    finally:
+        hold_saved(before)
+    alone = get(client, "u_admin", f"{DIRECTORY}/u_1").json()
+
+    assert ada["kept_out"] == WHY_KEPT_OUT[KeptOut.SUSPENDED]
+    assert cara["kept_out"] == WHY_KEPT_OUT[KeptOut.TYPE_NOT_ALLOWED]
+    assert bob["kept_out"] is None
+    assert alone["kept_out"] is None and alone["person"]["staff_status"] is None

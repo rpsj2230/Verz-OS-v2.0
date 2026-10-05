@@ -111,6 +111,10 @@ class Recording:
             return [{"chunk_id": ref, "relevance": 1.0} for ref in leg]
         if query.columns == ("chunk_id", "distance"):
             return [{"chunk_id": ref, "distance": 0.1} for ref in self.nearest]
+        if query.columns == ("held",):
+            # A reach within the exact re-ask's ceiling: a short walk is asked again exactly,
+            # and this source answers the exact sort with the same nearest chunks.
+            return [{"held": len(self.nearest)}]
         return list(self.bodies)
 
     def chunk_statements(self) -> list[RowQuery]:
@@ -442,12 +446,18 @@ def test_the_vector_leg_carries_the_callers_reach_and_both_sets_of_settings() ->
 
     search_embedding(source, "leave", web, Embedding())
 
-    walking = [query for query in source.chunk_statements() if walks(query.statement)]
-    [vector] = walking
-    assert predicate in compiled(vector)
+    # The walk, and the exact re-ask a short walk is given (one passage is fewer than asked).
+    walking = [
+        query
+        for query in source.chunk_statements()
+        if walks(query.statement) and query.columns == ("chunk_id", "distance")
+    ]
+    [vector, exact] = walking
+    assert predicate in compiled(vector) and predicate in compiled(exact)
     assert rendered(vector.settings) == rendered(
         (*session_settings(reach), *iterative_scan_statements())
     )
+    assert rendered(exact.settings) == rendered(session_settings(reach))
     scan = rendered(iterative_scan_statements())
     for query in source.chunk_statements():
         if query is not vector:

@@ -13,6 +13,7 @@ import {
   newVersionPath,
   passagesPath,
   promotionPath,
+  publicPath,
   solutionDecisionPath,
   SOLUTIONS_API_PATH,
   stewardPath,
@@ -43,6 +44,19 @@ const LIFECYCLE_REVIEWED = lifecycle(
 const LIFECYCLE_SOLVED = lifecycle("test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it");
 
 const LIFECYCLE_HANDED_OVER = lifecycle("test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told");
+
+/** `tests/unit/test_public_knowledge_db.py`, which presses the marking route against PostgreSQL. */
+const PUBLIC_MARKED = t(
+  "test_public_knowledge_db",
+  "test_a_department_admin_marks_their_own_document_and_the_ledger_names_them",
+  true,
+);
+
+const PUBLIC_SCOPED = t(
+  "test_public_knowledge_db",
+  "test_another_departments_admin_is_told_they_decide_for_their_own_only",
+  true,
+);
 
 /** `tests/unit/test_knowledge_documents_db.py`, which verifies several documents against PostgreSQL. */
 const VERIFIED_SEVERAL = t(
@@ -88,6 +102,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/knowledge/actForms.tsx promotionPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/promotion", "promotionPath", promotionPath("upload.x")),
+  ],
+  "src/pages/knowledge/PublicMarkingCard.tsx publicPath(itemId)": [
+    at("PUT /api/v1/knowledge/items/{item_id}/public", "publicPath", publicPath("upload.x")),
   ],
   "src/pages/knowledge/actForms.tsx stewardPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/steward", "stewardPath", stewardPath("upload.x")),
@@ -145,6 +162,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_HANDED_OVER,
     audit: LIFECYCLE_HANDED_OVER,
     behaviour: LIFECYCLE_HANDED_OVER,
+  },
+  "PUT /api/v1/knowledge/items/{item_id}/public": {
+    row: PUBLIC_MARKED,
+    audit: PUBLIC_MARKED,
+    behaviour: PUBLIC_SCOPED,
   },
   "POST /api/v1/knowledge/tasks/{task_id}/done": {
     row: LIFECYCLE_HANDED_OVER,
