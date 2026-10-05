@@ -93,7 +93,7 @@ def _phonetic_heavy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         store,
         "resolve_pair",
-        lambda left, right, profile: resolve_pair(left, right, profile, weights=heavy),
+        lambda left, right, profile, **kwargs: resolve_pair(left, right, profile, weights=heavy),
     )
 
 
@@ -102,8 +102,8 @@ def _questions_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
     from brain.resolution.cascade import CascadeResult, Decision, Stage
     from brain.resolution.entities import resolve_pair
 
-    def no_band(left: Any, right: Any, profile: Any) -> Any:
-        result = resolve_pair(left, right, profile)
+    def no_band(left: Any, right: Any, profile: Any, **kwargs: Any) -> Any:
+        result = resolve_pair(left, right, profile, **kwargs)
         if result.decision is not Decision.TO_REVIEW:
             return result
         return CascadeResult(

@@ -24,7 +24,12 @@
  * **A 409 is somebody else's decision, and its sentence is the API's.** `readNotChanged` reads the
  * `NotChangedView` body; the console adds nothing to it.
  *
- * Task ids: M14.6.4, M14.8.5
+ * **How pairs are weighed is said in bands, and the version strings are kept for Advanced.**
+ * `WeightsView` carries the waiting fit's drift as one sentence per kind of match and the moves
+ * that cross a band, and nothing counted; the page draws those sentences and says in words which
+ * weights are in use. See `THE_WEIGHTS_ARE_SAID_IN_BANDS_AND_NEVER_IN_FIGURES`.
+ *
+ * Task ids: M14.6.4, M14.8.5, M14.4.4, M14.8.3
  */
 
 import type { components } from "../api/schema";
@@ -251,5 +256,92 @@ export function readDecided(payload: unknown, itemId: string): { readonly state:
   const body = payload as { item_id?: unknown; state?: unknown; merged?: unknown };
   return body.item_id === itemId && typeof body.state === "string" && typeof body.merged === "boolean"
     ? { state: body.state, merged: body.merged }
+    : null;
+}
+
+// ------------------------------------------------------------- how pairs are weighed (M14.4.4, M14.8.3)
+
+export type WeightsBody = components["schemas"]["WeightsView"];
+
+/** Where the API keeps the weights in force and the waiting fit's drift. */
+export const WEIGHTS_API_PATH = "/resolution/weights";
+
+/** The route that puts the waiting fit in force. */
+export const PROMOTE_WEIGHTS_API_PATH = "/resolution/weights/promote";
+
+/** Written down because the fit's own figures are the easy thing to put on this card. */
+export const THE_WEIGHTS_ARE_SAID_IN_BANDS_AND_NEVER_IN_FIGURES =
+  "A fit is measured on every candidate pair the install holds, including pairs whose records this " +
+  "reader does not see, so a count of pairs on this card would be a figure about records kept " +
+  "from them. A weight is a number nobody can act on without a threshold beside it. So the card " +
+  "says which weights are in force and what the fit would move, in bands, and its version strings " +
+  "go to Advanced.";
+
+export const WEIGHTS_TITLE = "How pairs are weighed";
+export const WEIGHTS_LEDE =
+  "Each week the Brain checks how strong each kind of match is against the decisions people made here, and suggests new weights.";
+export const READING_WEIGHTS = "Reading how pairs are weighed.";
+export const WEIGHTS_UNREADABLE =
+  "The API answered in a shape this console does not read, so how pairs are weighed is not shown. The console and the API are probably from different releases.";
+
+export const DECLARED_IN_FORCE =
+  "Pairs are weighed with the product's own starting weights, which have not yet been checked against decisions made here.";
+export const CALIBRATED_IN_FORCE = "Pairs are weighed with new weights that a reviewer approved from the weekly check.";
+export const NOTHING_NEW = "The weekly check has nothing new for you to review.";
+
+export const NEW_WEIGHTS_WAITING = "New weights are waiting for your review.";
+export const CROSSINGS_LABEL = "These change what reviewers are told about a pair";
+export const OTHER_CHANGES_LABEL = "Other changes";
+export const NO_CROSSINGS = "None of these changes what reviewers are told about a pair.";
+
+export const USE_NEW_WEIGHTS = "Use the new weights";
+export const USE_NEW_WEIGHTS_QUESTION = "Use the new weights?";
+export const USE_NEW_WEIGHTS_CONSEQUENCE =
+  "From now on every pair is weighed with the new weights, so what reviewers are told about some pairs changes. It is recorded in your name.";
+export const KEEP_CURRENT_WEIGHTS = "Keep the current weights";
+export const WEIGHTS_NOT_CHANGED = "The weights were not changed";
+export const NEW_WEIGHTS_IN_FORCE = "The new weights are in use.";
+
+export const IN_FORCE_VERSION_LABEL = "Weights in use";
+export const WAITING_VERSION_LABEL = "Weights waiting";
+
+/** A line of drift as a person reads it: "name_exact moved from weak to strong" as a sentence. */
+export function driftSentence(line: string): string {
+  return sentence(words(line));
+}
+
+/** Which weights are in force, in a sentence. */
+export function inForceSentence(body: WeightsBody): string {
+  return body.calibrated ? CALIBRATED_IN_FORCE : DECLARED_IN_FORCE;
+}
+
+/** The lines that do not change what a reviewer is told, in the API's order. */
+export function otherChanges(body: WeightsBody): readonly string[] {
+  const crossing = new Set(body.crossings);
+  return body.lines.filter((line) => !crossing.has(line));
+}
+
+/** The body a promote posts. */
+export function promoteBody(version: string): { version: string } {
+  return { version };
+}
+
+function strings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((one) => typeof one === "string");
+}
+
+/** Read `brain.resolution_routes.WeightsView`, or null for a shape this console does not read. */
+export function readWeights(payload: unknown): WeightsBody | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Record<string, unknown>;
+  const waiting = body["candidate"];
+  return typeof body["in_force"] === "string" &&
+    typeof body["calibrated"] === "boolean" &&
+    (waiting === null || typeof waiting === "string") &&
+    strings(body["lines"]) &&
+    strings(body["crossings"])
+    ? (payload as WeightsBody)
     : null;
 }

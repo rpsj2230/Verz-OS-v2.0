@@ -24,7 +24,7 @@ through `review_store.merge_reviewed`, which is `merge_store.merge_entities` wit
 undoable; the item is then closed. A rejection only closes the item, and the pair is never raised
 again. Either way the reviewer's sentence is the merge's reason.
 
-Task ids: M14.6.4, M14.8.5
+Task ids: M14.6.4, M14.8.5, M14.4.4, M14.8.3
 """
 
 from __future__ import annotations
@@ -45,6 +45,12 @@ from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
 from brain.knowledge.columns import ColumnView
+from brain.resolution.calibration import drift
+from brain.resolution.calibration_store import (
+    candidate,
+    promote_fit,
+    weights_in_force,
+)
 from brain.resolution.canonical import SourceRef
 from brain.resolution.review import card_for, review_page
 from brain.resolution.review_store import (
@@ -286,3 +292,97 @@ async def decide_review_item(
 def _decided_already() -> JSONResponse:
     body = NotChangedView(outcome=ALREADY_DECIDED, sentence=DECIDED_ALREADY)
     return JSONResponse(status_code=409, content=body.model_dump(mode="json"))
+
+
+# ------------------------------------------------------------- the weights (M14.4.4, M14.8.3)
+WEIGHTS_PATH: Final = "/resolution/weights"
+PROMOTE_PATH: Final = "/resolution/weights/promote"
+
+#: The words a 409 carries when the fit asked about is no longer the one waiting.
+NOT_THE_CANDIDATE: Final = "moved"
+#: What a reviewer reads when a newer fit arrived, or somebody promoted first.
+FIT_MOVED: Final = (
+    "This is no longer the fit waiting for review, so nothing was changed. Open the screen again "
+    "to see the one that is."
+)
+
+
+class WeightsView(BaseModel):
+    """Which weights score pairs now, and what the newest fit would change, in words.
+
+    No count of pairs: a fit says how many candidate pairs it was measured on, and that is a
+    figure about records a reviewer may not reach, so it stays off the screen.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The version in force, or "declared" while nobody has promoted a fit.
+    in_force: str
+    #: Whether the weights in force came from a fit rather than from the product's declaration.
+    calibrated: bool
+    #: The fit waiting for a reviewer, or null when there is none.
+    candidate: str | None
+    #: What the candidate would change about each kind of agreement, in words.
+    lines: list[str]
+    #: The moves that change what a reviewer is told about a pair.
+    crossings: list[str]
+
+
+class PromoteAsked(BaseModel):
+    """A reviewer putting the waiting fit in force."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    version: str = Field(min_length=1, max_length=64)
+
+
+@router.get(WEIGHTS_PATH, response_model=WeightsView, responses=COMMON_RESPONSES)
+async def weights_view(request: Request, asked: Asked) -> WeightsView:
+    """The weights in force and the waiting fit's drift, for a reviewer (M14.4.4, M14.8.3)."""
+    if not may_review(asked):
+        raise _not_here(asked, "capability")
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    current = await weights_in_force(sessions)
+    waiting = await candidate(sessions)
+    report = None if waiting is None else drift(current, waiting)
+    return WeightsView(
+        in_force=current.version if current.calibrated else "declared",
+        calibrated=current.calibrated,
+        candidate=None if waiting is None else waiting.version,
+        lines=[] if report is None else list(report.explain()),
+        crossings=[] if report is None else [one.render() for one in report.crossings],
+    )
+
+
+@router.post(
+    PROMOTE_PATH,
+    response_model=WeightsView,
+    responses={
+        **COMMON_RESPONSES,
+        409: {"model": NotChangedView, "description": "Nothing was changed, and why."},
+    },
+)
+async def promote_weights(
+    request: Request, body: PromoteAsked, asked: Asked
+) -> WeightsView | JSONResponse:
+    """Put the waiting fit in force in this reviewer's name, on the ledger as theirs."""
+    if not may_review(asked):
+        raise _not_here(asked, "capability")
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    waiting = await candidate(sessions)
+    if waiting is None or waiting.version != body.version:
+        moved = NotChangedView(outcome=NOT_THE_CANDIDATE, sentence=FIT_MOVED)
+        return JSONResponse(status_code=409, content=moved.model_dump(mode="json"))
+    await promote_fit(
+        sessions,
+        body.version,
+        reviewer_id=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    log.info("weights promoted", version=body.version, principal=asked.caller.principal.id)
+    return await weights_view(request, asked)

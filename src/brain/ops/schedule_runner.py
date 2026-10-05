@@ -94,6 +94,7 @@ from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
 from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
+from brain.resolution.calibration_store import run_calibration_now
 from brain.resolution.registry_store import run_registry_now
 from brain.settings import process_environment, settings_from
 
@@ -375,6 +376,29 @@ def entity_resolution(now: datetime, report_only: bool, database_url: str) -> st
         database_url, now=now, pepper=pepper.reveal(), loop_factory=_loop_factory()
     )
     return ran.summary()
+
+
+#: Why the calibration declines in report-only mode, though it removes nothing.
+A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING: Final = (
+    "A fit only adds a setting row a reviewer may promote. Report-only mode exists for controls "
+    "that remove data, so brain.ops.schedule never asks for it here, and asked anyway the run "
+    "fits nothing and says so rather than ignoring the mode it was given."
+)
+
+
+def resolution_calibration(now: datetime, report_only: bool, database_url: str) -> str:
+    """Fit the week's candidate pairs into a weight table and keep it for a reviewer (M14.4.4).
+
+    `brain.resolution.calibration_store.run_calibration_now` does it as the worker's login; this is
+    the literal call the registry reads. Nothing it keeps is in force until a reviewer promotes
+    it, so a run can never change how records are scored. Declines in report-only mode, see
+    `A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING`.
+    """
+    if report_only:
+        return f"report only: nothing was fitted. {A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING}"
+    from brain.ops.worker import _loop_factory
+
+    return run_calibration_now(database_url, now=now, loop_factory=_loop_factory()).summary()
 
 
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
@@ -794,15 +818,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="escalation_expiry", run=escalation_expiry),
     # Wired on 2026-10-06 with `er.observation` (`0182`). See `brain.resolution.registry_store`.
     Runner(name="entity_resolution", run=entity_resolution),
-    # For whoever builds it: the feature observations `drift` measures over, which are
-    # resolution decisions nobody records for this purpose yet. The fit is weekly.
-    Runner(
-        name="resolution_calibration",
-        needs=(
-            "a record of the decisions made when two records were matched as the same person or "
-            "company, which this install does not keep yet"
-        ),
-    ),
+    # Wired on 2026-10-06: the weekly fit over the registry's candidate pairs, kept as a setting
+    # until a reviewer promotes it. See `brain.resolution.calibration_store`.
+    Runner(name="resolution_calibration", run=resolution_calibration),
     # Wired on 2026-09-30: `brain.ops.recovery_run.sweep_queue` re-drives an orphaned or failed
     # job its task declares safe and sets aside the rest, over the worker's own queue connection.
     Runner(name="queue_redrive", run=queue_redrive),
@@ -877,6 +895,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return escalation_expiry(now, report_only, database_url)
         case "entity_resolution":
             return entity_resolution(now, report_only, database_url)
+        case "resolution_calibration":
+            return resolution_calibration(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case "outbox_dispatch":

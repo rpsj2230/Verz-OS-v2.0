@@ -9,9 +9,9 @@
 import { type PageCase, UNBROKEN } from "../pageFixtures";
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // Possible duplicates. One pair with a long label on each side and a long line of evidence, so a
-  // phone's width is held against the card. The decision is held in
-  // `tests/resolution-review-page.test.tsx`.
+  // Possible duplicates. One pair with a long label on each side and a long line of evidence, and a
+  // waiting fit whose lines and crossings are long too, so a phone's width is held against both
+  // cards. The decision and the promote are held in `tests/resolution-review-page.test.tsx`.
   "/duplicates": {
     address: "/duplicates",
     signedIn: true,
@@ -33,6 +33,13 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           },
         ],
         by_strongest: { decisive: 1, strong: 0, supporting: 0, weak: 0, against: 0 },
+      },
+      "/api/v1/resolution/weights": {
+        in_force: "declared",
+        calibrated: false,
+        candidate: UNBROKEN,
+        lines: [UNBROKEN, "phone stayed weak"],
+        crossings: [UNBROKEN],
       },
     },
   },
