@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T15:12:40.563365+00:00",
-  "commit": "18dde3eb",
-  "commit_subject": "The scrub budget is timed on the thread's processor clock, so a busy host at deploy time no longer fails it (#338)",
+  "generated_at": "2026-10-05T15:22:13.835602+00:00",
+  "commit": "2e8d7d87",
+  "commit_subject": "Four connector leaves get an install check that fails on their break: Laravel's allowlist, Cloudflare's write grant, a fan-out's critical path, and a second source of one kind (#339)",
   "total": 1592,
   "done": 548,
   "percent": 34.4,
