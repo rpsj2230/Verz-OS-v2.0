@@ -135,7 +135,7 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5, M15.4.2
+Task ids: M12.1.5, M15.4.2, M12.4.4
 """
 
 from __future__ import annotations
@@ -153,6 +153,7 @@ from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, know
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
 from brain.tools.registry import ResultContract, ToolRegistry
+from brain.tools.website_check import WebsiteCheckTool, register_website_check
 
 #: Why the document plane is registered on every install that has rows, whatever it reads.
 THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE: Final = (
@@ -306,6 +307,7 @@ def build_registry(
     records: RowSource | None = None,
     sources: Iterable[str] | None = None,
     figures: LiveFigures | None = None,
+    website: WebsiteCheckTool | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -329,6 +331,10 @@ def build_registry(
     (`brain.knowledge.connector_figures`, M11.7.1). With it and a row source, every shipped source
     declaring a report gets its figure tool beside its row tool; without it none does, for the
     reason a row tool is not registered without a row source.
+
+    `website` is the website check bound to its transport (`brain.ops.website_probe`). Absent,
+    the check is not registered, for the reason a row tool is not registered without a row
+    source: a tool in the catalogue that cannot reach a site would tell a person it is down.
 
     Returns frozen. A caller receiving an unfrozen registry could register into it after the
     whole-registry checks had run, which is the same as not running them.
@@ -378,5 +384,10 @@ def build_registry(
                 result_contract=ResultContract.TYPED,
                 scope=KNOWLEDGE_PIN,
             )
+
+    # The website check, where the caller handed it a transport (M12.4.4). Not tied to a row
+    # source: it reads a site, not a table.
+    if website is not None:
+        register_website_check(registry, website)
 
     return registry.freeze()

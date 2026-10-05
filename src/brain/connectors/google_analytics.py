@@ -132,6 +132,7 @@ from brain.core.envelope import IdentityMode, TypedResult
 from brain.core.projection import MAX_LABEL_CHARS
 from brain.core.scope import Scope
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
+from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -937,7 +938,25 @@ CONSOLE: Final = ConsoleForm(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="google_analytics",
+    per_minute=20,
+    per_day=20_000,
+    note=(
+        "Google counts the Data API in tokens rather than calls: a standard property allows "
+        "14,000 tokens an hour to one Cloud project and 200,000 a day, and a simple report "
+        "costs about ten (https://developers.google.com/analytics/devguides/reporting/data/v1/"
+        "quotas). At ten a report that is 23 calls a minute and 20,000 calls a day, recorded "
+        "at 20 a minute. An Analytics 360 property allows ten times as much, which is the "
+        "property owner's plan to buy, so the ceiling can be raised."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=GOOGLE_ANALYTICS,
     label="Google Analytics",
     guide=GUIDE,

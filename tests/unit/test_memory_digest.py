@@ -508,10 +508,11 @@ def test_the_digest_period_is_short_enough_that_undo_still_does_something(
     than a habit.**
 
     A digest reporting learnings that have already decayed below `formation.RECALL_FLOOR` is a
-    list of undo buttons that change nothing anybody would notice, so a memory formed at the
-    start of the window has to still be reachable at the end of it. That property reads
-    `HALF_LIFE_DAYS` and `RECALL_FLOOR` from another module, so it cannot be satisfied by
-    moving `DIGEST_PERIOD` and the assertion together.
+    list of undo buttons that change nothing anybody would notice, so an inference formed at the
+    start of the window has to still be reachable at the end of it, at the shortest half-life an
+    administrator may save. That property reads the knob's bound, `EXTRACTED_CONFIDENCE` and
+    `RECALL_FLOOR` from other modules, so it cannot be satisfied by moving `DIGEST_PERIOD` and
+    the assertion together.
 
     The second half watches the diagnostic actually report something. A `digest_gaps` nobody
     has seen return a row is a `digest_gaps` nobody can rely on, and this check is the one
@@ -519,7 +520,19 @@ def test_the_digest_period_is_short_enough_that_undo_still_does_something(
 
     Delete this and the period can be lengthened to a month for convenience, and the oldest
     entries in every email will be for memories the system stopped using before it sent it."""
-    assert confidence_now(1.0, formed_at=NOW - DIGEST_PERIOD, now=NOW) >= RECALL_FLOOR
+    from brain.memory.turn import EXTRACTED_CONFIDENCE
+    from brain.ops.tuning import INFERRED_HALF_LIFE, KNOB_BY_NAME
+
+    shortest = float(KNOB_BY_NAME[INFERRED_HALF_LIFE].lowest)
+    assert (
+        confidence_now(
+            EXTRACTED_CONFIDENCE,
+            formed_at=NOW - DIGEST_PERIOD,
+            now=NOW,
+            half_life_days=shortest,
+        )
+        >= RECALL_FLOOR
+    )
 
     monkeypatch.setattr("brain.memory.digest.DIGEST_PERIOD", timedelta(days=90))
 
@@ -685,6 +698,23 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     `test_an_undo_locks_the_memory_reads_its_marks_and_the_clock_then_writes_one_correction` in
     `tests/unit/test_memory_store.py`.
 
+    **`brain.mine_routes` arrived on 2026-09-29**, for M16.4.2 and M33.3.1.4, a person editing
+    and forgetting what is remembered about them. It builds a `Learning` from the person's own
+    stored rows and hands it to the store's undo and edit, as `brain.estate_routes` does, and
+    lists nothing. Like `brain.console.own_things`, which decides it, this is not a reach
+    question: the row is admitted by authorship, so a memory formed from somebody else's words is
+    refused as if it were not there. Its sibling is
+    `test_a_member_forgets_a_memory_formed_from_their_own_words` in
+    `tests/unit/test_mine_routes.py`.
+
+    **`brain.estate_routes` calls `review.review_queue` since 2026-09-29**, for M16.5.4, the
+    Waiting view's alarm. It hands the queue only the learnings the page already lists as tier
+    three, which `learning_estate` decided at the reach the caller's run of each agent has, so the
+    queue's own reach filter can only agree, and the alarm is raised on nothing the reader is not
+    shown. Its sibling is
+    `test_the_waiting_alarm_is_raised_past_one_sitting_of_the_rows_listed_and_no_others` in
+    `tests/unit/test_estate_routes.py`.
+
     **`brain.agent_memory_routes` arrived on 2026-09-29**, for M39.4.1, one agent's Memory
     section. It builds no listing of its own: what the agent learnt is `reach_view.split_memory`
     and `revisions` at `E_run(reader, agent)` through `reach_view.run_reach`, which is the agent
@@ -700,6 +730,7 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     assert _callers_of("brain.memory.review") == [
         "brain.console.govern_estate",
         "brain.console.own_things",
+        "brain.estate_routes",
         "brain.ops.memory_store",
     ]
     assert _callers_of("brain.memory.digest") == [
@@ -709,6 +740,7 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
         "brain.console.reach_view",
         "brain.estate_routes",
         "brain.member_activity",
+        "brain.mine_routes",
         "brain.ops.memory_store",
     ]
 
