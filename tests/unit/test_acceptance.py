@@ -586,6 +586,9 @@ WRITTEN_BY_CHECKS = (
     "ops.operation",
     "ops.budget_version",
     "ops.control_run",
+    "ops.question_asked",
+    "ops.question_gap",
+    "ops.erasure_request",
 )
 
 
