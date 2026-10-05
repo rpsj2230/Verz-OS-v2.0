@@ -75,6 +75,9 @@ from brain.deployment.app_environment import (
 from brain.deployment.requirements import files_for
 from brain.ops.channel_lease import SEND_POLICY, SEND_ROLE_MAX_TTL_SECONDS, SEND_TOKEN_ROLE
 from brain.ops.connector_lease import (
+    PERSON_POLICY,
+    PERSON_ROLE_MAX_TTL_SECONDS,
+    PERSON_TOKEN_ROLE,
     ROTATE_POLICY,
     ROTATE_ROLE_MAX_TTL_SECONDS,
     ROTATE_TOKEN_ROLE,
@@ -645,12 +648,14 @@ def slot_lines(caller: str) -> tuple[str, ...]:
 
 
 #: Every token role the release defines, as (role, the one policy it gives, its TTL ceiling). The
-#: connector run's, one channel send's and one rotated refresh token's write: see
+#: connector run's, one channel send's, one rotated refresh token's write and one read of a person's
+#: own refresh token: see
 #: `brain.ops.connector_lease` and `brain.ops.channel_lease`.
 TOKEN_ROLES: Final[tuple[tuple[str, str, int], ...]] = (
     (RUN_TOKEN_ROLE, RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS),
     (SEND_TOKEN_ROLE, SEND_POLICY, SEND_ROLE_MAX_TTL_SECONDS),
     (ROTATE_TOKEN_ROLE, ROTATE_POLICY, ROTATE_ROLE_MAX_TTL_SECONDS),
+    (PERSON_TOKEN_ROLE, PERSON_POLICY, PERSON_ROLE_MAX_TTL_SECONDS),
 )
 
 

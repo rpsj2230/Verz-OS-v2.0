@@ -411,7 +411,7 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
     key in the process that talks to a model. No delete: a disconnect leaves the key and says so.
     `brain.ops.openbao.A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT` argues it.
     The same two for a consented source's refresh token (M11.8.6), kept by the console's consent
-    route, one segment deeper.
+    route, one segment deeper, and for a person's own refresh token, one segment deeper again.
 
     Delete this and the rule gains `read` or `delete` in a debugging session, and nothing else reads
     the policy."""
@@ -424,17 +424,25 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
         "connector_keys/metadata/+": ["read"],
         "connector_keys/data/oauth_refresh/+": ["create", "update"],
         "connector_keys/metadata/oauth_refresh/+": ["read"],
+        "connector_keys/data/oauth_refresh/+/+": ["create", "update"],
+        "connector_keys/metadata/oauth_refresh/+/+": ["read"],
     }
 
 
 def test_the_worker_reads_no_connector_key_itself_and_may_mint_only_the_run_token() -> None:
     """M31.3.2.3: the worker's own token, renewed for as long as the worker runs, reads nothing
     under the connector key engine, and may mint a child against the `connector-run` role, and
-    against the `channel-send` role for a message its schedule sends (M38.3.3.4), and no other.
+    against the `channel-send` role for a message its schedule sends (M38.3.3.4), and no other:
+    never `connector-person`, so nothing it runs reads a person's own refresh token. Its one rule
+    under the engine deletes a person's own slot's metadata, which erasure needs and reads nothing.
     Delete this and the direct read comes back in a debugging session, which makes the worker's
     token a standing read of every source's key again, and nothing else reads the policy."""
     granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
-    assert not [path for path in granted if path.startswith("connector_keys")]
+    # Its one rule there removes a person's own refresh token on erasure, and reads nothing.
+    keys = {
+        path: sorted(caps) for path, caps in granted.items() if path.startswith("connector_keys")
+    }
+    assert keys == {"connector_keys/metadata/oauth_refresh/+/+": ["delete"]}
     minting = {path: sorted(caps) for path, caps in granted.items() if "token/create" in path}
     assert minting == {
         "auth/token/create/connector-run": ["create", "update"],
@@ -478,10 +486,12 @@ def test_the_application_may_mint_only_the_run_token_a_question_borrows_a_key_wi
     assert minting == {
         "auth/token/create/connector-run": ["create", "update"],
         "auth/token/create/connector-rotate": ["create", "update"],
+        "auth/token/create/connector-person": ["create", "update"],
     }
     assert not [path for path in granted if path.startswith("auth/token/roles")]
     assert "read" not in granted["connector_keys/data/+"]
     assert "read" not in granted["connector_keys/data/oauth_refresh/+"]
+    assert "read" not in granted["connector_keys/data/oauth_refresh/+/+"]
 
 
 def test_the_run_token_policy_reads_a_source_key_and_revokes_itself_and_nothing_more() -> None:
@@ -658,6 +668,7 @@ def test_the_rotate_token_patches_a_refresh_token_and_can_read_nothing() -> None
     granted = _granted_paths((POLICIES / f"{ROTATE_POLICY}.hcl").read_text(encoding="utf-8"))
     assert {path: sorted(caps) for path, caps in granted.items()} == {
         "connector_keys/data/oauth_refresh/+": ["patch"],
+        "connector_keys/data/oauth_refresh/+/+": ["patch"],
         "auth/token/revoke-self": ["update"],
     }
     mount, _, rest = connector_oauth_slot("a" + "0" * 62).path.partition("/")
@@ -680,3 +691,92 @@ def test_the_release_defines_the_rotate_role_with_its_one_policy() -> None:
     script = (REPO / APPLY_SCRIPT).read_text(encoding="utf-8")
     assert script == render_apply()
     assert f"write auth/token/roles/{ROTATE_TOKEN_ROLE} allowed_policies={ROTATE_POLICY} " in script
+
+
+# ------------------------------------------------- a person's own refresh token (M11.8.6)
+def _person_slot_paths() -> tuple[str, str]:
+    """The data and metadata paths `OpenBaoVault` calls for a person's slot at the longest name."""
+    from brain.ops.credentials import connector_person_oauth_slot
+
+    slot = connector_person_oauth_slot("a" + "0" * 62, "u_" + "x" * 126)
+    mount, _, rest = slot.path.partition("/")
+    return f"{mount}/data/{rest}", f"{mount}/metadata/{rest}"
+
+
+def test_the_person_token_reads_a_persons_own_slot_and_nothing_a_source_keeps() -> None:
+    """The one policy a person's own refresh token is read under reads a person's slot, where the
+    code keeps it, and revokes itself, and nothing else: not a source's key, not a source's own
+    refresh token, and no write, so a read made for a question cannot replace that person's consent.
+    Held against the paths the code calls, not against the policy's words.
+
+    Delete this and the person policy can widen to `connector_keys/data/+` in a debugging session,
+    and a token minted to read one person's mailbox token reads every source's key."""
+    from brain.ops.connector_lease import PERSON_POLICY
+    from brain.ops.credentials import connector_key_slot, connector_oauth_slot
+
+    granted = _granted_paths((POLICIES / f"{PERSON_POLICY}.hcl").read_text(encoding="utf-8"))
+    assert {path: sorted(caps) for path, caps in granted.items()} == {
+        "connector_keys/data/oauth_refresh/+/+": ["read"],
+        "auth/token/revoke-self": ["update"],
+    }
+    data, _ = _person_slot_paths()
+    assert [caps for rule, caps in granted.items() if _matches(rule, data)] == [["read"]]
+    for slot in (connector_key_slot("a" + "0" * 62), connector_oauth_slot("a" + "0" * 62)):
+        mount, _, rest = slot.path.partition("/")
+        assert not [rule for rule in granted if _matches(rule, f"{mount}/data/{rest}")]
+
+
+def test_nothing_running_with_nobody_present_can_read_a_persons_own_refresh_token() -> None:
+    """The vault's half of `NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT`: no rule of
+    the run policy, which the worker's scheduled read is minted under, names a person's slot; the
+    worker may not mint the person role; and its own policy reads nothing there. The sibling is the
+    application, which may mint the person role, held by
+    `test_the_application_may_mint_only_the_run_token_a_question_borrows_a_key_with`.
+
+    Delete this and one more line on the run policy, or one more mint on the worker's, lets the
+    scheduled read lease every person's mailbox token with nobody asking."""
+    from brain.ops.connector_lease import PERSON_TOKEN_ROLE, RUN_POLICY
+
+    data, metadata = _person_slot_paths()
+    run = _granted_paths((POLICIES / f"{RUN_POLICY}.hcl").read_text(encoding="utf-8"))
+    assert not [rule for rule in run if _matches(rule, data)]
+    worker = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
+    assert f"auth/token/create/{PERSON_TOKEN_ROLE}" not in worker
+    assert not [rule for rule in worker if _matches(rule, data)]
+    assert [caps for rule, caps in worker.items() if _matches(rule, metadata)] == [["delete"]]
+    application = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    assert f"auth/token/create/{PERSON_TOKEN_ROLE}" in application
+
+
+def test_a_persons_own_token_is_kept_by_the_application_and_rotated_by_the_rotate_role() -> None:
+    """The writes on a person's slot: the application creates and updates it when that person's
+    consent is answered and reads only its metadata, which My workspace asks; the rotate role
+    patches it and reads nothing. Held against the paths the code calls.
+
+    Delete this and a person's consent cannot be kept on any install, or a rotated token cannot be
+    written back, and every vendor that rotates its refresh tokens loses that person's consent on
+    their first question."""
+    from brain.ops.connector_lease import ROTATE_POLICY
+
+    data, metadata = _person_slot_paths()
+    application = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    assert [sorted(caps) for rule, caps in application.items() if _matches(rule, data)] == [
+        ["create", "update"]
+    ]
+    assert [caps for rule, caps in application.items() if _matches(rule, metadata)] == [["read"]]
+    rotate = _granted_paths((POLICIES / f"{ROTATE_POLICY}.hcl").read_text(encoding="utf-8"))
+    assert [caps for rule, caps in rotate.items() if _matches(rule, data)] == [["patch"]]
+
+
+def test_the_release_defines_the_person_role_with_its_one_policy() -> None:
+    """The role a person's read token is minted against is defined by every release, giving
+    `connector-person` and nothing else, and the committed script is the one the module renders.
+    Delete this and the role can be left out of `TOKEN_ROLES`, so every install refuses the mint
+    and no person's own account is ever read."""
+    from brain.deployment.vault_setup import APPLY_SCRIPT, TOKEN_ROLES, render_apply
+    from brain.ops.connector_lease import PERSON_POLICY, PERSON_TOKEN_ROLE
+
+    assert (PERSON_TOKEN_ROLE, PERSON_POLICY) in {(role, policy) for role, policy, _ in TOKEN_ROLES}
+    script = (REPO / APPLY_SCRIPT).read_text(encoding="utf-8")
+    assert script == render_apply()
+    assert f"write auth/token/roles/{PERSON_TOKEN_ROLE} allowed_policies={PERSON_POLICY} " in script

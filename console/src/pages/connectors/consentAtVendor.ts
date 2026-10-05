@@ -18,6 +18,11 @@
  * twice, as a development build's effects do, would be told the second time that the consent is not
  * theirs; the return page keeps the one request it made in a ref for the life of its mount.
  *
+ * **A person connects their own account from My workspace.** A source each person consents to for
+ * themselves is never consented to by whoever connected it: `GET /me/accounts` lists the ones the
+ * person may connect, and `POST /me/accounts/{connector}/consent` starts it for them, through the same
+ * vendor page and the same return page, which sends them back to My workspace.
+ *
  * Task ids: M11.8.6
  */
 
@@ -28,6 +33,22 @@ import type { components } from "../../api/schema";
 export type ConsentStarted = components["schemas"]["ConsentStartedView"];
 /** What `GET /connectors/consent/callback` answers. */
 export type ConsentAnswered = components["schemas"]["ConsentAnsweredView"];
+/** What `GET /me/accounts` answers: the sources a person may connect their own account with. */
+export type MyAccounts = components["schemas"]["MyAccountsView"];
+export type MyAccount = components["schemas"]["MyAccountView"];
+
+/** `brain.connector_routes.MY_ACCOUNTS_PATH`. */
+export const MY_ACCOUNTS_API_PATH = "/me/accounts";
+
+/** `brain.connector_routes.MY_CONSENT_PATH` for one source. */
+export function myConsentPath(name: string): string {
+  return `${MY_ACCOUNTS_API_PATH}/${encodeURIComponent(name)}/consent`;
+}
+
+/** The button that sends a person to the vendor for their own account. */
+export function connectMyAccountLabel(vendor: string): string {
+  return `Connect my ${vendor} account`;
+}
 
 /** `brain.connectors.oauth.CONSENT_RETURN_PATH`: where the vendor sends the person back. */
 export const CONSENT_RETURN_PATH = "/connector-consent";

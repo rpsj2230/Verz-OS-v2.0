@@ -13,7 +13,13 @@ are all the same answer, `None`, because the person answering is told the same s
 See `brain.connectors.oauth.A_CONSENT_ANSWER_IS_TRUSTED_ONLY_FOR_THE_REQUEST_THAT_ASKED` and
 `0180`, whose policies hold the same rule a second time inside the database.
 
-**A consent the vendor refuses at the code is the source down, in words, on its health.**
+**A consent keeps the kind it was started as.** `TakenConsent.kind` is read back from the row, so
+the callback keeps a person's own consent in that person's slot and a source's in the source's,
+whatever the vendor's answer carries: an answer carries only a state and a code.
+
+**A consent the vendor refuses at the code is the source down, in words, on its health.** For a
+source's own consent only: a person's own refused consent is said to that person and marks nothing
+on the source, which everybody else still reads.
 `refused_consent` is the one failed attempt the consent route appends to the source's connection
 through `StoredConsentHealth`, with
 `brain.connectors.oauth.CONSENT_WITHDRAWN` as its sentence and the call as a refusal, through
@@ -38,6 +44,7 @@ from brain.connectors.contract import ConnectorContractError
 from brain.connectors.oauth import (
     CONSENT_LIFETIME_SECONDS,
     CONSENT_WITHDRAWN,
+    ConsentKind,
     ConsentStart,
     opened_verifier,
     sealed_verifier,
@@ -60,6 +67,8 @@ class TakenConsent:
     connector: str
     return_address: str
     start: ConsentStart
+    #: A source's own consent or a person's own, as it was started: never what the answer says.
+    kind: ConsentKind = ConsentKind.SOURCE
 
 
 class ConsentStates(Protocol):
@@ -73,8 +82,9 @@ class ConsentStates(Protocol):
         start: ConsentStart,
         return_address: str,
         now: datetime,
+        kind: ConsentKind,
     ) -> None:
-        """Hold this consent for `CONSENT_LIFETIME`, for this person alone."""
+        """Hold this consent for `CONSENT_LIFETIME`, for this person alone, as `kind`."""
         ...
 
     async def take(self, *, state: str, principal_id: str, now: datetime) -> TakenConsent | None:
@@ -99,6 +109,7 @@ class StoredConsents:
         start: ConsentStart,
         return_address: str,
         now: datetime,
+        kind: ConsentKind,
     ) -> None:
         async with self._sessions() as session, session.begin():
             await _attribute(session, principal_id)
@@ -106,6 +117,7 @@ class StoredConsents:
                 insert(OAuthConsentRow).values(
                     state_digest=state_digest(start.state),
                     connector=connector,
+                    kind=kind.value,
                     principal_id=principal_id,
                     return_address=return_address,
                     sealed_verifier=sealed_verifier(start),
@@ -133,6 +145,7 @@ class StoredConsents:
                     .values(used_at=now)
                     .returning(
                         OAuthConsentRow.connector,
+                        OAuthConsentRow.kind,
                         OAuthConsentRow.return_address,
                         OAuthConsentRow.sealed_verifier,
                     )
@@ -145,7 +158,10 @@ class StoredConsents:
         except ConnectorContractError:
             return None
         return TakenConsent(
-            connector=found.connector, return_address=found.return_address, start=start
+            connector=found.connector,
+            return_address=found.return_address,
+            start=start,
+            kind=ConsentKind(found.kind),
         )
 
 

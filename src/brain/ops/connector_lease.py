@@ -55,6 +55,20 @@ See `A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`. Rejected: t
 as a second field in the source's key slot, which no vault policy can split by field, so the role
 that writes it back could rewrite the client secret beside it.
 
+**A person's own refresh token is read by a third role, which only the application may mint
+(M11.8.6).** A source consented to by each person for themselves keeps one refresh token per
+person, and it may be read only for that person's own question. The vault cannot tell one person's
+read from another's: the application holds one token, and naming the person in a policy would mean
+an identity record per person inside the vault, which erasure would then have to find too. What the
+vault can hold is that **no read made with nobody present leases a person's token at all**: the
+`connector-person` policy reads `connector_keys/data/oauth_refresh/+/+` and nothing else, the
+`connector-run` policy's lines stop one segment short of it, and only the application's policy may
+mint the role. Which person's slot a question reads is then the code's, held by
+`brain.ops.connector_sync_run.PersonalKeys`, which builds the one reference from the asker and
+refuses every other. See `NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT`.
+Rejected: one more line on the run policy, which would let the worker's scheduled read lease every
+person's mailbox.
+
 Task ids: M31.3.2.3, M31.3.2.4, M11.8.6
 """
 
@@ -94,6 +108,15 @@ A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT: Final = (
     "cannot read the token it replaces, create a slot, or reach a slot a key is kept in."
 )
 
+#: Why a person's refresh token is read under a role the worker cannot mint.
+NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT: Final = (
+    "A refresh token a person's own consent bought is read only under the connector-person role, "
+    "whose policy reaches a person's slot and nothing else and which only the application, "
+    "answering that person's question, may mint. The worker's scheduled read mints the "
+    "connector-run role, whose policy stops one segment short of every person's slot, so nothing "
+    "running with nobody present can read anybody's mailbox."
+)
+
 # ------------------------------------------------------------------------ the lease
 
 #: The token role the installer creates and the worker mints against.
@@ -122,6 +145,19 @@ ROTATE_LEASE_TTL: Final = timedelta(minutes=5)
 
 #: The rotate role's own ceiling, as the release writes it. `MAX_LEASE`, one hour.
 ROTATE_ROLE_MAX_TTL_SECONDS: Final = int(MAX_LEASE.total_seconds())
+
+
+#: The token role a person's own refresh token is read under, and its one policy, whose file is
+#: `ops/openbao/policies/connector-person.hcl`. See
+#: `NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT`.
+PERSON_TOKEN_ROLE: Final = "connector-person"  # noqa: S105
+PERSON_POLICY: Final = "connector-person"
+
+#: How long a person's read token lives if nothing revokes it: one question's read of one value.
+PERSON_LEASE_TTL: Final = timedelta(minutes=5)
+
+#: The person role's own ceiling, as the release writes it. `MAX_LEASE`, one hour.
+PERSON_ROLE_MAX_TTL_SECONDS: Final = int(MAX_LEASE.total_seconds())
 
 
 class LeaseOutcome(enum.StrEnum):

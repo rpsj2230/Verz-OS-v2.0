@@ -22,6 +22,16 @@ as no row, in one statement, and none of them can be told apart from another.
 derived from the state, so the table alone opens no verifier. See
 `brain.connectors.oauth.A_KEPT_VERIFIER_IS_SEALED_UNDER_THE_STATE_THE_TABLE_NEVER_HOLDS`.
 
+**A consent is for a source, or a person's own (`kind`).** A source's consent is started by
+somebody who may connect it and buys the one refresh token every read of the source uses; a
+person's own consent is started by that person for their own account and buys a token read only
+for their questions (`brain.connectors.oauth.ConsentKind`). The row says which, so the answer is
+kept where its kind says and judged by the authority its kind asks, and the kind cannot be changed
+after the row is written: it is not among the columns the application may update. Nothing else
+differs, and the policies need no second rule: `principal_id` already names whose consent it is,
+and every policy already holds it to the actor. Added in place rather than in a migration of its
+own, because no install had applied `0180` when the personal consent was designed.
+
 **No DELETE.** A consent used or expired stays as the record that it was started, by whom and when,
 and holds nothing a reader could use. Rows are small and one is written per press of a button.
 
@@ -61,6 +71,9 @@ PRINCIPAL_ID_CHARS = 128
 DIGEST_PATTERN = r"^[0-9a-f]{64}$"
 RETURN_ADDRESS_CHARS = 512
 SEALED_CHARS = 256
+#: `brain.connectors.oauth.ConsentKind`'s values, held equal by `test_connector_consent.py`.
+KINDS: tuple[str, ...] = ("source", "person")
+KIND_CHARS = 16
 
 #: The actor a transaction is attributed to, empty when none was set.
 ACTOR = "NULLIF(current_setting('brain.actor_id', true), '')"
@@ -108,6 +121,7 @@ def upgrade() -> None:
         ),
         sa.Column("state_digest", sa.String(64), nullable=False),
         sa.Column("connector", sa.String(CONNECTOR_CHARS), nullable=False),
+        sa.Column("kind", sa.String(KIND_CHARS), nullable=False),
         sa.Column("principal_id", sa.String(PRINCIPAL_ID_CHARS), nullable=False),
         sa.Column("return_address", sa.String(RETURN_ADDRESS_CHARS), nullable=False),
         sa.Column("sealed_verifier", sa.String(SEALED_CHARS), nullable=False),
@@ -116,6 +130,9 @@ def upgrade() -> None:
         sa.Column("used_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint(f"state_digest ~ '{DIGEST_PATTERN}'", name="state_digest_shape"),
         sa.CheckConstraint(f"connector ~ '{CONNECTOR_NAME_PATTERN}'", name="connector_shape"),
+        sa.CheckConstraint(
+            "kind IN (" + ", ".join(f"'{one}'" for one in KINDS) + ")", name="kind_known"
+        ),
         sa.CheckConstraint(f"principal_id ~ '{IDENTIFIER}'", name="principal_id_shape"),
         sa.CheckConstraint("return_address LIKE 'https://%'", name="return_address_is_https"),
         sa.CheckConstraint("length(sealed_verifier) > 0", name="verifier_is_sealed"),

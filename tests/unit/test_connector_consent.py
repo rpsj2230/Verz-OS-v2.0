@@ -17,13 +17,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Final
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import HealthState
 from brain.connectors.oauth import (
     CONSENT_LIFETIME_SECONDS,
     CONSENT_WITHDRAWN,
+    ConsentKind,
     ConsentStart,
     new_consent,
     state_digest,
@@ -38,7 +39,12 @@ from brain.ops.connector_consent import (
 from brain.ops.connector_sync import SyncOutcome
 from brain.session import make_app_engine, make_application_sessions
 from brain.tables.audit import attributed_to
-from brain.tables.oauth_consent import DIGEST_PATTERN, SEALED_CHARS, OAuthConsentRow
+from brain.tables.oauth_consent import (
+    DIGEST_PATTERN,
+    KIND_CHARS,
+    SEALED_CHARS,
+    OAuthConsentRow,
+)
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_acceptance import at_head
 from tests.unit.test_tables import MIGRATION_OAUTH_CONSENT, migration_module
@@ -61,11 +67,18 @@ def through[T](url: str, work: Callable[[async_sessionmaker[AsyncSession]], Awai
     return run(go)
 
 
-def issue(url: str, start: ConsentStart, *, by: str = ME, at: datetime = NOW) -> None:
+def issue(
+    url: str,
+    start: ConsentStart,
+    *,
+    by: str = ME,
+    at: datetime = NOW,
+    kind: ConsentKind = ConsentKind.SOURCE,
+) -> None:
     through(
         url,
         lambda sessions: StoredConsents(sessions).issue(
-            connector="xero", principal_id=by, start=start, return_address=BACK, now=at
+            connector="xero", principal_id=by, start=start, return_address=BACK, now=at, kind=kind
         ),
     )
 
@@ -97,6 +110,8 @@ def test_the_table_and_its_model_hold_one_shape() -> None:
     assert (made.IDENTIFIER, made.PRINCIPAL_ID_CHARS) == (IDENTIFIER, PRINCIPAL_ID_CHARS)
     assert not [one for one in made.GRANTS if "DELETE" in one]
     assert "GRANT UPDATE (used_at) ON ops.oauth_consent TO brain_app" in made.GRANTS
+    assert tuple(one.value for one in ConsentKind) == made.KINDS
+    assert made.KIND_CHARS == KIND_CHARS >= max(len(one.value) for one in ConsentKind)
 
 
 def test_a_consent_waits_ten_minutes_and_no_longer() -> None:
@@ -145,6 +160,40 @@ def test_a_consent_is_taken_once_by_its_own_person_before_it_expires() -> None:
 
 
 @pytest.mark.needs_db
+def test_a_consent_is_answered_as_the_kind_it_was_started_as_and_the_kind_never_changes() -> None:
+    """A person's own consent is taken back as a person's own and a source's as a source's, read
+    from the row rather than from anything the answer carries; and the application role cannot
+    rewrite a row's kind, so a consent started for one person's account cannot be answered into the
+    source's slot. Delete this and the callback can keep a person's token where every read uses it.
+    """
+    with at_head("brain_oauth_consent_kind") as url:
+        own, theirs = new_consent(), new_consent()
+        issue(url, own, kind=ConsentKind.PERSON)
+        issue(url, theirs, kind=ConsentKind.SOURCE)
+        taken_own, taken_theirs = take(url, own.state), take(url, theirs.state)
+        assert isinstance(taken_own, TakenConsent) and isinstance(taken_theirs, TakenConsent)
+        assert (taken_own.kind, taken_theirs.kind) == (ConsentKind.PERSON, ConsentKind.SOURCE)
+
+        later = new_consent()
+        issue(url, later, kind=ConsentKind.PERSON)
+
+        async def rewrite(sessions: async_sessionmaker[AsyncSession]) -> None:
+            async with sessions() as session, session.begin():
+                for one in attributed_to(actor_id=ME, ent_hash="", trace_id=""):
+                    await session.execute(one)
+                await session.execute(
+                    update(OAuthConsentRow)
+                    .where(OAuthConsentRow.state_digest == state_digest(later.state))
+                    .values(kind=ConsentKind.SOURCE.value)
+                )
+
+        with pytest.raises(Exception, match="permission denied"):
+            through(url, rewrite)
+        again = take(url, later.state)
+        assert isinstance(again, TakenConsent) and again.kind is ConsentKind.PERSON
+
+
+@pytest.mark.needs_db
 def test_the_table_keeps_no_state_and_a_verifier_only_sealed() -> None:
     """The row is found by the state's digest and holds the verifier sealed, so neither the state
     nor the verifier is in it, and nothing in it opens without the state. Delete this and a copy of
@@ -183,6 +232,7 @@ def test_a_person_sees_and_starts_only_their_own_consents() -> None:
                     OAuthConsentRow(
                         state_digest=state_digest(new_consent().state),
                         connector="xero",
+                        kind=ConsentKind.SOURCE.value,
                         principal_id=ME,
                         return_address=BACK,
                         sealed_verifier="sealed",

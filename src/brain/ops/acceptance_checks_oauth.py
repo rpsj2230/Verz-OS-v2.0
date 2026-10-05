@@ -21,6 +21,15 @@ socket, and the vault is `_RoleVault`, which answers each token with what its po
 used the wrong role fails here as it would on the vault. The route's authority check is the one
 part not driven: `tests/unit/test_connector_routes.py` holds it.
 
+**And a person's own consent is checked the same way (`a_persons_own_consent_is_read_for_them_
+alone`).** The same Xero declaration, consented to by each person for themselves
+(`consented_personally`), over a vendor holding one account per person (`_Accounts`): a person
+holding the reader capability consents through `start_consent` and `finish_consent`, their read is
+`brain.ops.connector_sync_run.personal_access` leasing their own slot under the person role, a
+second person's read leases only theirs and is told they have not connected, a withdrawal at the
+vendor is said to that person alone with the source's health untouched, and erasing them is
+`brain.ops.erasure_store.erase_own_refresh_tokens` removing their slot and nobody else's.
+
 Task ids: M11.8.6
 """
 
@@ -104,6 +113,7 @@ class _RoleVault:
     patches: list[tuple[str, str]] = field(default_factory=list)
     refused: list[tuple[str, str]] = field(default_factory=list)
     minted: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
     revoked: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -125,12 +135,20 @@ class _RoleVault:
 
     # The worker's or the application's token minting a child: `RunTokenVault`.
     def mint_role_token(self, role: str, *, ttl: timedelta, meta: Mapping[str, str]) -> RoleToken:
-        from brain.ops.connector_lease import ROTATE_POLICY, ROTATE_TOKEN_ROLE, RUN_POLICY
+        from brain.ops.connector_lease import (
+            PERSON_POLICY,
+            PERSON_TOKEN_ROLE,
+            ROTATE_POLICY,
+            ROTATE_TOKEN_ROLE,
+            RUN_POLICY,
+        )
         from brain.ops.leases import SealedSecret
         from brain.ops.openbao import RoleToken
 
         del meta
-        policy = ROTATE_POLICY if role == ROTATE_TOKEN_ROLE else RUN_POLICY
+        policy = {ROTATE_TOKEN_ROLE: ROTATE_POLICY, PERSON_TOKEN_ROLE: PERSON_POLICY}.get(
+            role, RUN_POLICY
+        )
         with self._lock:
             self.minted.append(policy)
         return RoleToken(
@@ -144,6 +162,20 @@ class _RoleVault:
     def holding(self, token: RoleToken) -> _Holder:
         return _Holder(self, token.policies[0])
 
+    # The worker's own token on erasure: delete on a person's slot's metadata and nothing else.
+    def remove_static_kv(self, path: str) -> None:
+        from brain.ops.connector_sync_run import is_person_slot
+        from brain.ops.openbao import VaultRefusedError
+
+        with self._lock:
+            if not is_person_slot(path):
+                self.refused.append(("worker", "delete"))
+                raise VaultRefusedError(
+                    "the worker's policy deletes no slot but a person's", status=403
+                )
+            self.removed.append(path)
+            self.slots.pop(path, None)
+
 
 @dataclass
 class _Holder:
@@ -153,11 +185,15 @@ class _Holder:
     policy: str
 
     def read_static_kv(self, path: str) -> dict[str, Any]:
-        from brain.ops.connector_lease import RUN_POLICY
+        from brain.ops.connector_lease import PERSON_POLICY, RUN_POLICY
+        from brain.ops.connector_sync_run import is_person_slot
         from brain.ops.openbao import VaultRefusedError
 
+        # The run policy reads a source's key and its own refresh token, and the person policy a
+        # person's slot alone: each line of `ops/openbao/policies`, by the path's depth.
+        reads = PERSON_POLICY if is_person_slot(path) else RUN_POLICY
         with self.vault._lock:
-            if self.policy != RUN_POLICY:
+            if self.policy != reads:
                 self.vault.refused.append((self.policy, "read"))
                 raise VaultRefusedError("this token's policy grants no read", status=403)
             self.vault.reads.append((self.policy, path))
@@ -447,6 +483,7 @@ async def a_consented_source_is_renewed_by_its_read_and_a_refusal_is_said(h: Har
             vendor_refused=False,
             principal_id=principal or h.actor,
             may_connect=lambda name: name == source,
+            may_consent_personally=lambda declared, connection: False,
             declarations={source: declared},
             connected=connected,
             consents=consents,
@@ -556,3 +593,347 @@ async def a_consented_source_is_renewed_by_its_read_and_a_refusal_is_said(h: Har
         raise CheckFailedError(
             "the Connectors screen's record does not say the consent was withdrawn"
         )
+
+
+# ------------------------------------------------------------------ a person's own consent
+#: The capability a person holds in the connection's department to connect their own account.
+PERSONAL_READER: Final = "read:consented_account"
+
+
+@dataclass
+class _Accounts:
+    """A vendor holding one account per person: a consent page, a token endpoint and an API.
+
+    A code is issued for the account that signed in; a refresh token renews that account's access
+    alone and is rotated on every renewal; the API answers each access token with its own
+    account's words and nothing else. `revoked` names accounts whose consent the vendor withdrew.
+    """
+
+    client_id: str
+    client_secret: str = field(repr=False)
+    codes: dict[str, tuple[str, str]] = field(default_factory=dict, repr=False)
+    refresh: dict[str, str] = field(default_factory=dict, repr=False)
+    access: dict[str, str] = field(default_factory=dict, repr=False)
+    revoked: set[str] = field(default_factory=set)
+    renewed_for: list[str] = field(default_factory=list)
+
+    def consent(self, address: str, account: str) -> tuple[str, str]:
+        """`account` signing in on the vendor's page: the state and the code sent back."""
+        asked = {key: values[0] for key, values in parse_qs(urlsplit(address).query).items()}
+        if not address.startswith(f"{AUTHORIZE_URL}?") or asked.get("client_id") != self.client_id:
+            raise CheckFailedError("the person was not sent to the vendor's own page")
+        code = secrets.token_urlsafe(24)
+        self.codes[code] = (account, asked["code_challenge"])
+        return asked["state"], code
+
+    def _issue(self, account: str) -> SourceAnswer:
+        from brain.ops.connector_sync_run import SourceAnswer
+
+        refresh, access = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+        self.refresh[refresh], self.access[access] = account, account
+        issued = {
+            "access_token": access,
+            "token_type": "Bearer",
+            "expires_in": 1800,
+            "refresh_token": refresh,
+        }
+        return SourceAnswer(status=200, headers={}, body=json.dumps(issued).encode())
+
+    def post(
+        self, url: str, *, address: str, headers: Mapping[str, str], body: bytes, max_bytes: int
+    ) -> SourceAnswer:
+        from brain.ops.connector_sync_run import SourceAnswer
+
+        del address, headers, max_bytes
+        form = {key: values[0] for key, values in parse_qs(body.decode("ascii")).items()}
+        refused = SourceAnswer(status=400, headers={}, body=b'{"error": "invalid_grant"}')
+        if url != VENDOR_EXCHANGE or form.get("client_secret") != self.client_secret:
+            return refused
+        if form.get("grant_type") == "authorization_code":
+            account, challenge = self.codes.pop(form.get("code", ""), ("", ""))
+            digest = hashlib.sha256(form.get("code_verifier", "").encode("ascii")).digest()
+            if not account or challenge != base64.urlsafe_b64encode(digest).rstrip(b"=").decode():
+                return refused
+            return self._issue(account)
+        account = self.refresh.pop(form.get("refresh_token", ""), "")
+        if not account or account in self.revoked:
+            return refused
+        self.renewed_for.append(account)
+        return self._issue(account)
+
+    def mailbox(self, access: str) -> str:
+        """What the vendor's API answers an access token: its own account's words, or nothing."""
+        return f"mail of {self.access[access]}" if access in self.access else ""
+
+
+def consented_personally() -> ConnectorDeclaration:
+    """Xero's declaration, consented to by each person for their own account, with the department
+    its readers are held to. Its scheduled reading is Xero's own: a person's consent renews no read
+    made with nobody present."""
+    from brain.connectors import xero
+    from brain.connectors.declaration import PERSONAL_DEPARTMENT_SETTING, Setting
+    from brain.connectors.oauth import ConsentKind, OAuthConsent
+
+    declared = xero.CONNECTOR
+    assert declared.console is not None  # Xero declares its form
+    consent = OAuthConsent(
+        authorize_url=AUTHORIZE_URL,
+        token_url=VENDOR_EXCHANGE,
+        scopes=("offline_access",),
+        client_id_setting=CLIENT_ID_SETTING,
+        kind=ConsentKind.PERSON,
+        reader=PERSONAL_READER,
+    )
+    added = tuple(
+        Setting(name=name, label=label, hint=f"The {label.lower()}.", refused="That is not one.")
+        for name, label in (
+            (CLIENT_ID_SETTING, "Client id"),
+            (PERSONAL_DEPARTMENT_SETTING, "Department"),
+        )
+    )
+    form = replace(declared.console, settings=(*declared.console.settings, *added), example=None)
+    return replace(declared, console=form, guide=(), oauth=consent)
+
+
+@check(
+    leaves=("M11.8.6",),
+    sentence=(
+        "A source each person connects for their own account, stood up from Xero's declaration: a "
+        "person holding its reader capability consents for themselves and their read uses their "
+        "own token alone, another person's read never touches it, a consent the vendor withdraws "
+        "leaves only that person's reads down in words, and erasing them removes their token."
+    ),
+)
+async def a_persons_own_consent_is_read_for_them_alone(h: Harness) -> None:
+    from brain.connector_routes import (
+        YOUR_CONSENT_KEPT,
+        ConsentExchange,
+        ConsentRefusedError,
+        finish_consent,
+        may_consent_for_themselves,
+        start_consent,
+    )
+    from brain.connectors.manifest import manifest_digest
+    from brain.connectors.oauth import (
+        NOT_CONNECTED_FOR_YOU,
+        YOUR_CONSENT_WITHDRAWN,
+        ConsentNotHeldError,
+        ConsentWithdrawnError,
+    )
+    from brain.core.scope import Scope
+    from brain.ops.acceptance_checks_tables import _console
+    from brain.ops.connectable import manifest_for, person_refresh_reference
+    from brain.ops.connector_consent import StoredConsentHealth, StoredConsents
+    from brain.ops.connector_lease import PERSON_POLICY
+    from brain.ops.connector_store import Connection, StoredConnections, live
+    from brain.ops.connector_sync_run import (
+        PersonalKeys,
+        WorkerConnectorKeys,
+        personal_access,
+        personal_words,
+    )
+    from brain.ops.credential_write_store import StoredCredentialWrites
+    from brain.ops.credentials import (
+        KEY_FIELD,
+        Credentials,
+        connector_key_slot,
+        connector_oauth_slot,
+        connector_person_oauth_slot,
+    )
+    from brain.ops.erasure_store import erase_own_refresh_tokens
+    from brain.ops.secrets import SecretsUnavailableError
+
+    declared = consented_personally()
+    consent = declared.oauth
+    assert consent is not None  # declared just above
+    source = declared.name
+    if (await h.execute(live(source))).scalar_one_or_none() is not None:
+        raise CheckNotRunError(XERO_IS_CONNECTED_HERE_ALREADY)
+    await h.found_departments()
+    department = RESERVED_DEPARTMENTS[0]
+
+    vendor = _Accounts(
+        client_id=f"client-{secrets.token_hex(6)}", client_secret=secrets.token_urlsafe(32)
+    )
+    vault = _RoleVault()
+    credentials = Credentials(vault, writes=StoredCredentialWrites(h.sessions))
+    settings = {
+        "tenant_id": str(uuid.uuid4()),
+        CLIENT_ID_SETTING: vendor.client_id,
+        "department": department,
+    }
+    connection = Connection(
+        connector=source,
+        settings=settings,
+        digest=manifest_digest(manifest_for(source, settings)),
+        connected_by=h.actor,
+        connected_at=h.now,
+    )
+
+    async def keep_secret() -> datetime | None:
+        kept = await credentials.keep(
+            connector_key_slot(source), vendor.client_secret, actor=h.actor, trace_id=h.trace_id
+        )
+        return kept.set_at
+
+    await StoredConnections(h.sessions).connect(
+        connector=source,
+        settings=settings,
+        digest=connection.digest,
+        actor=h.actor,
+        trace_id=h.trace_id,
+        ent_hash=SET_UP_REACH,
+        keep_key=keep_secret,
+    )
+
+    # Two readers of the department, and a third person holding nothing there.
+    ada, bea, cal = (h.principal(department, one) for one in ("ada", "bea", "cal"))
+    reader = ((PERSONAL_READER, Scope.department(department)),)
+    for person, grants in ((ada, reader), (bea, reader), (cal, ())):
+        await h.person(person, department=department, grants=grants)
+    reaches = {one: await _console(h, one, second_factor=False) for one in (ada, bea, cal)}
+    if may_consent_for_themselves(reaches[cal], declared, connection, h.now):
+        raise CheckFailedError("a person without the reader capability may connect their account")
+
+    consents = StoredConsents(h.sessions)
+    exchange = ConsentExchange(
+        keys=WorkerConnectorKeys(vault),
+        poster=vendor,
+        resolver=_Resolver(),
+        health=StoredConsentHealth(h.sessions),
+    )
+
+    async def connected(name: str) -> Connection | None:
+        return connection if name == source else None
+
+    async def own_consent(person: str) -> Any:
+        address = await start_consent(
+            declared,
+            connection,
+            consents=consents,
+            principal_id=person,
+            return_address=CONSOLE_RETURN,
+            now=h.now,
+        )
+        state, code = vendor.consent(address, person)
+        return await finish_consent(
+            state=state,
+            code=code,
+            vendor_refused=False,
+            principal_id=person,
+            may_connect=lambda name: False,
+            may_consent_personally=lambda one, live_one: may_consent_for_themselves(
+                reaches[person], one, live_one, h.now
+            ),
+            declarations={source: declared},
+            connected=connected,
+            consents=consents,
+            exchange=exchange,
+            credentials=credentials,
+            trace_id=h.trace_id,
+            ent_hash=SET_UP_REACH,
+            now=h.now,
+        )
+
+    def read_for(person: str) -> str:
+        """`person`'s own read: their access renewed and the vendor's API asked with it."""
+        token = personal_access(
+            consent,
+            connector=source,
+            principal_id=person,
+            settings=settings,
+            keys=WorkerConnectorKeys(vault),
+            poster=vendor,
+            resolver=_Resolver(),
+            now=h.now,
+        )
+        return vendor.mailbox(token.value)
+
+    # Somebody without the capability cannot answer a consent of their own into the source.
+    try:
+        await own_consent(cal)
+    except ConsentRefusedError as refused:
+        if refused.status != 404:
+            msg = "a person without the capability was refused as something else"
+            raise CheckFailedError(msg) from None
+    else:
+        raise CheckFailedError("a person without the reader capability kept a consent")
+
+    # Ada consents for herself: her token is kept in her slot, the source's own slot is untouched.
+    done = await own_consent(ada)
+    ada_slot = connector_person_oauth_slot(source, ada).path
+    if not done.kept or done.told != YOUR_CONSENT_KEPT or not done.personal:
+        raise CheckFailedError("a person's own consent was not kept as theirs")
+    if vault.slots.get(ada_slot, {}).get(KEY_FIELD) not in vendor.refresh:
+        raise CheckFailedError("a person's refresh token is not in their own slot")
+    if connector_oauth_slot(source).path in vault.slots:
+        raise CheckFailedError("a person's own consent was kept where every read would use it")
+
+    # Her read uses her own token, leased under the person role, and answers her account alone.
+    if read_for(ada) != f"mail of {ada}" or vendor.renewed_for != [ada]:
+        raise CheckFailedError("a person's read did not use their own consent")
+    if (PERSON_POLICY, ada_slot) not in vault.reads:
+        raise CheckFailedError("a person's token was not read under the person role")
+
+    # Bea has not consented: her read is told so, and never leases or renews with Ada's token.
+    reads_before = list(vault.reads)
+    try:
+        read_for(bea)
+    except ConsentNotHeldError as refused:
+        if personal_words(refused) != NOT_CONNECTED_FOR_YOU:
+            raise CheckFailedError("a person with no consent was not told so in words") from None
+    else:
+        raise CheckFailedError("a person with no consent of their own was read for")
+    if any(path == ada_slot for _, path in vault.reads[len(reads_before) :]):
+        raise CheckFailedError("one person's read leased another person's token")
+    if vendor.renewed_for != [ada]:
+        raise CheckFailedError("one person's read renewed another person's consent")
+    # And asked outright for Ada's slot, Bea's keys refuse before the vault is asked.
+    theirs = PersonalKeys(WorkerConnectorKeys(vault), connector=source, principal_id=bea)
+    asked = len(vault.reads)
+    leased = theirs.lease(person_refresh_reference(source, ada), now=h.now)
+    try:
+        leased.key()
+    except SecretsUnavailableError:
+        refused_there = True
+    else:
+        refused_there = False
+    finally:
+        leased.close(h.now)
+    if not refused_there:
+        raise CheckFailedError("a person's keys leased another person's slot")
+    if len(vault.reads) != asked:
+        raise CheckFailedError("another person's slot was asked of the vault at all")
+
+    # Bea consents too, and each read answers its own account.
+    await own_consent(bea)
+    if read_for(bea) != f"mail of {bea}" or read_for(ada) != f"mail of {ada}":
+        raise CheckFailedError("two people's reads did not each use their own consent")
+
+    # The vendor withdraws Ada's consent: her reads are down in words, Bea's and the source are not.
+    vendor.revoked.add(ada)
+    try:
+        read_for(ada)
+    except ConsentWithdrawnError as refused:
+        if personal_words(refused) != YOUR_CONSENT_WITHDRAWN:
+            raise CheckFailedError("a withdrawn consent was not said in words") from None
+    else:
+        raise CheckFailedError("a consent the vendor withdrew was still read")
+    if read_for(bea) != f"mail of {bea}":
+        raise CheckFailedError("one person's withdrawn consent took another person's reads down")
+    if await StoredConsentHealth(h.sessions).latest(source) is None:
+        raise CheckFailedError("the connected source is not a live connection")
+    marked = await StoredConsentHealth(h.sessions).latest(source)
+    if marked is not None and marked.previous is not None:
+        raise CheckFailedError("one person's withdrawn consent was marked on the source")
+
+    # Erasing Ada removes her slot, every version, and nobody else's.
+    bea_slot = connector_person_oauth_slot(source, bea).path
+    erase_own_refresh_tokens(vault, ada, (source,))
+    if ada_slot in vault.slots or bea_slot not in vault.slots or vault.removed != [ada_slot]:
+        raise CheckFailedError("erasing a person did not remove their own token and only theirs")
+    if vault.refused:
+        raise CheckFailedError("a token was asked for something its policy does not grant")
+    for secret in (vendor.client_secret, *vendor.refresh, *vendor.access):
+        if await _search(h, secret):
+            raise CheckFailedError("a client secret or a person's token was found in a table")

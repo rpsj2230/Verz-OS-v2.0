@@ -21,10 +21,14 @@
  *
  * Imported statically rather than split: it mounts neither heavy library and no stylesheet.
  *
- * Task ids: M27.7.28
+ * The Connected accounts card also lists the sources a person may connect their own account with,
+ * and sends them to the vendor to do it (`components/MyAccounts.tsx`, M11.8.6).
+ *
+ * Task ids: M27.7.28, M11.8.6
  */
 
 import { useResource } from "../api/useResource";
+import { MyAccounts } from "../components/MyAccounts";
 import { MyChannels } from "../components/MyChannels";
 import { FailureNotice } from "../ui/FailureNotice";
 import { when } from "./artifactsQuery";
@@ -245,6 +249,7 @@ export function MyWorkspace() {
           <section className="card">
             <h2>Connected accounts</h2>
             <p>{answer.data.accounts}</p>
+            <MyAccounts />
           </section>
           <section className="card">
             <h2>What I can ask about</h2>

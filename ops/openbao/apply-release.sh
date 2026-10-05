@@ -95,6 +95,13 @@ if ! role_ok_connector_rotate; then
   fi
   role_ok_connector_rotate || missing "the connector-rotate token role"
 fi
+role_ok_connector_person() { test "$(bao_ read -field=allowed_policies auth/token/roles/connector-person 2>/dev/null)" = "[connector-person]" && test "$(bao_ read -field=orphan auth/token/roles/connector-person 2>/dev/null)" = "false" && test "$(bao_ read -field=renewable auth/token/roles/connector-person 2>/dev/null)" = "false" && test "$(bao_ read -field=token_no_default_policy auth/token/roles/connector-person 2>/dev/null)" = "true" && test "$(bao_ read -field=token_explicit_max_ttl auth/token/roles/connector-person 2>/dev/null)" = "3600"; }
+if ! role_ok_connector_person; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ write auth/token/roles/connector-person allowed_policies=connector-person orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600 >/dev/null || fail "the vault would not define the connector-person token role"
+  fi
+  role_ok_connector_person || missing "the connector-person token role"
+fi
 
 # Every connected source's slot: its scopes, and no key.
 slot_ok() { test "$(bao_ read -field=custom_metadata "connector_keys/metadata/$1" 2>/dev/null)" = "$2"; }
@@ -184,4 +191,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 3 token roles (connector-run, channel-send, connector-rotate) and 13 credential slots"
+say "in force: 4 engines, $POLICIES policies, 4 token roles (connector-run, channel-send, connector-rotate, connector-person) and 13 credential slots"
