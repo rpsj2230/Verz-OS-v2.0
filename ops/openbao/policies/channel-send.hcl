@@ -29,6 +29,10 @@ path "providers/data/channel_teams" {
   capabilities = ["read"]
 }
 
+path "providers/data/channel_telegram" {
+  capabilities = ["read"]
+}
+
 path "providers/data/channel_webhook" {
   capabilities = ["read"]
 }

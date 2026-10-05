@@ -19,6 +19,8 @@ later" is a scope nobody removes.
 | `connectors/creds/freshdesk` | Freshdesk | Agent key, read scope | An admin key. An admin key can change SLAs and delete tickets |
 | `connectors/creds/hubspot` | HubSpot | `crm.objects.contacts.read`, `crm.objects.deals.read` | `crm.objects.*.write`, and anything touching `settings` |
 | `connectors/creds/laravel_readonly` | Laravel MySQL | A database user with SELECT on the allowlisted views only | SELECT on tables. The views are the contract; tables change shape without warning |
+| `connectors/creds/google_analytics` | Google Analytics | A service account's key file, the account a Viewer on the one property, asking only for `analytics.readonly` | `analytics.edit`, and domain-wide delegation. It reads one property as itself |
+| `connectors/creds/search_console` | Search Console | A service account's key file, the account a restricted user on the one property, asking only for `webmasters.readonly` | `webmasters`, which can change a property, and domain-wide delegation |
 | `connectors/creds/google_drive` | Drive or M365 | A service account with Viewer on the one folder shared with it | Domain-wide delegation. It reads everything, for everyone, for ever |
 | `browser/creds/*` | Browser runner | One credential per site, per task | Anything reusable across sites |
 
@@ -207,11 +209,13 @@ is the catalogue, and a test holds this table to it):
 | Key slot | Source | Scopes | Not requested |
 |---|---|---|---|
 | `connector_keys/freshdesk` | freshdesk | an agent API key with read access | an admin key, which can change SLAs and delete tickets |
+| `connector_keys/google_analytics` | google_analytics | analytics.readonly; Viewer on the one property | analytics.edit; domain-wide delegation |
 | `connector_keys/google_drive` | google_drive | Viewer on the one folder shared with it | domain-wide delegation |
 | `connector_keys/hubspot` | hubspot | crm.objects.contacts.read; crm.objects.deals.read | crm.objects.*.write; anything touching settings |
 | `connector_keys/laravel` | laravel | SELECT on the allowlisted views only | SELECT on tables; any write |
 | `connector_keys/lark_base` | lark_base | bitable:app:readonly; base:record:read | base:record:write; drive:drive |
 | `connector_keys/lark_wiki` | lark_wiki | wiki:wiki:readonly | docs:document edit scopes |
+| `connector_keys/search_console` | search_console | webmasters.readonly; restricted permission on the one property | webmasters; domain-wide delegation |
 | `connector_keys/staff_source` | staff_source | read on the staff directory only; for LDAP a service account that may bind and search and nothing more | any write; for LDAP an administrator or an account that may reset passwords or groups |
 | `connector_keys/xero` | xero | accounting.transactions.read; accounting.contacts.read | any .write scope |
 

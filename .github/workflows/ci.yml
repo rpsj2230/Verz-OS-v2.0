@@ -40,6 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tasks_only: ${{ steps.kind.outputs.tasks_only }}
+      # One per filter in `brain.ops.ci_paths`: whether this diff can affect that job. A diff it
+      # cannot compute makes every one true. Read only by pull-request-only jobs; main's deploy
+      # gates never read them.
+      dependencies: ${{ steps.paths.outputs.dependencies }}
+      image: ${{ steps.paths.outputs.image }}
+      presidio: ${{ steps.paths.outputs.presidio }}
+      console: ${{ steps.paths.outputs.console }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,6 +65,10 @@ jobs:
           else
             echo "tasks_only=false" >> "$GITHUB_OUTPUT"
           fi
+      - id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 src/brain/ops/ci_paths.py --base "$BASE" --head "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
   # Everything that needs no database. Fast, so it fails first.
   static:
     name: Lint, types, invariants
@@ -364,7 +375,7 @@ jobs:
     name: Console types, boundaries, tests, build
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' && needs.changes.outputs.console == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -414,7 +425,7 @@ jobs:
         run: |
           node docs/wbs/export.js
           node docs/wbs/render.js
-          git diff --exit-code -- docs/tracker.html docs/wbs.json             || { echo "::error::docs/tracker.html is out of date - run node docs/wbs/render.js"; exit 1; }
+          git diff --exit-code -- docs/tracker.html docs/wbs.json docs/wave-windows.json             || { echo "::error::docs/tracker.html is out of date - run node docs/wbs/render.js"; exit 1; }
       - uses: astral-sh/setup-uv@v5
         if: ${{ needs.changes.outputs.tasks_only == 'true' }}
         with:
@@ -664,7 +675,7 @@ jobs:
     name: The personal data analyser starts, answers and fits its limit
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' && needs.changes.outputs.presidio == 'true' }}
     env:
       COMPOSE_FILE: docker-compose.presidio.yml
     steps:
@@ -975,7 +986,7 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' && needs.changes.outputs.dependencies == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -1021,7 +1032,7 @@ jobs:
     name: Vulnerability scan, locks and image
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' && needs.changes.outputs.image == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

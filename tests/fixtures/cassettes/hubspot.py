@@ -7,6 +7,7 @@ Task ids: M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+import re
 from typing import Final
 
 from brain.connectors import hubspot
@@ -82,7 +83,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "The absence of paging.next is the only end signal.",
         kind=Kind.PAGINATION,
         tools=("hubspot.read_companies",),
-        projects="client",
+        projects=hubspot.ENTITY_CLIENT,
         expect=Expect.MORE_TO_READ,
         origin=DOCUMENTED,
         reference=HUBSPOT_OBJECTS_DOC,
@@ -116,7 +117,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         why="A last page: no paging object. The email and phone arrive and nothing maps them.",
         kind=Kind.LIST,
         tools=("hubspot.read_contacts",),
-        projects="contact",
+        projects=hubspot.ENTITY_CONTACT,
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference="https://developers.hubspot.com/docs/api/crm/contacts",
@@ -148,7 +149,38 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "must not carry it.",
         kind=Kind.LIST,
         tools=("hubspot.read_deals",),
-        projects="deal",
+        projects=hubspot.ENTITY_DEAL,
+        expect=Expect.ANSWERED,
+        origin=DOCUMENTED,
+        reference="https://developers.hubspot.com/docs/api/crm/deals",
+    ),
+    Cassette(
+        cid="HUBSPOT-200-deal",
+        source=SOURCE,
+        request=(
+            "GET /crm/v3/objects/deals/4471?properties=amount,closedate,dealname,dealstage,"
+            "hubspot_owner_id,pipeline"
+        ),
+        status=200,
+        body={
+            "id": "4471",
+            "properties": {
+                "dealname": "SNM website revamp",
+                "amount": "CANARY-CONTRACT-LIVE-9RT2M",
+                "dealstage": "contractsent",
+                "pipeline": "default",
+                "closedate": "2026-10-01T00:00:00.000Z",
+                "hubspot_owner_id": "9911",
+            },
+            "createdAt": "2026-06-01T08:00:00.000Z",
+            "updatedAt": "2026-09-05T10:00:00.000Z",
+            "archived": False,
+        },
+        why="One deal by its id, the object itself with no results envelope: what a question "
+        "reads live, so its amount is told while the asker waits and never kept. The list cannot "
+        "be narrowed to one id, so this is the call that holds the record.",
+        kind=Kind.READ,
+        tools=("hubspot.read_deals",),
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference="https://developers.hubspot.com/docs/api/crm/deals",
@@ -222,6 +254,10 @@ RATE_LIMIT: Final = RateLimit(
 )
 
 
+#: A request for one record by its id, as a question's live read makes it.
+ONE_RECORD: Final = re.compile(r"/crm/v3/objects/(companies|contacts|deals)/[0-9]+(\?|$)")
+
+
 def _hubspot_entity(recorded: Cassette) -> str:
     if "/associations/" in recorded.request:
         return hubspot.ENTITY_ASSOCIATION
@@ -239,7 +275,12 @@ def replay(recorded: Cassette) -> Replayed:
     from tests.unit.test_hubspot import Resolver
 
     entity = _hubspot_entity(recorded)
-    operation = hubspot.operation_for(entity, resolver=Resolver())
+    one = ONE_RECORD.search(recorded.request)
+    operation = (
+        hubspot.one_record_operation(entity, resolver=Resolver())
+        if one
+        else hubspot.operation_for(entity, resolver=Resolver())
+    )
     reply = hubspot.interpret(
         operation, status=recorded.status, body=recorded.body, fetched_at=FETCHED_AT
     )
@@ -253,7 +294,10 @@ def replay(recorded: Cassette) -> Replayed:
         return Replayed(Expect.ABSENT)
     if entity == hubspot.ENTITY_ASSOCIATION:
         edges = hubspot.association_edges(
-            from_entity=hubspot.ENTITY_CLIENT, from_id="88", to_entity="contact", rows=tuple(rows)
+            from_entity=hubspot.ENTITY_CLIENT,
+            from_id="88",
+            to_entity=hubspot.ENTITY_CONTACT,
+            rows=tuple(rows),
         )
         return Replayed(Expect.ANSWERED if edges else Expect.ABSENT)
     kept = [hubspot.projected_record(entity, row, last_seen_at=SEEN_AT) for row in rows]

@@ -560,10 +560,11 @@ class VendorRequest:
 
     `repr=False` on the headers and the body, because this object is built with the secret in
     hand and the commonest way a key reaches a log is an exception handler formatting the object
-    it was holding; see `brain.ops.secrets.Lease`.
+    it was holding; see `brain.ops.secrets.Lease`. On the address too, because one vendor puts
+    the credential in it: Telegram's Bot API takes the bot token in the path.
     """
 
-    url: str
+    url: str = field(repr=False)
     headers: Mapping[str, str] = field(repr=False)
     body: bytes = field(repr=False)
     #: `POST` to deliver, `PATCH` to replace a card already delivered, both through `send` and
@@ -719,10 +720,89 @@ class CardWire(Protocol):
         """The address a reply is sent to so that it replaces the card in this message."""
         ...
 
+    def person_address(self, identity: str) -> str:
+        """The address of this identity's own conversation with the bot, for a card sent to a
+        person who did not ask (needs-rupash 118). The identity goes in a request's body, never
+        in its URL."""
+        ...
+
     def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:
         """What the vendor is answered with for a press: `told` shown to the presser at once, and
         the card replaced by `closed` when it is not empty, at no cost against any ceiling."""
         ...
+
+
+#: Why a set-up that the vendor must be told about is told before it is saved.
+A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE: Final = (
+    "A vendor that sends only to an address the install registered with it, rather than one a "
+    "person pastes into its dashboard, is told this install's events address, and the secret "
+    "it is to send, when the set-up is saved. A set-up the vendor did not accept is not saved, "
+    "so a record never claims a connection the vendor was never told about."
+)
+
+
+class RegistrationRefusedError(ValueError):
+    """A set-up the vendor cannot be told about, said in words for the person saving it.
+
+    A `ValueError`, so a caller of `RegisteredWire.registration_for` that catches the protocol's
+    error still catches it; its own class, so the route may show its sentence and shows no other
+    exception's text.
+    """
+
+
+@runtime_checkable
+class RegisteredWire(Protocol):
+    """A wire whose vendor is told where to send by a call the install makes, not by a person.
+
+    `registration_for` builds that call from the events address, the channel's secret as the
+    vault keeps it and the record's fields; the route sends it when the set-up is saved and asks
+    `judge` what the answer said. See `A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE`.
+    """
+
+    def registration_for(
+        self, *, address: str, secret: str, tenant: Mapping[str, str]
+    ) -> VendorRequest: ...
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome: ...
+
+
+#: Why a vendor that posts several messages at once is read one message at a time.
+A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL: Final = (
+    "A vendor that batches posts messages from different people in one request. After the "
+    "request is verified it is split into one request per message, and each is read, claimed and "
+    "answered alone, so no message is lost behind the first and none answers for another."
+)
+
+
+@runtime_checkable
+class BatchedWire(Protocol):
+    """A wire whose vendor may post several messages in one verified request.
+
+    `parts` splits the request, as `verify` returned it, into one per message, each read by
+    `read` as though it had arrived alone; see `A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL`.
+    """
+
+    def parts(self, arrived: Arrived) -> tuple[Arrived, ...]: ...
+
+
+#: Why a vendor's check of the address by a GET is answered only for the agreed word.
+AN_ADDRESS_CHECK_BY_GET_IS_ANSWERED_ONLY_FOR_THE_AGREED_WORD: Final = (
+    "A vendor that checks the events address with a GET, before it posts anything, names a word "
+    "the person saving the set-up chose; the address answers with the vendor's challenge only "
+    "when that word matches the one in the vault, and with one refusal otherwise."
+)
+
+
+@runtime_checkable
+class SubscribedWire(Protocol):
+    """A wire whose vendor checks the events address with a GET before it posts to it.
+
+    `subscription_answer` is handed the query and the channel's secret as the vault keeps it, and
+    answers the body to send back, or None to refuse; see
+    `AN_ADDRESS_CHECK_BY_GET_IS_ANSWERED_ONLY_FOR_THE_AGREED_WORD`.
+    """
+
+    def subscription_answer(self, query: Mapping[str, str], secret: str) -> str | None: ...
 
 
 class ChannelTransport(Protocol):

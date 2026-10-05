@@ -25,13 +25,29 @@ from the connections live at that moment, so a source connected on the Connector
 from the next question and one disconnected does not, with nothing restarted, and a source nobody
 connected contributes no question shape that could tell a person it exists.
 
+**A connected property's or site's figures are classified beside its index fields, and never
+kept (M11.7.1, M11.7.2).** Google Analytics keeps the property's name and dates, and Search Console
+the site's name and permission; their traffic and search figures for each named range are read
+from Google when a question asks (`google_analytics.AnalyticsReport`,
+`search_console.SearchConsoleReport`). They are classified here all the same, each behind its own
+field capability, because the redactor withholds a field nothing classifies from everybody, and a
+figure read live is a field of the record by the time the redactor sees it. So "what is the
+sessions last 28 days of <property>" is asked in the words every other question is, and answered
+only to a reader granted that figure in the source's department.
+
 **What each answer reads, and what it never keeps.** The fast lane finds the record in the index
 at the asker's reach, `brain.ops.live_records.SourceRecords` reads that record from its source
 while the asker waits (Xero today; Freshdesk declares no live lookup yet), the redactor removes
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9
+**HubSpot answers the same way since 2026-09-30.** Its companies, contacts and deals are compiled
+from `hubspot.HUBSPOT_FIELD_RULES`, a company and a deal are asked about by name, and every value
+is read from HubSpot's one-record read while the asker waits. Until then HubSpot was offered on the
+Connectors screen and read into its index, and no question on Ask could reach it, which is why
+`brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
+
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1, M11.7.2
 """
 
 from __future__ import annotations
@@ -40,7 +56,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, xero
+from brain.connectors import freshdesk, google_analytics, hubspot, search_console, xero
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -68,7 +84,13 @@ A_SOURCE_NOBODY_CONNECTED_ASKS_NOTHING: Final = (
 
 #: The field each source's visibility predicate tests on every row it keeps.
 SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
-    {xero.CONNECTOR_NAME: "tenant_id", freshdesk.FRESHDESK: "department"}
+    {
+        xero.CONNECTOR_NAME: "tenant_id",
+        freshdesk.FRESHDESK: "department",
+        google_analytics.GOOGLE_ANALYTICS: "department",
+        hubspot.CONNECTOR_NAME: "portal_id",
+        search_console.SEARCH_CONSOLE: "department",
+    }
 )
 
 
@@ -117,6 +139,19 @@ def xero_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def hubspot_classifications() -> tuple[TableClassification, ...]:
+    """HubSpot's companies, contacts and deals, from `hubspot.HUBSPOT_FIELD_RULES`.
+
+    The deal's amount is CONFIDENTIAL there and is never in the index, so a person is told it only
+    from HubSpot's own answer, read while they wait, and only with `read:deal.amount`.
+    """
+    rules = hubspot.HUBSPOT_FIELD_RULES
+    return tuple(
+        _from_rules(hubspot.CONNECTOR_NAME, entity, rules)
+        for entity in (hubspot.ENTITY_CLIENT, hubspot.ENTITY_CONTACT, hubspot.ENTITY_DEAL)
+    )
+
+
 def freshdesk_classifications() -> tuple[TableClassification, ...]:
     """Freshdesk's tickets, over the fields its index keeps and the body read live.
 
@@ -144,13 +179,72 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def _kept_and_read_live(
+    source: str, entity: str, kept: tuple[str, ...], figures: tuple[str, ...]
+) -> TableClassification:
+    """A connected source's one entity: the fields its index keeps and the figures read live."""
+    return TableClassification(
+        entity=entity,
+        rules=(
+            *(
+                ColumnRule(
+                    column=name,
+                    required_capability=Capability(value=f"read:{entity}.{name}"),
+                    classification=Classification.INTERNAL,
+                )
+                for name in (*kept, *figures)
+            ),
+            _scope_column(source, entity),
+        ),
+    )
+
+
+def google_analytics_classifications() -> tuple[TableClassification, ...]:
+    """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
+
+    Every field behind its own capability (`read:analytics_property.sessions_last_28_days`, ...),
+    in Freshdesk's pattern, so a reader may be told the property's name and not its traffic, or one
+    range and not another. See the module docstring.
+    """
+    return (
+        _kept_and_read_live(
+            google_analytics.GOOGLE_ANALYTICS,
+            google_analytics.ENTITY_PROPERTY,
+            tuple(one.name for one in google_analytics.PROPERTY_FIELDS),
+            (*google_analytics.FIGURE_FIELDS, *google_analytics.RANGE_FIGURE_FIELDS),
+        ),
+    )
+
+
+def search_console_classifications() -> tuple[TableClassification, ...]:
+    """The connected site, as the property is: its index fields and its figures, each INTERNAL."""
+    return (
+        _kept_and_read_live(
+            search_console.SEARCH_CONSOLE,
+            search_console.ENTITY_SITE,
+            tuple(one.name for one in search_console.SITE_FIELDS),
+            tuple(
+                dict.fromkeys((*search_console.FIGURE_FIELDS, *search_console.RANGE_FIGURE_FIELDS))
+            ),
+        ),
+    )
+
+
 #: Every connected source's classifications, by the source's name.
 CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
     {
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
+        google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
+        hubspot.CONNECTOR_NAME: hubspot_classifications(),
+        search_console.SEARCH_CONSOLE: search_console_classifications(),
     }
 )
+
+#: The sources Ask answers through a passage reader rather than a classification: what they hold
+#: is read live as passages for the question's model step, as the Lark Wiki's pages are. Each such
+#: source adds its own name here with its reader. See `brain.ops.connectable.answers`.
+ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset({"lark_wiki"})
 
 #: The field a person names a record by, per source and entity: the question's slot.
 NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
@@ -158,6 +252,14 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE): "invoice_number",
         (xero.CONNECTOR_NAME, xero.ENTITY_CONTACT): "name",
         (freshdesk.FRESHDESK, freshdesk.TICKET): "subject",
+        (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
+            google_analytics.LABEL_FIELD
+        ),
+        # A contact is kept with no name, by `hubspot.A_CRM_IS_MOSTLY_THE_DENYLIST`, so a person
+        # asks about a company or a deal by name and reaches its contacts through it.
+        (hubspot.CONNECTOR_NAME, hubspot.ENTITY_CLIENT): "name",
+        (hubspot.CONNECTOR_NAME, hubspot.ENTITY_DEAL): "deal_name",
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): search_console.LABEL_FIELD,
     }
 )
 
@@ -177,11 +279,76 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
                 "last changed"
             ),
         },
+        google_analytics.GOOGLE_ANALYTICS: {
+            google_analytics.ENTITY_PROPERTY: (
+                "Look up the connected Google Analytics property by name: its sessions, users "
+                "and conversions for yesterday or the last 7, 28 or 90 days, read live from Google "
+                "for a reader allowed them"
+            ),
+        },
+        hubspot.CONNECTOR_NAME: {
+            hubspot.ENTITY_CLIENT: (
+                "Look up HubSpot companies by name: lifecycle stage, web domain and owner, read "
+                "live from HubSpot"
+            ),
+            hubspot.ENTITY_CONTACT: (
+                "Look up HubSpot contacts: lifecycle stage and company, read live from HubSpot"
+            ),
+            hubspot.ENTITY_DEAL: (
+                "Look up HubSpot deals by name: stage, pipeline and close date, and the amount "
+                "read live from HubSpot for a reader allowed it"
+            ),
+        },
+        search_console.SEARCH_CONSOLE: {
+            search_console.ENTITY_SITE: (
+                "Look up the connected Search Console site by name: its clicks and impressions "
+                "for the last 7, 28 or 90 days, its top query and page and its sitemaps' errors, "
+                "read live from Google for a reader allowed them"
+            ),
+        },
     }
 )
 
 
 # ------------------------------------------------------------------------ the questions
+#: Fields a record carries only when read live, by entity: its figures, which no index row holds,
+#: so a filter on one matches nothing whatever it names. The records route's bound on how many
+#: columns a filter may name is a bound on the columns a row carries, and these are not among them.
+LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        google_analytics.ENTITY_PROPERTY: (
+            *google_analytics.FIGURE_FIELDS,
+            *google_analytics.RANGE_FIGURE_FIELDS,
+        ),
+        search_console.ENTITY_SITE: (
+            *search_console.FIGURE_FIELDS,
+            *search_console.RANGE_FIGURE_FIELDS,
+        ),
+    }
+)
+
+#: Fields a figure tool answers for a range it was asked for, and no question on Ask can name,
+#: because a question's range is in its words: see `A_TOOL_S_RANGE_IS_NOT_A_QUESTION_S`.
+UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = MappingProxyType(
+    {
+        (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): frozenset(
+            google_analytics.RANGE_FIGURE_FIELDS
+        ),
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): frozenset(
+            set(search_console.RANGE_FIGURE_FIELDS) - set(search_console.FIGURE_FIELDS)
+        ),
+    }
+)
+
+#: Why a figure tool's fields are classified and never asked about on Ask.
+A_TOOL_S_RANGE_IS_NOT_A_QUESTION_S: Final = (
+    "A figure tool answers sessions or clicks for the range it was given, and a question on Ask "
+    "names its range in its words from the ranges its fields carry. A question about plain "
+    "sessions would name no range, and would be answered from a report that has no such field, "
+    "so those fields are classified for the redactor and offered to no question shape."
+)
+
+
 def connected_questions(connected: Iterable[str]) -> tuple[FastPathRule, ...]:
     """The question shapes the connected sources answer. See `A_SOURCE_NOBODY_CONNECTED_...`.
 
@@ -194,5 +361,8 @@ def connected_questions(connected: Iterable[str]) -> tuple[FastPathRule, ...]:
             key = NAMED_BY.get((source, classification.entity))
             if key is None or classification.rule_for(key) is None:
                 continue
-            rules.extend(questions_over(classification, source=source, key_column=key))
+            unasked = UNASKED.get((source, classification.entity), frozenset())
+            rules.extend(
+                questions_over(classification, source=source, key_column=key, unasked=unasked)
+            )
     return tuple(rules)

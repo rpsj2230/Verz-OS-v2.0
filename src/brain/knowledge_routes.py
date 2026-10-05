@@ -364,13 +364,15 @@ async def store_upload(
     async def enqueue(job: Job) -> object:
         # Imported here: only an install that declares an embedding revision reaches this, and
         # the web process has no queue of its own to hold open for the others.
-        from brain.ops.queue import enqueue_job, queue_app
+        from brain.ops.queue import enqueue_job, queue_app, queue_url_of
         from brain.ops.worker import register_tasks
 
         settings = getattr(request.app.state, "settings", None)
         url = str(getattr(settings, "database_url", "") or "")
         try:
-            app = queue_app(url, pool_max=1)
+            # The queue's own URL, never the application's pooler: see
+            # `brain.ops.queue.A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S`.
+            app = queue_app(queue_url_of(settings), pool_max=1)
             register_tasks(app, database_url=url)
             async with app.open_async():
                 found = await enqueue_job(app, job)

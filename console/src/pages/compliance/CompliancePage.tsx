@@ -1,7 +1,8 @@
 /**
  * Compliance on the shared page kit: breach cases and the clock each is on, who a sensitive
- * question is routed to, and what each connected source reads, as three views at their own
- * addresses under one header, and a page of its own for each breach case (`BreachPage.tsx`).
+ * question is routed to, what each connected source reads, and who answers for each escalation
+ * queue (`EscalationQueues.tsx`, M8.3.2), as four views at their own addresses under one header,
+ * and a page of its own for each breach case (`BreachPage.tsx`).
  *
  * `brain.compliance_routes` answers all three under one authority, `admin:compliance`, so they are
  * one module: the person who names the handler for grievances is the same person who records a
@@ -12,7 +13,7 @@
  * deadline would be a second opinion on a legal deadline. **The tally is drawn as the API released
  * it**: a suppressed month says it is suppressed and draws no number.
  *
- * Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1
+ * Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1, M8.3.2
  */
 
 import { FileWarning, MoreHorizontal, Plus } from "lucide-react";
@@ -56,18 +57,20 @@ import {
 } from "../complianceQuery";
 import { nameOf, peopleIn, Pill, whenWords } from "../review/parts";
 import { NameDrawer, OpenCaseDrawer, OPEN_FORM_LABEL } from "./ComplianceActs";
+import { EscalationQueuesView } from "./EscalationQueues";
 
 export const COMPLIANCE_HEADING = "Compliance";
 export const COMPLIANCE_LEDE = "Data breach cases and the clock each is on, who a sensitive question is routed to, and what each connected source reads.";
 export const COMPLIANCE_PATH = "/compliance";
 export const READING_COMPLIANCE = "Reading the compliance records.";
 
-export const VIEWS = ["breaches", "topics", "register"] as const;
+export const VIEWS = ["breaches", "topics", "register", "escalations"] as const;
 export type ComplianceView = (typeof VIEWS)[number];
 export const VIEW_LABELS: Readonly<Record<ComplianceView, string>> = Object.freeze({
   breaches: "Breach cases",
   topics: "Sensitive topics",
   register: "Processing register",
+  escalations: "Escalation queues",
 });
 
 export function viewAddress(view: ComplianceView): string {
@@ -284,6 +287,7 @@ export function CompliancePage({ view }: { readonly view: string | undefined }) 
       {current === "breaches" ? <BreachesView onDone={onDone} version={version} /> : null}
       {current === "topics" ? <TopicsView onDone={onDone} version={version} /> : null}
       {current === "register" ? <RegisterView version={version} /> : null}
+      {current === "escalations" ? <EscalationQueuesView onDone={onDone} version={version} /> : null}
     </div>
   );
 }

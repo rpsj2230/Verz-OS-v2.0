@@ -147,8 +147,9 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         verification=Verification.WRITTEN,
         check="brain.channels.telegram:verified_update",
         how=(
-            "Telegram repeats a secret token chosen when the webhook is set; the check compares it "
-            "in constant time and refuses a configured token shorter than 32 characters."
+            "Telegram repeats a secret the install made from the bot token and named when it "
+            "registered its address; the check compares it in constant time. It is received at "
+            "its channel's events address while its record is switched on."
         ),
     ),
     InboundChannel(
@@ -169,9 +170,9 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         how=(
             "Meta signs each request with the app secret, an HMAC-SHA256 of the exact bytes sent "
             "in X-Hub-Signature-256; the check computes it again over the bytes received and "
-            "compares the two in constant time before anything is read, so an unsigned or altered "
-            "request is refused. It is received at its channel's events address while its record "
-            "is switched on, and nothing is sent back on it yet."
+            "compares the two in constant time before anything is read, and a request about "
+            "another phone number is refused too. It is received at its channel's events address "
+            "while its record is switched on."
         ),
     ),
 )
