@@ -848,20 +848,35 @@ async def _answered_by_model(
     only thing of the model's that reaches a frame.
     """
     frames.append(stream.step(at_tool_input_start()))
-    drafted = await draft(
-        question,
-        lane=model,
-        entitlement=entitlement,
-        scope=scope,
-        sink=sink,
-        now=now,
-        meter=meter,
-        trace_id=trace_id,
-        searching=calls.start,
-        entering=None if recorder is None else recorder.enter,
-        horizons=horizons,
-        using=calls.use,
-    )
+    if model.runtime is not None:
+        # The agent's tool loop, the one place a model is handed tools (M13.7.1). It returns
+        # what `draft` returns, so every frame below is the same code for both.
+        drafted = await model.runtime.drafted(
+            question,
+            lane=model,
+            scope=scope,
+            sink=sink,
+            now=now,
+            meter=meter,
+            trace_id=trace_id,
+            started=calls.start,
+            horizons=horizons,
+        )
+    else:
+        drafted = await draft(
+            question,
+            lane=model,
+            entitlement=entitlement,
+            scope=scope,
+            sink=sink,
+            now=now,
+            meter=meter,
+            trace_id=trace_id,
+            searching=calls.start,
+            entering=None if recorder is None else recorder.enter,
+            horizons=horizons,
+            using=calls.use,
+        )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:
         frames.append(stream.step(Progress.COMPOSING))

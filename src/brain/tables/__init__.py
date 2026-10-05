@@ -51,6 +51,7 @@ from brain.tables.access_request import AccessRequestHandledRow, AccessRequestRo
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
+from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
@@ -423,6 +424,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # grant are values, so each record outlives what it names.
     "ops.connector_steward",
     "gate.self_grant",
+    # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
+    # outlives both.
+    "ops.agent_run",
 )
 
 __all__ = [
@@ -433,6 +437,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentRow",
+    "AgentRunRow",
     "ApiKeyRow",
     "ApplicationLogRow",
     "ArtifactRow",
