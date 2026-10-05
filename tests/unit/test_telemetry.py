@@ -29,7 +29,7 @@ from brain.core.errors import Absent, Degraded, Denied, Failed, Outcome, Unresol
 from brain.core.lane import Lane
 from brain.gate.context import Channel, TrafficClass, traffic_class_for
 from brain.identity.roles import Role
-from brain.ops.limits import SOURCE_CEILINGS
+from brain.ops.limits import source_ceilings
 from brain.ops.retention import HORIZONS, DataClass, horizon_for
 from brain.ops.telemetry import (
     _COUNT_FIELDS,
@@ -541,7 +541,7 @@ def test_every_connector_this_system_declares_can_be_recorded() -> None:
     rather than to a string invented here. A rule strict enough to refuse `lark_base` would
     make every request through it unrecordable. Delete this and the grammar can be tightened
     until the ledger refuses the real estate."""
-    for ceiling in SOURCE_CEILINGS:
+    for ceiling in source_ceilings():
         assert _record(connector=ceiling.name).connector == ceiling.name
 
 
