@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T23:21:18.106106+00:00",
-  "commit": "a3474bb9",
-  "commit_subject": "A fresh install's Keycloak starts: the realm one-shot can write into its new volume (#400)",
+  "generated_at": "2026-10-05T23:30:39.330357+00:00",
+  "commit": "c9bcbdc3",
+  "commit_subject": "A skill keeps every script's bytes inside its approval digest, checked before the sandbox is asked (0178) (#357)",
   "total": 1592,
   "done": 603,
   "percent": 37.9,
