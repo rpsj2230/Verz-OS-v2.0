@@ -21,7 +21,7 @@
 export { readNotChanged } from "./agentAutomationsQuery";
 
 /** The acts the pages offer. */
-export type LifecycleAct = "enable" | "disable" | "archive" | "duplicate" | "transfer";
+export type LifecycleAct = "enable" | "disable" | "archive" | "duplicate" | "transfer" | "publish";
 
 function under(agentId: string, verb: string): string {
   return `/agents/${encodeURIComponent(agentId)}/${verb}`;
@@ -32,7 +32,8 @@ export function agentLifecycleApiPath(agentId: string): string {
   return under(agentId, "lifecycle");
 }
 
-/** `ENABLE_PATH`, `DISABLE_PATH`, `ARCHIVE_PATH`, `TRANSFER_PATH` and `DUPLICATE_PATH`, by act. */
+/** `ENABLE_PATH`, `DISABLE_PATH`, `ARCHIVE_PATH`, `TRANSFER_PATH`, `DUPLICATE_PATH` and
+ * `PUBLICATION_PATH`, by act. */
 export function agentMoveApiPath(agentId: string, act: LifecycleAct): string {
   return under(agentId, act);
 }
@@ -47,6 +48,10 @@ export interface AgentLifecycle {
   readonly mayChange: boolean;
   readonly mayDuplicate: boolean;
   readonly duplicateUnavailable?: string;
+  /** Who may find it: personal, department or company. What a publication confirms. */
+  readonly level: string;
+  /** Whether this reader may show it to the whole company (`LifecycleView.may_publish`). */
+  readonly mayPublish: boolean;
 }
 
 function said(value: unknown): string | undefined {
@@ -79,16 +84,18 @@ export function readLifecycle(payload: unknown): AgentLifecycle | null {
     mayChange: fields["may_change"] === true,
     mayDuplicate: fields["may_duplicate"] === true,
     ...(duplicateUnavailable === undefined ? {} : { duplicateUnavailable }),
+    level: said(fields["level"]) ?? "",
+    mayPublish: fields["may_publish"] === true,
   };
 }
 
 /** The acts a lifecycle word offers, before anybody asks who may press them. */
 export function actsFor(state: string | undefined): readonly LifecycleAct[] {
   if (state === "enabled") {
-    return ["disable", "archive"];
+    return ["disable", "archive", "publish"];
   }
   if (state === "disabled") {
-    return ["enable", "archive"];
+    return ["enable", "archive", "publish"];
   }
   return [];
 }
@@ -101,6 +108,9 @@ export function moveBody(act: LifecycleAct, shown: AgentLifecycle, typed: string
   if (act === "duplicate") {
     return { display_name: typed.trim(), expected_hash: shown.effectiveHash ?? "" };
   }
+  if (act === "publish") {
+    return { expected_level: shown.level };
+  }
   return { expected_state: shown.state };
 }
 
@@ -111,6 +121,7 @@ export const ACT_LABELS: Readonly<Record<LifecycleAct, string>> = Object.freeze(
   archive: "Archive",
   duplicate: "Duplicate",
   transfer: "Hand to a new steward",
+  publish: "Publish to the whole company",
 });
 
 /** What happens, said before it happens. */
@@ -122,6 +133,9 @@ export const ACT_CONSEQUENCES: Readonly<Record<LifecycleAct, string>> = Object.f
     "A new agent is made from the same version with the same settings. It starts disabled and at Shadow, " +
     "and only you can find it.",
   transfer: "The new steward answers for it from now on. What it may reach and who can find it do not change.",
+  publish:
+    "Everybody in the company can find it and choose it. What it may reach does not change: each person " +
+    "is answered at the narrower of their own reach and the agent's.",
 });
 
 /** What a person types, for the two acts that need a word from them. */
@@ -144,6 +158,7 @@ export function actQuestion(act: LifecycleAct, name: string): string {
     archive: "Archive",
     duplicate: "Duplicate",
     transfer: "Hand on",
+    publish: "Publish",
   };
   return `${verbs[act]} ${name}?`;
 }
@@ -155,6 +170,7 @@ export const ACT_DONE: Readonly<Record<LifecycleAct, string>> = Object.freeze({
   archive: "Archived",
   duplicate: "Duplicated",
   transfer: "Handed on",
+  publish: "Published",
 });
 
 /** Said when the reader may not do the act they chose, from what the API said about them. */

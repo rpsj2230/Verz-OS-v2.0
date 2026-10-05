@@ -114,7 +114,8 @@ export function useLifecycleActs(onChanged: () => void, addressOf: (agentId: str
       if (shown === null) {
         return;
       }
-      const allowed = act === "duplicate" ? shown.mayDuplicate : shown.mayChange;
+      const allowed =
+        act === "duplicate" ? shown.mayDuplicate : act === "publish" ? shown.mayPublish : shown.mayChange;
       if (!allowed) {
         setTold({
           title: NOT_CHANGED,

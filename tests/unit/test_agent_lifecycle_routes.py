@@ -40,6 +40,7 @@ from brain.agent_lifecycle_routes import (
     MOVED,
     NO_SIGNING_KEY_HERE,
     NOT_THE_VERSION_CONFIRMED,
+    PUBLICATION_PATH,
     REFUSED,
     STARTS_DISABLED_AT_SHADOW,
     TRANSFER_PATH,
@@ -52,7 +53,12 @@ from brain.agent_routes import TEMPLATE_SCREEN, record_of
 from brain.agents.creation import AGENT_INSTALL_CAPABILITY, install_draft
 from brain.agents.install import InstallDraft, answer
 from brain.agents.install_store import Finished, prepared
-from brain.agents.lifecycle import AGENT_LIFECYCLE_CAPABILITY, archive, enable
+from brain.agents.lifecycle import (
+    AGENT_LIFECYCLE_CAPABILITY,
+    AGENT_PUBLICATION_CAPABILITY,
+    archive,
+    enable,
+)
 from brain.agents.model import AgentAudience, AgentRecord, AgentState
 from brain.agents.template import (
     LeashRung,
@@ -91,7 +97,8 @@ GALLERY = (
 
 #: Who holds what. `u_admin` (web) holds both authorities everywhere and reads the gallery.
 #: `u_narrow` (web) holds both in web alone. `u_wide` (sales) reads the gallery and holds neither
-#: authority. `u_prefix` (web) holds both authorities and not the gallery's read. `u_none` holds
+#: authority. `u_prefix` (web) holds both authorities and the visibility one, and not the gallery's
+#: read. `u_none` holds
 #: nothing.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": (
@@ -108,6 +115,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_prefix": (
         Grant(capability=AGENT_LIFECYCLE_CAPABILITY, scope=EVERYWHERE),
         Grant(capability=AGENT_INSTALL_CAPABILITY, scope=EVERYWHERE),
+        Grant(capability=AGENT_PUBLICATION_CAPABILITY, scope=EVERYWHERE),
     ),
     "u_none": (),
     "u_elsewhere": (),
@@ -269,6 +277,22 @@ class Memory:
         return self.people.get(principal_id)
 
     async def change(
+        self,
+        before: AgentRecord,
+        after: AgentRecord,
+        *,
+        actor_id: str,
+        ent_hash: str,
+        trace_id: str,
+    ) -> bool:
+        if self.racing:
+            return False
+        held = self.agents[before.agent_id]
+        self.agents[before.agent_id] = replace(held, record=after)
+        self.changes.append(Change(before, after, actor_id, ent_hash, trace_id))
+        return True
+
+    async def widen(
         self,
         before: AgentRecord,
         after: AgentRecord,
@@ -861,7 +885,13 @@ def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> Non
         "may_change": True,
         "may_duplicate": True,
         "duplicate_unavailable": None,
+        "level": "company",
+        "may_publish": False,
     }
+    # A department agent seen by somebody holding the visibility authority who is not its steward
+    # is offered for publication; the same agent once company-wide is not.
+    offered = console.get("u_prefix", path(LIFECYCLE_PATH, agent_id=WEB)).json()
+    assert (offered["level"], offered["may_publish"]) == ("department", True)
 
 
 # ------------------------------------------------------------ the learning switch (M16.7.13)
@@ -917,3 +947,76 @@ def test_an_agents_learning_is_paused_and_resumed_by_who_may_switch_it_off(
     ]
     assert refusal(outside) == refusal(nobody) == refusal(missing)
     assert refusal(missing)[0] == 404
+
+
+# ------------------------------------------------------------------ a company-wide publication
+def test_somebody_other_than_the_steward_publishes_a_department_agent_to_the_whole_company(
+    console: Console,
+) -> None:
+    """The positive path (M33.1.2.1): a web agent stewarded by `u_narrow`, published by `u_prefix`,
+    who holds the visibility authority. The agent becomes company-wide with no department, the
+    store is told who did it, and the view says so.
+
+    Delete this and every refusal below is satisfied by a route that refuses everybody."""
+    published = console.post(
+        "u_prefix", path(PUBLICATION_PATH, agent_id=WEB), {"expected_level": "department"}
+    )
+
+    assert published.status_code == 200, published.text
+    assert published.json()["level"] == "company"
+    record = console.memory.agents[WEB].record
+    assert record.audience.level is Visibility.COMPANY
+    assert record.audience.department == ""
+    assert [(one.after.audience.level, one.actor_id) for one in console.memory.changes] == [
+        (Visibility.COMPANY, "u_prefix")
+    ]
+
+
+def test_a_publication_is_refused_to_its_steward_to_a_stale_page_and_to_an_archived_agent(
+    console: Console,
+) -> None:
+    """Three refusals, each a 409 that writes nothing: the agent's own steward publishing it, a page
+    that drew another audience, and an archived agent. Delete this and a steward could publish
+    their own agent alone, which `A_GATE_ONE_PERSON_PASSES_ALONE_IS_NOT_A_GATE` exists to stop."""
+    held = console.memory.agents[WEB]
+    console.memory.agents[WEB] = replace(
+        held,
+        record=held.record.model_copy(
+            update={"audience": held.record.audience.model_copy(update={"owner_id": "u_prefix"})}
+        ),
+    )
+    own = console.post(
+        "u_prefix", path(PUBLICATION_PATH, agent_id=WEB), {"expected_level": "department"}
+    )
+    console.memory.agents[WEB] = held
+    stale = console.post(
+        "u_prefix", path(PUBLICATION_PATH, agent_id=WEB), {"expected_level": "personal"}
+    )
+    retired = console.post(
+        "u_prefix", path(PUBLICATION_PATH, agent_id=RETIRED), {"expected_level": "company"}
+    )
+
+    assert not_changed(own)[:2] == (409, REFUSED)
+    assert not_changed(stale) == (409, MOVED, IT_MOVED)
+    assert not_changed(retired)[:2] == (409, REFUSED)
+    assert console.memory.changes == []
+
+
+def test_a_publication_by_somebody_without_the_visibility_authority_is_the_one_404(
+    console: Console,
+) -> None:
+    """`u_admin` holds both lifecycle authorities and not the visibility one, and a hidden agent
+    is the same 404. Delete this and the lifecycle authority would publish, which is the grant
+    `brain.console.global_surfaces.PUBLISHING_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED` says
+    it must not be."""
+    nothing = refusal(console.get("u_admin", path(LIFECYCLE_PATH, agent_id=MISSING)))
+    refused = console.post(
+        "u_admin", path(PUBLICATION_PATH, agent_id=WEB), {"expected_level": "department"}
+    )
+    hidden = console.post(
+        "u_prefix", path(PUBLICATION_PATH, agent_id=PRIVATE), {"expected_level": "personal"}
+    )
+
+    assert refusal(refused) == nothing
+    assert refusal(hidden) == nothing
+    assert console.memory.changes == []
