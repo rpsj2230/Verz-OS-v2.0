@@ -61,6 +61,12 @@ press, which costs no call against any ceiling. Rejected: carrying the decided c
 too, which spends nothing but depends on Lark still listening. See
 `A_DECIDED_CARD_IS_PATCHED_AND_A_REFUSED_ONE_CLOSED_IN_THE_ANSWER`.
 
+**A card carries no Take over control, because no card carries an agent's action.** Taking over
+is offered on an agent's prepared action (M33.6.1.3), which is offered to an approver holding the
+action's own capability, and a press admits read and approve alone. A test holds both halves, so
+the day a press admits more, the missing control is a red test. See
+`A_CARD_CARRIES_NO_AGENT_ACTION_SO_NOTHING_ON_IT_IS_TAKEN_OVER`.
+
 **A card decides only while the install says it may, and every install ships saying it may not
 (needs-rupash 117).** A press relies on Lark's own sign-in, and the product cannot see whether that
 sign-in had a second factor, which a decision in the console asks for. So `INSTALL_LARK_CARD_
@@ -179,6 +185,16 @@ A_PRESS_DECIDES_ONLY_AS_THE_PERSON_THE_CARD_WAS_BUILT_FOR: Final = (
     "that person's own permission admits it, through the Approvals route's take_decision. A "
     "press by anybody else, after a decision elsewhere or after the window, or replayed, "
     "decides nothing, and every refusal is one sentence."
+)
+
+#: Why a card carries no Take over control.
+A_CARD_CARRIES_NO_AGENT_ACTION_SO_NOTHING_ON_IT_IS_TAKEN_OVER: Final = (
+    "Taking over is offered on an agent's prepared action and never on a person's own request, and "
+    "an agent's action is offered to an approver who holds the action's own capability. A press is "
+    "admitted read and approve and nothing else, so no card can carry an agent's action and every "
+    "card is a promotion, which is approved or rejected. Take over is decided in the console and "
+    "the staff web application until a press is admitted an action's own verb, which is when a "
+    "third control belongs here, mapped by decision_asked to the Approvals route's own verdict."
 )
 
 #: Why a card decides nothing unless the install's switch says it may.

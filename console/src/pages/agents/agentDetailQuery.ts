@@ -107,6 +107,10 @@ export interface LeashShown {
   readonly rung: string;
   readonly configured: boolean;
   readonly acts: boolean;
+  /** The rung people taking this action over has lowered it to, when it is lower (M8.3.5). */
+  readonly loweredTo?: string;
+  /** When people took this action over inside the week, oldest first. When, and nothing else. */
+  readonly takenOverAt: readonly string[];
 }
 
 /** The ceiling in words, as `brain.console.agent_profile.CeilingWords` carries it. */
@@ -180,7 +184,18 @@ export function readProfile(payload: unknown): ProfileShown | null {
     if (fields === null || target === undefined || rung === undefined) {
       continue;
     }
-    leash.push({ target, rung, configured: fields["configured"] === true, acts: fields["acts"] === true });
+    const loweredTo = said(fields["lowered_to"]);
+    const takenOverAt = listOf(fields["taken_over_at"]).filter(
+      (at): at is string => typeof at === "string" && !Number.isNaN(Date.parse(at)),
+    );
+    leash.push({
+      target,
+      rung,
+      configured: fields["configured"] === true,
+      acts: fields["acts"] === true,
+      ...(loweredTo === undefined ? {} : { loweredTo }),
+      takenOverAt,
+    });
   }
   return {
     ...(tier === undefined ? {} : { tier }),
