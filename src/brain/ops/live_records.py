@@ -28,6 +28,10 @@ arriving through the back door of a fallback.
 disclosed it. Answering from the rows that did come back would leave the asker unable to tell a
 record that is absent from one that was not read.
 
+**A figure tool reads through the same executor, one range at a time (M11.7.1).** `figures` is
+`refresh` with the range a tool asked for as the read's second filter and the task lane's patience;
+the rows it lays figures over are the ones the tool found at the asker's reach, exactly as here.
+
 **It lives outside the gate, which knows it only as `brain.gate.live_records.LiveRecords`.** The
 gate imports no connector (`tests/unit/test_repo_shape.py`): it decides what a caller may see and
 never fetches, so the seam is a protocol the gate owns and this module, which reads through the
@@ -36,7 +40,7 @@ connectors' executor, is the one implementation `brain.api_routes` hands the lan
 Scope: nothing here opens a connection. What is connected, the throttle, the flights and the clock
 are handed in by whoever built the lane.
 
-Task ids: M11.9.2, M11.5.1, M11.5.5
+Task ids: M11.9.2, M11.5.1, M11.5.5, M11.7.1
 """
 
 from __future__ import annotations
@@ -47,8 +51,12 @@ from datetime import UTC, datetime
 from typing import Final
 
 from brain.connectors.contract import FetchRequest
+from brain.connectors.date_range import DateWindow
+from brain.connectors.federation import CONNECTOR_TIMEOUT_MS
 from brain.connectors.live_read import (
     LIVE_READ_BUDGET_MS,
+    LIVE_READ_TIMEOUT_MS,
+    RANGE_FILTER,
     RECORD_ID_FILTER,
     LiveCall,
     LiveFlights,
@@ -71,6 +79,18 @@ THE_INDEX_FINDS_A_RECORD_AND_THE_SOURCE_ANSWERS_FOR_IT: Final = (
 )
 
 
+#: Why a figure tool's read is given the task lane's timeout.
+A_FIGURE_TOOL_WAITS_AS_THE_TASK_LANE_WAITS: Final = (
+    "A figure tool is called by a workflow or an agent's step, which nobody is watching a spinner "
+    "for, and a report over a long range is Google's slowest read. So its read is given the task "
+    "lane's timeout and twice that in all, the same depth a question is allowed, where a question "
+    "on Ask keeps the answer lane's."
+)
+
+#: What a figure tool's reads may take in all, in milliseconds. See the reason above.
+TASK_BUDGET_MS: Final = 2 * CONNECTOR_TIMEOUT_MS
+
+
 @dataclass(frozen=True)
 class SourceRecords:
     """`brain.gate.live_records.LiveRecords` over the connected sources and their executor.
@@ -84,6 +104,9 @@ class SourceRecords:
     flights: LiveFlights = field(default_factory=LiveFlights)
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     budget_ms: int = LIVE_READ_BUDGET_MS
+    #: What a figure tool's reads may take in all: two of the task lane's timeouts, the same depth
+    #: the live read budget allows a question, at the patience of nobody watching a spinner.
+    task_budget_ms: int = TASK_BUDGET_MS
 
     async def refresh(
         self,
@@ -101,20 +124,73 @@ class SourceRecords:
         A result with no rows is None too: there is nothing to read, and a read of nothing
         would spend a source call to say what the index already said.
         """
+        return await self._read(
+            result,
+            source=source,
+            entity=entity,
+            asker=asker,
+            trace_id=trace_id,
+            window=None,
+            timeout_ms=LIVE_READ_TIMEOUT_MS,
+            budget_ms=self.budget_ms,
+        )
+
+    async def figures(
+        self,
+        result: TypedResult[RowRecord],
+        *,
+        source: str,
+        entity: str,
+        window: DateWindow,
+        asker: str,
+        trace_id: str = "",
+    ) -> Refreshed | None:
+        """Each index row's figures for one range, read from its source's report (M11.7.1).
+
+        `brain.knowledge.connector_figures.LiveFigures`, for a figure tool. The range travels as
+        the read's second filter, and the read is given the task lane's patience rather than a
+        waiting person's, because a figure tool is called by a workflow or an agent's step: see
+        `A_FIGURE_TOOL_WAITS_AS_THE_TASK_LANE_WAITS`.
+        """
+        return await self._read(
+            result,
+            source=source,
+            entity=entity,
+            asker=asker,
+            trace_id=trace_id,
+            window=window,
+            timeout_ms=CONNECTOR_TIMEOUT_MS,
+            budget_ms=self.task_budget_ms,
+        )
+
+    async def _read(
+        self,
+        result: TypedResult[RowRecord],
+        *,
+        source: str,
+        entity: str,
+        asker: str,
+        trace_id: str,
+        window: DateWindow | None,
+        timeout_ms: int,
+        budget_ms: int,
+    ) -> Refreshed | None:
         if not result.records:
             return None
         sources = await self.connected()
         mode = sources.reads(source, entity)
         if mode is None:
             return None
+        ranged = () if window is None else ((RANGE_FILTER, window.text()),)
         calls = tuple(
             LiveCall(
                 call_id=f"record-{index}",
                 connector=source,
                 request=FetchRequest(
-                    entity=entity, filters=((RECORD_ID_FILTER, record.id),), limit=1
+                    entity=entity, filters=((RECORD_ID_FILTER, record.id), *ranged), limit=1
                 ),
                 identity_mode=mode,
+                timeout_ms=timeout_ms,
             )
             for index, record in enumerate(result.records)
         )
@@ -125,7 +201,7 @@ class SourceRecords:
             throttle=self.throttle,
             flights=self.flights,
             clock=self.clock,
-            budget_ms=self.budget_ms,
+            budget_ms=budget_ms,
             trace_id=trace_id,
         )
         if any(call.call_id not in read.rows for call in calls):

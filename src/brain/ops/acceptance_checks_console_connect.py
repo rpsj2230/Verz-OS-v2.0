@@ -44,6 +44,7 @@ CHECK_ORDER: Final = 270
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
+
 #: What the check does with a source the install has connected already.
 A_CONNECTED_SOURCE_IS_JUDGED_ONLY: Final = (
     "A source this install has connected is connected from the console already, and the store "
@@ -59,6 +60,7 @@ EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
     "freshdesk": ("domain", lambda: f"acceptance-{secrets.token_hex(4)}.freshdesk.com"),
     "cloudflare": ("account_id", lambda: secrets.token_hex(16)),
     "google_drive": ("folder", lambda: f"acceptance{secrets.token_hex(8)}"),
+    "google_analytics": ("property", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
     "laravel": ("client_rule", lambda: "status in active, pending"),
 }
 

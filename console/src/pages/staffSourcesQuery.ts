@@ -116,6 +116,39 @@ export const THE_DESIGN_COUNTS_AND_THIS_SCREEN_CANNOT =
 export const STAFF_SOURCES_API_PATH = "/govern/staff_sources";
 export const TRIAL_API_PATH = "/govern/staff_sources/trial";
 
+/** Sync now: when the scheduled staff sync last ran and next runs, and a run asked for. */
+export const SYNC_API_PATH = "/govern/staff_sources/sync";
+
+/** `brain.staff_source_routes.StaffSyncNowView`. */
+export type SyncNowView = components["schemas"]["StaffSyncNowView"];
+
+const NO_SYNC: SyncNowView = Object.freeze({
+  may_sync: false,
+  last_run_at: null,
+  next_run_at: null,
+  requested_at: null,
+  waiting: false,
+  told: "",
+});
+
+/** Read the Sync now answer, or one a reader may not press for an unreadable body. */
+export function readSyncNow(payload: unknown): SyncNowView {
+  if (typeof payload !== "object" || payload === null) {
+    return NO_SYNC;
+  }
+  const body = payload as Partial<SyncNowView>;
+  return typeof body.may_sync === "boolean" && typeof body.waiting === "boolean" && typeof body.told === "string"
+    ? {
+        may_sync: body.may_sync,
+        last_run_at: body.last_run_at ?? null,
+        next_run_at: body.next_run_at ?? null,
+        requested_at: body.requested_at ?? null,
+        waiting: body.waiting,
+        told: body.told,
+      }
+    : NO_SYNC;
+}
+
 /**
  * The console address.
  *

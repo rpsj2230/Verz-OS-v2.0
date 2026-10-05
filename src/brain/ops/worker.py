@@ -998,7 +998,7 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
     if refused is not None:
         print(refused, file=sys.stderr)
         return EXIT_MISCONFIGURED
-    url = (env.get(QUEUE_URL_ENV) or "").strip()
+    queue_url = (env.get(QUEUE_URL_ENV) or "").strip()
     allocation, _ = declared_slots(env)
     share, _ = queue_pool_max(env, worker_component=worker_component)
     if share is None:
@@ -1007,7 +1007,7 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
         print(f"{POOL_MAX_ENV} does not give the queue a bound", file=sys.stderr)
         return EXIT_MISCONFIGURED
     try:
-        app = queue_app(url, pool_max=share, schema=DRIVER_SCHEMA)
+        app = queue_app(queue_url, pool_max=share, schema=DRIVER_SCHEMA)
     except QueueError as exc:
         print(f"the queue driver will not be started: {exc}", file=sys.stderr)
         return EXIT_MISCONFIGURED
