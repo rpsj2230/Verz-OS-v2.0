@@ -652,8 +652,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         name="entity_resolution",
         # Since 2026-10-06 (`0182`, M14.1). The worker's schedule starts `run_registry_now`, which
         # reads the records connectors declare for resolution and gives each an entity, its names,
-        # its hashed join keys and its comparison row. It matches nothing: two records become one
-        # only by a merge (`brain.resolution.merge`).
+        # its hashed join keys and its comparison row, then compares the records it read with
+        # their candidates (`brain.resolution.matching_store`, `0184`). Two records become one only
+        # by a merge, and on an install with unattended merging off, only by a person's.
         symbols=("brain.resolution.registry_store:run_registry_now",),
         guards=(
             "that every record a connector declares for resolution is registered, so a merge, a "

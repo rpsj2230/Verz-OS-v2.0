@@ -50,7 +50,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final, cast
 
@@ -137,14 +137,17 @@ class Registered:
     minted: int = 0
     reobserved: int = 0
     blocked: int = 0
+    #: What comparing the records read with their candidates came to, in counts, once it ran.
+    matching: str = ""
 
     def summary(self) -> str:
         if not self.read:
             return "no source record waited to be registered"
-        return (
+        said = (
             f"{self.read} source record(s) read: {self.minted} new entit(ies) minted, "
             f"{self.reobserved} observed again, {self.blocked} join key(s) refused as blocked"
         )
+        return f"{said}; {self.matching}" if self.matching else said
 
 
 def mint_entity_id() -> str:
@@ -196,6 +199,42 @@ def without_blocked(
             verified=observation.verified & set(kept),
         ),
         removed,
+    )
+
+
+def observation_of(
+    row: ProjectedRecordRow,
+    declared: ResolvesAs,
+    *,
+    pepper: str,
+    blocked: frozenset[tuple[str, str]],
+) -> tuple[Observation, int]:
+    """One stored record as the cascade compares it, without this install's blocked keys.
+
+    The one place a record becomes an observation, used by the registry when it writes and by
+    the matching when it compares, so the two never disagree about what a record says.
+    """
+    observed = observe(
+        ProjectedRecord(
+            source=row.source,
+            entity=row.entity,
+            source_id=row.source_id,
+            last_seen_at=row.last_seen_at,
+            fields=cast("Mapping[str, ProjectedValue]", declared.renamed(dict(row.fields or {}))),
+        ),
+        profile_for(declared.entity_type),
+        pepper=pepper,
+    )
+    return without_blocked(observed.observation, blocked)
+
+
+async def blocked_digests(session: AsyncSession) -> frozenset[tuple[str, str]]:
+    """Every join key this install blocks, as (kind, digest)."""
+    return frozenset(
+        (kind, digest)
+        for kind, digest in (
+            await session.execute(select(BlockedValueRow.kind, BlockedValueRow.key_hash))
+        ).all()
     )
 
 
@@ -290,32 +329,14 @@ class StoredRegistry:
                     )
                 ).scalars()
             }
-            blocked = frozenset(
-                (kind, digest)
-                for kind, digest in (
-                    await session.execute(select(BlockedValueRow.kind, BlockedValueRow.key_hash))
-                ).all()
-            )
+            blocked = await blocked_digests(session)
             minted = reobserved = refused = 0
             for key in keys:
                 row = records.get(key)
                 if row is None:
                     continue
                 declared = self._declared[(key[0], key[1])]
-                observed = observe(
-                    ProjectedRecord(
-                        source=row.source,
-                        entity=row.entity,
-                        source_id=row.source_id,
-                        last_seen_at=row.last_seen_at,
-                        fields=cast(
-                            "Mapping[str, ProjectedValue]", declared.renamed(dict(row.fields or {}))
-                        ),
-                    ),
-                    profile_for(declared.entity_type),
-                    pepper=pepper,
-                )
-                observation, removed = without_blocked(observed.observation, blocked)
+                observation, removed = observation_of(row, declared, pepper=pepper, blocked=blocked)
                 refused += removed
                 entity_id = linked.get(key)
                 if entity_id is None:
@@ -479,9 +500,18 @@ KEY: Final = frozenset({"source", "entity", "source_id"})
 async def register_pending(
     sessions: async_sessionmaker[AsyncSession], *, pepper: str, now: datetime
 ) -> Registered:
-    """One run: the records waiting, registered. What the worker's control does each time."""
+    """One run: the records waiting, registered, then compared with their candidates.
+
+    The comparison is `brain.resolution.matching_store`'s, over exactly the records this run read,
+    so a record is compared once when it arrives and again whenever its source changes it.
+    """
+    from brain.resolution.matching_store import StoredMatching
+
     store = StoredRegistry(sessions)
-    return await store.register(await store.pending(), pepper=pepper, now=now)
+    refs = await store.pending()
+    done = await store.register(refs, pepper=pepper, now=now)
+    matched = await StoredMatching(sessions).match(refs, pepper=pepper, now=now)
+    return replace(done, matching=matched.summary()) if done.read else done
 
 
 def run_registry_now(
