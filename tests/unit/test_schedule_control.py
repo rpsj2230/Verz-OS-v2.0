@@ -237,8 +237,9 @@ def tick(reads: Reads) -> tuple[ControlTick, ...]:
 
 
 def test_a_tick_starts_nothing_it_was_told_is_paused_and_reports_it_paused(reads: Reads) -> None:
-    """On a fresh install every wired control is owed; pausing one leaves it unstarted and
-    reported, and the others still start.
+    """On a fresh install every wired control owed on its interval is owed; pausing one leaves it
+    unstarted and reported, and the others still start. A control owed at a time of day
+    (`Control.daily_at`) waits for its hour, which nine in the morning UTC is not.
 
     Delete this and the worker ignores the pause the Scheduled jobs screen says is in force."""
     reads.paused = frozenset({REFRESH})
@@ -246,7 +247,9 @@ def test_a_tick_starts_nothing_it_was_told_is_paused_and_reports_it_paused(reads
     ticked = tick(reads)
 
     assert (REFRESH, False) not in reads.started
-    assert {name for name, _ in reads.started} == set(WIRED) - {REFRESH}
+    daily = {one.name for one in schedulable() if one.daily_at}
+    assert daily == {"evening_digest"}
+    assert {name for name, _ in reads.started} == set(WIRED) - {REFRESH} - daily
     assert ControlTick(REFRESH, Ticked.PAUSED) in ticked
 
 

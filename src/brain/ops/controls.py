@@ -981,6 +981,30 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
+    Control(
+        name="evening_digest",
+        # Added on 2026-09-30 with the owner's decision on where it goes (needs-rupash 125), and
+        # started by the worker's schedule from the day it was registered, once a day at the
+        # install's own hour rather than a day after the last run.
+        symbols=(
+            "brain.ops.digest:daily_digest",
+            "brain.ops.digest_delivery:deliver_digest",
+        ),
+        guards=(
+            "that whoever the install chose hears each evening what the build closed, reopened "
+            "and left overdue, and whether the wave still lands on its date, in the one "
+            "conversation they chose on any connected channel"
+        ),
+        lost_silently=(
+            "No digest arrives, and a quiet evening and a stopped digest look the same to the "
+            "person waiting for it. The Settings row says why when the channel is the cause; "
+            "a schedule that stopped says nothing anywhere else."
+        ),
+        every=_DAILY,
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+        daily_at="INSTALL_DIGEST_TIME",
+    ),
 )
 
 

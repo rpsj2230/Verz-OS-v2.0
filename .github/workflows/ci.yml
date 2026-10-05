@@ -425,7 +425,7 @@ jobs:
         run: |
           node docs/wbs/export.js
           node docs/wbs/render.js
-          git diff --exit-code -- docs/tracker.html docs/wbs.json             || { echo "::error::docs/tracker.html is out of date - run node docs/wbs/render.js"; exit 1; }
+          git diff --exit-code -- docs/tracker.html docs/wbs.json docs/wave-windows.json             || { echo "::error::docs/tracker.html is out of date - run node docs/wbs/render.js"; exit 1; }
       - uses: astral-sh/setup-uv@v5
         if: ${{ needs.changes.outputs.tasks_only == 'true' }}
         with:
