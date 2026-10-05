@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T15:22:13.835602+00:00",
-  "commit": "2e8d7d87",
-  "commit_subject": "Four connector leaves get an install check that fails on their break: Laravel's allowlist, Cloudflare's write grant, a fan-out's critical path, and a second source of one kind (#339)",
+  "generated_at": "2026-10-05T15:34:22.120317+00:00",
+  "commit": "82221cb5",
+  "commit_subject": "An agent's Memory section shows what it remembers as text, what it keeps about you and every change, lets its steward correct it, and says how it learns (#226)",
   "total": 1592,
   "done": 548,
   "percent": 34.4,
