@@ -117,6 +117,18 @@ def latest_attempts() -> Select[Any]:
         .group_by(ConnectorSyncRow.connection_id)
         .subquery("synced")
     )
+    # The newest read's own sentence, which is where a lost field is said and kept. See
+    # `brain.ops.connector_sync.fields_lost_of`.
+    read = (
+        select(
+            ConnectorSyncRow.connection_id,
+            ConnectorSyncRow.detail.label("synced_detail"),
+        )
+        .where(ConnectorSyncRow.outcome == SyncOutcome.SYNCED.value)
+        .distinct(ConnectorSyncRow.connection_id)
+        .order_by(ConnectorSyncRow.connection_id, ConnectorSyncRow.finished_at.desc())
+        .subquery("read")
+    )
     return (
         select(
             newest.c.connection_id,
@@ -128,6 +140,7 @@ def latest_attempts() -> Select[Any]:
             newest.c.next_attempt_at,
             newest.c.detail,
             synced.c.last_synced_at,
+            read.c.synced_detail,
         )
         .join(
             ConnectorConnectionRow,
@@ -137,6 +150,7 @@ def latest_attempts() -> Select[Any]:
             ),
         )
         .outerjoin(synced, synced.c.connection_id == newest.c.connection_id)
+        .outerjoin(read, read.c.connection_id == newest.c.connection_id)
         .order_by(newest.c.connector)
     )
 
@@ -198,7 +212,30 @@ def _state(row: RowMapping) -> SyncState:
         next_attempt_at=row["next_attempt_at"],
         detail=str(row["detail"]),
         last_synced_at=row["last_synced_at"],
+        synced_detail=str(row["synced_detail"] or ""),
     )
+
+
+async def held_by_record(
+    session: AsyncSession, source: str, entity: str, source_ids: Sequence[str]
+) -> Mapping[str, frozenset[str]]:
+    """The fields the index holds on each of these live records, by the record's id.
+
+    Read for a page before the page is written, because a run that has lost a field writes its
+    records without it. See `brain.ops.connector_sync.A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_
+    CARRIED_IT_NO_LONGER_DO`.
+    """
+    if not source_ids:
+        return MappingProxyType({})
+    rows = await session.execute(
+        select(ProjectedRecordRow.source_id, ProjectedRecordRow.fields).where(
+            ProjectedRecordRow.source == source,
+            ProjectedRecordRow.entity == entity,
+            ProjectedRecordRow.source_id.in_(list(source_ids)),
+            ProjectedRecordRow.deleted_at.is_(None),
+        )
+    )
+    return MappingProxyType({str(one): frozenset(dict(fields)) for one, fields in rows.all()})
 
 
 async def read_live(session: AsyncSession) -> tuple[LiveConnection, ...]:

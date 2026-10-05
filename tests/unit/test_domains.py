@@ -15,9 +15,11 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from sqlalchemy import Select
 from sqlalchemy.dialects import postgresql
 
 from brain.connectors import domains
@@ -295,9 +297,13 @@ def test_the_worker_indexes_each_listed_domain_and_asks_only_their_registries() 
         def begin(self) -> Session:
             return self
 
-        async def execute(self, statement: Any) -> None:
+        async def execute(self, statement: Any) -> Any:
+            if isinstance(statement, Select):
+                # The read a page makes before it is written (M11.8.7): nothing is kept here.
+                return SimpleNamespace(all=list)
             dialect: Any = postgresql.dialect()  # type: ignore[no-untyped-call]
             written.append(statement.compile(dialect=dialect).params)
+            return None
 
     one = connection()
     plan = plan_for(one, last=None, now=LONG_AGO)

@@ -138,14 +138,19 @@ from brain.ops.connector_sync import (
     SyncPlan,
     SyncState,
     after_attempt,
+    carried_for,
     database_failure_detail,
     failure_detail,
+    fields_lost_detail,
+    fields_lost_of,
     kept_fields,
+    lost_fields,
     plan_for,
 )
 from brain.ops.connector_sync_store import (
     LiveConnection,
     attempt_row,
+    held_by_record,
     read_live,
     read_states,
     record_upsert,
@@ -798,6 +803,7 @@ def _finish(
     previous: SyncState | None,
     call: CallOutcome | None = None,
     retry_after_seconds: float | None = None,
+    drifted: bool = False,
 ) -> Attempt:
     reading = one.plan.reading
     assert reading is not None  # a plan that may run carries its reading; SyncPlan holds that
@@ -813,7 +819,24 @@ def _finish(
         retry_after_seconds=retry_after_seconds,
         records=one.records,
         cut_short=one.cut_short,
+        drifted=drifted,
     )
+
+
+async def _held(
+    sessions: async_sessionmaker[AsyncSession],
+    kept: Sequence[tuple[ProjectedRecord, Mapping[str, StoredValue]]],
+) -> Mapping[tuple[str, str, str], frozenset[str]]:
+    """What the index holds on each record of a page, read before the page is written."""
+    held: dict[tuple[str, str, str], frozenset[str]] = {}
+    groups: dict[tuple[str, str], list[str]] = {}
+    for record, _ in kept:
+        groups.setdefault((record.source, record.entity), []).append(record.source_id)
+    async with sessions() as session, session.begin():
+        for (source, entity), ids in groups.items():
+            found = await held_by_record(session, source, entity, ids)
+            held.update({(source, entity, one): fields for one, fields in found.items()})
+    return held
 
 
 async def _write_page(
@@ -892,6 +915,7 @@ async def _read_under(
         *,
         call: CallOutcome | None = None,
         retry_after_seconds: float | None = None,
+        drifted: bool = False,
     ) -> Attempt:
         return _finish(
             one,
@@ -901,6 +925,7 @@ async def _read_under(
             previous=previous,
             call=call,
             retry_after_seconds=retry_after_seconds,
+            drifted=drifted,
         )
 
     try:
@@ -940,6 +965,12 @@ async def _read_under(
     limiter = LimiterState()
     # The ids kept in this run, by entity, for an entity listed under each of them (M11.7.3).
     kept_ids: dict[str, list[str]] = {}
+    # What each entity's records dropped and what any of them carries, for the schema check, and
+    # what the newest read before this one found lost (M11.8.7). See `brain.ops.connector_sync.
+    # A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_CARRIED_IT_NO_LONGER_DO`.
+    dropped: dict[str, set[str]] = {}
+    seen: dict[str, set[str]] = {}
+    carried = frozenset() if previous is None else fields_lost_of(previous.synced_detail)
 
     settings = live.connection.settings
     routed = isinstance(reading, RoutedReading)
@@ -1051,6 +1082,14 @@ async def _read_under(
                     # Broad on purpose, and the type is not kept either: a refusal raised while
                     # reading a row can quote the row. Nothing from this page was written.
                     return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+                if kept:
+                    before = await _held(sessions, kept)
+                    for record, fields in kept:
+                        had = before.get(
+                            (record.source, record.entity, record.source_id), frozenset()
+                        )
+                        dropped.setdefault(record.entity, set()).update(had - set(fields))
+                        seen.setdefault(record.entity, set()).update(fields)
                 await _write_page(sessions, kept)
                 one.records += len(kept)
                 pages += 1
@@ -1062,6 +1101,18 @@ async def _read_under(
                 if arguments is not None and reading.allowance_spent(said):
                     return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
 
+    lost = tuple(
+        name
+        for entity in sorted(seen)
+        for name in lost_fields(
+            entity,
+            dropped=dropped.get(entity, ()),
+            carried=carried_for(entity, carried),
+            seen=seen[entity],
+        )
+    )
+    if lost:
+        return finish(SyncOutcome.SYNCED, fields_lost_detail(lost), drifted=True)
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
     return finish(SyncOutcome.SYNCED, detail)
 

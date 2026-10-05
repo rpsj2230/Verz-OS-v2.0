@@ -39,6 +39,7 @@ from urllib.parse import urlsplit
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from sqlalchemy import Select
 
 from brain.connectors.declaration import KeyScheme, ViewReading
 from brain.connectors.manifest import manifest_digest
@@ -236,8 +237,20 @@ class Sessions:
     async def __aexit__(self, *raised: object) -> None:
         del raised
 
-    async def execute(self, statement: Any) -> None:
+    async def execute(self, statement: Any) -> Any:
+        if isinstance(statement, Select):
+            # The read a page makes before it is written (M11.8.7): this factory keeps nothing,
+            # so it finds nothing, and it is not a statement the run wrote.
+            return NothingKept()
         self.executed.append(statement)
+        return None
+
+
+class NothingKept:
+    """The answer to a read of a store that holds nothing."""
+
+    def all(self) -> list[Any]:
+        return []
 
 
 @pytest.fixture(scope="module")

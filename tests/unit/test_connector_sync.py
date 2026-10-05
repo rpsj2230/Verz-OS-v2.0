@@ -36,6 +36,7 @@ from brain.ops.connector_sync import (
     DECLARATION_CANNOT_BE_REBUILT,
     DECLARATION_NOT_AGREED,
     FAILED_IN_A_ROW,
+    FIELDS_LOST,
     KEY_DECLINED,
     LONGEST_WAIT_AFTER_FAILURES,
     NO_READING,
@@ -43,6 +44,7 @@ from brain.ops.connector_sync import (
     NOT_READ_YET,
     READ_TO_THE_END,
     READINGS,
+    SCHEMA_CHECKED_AT_LEAST_EVERY,
     SOURCE_ALLOWANCE_REFUSED,
     SOURCE_TIMED_OUT,
     SOURCE_UNREACHABLE,
@@ -56,7 +58,11 @@ from brain.ops.connector_sync import (
     SyncState,
     ViewReading,
     after_attempt,
+    carried_for,
     failure_detail,
+    fields_lost_detail,
+    fields_lost_of,
+    lost_fields,
     plan_for,
     storable_predicate,
     stored_fields,
@@ -588,3 +594,73 @@ def test_no_reading_ever_contributes_the_authorisation_header() -> None:
             continue
         headers = reading.call_headers(_settings(name))
         assert not {key.lower() for key in headers} & {"authorization", "cookie"}
+
+
+# ------------------------------------------------------------------ the schema check (M11.8.7)
+def test_a_field_a_re_read_record_dropped_and_no_record_carries_is_lost() -> None:
+    """**A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_CARRIED_IT_NO_LONGER_DO.** A field a record carried
+    and is read without, which no record of the read carries, is lost; a field one record dropped
+    while another still carries it is not; a field already lost stays lost while nothing carries
+    it and is found the moment something does. Delete this and the rule can call a field emptied
+    on one record lost, or forget a lost field because the read that found it rewrote the index."""
+    assert lost_fields("ticket", dropped={"status"}, carried=(), seen={"subject"}) == (
+        "ticket.status",
+    )
+    assert lost_fields("ticket", dropped={"status"}, carried=(), seen={"status", "subject"}) == ()
+    assert lost_fields("ticket", dropped=(), carried={"status"}, seen={"subject"}) == (
+        "ticket.status",
+    )
+    assert lost_fields("ticket", dropped=(), carried={"status"}, seen={"status"}) == ()
+    assert lost_fields("ticket", dropped=(), carried=(), seen=()) == ()
+
+
+def test_a_lost_sentence_is_read_back_whole_and_any_other_sentence_says_nothing() -> None:
+    """The sentence names each lost field as `entity.field` and `fields_lost_of` reads exactly
+    those back; a sentence this module did not write, or one naming something that is not a field,
+    reads as nothing lost rather than as part of a list. Delete this and an answer can be degraded
+    by a sentence that merely mentions a field, or not degraded by the one that says so."""
+    said = fields_lost_detail(("ticket.status", "invoice.due"))
+
+    assert said == f"{FIELDS_LOST} invoice.due, ticket.status."
+    assert fields_lost_of(said) == frozenset({"invoice.due", "ticket.status"})
+    assert carried_for("ticket", fields_lost_of(said)) == frozenset({"status"})
+    for other in (
+        READ_TO_THE_END,
+        f"{FIELDS_LOST} ticket.status",
+        f"{FIELDS_LOST} ticket status.",
+        f"{FIELDS_LOST} DROP TABLE.",
+        f"Before. {FIELDS_LOST} ticket.status.",
+        # Another sentence exactly as long as the prefix, whose tail reads as a field.
+        f"{'x' * len(FIELDS_LOST)} ticket.status.",
+    ):
+        assert fields_lost_of(other) == frozenset(), other
+
+
+def test_a_read_that_lost_a_field_is_degraded_and_one_that_did_not_is_healthy() -> None:
+    """The health word the Connectors screen shows. Delete this and a read that lost a field is
+    shown as healthy, with only its sentence saying otherwise."""
+    common: dict[str, Any] = {
+        "connector": "freshdesk",
+        "started_at": NOW,
+        "finished_at": NOW,
+        "outcome": SyncOutcome.SYNCED,
+        "detail": READ_TO_THE_END,
+        "interval": timedelta(minutes=15),
+        "previous": None,
+    }
+    assert after_attempt(**common, drifted=True).health is HealthState.DEGRADED
+    assert after_attempt(**common).health is HealthState.OK
+
+
+def test_every_shipped_reading_is_read_at_least_once_a_day_so_its_schema_is_checked_nightly() -> (
+    None
+):
+    """**A_SCHEDULED_READ_IS_THE_SCHEMA_CHECK_AND_RUNS_AT_LEAST_DAILY.** Every reading this release
+    ships asks to be read at least daily, and a failing one is asked at least daily too, so the
+    scheduled read checks every connected source's schema every night. Delete this and a reading
+    can declare a weekly interval, and a renamed field goes unseen for a week."""
+    assert timedelta(days=1) == SCHEMA_CHECKED_AT_LEAST_EVERY
+    assert LONGEST_WAIT_AFTER_FAILURES <= SCHEMA_CHECKED_AT_LEAST_EVERY
+    assert READINGS
+    for name, reading in READINGS.items():
+        assert reading.refresh_interval() <= SCHEMA_CHECKED_AT_LEAST_EVERY, name

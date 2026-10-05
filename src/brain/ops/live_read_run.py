@@ -69,6 +69,7 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
+from functools import partial
 from types import MappingProxyType
 from typing import Any, Final
 
@@ -106,6 +107,7 @@ from brain.connectors.transports import SourceRecord
 from brain.core.envelope import IdentityMode, TypedResult
 from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection, StoredConnections
+from brain.ops.connector_sync import fields_lost_of
 from brain.ops.connector_sync_run import (
     ConnectorKeys,
     HttpsSourceCaller,
@@ -120,6 +122,7 @@ from brain.ops.connector_sync_run import (
     page_operation,
     presented,
 )
+from brain.ops.connector_sync_store import ConnectorSyncRecords, StoredSyncStates
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
 from brain.ops.lark_base_live import BaseSchema, with_base
 from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, wiki_host
@@ -608,4 +611,21 @@ def live_records_for(
             clock=_utc_now,
         )
 
-    return SourceRecords(connected=connected, clock=_utc_now)
+    return SourceRecords(
+        connected=connected,
+        clock=_utc_now,
+        lost=partial(lost_by_source, StoredSyncStates(sessions)),
+    )
+
+
+async def lost_by_source(states: ConnectorSyncRecords) -> Mapping[str, frozenset[str]]:
+    """What each source's newest scheduled read found lost, for the answer lane (M11.8.7).
+
+    Read from the sentence of each source's newest read (`SyncState.synced_detail`), so a failed
+    attempt after it does not forget it. See
+    `brain.ops.live_records.A_SOURCE_THAT_LOST_A_FIELD_IS_ANSWERED_AS_DEGRADED`.
+    """
+    found = {
+        name: fields_lost_of(one.synced_detail) for name, one in (await states.states()).items()
+    }
+    return {name: fields for name, fields in found.items() if fields}
