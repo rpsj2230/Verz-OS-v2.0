@@ -5,7 +5,7 @@ at head and drives the recorder and the reader through the application's own ses
 every transaction as `brain_app`; it skips when `DATABASE_URL` is unset, as every `needs_db` test
 does. The clock is 2999, for the reason CLAUDE.md records about fixtures that go off.
 
-Task ids: M27.1.3, M24.3.4
+Task ids: M27.1.3, M24.3.4, M32.1.2.6
 """
 
 from __future__ import annotations
@@ -385,6 +385,73 @@ def test_a_trace_the_database_refuses_is_logged_and_the_request_goes_on(head: st
     asyncio.run(recorder.finished(finished(trace="trace_store_db_twice")))
 
     asyncio.run(recorder.finished(finished(trace="trace_store_db_twice")))
+
+
+@pytest.mark.needs_db
+def test_a_stored_run_is_handed_to_the_ledger_and_one_the_store_refused_is_not(head: str) -> None:
+    """M32.1.2.6: the graph the store kept is what the ledger is handed, once, after the store; a
+    run the store refused is not sent, because the ledger is a screen over the record and not a
+    second record. Delete this and the ledger can show runs the payload store has no trace of, or
+    miss every run because the hand-off was never called."""
+    shipped: list[tuple[str, tuple[Step, ...]]] = []
+    recorder = TraceRecorder(
+        _sessions(head),
+        environment="production",
+        ship=lambda trace_id, steps: shipped.append((trace_id, tuple(steps))),
+    )
+    asyncio.run(recorder.finished(finished(trace="trace_store_db_ledger")))
+    asyncio.run(recorder.finished(finished(trace="trace_store_db_ledger")))
+
+    [(trace_id, steps)] = shipped
+    assert trace_id == "trace_store_db_ledger"
+    assert [(one.kind, one.parent) for one in steps] == [
+        (StepKind.REQUEST, None),
+        (StepKind.TOOL_CALL, 0),
+    ]
+
+
+class _Rows:
+    def scalars(self) -> list[str]:
+        return []
+
+
+class _Session:
+    """A session that stores whatever it is given, or refuses it, with no database behind it."""
+
+    def __init__(self, refuse: bool) -> None:
+        self.refuse = refuse
+
+    async def __aenter__(self) -> _Session:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    def begin(self) -> _Session:
+        return self
+
+    async def execute(self, statement: object, rows: object = None) -> _Rows:
+        if self.refuse and rows is not None:
+            msg = "refused"
+            raise RuntimeError(msg)
+        return _Rows()
+
+
+@pytest.mark.parametrize("refuse", [False, True], ids=["stored", "refused"])
+def test_the_ledger_is_handed_what_the_store_kept_and_nothing_the_store_refused(
+    refuse: bool,
+) -> None:
+    """M32.1.2.6 with no database: the graph is handed to the ledger once the store has it, and a
+    graph the store refused is handed nowhere. Delete this and the hand-off can be dropped with only
+    the database test, which needs a server, to notice."""
+    shipped: list[str] = []
+    recorder = TraceRecorder(
+        lambda: _Session(refuse),  # type: ignore[arg-type]
+        environment="production",
+        ship=lambda trace_id, steps: shipped.append(trace_id),
+    )
+    asyncio.run(recorder.finished(finished(trace="trace_store_handed")))
+    assert shipped == ([] if refuse else ["trace_store_handed"])
 
 
 def test_a_step_is_a_span_and_nothing_else_reaches_a_row() -> None:

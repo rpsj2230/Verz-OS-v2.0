@@ -311,9 +311,11 @@ def test_no_other_role_reaches_the_provider_engine() -> None:
 
 def test_the_worker_reads_each_model_provider_key_by_name_and_nothing_else() -> None:
     """M5.4.7: the worker probes providers, and a probe needs the provider's key, so it reads the
-    four model slots, each named, with read alone. Never `providers/data/+`, which would also read
-    the mail relay's password and every provider added from the console; never write, which would
-    let a process nobody watches replace the key every question uses; never metadata or delete.
+    four model slots, each named, with read alone, and the trace ledger's keys (M32.1.2.6), which
+    its install check sends a run to the ledger with. Never `providers/data/+`, which would also
+    read the mail relay's password and every provider added from the console; never write, which
+    would let a process nobody watches replace the key every question uses; never metadata or
+    delete.
     The names are held to `PROVIDER_SLOTS`, so a slot added there and not here is a provider the
     prober silently never probes, and one here and not there is a read nothing needs.
 
@@ -325,7 +327,13 @@ def test_the_worker_reads_each_model_provider_key_by_name_and_nothing_else() -> 
     providers = {
         path: sorted(caps) for path, caps in granted.items() if path.startswith("providers")
     }
-    assert providers == {f"providers/data/{one.slug}": ["read"] for one in PROVIDER_SLOTS}
+    from brain.ops.ledger_export import LEDGER_KEY_SLOT
+
+    ledger = "providers/data/" + LEDGER_KEY_SLOT.removeprefix("providers/")
+    assert providers == {
+        **{f"providers/data/{one.slug}": ["read"] for one in PROVIDER_SLOTS},
+        ledger: ["read"],
+    }
     assert "providers/data/mail_relay" not in providers
     for slot in PROVIDER_SLOTS:
         mount, _, rest = slot.path.partition("/")

@@ -55,11 +55,17 @@ deploy and nothing already running is removed. Rejected: secrets in the image or
 which is the same secret on every install; and the vault, which would make the ledger's start
 wait on a release of the vault's policies for values only this server ever reads.
 
+**And the application is handed what only the server holds, once the services run.** An
+`Overlay`'s `after` scripts run on the host after the wait, with the application's container:
+`langfuse.hand.sh` gives the ledger's project keys, minted on the server with its other secrets,
+to `python -m brain.ops.ledger_export keep`, which keeps them in the vault with the application's
+own token. That is what lets every finished run reach the ledger (`brain.ops.ledger_export`).
+
 **What runs is reported by the server and read by the checks.** See
 `THE_SERVER_REPORTS_WHAT_RUNS_AND_THE_CHECK_READS_IT`: the step hands docker's account of each
 container to `observe`, which keeps it for the release in one `ops.setting` row.
 
-Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6
 """
 
 from __future__ import annotations
@@ -127,6 +133,10 @@ class Overlay:
     #: what the compose files expect to find there: settings files, secrets minted on that
     #: server, a database. Each is idempotent, and an overlay whose script fails is not started.
     prepare: tuple[str, ...] = ()
+    #: Scripts beside the step, run on the host once the services are started and waited for,
+    #: with the application's container: what the application must be handed from the server,
+    #: such as keys minted there. A failure is said and changes nothing that runs.
+    after: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z][a-z0-9-]*", self.name):
@@ -178,6 +188,7 @@ OVERLAYS: Final[tuple[Overlay, ...]] = (
             "langfuse.attach.yml",
         ),
         prepare=("langfuse.prepare.sh",),
+        after=("langfuse.hand.sh",),
     ),
 )
 
@@ -348,8 +359,9 @@ def plan(switched: Sequence[Overlay], host: Host) -> Plan:
 def render(planned: Plan, host: Host) -> str:
     """The plan as the script reads it, one fact per line.
 
-    `START` opens an overlay and the `PREPARE`, `FILE`, `JOIN` and `WAIT` lines after it are
-    that overlay's, so the script can leave out one whose preparation failed and start the rest.
+    `START` opens an overlay and the `PREPARE`, `FILE`, `JOIN`, `WAIT` and `AFTER` lines after it
+    are that overlay's, so the script can leave out one whose preparation failed and start the
+    rest.
     `SAY` lines go to the deploy's journal as they are.
     """
     lines = [
@@ -365,6 +377,7 @@ def render(planned: Plan, host: Host) -> str:
         lines.extend(f"FILE {name}" for name in one.files)
         lines.extend(f"JOIN {network} {' '.join(services)}" for network, services in one.joins)
         lines.extend(f"WAIT {name}" for name in one.components)
+        lines.extend(f"AFTER {name}" for name in one.after)
     lines.extend(f"SAY {reason}" for _, reason in planned.refused)
     if not planned.start:
         lines.append("SAY no optional service is started on this server")

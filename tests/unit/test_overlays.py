@@ -403,6 +403,7 @@ class Applied:
     output: str
     observed: str
     prepared: str
+    handed: str
 
 
 def apply(
@@ -445,6 +446,11 @@ def apply(
     if prepare_exit is not None:
         step = tmp_path / "step"
         shutil.copytree(SCRIPT.parent, step)
+        (step / "langfuse.hand.sh").write_text(
+            f'#!/bin/sh\necho "$BRAIN_APP_CONTAINER $BRAIN_OVERLAYS_ENV" > "{state}/handed"\n',
+            encoding="utf-8",
+            newline="\n",
+        )
         (step / "langfuse.prepare.sh").write_text(
             "#!/bin/sh\n"
             'echo "$BRAIN_APP_PROJECT $BRAIN_OVERLAYS_SETTINGS $BRAIN_OVERLAYS_ENV"'
@@ -485,6 +491,9 @@ def apply(
         output=done.stdout + done.stderr,
         observed=observed.read_text(encoding="utf-8") if observed.exists() else "",
         prepared=prepared.read_text(encoding="utf-8").strip() if prepared.exists() else "",
+        handed=(state / "handed").read_text(encoding="utf-8").strip()
+        if (state / "handed").exists()
+        else "",
     )
 
 
@@ -804,6 +813,12 @@ SECRETS = {
     "LANGFUSE_ENCRYPTION_KEY": 64,
 }
 
+#: The ledger's project keys, in the shapes the ledger gives its own and `ledger_export` reads.
+PROJECT_KEYS = {
+    "LANGFUSE_INIT_PROJECT_PUBLIC_KEY": r"pk-lf-[0-9a-f]{32}",
+    "LANGFUSE_INIT_PROJECT_SECRET_KEY": r"sk-lf-[0-9a-f]{64}",
+}
+
 
 @dataclass
 class Prepared:
@@ -881,6 +896,8 @@ def test_the_ledger_s_secrets_are_minted_on_the_server_once_and_kept_where_only_
     assert first.code == 0, first.output
     for name, length in SECRETS.items():
         assert re.fullmatch(f"[0-9a-f]{{{length}}}", first.env[name]), name
+    for name, shape in PROJECT_KEYS.items():
+        assert re.fullmatch(shape, first.env[name]), name
     assert first.env["LANGFUSE_PUBLIC_URL"] == "http://langfuse-web:3000"
     assert first.env["BRAIN_APP_NETWORK"] == "u"
     assert stat.S_IMODE((first.settings / "overlays.env").stat().st_mode) == 0o600
@@ -957,3 +974,115 @@ def test_a_server_with_no_database_for_the_ledger_refuses_to_prepare_it(tmp_path
     assert ran.code == 1
     assert "no running db service in u" in ran.output
     assert ran.sql == ""
+
+
+@pytestmark_sh
+def test_what_the_application_must_be_handed_is_handed_after_the_services_run(
+    tmp_path: Path,
+) -> None:
+    """An overlay's AFTER script runs once its services are started, with the application's
+    container and the environment file, and not for an overlay whose preparation failed. Delete
+    this and the ledger runs with keys the application never receives, or keys from a preparation
+    that never finished are handed over."""
+    settings = (tmp_path / "ok" / "settings").as_posix()
+    (tmp_path / "ok").mkdir()
+    (tmp_path / "failed").mkdir()
+    ran = apply(tmp_path / "ok", planned=_both(10_000), prepare_exit=0)
+    left_out = apply(tmp_path / "failed", planned=_both(10_000), prepare_exit=1)
+
+    assert ran.code == 0, ran.output
+    assert ran.handed == f"app-u {settings}/overlays.env"
+    assert left_out.handed == ""
+
+
+KEYS_IN_A_FILE = (
+    "LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-0a\nLANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-1b\n"
+)
+
+HAND_STUB = r"""#!/bin/sh
+S="$STUB_STATE"
+echo "$*" >> "$S/calls"
+case "$*" in
+  *ledger_export*)
+    cat > "$S/stdin"
+    echo "SAY the trace ledger's keys are kept in the vault"
+    exit "$(cat "$S/keep_exit")" ;;
+esac
+exit 0
+"""
+
+
+def hand(tmp_path: Path, *, env: str, keep_exit: int = 0) -> tuple[int, str, str, list[str]]:
+    """Run the real `langfuse.hand.sh` against a stub docker that keeps what it was handed."""
+    state = tmp_path / "state"
+    bin_dir = tmp_path / "bin"
+    for one in (state, bin_dir):
+        one.mkdir()
+    fake = bin_dir / "docker"
+    fake.write_text(HAND_STUB, encoding="utf-8", newline="\n")
+    fake.chmod(0o755)
+    (state / "keep_exit").write_text(f"{keep_exit}\n", encoding="utf-8", newline="\n")
+    (state / "calls").write_text("", encoding="utf-8", newline="\n")
+    envfile = tmp_path / "overlays.env"
+    envfile.write_text(env, encoding="utf-8", newline="\n")
+    assert SH is not None
+    done = subprocess.run(
+        [SH, (SCRIPT.parent / "langfuse.hand.sh").as_posix()],
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
+            "STUB_STATE": state.as_posix(),
+            "BRAIN_OVERLAYS_ENV": envfile.as_posix(),
+            "BRAIN_APP_CONTAINER": "app-u",
+        },
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    stdin = state / "stdin"
+    return (
+        done.returncode,
+        done.stdout + done.stderr,
+        stdin.read_text(encoding="utf-8") if stdin.exists() else "",
+        (state / "calls").read_text(encoding="utf-8").splitlines(),
+    )
+
+
+@pytestmark_sh
+def test_the_ledger_s_keys_are_handed_to_the_application_on_standard_input_only(
+    tmp_path: Path,
+) -> None:
+    """The public key then the secret, on standard input to `brain.ops.ledger_export keep` in the
+    application, and in no argument docker or `ps` could show; the application's own sentence is
+    what the journal says. Delete this and a key appears on a command line, or the two arrive in
+    the order `keys_from` refuses."""
+    env = "A=1\n" + KEYS_IN_A_FILE
+    code, said, stdin, calls = hand(tmp_path, env=env)
+
+    assert code == 0, said
+    assert stdin == "pk-lf-0a\nsk-lf-1b\n"
+    assert calls == ["exec -i app-u python -m brain.ops.ledger_export keep"]
+    assert "overlays: langfuse: the trace ledger's keys are kept in the vault" in said
+    assert "sk-lf-1b" not in said
+
+
+@pytestmark_sh
+@pytest.mark.parametrize(
+    ("env", "keep_exit"),
+    [
+        ("A=1\n", 0),
+        (
+            "LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-0a\nLANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-1b\n",
+            1,
+        ),
+    ],
+    ids=["no keys minted", "the application did not keep them"],
+)
+def test_keys_that_cannot_be_handed_or_kept_are_said_and_exit_non_zero(
+    tmp_path: Path, env: str, keep_exit: int
+) -> None:
+    """Delete this and a ledger with no keys in the application reads, in the deploy journal, as one
+    that was handed them."""
+    code, said, _, _ = hand(tmp_path, env=env, keep_exit=keep_exit)
+    assert code == 1, said

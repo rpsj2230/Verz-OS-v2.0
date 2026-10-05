@@ -18568,8 +18568,8 @@
     "M10.2.7"
    ],
    "decision": "needs-rupash 118: B, store each linked person's Lark address so the card is sent straight away"
-   },
-   {
+  },
+  {
    "id": "OWN5-1",
    "source": "owner, 2026-09-30 (chat): the People page lists only him although the staff sync ran",
    "area": "Identity",
@@ -18605,6 +18605,20 @@
    ],
    "proof": [
     "M1.10.5"
+   ],
+   "decision": null
+  },
+  {
+   "id": "DEC-64",
+   "source": "needs-rupash 120, row 3 (decided 2026-10-05, Option A)",
+   "area": "Observability",
+   "requirement": "The trace ledger the owner gave memory to shows each model call: every run's masked trace reaches it once INSTALL_SERVICES switches it on, and nothing is sent anywhere when it is off.",
+   "leaves": [
+    "M32.1.2.6",
+    "M32.1.1.1"
+   ],
+   "proof": [
+    "M32.1.2.6"
    ],
    "decision": null
   }

@@ -30,11 +30,18 @@ mean joining the worker to the ledger's network for a check, and would still say
 limits; and accepting a report from an earlier release, which would judge containers that may
 no longer exist.
 
-Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2
+**A run sent to the trace ledger is found there, and an install without one sends nowhere.** The
+first check sends the worker a run of its own making, with one model call, through the same
+`brain.ops.ledger_export.LedgerShipper` every finished request goes through, and reads it back from
+the ledger by its trace id. The second is its sibling: on an install that has not switched the
+ledger on, no destination resolves and a send reaches nothing, which is the flag M32.1.1.4 names.
+
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M32.1.1.4
 """
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Final
 
 import structlog
@@ -44,6 +51,7 @@ from brain.ops.acceptance_run import Harness
 
 if TYPE_CHECKING:
     from brain.ops.overlays import Seen
+    from brain.ops.trace_store import Step
 
 #: Where this module's checks stand on the Install page, before every larger key. See
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
@@ -217,3 +225,167 @@ async def every_trace_ledger_service_runs_under_its_budgeted_limit(h: Harness) -
     log.info("acceptance.ledger_limits", asked=len(components), off_budget=off)
     if off:
         raise CheckFailedError(A_LEDGER_SERVICE_IS_NOT_HELD_TO_ITS_BUDGET)
+
+
+# ------------------------------------------------------------------- the trace ledger's spans
+#: How long the ledger may take to make a run it accepted readable. Its worker writes the column
+#: store in batches; a minute is several of them.
+LEDGER_READ_WAIT_SECONDS: Final = 60.0
+
+#: How often the ledger is asked again within that minute.
+LEDGER_READ_EVERY_SECONDS: Final = 3.0
+
+#: Said where the ledger is switched on and the application holds no keys for it.
+THE_LEDGER_KEYS_ARE_NOT_KEPT: Final = (
+    "the trace ledger is switched on and the vault holds no project keys for it, so nothing can be "
+    "sent to it; the deploy step hands them over after it starts the ledger"
+)
+
+#: Said where the ledger refused or did not answer the run.
+THE_LEDGER_DID_NOT_TAKE_THE_RUN: Final = (
+    "the trace ledger did not accept the run the check sent it, with the keys the vault holds"
+)
+
+#: Said where it accepted the run and never showed it.
+THE_RUN_WAS_NOT_FOUND_IN_THE_LEDGER: Final = (
+    "the trace ledger accepted the run the check sent and did not show it, with its model call, "
+    "within a minute"
+)
+
+#: Said by the sibling where the ledger is switched on.
+THE_LEDGER_IS_ON_HERE: Final = (
+    "this install has the trace ledger switched on, so the check of an install without one does "
+    "not apply here; the check that a run reaches the ledger does"
+)
+
+#: Said where an install without a ledger still names somewhere to send spans.
+A_DESTINATION_WITHOUT_A_LEDGER: Final = (
+    "this install has no trace ledger switched on and still names somewhere to send a run's trace"
+)
+
+
+def _a_run_with_a_model_call(h: Harness, trace_id: str) -> tuple[Step, ...]:
+    """A run as `brain.ops.trace_store.steps_of` builds one: the request and one model attempt."""
+    from brain.ops.trace_store import Step
+    from brain.ops.tracing import Span, StepKind
+
+    return (
+        Step(
+            step=0,
+            parent=None,
+            kind=StepKind.REQUEST,
+            span=Span(
+                name=StepKind.REQUEST.value,
+                environment=h.settings.env,
+                attributes={"outcome": "answered", "trace_id": trace_id},
+            ),
+        ),
+        Step(
+            step=1,
+            parent=0,
+            kind=StepKind.MODEL_ATTEMPT,
+            span=Span(
+                name=StepKind.MODEL_ATTEMPT.value,
+                environment=h.settings.env,
+                attributes={"outcome": "answered"},
+            ),
+        ),
+    )
+
+
+@check(
+    leaves=("M32.1.2.6",),
+    sentence=(
+        "A run with one model call is sent from the worker to the trace ledger this install has "
+        "switched on, masked and with the keys the release kept in the vault, and is found in the "
+        "ledger by its trace id with its model call shown as a generation."
+    ),
+)
+async def a_run_sent_to_the_ledger_is_found_there_with_its_model_call(h: Harness) -> None:
+    import httpx
+
+    from brain.ops.ledger_export import LedgerShipper, destination_here, read_keys
+    from brain.ops.openbao import OpenBaoVault
+    from brain.ops.overlays import BY_NAME, switched_on_here
+
+    if BY_NAME["langfuse"] not in switched_on_here():
+        raise CheckNotRunError(NO_LEDGER_HERE)
+    address = destination_here(h.settings.profile, h.settings.langfuse_host)
+    if address is None:
+        raise CheckFailedError(A_DESTINATION_WITHOUT_A_LEDGER)
+    keys = None
+    if h.settings.vault_address and h.settings.vault_token:
+        try:
+            keys = await asyncio.to_thread(
+                read_keys, OpenBaoVault(h.settings.vault_address, h.settings.vault_token)
+            )
+        except Exception as exc:
+            log.info("acceptance.ledger_keys_unread", error=type(exc).__name__)
+    if keys is None:
+        raise CheckFailedError(THE_LEDGER_KEYS_ARE_NOT_KEPT)
+    held = keys
+    trace_id = f"acceptance-{h.run}-ledger"
+    shipper = LedgerShipper(destination=lambda: address, keys=lambda: held, clock=lambda: h.now)
+    if not await shipper.ship(trace_id, _a_run_with_a_model_call(h, trace_id)):
+        raise CheckFailedError(THE_LEDGER_DID_NOT_TAKE_THE_RUN)
+    found = False
+    # Counted in asks rather than in time added up, so a figure of nought is one ask and never a
+    # loop that waits for nothing for ever.
+    asks = 1 + int(LEDGER_READ_WAIT_SECONDS // max(LEDGER_READ_EVERY_SECONDS, 0.001))
+    async with httpx.AsyncClient(timeout=ANALYSE_TIMEOUT_SECONDS) as client:
+        for _ in range(asks):
+            try:
+                answer = await client.get(
+                    f"{address.rstrip('/')}/api/public/traces/{trace_id}",
+                    headers={"Authorization": held.authorisation()},
+                )
+                body = answer.json() if answer.status_code == 200 else {}
+            except (httpx.HTTPError, ValueError):
+                body = {}
+            observations = body.get("observations") if isinstance(body, dict) else None
+            found = isinstance(observations, list) and any(
+                isinstance(one, dict) and one.get("type") == "GENERATION" for one in observations
+            )
+            if found:
+                break
+            await asyncio.sleep(LEDGER_READ_EVERY_SECONDS)
+    log.info("acceptance.ledger_run", found=found)
+    if not found:
+        raise CheckFailedError(THE_RUN_WAS_NOT_FOUND_IN_THE_LEDGER)
+
+
+@check(
+    leaves=("M32.1.2.6", "M32.1.1.4"),
+    sentence=(
+        "An install without the trace ledger switched on names no trace destination, and a run "
+        "finished on it is sent nowhere, so its traces stay in its own payload store."
+    ),
+)
+async def with_the_ledger_off_a_run_is_sent_nowhere(h: Harness) -> None:
+    import httpx
+
+    from brain.ops.leases import SealedSecret
+    from brain.ops.ledger_export import LedgerKeys, LedgerShipper, destination_here
+    from brain.ops.overlays import BY_NAME, switched_on_here
+
+    if BY_NAME["langfuse"] in switched_on_here():
+        raise CheckNotRunError(THE_LEDGER_IS_ON_HERE)
+    address = destination_here(h.settings.profile, h.settings.langfuse_host)
+    asked: list[str] = []
+
+    def recording(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return httpx.Response(200, json={"successes": [], "errors": []})
+
+    keys = LedgerKeys(public="pk-lf-check", secret=SealedSecret("sk-lf-check"))
+    shipper = LedgerShipper(
+        destination=lambda: address,
+        keys=lambda: keys,
+        clock=lambda: h.now,
+        client=lambda: httpx.AsyncClient(transport=httpx.MockTransport(recording)),
+    )
+    trace_id = f"acceptance-{h.run}-nowhere"
+    sent = await shipper.ship(trace_id, _a_run_with_a_model_call(h, trace_id))
+    log.info("acceptance.ledger_off", destination=address is not None, sent=sent, asked=len(asked))
+    if address is not None or sent or asked:
+        raise CheckFailedError(A_DESTINATION_WITHOUT_A_LEDGER)
