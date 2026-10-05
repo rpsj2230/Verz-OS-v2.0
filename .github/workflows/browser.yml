@@ -179,6 +179,32 @@ jobs:
           person=$(curl -skf -H "$auth" "$kc/admin/realms/brain/users?username=e2e-admin&exact=true" | jq -r '.[0].id')
           echo "example token claim names: $(curl -skf -H "$auth" "$kc/admin/realms/brain/clients/$client/evaluate-scopes/generate-example-access-token?scope=openid&userId=$person" | jq -c '{aud, azp, scope, keys: keys}')"
 
+      - name: A realm imported with the old payload role mapping is repaired by the install script
+        # Puts this realm into the state an install that imported it between 2026-09-30 and the
+        # fix is in, shows the console's token losing its audience, runs the script such an
+        # install is told to run, and shows the audience back. Names and claim names only.
+        run: |
+          kc=https://localhost:8443
+          admin=$(printf '%s' "$KEYCLOAK_ADMIN_PASSWORD" | curl -skf "$kc/realms/master/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=admin-cli \
+            --data-urlencode "username=$KEYCLOAK_ADMIN" --data-urlencode "password@-" | jq -r .access_token)
+          echo "::add-mask::$admin"
+          call() { curl -skf -X "$1" -H "Authorization: Bearer $admin" -H "Content-Type: application/json" "$kc/admin/realms/brain$2" "${@:3}"; }
+          scope=$(call GET /client-scopes | jq -r '.[] | select(.name == "brain-identity") | .id')
+          client=$(call GET "/clients?clientId=brain-console" | jq -r '.[0].id')
+          person=$(call GET "/users?username=e2e-admin&exact=true" | jq -r '.[0].id')
+          role=$(call GET /roles/brain-langfuse-payload)
+          audience() { call GET "/clients/$client/evaluate-scopes/generate-example-access-token?scope=openid&userId=$person" | jq -c .aud; }
+          call DELETE "/clients/$client/scope-mappings/realm" -d "[$role]"
+          call POST "/client-scopes/$scope/scope-mappings/realm" -d "[$role]"
+          broken=$(audience)
+          echo "audience with the old mapping: $broken"
+          [ "$broken" = "null" ] || { echo "::error::the old mapping did not reproduce the fault"; exit 1; }
+          KC_URL=$kc KC_INSECURE=1 sh ops/keycloak/move-payload-role-mapping.sh
+          repaired=$(audience)
+          echo "audience after the script: $repaired"
+          [ "$repaired" = '"brain-api"' ] || { echo "::error::the script did not restore the audience"; exit 1; }
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
