@@ -184,6 +184,7 @@ def through_0067(database: str) -> Iterator[str]:
                     "ops.webhook_subscriber",
                     "ops.outbox_event",
                     "ops.outbox_delivery",
+                    "ops.halt",
                 ),
             )
             migrate(database, "stamp", "0063")
@@ -295,6 +296,40 @@ def test_a_due_automation_runs_as_its_owner_and_writes_its_run_its_event_and_its
     assert re.fullmatch(table.ENT_HASH_PATTERN, ent_hash)
     assert events == [(ran_id, "automation.run_finished", ran_id)]
     assert scheduled == next_run_after(QUESTIONS.cadence, NOW)
+
+
+def test_an_automation_whose_owner_is_stopped_is_held_and_runs_once_the_stop_is_lifted() -> None:
+    """**HELD_BY_A_HALT_IS_NOT_A_FAILED_RUN.** A halt on the person it runs as leaves it unrun,
+    unrecorded and still due, so no failure counts towards a pause; once the halt is resumed the
+    next tick runs it. Delete this and a stop can be ignored by the scheduler, or turn every
+    automation it touches into a pause somebody has to find and undo."""
+
+    def act(kind: str, reason: str, at: datetime) -> None:
+        sql(
+            url,
+            "INSERT INTO ops.halt (act, scope, target, actor_id, actor_role, reason, at)"
+            " VALUES (%s, 'person', %s, 'u_admin', 'install administrator', %s, %s)",
+            kind,
+            OWNER,
+            reason,
+            at,
+        )
+
+    with through_0067("brain_automation_run_halted") as url:
+        seeded(url)
+        act("halt", "the account was phished on Tuesday", NOW - timedelta(minutes=5))
+        held = tick(url)
+        still_due = next_run(url)
+        nothing = runs(url)
+        act("resume", "the token was revoked and reset", NOW - timedelta(minutes=2))
+        after = tick(url)
+        [(_, principal, outcome, _, _, _)] = runs(url)
+
+    assert held.summary() == "no automation was due"
+    assert still_due == NOW - timedelta(minutes=1)
+    assert nothing == []
+    assert (after.succeeded, after.paused) == (1, 0)
+    assert (principal, outcome) == (OWNER, "succeeded")
 
 
 def test_an_owner_who_lost_the_grant_runs_nothing_and_it_pauses_with_a_ledger_entry() -> None:

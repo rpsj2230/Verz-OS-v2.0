@@ -729,12 +729,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs"],
-    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview"],
+    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview", "/api/v1/halts*"],
     tables: ["ops.halt"],
     installation: [],
     gaps: [
       {
-        what: "The install cannot be stopped or resumed from the console: 0136 stores a halt and its resume, GET /api/v1/console/overview reads the halts in force, and no route or Stop control writes one yet.",
+        what: "The install cannot be stopped or resumed from the console yet: GET, POST /api/v1/halts and POST /api/v1/halts/resume stop and resume through brain.ops.halt_store, and no Stop screen or header control calls them.",
         leaf: "M27.12.4",
       },
     ],

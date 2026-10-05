@@ -228,6 +228,10 @@ from brain.govern_routes import router as govern_router
 # has written from them. See `brain.group_rule_routes`.
 from brain.group_rule_routes import router as group_rule_router
 
+# Stop: what is stopped, stop at once, and resume with a written reason, behind `admin:halt` in
+# a scope that matches what is stopped. See `brain.halt_routes` and `brain.ops.halt_store`.
+from brain.halt_routes import router as halt_router
+
 # The five install screens. A ninth router because what it answers about is the deployment
 # rather than the company's data: no name to guess, no row belonging to anybody, and no
 # session on four of the five. The same `asking` dependency, imported. See

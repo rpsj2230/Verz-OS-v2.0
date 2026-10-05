@@ -223,6 +223,7 @@ from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.halt_store import Work, refusal_for
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
@@ -1567,6 +1568,34 @@ def asked_too_often(request: Request, verdict: StoreVerdict) -> JSONResponse:
     )
 
 
+#: Why a halted question is turned away before anything else is asked.
+A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING: Final = (
+    "A question from a person, or a department, somebody has stopped is refused first, before the "
+    "windows, the cache, the lanes and any model, in the one sentence brain.ops.halt writes, "
+    "which names the scope and never the reason or who stopped it. A store that cannot be read "
+    "refuses too, in its own sentence. It is a 503 with no Retry-After, because nobody can say "
+    "when a person will resume it."
+)
+
+
+@dataclass(frozen=True)
+class Halted:
+    """A question a halt refused, and the one sentence the person is told."""
+
+    told: str
+
+
+def halted_reply(request: Request, halted: Halted) -> JSONResponse:
+    """The 503 a halted question is, with no `Retry-After`.
+
+    See `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    """
+    body = ErrorBody(message=halted.told, trace_id=bound_trace_id(request))
+    return JSONResponse(
+        status_code=503, content=body.model_dump(), headers={"Cache-Control": "no-store"}
+    )
+
+
 @dataclass(frozen=True)
 class Answering:
     """Who a question is answered for: the person, the one reach, the channel and the instant.
@@ -1613,7 +1642,7 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
 
 async def answered_for(
     request: Request, recorder: Recorder, asking: Answering, ask: Question
-) -> Answered | StoreVerdict:
+) -> Answered | StoreVerdict | Halted:
     """One question answered for one person at one reach, or the window that refused it.
 
     The body of `answer`, taken out so a chat channel answers a bound person by the same code
@@ -1628,6 +1657,20 @@ async def answered_for(
         # discloses nothing about what exists. `brain.app.lifespan` builds one before it
         # yields.
         raise Failed("no tool registry on this process")
+
+    # Stopped, by a halt on everything, this person or their department, or a halt store that
+    # cannot be read. First of all, before any table is read for the lanes, so a database that
+    # cannot be read refuses in the halt's own words rather than failing in a lane. See
+    # `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    told = await refusal_for(
+        getattr(request.app.state, "db_sessions", None),
+        Work(
+            person=asking.principal.id,
+            department=asking.principal.primary_department or "",
+        ),
+    )
+    if told:
+        return Halted(told)
 
     # Uploaded classified tables (Classification screen) join the fast lane beside the
     # built-in rules, each column answered only to who may read it.
@@ -1971,6 +2014,8 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     outcome = await answered_for(request, recorder, Answering.of(asked), ask)
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
+    if isinstance(outcome, Halted):
+        return halted_reply(request, outcome)
     thread = await remembered(request, Answering.of(asked), ask, outcome)
     return StreamingResponse(
         frames_of(outcome),

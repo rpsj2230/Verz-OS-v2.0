@@ -521,38 +521,40 @@ def test_a_halt_that_stops_running_work_and_admits_more_of_it_is_reported() -> N
 
 
 def test_a_halt_on_an_axis_nothing_consults_is_reported_as_refusing_nothing() -> None:
-    """**A halt in force that stops nothing is the fifth lie in its purest form.** Admission
-    is handed a connector and nothing else, so a halt on a person, an agent or a department
-    is stored, listed, and obeyed by no code path at all. An administrator halting a
-    compromised account is not in a position to go and read which call sites exist, so the
-    arrangement says so itself.
+    """**A halt in force that stops nothing is the fifth lie in its purest form.** Every path
+    that starts work asks `brain.ops.halt_store.refusal_in` with its person, department or
+    connector, and nothing that starts an agent's work names the agent, so a halt on one agent
+    is stored, listed, and obeyed by no code path at all. The administrator halting it is not
+    in a position to go and read which call sites exist, so the arrangement says so itself.
 
-    The last three assertions are what stop this being decoration: the claim `ENFORCED_AXES`
-    makes is checked against what `decide` actually does, in both directions. A person halt
-    admits, a connector halt does not.
+    The assertions after the gap are what stop this being decoration: the claim `ENFORCED_AXES`
+    makes is checked against what `refusal_in` actually does, in both directions. An agent halt
+    refuses no work whatever it names, and a person halt refuses that person's.
 
-    Delete this and `ENFORCED_AXES` becomes a comment, and a halt declared during an account
-    compromise reads as in force on the screen while the account keeps working."""
+    Delete this and `ENFORCED_AXES` becomes a comment, and a halt declared on an agent reads as
+    in force on the screen while the agent keeps working."""
+    from brain.ops.halt_store import Work, refusal_in
+
+    agent = Halt(
+        scope=HaltScope.AGENT, target="a_helper", declared_by="u_rupash", at=WHEN, reason=BECAUSE
+    )
     person = Halt(
-        scope=HaltScope.PERSON,
-        target="u_someone",
-        declared_by="u_rupash",
-        at=WHEN,
-        reason=BECAUSE,
+        scope=HaltScope.PERSON, target="u_someone", declared_by="u_rupash", at=WHEN, reason=BECAUSE
     )
 
-    found = halt_gaps([person])
+    found = halt_gaps([agent])
 
     assert len(found) == 1, found
     assert "nothing consults" in found[0]
+    assert not halt_gaps([person])
 
-    assert HaltScope.PERSON not in ENFORCED_AXES
-    assert HaltScope.CONNECTOR in ENFORCED_AXES
+    assert HaltScope.AGENT not in ENFORCED_AXES
+    assert {HaltScope.PERSON, HaltScope.DEPARTMENT, HaltScope.CONNECTOR} <= ENFORCED_AXES
 
-    unreached = decide(
-        _source_request("xero"), BUDGETS, CapacityState(), now=WHEN, halts=in_force([person])
-    )
-    assert unreached.admitted is True
+    every_kind = Work(person="u_someone", department="sales", connector="xero")
+    assert refusal_in(in_force([agent]), every_kind) == ""
+    assert refusal_in(in_force([person]), Work(person="u_someone")) != ""
+    assert refusal_in(in_force([person]), Work(person="u_other")) == ""
 
 
 def test_the_capability_that_stops_the_system_is_the_one_the_stop_screen_requires() -> None:
