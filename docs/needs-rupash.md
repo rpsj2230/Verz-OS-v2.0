@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**15 items are open: 134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**19 items are open: 141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,98 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 141. Connect Telegram (ready now)
+
+**In plain terms:** people can now ask the Brain in Telegram, the next channel in item 126's order.
+Only do this if your company uses Telegram. In a group the bot only answers a message that names it,
+and then with a link to Ask, so nothing private lands where others read. In the console open
+**Channels**, **Telegram**, **Connect**, which shows each step:
+
+1. **Make the bot.** In Telegram open **BotFather** (the console's step links to it), send /newbot,
+   give it a display name (for example Company Brain) and a username ending in bot (for example
+   company_brain_bot). BotFather replies with the bot's token: keep it private.
+2. **Optional: keep it out of groups.** Send BotFather /setjoingroups, pick the bot and choose
+   **Disable**.
+3. **Save it in the console.** Type the bot's username without the @ into **bot_id**, paste the
+   token into the secret field, tick **Switched on** and press **Save set-up**. The Brain tells
+   Telegram where to send messages by itself; if Telegram refuses, nothing is saved and the console
+   says why. The token goes to the vault and is never shown again.
+4. **Try it.** Open the bot in Telegram, press **Start** and write to it: the first answer asks you to
+   link your Telegram account to your Brain account.
+
+Tell me "connected Telegram" afterwards and I prove it on your install.
+
+## 140. Connect Microsoft Teams (ready now)
+
+**In plain terms:** people can now ask the Brain in Microsoft Teams, item 126's next channel. Only do
+this if your company uses Teams. The Brain answers in a one-to-one chat; in a group or channel that
+names it, it posts a link to Ask instead of the answer, so nothing private lands where others read.
+In the console open **Channels**, **Microsoft Teams**, **Connect**, which shows each step:
+
+1. **Create the bot in Azure.** In the Azure portal choose **Create a resource**, **Azure Bot**. Give
+   it a handle (for example company-brain), pick your subscription and resource group, set **Type of
+   App** to **Single Tenant** and **Creation type** to **Create new Microsoft App ID**, then **Review +
+   create** and **Create**.
+2. **Point it at the Brain.** Open the bot, then **Configuration**. Paste the events address the
+   console's step shows into **Messaging endpoint** and press **Apply**. Copy the **Microsoft App ID**
+   and the **App Tenant ID**.
+3. **Make its password.** Still on **Configuration**, press **Manage Password** beside the App ID,
+   then **Certificates & secrets**, **New client secret**, **Add**. Copy its **Value** (not the Secret
+   ID); Azure shows it only once.
+4. **Switch on Teams for the bot.** On the bot's **Channels** page choose **Microsoft Teams**, accept
+   the terms and press **Apply**.
+5. **Save it in the console.** Paste the App ID into **bot_id**, the tenant ID into **tenant_id** and
+   the secret's value into the secret field, tick **Switched on** and press **Save set-up**. The
+   secret goes to the vault and is never shown again.
+6. **Give people the app.** In the Teams Developer Portal choose **New app**, then **App features**,
+   **Bot**, **Enter a bot ID** (the App ID), tick **Personal** scope and save; then **Publish to your
+   org**, and approve it in the Teams admin centre if your organisation asks. Open the app in Teams and
+   write to it: the first answer asks you to link your Teams account to your Brain account.
+
+Tell me "connected Teams" afterwards and I prove it on your install.
+
+## 139. Website widget: should visitors get answers written by the model, or the published passages themselves?
+
+**In plain terms:** the website widget (M10.7.2, #315) lets visitors to your website ask questions,
+and it only ever reads documents an administrator has marked public. Today it answers with the
+matching passages from those documents, word for word. Having the model write a short answer from
+them reads better, but every visitor question then costs a model call, paid by you, asked by people
+who are not your staff and have no budget of their own.
+
+**Option A: passages only, for now.** No model cost, and nothing is ever said that is not already
+in a public document.
+
+**Option B: the model writes the answer** from the public passages only, under a daily spending cap
+for the widget that you set in the console, and the widget falls back to passages once the cap is
+reached.
+
+**My recommendation: A now, B later.** Start with passages, watch what visitors ask for a few weeks,
+and switch on B with a cap if the answers need to read better.
+
+**What I need from you:** reply "139: A" or "139: B".
+
+## 138. Laravel: may each client record be visible to one department, or to several?
+
+**In plain terms:** when you connect your Laravel application's database (its steps come to this page
+when it can read), you write a rule for each view saying who may see its records, for example
+"department = sales": a sales person sees the clients whose department is sales. The Brain keeps one
+such value per record in its small index. A rule naming several departments for one record ("visible
+to sales and operations") cannot be kept that way, so it would have saved and then shown nobody
+anything. It is now refused when you connect, with a sentence saying why.
+
+**Option A: one department per record, for now.** Every client record belongs to one department, and
+people in that department see it (administrators and anyone granted wider reach see more, as
+everywhere else).
+
+**Option B: several departments per record.** The index learns to keep a short list per record, so
+a client shared by sales and operations is seen by both. More work, and it makes the index hold a
+little more about each record.
+
+**My recommendation: A now.** Most client records have one owning department, and B can be added the
+day a real record needs two.
+
+**What I need from you:** reply "138: A" or "138: B".
 
 ## 134. Connect the Slack channel (ready now)
 
