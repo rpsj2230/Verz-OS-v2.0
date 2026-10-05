@@ -323,11 +323,11 @@ async def an_agent_s_pinned_model_is_tried_first_with_its_level_behind(h: Harnes
 @check(
     leaves=("M28.2.1", "M28.2.3"),
     sentence=(
-        "The scheduled canary run's own functions ask as three personas, the asker holding "
-        "nothing, a buyer granted the price list in acceptance_a and an outsider in acceptance_b: "
-        "each is offered exactly the tools its grants admit, the buyer more than nobody, and a "
-        "price nothing holds gets one answer from all three, while the buyer alone is told a real "
-        "price."
+        "The scheduled canary run's own functions, given a question of the check's own, ask as "
+        "three personas, the asker holding nothing, a buyer granted the price list in "
+        "acceptance_a and an outsider in acceptance_b: each is offered exactly the tools its "
+        "grants admit, the buyer more than nobody, a price nothing holds gets one answer from all "
+        "three, and the buyer alone is told a real price."
     ),
 )
 async def three_personas_are_told_one_absence_and_offered_their_own_tools(h: Harness) -> None:
