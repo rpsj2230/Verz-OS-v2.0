@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T15:43:58.061140+00:00",
-  "commit": "733de2d3",
-  "commit_subject": "Capacity, the trace role and Singapore's identifiers each get an install check that fails on its break, and three leaves held by CI close (#341)",
+  "generated_at": "2026-10-05T15:51:51.701524+00:00",
+  "commit": "19732966",
+  "commit_subject": "A connector declares its own Ask rows, key scopes and example settings, so adding one stops editing every other connector's lists (#342)",
   "total": 1592,
   "done": 551,
   "percent": 34.6,
