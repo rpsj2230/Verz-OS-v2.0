@@ -564,6 +564,7 @@ WRITTEN_BY_CHECKS = (
     # The merge checks plant their own entities and merge and unmerge them (`0183`).
     "er.merge",
     "er.unmerge",
+    "er.review_item",
     "proj.record",
     "ops.connector_connection",
     "ops.connector_sync",

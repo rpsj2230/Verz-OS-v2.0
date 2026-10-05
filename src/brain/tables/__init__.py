@@ -128,6 +128,7 @@ from brain.tables.resolution import (
     EntityLinkRow,
 )
 from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
+from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
@@ -433,6 +434,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # the merge it reverses, by the merge's own three columns so the pair cannot differ.
     "er.merge",
     "er.unmerge",
+    # 0184_entity_review_items. Points at nothing: the records and entities are values, so an item
+    # outlives a merge or an unmerge of what it names.
+    "er.review_item",
 )
 
 __all__ = [
@@ -528,6 +532,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "ReviewDecisionRow",
+    "ReviewItemRow",
     "RoleGrantRow",
     "RoutingChangeRow",
     "RoutingRungRow",

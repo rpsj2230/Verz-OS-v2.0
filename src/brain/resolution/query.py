@@ -72,13 +72,13 @@ Task ids: M14.3.6
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Final
 
 from brain.core.scope import Scope
 from brain.core.scope_sql import ColumnLayout, CompiledPredicate, compile_where
-from brain.resolution.canonical import ResolutionError
+from brain.resolution.canonical import ResolutionError, SourceRef
 from brain.resolution.cascade import (
     DECLARED_THRESHOLDS,
     DECLARED_WEIGHTS,
@@ -178,6 +178,33 @@ RIGHT_PARAM_PREFIX: Final = "rreach"
 #: which is why it is read from there rather than declared twice.
 THRESHOLD_PARAM: Final = "upper"
 
+#: What the lower trigram threshold binds under, for the candidate blocking below.
+LOWER_PARAM: Final = "lower"
+
+#: The pairs worth scoring online, and the half of the cost claim this module used to leave out.
+#:
+#: One entity type, and at least one join key or name key in common, or two names close enough
+#: to reach the review band (M14.3.3). A pair agreeing on none of these cannot reach any stage
+#: of the cascade, so scoring it is the unblocked self join
+#: `THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN` refused to call free. Every
+#: comparison here is an equality on an indexed digest or key, or pg_trgm's similarity, which
+#: 0001 installs.
+CANDIDATE_BLOCKING: Final = (
+    f"{LEFT_ALIAS}.entity_type = {RIGHT_ALIAS}.entity_type AND ("
+    + " OR ".join(
+        f"{LEFT_ALIAS}.{column} = {RIGHT_ALIAS}.{column}"
+        for column in (
+            "uen_hash",
+            "tax_id_hash",
+            "domain_hash",
+            "email_hash",
+            "phone_hash",
+            "name_key",
+        )
+    )
+    + f" OR similarity({LEFT_ALIAS}.name_key, {RIGHT_ALIAS}.name_key) >= :{LOWER_PARAM})"
+)
+
 #: A table this statement may be built over: a bare name or a schema-qualified one. Identifiers
 #: cannot be parameterised, so they are constrained rather than quoted, which is the reasoning
 #: `scope_sql.IDENT_RE` gives for its own.
@@ -241,6 +268,7 @@ def score_query(
     weights: WeightTable = DECLARED_WEIGHTS,
     thresholds: Thresholds = DECLARED_THRESHOLDS,
     layout: ColumnLayout | None = None,
+    touching: Sequence[SourceRef] = (),
 ) -> ScoreQuery:
     """The candidate scan: every visible pair with its additive score (M14.3.6).
 
@@ -258,6 +286,10 @@ def score_query(
     rather than as three ORs because the three-OR spelling is where somebody eventually drops a
     parenthesis and turns a strict ordering into one that admits the reflexive pair, and a
     record compared against itself agrees on every feature and scores the maximum.
+
+    `touching` is the online scan (M14.3.6): only pairs with at least one of these records on
+    either side, and only pairs `CANDIDATE_BLOCKING` admits. Empty, it is the whole table,
+    which is what the offline export and the tests compare against.
     """
     if not _TABLE_RE.match(table):
         msg = (
@@ -276,17 +308,32 @@ def score_query(
         f"{LEFT_ALIAS}.{one} AS left_{one}, {RIGHT_ALIAS}.{one} AS right_{one}"
         for one in RECORD_KEY_COLUMNS
     )
+    where = reach.where
+    touched: dict[str, Any] = {}
+    if touching:
+        rows = []
+        for n, one in enumerate(touching):
+            names = tuple(f"t{n}_{column}" for column in RECORD_KEY_COLUMNS)
+            touched.update(zip(names, (one.source, one.entity, one.source_id), strict=True))
+            rows.append("(" + ", ".join(f":{name}" for name in names) + ")")
+        listed = ", ".join(rows)
+        where = (
+            f"({where}) AND {CANDIDATE_BLOCKING}"
+            f" AND (({left_key}) IN ({listed}) OR ({right_key}) IN ({listed}))"
+        )
+        touched[LOWER_PARAM] = thresholds.lower
     sql = (
         f"SELECT {selected},\n"
         f"{sql_score_expression()} AS match_weight\n"
         f"FROM {table} {LEFT_ALIAS} JOIN {table} {RIGHT_ALIAS}\n"
         f"  ON ({left_key}) < ({right_key})\n"
-        f"WHERE {reach.where}"
+        f"WHERE {where}"
     )
     params: dict[str, Any] = {
         **weight_parameters(weights),
         THRESHOLD_PARAM: thresholds.upper,
         **reach.params,
+        **touched,
     }
     return ScoreQuery(
         sql=sql,
