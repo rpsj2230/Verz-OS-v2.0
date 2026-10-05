@@ -37,6 +37,7 @@ who wants to change them. On a process with no signing key the gallery says inst
 unavailable, installing changes nothing, and no setting this product reads can hold a key.
 
 Task ids: M13.2.7, M13.1.1, M13.2.4, M20.1.5, M20.2.2, M20.2.3, M20.2.4, M20.1.2, M13.9.4, M13.8.18
+Task ids: M20.4.6
 """
 
 from __future__ import annotations
@@ -504,3 +505,44 @@ async def the_form_is_the_manifest_and_a_template_installs_in_one_press(h: Harne
         raise CheckFailedError(INSTALLED_WITHOUT_A_KEY)
     if any("template" in name and "key" in name for name in Settings.model_fields):
         raise CheckFailedError(A_KEY_SETTING)
+
+
+# --------------------------------------------------------------- M20.4.6 the publish record
+NO_HISTORY: Final = "an agent's publish history did not list both of its publishes"
+WRONG_PATHS: Final = "a second publish was recorded with paths other than the one it changed"
+NOT_WHO: Final = "a publish was recorded under somebody other than its publisher"
+
+
+@check(
+    leaves=("M20.4.6",),
+    sentence=(
+        "A builder of acceptance_a publishes a new agent, then changes only its instructions as "
+        "a draft and publishes again: the agent's publish history lists both, each with who and "
+        "when, and the second names exactly the instructions as what changed."
+    ),
+)
+async def a_second_publish_is_recorded_with_exactly_the_paths_it_changed(h: Harness) -> None:
+    from brain.agent_builder_routes import agent_publications, edit_agent_as_draft
+
+    builder = await _builder(h, "publisher")
+    app = _gallery(h, secrets.token_hex(32))
+    draft = await _draft(h, app, builder)
+    agent_id = str(draft["agent_id"])
+    first = await _saved_and_checked(h, app, builder, draft, _document(agent_id, persona=PERSONA))
+    if (await _publish(h, app, builder, draft["draft_id"], first))[0] != 201:
+        raise CheckFailedError(NOT_PUBLISHED)
+    edit = _body(await edit_agent_as_draft(_request(app), agent_id, await _asking(h, builder)))
+    changed = {**edit["document"], "persona": EDITED}
+    second = await _saved_and_checked(h, app, builder, edit, changed)
+    if (await _publish(h, app, builder, edit["draft_id"], second))[0] != 201:
+        raise CheckFailedError(NOT_PUBLISHED)
+
+    history = (
+        await agent_publications(_request(app), agent_id, await _asking(h, builder))
+    ).publications
+    if len(history) != 2:
+        raise CheckFailedError(NO_HISTORY)
+    if history[1].paths != ["persona"]:
+        raise CheckFailedError(WRONG_PATHS)
+    if any(one.published_by != builder for one in history):
+        raise CheckFailedError(NOT_WHO)
