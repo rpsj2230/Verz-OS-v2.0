@@ -29,6 +29,8 @@ from typing import Any
 import pytest
 import yaml
 
+from brain.connectors.cloudflare import CloudflareConnection
+from brain.connectors.cloudflare import manifest as cloudflare_manifest
 from brain.connectors.contract import AccessMode, CredentialBinding
 from brain.connectors.freshdesk import manifest as freshdesk_manifest
 from brain.connectors.google_analytics import AnalyticsConnection
@@ -251,6 +253,10 @@ def manifests() -> tuple[ConnectorManifest, ...]:
         xero_manifest(
             XeroConnection(tenant_id="11111111-2222-3333-4444-555555555555"),
             ref=ref("connectors/creds/xero"),
+        ),
+        cloudflare_manifest(
+            CloudflareConnection(account_id="0" * 32, department="one"),
+            ref=ref("connectors/creds/cloudflare"),
         ),
         analytics_manifest(
             AnalyticsConnection(property_id="123456789", department="one"),
@@ -773,6 +779,7 @@ def test_the_nine_connectors_are_discovered_from_the_package() -> None:
     """Delete this and the guide is held to whatever list somebody handed the check, so a
     connector added tomorrow is not a finding but a gap nobody notices."""
     assert connector_modules(CONNECTOR_PACKAGE) == (
+        "cloudflare",
         "freshdesk",
         "google_analytics",
         "google_drive",

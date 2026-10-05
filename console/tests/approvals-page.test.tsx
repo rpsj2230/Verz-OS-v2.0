@@ -561,11 +561,37 @@ describe("the approvals queue", () => {
     expect(container.textContent).not.toContain(NO_APPROVALS);
   });
 
+  test("a card whose approval would send nothing says why above its buttons, and one that would send says nothing", async () => {
+    // What breaks if this is deleted: an approver approving a DNS change on an install that never
+    // allowed DNS changes, told only afterwards, or never, that nothing was sent (M11.7.3). The
+    // sentence is drawn as the API sent it, between the facts and the decision, and the sibling
+    // card with no sentence draws no note at all, so the note cannot be a fixed caption.
+    const unsent = "UNSENT-SENTINEL: approving this sends nothing to the source.";
+    const { container } = await consoleAt(APPROVALS_ADDRESS, {
+      [QUEUE_API]: { body: { items: [wireCard("sus_held", { unsent_because: unsent }), wireCard("sus_sent")] } },
+    });
+    const [held, sent] = [...page(container).querySelectorAll("article.approval-card")];
+
+    expect([...(held as Element).children].map((child) => child.getAttribute("class"))).toEqual([
+      "approval-card__artefact",
+      "approval-card__facts",
+      "approval-card__unsent",
+      "approval-card__decision",
+      "approval-card__link",
+    ]);
+    expect(held?.querySelector(".approval-card__unsent")?.textContent).toBe(unsent);
+    expect(sent?.querySelector(".approval-card__unsent")).toBeNull();
+    expect(sent?.textContent).not.toContain(unsent);
+    expect(readApprovalCard(wireCard("sus_sent"))?.unsentBecause).toBe("");
+    expect(readApprovalCard(wireCard("sus_held", { unsent_because: unsent }))?.unsentBecause).toBe(unsent);
+    expect(baseRule(parseCss(readConsoleFile(SHEET)), "approval-card__unsent").declarations["overflow-wrap"]).toBe("anywhere");
+  });
+
   test("every name the page reads is a name the routes declare, and a card declares no more", () => {
     // What breaks if this is deleted: the page and the routes drifting apart on a name, or a
     // route that started sending a card's call or state. The card's set is exact.
     const queue = declaredResponseSchema(QUEUE_ROUTE, "get");
-    const card = ["artefact", "expires_at", "raised_at", "runs_as", "suspension_id"];
+    const card = ["artefact", "expires_at", "raised_at", "runs_as", "suspension_id", "unsent_because"];
 
     expect(declaredPropertyNames(queue)).toEqual(expect.arrayContaining(["items", "truncated"]));
     expect(declaredPropertyNames(declaredProperty(queue, "items"))).toEqual(card);

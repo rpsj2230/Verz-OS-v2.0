@@ -41,13 +41,17 @@ while the asker waits (Xero today; Freshdesk declares no live lookup yet), the r
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
+**Cloudflare's zones and DNS records are asked by name (M11.7.3).** A record's content is read from
+Cloudflare while the asker waits, through the connector's own one-record call, and is classified
+here beside the fields the index keeps.
+
 **HubSpot answers the same way since 2026-09-30.** Its companies, contacts and deals are compiled
 from `hubspot.HUBSPOT_FIELD_RULES`, a company and a deal are asked about by name, and every value
 is read from HubSpot's one-record read while the asker waits. Until then HubSpot was offered on the
 Connectors screen and read into its index, and no question on Ask could reach it, which is why
 `brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1, M11.7.2
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.3, M11.7.1, M11.7.2
 """
 
 from __future__ import annotations
@@ -56,7 +60,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, google_analytics, hubspot, search_console, xero
+from brain.connectors import cloudflare, freshdesk, google_analytics, hubspot, search_console, xero
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -87,6 +91,7 @@ SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
     {
         xero.CONNECTOR_NAME: "tenant_id",
         freshdesk.FRESHDESK: "department",
+        cloudflare.CLOUDFLARE: cloudflare.DEPARTMENT_SETTING,
         google_analytics.GOOGLE_ANALYTICS: "department",
         hubspot.CONNECTOR_NAME: "portal_id",
         search_console.SEARCH_CONSOLE: "department",
@@ -199,6 +204,28 @@ def _kept_and_read_live(
     )
 
 
+def cloudflare_classifications() -> tuple[TableClassification, ...]:
+    """Cloudflare's zones and DNS records, over the fields the index keeps and the values read live.
+
+    Each behind its own capability, as Freshdesk's are. A record's content, time to live and
+    proxying (`cloudflare.LIVE_DNS_FIELDS`) are read from Cloudflare when a question asks and never
+    kept, and are classified here like any field, so being told a record's content is a grant of
+    its own (M11.7.3).
+    """
+    source = cloudflare.CLOUDFLARE
+    return (
+        _kept_and_read_live(
+            source, cloudflare.ZONE, tuple(one.name for one in cloudflare.ZONE_FIELDS), ()
+        ),
+        _kept_and_read_live(
+            source,
+            cloudflare.DNS_RECORD,
+            tuple(one.name for one in cloudflare.DNS_RECORD_FIELDS),
+            tuple(cloudflare.LIVE_DNS_FIELDS),
+        ),
+    )
+
+
 def google_analytics_classifications() -> tuple[TableClassification, ...]:
     """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
 
@@ -235,6 +262,7 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
     {
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
+        cloudflare.CLOUDFLARE: cloudflare_classifications(),
         google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
         hubspot.CONNECTOR_NAME: hubspot_classifications(),
         search_console.SEARCH_CONSOLE: search_console_classifications(),
@@ -252,6 +280,8 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE): "invoice_number",
         (xero.CONNECTOR_NAME, xero.ENTITY_CONTACT): "name",
         (freshdesk.FRESHDESK, freshdesk.TICKET): "subject",
+        (cloudflare.CLOUDFLARE, cloudflare.ZONE): "name",
+        (cloudflare.CLOUDFLARE, cloudflare.DNS_RECORD): "name",
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
             google_analytics.LABEL_FIELD
         ),
@@ -277,6 +307,13 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
             freshdesk.TICKET: (
                 "Look up Freshdesk tickets by subject: status, priority, due date and when it "
                 "last changed"
+            ),
+        },
+        cloudflare.CLOUDFLARE: {
+            cloudflare.ZONE: "Look up Cloudflare zones by domain name: status and account",
+            cloudflare.DNS_RECORD: (
+                "Look up DNS records by name: type and zone, and the content read live from "
+                "Cloudflare for a reader allowed it"
             ),
         },
         google_analytics.GOOGLE_ANALYTICS: {

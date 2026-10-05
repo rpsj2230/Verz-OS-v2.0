@@ -423,6 +423,11 @@ class ConnectorLimit:
     note: str = ""
 
 
+#: Cloudflare's documented global ceiling, in its own unit: 1,200 calls per five minutes per user
+#: (https://developers.cloudflare.com/fundamentals/api/reference/limits/). The row below records it
+#: per minute, as every row does, at a fifth, which a sliding minute can never exceed over five.
+CLOUDFLARE_CALLS_PER_FIVE_MINUTES = 1_200
+
 SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
     ConnectorLimit(
         name="xero",
@@ -492,6 +497,19 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
             "100 requests a minute, fixed. Their documentation states it cannot be raised, "
             "so it is 1.67 calls a second for the whole tenant permanently. Sizing against "
             "a higher number is sizing against a number that does not exist."
+        ),
+    ),
+    ConnectorLimit(
+        name="cloudflare",
+        per_minute=CLOUDFLARE_CALLS_PER_FIVE_MINUTES // 5,
+        raisable=False,
+        note=(
+            "1,200 requests per five minutes per user, across every token and the dashboard "
+            "(developers.cloudflare.com/fundamentals/api/reference/limits), recorded as 240 a "
+            "minute, so no five minutes can hold more than 1,200. Past it Cloudflare refuses "
+            "every call for five minutes with a 429. The ceiling is on the client's own user "
+            "rather than on our subscription, so no plan we can buy moves it. Separately, the "
+            "GraphQL Analytics API allows 300 queries per five minutes."
         ),
     ),
 )

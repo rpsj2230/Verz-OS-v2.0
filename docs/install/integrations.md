@@ -60,6 +60,7 @@ exists, because a row for something that is gone reads as coverage.
 
 | Connector | Transport | Pinned at connect to | Access | What the source enforces | Rate ceiling |
 | --- | --- | --- | --- | --- | --- |
+| `cloudflare` | `rest` | `account` | `read_only` | `none` | `cloudflare` |
 | `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |
 | `google_analytics` | `rest` | `analytics_property` | `read_only` | `none` | `google_analytics` |
 | `google_drive` | `rest` | `folder` | `read_only` | `none` | none measured |
@@ -78,7 +79,7 @@ ceiling of its own would give the tenant two windows of a hundred where it has o
 hundred, and the first anybody would know is a refusal.
 
 `freshdesk` is the one connector whose access mode is whatever binding it is handed. The other
-six either fix it read-only or refuse a write binding at connect. Bind it read-only.
+seven either fix it read-only or refuse a write binding at connect. Bind it read-only.
 
 ## Before you connect anything
 
@@ -98,6 +99,32 @@ and it is checked against the fields the source exposes: a rule over a column th
 matches nothing, for ever, and looks exactly like a source with no records in it.
 
 ---
+
+## `cloudflare`
+
+Your DNS provider. Pinned to one Cloudflare account by its id, and connected from the Connectors
+screen with two settings and a token: the account's 32-character id, from the account's Overview
+page, and the short name of the one department whose people may be granted its zones and DNS
+records. Nothing is done on the server. The worker reads the account's zones every hour and each
+zone's DNS records under it, and keeps a zone's id, name, status and account and a record's id,
+zone, name and type; a record's content, time to live and proxying are read live when a question
+needs them and never kept. A zone's security events are read live for the past hour or the past
+day, never with the visitor's address or user agent.
+
+**Create** a custom API token (My Profile, API Tokens, Create Token) with exactly three
+permissions, Zone Read, DNS Read and Analytics Read, over all zones from the one account. Never a
+token with DNS Write or any Edit permission, and never the Global API Key.
+
+**A DNS change is only ever prepared.** An agent asking to change a record prepares the change for
+a person to approve, and the gate holds it whatever the agent's leash says, because changing DNS
+is one of the effects that always waits for a person. An approved change is not sent by this
+release: sending one needs a second token with DNS Write, which is a decision for whoever owns the
+install, and until then the change is made in Cloudflare by a person.
+
+**What it does not narrow.** The token is one user's, and Cloudflare counts 1,200 calls per five
+minutes across every token that user holds and the dashboard, so another integration on the same
+user spends the same allowance. A zone that turns out to belong to another account stops the read
+rather than being kept, so a token wider than the one account it was created for is noticed.
 
 ## `freshdesk`
 
