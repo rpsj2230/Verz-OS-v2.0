@@ -29,9 +29,14 @@ services:
       - identity
 
   keycloak-realm:
-    entrypoint: ["sh", "-c"]
     command:
-      - python -m brain.ops.browser_harness realm /e2e/people.json /app/ops/keycloak/realm-export.json > /out/realm-export.json
+      - python
+      - -m
+      - brain.ops.browser_harness
+      - realm
+      - /e2e/people.json
+      - /app/ops/keycloak/realm-export.json
+      - /out/realm-export.json
     environment:
       E2E_ADMIN_PASSWORD: ${E2E_ADMIN_PASSWORD:?mint E2E_ADMIN_PASSWORD}
       E2E_ADMIN_CODE_SECRET: ${E2E_ADMIN_CODE_SECRET:?mint E2E_ADMIN_CODE_SECRET}

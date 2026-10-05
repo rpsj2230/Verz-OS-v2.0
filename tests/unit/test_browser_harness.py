@@ -148,6 +148,23 @@ def test_a_person_of_no_known_kind_is_given_no_credential() -> None:
 def test_the_command_says_how_it_is_used() -> None:
     """Delete this and the job's one call can drift from the command's shape unnoticed."""
     assert main([]) == 64
+    assert main(["realm", "a", "b", "c", "d"]) == 64
+
+
+def test_the_command_writes_the_realm_where_the_one_shot_asks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fourth argument is the file Keycloak imports, written whole.
+
+    Delete this and the one-shot in `e2e/docker-compose.e2e.yml`, which passes that argument, can
+    exit 0 having written nothing, and Keycloak starts with no realm and no people.
+    """
+    for name, value in MINTED.items():
+        monkeypatch.setenv(name, value)
+    out = tmp_path / "realm-export.json"
+    assert main(["realm", str(FIXTURE), str(SOURCE), str(out)]) == 0
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert {"e2e-admin", "e2e-reader"} <= {one["username"] for one in written["users"]}
 
 
 PAGES = REPO / "e2e" / "pages"

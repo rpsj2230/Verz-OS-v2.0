@@ -150,18 +150,29 @@ def realm_with_people(fixture: Path, env: Mapping[str, str], *, source: Path) ->
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """`realm FIXTURE SOURCE`: print the realm to import, from this process's environment."""
+    """`realm FIXTURE SOURCE [OUT]`: the realm to import, from this process's environment.
+
+    Written to OUT when given, which is how the realm one-shot calls it, so that service starts
+    one Python process and no shell, as the product's own one-shot does. Printed otherwise.
+    """
     from brain.settings import process_environment
 
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 3 or args[0] != "realm":
-        print("usage: python -m brain.ops.browser_harness realm FIXTURE SOURCE", file=sys.stderr)
+    if len(args) not in (3, 4) or args[0] != "realm":
+        print(
+            "usage: python -m brain.ops.browser_harness realm FIXTURE SOURCE [OUT]",
+            file=sys.stderr,
+        )
         return 64
     try:
-        print(realm_with_people(Path(args[1]), process_environment(), source=Path(args[2])))
+        realm = realm_with_people(Path(args[1]), process_environment(), source=Path(args[2]))
     except HarnessError as error:
         print(f"browser harness: {error}", file=sys.stderr)
         return 1
+    if len(args) == 4:
+        Path(args[3]).write_text(realm, encoding="utf-8", newline="\n")
+    else:
+        print(realm)
     return 0
 
 
