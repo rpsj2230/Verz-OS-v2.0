@@ -25,7 +25,15 @@ path "providers/data/channel_slack" {
   capabilities = ["read"]
 }
 
+path "providers/data/channel_teams" {
+  capabilities = ["read"]
+}
+
 path "providers/data/channel_webhook" {
+  capabilities = ["read"]
+}
+
+path "providers/data/channel_whatsapp" {
   capabilities = ["read"]
 }
 

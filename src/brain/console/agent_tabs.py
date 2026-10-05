@@ -419,8 +419,13 @@ SKILL_SCREEN: Final = "skills"
 #: What a reader needs to see a skill at all, read off the registry rather than restated.
 SKILL_CAPABILITY: Final[Capability] = screen(SKILL_SCREEN).read.requires
 
-#: Where the review queue is addressed, derived from the screen key so a rename moves both.
-REVIEW_ROUTE_PREFIX: Final = f"/{SKILL_SCREEN}/review/"
+#: Where one skill's review is decided, derived from the screen key so a rename moves both.
+#:
+#: The skill's own page, `/skills/<name>`, which is where the console draws its review and its
+#: decision. Until 2026-09-29 this was `/skills/review/<name>`, an address the console has never
+#: drawn: its skill routes are `skills/:name` and `skills/:name/:view`, so the link opened a skill
+#: called "review" and the reader landed on a page for nothing.
+REVIEW_ROUTE_PREFIX: Final = f"/{SKILL_SCREEN}/"
 
 #: The screen whose grant decides whether a count on this tab may be everybody's.
 #:

@@ -31,10 +31,6 @@ export const UNAVAILABLE = Object.freeze({
     reason: "Coming soon: adding an agent to a group chat.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(channels|groups)\b/,
   },
-  preview: {
-    reason: "Coming soon: seeing what this agent could reach for one particular person.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/preview\b/,
-  },
   level: {
     reason: "Coming soon: changing who can find this agent.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(audience|availability)\b/,
