@@ -19,6 +19,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           { scope: "principal", subject: UNBROKEN, limit: 60, retry_after_seconds: 12 },
         ],
         unread: "",
+        deferred: [
+          { workload_class: "batch", work: UNBROKEN, budget: UNBROKEN, share: 2, limit: 4, said: UNBROKEN },
+        ],
+        deferred_unread: "",
       },
       "/api/v1/install/tuning": {
         knobs: [

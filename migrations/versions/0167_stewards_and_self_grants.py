@@ -39,12 +39,12 @@ and a second copy of those in SQL is the second implementation `0003` refuses.
 **The downgrade** drops both triggers, their functions and both tables. The ledger entries the
 steward trigger appended stay, for `0026`'s reason.
 
-Revises `0157`, the head of main when this was written.
+Revises `0171`, the head of main when it landed.
 
 Task ids: M7.7.2
 
 Revision ID: 0167
-Revises: 0157
+Revises: 0171
 """
 
 from __future__ import annotations
@@ -54,8 +54,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0167"
-# The head of origin/main when this was written; re-pointed when it lands.
-down_revision = "0157"
+# The head of origin/main when it landed.
+down_revision = "0171"
 branch_labels = None
 depends_on = None
 

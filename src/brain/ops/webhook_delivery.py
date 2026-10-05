@@ -254,6 +254,12 @@ class HttpsSender:
         send or a read. It changes nothing at the far end, and the token expires on its own."""
         return self._round_trip(request, "POST")
 
+    def edit(self, request: SignedRequest) -> SendResult:
+        """PATCH the request: something already delivered, replaced in place, such as a chat card
+        closed once its decision was taken. As much an effect as `send`, and reached only through
+        the same keyed door in `brain.channel_routes.HttpsTransport.send`."""
+        return self._round_trip(request, "PATCH")
+
     def _round_trip(self, request: SignedRequest, method: str) -> SendResult:
         parts = urlsplit(request.url)
         host = parts.hostname
@@ -269,14 +275,16 @@ class HttpsSender:
             timeout=self._timeout,
             context=self._context,
         )
+        # JSON unless the request says otherwise: an OAuth token endpoint takes a form.
         headers = {
-            **request.headers,
             "Content-Type": "application/json",
+            **request.headers,
             "User-Agent": USER_AGENT,
         }
         try:
+            carries = method in ("POST", "PATCH")
             connection.request(
-                method, path, body=request.body if method == "POST" else None, headers=headers
+                method, path, body=request.body if carries else None, headers=headers
             )
             answer = connection.getresponse()
             read = answer.read(max(MAX_ANSWER_BYTES, self._kept))

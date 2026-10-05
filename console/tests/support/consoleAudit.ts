@@ -143,6 +143,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/service-accounts*",
       "/api/v1/access-requests*",
       "/api/v1/stewardship/self-grants",
+      "/api/v1/escalations",
       "/api/v1/govern/roles/holders",
       "/api/v1/govern/roles/appointment",
       "/api/v1/govern/roles/deputy",
@@ -184,6 +185,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_STAFF_SOURCE",
       "INSTALL_STAFF_SOURCE_LOCATION",
       "INSTALL_BROKERED_CLIENT_ID",
+      "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
     ],
     gaps: [
       {
@@ -230,10 +232,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/install/limits",
       "/api/v1/install/tuning*",
       "/api/v1/install/capacity",
+      "/api/v1/digest/destination",
       "/setup/*",
     ],
     tables: ["ops.setting", "ops.budget_version"],
-    installation: ["INSTALL_LOCALES", "INSTALL_CURRENCY", "INSTALL_TIME_ZONE"],
+    installation: [
+      "INSTALL_LOCALES",
+      "INSTALL_CURRENCY",
+      "INSTALL_TIME_ZONE",
+      "INSTALL_DIGEST_DESTINATION",
+      "INSTALL_DIGEST_TIME",
+    ],
     gaps: [
       {
         what: "Spending budgets are read and never changed.",
@@ -302,6 +311,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
       "/api/v1/console/agents/{agent_id}/stats",
+      "/api/v1/agents/{agent_id}/budget",
+      "/api/v1/agents/{agent_id}/capabilities",
+      "/api/v1/agents/{agent_id}/preview",
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
@@ -343,6 +355,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills",
       "/api/v1/skills/library",
       "/api/v1/skills/imports",
+      "/api/v1/skills/procedures",
       "/api/v1/skills/{digest}/versions",
       "/api/v1/skills/{digest}/categories",
       "/api/v1/skills/{digest}/review",
@@ -457,7 +470,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "er.identifier",
       "er.link",
     ],
-    installation: ["INSTALL_LARK_USES", "INSTALL_LARK_PLATFORM", "INSTALL_LARK_BASE"],
+    installation: ["INSTALL_LARK_USES", "INSTALL_LARK_PLATFORM", "INSTALL_LARK_BASE", "INSTALL_LARK_CARD_APPROVALS"],
     gaps: [
       {
         what: "A connected source is read and kept, and no question is answered from what is kept.",
@@ -645,13 +658,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Scheduled jobs and background work": {
     screens: ["/jobs", "/jobs/:name", "/jobs/:name/:view", "/runs"],
-    routes: ["/api/v1/jobs*", "/api/v1/operate/runs"],
+    routes: ["/api/v1/jobs*", "/api/v1/operate/runs", "/api/v1/operations/interrupted"],
     tables: ["ops.control_run", "ops.operation", "ops.acceptance_result"],
     installation: [],
     gaps: [
       {
         what: "A run in progress cannot be stopped.",
         because: "The route says no_run_can_be_stopped: a control runs to its end inside the worker's tick and there is nothing to signal.",
+      },
+      {
+        what: "The interrupted actions a stopped worker left unconfirmed are served and no screen draws them or resolves one yet.",
+        leaf: "M27.15.46",
       },
     ],
   },
@@ -682,7 +699,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "The audit trail: who changed what, and when": {
     screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
-    routes: ["/api/v1/audit*", "/api/v1/requirements/checks"],
+    routes: ["/api/v1/audit*", "/api/v1/requirements/checks", "/api/v1/traces*"],
     tables: [
       "obs.audit_entry",
       "ops.sensitive_read",
@@ -694,7 +711,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: [],
     gaps: [
       {
-        what: "A run's trace graph is stored masked and read only under its own role, and no screen reads it: TraceGraph draws a completed run and no route serves one.",
+        what: "A run's trace graph is stored masked and read only under the payload role, and no screen reads it: the read route serves one to a holder of that role, and no page calls it for TraceGraph to draw.",
         leaf: "M20.2.1",
       },
     ],
@@ -730,6 +747,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/erasures",
       "/api/v1/govern/compliance*",
       "/api/v1/me/referrals*",
+      "/api/v1/govern/escalation-routes*",
     ],
     tables: [
       "ops.retention_release",
@@ -738,6 +756,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.erasure_request",
       "ops.breach_case",
       "ops.sensitive_referral",
+      "gate.escalation",
     ],
     installation: [],
     gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],
@@ -765,6 +784,10 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "/signed-out": "The page a person lands on after signing out, which asks nothing and manages nothing.",
   "/*": "The page drawn for an address the console does not have, which manages nothing.",
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
+  "POST /api/v1/widget/sessions":
+    "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
+  "POST /api/v1/widget/questions":
+    "Where a website visitor's question is answered from knowledge marked public, which writes nothing; what is public is decided on each document's page, by the marking route.",
   "POST /api/v1/automation/tool-call":
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
   "chat.conversation":

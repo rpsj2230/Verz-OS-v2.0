@@ -66,6 +66,10 @@ if TYPE_CHECKING:
     from brain.ops.connector_sync_run import SourceAnswer
     from brain.ops.secrets import SecretRef
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 80
+
 # ------------------------------------------------------------------ written-down reasons
 #: Why nothing the sync check does reaches a source.
 A_RECORDED_ANSWER_IS_NEVER_A_CALL: Final = (
@@ -215,8 +219,18 @@ class _Lease:
 
     given: str = field(repr=False)
 
+    user_name: str = ""
+
     def key(self) -> str:
         return self.given
+
+    def user(self) -> str:
+        from brain.ops.connector_sync import NO_KEY
+        from brain.ops.connector_sync_run import ConnectorKeyAbsentError
+
+        if not self.user_name:
+            raise ConnectorKeyAbsentError(NO_KEY)
+        return self.user_name
 
     def close(self, now: datetime) -> LeaseOutcome:
         from brain.ops.connector_lease import LeaseOutcome

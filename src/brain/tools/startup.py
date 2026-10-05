@@ -147,6 +147,8 @@ from typing import Final
 from brain import demo
 from brain.connectors.declaration import shipped
 from brain.knowledge.columns import PRICE_LIST, TableClassification
+from brain.knowledge.connector_figures import LiveFigures, figure_tools
+from brain.knowledge.connector_rows import CONNECTOR_ROW_DESCRIPTIONS, CONNECTOR_ROW_ENTITIES
 from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, knowledge_tools
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
@@ -200,14 +202,14 @@ BUILT_IN_ROW_ENTITIES: Final = (PRICE_LIST,)
 #: built afterwards in the same process, which is the singleton the module docstring rejects
 #: arriving through a dictionary.
 SOURCE_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.row_classifications()}
+    {demo.DEMO_SOURCE: demo.row_classifications(), **CONNECTOR_ROW_ENTITIES}
 )
 
 #: The catalogue descriptions for those entities, by source and then entity. Beside the
 #: classifications rather than inside them for the reason `ROW_TOOL_DESCRIPTIONS` gives: a
 #: description is catalogue text whose collisions are a property of the whole registry.
 SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS}
+    {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS, **CONNECTOR_ROW_DESCRIPTIONS}
 )
 
 
@@ -299,7 +301,11 @@ def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder 
 
 
 def build_registry(
-    *, source: str, records: RowSource | None = None, sources: Iterable[str] | None = None
+    *,
+    source: str,
+    records: RowSource | None = None,
+    sources: Iterable[str] | None = None,
+    figures: LiveFigures | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -318,6 +324,11 @@ def build_registry(
     under its own name and each classified by its own rules (M15.4.2); None means every shipped
     connector that brings classifications (`connector_row_sources`). The built-ins are registered
     once, under `source`, because the price list is the product's and not any system's.
+
+    `figures` is how a connected source's figures are read live for a range a tool names
+    (`brain.knowledge.connector_figures`, M11.7.1). With it and a row source, every shipped source
+    declaring a report gets its figure tool beside its row tool; without it none does, for the
+    reason a row tool is not registered without a row source.
 
     Returns frozen. A caller receiving an unfrozen registry could register into it after the
     whole-registry checks had run, which is the same as not running them.
@@ -348,6 +359,16 @@ def build_registry(
                 result_contract=ResultContract.TYPED,
                 scope=tool.scope,
             )
+        # A connected source's figures for a range a tool names, where its reads can be made.
+        if figures is not None:
+            classified = {name: owned.get(name, ()) for name in dict.fromkeys(others)}
+            for figure in figure_tools(classified):
+                registry.register(
+                    figure.definition(),
+                    figure.reader(records, figures),
+                    result_contract=ResultContract.TYPED,
+                    scope=figure.scope,
+                )
         # The document plane, for every source. See
         # `THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE`.
         for definition, handler in knowledge_tools(records, question_embedder()):

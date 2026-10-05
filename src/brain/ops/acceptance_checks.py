@@ -50,6 +50,10 @@ from brain.ops.acceptance import (
 )
 from brain.ops.acceptance_run import Harness
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 10
+
 A, B = RESERVED_DEPARTMENTS
 
 #: The four reads a department's knowledge reader holds, as a Starter pack assignment grants them.

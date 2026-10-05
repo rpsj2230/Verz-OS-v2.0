@@ -46,6 +46,19 @@ what, where, at what reach, and never the title or a word of the text. See
 one running, so the text path takes a lock around it rather than letting two uploads each spend
 the whole budget. A second upload waits for the first.
 
+**And a slot of the install's document-job budget for the parse, as work somebody is waiting for.**
+The lock bounds this process; the budget bounds the install, which reads documents in every
+application process and in the worker that reads queued uploads. So the parse takes a slot from
+`brain.ops.capacity_ledger` as INTERACTIVE (`brain.knowledge.uploads.reading_request`), after the
+body has arrived and before the parser starts, and gives it back when the parse ends. INTERACTIVE
+may use the whole budget, so this door is refused only when every slot is in use, and then with
+`brain.ops.admission.CapacityRefused`'s own sentence and a 503 carrying when to try again: a busy
+machine is never worded as a place the person may not add to, which is a 404. The slot is taken
+after the body rather than before it because the budget counts documents being read, and a slow
+connection sending a large file is not one. Where the install has no cache, or the cache does not
+answer, the lock alone bounds the parse, as it did before. See
+`THE_PARSE_HOLDS_A_SLOT_OF_THE_BUDGET`.
+
 Task ids: M7.1.1, M7.6.3, M7.2.5, M7.4.3, M7.6.1, M7.7.3
 """
 
@@ -64,11 +77,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, RequestProblemView
-from brain.api_routes import Asked, Asking
-from brain.attribution import of_request
+from brain.api_routes import Asked, Asking, capacity_ledger_of
+from brain.attribution import of_request, trace_of_request
 from brain.core.department import SLUG_RE
 from brain.core.entitlement import EntitlementSet
-from brain.core.errors import Absent, Failed
+from brain.core.errors import Absent, Failed, to_public
 from brain.knowledge.app_parse_budget import app_parse_budget_bytes
 from brain.knowledge.chunk_store import ChunkStoreError, ingest_document
 from brain.knowledge.chunking import Block
@@ -99,10 +112,15 @@ from brain.knowledge.uploads import (
     placement_for_upload,
     read_arriving,
     read_for_text_path,
+    reading_request,
     text_path_type,
 )
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility, VisibilityError
+from brain.ops.admission import AdmissionDecision, CapacityState, decide
+from brain.ops.capacity_ledger import CapacityLedger, Taken
+from brain.ops.limits import retry_after_header, when_again
 from brain.ops.queue import Job
+from brain.ops.tuning import configured_budgets
 from brain.routing_routes import sessions_of
 
 log = structlog.get_logger()
@@ -147,6 +165,16 @@ AN_UPLOAD_IS_AUDITED_AS_THE_PERSON_WHO_MADE_IT: Final = (
     "writes in, and the Audit screen shows the upload as the person who made it, at their reach, "
     "in the request that made it, naming the item, its kind and its department and never a word "
     "of what it says."
+)
+
+#: Why a parse read in the request holds a slot of the install's document-job budget.
+THE_PARSE_HOLDS_A_SLOT_OF_THE_BUDGET: Final = (
+    "The parse lock bounds one process and the document-job budget bounds the install, which "
+    "reads documents in every application process and in the worker. So a document read while "
+    "its sender waits takes a slot as interactive work, which may use the whole budget, and "
+    "gives it back when the parse ends. Over the whole budget the sender is told the system is "
+    "busy, with a 503 and when to try again, never in a permission's words; with no cache "
+    "answering, the lock alone bounds the parse, as it did before."
 )
 
 #: The parse lock. See the module docstring on one parse at a time. A thread lock, taken inside
@@ -214,6 +242,11 @@ UPLOAD_RESPONSES: Final[dict[int | str, dict[str, Any]]] = {
         "model": ErrorBody,
         "description": "Not added, and why, in words: the message, and the one problem by field.",
     },
+    503: {
+        "model": ErrorBody,
+        "description": "Every slot for reading documents is in use, or a source was unreachable. "
+        "Nothing was added; `Retry-After` says when to try again when it can be said.",
+    },
 }
 
 
@@ -267,6 +300,46 @@ def read_one_at_a_time(
         )
 
 
+async def take_reading_slot(
+    request: Request, *, now: datetime
+) -> tuple[CapacityLedger | None, Taken]:
+    """A slot of the document-job budget for a parse its sender waits for, or the refusal.
+
+    `THE_PARSE_HOLDS_A_SLOT_OF_THE_BUDGET`. With no cache on this process the decision is asked
+    over nothing in use, which admits unless the budget is missing, and holds nothing.
+    """
+    asked_for = reading_request(trace_of_request())
+    budgets = configured_budgets()
+    ledger = capacity_ledger_of(request.app.state)
+    if ledger is None:
+        return None, Taken(decision=decide(asked_for, budgets, CapacityState(), now=now))
+    return ledger, await asyncio.to_thread(ledger.admit, asked_for, budgets, now=now)
+
+
+async def give_back(ledger: CapacityLedger | None, taken: Taken) -> None:
+    """Free the slot a parse held. A cache that does not answer leaves it to lapse on its own."""
+    if ledger is not None and taken.hold is not None:
+        await asyncio.to_thread(ledger.give_back, taken.hold)
+
+
+def too_busy(decision: AdmissionDecision, *, field: str) -> JSONResponse:
+    """The capacity refusal: a 503 in `CapacityRefused`'s words, with when to try again.
+
+    Never a 404 and never a permission's sentence: the sender may add here and the machine is
+    full, which `brain.ops.admission.CAPACITY_IS_NOT_PERMISSION` says must stay two answers.
+    """
+    said = to_public(decision.as_error())
+    headers: dict[str, str] = {}
+    if decision.retry_after_seconds is not None:
+        said = f"{said} {when_again(decision.retry_after_seconds)}"
+        headers["Retry-After"] = retry_after_header(decision.retry_after_seconds)
+    log.info("knowledge.read_shed", **decision.log_record())
+    told = ErrorBody(
+        message=said, problems=[RequestProblemView(field=field, code="busy", message=said)]
+    )
+    return JSONResponse(status_code=503, content=told.model_dump(mode="json"), headers=headers)
+
+
 def _refused(field: str, code: str, message: str) -> JSONResponse:
     """A 422 whose message is the reason, so the page shows the reason and not a status word."""
     told = ErrorBody(
@@ -291,13 +364,15 @@ async def store_upload(
     async def enqueue(job: Job) -> object:
         # Imported here: only an install that declares an embedding revision reaches this, and
         # the web process has no queue of its own to hold open for the others.
-        from brain.ops.queue import enqueue_job, queue_app
+        from brain.ops.queue import enqueue_job, queue_app, queue_url_of
         from brain.ops.worker import register_tasks
 
         settings = getattr(request.app.state, "settings", None)
         url = str(getattr(settings, "database_url", "") or "")
         try:
-            app = queue_app(url, pool_max=1)
+            # The queue's own URL, never the application's pooler: see
+            # `brain.ops.queue.A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S`.
+            app = queue_app(queue_url_of(settings), pool_max=1)
             register_tasks(app, database_url=url)
             async with app.open_async():
                 found = await enqueue_job(app, job)
@@ -410,6 +485,14 @@ async def upload(
             upload=admit_upload(filename=filename, declared_type=media_type.value, content=body),
             body=body,
         )
+    except OfferedAsATable as exc:
+        return _refused("file", OFFERED_AS_A_TABLE, str(exc))
+    except (IngestRefused, KindError) as exc:
+        return _refused("file", "not_added", str(exc))
+    ledger, taken = await take_reading_slot(request, now=asked.now)
+    if not taken.admitted:
+        return too_busy(taken.decision, field="file")
+    try:
         read = await asyncio.to_thread(
             read_one_at_a_time, received, kind=kind, placement=placement, owner_id=owner
         )
@@ -417,6 +500,8 @@ async def upload(
         return _refused("file", OFFERED_AS_A_TABLE, str(exc))
     except (IngestRefused, KindError) as exc:
         return _refused("file", "not_added", str(exc))
+    finally:
+        await give_back(ledger, taken)
     if isinstance(read, ParseFailure):
         # The cause and its remedy, from `CAUSE_TEXT`, and never the parser's own words (M7.2.5).
         return _refused("file", read.cause.value, read.message())

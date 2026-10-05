@@ -24,10 +24,13 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { UNAVAILABLE_MARK } from "../src/components/kit";
 import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src/pages/access/formParts";
 import { phraseFor } from "../src/pages/auditQuery";
+import { ACCOUNT_READY_HEADING, COPY } from "../src/pages/people/AccountReady";
 import { UNAVAILABLE } from "../src/pages/people/peopleActions";
-import { readPeople } from "../src/pages/people/peopleQuery";
+import { PEOPLE_FILTERS, readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
+import { AGENT_FORMAT } from "../src/pages/people/PersonPreview";
+import { ADD_WORK_EMAIL, JOIN, WORK_EMAIL_BLANK } from "../src/pages/people/WorkEmail";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 
@@ -290,6 +293,41 @@ describe("the People list", () => {
     await waitFor(() => expect(mounted.router.state.location.pathname).toBe("/people/p_new"));
   });
 
+  test("with a staff list read, the sentence to pass on is under the list with a Copy button, and without one it is not", async () => {
+    // What breaks if this is deleted: the one thing the owner asked People to carry once the sync
+    // sends nobody anything, the sentence telling somebody their account is ready, can go missing,
+    // or appear on an install that makes no accounts.
+    const said = "Your account is ready. Go to the sign-in page, press Forgot password and enter your work email.";
+    const listed = await consoleAt("/people", {
+      [`${API}/govern/directory`]: { body: directory([ADA], { account_ready: said }) },
+    });
+    expect(listed.container.textContent).toContain(ACCOUNT_READY_HEADING);
+    expect(listed.container.querySelector("blockquote")?.textContent).toBe(said);
+    expect(within(listed.container).getByRole("button", { name: COPY })).toBeTruthy();
+    const none = await consoleAt("/people", { [`${API}/govern/directory`]: { body: directory([ADA]) } });
+    expect(none.container.textContent).not.toContain(ACCOUNT_READY_HEADING);
+    expect(none.container.querySelector("blockquote")).toBeNull();
+  });
+
+  test("beside a staff list each row says where the list puts them and their type, and both are filters", async () => {
+    // What breaks if this is deleted: People stops saying who the staff list keeps out (M1.6.13), or a
+    // status arrives as the API's raw word, or the list cannot be narrowed to the suspended.
+    const suspended = { ...ADA, staff_status: "suspended", employment_type: "labour_dispatch" };
+    const { container } = await consoleAt("/people", {
+      [`${API}/govern/directory`]: { body: directory([suspended, BEN]) },
+    });
+    const pill = container.querySelector('[data-slot="staff-status-pill"]');
+    expect(pill?.textContent).toBe("Suspended");
+    expect(container.textContent).toContain("Labour dispatch");
+    expect(container.textContent).not.toContain("labour_dispatch");
+    expect(container.querySelectorAll('[data-slot="staff-status-pill"]')).toHaveLength(1);
+    const columns = PEOPLE_FILTERS.map((one) => one.column);
+    expect(columns).toEqual(expect.arrayContaining(["staff_status", "employment_type"]));
+    const schemas = (apiDocument()["components"] as { schemas: Record<string, Record<string, unknown>> }).schemas;
+    const view = schemas["DirectoryPersonView"] ?? schemas["DirectoryPersonView-Output"] ?? {};
+    expect(declaredPropertyNames(view)).toEqual(expect.arrayContaining(["staff_status", "employment_type"]));
+  });
+
   test("selecting people offers one grant to all of them, asked first with each named, and only the confirmation sends", async () => {
     // What breaks if this is deleted: a bulk grant written without the grantor seeing who it reaches,
     // or one that writes some people and not others (the route is all or nothing and says so).
@@ -347,6 +385,71 @@ describe("one person's page", () => {
 
     const old = await consoleAt(`/people/${encodeURIComponent("principal:p_ada")}`, answers);
     expect(old.container.querySelector('[data-slot="detail-header"] h1')?.textContent).toBe("Ada Okafor");
+  });
+
+  test("a person the staff list keeps out says why on their Overview, in the API's words, and one it lets in says nothing", async () => {
+    // What breaks if this is deleted: an administrator sees a disabled person with no reason (M1.6.14),
+    // re-enables them, and the next sync disables them again.
+    const why = "The staff list says they are suspended, so they cannot sign in or ask.";
+    const around = { [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
+    const kept = await consoleAt("/people/p_ada", {
+      [PERSON_API]: { body: detail({ person: { ...ADA, staff_status: "suspended" }, kept_out: why }) },
+      ...around,
+    });
+    expect(kept.container.querySelector('[data-slot="note"]')?.textContent).toContain(why);
+    expect(kept.container.querySelector('[data-slot="staff-status-pill"]')?.textContent).toBe("Suspended");
+    const fine = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
+    expect(fine.container.textContent).not.toContain("cannot sign in or ask");
+  });
+
+  test("Add work email is offered only where the API says, sends only a shaped address, and joins after asking", async () => {
+    // What breaks if this is deleted: the owner's way to remove his own duplicate (M1.10.4), a blank
+    // or misspelt address sent, or a join that retires somebody's grants without a question.
+    const around = { [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
+    const asking = "The staff list's person for this email has signed in or holds something somebody gave them.";
+    const joined = "The work email is added, and the person the staff list had made for it is joined into this one.";
+    const sent: unknown[] = [];
+    const mounted = await consoleAt("/people/p_ada", {
+      [PERSON_API]: { body: detail({ may_add_work_email: true }) },
+      [`POST ${PERSON_API}/work-email`]: (body) => {
+        sent.push(body);
+        const confirmed = (body as { confirm?: boolean }).confirm === true;
+        return {
+          body: confirmed
+            ? { principal_id: "p_ada", outcome: "joined", written: true, told: joined }
+            : { principal_id: "p_ada", outcome: "ask", written: false, told: asking },
+        };
+      },
+      ...around,
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    const drawer = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    expect(writes(mounted.idp)).toEqual([]);
+    expect(drawer.textContent).toContain(WORK_EMAIL_BLANK);
+    fireEvent.change(drawer.querySelector("input[name=address]") as HTMLInputElement, { target: { value: " ada@example.test " } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    const question = await screen.findByRole("alertdialog");
+    expect(question.textContent).toContain(asking);
+    await act(async () => {
+      fireEvent.click(within(question).getByRole("button", { name: JOIN }));
+    });
+    await waitFor(() => {
+      expect(mounted.container.textContent).toContain(joined);
+    });
+    expect(sent).toEqual([
+      { address: "ada@example.test", confirm: false },
+      { address: "ada@example.test", confirm: true },
+    ]);
+
+    const plain = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
+    expect(within(plain.container).queryByRole("button", { name: ADD_WORK_EMAIL })).toBeNull();
   });
 
   test("a person the API refuses is its sentence and reference and nothing else, whatever the reason", async () => {
@@ -450,9 +553,10 @@ describe("one person's page", () => {
     await waitFor(() => expect(writes(mounted.idp)).toEqual([{ to: `POST ${API}/govern/people/disable`, body: { principal_id: "p_ada" } }]));
   });
 
-  test("the Access view groups holdings by origin, names roles apart from grants, and draws the preview inert with its reason", async () => {
+  test("the Access view groups holdings by origin, names roles apart from grants, and offers a preview the gate computes", async () => {
     // What breaks if this is deleted: the three questions of Part 4.4 merged into one list, a role drawn
-    // beside a capability as though it implied one, or a preview computed in the browser.
+    // beside a capability as though it implied one, or a preview computed in the browser. Since
+    // 2026-09-29 the preview is `POST /agents/{agent_id}/preview`, asked for an agent the reader chooses.
     const { container } = await consoleAt("/people/p_ada/access", {
       [PERSON_API]: { body: detail() },
       [`${API}/govern/roles/holders`]: {
@@ -469,9 +573,10 @@ describe("one person's page", () => {
     expect(groups).toEqual(expect.arrayContaining(["Given by a person", "From a pack", "From an approved elevation"]));
     expect(textOf(container)).toContain("Approver");
     expect(textOf(container)).not.toContain("Auditor");
-    const inert = container.querySelector(`[${UNAVAILABLE_MARK}]`);
-    expect(inert?.textContent).toBe("Preview a run");
-    expect(textOf(container)).toContain(UNAVAILABLE.preview.reason);
+    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)).toBeNull();
+    const preview = container.querySelector('[data-slot="person-preview"]');
+    expect(preview?.querySelector("select")).not.toBeNull();
+    expect(preview?.textContent).toContain(AGENT_FORMAT);
   });
 
   test("the Sign-ins view asks the sessions and sign-in routes about this person and ends every session in one confirmed act", async () => {
@@ -565,6 +670,35 @@ describe("Departments and teams", () => {
     expect(textOf(row)).toContain("Ada Okafor");
     expect(textOf(row)).toContain("Design");
     expect(textOf(row)).not.toMatch(/\d/);
+  });
+
+  test("the departments the staff source names are created by one confirmed press that lists each and sends their short names", async () => {
+    // What breaks if this is deleted: the owner's install on 2026-09-29, eleven departments named by
+    // Lark and none on this screen, or departments created without a confirmation naming each.
+    let offered: unknown = { to_found: [{ name: "Web Development", slug: "web_development" }, { name: "设计部", slug: "department_bf7a74ff" }], registered: ["Finance"] };
+    const mounted = await consoleAt("/departments", {
+      [`${API}/govern/departments`]: { body: organisation([WEB]) },
+      [`${API}/govern/departments/from-staff-source`]: () => ({ body: offered }),
+      [`POST ${API}/govern/departments/from-staff-source`]: () => {
+        offered = { to_found: [], registered: ["Finance", "Web Development", "设计部"] };
+        return { body: { created: [{ name: "Web Development", slug: "web_development" }, { name: "设计部", slug: "department_bf7a74ff" }], not_founded: [] } };
+      },
+    });
+    const offer = await screen.findByRole("list", { name: "Departments your staff source names" });
+    expect(textOf(offer)).toContain("Web Development");
+    expect(textOf(offer)).toContain("设计部");
+    press(mounted.container, "Create the departments your staff source names");
+    const dialog = await confirmation("Create these departments?");
+    expect(textOf(dialog)).toContain("Web Development (short name web_development)");
+    expect(writes(mounted.idp)).toEqual([]);
+    press(dialog, "Create the departments your staff source names");
+    await waitFor(() =>
+      expect(writes(mounted.idp)).toEqual([
+        { to: `POST ${API}/govern/departments/from-staff-source`, body: { slugs: ["web_development", "department_bf7a74ff"] } },
+      ]),
+    );
+    await waitFor(() => expect(mounted.container.textContent).toContain("Created Web Development, 设计部."));
+    expect(asked(mounted.idp).filter((url) => url.pathname === `${API}/govern/departments`).length).toBeGreaterThanOrEqual(2);
   });
 
   test("a short name says its form before submit, and acceptance-test is told to use an underscore without anything sent", async () => {
@@ -832,7 +966,8 @@ describe("what the pages hold against the API", () => {
     for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
-    expect(UNAVAILABLE.preview.retiredBy.test("/api/v1/govern/directory/{principal_id}/preview")).toBe(true);
+    // The preview this table held retired with its route, which the page now calls.
+    expect(paths).toContain("/api/v1/agents/{agent_id}/preview");
   });
 
   test("each write body the new pages send carries only keys its route declares", () => {

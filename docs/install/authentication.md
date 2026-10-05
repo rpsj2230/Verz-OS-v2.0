@@ -175,7 +175,7 @@ address to register, which is your web address followed by `/first-run/staff-lis
 | --- | --- | --- |
 | Google Workspace | In Google Cloud console, in a project belonging to your company, an OAuth client of the type Web application, with the return address as an authorised redirect URI. Enable the Admin SDK API in the same project. | Nothing on the client. Sign in with a Workspace administrator's account, which is what lets it read the user directory. |
 | Microsoft Entra | In the Microsoft Entra admin centre, an application registration with a Web platform, the return address as a redirect URI, and a client secret. | The delegated Microsoft Graph permission `User.Read.All`, with admin consent granted for your organisation. |
-| Lark | In the Lark developer console, a custom app with the return address as a redirect URL under Security settings. Copy its App ID and App Secret. | The scopes `contact:department.organize:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly` and `contact:user.email:readonly`; a contact range covering everyone who should be listed; and a published version. |
+| Lark | In the Lark developer console, a custom app with the return address as a redirect URL under Security settings. Copy its App ID and App Secret. | The scopes `contact:department.organize:readonly`, `contact:department.base:readonly` (without it Lark reads every department with no name and nobody is placed in one), `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly` and `contact:user.email:readonly`; a contact range covering everyone who should be listed; and a published version. |
 
 Then paste the application's client ID and secret on the screen and press **Sign in and read the
 list**. The directory's own sign-in page opens in a second window, because the setup code lives
@@ -229,7 +229,7 @@ screen and to nothing else. Each is connected from **Govern > Staff sources**, w
 
 | Directory | What the vault slot `connector_keys/staff_source` keeps | What to grant |
 | --- | --- | --- |
-| Lark | `<App ID>:<App Secret>`, or the Lark app the Connectors screen keeps | `contact:department.organize:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly`, `contact:user.email:readonly`, `contact:group:readonly`; contact range All members; a released version |
+| Lark | `<App ID>:<App Secret>`, or the Lark app the Connectors screen keeps | `contact:department.organize:readonly`, `contact:department.base:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly`, `contact:user.email:readonly`, `contact:group:readonly`; contact range All members; a released version |
 | Microsoft Entra | `<application id>:<client secret>` | the application permissions `User.Read.All` and `GroupMember.Read.All`, with admin consent |
 | Google Workspace | `<administrator>:<service account>:<key>`, made from the pasted JSON key file | domain-wide delegation of `admin.directory.user.readonly` and `admin.directory.group.readonly` to the service account, acting as an administrator |
 
@@ -312,7 +312,9 @@ everything, written by first run and recorded in the ledger. They come in three 
   could grant anybody anything from the console. And `approve:knowledge.visibility`, which is
   approving a document for the whole company on the Approvals screen; nobody else on a fresh
   install holds it, and a grant is bounded by what its writer holds, so without it no document
-  could ever be published company-wide.
+  could ever be published company-wide. And `approve:knowledge.public`, which is marking a
+  document public so the website widget may answer from it; the first administrator grants it
+  onward scoped to a department, which is how a Department Admin decides for their own.
 - **Reading how the system is run**: every console screen's own read at the existence and
   configuration planes, the two plane capabilities themselves, the audit entries about
   governing the system, and the reads of the Routing and Classification pages. That says a thing
@@ -361,6 +363,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:webhook_subscriber` | running the system |
 | `approve:grant` | letting the second person in |
 | `approve:knowledge.visibility` | letting the second person in |
+| `approve:knowledge.public` | letting the second person in |
 | `read:agent` | reading how the system is run |
 | `read:artifact` | reading how the system is run |
 | `read:audit` | reading how the system is run |

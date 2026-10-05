@@ -7854,12 +7854,13 @@
     "M11.6.7",
     "M11.2.3",
     "M11.7.7",
-    "M11.8.8"
+    "M11.8.8",
+    "M11.9.15"
    ],
    "proof": [
     "M11.8.8"
    ],
-   "decision": null
+   "decision": "needs-rupash 135: A, Viewer"
   },
   {
    "id": "OWN-10",
@@ -18512,6 +18513,100 @@
     "M42.4.7"
    ],
    "decision": "needs-rupash 82: recorded as OWN3-1 with two new installer tasks"
+  },
+  {
+   "id": "DEC-61",
+   "source": "owner decision needs-rupash 115, 2026-09-29",
+   "area": "Identity",
+   "requirement": "The staff sync gives each active person on the staff list, of an employment type the install allows, a Brain sign-in account and sends nobody anything: a person sets their password with Forgot password on the sign-in page and then their second factor. Suspended people, leavers and people never activated get none, outsourced people get none unless an administrator allows their type, and when someone leaves or is suspended the next sync closes the account the sync made and ends their Brain sessions.",
+   "leaves": [
+    "M1.6.16",
+    "M1.6.17"
+   ],
+   "proof": [
+    "M1.6.18"
+   ],
+   "decision": "needs-rupash 130: a staff list anybody with its link can edit (a spreadsheet or a Google Sheet) makes no accounts until the owner says otherwise"
+  },
+  {
+   "id": "DEC-62",
+   "source": "owner decision needs-rupash 115, 2026-09-29",
+   "area": "Identity",
+   "requirement": "A person on a Lark staff list can sign in with Lark and no password, matched to the account the staff sync made for them by their stored Lark address, after the staff sync's own accounts (B) are in place.",
+   "leaves": [
+    "M1.1.8"
+   ],
+   "proof": [
+    "M1.1.9"
+   ],
+   "decision": null
+  },
+  {
+   "id": "DEC-63",
+   "source": "owner decision needs-rupash 115, 2026-09-29",
+   "area": "Identity",
+   "requirement": "People shows each person's employment status and type as the staff source says them, with filters, and somebody suspended, gone or never activated, or of a type the install does not allow, cannot sign in or ask, with the reason on their page.",
+   "leaves": [
+    "M1.6.13",
+    "M1.6.14"
+   ],
+   "proof": [
+    "M1.6.15"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN4-1",
+   "source": "owner decision needs-rupash 118, 2026-09-29",
+   "area": "Channels",
+   "requirement": "An approval card reaches each person who may decide it in their own Lark chat the moment the approval is raised, sent to the Lark address kept on their binding; that address is personal data, kept only for people who linked Lark, removed when they are unbound or erased, and never shown on a screen.",
+   "leaves": [
+    "M10.2.7",
+    "M10.3.5"
+   ],
+   "proof": [
+    "M10.2.7"
+   ],
+   "decision": "needs-rupash 118: B, store each linked person's Lark address so the card is sent straight away"
+   },
+   {
+   "id": "OWN5-1",
+   "source": "owner, 2026-09-30 (chat): the People page lists only him although the staff sync ran",
+   "area": "Identity",
+   "requirement": "Every active person on the staff list appears on People, and can be placed and granted, before their first sign-in, whether or not the sign-in service's accounts are set up; their sign-in later binds to that same person and never makes a second one.",
+   "leaves": [
+    "M1.10.1"
+   ],
+   "proof": [
+    "M1.10.3"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN5-2",
+   "source": "owner, 2026-09-30 (chat): a manual Sync now beside the scheduled daily sync",
+   "area": "Identity",
+   "requirement": "Staff sources has a Sync now button beside the scheduled sync that runs the same staff sync at once, one run at a time, recorded like a scheduled run, and says when the last and next scheduled runs are and what the run did.",
+   "leaves": [
+    "M1.10.2"
+   ],
+   "proof": [
+    "M1.10.3"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN5-3",
+   "source": "owner, 2026-09-30 (chat): duplicates are detected by email address, which is unique per person, and never by name",
+   "area": "Identity",
+   "requirement": "A person made by hand before the staff list, such as the first administrator, can be given their work email on their own People page, and the person the staff list made for that address is then joined into them, automatically when that person has never signed in and holds nothing but what the sync wrote, and after a confirmation otherwise; a duplicate is never found by name.",
+   "leaves": [
+    "M1.10.4"
+   ],
+   "proof": [
+    "M1.10.5"
+   ],
+   "decision": null
   }
  ]
 }

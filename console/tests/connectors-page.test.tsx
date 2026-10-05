@@ -39,7 +39,7 @@ import { TESTING_WORDS, VERDICT_WORDS } from "../src/pages/connectors/connectorP
 import { CHECK_AGAIN, NOT_NOW } from "../src/pages/connectors/TestConnection";
 import { connectorAddress, readSourceRows } from "../src/pages/connectors/connectorSources";
 import { CONNECT_A_SOURCE, CONNECTORS_HEADING, NOT_AVAILABLE } from "../src/pages/connectors/ConnectorsPage";
-import { KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY, REVIEW_STEWARD, STEWARD_BLANK, STEWARD_FIELD_LABEL } from "../src/pages/connectors/SourceActs";
+import { GRANT_OFF, GRANT_ON, KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY, REVIEW_STEWARD, STEWARD_BLANK, STEWARD_FIELD_LABEL } from "../src/pages/connectors/SourceActs";
 import { ACCEPT, BEFORE, DRIFT_HEADING, NOW_DOES } from "../src/pages/connectors/DeclarationDrift";
 import { DECLARATION_CHANGED_WORDS } from "../src/pages/connectors/pills";
 import { AT_THE_SERVER, FROM_HERE, START } from "../src/pages/connectors/SourceFlow";
@@ -91,6 +91,8 @@ function aSource(over: Partial<Connectable> = {}): Connectable {
     ],
     credential_label: "The key Xero issued for this connection",
     credential_hint: sentinel("key-hint"),
+    credential_shape: "key",
+    credential_max_chars: 1000,
     may_connect: true,
     steps: [aStep("create"), aStep("authorise"), aStep("connect", ["tenant_id", "credential"])],
     ...over,
@@ -309,6 +311,20 @@ interface Answer {
   readonly body: unknown;
 }
 
+/** A write the source can be allowed to make, as `brain.connector_routes.WriteGrantView` sends it. */
+function aGrant(): NonNullable<Connectable["writes"]>[number] {
+  return {
+    name: "dns_changes",
+    label: "Allow approved DNS changes",
+    credential_label: "A second token that can edit DNS",
+    credential_hint: sentinel("grant-hint"),
+    credential_shape: "key",
+    credential_max_chars: 1000,
+    not_allowed: sentinel("not-allowed"),
+    confirmation: sentinel("confirm-grant"),
+  };
+}
+
 const ANSWERS: Readonly<Record<string, Answer>> = {
   "/api/v1/console/connectors": { body: LIST },
   "/api/v1/connectors": { body: aPage() },
@@ -322,6 +338,19 @@ const ANSWERS: Readonly<Record<string, Answer>> = {
   "/api/v1/console/connectors/xero/probe": { body: aProbe() },
   "/api/v1/console/connectors/xero/drift": { body: aDrift() },
 };
+
+/** The answers with Xero declaring one write, whose key the vault holds for the grants named. */
+function withGrant(allowed: string[]): Readonly<Record<string, Answer>> {
+  return {
+    ...ANSWERS,
+    "/api/v1/connectors": {
+      body: aPage({
+        connectors: [aConnected({ writes_allowed: allowed })],
+        connectable: [aSource({ writes: [aGrant()] }), aSource({ name: "hubspot", label: "HubSpot", settings: [] })],
+      }),
+    },
+  };
+}
 
 interface Mounted {
   readonly container: HTMLElement;
@@ -415,10 +444,14 @@ describe("what this module agrees with the API about", () => {
     // What breaks if this is deleted: a body key the route forbids with `extra="forbid"`, refused
     // with a 422 naming no field the form can draw, or an edit that carries a key it must not.
     expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/edit", "post"))).toEqual(["settings"]);
-    expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/key", "post"))).toEqual(["credential"]);
+    expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/key", "post"))).toEqual([
+      "credential",
+      "grant",
+    ]);
     const acts = readConsoleFile("src/pages/connectors/SourceActs.tsx");
     expect(acts).toContain("const body = { settings: Object.fromEntries(");
-    expect(acts).toContain("const body = { credential: secret.take() };");
+    expect(acts).toContain("const credential = shaped ? credentialFor(asked.credential_shape, held, secret) : secret.take();");
+    expect(acts).toContain("const body = grant === undefined ? { credential } : { credential, grant: grant.name };");
   });
 
   test("no model the module reads carries a field that could hold a key or where one is kept", () => {
@@ -434,6 +467,7 @@ describe("what this module agrees with the API about", () => {
       "ConnectorEditedView",
       "ConnectorKeyReplacedView",
       "ConnectorProbeView",
+      "WriteGrantView",
     ]) {
       const fields = backendModelFields(ROUTES, model);
       expect(fields.length, model).toBeGreaterThan(0);
@@ -799,6 +833,73 @@ describe("one source's page", () => {
     expect(drawer.textContent).toContain(sentinel("key-blank"));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(posts(idp)).toEqual([]);
+  });
+
+  test("allowing a write is its own item, asks for the grant's key in its words, and sends it naming the grant", async () => {
+    // What breaks if this is deleted: Cloudflare's DNS Edit token pasted into the read key's drawer
+    // and sent as the read key, the grant's key sent without a confirmation, or shown on one, or a
+    // drawer that says a write is off while the vault holds its key (M11.7.3). The item is the
+    // API's label, under the key; the body names the grant; the key leaves the page once.
+    const grant = aGrant();
+    const { container, idp } = await consoleAt(`${connectorAddress("xero")}/profile`, withGrant([]));
+    const menu = await openMenu("Manage this source");
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      ACT_LABELS.edit,
+      ACT_LABELS.key,
+      grant.label,
+      ACT_LABELS.steward,
+      ACT_LABELS.export,
+      ACT_LABELS.disconnect,
+    ]);
+    await choose(menu, grant.label);
+    const drawer = await screen.findByRole("dialog");
+    expect(drawer.textContent).toContain(GRANT_OFF);
+    expect(drawer.textContent).toContain(sentinel("grant-hint"));
+    expect(drawer.textContent).not.toContain(sentinel("key-hint"));
+    const field = within(drawer).getByLabelText(grant.credential_label) as HTMLInputElement;
+    fireEvent.input(field, { target: { value: KEY } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: REVIEW_KEY }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(sentinel("confirm-grant"));
+    expect(dialog.textContent).not.toContain(sentinel("confirm-key"));
+    expect(dialog.textContent).toContain(KEY_SUPPLIED);
+    expect(dialog.textContent).not.toContain(KEY);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: grant.label }));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toEqual([{ path: "/api/v1/connectors/xero/key", body: { credential: KEY, grant: grant.name } }]);
+    });
+    expect(field.value).toBe("");
+    expect(document.body.innerHTML).not.toContain(KEY);
+    expect(container.innerHTML).not.toContain(KEY);
+  });
+
+  test("a write whose key is held says it is on", async () => {
+    // What breaks if this is deleted: a drawer that says off whatever the vault holds, which tells
+    // an administrator a write is not happening while approved changes are being sent.
+    await consoleAt(`${connectorAddress("xero")}/profile`, withGrant([aGrant().name]));
+    await choose(await openMenu("Manage this source"), aGrant().label);
+    const drawer = await screen.findByRole("dialog");
+    expect(drawer.textContent).toContain(GRANT_ON);
+    expect(drawer.textContent).not.toContain(GRANT_OFF);
+    expect(drawer.textContent).toContain(SECRET_STORED);
+  });
+
+  test("a source that declares no write offers no item to allow one", async () => {
+    // What breaks if this is deleted: the grant offered for every source, so a drawer asks Xero for
+    // a DNS token it has no use for.
+    await consoleAt(`${connectorAddress("xero")}/profile`);
+    const plain = await openMenu("Manage this source");
+    expect(within(plain).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      ACT_LABELS.edit,
+      ACT_LABELS.key,
+      ACT_LABELS.steward,
+      ACT_LABELS.export,
+      ACT_LABELS.disconnect,
+    ]);
   });
 
   test("the profile names the source's steward, and handing it on is confirmed in the API's words and sends only the person", async () => {

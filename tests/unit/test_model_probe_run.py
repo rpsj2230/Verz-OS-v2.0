@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -28,6 +28,7 @@ from brain.models.wire import KeyLookup
 from brain.ops import model_probe_run
 from brain.ops.model_probe_run import (
     A_PROBE_FAILS_ONLY_ON_THE_PROVIDERS_OWN_FAILURE,
+    A_PROBE_WAITS_AS_LONG_AS_THE_CALL_PATH_WOULD,
     LOCAL_ONLY,
     NOTHING_HELD,
     PROBES_PER_TICK,
@@ -309,6 +310,56 @@ def test_a_probe_is_sent_the_fixed_sentence_with_a_short_timeout_and_a_small_cap
     assert [one.content for one in request.messages] == [model_probe_run.PROBE_PROMPT]
     assert request.timeout_seconds == model_probe_run.PROBE_TIMEOUT_SECONDS
     assert request.max_output_tokens == model_probe_run.PROBE_MAX_OUTPUT_TOKENS
+
+
+def test_a_levels_last_step_is_probed_as_long_as_a_question_would_wait_for_it() -> None:
+    """`A_PROBE_WAITS_AS_LONG_AS_THE_CALL_PATH_WOULD`, the owner's case. Moonshot, last in its
+    level at four seconds of its own, is probed at the prober's own ten, because a question that
+    reaches it gives it the rest of the answer budget; a failover at four with a step behind it is
+    probed at its own four; and a primary at twelve is capped at ten. A step behind the last one
+    whose key is not held does not make it any less last.
+
+    Delete this and a slow last step is probed at a figure no question holds it to, fails, and is
+    taken out of the chain while it answers every question it is sent."""
+    assert A_PROBE_WAITS_AS_LONG_AS_THE_CALL_PATH_WOULD
+    seen: dict[str, float] = {}
+
+    def reply(request: Any) -> Any:
+        seen[request.deployment_id] = request.timeout_seconds
+        from brain.models.adapter import Completion
+
+        return Completion(text="ready", finish_reason="stop", input_tokens=5, output_tokens=1)
+
+    from brain.models.adapter import SdkDriver
+
+    sender = DriverProbes(httpx.Client(), _Keys({"anthropic": "k", "moonshot": "k"}))
+    for slug in ("anthropic", "moonshot"):
+        sender._drivers[slug] = SdkDriver(provider=slug, transport=reply)
+    steps = (
+        replace(rung("anthropic"), timeout_seconds=12.0),
+        replace(rung("anthropic", position=1), timeout_seconds=4.0),
+        replace(rung("moonshot", position=2), timeout_seconds=4.0),
+        replace(rung("deepseek", position=3), timeout_seconds=4.0),
+    )
+
+    asyncio.run(
+        probe_on(
+            ladder=Ladder(steps),
+            store=StoreSink(Store()),
+            sender=sender,
+            held=frozenset({"anthropic", "moonshot"}),
+            profile=HOSTED_PROFILE,
+            now=T0,
+            clock=lambda: T0,
+        )
+    )
+
+    assert seen == {
+        "anthropic-main-0": model_probe_run.PROBE_TIMEOUT_SECONDS,
+        "anthropic-main-1": 4.0,
+        "moonshot-main-2": model_probe_run.PROBE_TIMEOUT_SECONDS,
+    }
+    assert model_probe_run.PROBE_TIMEOUT_SECONDS > 4.0
 
 
 # ------------------------------------------------------------------------------ the keys

@@ -10,7 +10,21 @@
  */
 
 export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
-export { BACK, ConnectFlow, FLAGGED, FlowDialog, indexOf, NEXT, StepPicture, stepOf, type FlowStep } from "./ConnectFlow";
+export {
+  BACK,
+  ConnectFlow,
+  COPIED_TEXT,
+  FLAGGED,
+  FlowDialog,
+  indexOf,
+  NEXT,
+  NOT_COPIED_TEXT,
+  SHOW_TEXT,
+  StepPicture,
+  stepOf,
+  type FlowStep,
+} from "./ConnectFlow";
+export { copied } from "./copyText";
 export { DetailHeader, DetailPage, ViewSwitch, type DetailView } from "./DetailPage";
 export { Drawer } from "./Drawer";
 export { EntityTable, saveCsv, selectedWords, toCsv, type EntityColumn } from "./EntityTable";

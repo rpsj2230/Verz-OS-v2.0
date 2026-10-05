@@ -48,6 +48,10 @@ if TYPE_CHECKING:
 
 A, B = RESERVED_DEPARTMENTS
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 390
+
 # ------------------------------------------------------------------ written-down reasons
 #: Why the check calls the routes' functions rather than restating what they decide.
 A_CHECK_IS_THE_ROUTES_SEQUENCE_AND_NOT_A_SECOND_COPY_OF_ITS_RULES: Final = (

@@ -23,7 +23,7 @@ from brain.ops import acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.ops.acceptance_stewardship import INVOICE_FIELD, KNOWLEDGE_FIELD
 from brain.settings import settings_from
-from tests.unit.test_acceptance import INSTALL, at_head, counts
+from tests.unit.test_acceptance import INSTALL, at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_stewardship"
 NAMED = "a_steward_is_named_and_told_of_access_somebody_gave_themselves"
@@ -34,6 +34,12 @@ def test_the_module_declares_one_check_for_its_one_leaf() -> None:
     """One check, for M7.7.2 alone. Delete this and the check can start claiming the document
     hand-over's leaf, which the document's whole life already proves on its own."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [(NAMED, ("M7.7.2",))]
+
+
+def test_the_stewardship_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Delete this and
+    a check can drop out of the module with the page simply listing one fewer row."""
+    assert checks_in(MODULE) == [NAMED]
 
 
 def test_each_self_granted_field_reaches_its_own_thing_and_not_the_other() -> None:

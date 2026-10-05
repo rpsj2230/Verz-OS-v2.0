@@ -31,6 +31,34 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         truncated: true,
         people: { [UNBROKEN]: UNBROKEN },
       },
+      "/api/v1/escalations": {
+        asked: [
+          {
+            escalation_id: UNBROKEN,
+            queue: UNBROKEN,
+            question: UNBROKEN,
+            raised_at: "2019-03-04T09:00:00Z",
+            expires_at: "2019-03-04T10:00:00Z",
+            expired: true,
+            said: UNBROKEN,
+          },
+        ],
+        handed: [
+          {
+            escalation_id: UNBROKEN,
+            queue: UNBROKEN,
+            asker_id: UNBROKEN,
+            asker_name: UNBROKEN,
+            question: UNBROKEN,
+            tried: [UNBROKEN],
+            needed: UNBROKEN,
+            raised_at: "2019-03-04T09:00:00Z",
+            expires_at: "2019-03-04T10:00:00Z",
+            expired: false,
+          },
+        ],
+        told: UNBROKEN,
+      },
       "/api/v1/stewardship/self-grants": {
         items: [
           {

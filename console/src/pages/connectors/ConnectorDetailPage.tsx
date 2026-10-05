@@ -25,10 +25,14 @@
  * test connection (`TestConnection.tsx`), which the worker makes and the header reports: waiting,
  * then what it found. A reader who may not manage the source sees the newest test and no button.
  *
+ * **A write the source can be allowed to make is its own item, apart from the read key.** Each grant
+ * the form declares (Cloudflare's "Allow approved DNS changes") is an item under a separator in the
+ * Manage menu, labelled in the API's words, and opens the key drawer for that grant alone.
+ *
  * **A connected source can be handed to another steward** from Manage, by whoever may manage it
  * (M7.7.2). The Profile names the steward; the API decides who may be named.
  *
- * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M27.10.2, M27.15.8, M7.7.2
+ * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M27.10.2, M27.15.8, M11.7.3, M7.7.2
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, Plus, Settings } from "lucide-react";
@@ -55,7 +59,13 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { FailureNotice } from "../../ui/FailureNotice";
-import { CONNECTORS_API_PATH, when, type Connected, type Connectors as ConnectorsBody } from "../connectorsQuery";
+import {
+  CONNECTORS_API_PATH,
+  when,
+  type Connectable,
+  type Connected,
+  type Connectors as ConnectorsBody,
+} from "../connectorsQuery";
 import { LARK_API_PATH, type LarkGuide } from "../larkConnectQuery";
 import { ACT_LABELS } from "./connectorActions";
 import { worthShowing } from "./connectorProbe";
@@ -127,16 +137,19 @@ export function viewFor(tab: string | undefined): SourceView {
 function ManageMenu({
   detail,
   connected,
+  form,
   onAct,
   onExport,
 }: {
   readonly detail: SourceDetail;
   readonly connected: Connected | undefined;
+  readonly form: Connectable | undefined;
   readonly onAct: (act: OpenAct) => void;
   readonly onExport: () => void;
 }) {
   const { source } = detail;
   const manages = source.mayManage && source.connectFrom === "console" && connected !== undefined;
+  const grants = manages ? (form?.writes ?? []) : [];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -165,6 +178,21 @@ function ManageMenu({
             </DropdownMenuItem>
           </>
         ) : null}
+        {grants.length === 0 ? null : (
+          <>
+            <DropdownMenuSeparator />
+            {grants.map((grant) => (
+              <DropdownMenuItem
+                key={grant.name}
+                onSelect={() => {
+                  onAct({ act: "grant", source: source.name, grant: grant.name });
+                }}
+              >
+                {grant.label}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
         {source.mayManage && detail.steward !== undefined ? (
           <DropdownMenuItem
             onSelect={() => {
@@ -324,7 +352,7 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
               onFailed={setTestFailure}
             />
           )}
-          <ManageMenu detail={detail} connected={connected} onAct={act} onExport={saveExport} />
+          <ManageMenu detail={detail} connected={connected} form={form} onAct={act} onExport={saveExport} />
         </>
       }
       figures={
@@ -406,6 +434,23 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
           onDone={done}
         />
       ) : null}
+      {open?.act === "grant" && form !== undefined && page !== null
+        ? (() => {
+            const grant = form.writes.find((one) => one.name === open.grant);
+            return grant === undefined ? null : (
+              <KeyDrawer
+                name={source.name}
+                form={form}
+                grant={grant}
+                keyBlank={page.key_blank}
+                confirmation={grant.confirmation}
+                keyHeld={(connected?.writes_allowed ?? []).includes(grant.name)}
+                onClose={close}
+                onDone={done}
+              />
+            );
+          })()
+        : null}
       {open?.act === "steward" ? (
         <StewardDrawer
           name={source.name}

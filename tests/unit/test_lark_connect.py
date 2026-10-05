@@ -63,6 +63,8 @@ from brain.ops.connectable import CONNECTABLE, NotConnectableError, manifest_for
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.credentials import KEY_FIELD, Credentials
 from brain.ops.lark_connect import (
+    CHAT_LIST_PATH,
+    CHAT_LIST_SCOPE,
     MEMBERS_SCOPE,
     MESSAGE_EVENT,
     USES,
@@ -121,8 +123,16 @@ class FakeLark:
     def __init__(self) -> None:
         self.seen: list[tuple[str, str, bytes]] = []
         self.refuse: dict[str, dict[str, Any]] = {}
+        #: Like `refuse`, for one path exactly, where a prefix would also refuse its children.
+        self.refuse_exact: dict[str, dict[str, Any]] = {}
+        #: The HTTP status a refused prefix answers with, 200 unless named: Lark refuses most
+        #: calls inside a 200 and a department outside the data range with a 403.
+        self.refuse_status: dict[str, int] = {}
         self.accept_secret = SECRET
         self.empty_directory = False
+        #: False for an app without `contact:department.base:readonly`, which Lark answers by
+        #: leaving each department's `name` out of an otherwise successful walk.
+        self.department_names = True
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -156,9 +166,12 @@ class FakeLark:
                 if self.headers.get("Authorization") != f"Bearer {TOKEN}":
                     self._answer({"code": 99991663, "msg": "invalid tenant token"})
                     return
+                if path in fake.refuse_exact:
+                    self._answer(fake.refuse_exact[path])
+                    return
                 for prefix, envelope in fake.refuse.items():
                     if path.startswith(prefix):
-                        self._answer(envelope)
+                        self._answer(envelope, fake.refuse_status.get(prefix, 200))
                         return
                 self._answer(fake.success(path))
 
@@ -185,7 +198,10 @@ class FakeLark:
         if path.endswith("/users/find_by_department"):
             items = [] if self.empty_directory else [{"union_id": "on_1", "name": "A"}]
         elif path.endswith("/departments/0/children"):
-            items = [] if self.empty_directory else [{"open_department_id": "od_1"}]
+            department = {"open_department_id": "od_1", "name": "Operations"}
+            if not self.department_names:
+                del department["name"]
+            items = [] if self.empty_directory else [department]
         elif path == "/open-apis/wiki/v2/spaces":
             items = [{"space_id": "7000000000000000001", "name": "Handbook"}]
         elif path.endswith("/nodes"):
@@ -385,6 +401,34 @@ def test_nothing_granted_at_all_reads_as_a_version_not_released(lark: FakeLark) 
 def test_a_directory_the_app_cannot_see_asks_for_the_data_range(lark: FakeLark) -> None:
     """Delete this and an app whose contacts range is empty is reported working over nobody."""
     lark.empty_directory = True
+    (staff,) = probe(lark, Use.STAFF_LIST).uses
+    assert staff.verdict is Verdict.NOT_SHARED
+    assert "All members" in staff.told
+
+
+def test_an_app_that_reads_departments_without_their_names_is_told_the_scope_that_shows_them(
+    lark: FakeLark,
+) -> None:
+    """Lark admits the department walk without `contact:department.base:readonly` and leaves out
+    each name, so the call succeeds and the sync places nobody: the owner's install, 2026-09-29,
+    which this test called working because it had read one person. Delete this and the test goes
+    back to passing an app one scope short. The positive case is the working app above."""
+    lark.department_names = False
+    (staff,) = probe(lark, Use.STAFF_LIST).uses
+    assert staff.verdict is Verdict.MISSING_SCOPE
+    assert staff.missing == ("contact:department.base:readonly",)
+    assert "contact:department.base:readonly" in staff.told
+
+
+def test_a_department_walk_the_range_refuses_is_the_data_range_even_when_a_person_was_read(
+    lark: FakeLark,
+) -> None:
+    """The owner's first sync met "no dept authority" on the department walk while the root could
+    list people, and this test had already said working. The walk is the sync's first call, so a
+    refusal there is the data range. Delete this and a test passes an app the night's run fails."""
+    refused = "/open-apis/contact/v3/departments/"
+    lark.refuse[refused] = {"code": 40004, "msg": "no dept authority error"}
+    lark.refuse_status[refused] = 403
     (staff,) = probe(lark, Use.STAFF_LIST).uses
     assert staff.verdict is Verdict.NOT_SHARED
     assert "All members" in staff.told
@@ -599,6 +643,26 @@ def test_the_test_route_reports_each_use_and_writes_nothing(
     assert {method for method, _, _ in lark.seen[1:]} == {"GET"}
 
 
+def test_a_chat_channel_that_cannot_list_its_groups_is_told_the_scope_it_lacks(
+    app: FastAPI, client: TestClient, lark: FakeLark
+) -> None:
+    """The bot and the members read are there and the group list is refused: the chat channel is
+    missing exactly the list scope, and nothing else is reported missing.
+
+    Delete this and an app without the scope passes its test, and the first person choosing where
+    the evening digest goes finds an empty list with no sentence saying why."""
+    vault = Vault()
+    app.state.credentials = Credentials(vault, environ={}, writes=Recorded())
+    lark.refuse_exact[CHAT_LIST_PATH] = missing(CHAT_LIST_SCOPE)
+    answered = client.post(
+        f"{API_PREFIX}{LARK_TEST_PATH}", headers=headers("u_admin"), json=body(Use.CHANNEL)
+    )
+    verdicts = {one["name"]: (one["verdict"], one["missing"]) for one in answered.json()["uses"]}
+
+    assert verdicts == {"chat_channel": ("missing_scope", [CHAT_LIST_SCOPE])}
+    assert ("GET", CHAT_LIST_PATH + "?page_size=1") in {(m, p) for m, p, _ in lark.seen}
+
+
 def test_a_caller_short_of_one_chosen_uses_authority_is_refused_and_nothing_is_sent(
     app: FastAPI, client: TestClient, lark: FakeLark
 ) -> None:
@@ -763,7 +827,7 @@ def test_connecting_lark_copies_no_content_and_registers_nothing_the_sync_worker
 
 def test_the_chat_steps_name_every_scope_and_the_event_and_save_before_the_address() -> None:
     """The owner creates the Lark app from these steps and nothing else, so the permissions they
-    copy name each of the four chat scopes, the steps name the one event and both keys, and the
+    copy name each of the five chat scopes, the steps name the one event and both keys, and the
     save here comes before the Request URL in Lark, which Lark checks the moment it is entered.
     Delete this and a step can be dropped or reordered, and the owner's app is refused its address
     with no sentence saying why."""
@@ -774,8 +838,10 @@ def test_the_chat_steps_name_every_scope_and_the_event_and_save_before_the_addre
         "im:message.p2p_msg:readonly",
         "im:message.group_at_msg:readonly",
         MEMBERS_SCOPE,
+        "im:chat:read",
         "im:message:send_as_bot",
     }
+    assert CHAT_LIST_SCOPE == "im:chat:read"
     assert {one.name for one in USES[Use.CHANNEL].scopes} == set(copied)
     assert MESSAGE_EVENT == "im.message.receive_v1" and MESSAGE_EVENT in text
     assert "Encrypt Key" in text and "Verification Token" in text

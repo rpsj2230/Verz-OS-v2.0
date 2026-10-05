@@ -38,9 +38,10 @@ leash is bound to this install's tools by `brain.agents.install.bound_leash`, wh
 finished install stores the rungs from. What the page is not told is
 `brain.agents.install.pinned_leash`, which holds every rung at Shadow while a declared
 connector is not serving, because no connector registry is read by the process answering the
-page, and the risk score `brain.gate.injection.autonomy_ceiling` applies per request. Both only
-lower a rung, so the page states the most the agent could do, which is the direction a
-description of supervision may err in. See
+page, and the risk score `brain.gate.injection.autonomy_ceiling` applies per request. Nor is it
+told the rung each tool's side effect allows, which `brain.gate.invoke.invoke` holds every run
+to through `ToolRegistry.tighten` (M12.1.3). All three only lower a rung, so the page states the
+most the agent could do, which is the direction a description of supervision may err in. See
 `THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER`.
 
 **Whether anything writes a run's cost is read off the source, and served beside the figure.**
@@ -55,10 +56,14 @@ screen names every such model. See
 
 Scope: domain logic. Nothing here opens a connection, reads a clock or renders markup.
 
-It is written for the Profile of M27.11.15, and claims no leaf: that leaf closes when the page
-exists.
+**A target people keep taking over is drawn at the rung it is held to, with when (M8.3.5).**
+`taken_over` reads the autonomy breaker's standing the route read for each target, and says the
+lowered rung and the instants behind it. See `A_LOWERED_RUNG_IS_SHOWN_WITH_THE_TAKEOVERS_BEHIND_IT`.
 
-Task ids: none
+It is written for the Profile of M27.11.15, and claims no leaf of it: that leaf closes when the
+page exists. It claims M8.3.5 for the standing it draws.
+
+Task ids: M8.3.5
 """
 
 from __future__ import annotations
@@ -66,6 +71,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
@@ -74,6 +80,7 @@ from brain.console.reach_view import CeilingBlock
 from brain.core.entitlement import Capability
 from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.scope import Clause, Op, Scope
+from brain.gate.abstain import AutonomyBreaker
 from brain.gate.catalogue import SIDE_EFFECT_ORDER
 from brain.gate.injection import AutonomyTier
 from brain.gate.leash import MISSING_ENTRY_RUNG, Leash
@@ -103,9 +110,20 @@ A_RUNG_A_PAGE_CANNOT_SEE_THE_ROW_FOR_IS_EVERY_RUNG_IT_COULD_BE: Final = (
 #: Why the page's rungs are an upper bound.
 THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER: Final = (
     "The rungs shown are the template's leash bound to this install's tools. A run is held "
-    "lower still while a declared connector is not serving and whenever the risk score of a "
-    "request tightens it, and neither is known to the page. Both only lower a rung, so the "
-    "page states the most the agent could do and never less."
+    "lower still while a declared connector is not serving, whenever the risk score of a "
+    "request tightens it, and on a tool whose side effect allows less than the rung set, and "
+    "the page is told none of the three. All three only lower a rung, so the page states the "
+    "most the agent could do and never less."
+)
+
+#: Why a rung people keep taking over is shown lowered, and with what.
+A_LOWERED_RUNG_IS_SHOWN_WITH_THE_TAKEOVERS_BEHIND_IT: Final = (
+    "The autonomy breaker lowers a target's rung a step once people have taken the agent's work "
+    "on it over three times inside a week, and the configured rung beside it would then state "
+    "more than the agent may do. So a target the breaker holds lower shows the rung it is held "
+    "to, and every target taken over inside the week shows when, which is how whoever sets the "
+    "leash sees why and when it returns. When, and never who or what: the instants are all the "
+    "breaker reads, by brain.gate.takeover_store.A_TAKEOVER_INSTANT_SAYS_WHEN_AND_NAMES_NOTHING."
 )
 
 #: Why a figure travels with the statement of whether anything writes it.
@@ -463,6 +481,41 @@ def leash_rows(leash: Leash, agent_id: str, actions: Iterable[str]) -> tuple[Lea
             ),
         )
         for target in targets
+    )
+
+
+@dataclass(frozen=True)
+class TakenOver:
+    """What people doing this agent's work on one target has done to its rung (M8.3.5).
+
+    `lowered_to` is the rung the breaker holds the target's highest rung to, and None when it
+    holds it nowhere lower. `at` is every takeover inside the window, oldest first. See
+    `A_LOWERED_RUNG_IS_SHOWN_WITH_THE_TAKEOVERS_BEHIND_IT`.
+    """
+
+    lowered_to: AutonomyTier | None
+    at: tuple[datetime, ...]
+
+
+#: A target nobody has taken over, or one read on a process with nowhere takeovers are kept.
+NOT_TAKEN_OVER: Final = TakenOver(lowered_to=None, at=())
+
+
+def taken_over(row: LeashRow, standing: AutonomyBreaker | None, now: datetime) -> TakenOver:
+    """The breaker's standing on this row's target, at `now`, in the terms the page draws.
+
+    Refuses a standing for another target rather than drawing it: a lowered rung shown on the
+    wrong action is a page telling somebody to fix a leash that is fine.
+    """
+    if standing is None:
+        return NOT_TAKEN_OVER
+    if standing.target != row.target:
+        msg = f"a standing for {standing.target!r} was given for the row {row.target!r}"
+        raise ValueError(msg)
+    held = standing.rung(row.highest, now)
+    return TakenOver(
+        lowered_to=held if held < row.highest else None,
+        at=tuple(one for one in standing.takeovers if one <= now),
     )
 
 
