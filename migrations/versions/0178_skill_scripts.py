@@ -27,12 +27,12 @@ No ledger entry: the skill's own insert is the entry, and its digest now covers 
 without them and no longer digests to its key, so the library leaves it out, which is
 `brain.ops.skill_store`'s rule for a row that does not construct, and its approval is not honoured.
 
-Revises `0167`, the head of main when this was written.
+Revises `0179` (#251), which lands immediately before it.
 
 Task ids: M12.4.11
 
 Revision ID: 0178
-Revises: 0167
+Revises: 0179
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from alembic import op
 
 revision = "0178"
 # The head of origin/main when this was written; re-pointed when it lands.
-down_revision = "0167"
+down_revision = "0179"
 branch_labels = None
 depends_on = None
 

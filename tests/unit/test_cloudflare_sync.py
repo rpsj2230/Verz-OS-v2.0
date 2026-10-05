@@ -187,6 +187,66 @@ def test_the_worker_reads_the_zones_then_each_zones_records_named_by_the_zone_an
     assert (outcome, records, detail) == ("synced", 4, READ_TO_THE_END)
 
 
+@dataclass
+class RefusedOnce(ByPath):
+    """`ByPath`, with one zone's records refused for the source's allowance the first time asked."""
+
+    refused: str = ""
+    spent: bool = False
+
+    def get(
+        self, url: str, *, address: str, headers: Mapping[str, str], max_bytes: int
+    ) -> SourceAnswer:
+        if not self.spent and url.split("?", 1)[0].endswith(f"/zones/{self.refused}/dns_records"):
+            self.spent = True
+            self.calls.append(Call(url=url, address=address, headers=dict(headers)))
+            return answered({"success": False, "errors": [], "messages": [], "result": None}, 429)
+        return super().get(url, address=address, headers=headers, max_bytes=max_bytes)
+
+
+@pytest.mark.needs_db
+def test_a_walk_under_zones_cut_short_carries_on_at_the_zone_it_stopped_under() -> None:
+    """**A listed-under walk is carried on, not started again (M11.9.15).** The second zone's
+    records are refused for the allowance after the zones and the first zone's records are read;
+    the next attempt asks only for the second zone's records, the zones it walks under read from
+    what the first attempt wrote, and the read ends with every record kept and none retired.
+    Delete this and a read cut short under its second zone either reads the zones and the first
+    zone again, or never reads the second zone's records at all, because the attempt that carries
+    on kept no zone of its own."""
+    from datetime import timedelta
+
+    with a_database("brain_cloudflare_carried_on") as url:
+        connect(url)
+        caller = RefusedOnce(
+            answers=(),
+            zones=recorded("CF-200-zones").body,
+            records={ZONE: recorded("CF-200-dns-records").body, OTHER_ZONE: {**envelope([])}},
+            refused=OTHER_ZONE,
+        )
+        first = sync(url, caller)
+        asked_first = caller.paths()
+        caller.calls.clear()
+        second = sync(url, caller, at=NOW + timedelta(days=1))
+        rows = projected(url)
+        done = attempts(url)
+
+    assert first == SyncRun(read=0, waiting=1, failed=0, not_due=0, cannot_be_read=0)
+    assert asked_first == [
+        "/zones",
+        f"/zones/{ZONE}/dns_records",
+        f"/zones/{OTHER_ZONE}/dns_records",
+    ]
+    assert second == SyncRun(read=1, waiting=0, failed=0, not_due=0, cannot_be_read=0)
+    assert caller.paths() == [f"/zones/{OTHER_ZONE}/dns_records"]
+    assert {(entity, source_id) for _, entity, source_id, _, _, _ in rows} == {
+        (cloudflare.ZONE, ZONE),
+        (cloudflare.ZONE, OTHER_ZONE),
+        *((cloudflare.DNS_RECORD, one) for one in LISTED),
+    }
+    assert all(deleted_at is None for *_, deleted_at in rows)
+    assert done[-1][-1] == READ_TO_THE_END
+
+
 @pytest.mark.needs_db
 def test_a_zone_of_another_account_stops_the_read_and_no_record_is_asked_for() -> None:
     """**`A_ZONE_OF_ANOTHER_ACCOUNT_STOPS_THE_READ`.** The token reaches a zone Cloudflare says

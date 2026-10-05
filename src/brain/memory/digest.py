@@ -536,11 +536,28 @@ def digest_gaps() -> tuple[str, ...]:
             "conversation they are already having"
         )
 
-    if confidence_now(1.0, formed_at=_ANY_INSTANT, now=_ANY_INSTANT + DIGEST_PERIOD) < RECALL_FLOOR:
+    # At the shortest half-life an administrator may set, and for an inference at the weight it
+    # forms with, which is the case the figure's lower bound was chosen for. Imported here for
+    # `brain.memory.formation.in_force_half_life_days`'s reason: the tuning module reads this
+    # package's constants at load.
+    from brain.memory.turn import EXTRACTED_CONFIDENCE
+    from brain.ops.tuning import INFERRED_HALF_LIFE, KNOB_BY_NAME
+
+    shortest = float(KNOB_BY_NAME[INFERRED_HALF_LIFE].lowest)
+    if (
+        confidence_now(
+            EXTRACTED_CONFIDENCE,
+            formed_at=_ANY_INSTANT,
+            now=_ANY_INSTANT + DIGEST_PERIOD,
+            half_life_days=shortest,
+        )
+        < RECALL_FLOOR
+    ):
         gaps.append(
-            "a memory formed at the start of one digest period is below the retrieval floor "
-            "by the end of it, so the digest reports learnings that have already stopped "
-            "being recalled and the undo button changes nothing"
+            "an inference formed at the start of one digest period is below the retrieval floor "
+            "by the end of it at the shortest half-life an administrator may set, so the digest "
+            "reports learnings that have already stopped being recalled and the undo button "
+            "changes nothing"
         )
 
     for model in (MemoryItem, WeeklyDigest, Undo, Learning):

@@ -557,6 +557,8 @@ WRITTEN_BY_CHECKS = (
     "ops.sensitive_read",
     "er.canonical",
     "proj.record",
+    "proj.record_retired",
+    "proj.source_epoch",
     "ops.connector_connection",
     "ops.connector_sync",
     "ops.setting",
@@ -578,10 +580,13 @@ WRITTEN_BY_CHECKS = (
     "auth.service_account",
     "auth.api_key",
     "ops.credential_write",
+    "gate.fast_path_rule",
     "agent.browser_envelope",
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    "mem.mark",
+    "agent.learning_pause",
     "ops.operation",
     "ops.budget_version",
 )
@@ -650,6 +655,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
+    # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
+    assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -682,6 +689,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_checks_services.NO_DETECTOR_HERE,
     )
+    for ledger_check in (
+        "the_trace_ledger_runs_as_its_five_services",
+        "every_trace_ledger_service_runs_under_its_budgeted_limit",
+    ):
+        assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
