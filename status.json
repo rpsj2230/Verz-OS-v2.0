@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T22:50:20.887167+00:00",
-  "commit": "f2e7b2fa",
-  "commit_subject": "Interactive, background and batch work each get their own connection pool, started by the release and used only while it runs (#374)",
+  "generated_at": "2026-10-05T23:13:00.310959+00:00",
+  "commit": "45d99015",
+  "commit_subject": "A connected source is read only for what changed, a read cut short carries on, a changed read moves the answer cache's key, and a deleted record is retired and comes back as a new row (#251)",
   "total": 1592,
   "done": 603,
   "percent": 37.9,
