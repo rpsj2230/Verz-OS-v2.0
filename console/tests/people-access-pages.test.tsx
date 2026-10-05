@@ -16,7 +16,7 @@
  * declares.
  *
  * Task ids: M27.11.1, M27.11.2, M27.11.3, M27.15.18, M27.15.19, M27.15.20, M27.15.22, M27.15.24, M27.16.1,
- * M27.3.2, M27.7.3, M27.7.5, M27.7.7
+ * M27.3.2, M27.7.3, M27.7.5, M27.7.7, M27.15.60
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -26,10 +26,11 @@ import { UNAVAILABLE_MARK } from "../src/components/kit";
 import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src/pages/access/formParts";
 import { phraseFor } from "../src/pages/auditQuery";
 import { ACCOUNT_READY_HEADING, COPY } from "../src/pages/people/AccountReady";
-import { UNAVAILABLE } from "../src/pages/people/peopleActions";
+import { UNAVAILABLE, WHAT_NEEDS_A_SECOND_FACTOR } from "../src/pages/people/peopleActions";
 import { PEOPLE_FILTERS, readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
+import { USABLE_HEADING } from "../src/pages/people/PersonAccess";
 import { AGENT_FORMAT } from "../src/pages/people/PersonPreview";
 import { ADD_WORK_EMAIL, JOIN, WORK_EMAIL_BLANK } from "../src/pages/people/WorkEmail";
 import { installRadixStubs } from "./support/radix";
@@ -152,6 +153,15 @@ async function choose(menu: HTMLElement, item: string): Promise<void> {
   await act(async () => {
     fireEvent.click(within(menu).getByRole("menuitem", { name: item }));
   });
+}
+
+/** The kit's section card headed `title`, or null when none is drawn. */
+function sectionTitled(root: HTMLElement, title: string): Element | null {
+  return (
+    [...root.querySelectorAll('section[data-slot="section-card"]')].find(
+      (one) => one.querySelector("h1, h2, h3, h4")?.textContent === title,
+    ) ?? null
+  );
 }
 
 function textOf(element: Element | null): string {
@@ -578,6 +588,33 @@ describe("one person's page", () => {
     const preview = container.querySelector('[data-slot="person-preview"]');
     expect(preview?.querySelector("select")).not.toBeNull();
     expect(preview?.textContent).toContain(AGENT_FORMAT);
+  });
+
+  test("the Access view tells a person what their own sign-in holds back, in the words of /me", async () => {
+    // What breaks if this is deleted: M27.15.60's first half, the reader's own page saying which of
+    // their verbs this sign-in withholds and that an authenticator gives them back, read from `/me`
+    // and from nothing the page works out itself.
+    const { container } = await consoleAt("/people/p_ada/access", {
+      [PERSON_API]: { body: detail() },
+      [`${API}/me`]: { body: { principal_id: "p_ada", withheld_verbs: ["admin", "approve"], second_factor_needed: true } },
+    });
+    const usable = textOf(sectionTitled(container, USABLE_HEADING));
+    expect(usable).toContain("With this sign-in you cannot use what you hold for administration, approvals.");
+    expect(usable).toContain("Signing in again with your authenticator gives it back.");
+    expect(usable).not.toContain(WHAT_NEEDS_A_SECOND_FACTOR);
+  });
+
+  test("the Access view tells an administrator looking at somebody else only what the console needs", async () => {
+    // What breaks if this is deleted: M27.15.60's second half. Another person's withheld verbs are
+    // not the reader's to know, so their page says what needs a second factor and nothing derived
+    // from their grants or the reader's own sign-in.
+    const { container } = await consoleAt("/people/p_ada/access", {
+      [PERSON_API]: { body: detail() },
+      [`${API}/me`]: { body: { principal_id: "p_ben", withheld_verbs: ["admin"], second_factor_needed: true } },
+    });
+    const usable = textOf(sectionTitled(container, USABLE_HEADING));
+    expect(usable).toContain(WHAT_NEEDS_A_SECOND_FACTOR);
+    expect(usable).not.toContain("With this sign-in");
   });
 
   test("the Sign-ins view asks the sessions and sign-in routes about this person and ends every session in one confirmed act", async () => {

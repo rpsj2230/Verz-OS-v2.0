@@ -32,6 +32,7 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_recovery,
+    acceptance_people_console_2,
     acceptance_run,
 )
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
@@ -587,6 +588,7 @@ WRITTEN_BY_CHECKS = (
     "gate.capability_pack",
     "gate.capability_pack_assignment",
     "gate.role_grant",
+    "ops.data_export",
 )
 
 
@@ -713,6 +715,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # Nobody here has opened a console session with a second factor, so the realm's half is not
+    # run; `tests/unit/test_acceptance_people_console_2.py` records one and it passes.
+    assert outcomes.pop("a_second_factor_reported_by_the_realm_admits_administration") == (
+        NOT_RUN,
+        acceptance_people_console_2.NOBODY_HAS_SIGNED_IN_WITH_AN_AUTHENTICATOR,
+    )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)
