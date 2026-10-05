@@ -48,7 +48,7 @@ NOT_ONE_404: Final = "a pair a reviewer may not see did not answer as one that d
 SHOWN_WITHOUT_AUTHORITY: Final = "the queue was shown to somebody without the reviewer's capability"
 NOT_MERGED: Final = "a reviewer's merge was not stored and audited in their name"
 NOT_REJECTED: Final = "a reviewer's rejection was not stored, or merged something"
-DECIDED_TWICE: Final = "a pair already decided was decided again"
+DECIDED_TWICE: Final = "a pair already decided was decided again, or merged after it was rejected"
 
 
 def _capabilities(*sources: tuple[str, str]) -> tuple[str, ...]:
@@ -241,5 +241,8 @@ async def a_waiting_pair_is_reviewed_and_decided_in_the_reviewers_name(
         ReviewDecisionAsked(decision="merge", reason="changed my mind"),
         both,
     )
-    if getattr(again, "status_code", None) != 409:
+    joined = await h.execute(
+        text("SELECT count(*) FROM er.merge WHERE review_ref = :item").bindparams(item=bare_item)
+    )
+    if getattr(again, "status_code", None) != 409 or joined.scalar_one():
         raise CheckFailedError(DECIDED_TWICE)
