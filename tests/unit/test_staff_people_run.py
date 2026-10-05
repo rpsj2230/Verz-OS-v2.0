@@ -11,7 +11,7 @@ Task ids: M1.10.1
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -31,9 +31,8 @@ from brain.identity.staff_source import (
     StaffRecord,
 )
 from brain.identity.standing import standings
-from brain.ops.staff_accounts_run import person_for
+from brain.ops.staff_accounts_run import CONTRACTED_ENGAGEMENT_LASTS, person_for
 from brain.ops.staff_people_run import (
-    CONTRACTED_ENGAGEMENT_LASTS,
     PeopleRun,
     people_to_make,
     provide_people,
@@ -276,3 +275,94 @@ def test_a_person_the_list_made_who_then_leaves_is_kept_out_by_the_standing_step
     assert (
         through(url, lambda sessions: StoredPrincipals(sessions).live_principal(str(ada))) is None
     )
+
+
+# ------------------------------------------------------------------ a contractor's end date
+
+
+def ends(url: str, address: str) -> datetime | None:
+    [(end,)] = sql(
+        url,
+        "SELECT p.not_after FROM auth.principal p JOIN auth.principal_identity i"
+        " ON i.principal_id = p.id WHERE i.channel = 'email' AND i.identity_hash = %s"
+        " AND i.deleted_at IS NULL",
+        digest_of(address),
+    )
+    return end if isinstance(end, datetime) or end is None else None
+
+
+def test_a_contractor_still_on_the_list_never_lapses_and_one_the_list_dropped_does(
+    url: str,
+) -> None:
+    """Every run that still lists a contractor moves their end date on by the same span, so it
+    lapses only once the list has stopped naming them for that long. Delete this and a contractor
+    who is still working is locked out ninety days after the first sync."""
+    contracted = EmploymentType.CONTRACTOR
+    both = roster(person("fay", kind=contracted), person("gus", kind=contracted))
+    through(url, lambda sessions: provide_people(sessions, both, now=NOW))
+    later = NOW + timedelta(days=80)
+    # Gus is still on the list, marked as having left, which is the list dropping him too.
+    only_fay = roster(
+        person("fay", kind=contracted), person("gus", EmploymentStatus.LEFT, kind=contracted)
+    )
+
+    ran = through(url, lambda sessions: provide_people(sessions, only_fay, now=later))
+
+    past_the_first_span = NOW + timedelta(days=100)
+    fay, gus = ends(url, "fay@example.test"), ends(url, "gus@example.test")
+    assert (fay, gus) == (later + CONTRACTED_ENGAGEMENT_LASTS, NOW + CONTRACTED_ENGAGEMENT_LASTS)
+    assert fay is not None and fay > past_the_first_span
+    assert gus is not None and gus < past_the_first_span
+    assert ran == PeopleRun(made=0, renewed=1)
+    assert (
+        ran.sentences()[1] == "People: 1 contracted on the list kept engaged for another 90 days."
+    )
+
+
+def test_an_end_date_later_than_the_span_is_left_and_a_trial_moves_none(url: str) -> None:
+    """Delete this and a run shortens an end date an administrator set further out, or a trial
+    read, which promises to change nobody, moves one."""
+    contracted = roster(person("fay", kind=EmploymentType.CONTRACTOR))
+    through(url, lambda sessions: provide_people(sessions, contracted, now=NOW))
+    far = NOW + timedelta(days=1000)
+    sql(
+        url,
+        "UPDATE auth.principal SET not_after = %s WHERE display_name = 'Person fay'",
+        far,
+    )
+    through(url, lambda sessions: provide_people(sessions, contracted, now=NOW + timedelta(days=5)))
+    kept = ends(url, "fay@example.test")
+    sql(url, "UPDATE auth.principal SET not_after = %s WHERE display_name = 'Person fay'", NOW)
+    tried = through(
+        url,
+        lambda sessions: provide_people(
+            sessions, contracted, now=NOW + timedelta(days=5), trial=True
+        ),
+    )
+
+    assert kept == far
+    assert ends(url, "fay@example.test") == NOW
+    assert tried.renewed == 0
+
+
+def test_the_accounts_step_makes_a_contractor_with_the_same_end_date(url: str) -> None:
+    """`person_for` makes a person when the people step has not, and a contractor with no end date
+    is refused by the database. Delete this and the first outsourced account the accounts step
+    makes fails its whole person."""
+    fay = person("fay", kind=EmploymentType.CONTRACTOR)
+    account = HeldAccount(account_id="kc-fay", email="fay@example.test", enabled=True)
+
+    through(
+        url,
+        lambda sessions: person_for(
+            sessions,
+            account=account,
+            person=fay,
+            issuer=ISSUER,
+            actor=f"roster.{SOURCE}",
+            now=NOW,
+            trace_id="staff-accounts-test",
+        ),
+    )
+
+    assert ends(url, "fay@example.test") == NOW + CONTRACTED_ENGAGEMENT_LASTS

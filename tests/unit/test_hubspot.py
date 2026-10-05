@@ -414,7 +414,7 @@ def test_a_pipeline_figure_is_confidential_and_a_payroll_figure_is_restricted() 
     rule = hubspot_field_policy().rule_for(ENTITY_DEAL, "amount")
     assert rule is not None
     assert rule.classification is Classification.CONFIDENTIAL
-    assert rule.required_capability == Capability(value="read:deal.amount")
+    assert rule.required_capability == Capability(value=f"read:{ENTITY_DEAL}.amount")
     assert Classification.CONFIDENTIAL.rank < Classification.RESTRICTED.rank
     assert Classification.INTERNAL.rank < Classification.CONFIDENTIAL.rank
 
@@ -1042,11 +1042,13 @@ def test_a_rule_that_disagrees_with_another_sources_opinion_is_refused() -> None
     inside whatever merges the fragments, which reads as a bug in the merge."""
     agreeing = FieldPolicy(
         rules=(
-            FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.INTERNAL),
+            FieldRule.of(
+                ENTITY_CLIENT, "name", f"read:{ENTITY_CLIENT}.name", Classification.INTERNAL
+            ),
             FieldRule.of(
                 ENTITY_CLIENT,
                 "hours_remaining",
-                "read:client.hours_remaining",
+                f"read:{ENTITY_CLIENT}.hours_remaining",
                 Classification.INTERNAL,
             ),
         )
@@ -1054,27 +1056,35 @@ def test_a_rule_that_disagrees_with_another_sources_opinion_is_refused() -> None
     assert_policy_merges_with(agreeing)
 
     disagreeing = FieldPolicy(
-        rules=(FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.PUBLIC),)
+        rules=(
+            FieldRule.of(
+                ENTITY_CLIENT, "name", f"read:{ENTITY_CLIENT}.name", Classification.PUBLIC
+            ),
+        )
     )
-    with pytest.raises(HubSpotError, match=r"client\.name"):
+    with pytest.raises(HubSpotError, match=r"hubspot_company\.name"):
         assert_policy_merges_with(disagreeing)
 
 
-def test_the_house_spelling_is_used_for_a_field_another_source_already_classifies() -> None:
-    """The positive form of the rule above, and the reason there is no conflict to resolve:
-    `client.name` is spelled exactly as `tests/invariants/test_redaction_invariants.py` and
-    `brain.connectors.xero` already spell their shared fields.
+def test_hubspot_s_entities_are_its_own_and_no_other_source_classifies_them() -> None:
+    """`ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`: HubSpot's company, contact and deal are named for
+    HubSpot, each field behind a capability under that name, and no other source's rules, the
+    demo's or a connector's, classify an entity of the same name. Delete this and HubSpot can go
+    back to the house nouns, and the records screen answers neither its contacts nor Xero's."""
+    from brain.tools.startup import every_row_classification
 
-    Delete this and a capability of `read:hubspot.client_name`, which reads as tidier, makes
-    every existing grant for `read:client.name` stop reaching this connector's rows."""
     policy = hubspot_field_policy()
     name = policy.rule_for(ENTITY_CLIENT, "name")
     assert name is not None
-    assert name.required_capability == Capability(value="read:client.name")
+    assert name.required_capability == Capability(value="read:hubspot_company.name")
     assert name.classification is Classification.INTERNAL
     updated = policy.rule_for(ENTITY_CONTACT, "updated_at")
     assert updated is not None
-    assert updated.required_capability == Capability(value="read:contact.updated_at")
+    assert updated.required_capability == Capability(value="read:hubspot_contact.updated_at")
+    entities = [one.entity for one in every_row_classification()]
+    for mine in (ENTITY_CLIENT, ENTITY_CONTACT, ENTITY_DEAL):
+        assert mine.startswith("hubspot_")
+        assert entities.count(mine) == 1, mine
 
 
 # ------------------------------------------------- three answers, not one (M11.5.5)
@@ -1417,3 +1427,51 @@ def test_a_field_mapping_that_writes_one_target_twice_is_refused() -> None:
                 FieldMapping(target="name", source_path="properties.lastname"),
             ),
         )
+
+
+# ------------------------------------------------------------------ read live (M11.9.2)
+def _recording(cid: str) -> Any:
+    return next(one for one in CASSETTES if one.cid == cid)
+
+
+def test_a_record_is_read_live_by_an_id_of_digits_and_nothing_else() -> None:
+    """HubSpot's record ids are digits, and one is laid into the address, so anything else is
+    refused rather than escaped; an entity nothing reads live is refused too. The positive case
+    is the same lookup with a real id. Delete this and a crafted id could reach a different
+    path of HubSpot's API under the connection's key."""
+    from brain.connectors.hubspot import RECORD_ID_PARAMETER, HubSpotLiveLookup
+
+    live = HubSpotLiveLookup()
+    asked = live.arguments_for(ENTITY_DEAL, "4471")
+    assert asked[RECORD_ID_PARAMETER] == "4471"
+    assert asked["properties"].split(",") == sorted(requested_properties(ENTITY_DEAL))
+    for crafted in ("4471/../../owners", "44 71", "", "4471?archived=true"):
+        with pytest.raises(HubSpotError, match="refused rather than escaped"):
+            live.arguments_for(ENTITY_DEAL, crafted)
+    with pytest.raises(HubSpotError):
+        live.arguments_for(ENTITY_ASSOCIATION, "4471")
+    assert live.entities() == tuple(sorted((ENTITY_CLIENT, ENTITY_CONTACT, ENTITY_DEAL)))
+    assert {live.identity_mode(one) for one in live.entities()} == {IdentityMode.SERVICE}
+
+
+def test_a_deal_s_amount_is_read_by_the_one_record_call_that_holds_it() -> None:
+    """The list cannot be narrowed to one id, so a live read names HubSpot's one-record GET, with
+    the list's own mapping, and the recorded deal's amount comes back from it. Delete this and a
+    live read of a deal falls back to the list, which answers a page, or to nothing."""
+    from brain.connectors.hubspot import HubSpotLiveLookup, HubSpotReading
+
+    live = HubSpotLiveLookup()
+    operation = live.operation(ENTITY_DEAL, settings={"portal_id": PORTAL}, resolver=Resolver())
+    assert operation is not None
+    checked = operation.prepare(live.arguments_for(ENTITY_DEAL, "4471"), resolver=Resolver())
+    assert checked.url.startswith("https://api.hubapi.com/crm/v3/objects/deals/4471?")
+    recorded = _recording("HUBSPOT-200-deal")
+    reply = HubSpotReading().interpret(
+        operation, status=recorded.status, body=recorded.body, fetched_at="2019-06-01T00:00:00Z"
+    )
+    assert reply.rows is not None
+    [deal] = reply.rows.records
+    assert (deal.id, deal.model_dump()["amount"]) == ("4471", recorded.body["properties"]["amount"])
+    # The list is what the worker indexes, and it is a different call.
+    listed = operation_for(ENTITY_DEAL, resolver=Resolver())
+    assert listed.operation.path != operation.operation.path

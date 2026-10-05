@@ -35,6 +35,7 @@ from brain.connectors import (
     laravel,
     lark_base,
     lark_wiki,
+    search_console,
     throttle,
     write_verification,
     xero,
@@ -67,6 +68,7 @@ from brain.ops.idempotency import (
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
 from tests.fixtures.cassettes.google_analytics import PROPERTY
+from tests.fixtures.cassettes.search_console import SITE
 
 #: Every shipped connector's read-back, as the declarations state it.
 READ_BACKS = read_backs()
@@ -106,9 +108,15 @@ def xero_answer(
 
 
 def hubspot_answer(
-    status: int | None, body: Any = None, *, entity: str = hubspot.ENTITY_CLIENT, **overrides: Any
+    status: int | None,
+    body: Any = None,
+    *,
+    entity: str = hubspot.ENTITY_CLIENT,
+    one_record: bool = False,
+    **overrides: Any,
 ) -> Verification:
-    operation = hubspot.operation_for(entity, resolver=Resolver())
+    build = hubspot.one_record_operation if one_record else hubspot.operation_for
+    operation = build(entity, resolver=Resolver())
     reply = hubspot.interpret(
         operation, status=status, body=body, fetched_at=FETCHED_AT, **overrides
     )
@@ -236,6 +244,8 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("hubspot", "HUBSPOT-200-companies-page"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-contacts"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-deals"): Verification.FOUND,
+    # One deal read by its id, through its own operation: it is there.
+    ("hubspot", "HUBSPOT-200-deal"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-associations"): Verification.FOUND,
     ("hubspot", "HUBSPOT-429"): Verification.INCONCLUSIVE,
     ("hubspot", "HUBSPOT-401"): Verification.INCONCLUSIVE,
@@ -277,6 +287,17 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_analytics", "GA-403-property"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-429-report"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-500-report"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sites"): Verification.FOUND,
+    # A report's calls and every refusal hold no site list, and a list without the connected site
+    # never proves it gone: see `search_console.A_SITE_LIST_CANNOT_PROVE_ABSENCE`.
+    ("search_console", "SC-200-days"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-totals"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-queries"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-pages"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sitemaps"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-403-site"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-429-query"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-503-query"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
@@ -318,7 +339,14 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             entity = xero.ENTITY_CONTACT if "/Contacts" in recorded.request else xero.ENTITY_INVOICE
             return xero_answer(recorded.status, recorded.body, entity=entity)
         case "hubspot":
-            return hubspot_answer(recorded.status, recorded.body, entity=hubspot_entity(recorded))
+            from tests.fixtures.cassettes.hubspot import ONE_RECORD
+
+            return hubspot_answer(
+                recorded.status,
+                recorded.body,
+                entity=hubspot_entity(recorded),
+                one_record=bool(ONE_RECORD.search(recorded.request)),
+            )
         case "laravel":
             if recorded.protocol is Protocol.HTTP:
                 return laravel_answer(laravel.ViewReply(app_status=recorded.status))
@@ -343,6 +371,12 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             )
             property_read = google_analytics.operation_for(PROPERTY)
             return verdict(reading("google_analytics")(property_read, answered))
+        case "search_console":
+            listed = search_console.Reply(
+                status=recorded.status, headers=recorded.headers, body=recorded.body
+            )
+            site_list = search_console.listing_for(SITE)
+            return verdict(reading("search_console")(site_list, listed))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
         case "cloudflare":

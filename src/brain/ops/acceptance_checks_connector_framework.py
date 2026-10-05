@@ -195,6 +195,10 @@ FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
             "property": str(10**8 + secrets.randbelow(9 * 10**8)),
             "department": RESERVED_DEPARTMENTS[0],
         },
+        "search_console": lambda: {
+            "site": f"sc-domain:acceptance-{secrets.token_hex(4)}.example",
+            "department": RESERVED_DEPARTMENTS[0],
+        },
         "laravel": lambda: {
             "schema": f"acceptance_{secrets.token_hex(4)}",
             "client_rule": f"department = {RESERVED_DEPARTMENTS[0]}",

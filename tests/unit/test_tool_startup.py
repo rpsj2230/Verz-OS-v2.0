@@ -373,6 +373,8 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         "cloudflare",
         "freshdesk",
         "google_analytics",
+        "hubspot",
+        "search_console",
         "xero",
     )
     registered = set(row_readers(build_registry(source="local", records=_Rows())))
@@ -383,6 +385,10 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         ("cloudflare", "zone"),
         ("cloudflare", "dns_record"),
         ("google_analytics", "analytics_property"),
+        ("hubspot", "hubspot_company"),
+        ("hubspot", "hubspot_contact"),
+        ("hubspot", "hubspot_deal"),
+        ("search_console", "search_site"),
     }
     assert classification_for("invoice", source="xero") == xero_invoices
 

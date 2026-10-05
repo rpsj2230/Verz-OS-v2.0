@@ -721,6 +721,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.digest_destination:ConversationLister.conversations_request": Repeat.READS,
         "brain.ops.digest_destination:ConversationLister.conversations_page": Repeat.READS,
         "brain.ops.channel_lease:ChannelSecretLeases.lease": Repeat.EXPIRES_ON_ITS_OWN,
+        # The digest's send is made once per day and room inside `issue_once`
+        # (`brain.ops.digest_delivery`); these build the request, name the room, judge the
+        # answer and read the channel's record, and none of them sends anything.
+        "brain.ops.digest_run:DigestWire.room_of": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.request_for": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.judge": Repeat.READS,
+        "brain.ops.digest_run:ChannelRecordReader.get": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.read": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.write": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
@@ -861,6 +870,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
         "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
+        # A bound person's Lark address, kept as their verified message arrives (`0166`): an update
+        # of their own live row that a second call with the same address leaves unchanged.
+        "brain.channels.adapter:CardWire.person_address": Repeat.READS,
+        "brain.channels.inbound:AddressBook.remember": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
     }
 )
 

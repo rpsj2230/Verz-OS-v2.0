@@ -61,6 +61,7 @@ EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
     "cloudflare": ("account_id", lambda: secrets.token_hex(16)),
     "google_drive": ("folder", lambda: f"acceptance{secrets.token_hex(8)}"),
     "google_analytics": ("property", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
+    "search_console": ("site", lambda: f"sc-domain:acceptance-{secrets.token_hex(4)}.example"),
     "laravel": ("client_rule", lambda: "status in active, pending"),
 }
 

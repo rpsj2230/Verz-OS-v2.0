@@ -44,6 +44,8 @@ from brain.connectors.lark_base import manifest as lark_base_manifest
 from brain.connectors.lark_wiki import SpaceDeclaration
 from brain.connectors.lark_wiki import manifest as lark_wiki_manifest
 from brain.connectors.manifest import ConnectorManifest, FieldShape, HotUse, PermissionSync
+from brain.connectors.search_console import SearchConsoleConnection
+from brain.connectors.search_console import manifest as search_console_manifest
 from brain.connectors.xero import XeroConnection, xero_manifest
 from brain.core.scope import Clause, Op, Scope
 from brain.deployment.installer import PLAN, render
@@ -259,6 +261,10 @@ def manifests() -> tuple[ConnectorManifest, ...]:
         analytics_manifest(
             AnalyticsConnection(property_id="123456789", department="one"),
             ref=ref("connectors/creds/google_analytics"),
+        ),
+        search_console_manifest(
+            SearchConsoleConnection(site="sc-domain:example.com", department="one"),
+            ref=ref("connectors/creds/search_console"),
         ),
     )
 
@@ -769,7 +775,7 @@ def test_a_port_row_with_too_few_cells_is_a_finding() -> None:
 
 
 # =================================================================== connector discovery
-def test_the_eight_connectors_are_discovered_from_the_package() -> None:
+def test_the_nine_connectors_are_discovered_from_the_package() -> None:
     """Delete this and the guide is held to whatever list somebody handed the check, so a
     connector added tomorrow is not a finding but a gap nobody notices."""
     assert connector_modules(CONNECTOR_PACKAGE) == (
@@ -781,6 +787,7 @@ def test_the_eight_connectors_are_discovered_from_the_package() -> None:
         "laravel",
         "lark_base",
         "lark_wiki",
+        "search_console",
         "xero",
     )
 
@@ -937,7 +944,7 @@ def test_a_connector_row_with_too_few_cells_is_a_finding() -> None:
 
 
 def test_a_connector_with_no_verified_ceiling_says_so_rather_than_leaving_a_cell_blank() -> None:
-    """Delete this and two of the eight have an empty cell in the ceiling column, which reads
+    """Delete this and two of the nine have an empty cell in the ceiling column, which reads
     as a cell somebody did not fill in rather than as a statement that nothing has measured
     one."""
     drive = manifests()[1]
@@ -953,7 +960,7 @@ def test_a_connector_with_no_verified_ceiling_says_so_rather_than_leaving_a_cell
 def test_every_connector_shipping_today_is_bound_read_only_and_claims_no_source_enforcement() -> (
     None
 ):
-    """The guide states both as facts about all eight. Delete this and a connector shipped with
+    """The guide states both as facts about all nine. Delete this and a connector shipped with
     a write binding, or claiming its source applies the asker's own permissions, changes what a
     client should grant and the page goes on saying otherwise. The row check would catch it as
     a cell mismatch; this says which direction the whole table is expected to point."""

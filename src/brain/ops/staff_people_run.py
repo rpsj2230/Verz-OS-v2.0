@@ -47,12 +47,12 @@ Task ids: M1.10.1
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Final
 
-from sqlalchemy import insert, select
+from sqlalchemy import Update, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.principal import Employment
@@ -62,7 +62,14 @@ from brain.identity.organisation_sync import department_key, sync_actor, sync_tr
 from brain.identity.staff_roster import digest_of
 from brain.identity.staff_source import EmploymentStatus, Roster, StaffRecord
 from brain.identity.starter_pack_sync import registered_by_name
-from brain.ops.staff_accounts_run import NO_REACH, PRINCIPAL_PREFIX, employment_of
+from brain.ops.staff_accounts_run import (
+    CONTRACTED,
+    CONTRACTED_ENGAGEMENT_LASTS,
+    NO_REACH,
+    PRINCIPAL_PREFIX,
+    employment_of,
+    engaged_until,
+)
 from brain.ops.starter_pack_store import registered_departments
 from brain.tables.audit import attributed_to
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
@@ -75,20 +82,6 @@ A_PERSON_ON_THE_LIST_IS_A_PERSON_BEFORE_THEY_SIGN_IN: Final = (
     "console can see, place and grant before their first sign-in; their sign-in is bound to "
     "that same person later, by the accounts step or by an administrator, and never makes a "
     "second one."
-)
-
-
-#: How long a contracted person the list brings in is engaged for before somebody extends it.
-CONTRACTED_ENGAGEMENT_LASTS: Final = timedelta(days=90)
-
-#: Why a contracted person is made with an end date the source did not give.
-A_CONTRACTOR_THE_LIST_BRINGS_IN_HAS_AN_END: Final = (
-    "auth.principal refuses a contractor with no end date (bounded_engagement_expires), because "
-    "an unbounded contractor is how a permission model rots, and no staff source says when a "
-    "contract ends. Made without one, the first outsourced or consultant row on a list would "
-    "refuse the step's one transaction and nobody on the list would be made. So a contracted "
-    "person is made engaged for CONTRACTED_ENGAGEMENT_LASTS from the run, which an "
-    "administrator extends or shortens on their page like any other end date."
 )
 
 
@@ -111,11 +104,54 @@ class PeopleRun:
     """What the people step came to: how many it made, in a sentence that names nobody."""
 
     made: int
+    #: Contractors still on the list whose end date this run moved on.
+    renewed: int = 0
 
     def sentences(self, *, trial: bool = False) -> tuple[str, ...]:
         if trial:
             return (f"People: {self.made} on the list would be added to People.",)
-        return (f"People: {self.made} on the list added to People.",)
+        said = [f"People: {self.made} on the list added to People."]
+        if self.renewed:
+            said.append(
+                f"People: {self.renewed} contracted on the list kept engaged for another "
+                f"{CONTRACTED_ENGAGEMENT_LASTS.days} days."
+            )
+        return tuple(said)
+
+
+def still_contracted(roster: Roster) -> tuple[str, ...]:
+    """The digests of the active people the list names as contracted, whose end dates move on.
+
+    See `A_CONTRACTOR_ON_THE_LIST_STAYS_ENGAGED_WHILE_LISTED`.
+    """
+    return tuple(
+        sorted(
+            {
+                digest_of(one.work_address)
+                for one in roster.people
+                if one.standing is EmploymentStatus.ACTIVE and one.employment_type in CONTRACTED
+            }
+        )
+    )
+
+
+def renewing(digests: Sequence[str], until: datetime) -> Update:
+    """Move on the end date of every contractor joined to one of these addresses, never back."""
+    joined = select(PrincipalIdentityRow.principal_id).where(
+        PrincipalIdentityRow.channel == Channel.EMAIL.value,
+        PrincipalIdentityRow.identity_hash.in_(list(digests)),
+        PrincipalIdentityRow.deleted_at.is_(None),
+    )
+    return (
+        update(PrincipalRow)
+        .where(
+            PrincipalRow.id.in_(joined),
+            PrincipalRow.employment == Employment.CONTRACTOR.value,
+            PrincipalRow.not_after.is_not(None),
+            PrincipalRow.not_after < until,
+        )
+        .values(not_after=until)
+    )
 
 
 async def _joined(session: AsyncSession, digests: Iterable[str]) -> set[str]:
@@ -151,18 +187,25 @@ async def provide_people(
     async with sessions() as session, session.begin():
         joined = await _joined(session, (digest_of(one.work_address) for one in roster.people))
         making = people_to_make(roster, joined)
-        if trial or not making:
+        if trial:
             return PeopleRun(made=len(making))
+        for statement in attributed_to(
+            actor_id=actor, ent_hash=NO_REACH, trace_id=sync_trace("staff-people", now)
+        ):
+            await session.execute(statement)
+        contracted = still_contracted(roster)
+        renewed = 0
+        if contracted:
+            moved = await session.execute(renewing(contracted, now + CONTRACTED_ENGAGEMENT_LASTS))
+            renewed = int(getattr(moved, "rowcount", 0) or 0)
+        if not making:
+            return PeopleRun(made=0, renewed=renewed)
         departments = registered_by_name(
             {
                 str(slug): str(name)
                 for slug, name in (await session.execute(registered_departments())).all()
             }
         )
-        for statement in attributed_to(
-            actor_id=actor, ent_hash=NO_REACH, trace_id=sync_trace("staff-people", now)
-        ):
-            await session.execute(statement)
         for person in making:
             principal_id = (
                 new_id() if new_id is not None else f"{PRINCIPAL_PREFIX}{uuid.uuid4().hex}"
@@ -172,9 +215,7 @@ async def provide_people(
                     id=principal_id,
                     kind="human",
                     employment=employment_of(person).value,
-                    not_after=now + CONTRACTED_ENGAGEMENT_LASTS
-                    if employment_of(person) is Employment.CONTRACTOR
-                    else None,
+                    not_after=engaged_until(person, now),
                     display_name=person.display_name,
                     primary_department=departments.get(department_key(person.department)),
                 )
@@ -188,4 +229,4 @@ async def provide_people(
                     assurance=int(Assurance.UNVERIFIED),
                 )
             )
-    return PeopleRun(made=len(making))
+    return PeopleRun(made=len(making), renewed=renewed)

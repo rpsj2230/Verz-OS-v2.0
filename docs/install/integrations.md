@@ -43,7 +43,7 @@ account or a bot token: the source is answering as us, and it never sees the per
 What stands between a person and a row in those sources is this system's own entitlements and
 nothing else. Read that as a requirement on how you grant, not as a gap to be worked around.
 
-**What it will run against.** Two of the eight have no measured rate ceiling, and the ones that
+**What it will run against.** Two of the nine have no measured rate ceiling, and the ones that
 do are the source's published limit rather than a number chosen here. Where the ceiling belongs
 to your own account rather than to a subscription, spending it is your outage: the accounting
 connector's allowance is five thousand calls a day for your whole organisation, shared with
@@ -68,6 +68,7 @@ exists, because a row for something that is gone reads as coverage.
 | `laravel` | `database` | `view` | `read_only` | `none` | none measured |
 | `lark_base` | `rest` | `base_table` | `read_only` | `none` | `lark_base` |
 | `lark_wiki` | `rest` | `wiki_space` | `read_only` | `none` | `lark_base` |
+| `search_console` | `rest` | `search_site` | `read_only` | `none` | `search_console` |
 | `xero` | `rest` | `tenant` | `read_only` | `none` | `xero` |
 
 Two rows deserve a second look.
@@ -261,6 +262,24 @@ which is a document, and documents are handled by the knowledge layer with a cit
 every passage.
 
 **It shares `lark_base`'s ceiling.** See the note under the table.
+
+## `search_console`
+
+One Search Console property, pinned at connect by its name as Search Console lists it: an address
+ending in a slash, or `sc-domain:` and a domain.
+
+**Create** a service account (the Google Analytics one will do), switch on the Search Console API
+in its project, create a JSON key for it, and add its address to the one property as a user with
+restricted permission. Do not grant domain-wide delegation. The key file is exchanged for a token
+that carries `webmasters.readonly` and nothing else, for one read at a time, and never kept.
+
+**It keeps the site and never its figures.** The index holds the site's name and the permission
+the account has on it. Clicks and impressions for the last 7, 28 or 90 days, the top query and page
+for the last 28 days and the sitemaps' errors and warnings are read from Google when somebody asks,
+four calls made at once, and are never stored anywhere here.
+
+**What it does not narrow.** One department reads the site: the one named at connect. Indexing
+issues are the sitemaps' own counts, because the API offers no page-indexing report to read.
 
 ## `xero`
 

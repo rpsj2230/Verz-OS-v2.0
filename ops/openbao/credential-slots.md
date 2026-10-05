@@ -22,6 +22,7 @@ later" is a scope nobody removes.
 | `connectors/creds/cloudflare_dns_changes` | Cloudflare, approved DNS changes | A second API token with DNS Edit over the same zones, given only to allow approved DNS changes | Zone Edit, any Account permission and the Global API Key. The read token never holds a write permission |
 | `connectors/creds/cloudflare` | Cloudflare | An API token with Zone Read, DNS Read and Analytics Read over the one account's zones | DNS Write, any Edit permission and the Global API Key. A DNS change is only ever prepared for a person to approve |
 | `connectors/creds/google_analytics` | Google Analytics | A service account's key file, the account a Viewer on the one property, asking only for `analytics.readonly` | `analytics.edit`, and domain-wide delegation. It reads one property as itself |
+| `connectors/creds/search_console` | Search Console | A service account's key file, the account a restricted user on the one property, asking only for `webmasters.readonly` | `webmasters`, which can change a property, and domain-wide delegation |
 | `connectors/creds/google_drive` | Drive or M365 | A service account with Viewer on the one folder shared with it | Domain-wide delegation. It reads everything, for everyone, for ever |
 | `browser/creds/*` | Browser runner | One credential per site, per task | Anything reusable across sites |
 
@@ -218,6 +219,7 @@ is the catalogue, and a test holds this table to it):
 | `connector_keys/laravel` | laravel | SELECT on the allowlisted views only | SELECT on tables; any write |
 | `connector_keys/lark_base` | lark_base | bitable:app:readonly; base:record:read | base:record:write; drive:drive |
 | `connector_keys/lark_wiki` | lark_wiki | wiki:wiki:readonly | docs:document edit scopes |
+| `connector_keys/search_console` | search_console | webmasters.readonly; restricted permission on the one property | webmasters; domain-wide delegation |
 | `connector_keys/staff_source` | staff_source | read on the staff directory only; for LDAP a service account that may bind and search and nothing more | any write; for LDAP an administrator or an account that may reset passwords or groups |
 | `connector_keys/xero` | xero | accounting.transactions.read; accounting.contacts.read | any .write scope |
 

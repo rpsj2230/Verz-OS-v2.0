@@ -145,6 +145,11 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
                 refuse=("docs:document edit scopes",),
             ),
             SlotScopes(
+                "search_console",
+                request=("webmasters.readonly", "restricted permission on the one property"),
+                refuse=("webmasters", "domain-wide delegation"),
+            ),
+            SlotScopes(
                 STAFF_LIST,
                 request=(
                     "read on the staff directory only",

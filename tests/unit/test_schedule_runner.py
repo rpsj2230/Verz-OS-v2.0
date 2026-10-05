@@ -481,8 +481,9 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     `brain.ops.recovery_run` calls `redrive`, `resume` and `verify_once`, so `queue_redrive` and
     `side_effect_resume` left the list together.
 
-    **And twenty-two controls on 2026-09-30, with two orphans still.** `escalation_expiry` arrived
-    already wired, with `gate.escalation`.
+    **And twenty-three controls on 2026-09-30, with two orphans still.** `escalation_expiry`
+    arrived already wired, with `gate.escalation`, and `evening_digest` later that day, with its
+    destination, its borrowed key and `brain.ops.digest_run`.
 
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
@@ -500,7 +501,8 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "restore_drill" not in {one.name for one in orphans()}
     assert "acceptance_run" not in {one.name for one in orphans()}
     assert "escalation_expiry" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 22
+    assert "evening_digest" not in {one.name for one in orphans()}
+    assert len(CONTROLS) == 23
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -540,6 +542,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "queue_redrive",
         "side_effect_resume",
         "escalation_expiry",
+        "evening_digest",
     }
 
 

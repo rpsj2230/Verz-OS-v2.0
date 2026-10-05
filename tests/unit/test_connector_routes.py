@@ -161,6 +161,7 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "cloudflare": "0123456789abcdef0123456789abcdef",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
     "laravel": "portal",
 }
 
@@ -170,6 +171,7 @@ FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
     "cloudflare": {"department": "operations"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
     "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -796,6 +798,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "freshdesk": False,
         "cloudflare": False,
         "google_analytics": False,
+        "search_console": False,
     }
 
 

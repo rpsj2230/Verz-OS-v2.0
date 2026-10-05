@@ -32,9 +32,10 @@ Cloudflare DNS record's index id is its zone's and its own, and the lookup lays 
 from it; the record read back is named the same way, so `brain.ops.live_records` matches it to its
 index row.
 
-**A record's figures are read by the report its source declares (M11.7.1).** Google Analytics'
-traffic for a property is not the property read again: `declaration.LiveReport` names the calls a
-report is, the address rule checks each, and they are sent at once on pinned connections,
+**A record's figures are read by the report its source declares (M11.7.1, M11.7.2).** Google
+Analytics' traffic for a property is not the property read again: `declaration.LiveReport` names the
+calls a report is (one POST for Analytics; several for Search Console, POSTs and a GET), the
+address rule checks each, and they are sent at once on pinned connections,
 `SourcePoster` for a call with a body. When every call answered, the connector's own
 interpretation turns the bodies into one record carrying the record's id, which the lane lays over
 the index row as it lays a live record. A read may carry one range beside the id (`RANGE_FILTER`),
@@ -52,7 +53,7 @@ Scope: every part that touches the world is handed in (the keys, the caller, the
 clock), so the tests drive it over recorded replies, and `live_records_for` is the one place the
 real ones are chosen.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5, M11.7.3, M11.7.1, M11.6.3, M11.6.4
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
 """
 
 from __future__ import annotations

@@ -478,6 +478,18 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
         ),
     ),
     ConnectorLimit(
+        name="search_console",
+        per_minute=200,
+        raisable=False,
+        note=(
+            "Google limits the Search Console API per user and per site rather than by plan: "
+            "search analytics to 1,200 queries a minute for a site, and the site list and "
+            "sitemaps to 200 a minute and 20 a second for a user "
+            "(https://developers.google.com/webmaster-tools/limits). Recorded at 200 a minute, the "
+            "lowest that governs a report's calls. There is no plan to buy that raises them."
+        ),
+    ),
+    ConnectorLimit(
         name="lark_base",
         per_minute=100,
         raisable=False,
