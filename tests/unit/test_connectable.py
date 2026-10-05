@@ -57,6 +57,7 @@ IDENTIFIERS: Final = {
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
+    "google_analytics": "123456789",
     "laravel": "portal",
 }
 
@@ -64,6 +65,7 @@ IDENTIFIERS: Final = {
 FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "freshdesk": {"department": "support"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "google_analytics": {"department": "marketing"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -190,7 +192,7 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
     Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
     declared = shipped()
-    assert set(CONNECTABLE) == {"freshdesk", "hubspot", "xero"}
+    assert set(CONNECTABLE) == {"freshdesk", "google_analytics", "hubspot", "xero"}
     for name in CONNECTABLE:
         one = declared[name]
         assert one.reading is not None or one.live is not None, name
