@@ -11,6 +11,7 @@ Task ids: M42.6.5, M11.1.6
 
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import pkgutil
 import re
@@ -21,22 +22,27 @@ import pytest
 
 import brain.connectors
 from brain.connectors.contract import AccessMode
+from brain.connectors.declaration import shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.write_verification import builds_a_manifest
 from brain.ops.connectable import (
     CONNECTABLE,
+    DECLARED_FORMS,
     MAX_SETTING_CHARS,
     NOT_FROM_THE_CONSOLE,
     READING_ROLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
     NotConnectableError,
     blank_sentence,
     connectable,
     given,
     key_reference,
     manifest_for,
+    offered,
     settings_problems,
 )
 from brain.ops.credentials import CONNECTOR_NAME_PATTERN
+from brain.ops.limits import connector_ceiling
 from brain.ops.openbao import CONNECTOR_KEY_PREFIX
 from brain.ops.secrets import VaultRole
 
@@ -169,12 +175,56 @@ def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
     for one in NOT_FROM_THE_CONSOLE.values():
         assert one.name and one.label
         # Lark's two are connected by Connect Lark on the same screen, and since 2026-09-30
-        # (M11.7.7) nothing else is connected at the server.
-        assert one.name.startswith("lark_")
-        assert "Connect Lark" in one.why
+        # (M11.7.7) nothing else is connected at the server: the rest are declared forms this
+        # install cannot read yet, and say so.
+        if one.name.startswith("lark_"):
+            assert "Connect Lark" in one.why
+        else:
+            assert one.name in DECLARED_FORMS
+            assert (one.why, one.guide) == (THIS_INSTALL_CANNOT_READ_IT_YET, ())
     with pytest.raises(NotConnectableError):
         connectable("lark_base")
     assert connectable("xero") is CONNECTABLE["xero"]
+
+
+def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
+    """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every source offered today:
+    each has a reading or a live lookup, and a recorded ceiling. Delete this and the screen can
+    offer a connection that keeps its key and reads nothing, which is what Google Drive and
+    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
+    declared = shipped()
+    assert set(CONNECTABLE) == {
+        "freshdesk",
+        "google_analytics",
+        "hubspot",
+        "search_console",
+        "xero",
+    }
+    for name in CONNECTABLE:
+        one = declared[name]
+        assert one.reading is not None or one.live is not None, name
+        assert connector_ceiling(name) is not None, name
+
+
+def test_a_form_with_no_way_to_be_read_is_listed_and_not_offered() -> None:
+    """The rule driven from both sides on one real declaration. Xero as it ships is offered; Xero
+    with neither its reading nor its live lookup, and Xero under a name no ceiling is recorded for,
+    are each listed as not readable yet and offered nowhere. Delete this and the rule can be
+    satisfied by a function that offers everything, or by one that offers nothing."""
+    from brain.connectors import xero
+
+    real = xero.CONNECTOR
+    offers, listed = offered({"xero": real})
+    assert set(offers) == {"xero"} and listed == {}
+
+    unread = dataclasses.replace(real, reading=None, live=None)
+    offers, listed = offered({"xero": unread})
+    assert offers == {}
+    assert (listed["xero"].why, listed["xero"].guide) == (THIS_INSTALL_CANNOT_READ_IT_YET, ())
+
+    unmeasured = dataclasses.replace(real, name="nowhere")
+    offers, listed = offered({"nowhere": unmeasured})
+    assert offers == {} and listed["nowhere"].why == THIS_INSTALL_CANNOT_READ_IT_YET
 
 
 # ------------------------------------------------------------------------- the refusals

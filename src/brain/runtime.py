@@ -37,9 +37,22 @@ log = structlog.get_logger()
 #: or SIGKILL arrives mid-request and the graceful shutdown was theatre.
 DOCKER_STOP_TIMEOUT = 10
 
-#: Roughly what one worker costs with its pool attached, measured rather than assumed
-#: once there is something to measure. Conservative until then.
-WORKER_MB = 180
+#: What one worker was measured to hold at its peak, and what the supervisor and multiprocessing's
+#: resource tracker hold beside the workers, in MiB. Read-only on a staging install on 2026-09-29,
+#: two minutes after a deploy started four workers in a 1024 MiB container: cgroup memory.peak
+#: 954 MiB and memory.current 839 MiB, of which 830 MiB anonymous and 4 KiB file cache, so the
+#: figure is the processes' own and not reclaimable cache; per-process RSS 228 MiB for each worker,
+#: 65 MiB for the supervisor and 17 MiB for the tracker. The peak is the boot: four workers import
+#: at once. So (954 - 82) / 4 = 218 per worker at the moment that decides whether the container is
+#: killed. Re-measure when the application's imports change materially.
+MEASURED_WORKER_PEAK_MB = 218
+MEASURED_SUPERVISOR_MB = 82
+
+#: What one worker is sized at: the measured peak, rounded up. It was 180, "conservative until
+#: measured", and the measurement said otherwise: at 180 a 1536 MiB container started seven
+#: workers, whose measured peak is 82 + 7 x 218 = 1608 MiB, so it was killed at every start. See
+#: `test_no_container_size_starts_more_workers_than_its_measured_peak_holds`.
+WORKER_MB = 220
 
 
 @dataclass(frozen=True)
@@ -51,8 +64,10 @@ class ProcessProfile:
     reason: str
 
 
-#: Left out of the memory ceiling for the runtime itself before any worker is counted.
-RUNTIME_HEADROOM_MB = 256
+#: Left out of the memory ceiling for the supervisor and the resource tracker before any worker is
+#: counted: `MEASURED_SUPERVISOR_MB`, rounded up. It was 256, set before anything was measured,
+#: and with a worker sized at 220 it would leave a 1024 MiB container three workers where four fit.
+RUNTIME_HEADROOM_MB = 96
 
 
 def workers_by_memory(memory_mb: int) -> int:

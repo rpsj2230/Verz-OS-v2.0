@@ -128,6 +128,7 @@ from brain.ops.connector_sync_store import (
     record_upsert,
 )
 from brain.ops.credentials import KEY_FIELD
+from brain.ops.lark_base_index import HttpsTokenIssuer, index_if_due
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import LimiterState, check
 from brain.ops.openbao import (
@@ -603,14 +604,18 @@ class SyncRun:
     failed: int
     not_due: int
     cannot_be_read: int
+    #: What the switched-on Lark Base's index run did, or empty with no Base switched on. See
+    #: `brain.ops.lark_base_index.IndexRun.summary`, which names no Base and no table.
+    base: str = ""
 
     def summary(self) -> str:
+        after = f"; {self.base}" if self.base else ""
         if not (self.read or self.waiting or self.failed or self.not_due or self.cannot_be_read):
-            return "no source is connected"
+            return f"no source is connected{after}"
         return (
             f"{self.read} read, {self.waiting} waiting for a source's allowance, "
             f"{self.failed} failed, {self.not_due} not yet due, "
-            f"{self.cannot_be_read} that cannot be read"
+            f"{self.cannot_be_read} that cannot be read{after}"
         )
 
 
@@ -914,17 +919,30 @@ def run_connector_sync_now(
 
     async def go() -> SyncRun:
         engine = make_app_engine(database_url)
-        caller = HttpsSourceCaller()
+        sessions = make_session_factory(engine)
+        keys = worker_connector_keys(vault_address, vault_token)
+        caller, resolver = HttpsSourceCaller(), SystemResolver()
         try:
-            return await sync_on(
-                sessions=make_session_factory(engine),
+            done = await sync_on(
+                sessions=sessions,
                 now=now,
-                keys=worker_connector_keys(vault_address, vault_token),
+                keys=keys,
                 caller=caller,
-                resolver=SystemResolver(),
+                resolver=resolver,
                 clock=_utc_now,
                 poster=caller,
             )
+            # The switched-on Lark Base's minimal index, on the same schedule and under the same
+            # keys; it has no connection row, for `brain.ops.lark_base_index`'s reason.
+            base = await index_if_due(
+                sessions,
+                now=now,
+                keys=keys,
+                caller=caller,
+                resolver=resolver,
+                issuer=HttpsTokenIssuer(),
+            )
+            return done if base is None else replace(done, base=base.summary())
         finally:
             await engine.dispose()
 

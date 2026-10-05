@@ -46,7 +46,7 @@ from brain.identity.data_steward import (
 )
 from brain.identity.first_administrator import GRANTED_AT_APPOINTMENT, FirstAdministrators
 from brain.knowledge.rows import entity_capability
-from brain.ops.connectable import CONNECTABLE, manifest_for
+from brain.ops.connectable import DECLARED_FORMS, given, key_reference
 from brain.ops.connector_store import StoredConnections
 from brain.session import make_session_factory
 from brain.setup_routes import steward_of
@@ -93,6 +93,12 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
 FINANCE = "finance"
 
 
+def built(name: str, settings: Mapping[str, str]) -> Any:
+    """The manifest a declared console form builds, whether or not the console offers it yet."""
+    form = DECLARED_FORMS[name]
+    return form.build(given(form, settings), key_reference(name))
+
+
 # ------------------------------------------------------------------------- no server
 
 
@@ -129,13 +135,13 @@ def test_the_steward_holds_the_console_s_own_spellings_of_the_authority_and_the_
 
 
 def test_a_source_declares_each_entity_it_reaches_as_its_row_and_its_fields_and_no_write() -> None:
-    """Built from every connectable source's real manifest. Each entity a tool or a projection
-    reaches is declared as `entity_capability` and the wildcard over its fields, and nothing is a
-    write. Delete this and a source can declare a spelling the row reader never asks for, so the
-    steward holds reads that admit no row, or a write can reach the steward by connecting a
-    source."""
+    """Built from every declared console form's real manifest, offered yet or not. Each entity a
+    tool or a projection reaches is declared as `entity_capability` and the wildcard over its
+    fields, and nothing is a write. Delete this and a source can declare a spelling the row
+    reader never asks for, so the steward holds reads that admit no row, or a write can reach the
+    steward by connecting a source."""
     for name, settings in SETTINGS.items():
-        manifest = manifest_for(name, settings)
+        manifest = built(name, settings)
         entities = {one.entity for one in manifest.tools} | {
             one.entity for one in manifest.projections
         }
@@ -149,7 +155,7 @@ def test_a_source_declares_each_entity_it_reaches_as_its_row_and_its_fields_and_
         }
         assert list(declared) == sorted(declared)
         assert all(one.startswith("read:") for one in declared)
-    assert set(SETTINGS) == set(CONNECTABLE)
+    assert set(SETTINGS) == set(DECLARED_FORMS)
 
 
 def test_the_same_person_is_refused_unless_said_and_said_only_of_an_administrator() -> None:
@@ -293,7 +299,7 @@ def connect(
     declared: Sequence[str] | None = None,
 ) -> str:
     """Connect one source through the store, granting what its manifest declares unless told."""
-    manifest = manifest_for(name, SETTINGS[name])
+    manifest = built(name, SETTINGS[name])
 
     async def work(sessions: async_sessionmaker[AsyncSession]) -> str:
         try:
@@ -328,7 +334,7 @@ def reach_of(url: str, principal_id: str) -> EntitlementSet:
 
 
 def declared_by(name: str) -> tuple[str, ...]:
-    return declared_capabilities(manifest_for(name, SETTINGS[name]))
+    return declared_capabilities(built(name, SETTINGS[name]))
 
 
 def steward_rows(url: str) -> list[tuple[Any, ...]]:

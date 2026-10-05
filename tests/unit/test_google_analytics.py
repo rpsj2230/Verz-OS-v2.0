@@ -602,6 +602,9 @@ def test_a_declaration_with_a_report_and_a_live_lookup_for_one_entity_is_refused
         def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
             return {}
 
+        def operation(self, entity: str, *, settings: Mapping[str, str], resolver: Any) -> None:
+            return None
+
     with pytest.raises(DeclarationError, match="both as a record and as a report"):
         replace(shipped_one, live=Both())
     with pytest.raises(DeclarationError, match="report and no reading"):

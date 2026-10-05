@@ -25,6 +25,7 @@ from brain.connectors import ldap_directory
 from brain.connectors.staff_directories import Answer, Fetch, Outbound
 from brain.identity.staff_roster import Application, RunOutcome, StoredMember, digest_of
 from brain.identity.staff_source import STAFF_SOURCE_LOCATION_SETTING, STAFF_SOURCE_SETTING
+from brain.identity.standing import StandingPlan
 from brain.ops import staff_sync_run
 from brain.ops.connectable import READING_ROLE
 from brain.ops.connector_lease import LeaseOutcome
@@ -154,6 +155,17 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Store:
     monkeypatch.setattr(staff_sync_run, "read_last_applied", read_last_applied)
     monkeypatch.setattr(staff_sync_run, "write_application", write_application)
     monkeypatch.setattr(staff_sync_run, "run_row", lambda record: ("run", record))
+
+    # The standing step reads principals and the ledger, which a recording session cannot answer;
+    # `tests/unit/test_standing_run.py` runs it against a real database.
+    async def plan_standing(*_: object, **__: object) -> StandingPlan:
+        return StandingPlan()
+
+    async def apply_standing(*_: object, **__: object) -> None:
+        return None
+
+    monkeypatch.setattr(staff_sync_run, "plan_standing", plan_standing)
+    monkeypatch.setattr(staff_sync_run, "apply_standing", apply_standing)
     return held
 
 

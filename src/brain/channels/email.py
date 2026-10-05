@@ -54,14 +54,22 @@ message and covered by the signature, so this module still reads no verdict out 
 See `THE_RECEIVER_STATES_ITS_VERDICT_AND_SIGNS_IT`. `GUIDE` sets that receiver up in
 Cloudflare Email Routing with an Email Worker, `WORKER_SCRIPT`, which turns away every domain
 but the company's own before posting anything; a company whose mail arrives elsewhere posts
-the same envelope from its own receiver, and nothing on this side changes. Rejected: reading
-a mailbox over IMAP, which holds a mailbox password in this install, polls, and gets its
-verdict from an `Authentication-Results` header nothing here can tell from a forgery.
+the same envelope from its own receiver, and nothing on this side changes.
+
+**And a mailbox is the other way in, offered first.** Reading a mailbox over IMAP was rejected
+here at first, as a verdict read from a header nothing could tell from a forgery. That was
+wrong in part: the receiving provider's own `Authentication-Results` is the topmost one and
+names the provider, so it can be told apart by its place and its name, and a Cloudflare-only way
+in left every company not on Cloudflare with no email at all. `brain.channels.mailbox` reads
+that stamp and nothing else, `brain.mailbox_read` hands each message to the same steps a post
+takes, and `A_CHANNEL_READING_A_MAILBOX_TAKES_NO_POSTS` keeps the mailbox's password, which is
+then the channel's secret, from signing anything. The record says which way it is set up: a
+record naming an `imap_host` reads a mailbox. `GUIDE` asks first which way applies.
 
 **A reply leaves by the install's own relay.** `EmailWire.request_for` addresses
 `brain.channels.relay.RELAY_URL`, which `brain.channel_routes` hands to the relay saved on
-Notifications with its password borrowed for the one send, so this channel keeps no mail
-credential of its own and its record holds only the address people write to.
+Notifications with its password borrowed for the one send, so this channel keeps no sending
+credential of its own.
 
 **Automatic mail is never answered.** Two systems replying to each other is a loop that ends
 in a full mailbox or a rate limit, and it is the classic way an autoresponder takes down a
@@ -113,7 +121,7 @@ from brain.channels.relay import (
     SUBJECT,
     TO,
 )
-from brain.channels.webhook import SIGNATURE_HEADER, TIMESTAMP_HEADER
+from brain.channels.webhook import SIGNATURE_HEADER, TIMESTAMP_HEADER, WebhookRefusedError
 from brain.channels.webhook import verify as verify_signed
 from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
@@ -600,8 +608,23 @@ A_REPLY_THREADS_BY_ITS_ID_AND_SAYS_NOTHING_IN_ITS_SUBJECT: Final = (
 ENVELOPE_AUTHENTICATION: Final = "authentication"
 ENVELOPE_MESSAGE: Final = "message"
 
-#: The record's one field: the address people write to, which a reply names as its Reply-To.
+#: The record's first field: the address people write to, which a reply names as its Reply-To.
 ADDRESS: Final = "address"
+
+#: The fields a record reading a mailbox holds besides its address; `imap_host` is the switch.
+#: See `brain.channels.mailbox`, which reads them.
+IMAP_HOST: Final = "imap_host"
+IMAP_PORT: Final = "imap_port"
+IMAP_USER: Final = "imap_user"
+RECEIVER: Final = "receiver"
+DOMAINS: Final = "domains"
+
+#: Why the events address refuses everything on a channel that reads a mailbox.
+A_CHANNEL_READING_A_MAILBOX_TAKES_NO_POSTS: Final = (
+    "On a channel that reads a mailbox the channel's secret is the mailbox's password, and a "
+    "password that also signed envelopes posted to the events address would let whoever held it "
+    "write mail from anybody. So that address refuses every post while the record reads a mailbox."
+)
 
 #: A line that opens a signature (RFC 3676) or a quoted reply, where the question stops.
 _SIGNATURE: Final = re.compile(r"^-- ?$")
@@ -678,7 +701,7 @@ class EmailWire:
 
     @property
     def tenant_fields(self) -> tuple[str, ...]:
-        return (ADDRESS,)
+        return (ADDRESS, IMAP_HOST, IMAP_PORT, IMAP_USER, RECEIVER, DOMAINS)
 
     @property
     def secret_parts(self) -> tuple[str, ...]:
@@ -686,7 +709,13 @@ class EmailWire:
         return ()
 
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
-        """The webhook channel's signature over the time and the exact bytes, and nothing read."""
+        """The webhook channel's signature over the time and the exact bytes, and nothing read.
+
+        Refused outright on a record that reads a mailbox; see
+        `A_CHANNEL_READING_A_MAILBOX_TAKES_NO_POSTS`.
+        """
+        if arrived.tenant.get(IMAP_HOST, "").strip():
+            raise WebhookRefusedError(A_CHANNEL_READING_A_MAILBOX_TAKES_NO_POSTS)
         verify_signed(
             secret=secret,
             signature=arrived.headers.get(SIGNATURE_HEADER, ""),
@@ -884,9 +913,37 @@ def _dashboard(
     )
 
 
-#: The steps that connect email, found by `brain.channels.adapter.channel_guides`.
+#: The two ways mail reaches this install, as the first step offers them. A mailbox first: see
+#: `brain.channels.mailbox.A_MAILBOX_IS_THE_WAY_IN_EVERY_COMPANY_HAS`.
+MAILBOX_PATH: Final = "mailbox"
+CLOUDFLARE_PATH: Final = "cloudflare"
+
+#: The steps that connect email, found by `brain.channels.adapter.channel_guides`. They branch on
+#: where the company's mail is, and each path ends in its own form.
 GUIDE: Final = keyed(
     (
+        GuideStep(
+            key="where",
+            title="Is your domain's mail on Cloudflare?",
+            text=(
+                "The Brain can read an ordinary mailbox you make for it, which works whoever "
+                "hosts your mail, such as Google Workspace or Microsoft 365. If your domain's mail "
+                "and DNS are on Cloudflare, it can take mail from Cloudflare Email Routing "
+                "instead. Choose one; you can come back and choose the other."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Email",
+                lines=(
+                    SketchLine(LineKind.ITEM, "Read a mailbox", mark=True),
+                    SketchLine(LineKind.ITEM, "Cloudflare Email Routing"),
+                ),
+            ),
+            choices=(
+                (MAILBOX_PATH, "No: read a mailbox"),
+                (CLOUDFLARE_PATH, "Yes: use Cloudflare Email Routing"),
+            ),
+        ),
         GuideStep(
             key="relay",
             title="Set up the mail relay first",
@@ -906,6 +963,77 @@ GUIDE: Final = keyed(
                 ),
                 button="Send a test message",
             ),
+        ),
+        GuideStep(
+            key="mailbox",
+            title="Make a mailbox for the Brain and turn on IMAP",
+            text=(
+                "With your mail provider make a mailbox only the Brain uses, such as "
+                "ask@example.com, and turn on IMAP for it. In Google Workspace that is Gmail's "
+                "Settings, Forwarding and POP/IMAP, Enable IMAP, and an app password if the "
+                "mailbox signs in with two steps; in Microsoft 365, IMAP is switched on for the "
+                "mailbox under Mail, Manage email apps. Note the IMAP server your provider names, "
+                "such as imap.gmail.com or outlook.office365.com, on port 993. Nobody should read "
+                "this mailbox by hand: the Brain reads what is unread, and marks it read."
+            ),
+            sketch=Sketch(
+                place="Your mail provider",
+                heading="IMAP access",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Mailbox", "ask@example.com", mark=True),
+                    SketchLine(LineKind.TOGGLE, "IMAP", mark=True),
+                    SketchLine(LineKind.FIELD, "IMAP server", "imap.example.com:993"),
+                ),
+            ),
+            path=MAILBOX_PATH,
+        ),
+        GuideStep(
+            key="receiver",
+            title="Find the name your provider stamps on arriving mail",
+            text=(
+                "From your own work address send the mailbox a message, then open it in the "
+                "mailbox and show its original or its source. The topmost line starting "
+                "Authentication-Results: names your provider before the first semicolon, such as "
+                "mx.google.com: that name goes into receiver. If you are on Microsoft 365, whose "
+                "line names nobody, receiver is exchange. The Brain answers only mail your "
+                "provider says came from your own domains."
+            ),
+            sketch=Sketch(
+                place="Your mail provider",
+                heading="Show original",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Authentication-Results", "mx.example.com; ..."),
+                    SketchLine(LineKind.FIELD, "receiver", "mx.example.com", mark=True),
+                ),
+            ),
+            path=MAILBOX_PATH,
+        ),
+        GuideStep(
+            key="save_mailbox",
+            title="Save the mailbox here",
+            text=(
+                "Type the mailbox's address in address, its IMAP server, port 993 and user name, "
+                "the receiver's name from the last step, and your staff's email domains in "
+                "domains, separated by commas. Paste the mailbox's password, or its app password, "
+                "into the secret field, tick Switched on and press Save set-up. The password is "
+                "kept in the vault. Within a minute of a message arriving the Brain reads it; "
+                "write to the mailbox from your own address and the first answer asks you to "
+                "link your address to your account."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Email",
+                lines=(
+                    SketchLine(LineKind.FIELD, ADDRESS, "ask@example.com", mark=True),
+                    SketchLine(LineKind.FIELD, IMAP_HOST, "imap.example.com", mark=True),
+                    SketchLine(LineKind.FIELD, RECEIVER, "mx.example.com", mark=True),
+                    SketchLine(LineKind.FIELD, DOMAINS, "example.com", mark=True),
+                    SketchLine(LineKind.FIELD, "Secret (write only)", "********", mark=True),
+                ),
+                button="Save set-up",
+            ),
+            asks=(ADDRESS, IMAP_HOST, IMAP_PORT, IMAP_USER, RECEIVER, DOMAINS, SECRET_ASK),
+            path=MAILBOX_PATH,
         ),
         GuideStep(
             key="address",
@@ -931,6 +1059,7 @@ GUIDE: Final = keyed(
             ),
             link=CLOUDFLARE_DASHBOARD_URL,
             link_label="Open Cloudflare",
+            path=CLOUDFLARE_PATH,
         ),
         GuideStep(
             key="worker",
@@ -961,6 +1090,7 @@ GUIDE: Final = keyed(
             asks=(EVENTS_ADDRESS_ASK,),
             copy_text=WORKER_SCRIPT,
             copy_label="Copy the Worker script",
+            path=CLOUDFLARE_PATH,
         ),
         GuideStep(
             key="route",
@@ -983,6 +1113,7 @@ GUIDE: Final = keyed(
             ),
             link=CLOUDFLARE_DASHBOARD_URL,
             link_label="Open Cloudflare",
+            path=CLOUDFLARE_PATH,
         ),
         GuideStep(
             key="save",
@@ -1006,6 +1137,7 @@ GUIDE: Final = keyed(
                 button="Save set-up",
             ),
             asks=(ADDRESS, SECRET_ASK),
+            path=CLOUDFLARE_PATH,
         ),
     )
 )
