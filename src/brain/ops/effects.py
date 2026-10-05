@@ -838,6 +838,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
         "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
+        # A bound person's Lark address, kept as their verified message arrives (`0166`): an update
+        # of their own live row that a second call with the same address leaves unchanged.
+        "brain.channels.adapter:CardWire.person_address": Repeat.READS,
+        "brain.channels.inbound:AddressBook.remember": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
     }
 )
 
