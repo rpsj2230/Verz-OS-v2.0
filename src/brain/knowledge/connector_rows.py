@@ -131,12 +131,13 @@ def xero_classifications() -> tuple[TableClassification, ...]:
 
 
 def freshdesk_classifications() -> tuple[TableClassification, ...]:
-    """Freshdesk's tickets, over exactly the fields its index keeps.
+    """Freshdesk's tickets, over the fields its index keeps and the body read live.
 
     Each field behind its own capability (`read:ticket.status`, ...), INTERNAL, in
     `brain.demo.row_classifications`' pattern: reaching a ticket is `read:ticket` in the department
-    the connection names, and each field a person is told is a further grant. The ticket's body is
-    not here because it is not kept, and nothing reads it live yet.
+    the connection names, and each field a person is told is a further grant. The ticket's body in
+    plain text (`freshdesk.LIVE_BODY_FIELD`) is read from the helpdesk when a question asks for it
+    and never kept, and is classified here like any field, so being told it is a grant of its own.
     """
     return (
         TableClassification(
@@ -148,7 +149,7 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
                         required_capability=Capability(value=f"read:{freshdesk.TICKET}.{name}"),
                         classification=Classification.INTERNAL,
                     )
-                    for name in freshdesk.projected_field_names()
+                    for name in (*freshdesk.projected_field_names(), freshdesk.LIVE_BODY_FIELD)
                 ),
                 _scope_column(freshdesk.FRESHDESK, freshdesk.TICKET),
             ),

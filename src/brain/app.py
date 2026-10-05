@@ -110,6 +110,7 @@ from brain.identity.sign_in_binding import sign_in_bindings
 from brain.install import InstallError, installed_name, value_of
 from brain.knowledge.app_parse_budget import app_parse_gaps
 from brain.knowledge.row_store import SessionRowSource
+from brain.mailbox_read import keep_reading_the_mailbox
 from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
 from brain.ops.artifact_store import artifacts_for
@@ -258,6 +259,18 @@ AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN: Final = (
     "key cache has nothing to check it against."
 )
 
+#: Why the endpoints `create_app` defines read their application from the request.
+AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION: Final = (
+    "FastAPI keeps every endpoint and dependency it inspects in module-level caches of 4096 "
+    "entries (fastapi.dependencies.models), holding the function itself. An endpoint defined "
+    "inside create_app that closes over app therefore keeps that application, its engines and "
+    "its routing table alive for as long as the cache does. A server builds one application and "
+    "never notices. The test suite builds thousands, two cache entries each, so up to some two "
+    "thousand stayed alive at once; measured on 2026-09-30, five route test files left 122, and "
+    "in a full run one request took 504 seconds against a deadline of 30. So such an endpoint "
+    "takes request: Request and reads request.app."
+)
+
 
 class Health(BaseModel):
     status: Literal["ok", "degraded"]
@@ -351,6 +364,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # changed on the Settings screen reaches every process and not only the one that saved it.
     # See `brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
     holding: asyncio.Task[None] | None = None
+    # The email channel's mailbox, read every minute where the answer is made; it reads nothing
+    # while the channel's record reads no mailbox. See `brain.mailbox_read`.
+    reading: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -411,6 +427,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             log.exception("installation settings could not be loaded")
         holding = asyncio.create_task(keep_holding(app.state.db_sessions))
+        reading = asyncio.create_task(keep_reading_the_mailbox(app))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -720,6 +737,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             holding.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await holding
+        if reading is not None:
+            reading.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reading
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -1237,15 +1258,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Health(status="ok", commit=settings.resolved_commit())
 
     @app.get("/health/ready", response_model=Health, tags=["health"])
-    async def ready(response: Response) -> Health:
+    async def ready(request: Request, response: Response) -> Health:
         """Every dependency is reachable. Deployment gates on this, not on liveness.
 
         `checks` decide the status; `reported` are named beside them and decide nothing. See
-        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
+        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`. The application is the request's,
+        never the enclosing `app`: see `AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION`.
         """
-        await app.state.readings.refresh(app.state.ready)
-        checks: dict[str, bool] = dict(app.state.ready)
-        reported: dict[str, bool] = dict(getattr(app.state, "reported", {}))
+        state = request.app.state
+        await state.readings.refresh(state.ready)
+        checks: dict[str, bool] = dict(state.ready)
+        reported: dict[str, bool] = dict(getattr(state, "reported", {}))
         ok = all(checks.values()) if checks else True
         if not ok:
             response.status_code = 503

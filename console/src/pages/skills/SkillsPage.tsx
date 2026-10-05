@@ -16,7 +16,9 @@
  * `brain.console.skill_library.queue_entries` now diffs an edit against the version it came from.
  *
  * **Adding and importing open in a drawer**, each form saying what it accepts before anything is
- * pressed (`SkillForms.tsx`), and only for a reader the API says may add.
+ * pressed (`SkillForms.tsx`), and only for a reader the API says may add. A written procedure is the
+ * drawer's third way in (M12.2.10), and what its reader found is listed under the sentence saying it
+ * was imported, one line each.
  *
  * **What was removed from the old page.** The lede explaining that import is the security boundary;
  * the "skills in use" list, which listed the same skills a second time keyed by agent, and its
@@ -24,7 +26,7 @@
  * applies; the sentences about truncated loads under every list; and the add and import forms drawn
  * open above the library for every visit.
  *
- * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56
+ * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M12.2.10
  */
 
 import { Plus, Sparkles } from "lucide-react";
@@ -36,7 +38,7 @@ import { Button } from "../../components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useListing, type Listing } from "../../components/useListing";
 import { CATEGORY_COLUMN, LIBRARY_API_PATH, skillAddress, type LibraryRow } from "../skillsQuery";
-import { AddSkillForm, ImportSkillForm, type Told } from "./SkillForms";
+import { AddSkillForm, ImportProcedureForm, ImportSkillForm, type Told } from "./SkillForms";
 import { ReviewPill, RetiredPill } from "./pills";
 import { retiredWords, reviewPill } from "./skillActions";
 
@@ -52,6 +54,8 @@ export const FILTERS_LABEL = "Narrow the skills";
 export const SEARCH_HINT = "Search skills";
 export const ADD_SKILL = "Add a skill";
 export const ADD_DESCRIPTION = "A skill is added unreviewed and reaches no agent until it is approved and assigned.";
+/** The drawer's third tab: a Word document or a Confluence page, imported as a draft (M12.2.10). */
+export const PROCEDURE_TAB = "Written procedure";
 export const CHIPS_LABEL = "Show one category";
 export const EVERY_CATEGORY = "Every category";
 
@@ -215,12 +219,16 @@ function AddDrawer({ open, onOpenChange, onTold }: { readonly open: boolean; rea
         <TabsList>
           <TabsTrigger value="paste">Paste or upload</TabsTrigger>
           <TabsTrigger value="import">Import</TabsTrigger>
+          <TabsTrigger value="procedure">{PROCEDURE_TAB}</TabsTrigger>
         </TabsList>
         <TabsContent value="paste" className="pt-2">
           <AddSkillForm onTold={onTold} />
         </TabsContent>
         <TabsContent value="import" className="pt-2">
           <ImportSkillForm onTold={onTold} />
+        </TabsContent>
+        <TabsContent value="procedure" className="pt-2">
+          <ImportProcedureForm onTold={onTold} />
         </TabsContent>
       </Tabs>
     </Drawer>
@@ -320,6 +328,15 @@ export function SkillsPage() {
       {told === null ? null : (
         <div role={told.ok ? "status" : "alert"}>
           <Note kind={told.ok ? "done" : "info"}>{told.sentence}</Note>
+          {told.details === undefined || told.details.length === 0 ? null : (
+            <ul data-slot="told-details" className="m-0 mt-1.5 flex list-none flex-col gap-1 p-0 pl-5">
+              {told.details.map((line) => (
+                <li key={line} className="text-[12.5px] leading-relaxed text-body [overflow-wrap:anywhere]">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       <QueueCard page={page} listing={listing} />

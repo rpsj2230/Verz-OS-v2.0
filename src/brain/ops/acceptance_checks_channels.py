@@ -28,7 +28,13 @@ events route, and the binding prompt it answers with is kept by a transport that
 documents a success. What only the owner's workspace proves is that Slack signs and delivers as
 documented and accepts the post.
 
-Task ids: M10.5.6, M10.5.1
+**Telegram: the address the install tells Telegram is the one it then believes.** A bot token
+made by the check is given to the wire's `setWebhook` call, and the header named in that call is
+the one a message is posted with: accepted, answered with the binding prompt on the token, and a
+header made any other way refused. What only the owner's bot proves is that Telegram accepts the
+registration and sends and delivers as documented.
+
+Task ids: M10.5.6, M10.5.1, M10.5.2, M10.5.4
 """
 
 from __future__ import annotations
@@ -311,4 +317,370 @@ async def a_slack_message_is_taken_signed_and_answered_on_the_bot_token(h: Harne
         raise CheckFailedError("the answer was not built on the bot's token")
     body = json.loads(built.body)
     if body != {"channel": sender, "text": Unrecognised(channel=Channel.SLACK).prompt}:
+        raise CheckFailedError("the answer was not the binding prompt, to the sender alone")
+
+
+# ------------------------------------------------------------------------ email, a mailbox
+#: The reason the mailbox check's reply half is not run on an install with no relay saved.
+NO_RELAY_IS_SAVED_FOR_THE_MAILBOX: Final = (
+    "mail was read from the stand-in mailbox and marked, but no mail relay is saved on "
+    "Notifications, so its answer had nowhere to leave from and its relay was not asked"
+)
+
+
+@dataclass
+class _StandInMailbox:
+    """`brain.channels.mailbox.MailboxReader` over messages the check made, in memory."""
+
+    messages: list[tuple[str, bytes]]
+    marked: list[str] = field(default_factory=list)
+    closed: bool = False
+
+    def unseen(self, most: int) -> list[tuple[str, bytes]]:
+        return [one for one in self.messages if one[0] not in self.marked][:most]
+
+    def mark_handled(self, ids: Any) -> None:
+        self.marked.extend(ids)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@check(
+    leaves=("M10.5.6",),
+    sentence=(
+        "An email channel reading a mailbox, with a stand-in mailbox the check filled, reads "
+        "its unread mail, answers a colleague its provider vouched for through the relay saved "
+        "on Notifications with how to link their address, answers nobody else, and marks "
+        "every message it read, deleting none."
+    ),
+)
+async def mail_in_the_mailbox_is_read_answered_and_marked(h: Harness) -> None:
+    from datetime import UTC, datetime
+
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.email import (
+        ADDRESS,
+        DOMAINS,
+        IMAP_HOST,
+        IMAP_PORT,
+        IMAP_USER,
+        RECEIVER,
+    )
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.mailbox_read import read_mailbox_once
+    from brain.ops.channel_store import StoredChannels
+    from brain.ops.mail import settings_from_rows, settings_rows
+
+    async with h.sessions() as session:
+        saved = settings_from_rows(await settings_rows(session))
+    box_user = f"ask-{h.run}@{_DOMAIN}"
+    receiver = f"mx.{_DOMAIN}"
+    await StoredChannels(h.sessions).save(
+        Channel.EMAIL,
+        enabled=True,
+        tenant={
+            ADDRESS: box_user,
+            IMAP_HOST: f"imap.{_DOMAIN}",
+            IMAP_PORT: "993",
+            IMAP_USER: box_user,
+            RECEIVER: receiver,
+            DOMAINS: _DOMAIN,
+        },
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    password = secrets.token_hex(16)
+    colleague, stranger = f"acceptance-{h.run}@{_DOMAIN}", f"acceptance-{h.run}@elsewhere.invalid"
+
+    def stamped(sender: str, n: int) -> bytes:
+        message = EmailMessage()
+        message["Authentication-Results"] = (
+            f"{receiver}; dmarc=pass header.from={sender.rpartition('@')[2]}"
+        )
+        message["From"] = sender
+        message["To"] = box_user
+        message["Subject"] = "Acceptance"
+        message["Message-ID"] = f"<acceptance-{h.run}-{n}@{_DOMAIN}>"
+        message.set_content(h.word())
+        return message.as_bytes()
+
+    box = _StandInMailbox(messages=[("1", stamped(colleague, 1)), ("2", stamped(stranger, 2))])
+    opened: list[tuple[str, str, bool]] = []
+
+    def opener(settings: Any, given: str) -> _StandInMailbox:
+        opened.append((settings.host, settings.user, given == password))
+        return box
+
+    relayed, https = _Relayed(), _Kept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(password)
+    state.channel_transport = https
+    state.operation_ledger = _HeldLedger()
+    state.mail_transport = relayed.build
+
+    ran = await read_mailbox_once(app, now=datetime.now(UTC), opener=opener)
+    if opened != [(f"imap.{_DOMAIN}", box_user, True)]:
+        raise CheckFailedError("the mailbox was not opened with the record's settings and secret")
+    if ran.read != 2 or sorted(box.marked) != ["1", "2"] or not box.closed:
+        raise CheckFailedError("the mailbox's unread mail was not read, marked and closed")
+    if https.sent:
+        raise CheckFailedError("an answer to mail was sent over HTTPS")
+    if saved is None:
+        if relayed.built:
+            raise CheckFailedError("with no relay saved, an answer was handed to a relay")
+        raise CheckNotRunError(NO_RELAY_IS_SAVED_FOR_THE_MAILBOX)
+    if len(relayed.kept.sent) != 1:
+        raise CheckFailedError("not exactly the colleague's message was answered")
+    (kept,) = relayed.kept.sent
+    if (kept.to, kept.body.rstrip()) != (colleague, Unrecognised(channel=Channel.EMAIL).prompt):
+        raise CheckFailedError("the colleague was not told how to link their address")
+
+
+# ------------------------------------------------------------------------------ teams
+@dataclass
+class _TeamsKept(_Kept):
+    """The webhook check's transport, answering each send as the Bot Connector documents."""
+
+    def send(self, request: Any) -> Any:
+        from brain.channels.adapter import VendorAnswer
+
+        self.sent.append(request)
+        return VendorAnswer(status=201, body=b'{"id":"1"}')
+
+
+def _teams_token(private: Any, *, kid: str, app_id: str, service: str) -> str:
+    """A compact RS256 token shaped as the Bot Framework mints one, signed by `private`."""
+    import base64
+
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+
+    from brain.channels.teams import BOT_FRAMEWORK_ISSUER
+
+    def b64(blob: bytes) -> str:
+        return base64.urlsafe_b64encode(blob).decode("ascii").rstrip("=")
+
+    now = int(time.time())
+    head = {"alg": "RS256", "kid": kid, "typ": "JWT"}
+    claims = {
+        "iss": BOT_FRAMEWORK_ISSUER,
+        "aud": app_id,
+        "serviceurl": service,
+        "nbf": now - 60,
+        "exp": now + 1800,
+    }
+    signing = f"{b64(json.dumps(head).encode())}.{b64(json.dumps(claims).encode())}"
+    signature = private.sign(signing.encode("ascii"), padding.PKCS1v15(), hashes.SHA256())
+    return f"{signing}.{b64(signature)}"
+
+
+@check(
+    leaves=("M10.5.2",),
+    sentence=(
+        "A Teams channel set up with ids and a key the check made accepts a personal message "
+        "whose token that key signed for the bot and tenant, refuses one signed by another key "
+        "and one from another tenant, and answers the sender in the chat through Microsoft's "
+        "reply host on a token exchanged at the tenant's own login, kept rather than sent."
+    ),
+)
+async def a_teams_message_is_taken_signed_and_answered_in_its_chat(h: Harness) -> None:
+    import uuid
+    from datetime import UTC, datetime
+
+    import httpx
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.adapter import BOT_ID
+    from brain.channels.teams import BOT_FRAMEWORK_ISSUER, MICROSOFT_LOGIN_URL, TENANT_ID
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.identity.oidc import KeySet, SigningKey
+    from brain.ops.channel_store import StoredChannels
+
+    app_id, tenant_id, other_tenant = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    service, chat, kid = "https://smba.trafficmanager.net/emea/", f"a:{h.run}", f"k-{h.run}"
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    stranger = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = (
+        private.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode("ascii")
+    )
+    await StoredChannels(h.sessions).save(
+        Channel.TEAMS,
+        enabled=True,
+        tenant={BOT_ID: app_id, TENANT_ID: tenant_id},
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    kept = _TeamsKept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(secrets.token_hex(24))
+    state.channel_transport = kept
+    state.operation_ledger = _HeldLedger()
+    state.channel_keys = KeySet(
+        issuer=BOT_FRAMEWORK_ISSUER,
+        keys=(SigningKey(kid=kid, algorithm="RS256", material=pem, use="sig"),),
+        fetched_at=datetime.now(UTC),
+    )
+    person = str(uuid.uuid4())
+
+    async def post(n: int, signer: Any, tenant: str) -> Any:
+        activity = {
+            "type": "message",
+            "id": f"{h.run}-{n}",
+            "channelId": "msteams",
+            "serviceUrl": service,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "from": {"id": f"29:{h.run}", "aadObjectId": person},
+            "conversation": {"id": chat, "conversationType": "personal"},
+            "text": h.word(),
+            "channelData": {"tenant": {"id": tenant}},
+        }
+        bearer = _teams_token(signer, kid=kid, app_id=app_id, service=service)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="https://acceptance.invalid"
+        ) as c:
+            return await c.post(
+                f"/api/v1/channels/{Channel.TEAMS.value}/events",
+                content=json.dumps(activity).encode("utf-8"),
+                headers={"Authorization": f"Bearer {bearer}"},
+            )
+
+    forged = await post(1, stranger, tenant_id)
+    if forged.status_code == 200 or kept.sent:
+        raise CheckFailedError("a token no published key signed was accepted")
+    elsewhere = await post(2, private, other_tenant)
+    if elsewhere.status_code == 200 or kept.sent:
+        raise CheckFailedError("an activity from another tenant was accepted")
+    accepted = await post(3, private, tenant_id)
+    if accepted.status_code != 200 or accepted.json().get("status") != "accepted":
+        raise CheckFailedError("a personal message Microsoft signed for this bot was not accepted")
+    if len(kept.sent) != 1:
+        raise CheckFailedError("a message from somebody bound to nobody was not answered once")
+    (built,) = kept.sent
+    if not built.url.startswith(f"{service}v3/conversations/"):
+        raise CheckFailedError("the answer was not built for Microsoft's reply host")
+    exchange = built.exchange
+    if exchange is None or exchange.url != f"{MICROSOFT_LOGIN_URL}/{tenant_id}/oauth2/v2.0/token":
+        raise CheckFailedError("the answer was not authorised at the tenant's own login")
+    if json.loads(built.body).get("text") != Unrecognised(channel=Channel.TEAMS).prompt:
+        raise CheckFailedError("the answer was not the binding prompt")
+
+
+# ------------------------------------------------------------------------------ telegram
+@dataclass
+class _TelegramKept(_Kept):
+    """The check's transport, answering each send as the Bot API documents a success."""
+
+    def send(self, request: Any) -> Any:
+        from brain.channels.adapter import VendorAnswer
+
+        self.sent.append(request)
+        return VendorAnswer(status=200, body=b'{"ok":true,"result":{}}')
+
+
+@check(
+    leaves=("M10.5.4",),
+    sentence=(
+        "A Telegram channel set up with a bot token the check made builds the setWebhook call "
+        "that names this install's events address and a header made from the token, accepts a "
+        "private message carrying that header, refuses one carrying any other, and answers the "
+        "sender with the binding prompt through sendMessage on the token, kept rather than sent."
+    ),
+)
+async def a_telegram_message_on_the_registered_header_is_answered(h: Harness) -> None:
+    import httpx
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.adapter import BOT_ID
+    from brain.channels.telegram import AUTHENTICATING_HEADER, TELEGRAM_API_URL, WIRE
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.ops.channel_store import StoredChannels
+
+    token = f"{secrets.randbelow(10**9) + 10**9}:{secrets.token_urlsafe(26)}"
+    tenant = {BOT_ID: f"acceptance_{h.run[:8]}_bot"}
+    await StoredChannels(h.sessions).save(
+        Channel.TELEGRAM,
+        enabled=True,
+        tenant=tenant,
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    events = f"/api/v1/channels/{Channel.TELEGRAM.value}/events"
+    address = f"https://acceptance.invalid{events}"
+    told = WIRE.registration_for(address=address, secret=token, tenant=tenant)
+    registered = json.loads(told.body)
+    if told.url != f"{TELEGRAM_API_URL}/bot{token}/setWebhook" or registered.get("url") != address:
+        raise CheckFailedError("the address was not registered with Telegram's own API")
+    header = registered.get("secret_token")
+    if not isinstance(header, str) or token in header:
+        raise CheckFailedError("the header Telegram is told to send is not made from the token")
+
+    kept = _TelegramKept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(token)
+    state.channel_transport = kept
+    state.operation_ledger = _HeldLedger()
+    sender = secrets.randbelow(10**9) + 10**9
+
+    async def post(n: int, presented: str) -> Any:
+        update = {
+            "update_id": n,
+            "message": {
+                "message_id": n,
+                "from": {"id": sender, "is_bot": False, "first_name": "Acceptance"},
+                "chat": {"id": sender, "type": "private"},
+                "date": int(time.time()),
+                "text": h.word(),
+            },
+        }
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="https://acceptance.invalid"
+        ) as c:
+            return await c.post(
+                events,
+                content=json.dumps(update).encode("utf-8"),
+                headers={AUTHENTICATING_HEADER: presented},
+            )
+
+    forged = await post(secrets.randbelow(10**9), secrets.token_hex(32))
+    if forged.status_code == 200 or kept.sent:
+        raise CheckFailedError("an update carrying another header was accepted")
+    accepted = await post(secrets.randbelow(10**9) + 1, header)
+    if accepted.status_code != 200 or accepted.json().get("status") != "accepted":
+        raise CheckFailedError("an update carrying the registered header was not accepted")
+    if len(kept.sent) != 1:
+        raise CheckFailedError(
+            "a private message from somebody bound to nobody was not answered once"
+        )
+    (built,) = kept.sent
+    if built.url != f"{TELEGRAM_API_URL}/bot{token}/sendMessage":
+        raise CheckFailedError("the answer was not built for Telegram's API on the bot's token")
+    body = json.loads(built.body)
+    if body != {"chat_id": sender, "text": Unrecognised(channel=Channel.TELEGRAM).prompt}:
         raise CheckFailedError("the answer was not the binding prompt, to the sender alone")

@@ -152,6 +152,11 @@ class GuideStep:
     #: A text the person pastes into the vendor whole, and what its button says. Never a secret.
     copy_text: str = ""
     copy_label: str = ""
+    #: The path this step belongs to, where the steps branch; empty for a step on every path.
+    path: str = ""
+    #: The paths this step offers, as the path's key and the words of its button. A step that
+    #: offers a choice asks for nothing else.
+    choices: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not (self.key.strip() and self.title.strip() and self.text.strip()):
@@ -170,6 +175,15 @@ class GuideStep:
             raise ValueError(msg)
         if len(self.copy_text) > MAX_COPY_CHARS:
             msg = f"step {self.key!r} offers {len(self.copy_text)} characters to copy"
+            raise ValueError(msg)
+        keys = [key for key, _ in self.choices]
+        if any(not key.strip() or not label.strip() for key, label in self.choices) or len(
+            keys
+        ) != len(set(keys)):
+            msg = f"step {self.key!r} offers a choice with a blank or repeated path"
+            raise ValueError(msg)
+        if self.choices and (self.asks or self.path):
+            msg = f"step {self.key!r} offers a choice and so asks for nothing and is on every path"
             raise ValueError(msg)
 
 

@@ -1509,6 +1509,13 @@ class XeroLiveLookup:
             raise XeroError(msg)
         return MappingProxyType({"where": f'{field}==Guid("{source_id}")'})
 
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        """None: Xero's list is narrowed to the one record by its where filter."""
+        del entity, settings, resolver
+        return None
+
 
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
     """The manifest a connection made on the Connectors screen declares."""

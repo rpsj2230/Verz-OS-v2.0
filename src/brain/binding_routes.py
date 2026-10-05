@@ -691,7 +691,15 @@ async def unbind_someone(
 @router.get(HEALTH_PATH, response_model=ChannelHealthView, responses=COMMON_RESPONSES)
 async def health(name: Name, request: Request, asked: Asked) -> ChannelHealthView:
     """This channel's declared capabilities and its health from its deliveries."""
-    channel = _managed(name, asked, receiving=False)
+    return await health_view(request, _managed(name, asked, receiving=False))
+
+
+async def health_view(request: Request, channel: Channel) -> ChannelHealthView:
+    """The health route's answer for a channel its gate admitted the reader to.
+
+    The route's body, apart so the install's acceptance check asks the same function for every
+    registered adapter (`brain.ops.acceptance_checks_channel_framework`), where no reader signs in.
+    """
     declared = adapter_for(channel).capabilities()
     record = await records_of(request).get(channel)
     found = channel_health(record, await deliveries_of(request).recent(channel))

@@ -53,7 +53,6 @@ from brain.ops.drive_passages import (
     DrivePassages,
     WithDrive,
     candidates,
-    words_of,
 )
 from brain.ops.model_service import ModelService
 
@@ -296,11 +295,15 @@ def test_a_question_with_no_word_to_match_or_no_folder_asks_nothing() -> None:
 
 
 # ------------------------------------------------------------------ what is matched
-def test_a_name_is_matched_on_the_question_s_longer_words() -> None:
-    """Words of four letters or more, and runs of two or more characters outside the Latin
-    alphabet; each once, eight at most. Delete this and "is" matches every file named in English."""
-    assert words_of("Who is on the Quarterly roster, the ROSTER?") == ("quarterly", "roster")
-    assert words_of("值班 表") == ("值班",)
+def test_a_name_is_matched_by_the_lark_wiki_s_rule_for_its_titles() -> None:
+    """One rule for matching a question to a name, the Wiki's: words of four letters or more, and
+    runs of two or more characters outside the Latin alphabet. Delete this and Drive can grow a
+    second copy of it that drifts, and "is" matches every file named in English."""
+    from brain.ops import drive_passages, lark_wiki_live
+
+    assert vars(drive_passages)["words_of"] is lark_wiki_live.words_of
+    asked = "Who is on the Quarterly roster, the ROSTER?"
+    assert lark_wiki_live.words_of(asked) == ("quarterly", "roster")
 
 
 def test_candidates_are_the_folder_s_readable_files_best_matched_first_and_few() -> None:
@@ -390,3 +393,26 @@ def test_the_capability_is_the_one_the_folder_s_rows_are_granted_by() -> None:
     from brain.knowledge.rows import entity_capability
 
     assert Capability(value=entity_capability(FILE).value) == READ_FILE
+
+
+def test_a_narrowed_question_unwraps_the_wiki_and_drive_to_the_library() -> None:
+    """`narrowed_to` with both live sources beside the library, as an install with the Wiki on and
+    a folder connected has: the narrowed search is the library's, and a search that wraps no
+    library is handed back. Delete this and, with the Wiki switched on, a question narrowed to FAQs
+    is shown every kind, which main did until 2026-10-05 because `WithWiki` named no library."""
+    from typing import cast
+
+    from brain.api_routes import narrowed_to
+    from brain.ops.lark_wiki_live import WikiPassages, WithWiki
+
+    async def handler(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError
+
+    library = DocumentSearchTool(handler=handler)
+    google = RecordedDrive(files={}, words={})
+    wrapped = WithDrive(WithWiki(library, cast(WikiPassages, object())), passages_over(google, ()))
+
+    narrowed = narrowed_to(wrapped, (KnowledgeKind.FAQ,))
+    assert narrowed == DocumentSearchTool(handler=handler, kinds=(KnowledgeKind.FAQ,))
+    lone = Library()
+    assert narrowed_to(lone, (KnowledgeKind.FAQ,)) is lone

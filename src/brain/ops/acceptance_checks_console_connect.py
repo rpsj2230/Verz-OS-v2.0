@@ -44,6 +44,7 @@ CHECK_ORDER: Final = 270
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
+
 #: What the check does with a source the install has connected already.
 A_CONNECTED_SOURCE_IS_JUDGED_ONLY: Final = (
     "A source this install has connected is connected from the console already, and the store "

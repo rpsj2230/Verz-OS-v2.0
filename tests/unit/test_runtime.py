@@ -14,11 +14,16 @@ import yaml
 
 from brain.runtime import (
     DOCKER_STOP_TIMEOUT,
+    MEASURED_SUPERVISOR_MB,
+    MEASURED_WORKER_PEAK_MB,
+    RUNTIME_HEADROOM_MB,
+    WORKER_MB,
     ProcessProfile,
     _cgroup_cores,
     _cgroup_memory_mb,
     choose_workers,
     detect_profile,
+    most_workers,
     profile_for,
 )
 
@@ -47,6 +52,23 @@ def test_never_fewer_than_one() -> None:
 def test_the_real_target_box_gets_a_sane_number() -> None:
     """1 GiB limit, as set in docker-compose.yml, on a shared four-core host."""
     assert choose_workers(memory_mb=1024, cores=4) == 4
+
+
+def test_no_container_size_starts_more_workers_than_its_measured_peak_holds() -> None:
+    """Held against the measurement at every size from 512 MiB to 8 GiB, not only the deployed
+    one. At the old 180 MiB a 1536 MiB container started seven workers, whose measured peak is
+    82 + 7 x 218 = 1608 MiB, and was killed at every start while the deployed 1024 MiB container
+    happened to fit. Delete this and the sizing can drift below what a worker holds again."""
+    for memory_mb in range(512, 8193, 64):
+        peak = MEASURED_SUPERVISOR_MB + most_workers(memory_mb) * MEASURED_WORKER_PEAK_MB
+        assert peak <= memory_mb, memory_mb
+
+
+def test_the_sizing_figures_are_at_least_what_was_measured() -> None:
+    """The sizing constants against the measurements beside them, not against themselves. Delete
+    this and either can be edited down to fit a hoped-for worker count."""
+    assert WORKER_MB >= MEASURED_WORKER_PEAK_MB
+    assert RUNTIME_HEADROOM_MB >= MEASURED_SUPERVISOR_MB
 
 
 # ------------------------------------------------------------------- drain

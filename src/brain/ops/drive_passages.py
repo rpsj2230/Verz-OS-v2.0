@@ -10,7 +10,8 @@ passages.
 
 **Two gates before Drive is asked anything.** The asker must hold `read:file` in the department
 the folder was connected for, which is the grant the folder's index rows are judged by, and the
-question must hold a word a file's name can be matched on. Either missing is answered with no
+question must hold a word a file's name can be matched on, by the Lark Wiki's rule for its titles
+(`brain.ops.lark_wiki_live.words_of`). Either missing is answered with no
 passage and no call, which is exactly what a person asking about a file that is not there is told.
 See `A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW`.
 
@@ -46,7 +47,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -89,6 +89,7 @@ from brain.ops.connector_sync_run import (
     call_headers,
     presented,
 )
+from brain.ops.lark_wiki_live import words_of
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.webhook_delivery import SystemResolver
 from brain.tables.projection import ProjectedRecordRow
@@ -115,14 +116,6 @@ A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW: Final = (
     "the subject."
 )
 
-#: Why a file is matched on the question's longer words.
-A_NAME_IS_MATCHED_ON_THE_QUESTION_S_LONGER_WORDS: Final = (
-    "A name matches when it holds one of the question's words, and a word of three letters or "
-    "fewer (what, is, the, of) is in almost every name, so it would read files nobody asked "
-    "about. Words of four letters or more are matched, and any run of two or more characters "
-    "outside the Latin alphabet, the Lark Wiki's rule for its titles."
-)
-
 # ------------------------------------------------------------------------ the figures
 #: The capability a person needs to be told a connected folder's files.
 READ_FILE: Final = Capability(value=f"read:{google_drive.FILE}")
@@ -130,29 +123,11 @@ READ_FILE: Final = Capability(value=f"read:{google_drive.FILE}")
 #: The most files whose words are read for one question.
 MAX_FILES_READ: Final = 3
 
-#: How many of the question's words a name is matched on, at most.
-MAX_WORDS: Final = 8
-
-_WORD: Final = re.compile(r"\w+", re.UNICODE)
-_LATIN: Final = re.compile(r"^[A-Za-z0-9_]+$")
-
 #: The one reading whose token and headers a question's calls use.
 READING: Final = DriveReading()
 
 #: What an index read hands back: each file's id and the fields its row keeps.
 type Indexed = Callable[[], Awaitable[tuple[tuple[str, Mapping[str, Any]], ...]]]
-
-
-def words_of(question: str) -> tuple[str, ...]:
-    """The words a name is matched on. See `A_NAME_IS_MATCHED_ON_THE_QUESTION_S_LONGER_WORDS`."""
-    kept: list[str] = []
-    for word in _WORD.findall(question):
-        latin = bool(_LATIN.match(word))
-        if (latin and len(word) >= 4) or (not latin and len(word) >= 2):
-            folded = word.casefold()
-            if folded not in kept:
-                kept.append(folded)
-    return tuple(kept[:MAX_WORDS])
 
 
 @dataclass(frozen=True)
