@@ -689,6 +689,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_checks_services.NO_DETECTOR_HERE,
     )
+    for ledger_check in (
+        "the_trace_ledger_runs_as_its_five_services",
+        "every_trace_ledger_service_runs_under_its_budgeted_limit",
+    ):
+        assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)

@@ -164,6 +164,7 @@ from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, key
 from brain.ops.limits import (
     FRESHDESK_SEARCH_MAX_RECORDS,
     MAX_BACKOFF_SECONDS,
+    ConnectorLimit,
     SearchCompleteness,
     search_completeness,
 )
@@ -1678,7 +1679,22 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="freshdesk",
+    per_minute=100,
+    note=(
+        "100 / 400 / 700 a minute by plan, per account. Recorded at the lowest, because "
+        "sizing against a plan we may not hold produces 429s on the day of a downgrade. "
+        "Separately, search returns at most 300 records ever; see "
+        "FRESHDESK_SEARCH_MAX_RECORDS."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=FRESHDESK,
     label="Freshdesk",
     guide=GUIDE,

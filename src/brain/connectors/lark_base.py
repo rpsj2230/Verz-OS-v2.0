@@ -2512,7 +2512,22 @@ def read_back_reading(operation: RestOperation, reply: LarkReply) -> Reading:
     return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not envelope.has_more)
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="lark_base",
+    per_minute=100,
+    raisable=False,
+    note=(
+        "100 requests a minute, fixed. Their documentation states it cannot be raised, "
+        "so it is 1.67 calls a second for the whole tenant permanently. Sizing against "
+        "a higher number is sizing against a number that does not exist."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=LARK_BASE,
     label="Lark Base",
     not_from_the_console=(

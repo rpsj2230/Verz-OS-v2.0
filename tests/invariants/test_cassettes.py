@@ -114,7 +114,7 @@ def test_the_rate_limits_record_whether_they_can_be_raised() -> None:
 
 
 #: Sources whose cassette `RateLimit` records something other than a rate, and are therefore
-#: not comparable with `brain.ops.limits.SOURCE_CEILINGS` by raisability.
+#: not comparable with `brain.ops.limits.source_ceilings()` by raisability.
 #:
 #: Freshdesk is the only one and it is worth the exception. Its cassette entry is the
 #: 300-record search ceiling, which is a bound on a *result set* and genuinely cannot be
@@ -131,7 +131,7 @@ def test_the_recordings_and_the_operational_ceilings_agree_about_what_can_be_rai
     """**Two records of the same fact, and until this test nothing compared them.**
 
     `tests/fixtures/cassettes/` is what connectors are built against;
-    `brain.ops.limits.SOURCE_CEILINGS` is what the admission controller sizes budgets from.
+    `brain.ops.limits.source_ceilings()` is what the admission controller sizes budgets from.
     They disagreed about Xero for as long as both existed, and it surfaced only because one
     connector was written against both at once and its author noticed.
 
@@ -145,9 +145,9 @@ def test_the_recordings_and_the_operational_ceilings_agree_about_what_can_be_rai
     comparison is only meaningful where both records describe the same quantity.
 
     Delete this and the two drift again, quietly, in whichever direction somebody edits."""
-    from brain.ops.limits import SOURCE_CEILINGS
+    from brain.ops.limits import source_ceilings
 
-    operational = {ceiling.name: ceiling.raisable for ceiling in SOURCE_CEILINGS}
+    operational = {ceiling.name: ceiling.raisable for ceiling in source_ceilings()}
 
     disagreements = {
         source: (limit_for(source).raisable, operational[source])
@@ -232,10 +232,10 @@ def test_the_source_excluded_from_that_comparison_really_is_measuring_something_
     operational ceiling must be a rate. If either stops being true, the exemption is no
     longer justified and this fails rather than the comparison silently skipping a real
     contradiction."""
-    from brain.ops.limits import SOURCE_CEILINGS
+    from brain.ops.limits import source_ceilings
 
     recorded = limit_for("freshdesk")
-    ceiling = next(c for c in SOURCE_CEILINGS if c.name == "freshdesk")
+    ceiling = next(c for c in source_ceilings() if c.name == "freshdesk")
 
     assert "record" in recorded.per, f"the cassette now records {recorded.per!r}, not a result set"
     assert ceiling.per_minute, "the operational ceiling is no longer a rate per minute"

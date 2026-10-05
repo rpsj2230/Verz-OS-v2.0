@@ -149,6 +149,8 @@ from brain.ops.trace_store import TraceRecorder
 from brain.ops.usage_store import UsageRecorder
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
+from brain.ops.webhook_delivery import SystemResolver
+from brain.ops.website_probe import HttpsProber
 from brain.readiness import (
     CACHE_PART,
     DATABASE_LOGIN_PART,
@@ -178,6 +180,7 @@ from brain.session import (
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
 from brain.tools.startup import build_registry
+from brain.tools.website_check import WebsiteCheckTool
 
 log = structlog.get_logger()
 
@@ -531,8 +534,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     live = live_records_for(app.state.db_sessions or None, app.state.vault)
     if live is not None:
         app.state.live_records = live
+    # The website check over HTTPS, to the address each hop was checked at (M12.4.4).
+    website = WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber())
     app.state.tools = build_registry(
-        source=settings.tool_source, records=records, figures=live if records else None
+        source=settings.tool_source,
+        records=records,
+        figures=live if records else None,
+        website=website,
     )
     app.state.ready["tools"] = True
     # Every call to a registered tool asks the switch table first, and each tool's catalogue row

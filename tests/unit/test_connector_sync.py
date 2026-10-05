@@ -172,7 +172,7 @@ def test_a_source_with_no_recorded_ceiling_is_not_read(monkeypatch: pytest.Monke
     refuse, or the refusal stops being said on the screen."""
     from brain.ops import limits
 
-    kept = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    kept = {name: one for name, one in limits.ceilings_by_name().items() if name != "hubspot"}
     monkeypatch.setattr(limits, "_BY_NAME", kept)
     assert hubspot.ceiling_is_verified() is False
     plan = plan_for(a_connection("hubspot"), last=None, now=NOW)

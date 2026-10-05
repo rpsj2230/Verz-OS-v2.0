@@ -717,6 +717,6 @@ def test_laravel_is_offered_because_it_reads_and_would_not_be_without_its_readin
     assert offers == {}
     assert listed[laravel.CONNECTOR_NAME].why == THIS_INSTALL_CANNOT_READ_IT_YET
 
-    unmeasured = dataclasses.replace(real, name="nowhere")
+    unmeasured = dataclasses.replace(real, name="nowhere", ceiling=None)
     offers, listed = offered({"nowhere": unmeasured})
     assert offers == {} and listed["nowhere"].why == THIS_INSTALL_CANNOT_READ_IT_YET

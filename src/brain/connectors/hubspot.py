@@ -2077,7 +2077,25 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="hubspot",
+    per_minute=100,
+    per_day=250_000,
+    note=(
+        "A private app may make 100 calls per 10 seconds, and the account 250,000 calls a day, "
+        "on the Free and Starter tiers; Professional and Enterprise allow 190 per 10 seconds "
+        "and 625,000 or 1,000,000 a day, and the API Limit Increase add-on raises both "
+        "(HubSpot's usage guidelines, read 2026-09-30, cited in brain.connectors.hubspot). "
+        "Recorded at the lowest tier, and the ten-second allowance as the minute's, so no "
+        "burst inside a minute can reach HubSpot's ten-second window."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CONNECTOR_NAME,
     label="HubSpot",
     guide=GUIDE,
