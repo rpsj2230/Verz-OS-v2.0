@@ -102,8 +102,19 @@ jobs:
         # rather than inside a one-shot container after a ten-minute build.
         run: uv run python -m brain.ops.browser_harness realm e2e/fixtures/people.json ops/keycloak/realm-export.json > /dev/null
 
+      - uses: docker/setup-buildx-action@v3
       - name: Build the image the way production builds it
-        run: docker build --build-arg COMMIT_SHA=e2e -t brain:e2e .
+        # Reads the layer cache the deploy writes on main and writes none of its own: the cache is
+        # one shared allowance, and a branch's layers filling it would evict the ones every deploy
+        # reuses.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: brain:e2e
+          build-args: |
+            COMMIT_SHA=e2e
+          cache-from: type=gha
 
       - name: Start the install
         run: |
