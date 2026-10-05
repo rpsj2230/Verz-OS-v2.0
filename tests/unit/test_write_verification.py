@@ -105,9 +105,15 @@ def xero_answer(
 
 
 def hubspot_answer(
-    status: int | None, body: Any = None, *, entity: str = hubspot.ENTITY_CLIENT, **overrides: Any
+    status: int | None,
+    body: Any = None,
+    *,
+    entity: str = hubspot.ENTITY_CLIENT,
+    one_record: bool = False,
+    **overrides: Any,
 ) -> Verification:
-    operation = hubspot.operation_for(entity, resolver=Resolver())
+    build = hubspot.one_record_operation if one_record else hubspot.operation_for
+    operation = build(entity, resolver=Resolver())
     reply = hubspot.interpret(
         operation, status=status, body=body, fetched_at=FETCHED_AT, **overrides
     )
@@ -225,6 +231,8 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("hubspot", "HUBSPOT-200-companies-page"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-contacts"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-deals"): Verification.FOUND,
+    # One deal read by its id, through its own operation: it is there.
+    ("hubspot", "HUBSPOT-200-deal"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-associations"): Verification.FOUND,
     ("hubspot", "HUBSPOT-429"): Verification.INCONCLUSIVE,
     ("hubspot", "HUBSPOT-401"): Verification.INCONCLUSIVE,
@@ -295,7 +303,14 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             entity = xero.ENTITY_CONTACT if "/Contacts" in recorded.request else xero.ENTITY_INVOICE
             return xero_answer(recorded.status, recorded.body, entity=entity)
         case "hubspot":
-            return hubspot_answer(recorded.status, recorded.body, entity=hubspot_entity(recorded))
+            from tests.fixtures.cassettes.hubspot import ONE_RECORD
+
+            return hubspot_answer(
+                recorded.status,
+                recorded.body,
+                entity=hubspot_entity(recorded),
+                one_record=bool(ONE_RECORD.search(recorded.request)),
+            )
         case "laravel":
             if recorded.protocol is Protocol.HTTP:
                 return laravel_answer(laravel.ViewReply(app_status=recorded.status))

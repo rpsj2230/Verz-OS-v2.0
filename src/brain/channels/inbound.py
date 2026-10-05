@@ -89,7 +89,7 @@ import asyncio
 import enum
 import hashlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Final, Protocol
 
@@ -98,6 +98,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from brain.channels.adapter import (
     BOT_ID,
     Arrived,
+    BatchedWire,
     CardPress,
     ChannelAdapter,
     ChannelWire,
@@ -250,6 +251,9 @@ class Receipt:
     handshake: Mapping[str, str] | None = None
     inbound: Inbound | None = None
     reply_to: str = ""
+    #: The other messages of a request that carried several, each taken as far as it went; see
+    #: `brain.channels.adapter.A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL`.
+    more: tuple[Receipt, ...] = ()
 
 
 class ChannelBindings(Protocol):
@@ -460,7 +464,20 @@ async def receive(
     handshake = wire.handshake(opened)
     if handshake is not None:
         return Receipt(kind=ReceiptKind.HANDSHAKE, handshake=handshake)
-    return await accept(wire, opened=opened, claims=claims, deliveries=deliveries)
+    # Typed as an object: whether a vendor batches is a question about the wire's class.
+    batching: object = wire
+    if not isinstance(batching, BatchedWire):
+        return await accept(wire, opened=opened, claims=claims, deliveries=deliveries)
+    try:
+        parts = batching.parts(opened)
+    except ValueError:
+        return await _refuse(deliveries, channel, RefusedBecause.UNREADABLE)
+    if not parts:
+        return await _refuse(deliveries, channel, RefusedBecause.UNREADABLE)
+    receipts = [
+        await accept(wire, opened=one, claims=claims, deliveries=deliveries) for one in parts
+    ]
+    return replace(receipts[0], more=tuple(receipts[1:]))
 
 
 async def accept(

@@ -40,6 +40,12 @@ while the asker waits (Xero today; Freshdesk declares no live lookup yet), the r
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
+**HubSpot answers the same way since 2026-09-30.** Its companies, contacts and deals are compiled
+from `hubspot.HUBSPOT_FIELD_RULES`, a company and a deal are asked about by name, and every value
+is read from HubSpot's one-record read while the asker waits. Until then HubSpot was offered on the
+Connectors screen and read into its index, and no question on Ask could reach it, which is why
+`brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
+
 Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1
 """
 
@@ -49,7 +55,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, google_analytics, xero
+from brain.connectors import freshdesk, google_analytics, hubspot, xero
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -81,6 +87,7 @@ SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
         xero.CONNECTOR_NAME: "tenant_id",
         freshdesk.FRESHDESK: "department",
         google_analytics.GOOGLE_ANALYTICS: "department",
+        hubspot.CONNECTOR_NAME: "portal_id",
     }
 )
 
@@ -127,6 +134,19 @@ def xero_classifications() -> tuple[TableClassification, ...]:
     return (
         _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_INVOICE, rules),
         _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_CONTACT, rules),
+    )
+
+
+def hubspot_classifications() -> tuple[TableClassification, ...]:
+    """HubSpot's companies, contacts and deals, from `hubspot.HUBSPOT_FIELD_RULES`.
+
+    The deal's amount is CONFIDENTIAL there and is never in the index, so a person is told it only
+    from HubSpot's own answer, read while they wait, and only with `read:deal.amount`.
+    """
+    rules = hubspot.HUBSPOT_FIELD_RULES
+    return tuple(
+        _from_rules(hubspot.CONNECTOR_NAME, entity, rules)
+        for entity in (hubspot.ENTITY_CLIENT, hubspot.ENTITY_CONTACT, hubspot.ENTITY_DEAL)
     )
 
 
@@ -194,8 +214,14 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
         google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
+        hubspot.CONNECTOR_NAME: hubspot_classifications(),
     }
 )
+
+#: The sources Ask answers through a passage reader rather than a classification: what they hold
+#: is read live as passages for the question's model step, as the Lark Wiki's pages are. Each such
+#: source adds its own name here with its reader. See `brain.ops.connectable.answers`.
+ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset({"lark_wiki"})
 
 #: The field a person names a record by, per source and entity: the question's slot.
 NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
@@ -206,6 +232,10 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
             google_analytics.LABEL_FIELD
         ),
+        # A contact is kept with no name, by `hubspot.A_CRM_IS_MOSTLY_THE_DENYLIST`, so a person
+        # asks about a company or a deal by name and reaches its contacts through it.
+        (hubspot.CONNECTOR_NAME, hubspot.ENTITY_CLIENT): "name",
+        (hubspot.CONNECTOR_NAME, hubspot.ENTITY_DEAL): "deal_name",
     }
 )
 
@@ -230,6 +260,19 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
                 "Look up the connected Google Analytics property by name: its sessions, users "
                 "and conversions for yesterday or the last 7, 28 or 90 days, read live from Google "
                 "for a reader allowed them"
+            ),
+        },
+        hubspot.CONNECTOR_NAME: {
+            hubspot.ENTITY_CLIENT: (
+                "Look up HubSpot companies by name: lifecycle stage, web domain and owner, read "
+                "live from HubSpot"
+            ),
+            hubspot.ENTITY_CONTACT: (
+                "Look up HubSpot contacts: lifecycle stage and company, read live from HubSpot"
+            ),
+            hubspot.ENTITY_DEAL: (
+                "Look up HubSpot deals by name: stage, pipeline and close date, and the amount "
+                "read live from HubSpot for a reader allowed it"
             ),
         },
     }
