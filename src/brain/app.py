@@ -76,8 +76,10 @@ from brain.cache import (
     ValkeyAnswerStore,
     ValkeyEntitlementCache,
     check_reachable_async,
+    embedding_cache,
     make_async_client,
     make_client,
+    retrieval_cache,
 )
 from brain.channels.widget import allowed_origins
 from brain.console_static import mount_console_entry, mount_console_fallback
@@ -112,13 +114,16 @@ from brain.identity.roles import IdentityError
 from brain.identity.sign_in_binding import sign_in_bindings
 from brain.install import InstallError, installed_name, value_of
 from brain.knowledge.app_parse_budget import app_parse_gaps
+from brain.knowledge.document_tools import KnowledgeCaches
 from brain.knowledge.row_store import SessionRowSource
 from brain.mailbox_read import keep_reading_the_mailbox
 from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
+from brain.ops.admission import WorkloadClass
 from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.builtin_templates import sign_built_ins
+from brain.ops.class_pools import keep_following
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
@@ -139,6 +144,7 @@ from brain.ops.pii import analyzer_address
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
+from brain.ops.sandbox import sandbox_address
 from brain.ops.secrets import VaultRole
 from brain.ops.sensitive_read_store import SensitiveReadRecorder
 from brain.ops.starter_store import furnish as furnish_install
@@ -372,6 +378,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # changed on the Settings screen reaches every process and not only the one that saved it.
     # See `brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
     holding: asyncio.Task[None] | None = None
+    # The request path's sessions, moved onto the interactive class's pool while this release's
+    # class pooler runs and left on their own engine otherwise. See `brain.ops.class_pools`.
+    following: asyncio.Task[None] | None = None
     # The email channel's mailbox, read every minute where the answer is made; it reads nothing
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
@@ -436,6 +445,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             log.exception("installation settings could not be loaded")
         holding = asyncio.create_task(keep_holding(app.state.db_sessions))
+        following = asyncio.create_task(
+            keep_following(
+                app.state.db_sessions,
+                url=settings.database_url,
+                workload=WorkloadClass.INTERACTIVE,
+                commit=settings.resolved_commit(),
+            )
+        )
         reading = asyncio.create_task(keep_reading_the_mailbox(app))
         # An asker whose handed-on question expired is told in their own chat, by this process
         # because the worker holds no channel's token. See `brain.escalation_told`.
@@ -538,11 +555,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.live_records = live
     # The website check over HTTPS, to the address each hop was checked at (M12.4.4).
     website = WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber())
+    # The document plane's retrieval and embedding caches (M6.2.3, M6.2.4), only where a cache
+    # is configured and there is a database to search. Their own synchronous client, as the
+    # answer store has, closed below. See `brain.knowledge.document_tools.KnowledgeCaches`.
+    app.state.knowledge_cache_client = None
+    knowledge_caches = None
+    if records is not None and settings.valkey_url:
+        knowledge_client = make_client(settings.valkey_url)
+        app.state.knowledge_cache_client = knowledge_client
+        knowledge_caches = KnowledgeCaches(
+            retrievals=retrieval_cache(knowledge_client),
+            embeddings=embedding_cache(knowledge_client),
+        )
     app.state.tools = build_registry(
         source=settings.tool_source,
         records=records,
         figures=live if records else None,
         website=website,
+        caches=knowledge_caches,
     )
     app.state.ready["tools"] = True
     # Every call to a registered tool asks the switch table first, and each tool's catalogue row
@@ -601,6 +631,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # per call from the ladder, the provider switches and the keys this process holds, so a
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
+    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9). No
+    # installation switches it on until the sandbox overlay lands with its switch; until then
+    # the set of switched services is empty and every skill with scripts is refused at the door.
+    app.state.sandbox_address = sandbox_address(settings.sandbox_url, frozenset())
     # Every request to a third-party model is scrubbed of personal data on its way out, by the
     # rules and by the install's analyser where its profile deploys one (`brain.ops.egress`).
     app.state.models = model_service_at_start(
@@ -774,6 +808,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             holding.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await holding
+        if following is not None:
+            following.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await following
         if reading is not None:
             reading.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -800,9 +838,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if valkey is not None:
             await valkey.aclose()
         # `ValkeyClient` declares no close, deliberately; the object that built it holds one.
-        close_answers = getattr(getattr(app.state, "answer_client", None), "close", None)
-        if callable(close_answers):
-            close_answers()
+        for held in ("answer_client", "knowledge_cache_client"):
+            close_held = getattr(getattr(app.state, held, None), "close", None)
+            if callable(close_held):
+                close_held()
         console_reads = getattr(app.state, "console_reads", None)
         if console_reads is not None:
             await console_reads.close()

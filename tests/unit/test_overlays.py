@@ -453,7 +453,8 @@ def apply(
         )
         (step / "langfuse.prepare.sh").write_text(
             "#!/bin/sh\n"
-            'echo "$BRAIN_APP_PROJECT $BRAIN_OVERLAYS_SETTINGS $BRAIN_OVERLAYS_ENV"'
+            'echo "$BRAIN_APP_PROJECT $BRAIN_OVERLAYS_SETTINGS $BRAIN_OVERLAYS_ENV'
+            ' $BRAIN_APP_CONTAINER"'
             f' > "{state}/prepared"\n'
             f"exit {prepare_exit}\n",
             encoding="utf-8",
@@ -715,14 +716,15 @@ def test_a_report_that_cannot_be_kept_says_so_and_exits_non_zero(
 def test_an_overlay_is_prepared_with_the_project_settings_and_environment_file_it_is_given(
     tmp_path: Path,
 ) -> None:
-    """The preparation is told where the settings and the secrets go and which project's database
-    to use, and the services are composed with that environment file. Delete this and the ledger
-    starts with secrets interpolated as empty strings."""
+    """The preparation is told where the settings and the secrets go, which project's database
+    to use and which container is the application's, and the services are composed with that
+    environment file. Delete this and the ledger starts with secrets interpolated as empty
+    strings, or the class pools' preparation has no application to ask for its configuration."""
     ran = apply(tmp_path, planned=_both(10_000), prepare_exit=0, env_file=True)
 
     assert ran.code == 0, ran.output
     settings = (tmp_path / "settings").as_posix()
-    assert ran.prepared == f"u {settings} {settings}/overlays.env"
+    assert ran.prepared == f"u {settings} {settings}/overlays.env app-u"
     [started] = [
         one for one in ran.calls if one.startswith("compose ") and "--remove-orphans" in one
     ]

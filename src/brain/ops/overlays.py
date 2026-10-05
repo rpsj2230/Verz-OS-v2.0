@@ -65,7 +65,15 @@ own token. That is what lets every finished run reach the ledger (`brain.ops.led
 `THE_SERVER_REPORTS_WHAT_RUNS_AND_THE_CHECK_READS_IT`: the step hands docker's account of each
 container to `observe`, which keeps it for the release in one `ops.setting` row.
 
-Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6
+**One overlay is not optional, and it is planned on every deploy whatever the setting says.** The
+connection pools per workload class (`brain.ops.class_pools`) are how the product keeps a batch
+job off the request path's connections, which is product behaviour rather than a service an
+administrator chooses, so `Overlay.always` puts it in every plan and the setting cannot name it.
+It is still costed, first, because it is the floor the optional services are chosen above: on a
+server with no room for it the plan refuses it in words like any other, and every process stays on
+the pooler it already had. See `AN_OVERLAY_THE_PRODUCT_ALWAYS_RUNS_IS_STILL_COSTED`.
+
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M22.2.2
 """
 
 from __future__ import annotations
@@ -137,6 +145,9 @@ class Overlay:
     #: with the application's container: what the application must be handed from the server,
     #: such as keys minted there. A failure is said and changes nothing that runs.
     after: tuple[str, ...] = ()
+    #: Planned on every deploy, and not a name `INSTALL_SERVICES` may carry. See
+    #: `AN_OVERLAY_THE_PRODUCT_ALWAYS_RUNS_IS_STILL_COSTED`.
+    always: bool = False
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z][a-z0-9-]*", self.name):
@@ -158,9 +169,26 @@ class Overlay:
         return set_cost_mib(self.components)
 
 
-#: Every optional service, in the order the room is given to them. Item 120 gave it to the
-#: personal data detector first.
+#: Why the overlay the product always runs goes through the same plan as the optional ones.
+AN_OVERLAY_THE_PRODUCT_ALWAYS_RUNS_IS_STILL_COSTED: Final = (
+    "An overlay that is always on is started by the same step, on the same measured server, as "
+    "the optional ones, so it is costed the same way and refused in the same words when the "
+    "server has no room. It is costed first because it is the floor the optional services are "
+    "chosen above. Nothing depends on it having started: a process uses it only when the step "
+    "reported it running for that release."
+)
+
+#: Every overlay, in the order the room is given to them: the one the product always runs, then
+#: the optional services in the order item 120 gave the room, the personal data detector first.
 OVERLAYS: Final[tuple[Overlay, ...]] = (
+    Overlay(
+        name="class-pools",
+        what="the connection pools for each workload class",
+        components=("pgbouncer-classes",),
+        files=("class-pools.yml",),
+        prepare=("class-pools.prepare.sh",),
+        always=True,
+    ),
     Overlay(
         name="presidio",
         what="the personal data detector",
@@ -192,7 +220,10 @@ OVERLAYS: Final[tuple[Overlay, ...]] = (
     ),
 )
 
-BY_NAME: Final[Mapping[str, Overlay]] = {one.name: one for one in OVERLAYS}
+#: The overlays an install chooses, which are the only names `INSTALL_SERVICES` may carry.
+OPTIONAL: Final[tuple[Overlay, ...]] = tuple(one for one in OVERLAYS if not one.always)
+
+BY_NAME: Final[Mapping[str, Overlay]] = {one.name: one for one in OPTIONAL}
 
 
 def switched_on(value: str) -> tuple[Overlay, ...]:
@@ -211,7 +242,16 @@ def switched_on(value: str) -> tuple[Overlay, ...]:
             f"{', '.join(BY_NAME)} or {NO_SERVICES}"
         )
         raise OverlayError(msg)
-    return tuple(one for one in OVERLAYS if one.name in names)
+    return tuple(one for one in OPTIONAL if one.name in names)
+
+
+def planned(switched: Iterable[Overlay]) -> tuple[Overlay, ...]:
+    """Every overlay a deploy costs: those always run and those switched on, in declaration order.
+
+    See `AN_OVERLAY_THE_PRODUCT_ALWAYS_RUNS_IS_STILL_COSTED`.
+    """
+    chosen = set(switched)
+    return tuple(one for one in OVERLAYS if one.always or one in chosen)
 
 
 def services_problem(value: str) -> str:
@@ -219,7 +259,7 @@ def services_problem(value: str) -> str:
     try:
         switched_on(value)
     except OverlayError:
-        choices = ", ".join(f"{one.name} for {one.what}" for one in OVERLAYS)
+        choices = ", ".join(f"{one.name} for {one.what}" for one in OPTIONAL)
         return f"Write {NO_SERVICES}, or one or more of these separated by commas: {choices}."
     return ""
 
@@ -554,7 +594,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         print(f"SAY no plan was made, so nothing is started or stopped: {describe(error)}")
         return 1
-    sys.stdout.write(render(plan(switched, host), host))
+    sys.stdout.write(render(plan(planned(switched), host), host))
     return 0
 
 

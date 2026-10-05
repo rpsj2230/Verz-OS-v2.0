@@ -1600,7 +1600,24 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="xero",
+    per_minute=60,
+    per_day=5_000,
+    raisable=False,
+    note=(
+        "5,000 calls a day per tenant, shared with every other integration the client "
+        "runs, so our own share is smaller than the number suggests. The ceiling is on "
+        "the client's tenant rather than on our subscription, so there is no plan we "
+        "can buy that moves it. This is the ceiling a backfill reaches first."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CONNECTOR_NAME,
     label="Xero",
     guide=GUIDE,

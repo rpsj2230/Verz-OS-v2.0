@@ -76,6 +76,7 @@ services:
       # profile that deploys it (`brain.ops.pii.analyzer_address`); startup refuses a value on
       # `lite`, which deploys none. See `docker-compose.presidio.yml`.
       BRAIN_PRESIDIO_URL: ${BRAIN_PRESIDIO_URL:-}
+      BRAIN_SANDBOX_URL: ${BRAIN_SANDBOX_URL:-}
       # This installation's own values, every one `brain.install.INSTALLATION` declares.
       INSTALL_COMPANY_NAME: ${INSTALL_COMPANY_NAME:-}
       INSTALL_PRODUCT_NAME: ${INSTALL_PRODUCT_NAME:-}
@@ -170,6 +171,10 @@ services:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
       DEFAULT_POOL_SIZE: "20"
+      # PgBouncer's pool size is per login and database, and the application reaches it as
+      # brain_app and the owner, so without this it could hold twice the pool. This caps the
+      # database across logins at the figure brain.ops.connections counts.
+      MAX_DB_CONNECTIONS: "20"
       AUTH_TYPE: scram-sha-256
       # A login not in the userlist (the owner is) is looked up as the owner, which is how
       # brain_app gets in; a role that is a superuser or bypasses row security never does.

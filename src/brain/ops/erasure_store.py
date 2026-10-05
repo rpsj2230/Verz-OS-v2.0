@@ -275,6 +275,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "know.solution": "captured_by",
         "know.steward_task": "principal_id",
         "mem.adaptive": "principal_id",
+        # A helpful or unhelpful mark on an answer the person was given, and nothing they said
+        # (`0154`). `0154` grants no way for a row to leave, so an erasure keeps these and reports
+        # them kept.
+        "mem.mark": "principal_id",
         "mem.persistent": "principal_id",
         "obs.request_telemetry": "principal",
         # A budget's subject is a person, a department or an agent; only a person's id matches.
@@ -339,6 +343,9 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
 #: Tables in a PostgreSQL store no row of which is a person's own. See `AN_ACTOR_IS_NOT_AN_OWNER`.
 ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     {
+        # Whether an agent's runs may teach it, and why (`0154`): about an agent, and the person
+        # named is the steward who switched it, an actor and not an owner.
+        "agent.learning_pause",
         # An uploaded table and its rows (`0116`): a price list is the company's, and the people
         # named on the table row are the administrators who uploaded and marked it, actors and not
         # owners.
@@ -365,6 +372,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.skill_detachment",
         "agent.skill_retirement",
         "agent.skill_review",
+        # The bytes of a script a stored skill version carries (`0178`): about a skill, never a
+        # person.
+        "agent.skill_script",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.
         "agent.tool_definition",
@@ -438,6 +448,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.webhook_change",
         "ops.webhook_subscriber",
         "proj.record",
+        # A retired projected row keeps what `proj.record` kept, pointers and no principal, and a
+        # source's epoch is its name and a count: `0179` keeps no principal in either.
+        "proj.record_retired",
+        "proj.source_epoch",
         # A channel's record names the administrator who last switched it, an actor and not an
         # owner, and a delivery keeps a channel, an outcome and a reason and never a sender or a
         # message (`0114`), so neither is anybody's.

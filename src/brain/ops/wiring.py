@@ -306,6 +306,26 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         ),
     ),
     Component(
+        # The connection pools per workload class (`brain.ops.class_pools`, M22.2.2), in
+        # transaction mode like the application's pooler. In no profile's file list, because no
+        # profile's files start it: the release's overlay step does, on every install whatever its
+        # profile (`brain.ops.overlays`, the one overlay that is always on), and costs it there
+        # against the measured server. So `components_for` does not answer for it and
+        # `set_cost_mib` does. 32 MiB is argued rather than measured, in the header of
+        # `ops/deploy/overlays/class-pools.yml`: the application's pooler holds the same two
+        # hundred clients in a 128 MiB ceiling.
+        name="pgbouncer-classes",
+        memory_mib=32,
+        profiles=frozenset(),
+        # It reaches `db` straight, as the session pooler does; what it hands its own clients is
+        # transaction pooling, which is why nothing that needs session state is moved onto it.
+        wiring=Wiring.DIRECT,
+        ready_when=(
+            "pg_isready answers through the pooler for the interactive class's entry, which is "
+            "true once it accepts a client; a server connection is taken on the first query"
+        ),
+    ),
+    Component(
         name="seaweedfs",
         memory_mib=256,
         profiles=frozenset({"standard", "full"}),

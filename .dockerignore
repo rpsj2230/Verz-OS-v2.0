@@ -31,6 +31,8 @@ ops
 !ops/deploy/overlays/langfuse.attach.yml
 !ops/deploy/overlays/langfuse.prepare.sh
 !ops/deploy/overlays/langfuse.hand.sh
+!ops/deploy/overlays/class-pools.yml
+!ops/deploy/overlays/class-pools.prepare.sh
 !ops/langfuse/clickhouse-memory.xml
 !ops/seaweedfs/provision.sh
 docs/wbs

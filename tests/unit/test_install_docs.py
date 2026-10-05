@@ -1505,3 +1505,53 @@ def test_a_database_command_row_with_too_few_cells_is_a_finding() -> None:
         "a row with 1 cell(s) reads ('`create`',); every row states the command, how to run it "
         "and what it does",
     )
+
+
+# ================================================== the application's pooler, capped across logins
+def _transaction_pooler(name: str) -> dict[str, str]:
+    """The `pgbouncer` service's environment in one of the product's compose files."""
+    document = yaml.safe_load((REPO / name).read_text(encoding="utf-8"))
+    return {
+        key: str(value) for key, value in document["services"]["pgbouncer"]["environment"].items()
+    }
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "docker-compose.yml",
+        "docker-compose.full.yml",
+        "docker-compose.lite.yml",
+        "docker-compose.staging.yml",
+    ],
+)
+def test_the_application_s_pooler_is_capped_across_logins_at_its_own_pool(name: str) -> None:
+    """PgBouncer's `default_pool_size` is per login and database, and the application reaches the
+    pooler as `brain_app` and as the owner, so a pool of twenty can hold forty. Delete this and a
+    compose file can drop `MAX_DB_CONNECTIONS`, or set it apart from the pool, and the database's
+    connection budget counts half of what the pooler may open."""
+    environment = _transaction_pooler(name)
+    assert environment["MAX_DB_CONNECTIONS"] == environment["DEFAULT_POOL_SIZE"]
+
+
+def test_the_application_s_pooler_cap_is_the_figure_the_budget_counts() -> None:
+    """The cap is held to `brain.ops.connections`' row for the pooler, which is what the database's
+    max_connections is sized against. Delete this and the cap could be set to a figure the budget
+    never counted, which bounds the pooler at a number nobody planned for."""
+    from brain.ops.connections import CLIENTS
+
+    [row] = [one for one in CLIENTS if one.name == "pgbouncer"]
+    assert int(_transaction_pooler("docker-compose.yml")["MAX_DB_CONNECTIONS"]) == row.pool_max
+
+
+def test_the_operations_page_gives_an_older_install_the_line_that_caps_its_pooler() -> None:
+    """An install set up before the cap keeps Coolify's copy of the compose file, which a release
+    never edits, so the page says which line to add. Delete this and the page can lose the line,
+    or name a figure other than the one the product's own compose file carries, and an operator
+    following it caps the pooler at the wrong number or not at all."""
+    cap = _transaction_pooler("docker-compose.yml")["MAX_DB_CONNECTIONS"]
+    page = guide("operations.md")
+    start = page.index("## A known limit on an install set up before 2026-10-06")
+    section = page[start : page.index("\n## ", start + 1)]
+    assert f'MAX_DB_CONNECTIONS: "{cap}"' in section
+    assert "DEFAULT_POOL_SIZE" in section and "per login" in section

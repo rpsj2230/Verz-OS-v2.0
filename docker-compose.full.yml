@@ -54,6 +54,7 @@ services:
       BRAIN_LANGFUSE_SECRET_KEY: ${BRAIN_LANGFUSE_SECRET_KEY:-}
       BRAIN_INFERENCE_URL: ${BRAIN_INFERENCE_URL:-}
       BRAIN_PRESIDIO_URL: ${BRAIN_PRESIDIO_URL:-}
+      BRAIN_SANDBOX_URL: ${BRAIN_SANDBOX_URL:-}
       INSTALL_COMPANY_NAME: ${INSTALL_COMPANY_NAME:-}
       INSTALL_PRODUCT_NAME: ${INSTALL_PRODUCT_NAME:-}
       INSTALL_LOGO_URL: ${INSTALL_LOGO_URL:-}
@@ -122,6 +123,7 @@ services:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: '200'
       DEFAULT_POOL_SIZE: '20'
+      MAX_DB_CONNECTIONS: '20'
       AUTH_TYPE: scram-sha-256
       AUTH_QUERY: SELECT rolname, CASE WHEN rolvaliduntil < now() THEN NULL ELSE rolpassword END FROM pg_authid WHERE rolname = $$1 AND rolcanlogin AND NOT rolsuper AND NOT rolbypassrls
     expose:

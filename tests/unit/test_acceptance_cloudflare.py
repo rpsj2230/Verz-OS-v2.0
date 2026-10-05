@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_cloudflare"
 HELD = "cloudflare_is_read_live_and_a_dns_change_waits_for_a_person"
 SENT = "an_allowed_dns_change_is_sent_once_and_read_back"
+WRITES = "a_connector_write_is_a_declared_tool_off_until_its_key_is_given"
 
 #: Every table the checks write to, which must hold afterwards what it held before.
 WRITTEN = ("proj.record", "ops.connector_connection", "ops.connector_sync", "gate.suspension")
@@ -46,7 +47,8 @@ def test_the_cloudflare_checks_are_registered_with_the_leaf_they_prove() -> None
     """Delete this and a check can close a leaf it does not exercise, or name an id no task has."""
     assert {name: one.leaves for name, one in mine().items()} == {
         HELD: ("M11.7.3", "M11.2.4"),
-        SENT: ("M11.7.3", "M11.2.4"),
+        SENT: ("M11.7.3", "M11.2.4", "M11.8.5"),
+        WRITES: ("M11.8.5",),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
@@ -59,7 +61,7 @@ def test_the_cloudflare_checks_are_listed_in_their_page_order() -> None:
     module's other tests, so a package adding a check edits its own file and never a list every
     package appends to. Delete this and a check can drop out of the module with the page simply
     listing one fewer row."""
-    assert checks_in(MODULE) == [HELD, SENT]
+    assert checks_in(MODULE) == [HELD, SENT, WRITES]
 
 
 @pytest.mark.needs_db
@@ -73,7 +75,7 @@ def test_on_a_real_database_cloudflare_is_read_live_and_a_change_is_held_or_sent
         before = (counts(url), written(url))
         outcome = run_checks(url, tuple(mine().values()))
         after = (counts(url), written(url))
-    assert outcome == {HELD: (PASSED, ""), SENT: (PASSED, "")}
+    assert outcome == {HELD: (PASSED, ""), SENT: (PASSED, ""), WRITES: (PASSED, "")}
     assert after == before
 
 
@@ -94,6 +96,8 @@ def test_on_a_real_database_cloudflare_is_read_live_and_a_change_is_held_or_sent
         (SENT, "readkey", "an allowed DNS change was not sent with the grant's own key"),
         (SENT, "twice", "an approved DNS change was sent twice"),
         (SENT, "readback", "an allowed DNS change was not sent and read back as approved"),
+        (WRITES, "tool", "a connector's write is not declared as a tool that changes"),
+        (WRITES, "unrecorded", "turning a connector's write on left no ledger entry by its giver"),
     ],
 )
 def test_the_cloudflare_checks_fail_where_the_path_is_broken(
@@ -103,13 +107,15 @@ def test_the_cloudflare_checks_fail_where_the_path_is_broken(
     longer taking a record's content, a policy telling the content to anybody who reaches the
     record, the sensitive-effect cap lifted so an Autonomous leash runs the change, the card not
     saying the install has not allowed DNS changes, a change sent with the read key, an approval
-    that runs every time it is resumed, and a read-back that never finds what was sent. Each fails
+    that runs every time it is resumed, a read-back that never finds what was sent, a write's tool
+    declared as changing nothing, and a write's key kept with no record of who gave it. Each fails
     its check with its own sentence. Delete this and a check can pass with its property gone."""
     import brain.api_routes as api_routes
     import brain.connectors.cloudflare as cloudflare
     import brain.gate.leash as leash
     import brain.knowledge.connector_rows as connector_rows
     import brain.ops.connector_write_run as connector_write_run
+    from brain.core.envelope import SideEffect
     from brain.core.field_policy import Classification, FieldPolicy, FieldRule
     from brain.gate.injection import AutonomyTier
     from brain.ops.connectable import READING_ROLE
@@ -151,6 +157,21 @@ def test_the_cloudflare_checks_fail_where_the_path_is_broken(
             return execute(action)
 
         monkeypatch.setattr(leash, "run_real", always)
+    elif broken == "tool":
+        # The write's tool declared as a read, which is what a write that changes nothing claims.
+        monkeypatch.setattr(
+            cloudflare,
+            "DNS_CHANGE_TOOL",
+            cloudflare.DNS_CHANGE_TOOL.model_copy(update={"side_effect": SideEffect.NONE}),
+        )
+    elif broken == "unrecorded":
+        # The key kept and the record of who gave it lost: the write turned on with no trace.
+        import brain.ops.credential_write_store as credential_write_store
+
+        async def forgotten(self: Any, **kwargs: Any) -> None:
+            del self, kwargs
+
+        monkeypatch.setattr(credential_write_store.StoredCredentialWrites, "record", forgotten)
     else:
         monkeypatch.setattr(
             cloudflare.DnsChangeWrites, "differs", lambda self, action, found: ("content",)
@@ -181,4 +202,5 @@ def test_the_cloudflare_checks_step_aside_where_the_install_has_cloudflare_conne
     assert outcome == {
         HELD: (NOT_RUN, A_CLOUDFLARE_IS_CONNECTED_HERE_ALREADY),
         SENT: (NOT_RUN, A_CLOUDFLARE_IS_CONNECTED_HERE_ALREADY),
+        WRITES: (NOT_RUN, A_CLOUDFLARE_IS_CONNECTED_HERE_ALREADY),
     }

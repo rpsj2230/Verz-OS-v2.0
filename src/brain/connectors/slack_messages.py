@@ -92,6 +92,7 @@ from brain.core.scope import Scope
 from brain.gate.context import Channel
 from brain.gate.ingress import identity_hash
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
+from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
 
 # ------------------------------------------------------------------ written-down reasons
@@ -609,7 +610,27 @@ GUIDE: Final = keyed(
     )
 )
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="slack_messages",
+    per_minute=20,
+    raisable=False,
+    note=(
+        "Slack limits each Web API method per workspace and per app by tier "
+        "(https://docs.slack.dev/apis/web-api/rate-limits). The index reads "
+        "conversations.list and users.list, which are Tier 2, 20 or more a minute; a "
+        "question's users.conversations and conversations.history are Tier 3, 50 or more. "
+        "Recorded at Tier 2, the lowest this connector calls. The tier is Slack's and no plan "
+        "moves it. An app a workspace builds for itself keeps Tier 3 history; the one a "
+        "minute limit Slack set in 2025 is for commercially distributed apps outside its "
+        "Marketplace, which this is not."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CONNECTOR_NAME,
     label="Slack",
     guide=GUIDE,
