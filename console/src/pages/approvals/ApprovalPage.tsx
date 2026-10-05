@@ -71,6 +71,8 @@ export function ApprovalPage({ suspensionId }: { readonly suspensionId: string }
               <Pill tone="warn">Waiting for you</Pill>
             ) : decided === "approved" ? (
               <Pill tone="ok">Approved</Pill>
+            ) : decided === "taken_over" ? (
+              <Pill tone="plain">Taken over</Pill>
             ) : (
               <Pill tone="plain">Rejected</Pill>
             )
@@ -91,7 +93,7 @@ export function ApprovalPage({ suspensionId }: { readonly suspensionId: string }
           card={card}
           people={people}
           linked={false}
-          decision={decided === null ? <DecisionControls suspensionId={card.suspensionId} onDecided={setDecided} /> : null}
+          decision={decided === null ? <DecisionControls suspensionId={card.suspensionId} mayTakeOver={card.mayTakeOver} onDecided={setDecided} /> : null}
         />
         <Advanced>
           <FactList>

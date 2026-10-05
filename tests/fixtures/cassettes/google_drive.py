@@ -7,10 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Final
-
-import pytest
 
 from brain.connectors import google_drive
 from brain.connectors.manifest import ConnectorManifest
@@ -36,15 +35,6 @@ DRIVE_ERRORS_DOC = "https://developers.google.com/workspace/drive/api/guides/han
 #: The folder a Drive recording's listing was asked for. The replay pins its connection here.
 DRIVE_FOLDER = "fld0447AbC-_x"
 
-#: Why the file projection's positive path cannot be replayed from a documented shape.
-NO_SHARING_READER: Final = (
-    "a file is kept only with a sharing state, which is reduced from the permissions Drive "
-    "returns; the connector has no function reading them out of a response, and Google's "
-    "documentation does not say whether a user grant carries the domain that reduction "
-    "needs, so only a live capture can settle it"
-)
-
-
 CASSETTES: Final[tuple[Cassette, ...]] = (
     Cassette(
         cid="DRIVE-200-files-page",
@@ -62,16 +52,19 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
                     "headRevisionId": "0B-rev1",
                     "trashed": False,
                     "parents": [DRIVE_FOLDER],
-                    "permissions": [{"type": "user"}, {"type": "domain", "domain": "verz.com"}],
+                    "permissions": [
+                        {"type": "user"},
+                        {"type": "domain", "domain": "CANARY-DRIVE-GRANTEE-DOMAIN"},
+                    ],
                 }
             ],
         },
         why="A page with a cursor: Drive states continuation in nextPageToken. The "
-        "permissions are sub-selected to type and domain, and the documentation does not say "
-        "a user grant carries a domain, so no sharing state can be reduced from this shape.",
+        "permissions are sub-selected to type and domain and are reduced to a verdict where the "
+        "page is read; a grantee's domain is never kept, which the canary proves.",
         kind=Kind.PAGINATION,
         tools=("google_drive.list_folder",),
-        projects="file",
+        projects="drive_file",
         expect=Expect.MORE_TO_READ,
         origin=DOCUMENTED,
         reference=DRIVE_LIST_DOC,
@@ -203,13 +196,21 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
 
 RATE_LIMIT: Final = RateLimit(
     SOURCE,
-    0,
-    "not measured",
-    "Google publishes per-project and per-user query quotas that a project owner sees "
-    "and changes in the Cloud console, so there is no one figure to record here; "
-    "`brain.connectors.google_drive.THERE_IS_NO_MEASURED_CEILING_HERE` says the same.",
+    1625,
+    "minute",
+    "325,000 quota units a minute per user per project, and a download costs 200, so 1,625 of the "
+    "dearest call a read makes; `brain.ops.limits` records the same figure. A project owner may "
+    "ask for more on the Cloud console's Quotas page.",
     True,
 )
+
+
+#: When a replayed listing is read and seen. Far from any wall clock, deliberately.
+AT: Final = "2999-01-01T00:00:00+00:00"
+SEEN: Final = datetime(2999, 1, 1, tzinfo=UTC)
+
+#: Every verdict a kept row may carry.
+SHARING_STATES: Final = frozenset(state.value for state in google_drive.SharingState)
 
 
 def _drive_connection() -> google_drive.DriveConnection:
@@ -253,17 +254,21 @@ def replay(recorded: Cassette) -> Replayed:
         return Replayed(unreachable_or_quota(failed.call_outcome))
     if not rows:
         return Replayed(Expect.ABSENT)
-    # No function in the connector reads a permission array out of a response, so no sharing
-    # state has a producer to replay; see `NO_SHARING_READER`. What is replayed is the refusal:
-    # a row whose sharing nobody determined is not kept.
-    for row in rows:
-        with pytest.raises(google_drive.DriveError):
-            google_drive.projected_fields(
-                row,
-                connection=connection,
-                sharing=google_drive.classify_sharing(None, domain="verz.com"),
-            )
-    return Replayed(Expect.MORE_TO_READ if cursor else Expect.ANSWERED)
+    outcome = Expect.MORE_TO_READ if cursor else Expect.ANSWERED
+    if not listing:
+        return Replayed(outcome)
+    # Through the worker's own reading: the listing lays each file's verdict on its row, and the
+    # reading keeps it, a verdict Drive did not show as "undetermined" (needs-rupash 135).
+    reading = google_drive.DriveReading()
+    listed = google_drive.folder_listing(connection).records(reply.body, fetched_at=AT)
+    kept = tuple(
+        one
+        for record in listed.records
+        if (one := reading.projected(google_drive.FILE, record.model_dump(), seen_at=SEEN))
+        is not None
+    )
+    assert all(one.fields["sharing_state"] in SHARING_STATES for one in kept)
+    return Replayed(outcome, kept=kept)
 
 
 def manifest() -> ConnectorManifest:
@@ -308,5 +313,4 @@ CASSETTE_FILE: Final = CassetteFile(
     rate_limit=RATE_LIMIT,
     replay=replay,
     manifest=manifest,
-    projection_not_replayable={"file": NO_SHARING_READER},
 )

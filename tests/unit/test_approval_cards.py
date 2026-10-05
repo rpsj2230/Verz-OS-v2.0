@@ -814,6 +814,35 @@ def test_with_the_switch_off_a_press_decides_nothing_and_never_reaches_the_route
 # ======================================================================== the pieces
 
 
+def test_an_agent_s_action_is_not_offered_on_a_card_so_nothing_on_a_card_is_taken_over() -> None:
+    """`A_CARD_CARRIES_NO_AGENT_ACTION_SO_NOTHING_ON_IT_IS_TAKEN_OVER`, both halves. An approver
+    holding an agent action's own capability is offered it in the console, which is where Take over
+    is; the same approver's press reach on Lark is not, and every card Lark is offered is a
+    promotion, which offers no takeover. Delete this and a press admitted an action's own verb one
+    day sends agents' actions to Lark with no Take over on them and nobody told."""
+    from brain.approval_routes import shown_card
+    from tests.unit.test_approval_decisions import WRITE_STATUS, a_suspension
+
+    now = datetime.now(UTC)
+    held = EntitlementSet(
+        principal_id="u_wide",
+        grants=(
+            Grant(capability=Capability(value=WRITE_STATUS), scope=WHOLE),
+            APPROVE,
+        ),
+    )
+    agents = a_suspension("m_1")
+    in_console = shown_card(agents, held, now)
+    on_a_card = shown_card(agents, admit_card_press(held, Channel.LARK, switched_on=True), now)
+    promotion = shown_card(
+        a_promotion("u_prefix"), admit_card_press(held, Channel.LARK, switched_on=True), now
+    )
+
+    assert in_console is not None and in_console.may_take_over is True
+    assert on_a_card is None
+    assert promotion is not None and promotion.may_take_over is False
+
+
 def test_the_reasons_a_card_offers_are_the_console_s_own_words() -> None:
     """Held to `REJECTION_REASONS` in the console's Approvals query, so a reason reads the same on
     a phone in Lark and on the screen. Delete this and the two drift apart one edit at a time."""

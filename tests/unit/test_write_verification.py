@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 from brain.connectors import (
+    cloudflare,
     freshdesk,
     google_drive,
     hubspot,
@@ -120,7 +121,12 @@ def hubspot_answer(
 
 def laravel_answer(reply: laravel.ViewReply) -> Verification:
     connection = laravel.LaravelConnection(
-        schema="portal", bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0)
+        schema="portal",
+        bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0),
+        host="db.example.invalid",
+        port=3306,
+        private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     read = laravel.read_plan(connection, laravel.ENTITY_CLIENT)
     answered = laravel.interpret(read, reply, fetched_at=FETCHED_AT)
@@ -132,6 +138,16 @@ def freshdesk_answer(reply: freshdesk.Reply) -> Verification:
         freshdesk.Endpoint.SEARCH_TICKETS, domain="helpdesk.example.invalid"
     )
     return verdict(reading("freshdesk")(operation, reply))
+
+
+def cloudflare_answer(recorded: Cassette) -> Verification:
+    """A Cloudflare reply read as the listing its request was made against."""
+    operation = (
+        cloudflare.dns_records_operation()
+        if "/dns_records" in recorded.request
+        else cloudflare.zones_operation()
+    )
+    return verdict(reading("cloudflare")(operation, status=recorded.status, body=recorded.body))
 
 
 def lark_table() -> LarkBaseTable:
@@ -452,7 +468,12 @@ def test_the_two_connectors_recorded_as_read_only_really_are() -> None:
     finding is wrong in a test rather than in a file nobody rereads."""
     ref = SecretRef(path="connectors/creds/laravel", role=VaultRole.APPLICATION)
     connection = laravel.LaravelConnection(
-        schema="portal", bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0)
+        schema="portal",
+        bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0),
+        host="db.example.invalid",
+        port=3306,
+        private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     visibility = {entity: brain_scope() for entity in laravel.ENTITIES}
     built = laravel.laravel_manifest(connection, ref=ref, visibility=visibility)

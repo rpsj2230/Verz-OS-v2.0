@@ -64,20 +64,42 @@ view is not there, so there is nothing to return, so return nothing. That produc
 confident empty answer out of a broken installation, nobody files a bug because an empty list
 is a plausible answer, and the projection quietly stops being refreshed at the same time.
 
-Two things this module does not do, stated rather than implied.
+**Its ceiling is this product's own pace, and says so.** No vendor publishes a rate for a
+company's own database, and `brain.ops.limits` records a figure for this source that is ours: a
+conservative number of bounded reads a minute across the worker and every question together, so
+twenty concurrent agent runs are not twenty concurrent reads of the company's database. The
+manifest names it, `throttle.limits_for` admits each read against it, and the note beside the
+figure says it is not a vendor's. See `THERE_IS_NO_MEASURED_CEILING_HERE`.
 
-*It declares no verified ceiling.* `brain.ops.limits` records figures for Xero, Freshdesk and
-Lark Base and none for this source, and `tests/fixtures/cassettes/` records "no ceiling, our
-own system". So `ConnectorManifest.ceiling` is empty and `throttle.limits_for` refuses rather
-than inventing a number, which is the correct refusal and is also a real gap: nothing paces
-this connector, so twenty concurrent agent runs are twenty concurrent reads of the client's
-database. The per-read bound is what exists today. See `THERE_IS_NO_MEASURED_CEILING_HERE`.
+**The time bound is enforced where the statement runs, not here.** `BoundedRead` names the
+seconds so a read cannot be issued without somebody having chosen a number, and the executor
+(`brain.ops.laravel_reader`) sets the driver's timeouts and the session's own bound from it.
+`transports.THE_SANDBOX_IS_NOT_IN_THIS_MODULE` draws the same line about its sandbox profile.
 
-*It does not enforce the time bound.* `BoundedRead` names the seconds so a read cannot be
-issued without somebody having chosen a number, and whoever executes has to set the driver's
-timeout from it. `transports.THE_SANDBOX_IS_NOT_IN_THIS_MODULE` draws the same line about
-its sandbox profile, and drawing it clearly matters more here than anywhere else in the
-package, because this is the bound that protects a database we do not own.
+**Where the database is, is a setting, and a private address is refused unless the connection
+says it is on a private network.** The host and the port are typed on the form and have no
+default, because no two companies' databases are in the same place. Each read resolves the host
+and connects to the address it checked, through the REST sources' own rule
+(`brain.tools.fetch.assert_fetchable`), so a name that answers inside this server's network is
+refused like any other source's. A connection whose database is on a private network, reached
+directly or through a tunnel the operator runs, says so in its own setting, and only that
+connection may name a private address. See `A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION`.
+
+**The password crosses only a channel whose other end has proved who it is.** The read-only user's
+password reaches the company's database over whatever network lies between, which for a database
+allowed through a firewall is the internet. So every connection is encrypted and the server's
+certificate is checked, against the certificate authorities this server trusts or against the
+company's own when the form is handed one, and a connection that cannot check it is not made. The
+one exception is a tunnel: with the private network setting on, `none` may be typed, because the
+tunnel carries the encryption, and with it off `none` is refused where it is typed. See
+`A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL` and `NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE`.
+
+**This connector reads, on a schedule and while somebody waits (M11.6.1).** `LaravelReading` is
+the worker's `ViewReading`: one bounded read of each view per run, written into the minimal index.
+`LaravelLiveLookup` narrows the same read to one record's id while somebody waits. Both run the
+read through `connector_fetch`, so the two checks on the fetch closure hold for every read this
+product makes of the company's database, and both open the executor only when a read happens,
+so importing this module imports no driver.
 
 Rejected, and worth stating:
 
@@ -97,8 +119,9 @@ same classification, so `ViewReply.app_status` is the narrow seam that lets the 
 interpreted here without anybody inventing a MySQL error code to carry it.
 
 Scope: domain logic. Nothing here opens a connection, imports a driver, holds a DSN or reads
-a clock. The reader is a protocol, `fetched_at` and `checked_at` are parameters, and
-`assert_holds_no_credential` runs on the connection at construction.
+a clock. The reader is a protocol, the one that opens a socket is imported from
+`brain.ops.laravel_reader` inside the function that makes a read, `fetched_at` and `checked_at`
+are parameters, and `assert_holds_no_credential` runs on the connection at construction.
 
 **This connector keeps a minimal index and reads every value live.** What it keeps of a
 client and a staff record is their ids, names, status, department, manager and when they
@@ -113,6 +136,7 @@ Task ids: M11.6.1, M38.4.1.1, M11.7.7
 from __future__ import annotations
 
 import enum
+import ipaddress
 import re
 import secrets
 import sys
@@ -122,6 +146,7 @@ from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
+from brain.connectors.ask import AskEntity, AskRows, of_entity
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     CREDENTIAL_ATTRIBUTE_RE,
@@ -143,7 +168,9 @@ from brain.connectors.declaration import (
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
+    DatabaseLogin,
     KeyScopes,
+    PageReply,
     Recorded,
     Setting,
     SettingRefusedError,
@@ -178,6 +205,7 @@ from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.knowledge.rows import assert_takes_no_sql
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.secrets import SecretRef
+from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the reachable set is views and never tables.
@@ -260,16 +288,49 @@ A_DROPPED_FILTER_WIDENS_A_READ = (
     "whoever wired the tool and belongs in front of them at build time."
 )
 
-#: What this connector has instead of a measured rate ceiling, said plainly.
+#: What this connector's ceiling is instead of a measured one, said plainly.
 THERE_IS_NO_MEASURED_CEILING_HERE = (
-    "brain.ops.limits holds verified figures for Xero, Freshdesk and Lark Base and none for "
-    "this source, and the recorded corpus says 'no ceiling, our own system'. So the manifest "
-    "declares no ceiling and throttle.limits_for refuses rather than inventing one, which is "
-    "the right refusal and is also a real gap: nothing paces this connector, and twenty "
-    "concurrent agent runs are twenty concurrent reads of the client's database. What exists "
-    "today is the per-read bound, which limits how much damage one read can do and says "
-    "nothing about how many there are. A measured ceiling belongs in brain.ops.limits beside "
-    "the other three, once somebody has watched this database under load."
+    "No vendor publishes a rate for a company's own database, so the figure brain.ops.limits "
+    "records for this source is this product's own pace and not a measurement: a conservative "
+    "number of bounded reads a minute across the worker and every question together, admitted "
+    "read by read like any source's ceiling. It is not raisable by buying anything, because "
+    "nobody sells it; it changes when a release of this product changes it. The per-read bound "
+    "limits what one read can cost the database, and the ceiling limits how many there are."
+)
+
+#: Why a private address is refused unless this connection says its database is on one.
+A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION = (
+    "A host that resolves inside this server's network is refused by the rule every REST source "
+    "passes through, so a connection cannot be used to reach the server's own infrastructure. A "
+    "company whose database is on a private network, reached directly or through a tunnel the "
+    "operator runs, says so in this connection's own setting, and only that connection may then "
+    "name a private address. The setting is off unless yes is typed, and with it on nothing else "
+    "about the read changes: the same user, the same views, the same bounds."
+)
+
+#: Why every connection is encrypted and its server's certificate checked.
+A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL = (
+    "The read-only user's password is sent to the company's database over whatever network lies "
+    "between, and for a database reached through a firewall that is the internet. An encrypted "
+    "connection whose certificate nobody checks protects nothing from whoever sits on the path, "
+    "because that is who would answer. So TLS is required and the server's certificate is "
+    "verified, name and chain, against the authorities this server trusts or the company's own "
+    "certificate authority, and a connection that cannot be verified is not made."
+)
+
+#: Why no encryption is allowed only on a private network.
+NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE = (
+    "A database reached through an SSH tunnel is connected to at the tunnel's local end, which "
+    "has no certificate for its name, and the tunnel already encrypts everything it carries. So "
+    "a connection that says its database is on a private network may say none, and one that does "
+    "not say so is refused none where it is typed, naming that setting."
+)
+
+#: Why a view's rule is one value.
+A_RULE_THE_INDEX_CANNOT_CARRY_IS_REFUSED = (
+    "A view's rule is stored on every record the view keeps, so the index can test a reader's "
+    "grant against it, and a record holds one value in a field. A rule listing several values "
+    "would be connected and never read, so it is refused where it is typed."
 )
 
 #: What the source's own permission model is, said plainly rather than implied by a blank.
@@ -287,10 +348,17 @@ THE_VIEW_IS_THE_UNIT_OF_ACCESS = (
 # ------------------------------------------------------------------------------- names
 CONNECTOR_NAME: Final = "laravel"
 
+#: The row of `brain.ops.limits.SOURCE_CEILINGS` every read of this connector is admitted by.
+#: This connector's own name, held equal to it by a test. See `THERE_IS_NO_MEASURED_CEILING_HERE`.
+CEILING_NAME: Final = "laravel"
+
 MANIFEST_VERSION: Final = "1.0.0"
 
-ENTITY_CLIENT: Final = "client"
-ENTITY_USER: Final = "user"
+#: The entities, named for Laravel: the records screen and Ask read one row tool per entity, and
+#: the demo's `client` and HubSpot's would otherwise be a second tool for the same name. See
+#: `brain.connectors.hubspot.ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`.
+ENTITY_CLIENT: Final = "laravel_client"
+ENTITY_USER: Final = "laravel_user"
 
 #: Every record's own identifier, and Laravel's own convention. Always in the column list and
 #: never one of the projected fields: `ProjectedRecord.source_id` carries it, and declaring it
@@ -580,7 +648,7 @@ PROJECTED_FIELDS: Final[Mapping[str, tuple[ProjectedField, ...]]] = MappingProxy
 #: Columns fetched on every read and never stored. One of them, and it is the money.
 #: `contract_value` is on `brain.core.projection.NEVER_PROJECT` already, so the platform
 #: refuses to store it whatever this module says; what this list does is state that it is
-#: still *selected*, because a person holding `read:client.contract_value` is asking a
+#: still *selected*, because a person holding `read:laravel_client.contract_value` is asking a
 #: question that has to be answered from the ledger of the moment rather than from a copy.
 #: The company canaries hold `CANARY-CONTRACT-7Q4XZ` in this field for exactly this test.
 LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
@@ -724,9 +792,143 @@ class BoundedRead:
 
 
 # ----------------------------------------------------------- the connection (M11.2.3)
+#: The longest host name DNS carries, and the pattern of one of its labels (RFC 1123).
+_HOST_MAX: Final = 253
+_HOST_LABEL: Final = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+
+#: The highest port a TCP address has.
+MAX_PORT: Final = 65_535
+
+
+def _address_literal(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """The address a host is written as, or None for a name."""
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        return None
+
+
+def _is_host(host: str) -> bool:
+    """A lower-case host name of RFC 1123 labels, or an address, and nothing else.
+
+    Nothing else means no scheme, no port, no user and no path: a host setting that carried
+    `user@` or `:3306` would be a second place for what the port and the credential settings say,
+    and the one read first would decide.
+    """
+    if _address_literal(host) is not None:
+        return True
+    if not host or len(host) > _HOST_MAX:
+        return False
+    return all(_HOST_LABEL.match(label) for label in host.split("."))
+
+
+def _url_for(host: str, port: int) -> str:
+    """The host and port as `brain.tools.fetch.assert_fetchable` reads an address, and only that.
+
+    The scheme is the rule's and nothing is ever sent to this URL: a database is not reached over
+    HTTPS. It is how the rule every REST source passes through is asked about this host too,
+    rather than written a second time for a database.
+    """
+    literal = _address_literal(host)
+    authority = f"[{host}]" if isinstance(literal, ipaddress.IPv6Address) else host
+    return f"https://{authority}:{port}/"
+
+
+class _NoNames:
+    """A resolver that answers nothing, for a host written as an address, which needs none."""
+
+    def resolve(self, host: str) -> tuple[str, ...]:
+        del host
+        return ()
+
+
+class TlsMode(enum.StrEnum):
+    """How one connection to the database is encrypted. See `A_LOGIN_CROSSES_ONLY_A_VERIFIED_...`.
+
+    Closed, because each member is a way a password is sent and a way to be wrong about who
+    received it.
+    """
+
+    #: Encrypted, and the certificate checked against the authorities this server trusts.
+    VERIFIED = "verified"
+    #: Encrypted, and the certificate checked against the company's own certificate authority.
+    OWN_AUTHORITY = "own_authority"
+    #: Not encrypted by this connection, because a tunnel carries it. Private network only.
+    NONE = "none"
+
+
+#: The longest certificate text the form takes: a certificate authority's, or a short chain of
+#: them, and never a document. A typical certificate is under two thousand characters.
+MAX_CA_CERTIFICATE_CHARS: Final = 8_000
+
+_PEM_BLOCK: Final = re.compile(
+    r"-----BEGIN CERTIFICATE-----(?P<body>[A-Za-z0-9+/=\s]+?)-----END CERTIFICATE-----"
+)
+
+
+def ca_certificate_of(text: str) -> str:
+    """The certificate text as PEM, one line or many, or `LaravelError` when it is not one.
+
+    A text box on the form turns a pasted certificate into one line, so the body is read whatever
+    its line breaks and written back out in the standard shape. Refused: text past the bound,
+    anything carrying a private key (a certificate authority is public, and a key pasted here
+    would be kept as configuration), text with nothing but certificates in it, and a certificate
+    the library cannot read.
+    """
+    if len(text) > MAX_CA_CERTIFICATE_CHARS:
+        msg = (
+            f"a certificate of {len(text)} characters is past the {MAX_CA_CERTIFICATE_CHARS} taken"
+        )
+        raise LaravelError(msg)
+    if "PRIVATE KEY" in text:
+        msg = (
+            "this is a private key, and a certificate authority is only ever its public certificate"
+        )
+        raise LaravelError(msg)
+    blocks = [re.sub(r"\s+", "", one.group("body")) for one in _PEM_BLOCK.finditer(text)]
+    rest = _PEM_BLOCK.sub("", text).strip()
+    if not blocks or rest:
+        msg = "this is not a certificate in PEM, between BEGIN CERTIFICATE and END CERTIFICATE"
+        raise LaravelError(msg)
+    pem = "".join(
+        "-----BEGIN CERTIFICATE-----\n"
+        + "\n".join(body[i : i + 64] for i in range(0, len(body), 64))
+        + "\n-----END CERTIFICATE-----\n"
+        for body in blocks
+    )
+    from cryptography import x509
+
+    try:
+        x509.load_pem_x509_certificates(pem.encode("ascii"))
+    except ValueError as unreadable:
+        msg = "this is not a certificate the library can read"
+        raise LaravelError(msg) from unreadable
+    return pem
+
+
+@dataclass(frozen=True)
+class DatabaseTls:
+    """How a connection is encrypted, and the certificate authority it trusts when it has its own.
+
+    A certificate authority's certificate is public, so it is configuration like the host, kept
+    with the connection's settings and never in the vault.
+    """
+
+    mode: TlsMode
+    ca_certificate: str = ""
+
+    def __post_init__(self) -> None:
+        if (self.mode is TlsMode.OWN_AUTHORITY) != bool(self.ca_certificate):
+            msg = "a certificate authority is given exactly when the connection trusts its own"
+            raise LaravelError(msg)
+        if self.ca_certificate and ca_certificate_of(self.ca_certificate) != self.ca_certificate:
+            msg = "a certificate authority is kept in the shape `ca_certificate_of` writes it"
+            raise LaravelError(msg)
+
+
 @dataclass(frozen=True)
 class LaravelConnection:
-    """One schema, one set of views, one bound on a read. Decided at connect.
+    """One database server, one schema, one set of views, one bound on a read. Decided at connect.
 
     No driver, no DSN, no session and no credential. `assert_holds_no_credential` runs on the
     class at construction rather than being promised in a comment, so an attribute called
@@ -739,13 +941,48 @@ class LaravelConnection:
     `assert_scope_covers` compares cannot disagree. That check is still run at connect: it is
     what catches the future edit that gives them separate sources, which is exactly the
     edit that would not look like a permission change in a diff.
+
+    `host` and `port` are where the server is, with no default, because no two companies'
+    databases are in the same place. A host written as an address inside a private network is
+    refused here unless `private_network` says the database is on one; a host written as a name
+    is checked when each read resolves it (`checked_address`). See
+    `A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION`.
     """
 
     schema: str
     bounds: ReadBounds
+    host: str
+    port: int
+    private_network: bool
+    tls: DatabaseTls
 
     def __post_init__(self) -> None:
         assert_holds_no_credential(type(self))
+        if self.tls.mode is TlsMode.NONE and not self.private_network:
+            msg = (
+                "this connection sends its password unencrypted and does not say its database is "
+                f"on a private network. {NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE}"
+            )
+            raise LaravelError(msg)
+        if not _is_host(self.host):
+            msg = (
+                f"host {self.host!r} is not a server name or address; it is where the database "
+                "is and nothing else, with no scheme, port or user in it"
+            )
+            raise LaravelError(msg)
+        if not 1 <= self.port <= MAX_PORT:
+            msg = f"port {self.port} is not a TCP port"
+            raise LaravelError(msg)
+        if _address_literal(self.host) is not None and not self.private_network:
+            try:
+                assert_fetchable(_url_for(self.host, self.port), _NoNames())
+            except UnsafeAddressError as inside:
+                msg = (
+                    f"host {self.host!r} is an address inside a private network, and this "
+                    "connection does not say its database is on one. "
+                    f"{A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION}"
+                )
+                raise LaravelError(msg) from inside
         for view in self.views():
             assert_is_a_view(view)
         # Constructing both is the check. `ConnectorScope` refuses a selector that narrows
@@ -779,6 +1016,31 @@ class LaravelConnection:
     def admits(self, view: str) -> bool:
         """Whether this connection reaches one view. Exact membership, never a prefix."""
         return self.scope().admits(view)
+
+
+def checked_address(connection: LaravelConnection, *, resolver: Resolver) -> str:
+    """The address one read connects to, resolved now and checked (M11.6.1).
+
+    Without `private_network`, the answer is `brain.tools.fetch.assert_fetchable`'s: every address
+    the host resolves to is checked and the first is handed back, so the read connects to what was
+    checked rather than resolving the name a second time. With it, the host is resolved and the
+    first answer taken, whatever network it is in; a host that resolves to nothing is refused
+    either way. Raises `UnsafeAddressError`, which the worker records as the address refused. See
+    `A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION`.
+
+    What the setting admits that the rule would not, and why that is enough: a MySQL client waits
+    for the server to speak first, so a connection pointed at a web service on a private address
+    sends that service nothing but a TCP handshake and times out.
+    """
+    if not connection.private_network:
+        return assert_fetchable(_url_for(connection.host, connection.port), resolver).address
+    if _address_literal(connection.host) is not None:
+        return connection.host
+    answers = tuple(resolver.resolve(connection.host))
+    if not answers:
+        msg = f"{connection.host!r} resolves to nothing"
+        raise UnsafeAddressError(msg)
+    return answers[0]
 
 
 def read_plan(
@@ -951,7 +1213,7 @@ def projected_record(
 #:
 #: `contract_value` is RESTRICTED and is the point of the table: it is money, it is what the
 #: company canaries protect, and it is returnable live to somebody holding
-#: `read:client.contract_value` while never being storable.
+#: `read:laravel_client.contract_value` while never being storable.
 #:
 #: `manager_id` is INTERNAL rather than CONFIDENTIAL. It names which member of staff owns the
 #: relationship, which is the ordinary content of a project conversation, and classifying it
@@ -961,21 +1223,33 @@ def projected_record(
 #: rather than an omission: they are not selected, so there is nothing to classify, and
 #: default-deny would withhold them from everybody even if a row arrived carrying one.
 LARAVEL_FIELD_RULES: Final[tuple[FieldRule, ...]] = (
-    FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "status", "read:client.status", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "department", "read:client.department", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "manager_id", "read:client.manager_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, CURSOR_COLUMN, "read:client.updated_at", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "name", "read:laravel_client.name", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "status", "read:laravel_client.status", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_CLIENT, "department", "read:laravel_client.department", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CLIENT, "manager_id", "read:laravel_client.manager_id", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CLIENT, CURSOR_COLUMN, "read:laravel_client.updated_at", Classification.INTERNAL
+    ),
     FieldRule.of(
         ENTITY_CLIENT,
         "contract_value",
-        "read:client.contract_value",
+        "read:laravel_client.contract_value",
         Classification.RESTRICTED,
     ),
-    FieldRule.of(ENTITY_USER, "display_name", "read:user.display_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_USER, "department", "read:user.department", Classification.INTERNAL),
-    FieldRule.of(ENTITY_USER, "status", "read:user.status", Classification.INTERNAL),
-    FieldRule.of(ENTITY_USER, CURSOR_COLUMN, "read:user.updated_at", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_USER, "display_name", "read:laravel_user.display_name", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_USER, "department", "read:laravel_user.department", Classification.INTERNAL
+    ),
+    FieldRule.of(ENTITY_USER, "status", "read:laravel_user.status", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_USER, CURSOR_COLUMN, "read:laravel_user.updated_at", Classification.INTERNAL
+    ),
 )
 
 
@@ -1066,8 +1340,8 @@ def laravel_manifest(
     generally not writable anyway, so a write tool here would fail at the source during
     somebody's request having looked installable all along.
 
-    `ceiling` is empty and that is deliberate rather than forgotten. See
-    `THERE_IS_NO_MEASURED_CEILING_HERE`.
+    `ceiling` names this connector, whose figure in `brain.ops.limits` is this product's own
+    pace rather than a vendor's. See `THERE_IS_NO_MEASURED_CEILING_HERE`.
     """
     assert_declarations_agree()
     missing = sorted(set(ENTITIES) - set(visibility))
@@ -1088,7 +1362,7 @@ def laravel_manifest(
         projections=tuple(
             projection_for(entity, visibility=visibility[entity]) for entity in ENTITIES
         ),
-        ceiling="",
+        ceiling=CEILING_NAME,
     )
 
 
@@ -1102,7 +1376,8 @@ class DatabaseFault(enum.StrEnum):
     neither is a 404 in any useful sense.
     """
 
-    #: The grant does not cover this view. MySQL 1142 and 1143.
+    #: The grant does not cover this view, MySQL 1142 and 1143, or the user's password is no
+    #: longer the one the vault holds, MySQL 1045: the database declining this connector either way.
     ACCESS_DENIED = "access_denied"
     #: The view is not there: dropped, renamed, or never created. MySQL 1146.
     UNKNOWN_VIEW = "unknown_view"
@@ -1160,14 +1435,19 @@ AN_UNRECOGNISED_DATABASE_ERROR_IS_NOT_AN_ANSWER: Final = (
 )
 
 #: MySQL's documented error numbers for the four faults, from the server and client error
-#: references. 1142 and 1143 are the grant; 1146 is the view gone; 3024 is our own
-#: `max_execution_time`; the rest are a connection that could not be made or was lost.
+#: references. 1142 and 1143 are the grant; 1045 is the login refused, which is the password the
+#: vault holds no longer being the user's; 1146 is the view gone; 3024 is our own
+#: `max_execution_time`, and 1969 is MariaDB's own number for its `max_statement_time`, which
+#: `brain.ops.laravel_reader` sets on a server that has no `max_execution_time`; the rest are a
+#: connection that could not be made or was lost.
 MYSQL_ERRNO_FAULTS: Final[Mapping[int, DatabaseFault]] = MappingProxyType(
     {
         1142: DatabaseFault.ACCESS_DENIED,
         1143: DatabaseFault.ACCESS_DENIED,
+        1045: DatabaseFault.ACCESS_DENIED,
         1146: DatabaseFault.UNKNOWN_VIEW,
         3024: DatabaseFault.TIMED_OUT,
+        1969: DatabaseFault.TIMED_OUT,
         1040: DatabaseFault.UNAVAILABLE,
         2002: DatabaseFault.UNAVAILABLE,
         2003: DatabaseFault.UNAVAILABLE,
@@ -1599,13 +1879,29 @@ LARAVEL_THE_CREDENTIAL_IS_READ_ONLY: Final = (
 
 
 # ------------------------------------------------- connecting from the console (M11.7.7)
-#: The settings Connectors asks for: the database the views live in, each view's visibility rule
-#: and the bound on one read, which `ReadBounds` refuses to default.
+#: The settings Connectors asks for: the database the views live in, where its server is and
+#: whether that is a private network, each view's visibility rule and the bound on one read, which
+#: `ReadBounds` refuses to default.
 SCHEMA_SETTING: Final = "schema"
+HOST_SETTING: Final = "host"
+PORT_SETTING: Final = "port"
+PRIVATE_NETWORK_SETTING: Final = "private_network"
+TLS_SETTING: Final = "tls"
 CLIENT_RULE_SETTING: Final = "client_rule"
 USER_RULE_SETTING: Final = "user_rule"
 MAX_ROWS_SETTING: Final = "max_rows"
 TIMEOUT_SETTING: Final = "timeout_seconds"
+
+#: What the private network setting takes, in words, and nothing else. `yes` turns it on.
+PRIVATE_NETWORK_ANSWERS: Final[Mapping[str, bool]] = MappingProxyType({"yes": True, "no": False})
+
+#: The two words the encryption setting takes besides a pasted certificate authority.
+VERIFY_WORD: Final = "verify"
+NO_ENCRYPTION_WORD: Final = "none"
+
+#: The port MySQL listens on when nobody chose another. Said in the form's words and never filled
+#: in for the person: every setting on this form is typed, so a connection is where somebody said.
+MYSQL_PORT: Final = 3306
 
 #: Each view's rule, by the entity it keeps.
 RULE_SETTING_FOR: Final[Mapping[str, str]] = MappingProxyType(
@@ -1614,11 +1910,11 @@ RULE_SETTING_FOR: Final[Mapping[str, str]] = MappingProxyType(
 
 #: How a view's visibility rule is written on the form, and the whole of the grammar.
 A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES: Final = (
-    "A view's visibility rule is one field the view keeps and the value or values a reader's own "
-    "scope must hold for it: department = sales, or department in sales, marketing. One clause, "
-    "because that is what a person reading a view's definition can check against it, and a field "
-    "the view does not keep is refused, because a rule over a column that never arrives matches "
-    "nothing for ever and reads as a company with no records."
+    "A view's visibility rule is one field the view keeps and the value a reader's own scope must "
+    "hold for it: department = sales. One clause, because that is what a person reading a view's "
+    "definition can check against it, and a field the view does not keep is refused, because a "
+    "rule over a column that never arrives matches nothing for ever and reads as a company with no "
+    "records."
 )
 
 _RULE_EQ: Final = re.compile(r"^\s*([a-z][a-z0-9_]{0,59})\s*=\s*(.+?)\s*$")
@@ -1630,7 +1926,9 @@ def rule_of(text: str) -> Scope:
     """One view's visibility rule, as the form writes it, or `LaravelError` when it is not one.
 
     See `A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES`. Whether the field is one the view keeps is
-    `projection_for`'s refusal, not a second one here.
+    `projection_for`'s refusal, not a second one here, and whether the index can carry the rule is
+    `built_from_the_console`'s (`A_RULE_THE_INDEX_CANNOT_CARRY_IS_REFUSED`). A list (`department
+    in sales, marketing`) is still read as one, so that refusal can say what it refused.
     """
     listed = _RULE_IN.match(text)
     equal = None if listed is not None else _RULE_EQ.match(text)
@@ -1659,33 +1957,74 @@ def _whole(settings: Mapping[str, str], name: str, *, most: int) -> int:
     return int(given)
 
 
-def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
-    """The manifest a connection made on the Connectors screen declares (M11.7.7).
+def tls_of(typed: str) -> DatabaseTls:
+    """What the encryption setting says: verify, none, or a certificate authority's certificate.
 
-    Each setting is judged by the rule the connection already holds it to and a refusal names the
-    setting: the database by `assert_is_a_view` on the views it would hold, each rule by
-    `rule_of` and `projection_for`, and the bound by `ReadBounds`, which refuses a figure past
-    its cap. Then the manifest is built, which is the check that they agree.
+    The words are read in any case; anything else is read as a certificate, and refused naming the
+    setting when it is not one. Whether none is allowed is `connection_of`'s question, because it
+    depends on the private network setting beside it.
+    """
+    word = typed.strip().lower()
+    if word == VERIFY_WORD:
+        return DatabaseTls(TlsMode.VERIFIED)
+    if word == NO_ENCRYPTION_WORD:
+        return DatabaseTls(TlsMode.NONE)
+    try:
+        return DatabaseTls(TlsMode.OWN_AUTHORITY, ca_certificate_of(typed.strip()))
+    except LaravelError as refused:
+        raise SettingRefusedError(
+            "not verify, none or a certificate", setting=TLS_SETTING
+        ) from refused
+
+
+def connection_of(settings: Mapping[str, str]) -> LaravelConnection:
+    """The connection these settings name, or the refusal naming the setting that was wrong.
+
+    What `built_from_the_console` builds its manifest over and what a read connects with, so the
+    connection a person was told is saved and the one the worker reads are one value. The host is
+    lower-cased and an IPv6 address may be typed in brackets, because both are how an address is
+    ordinarily written; nothing else is adjusted.
     """
     schema = settings.get(SCHEMA_SETTING, "").strip()
     if schema.casefold() in UNBOUNDED_SELECTORS:
         # A database called `all` is a legal name and reads as everything to whoever reads the
         # connection afterwards, so it is refused in front of the person connecting it.
         raise SettingRefusedError("reads as everything", setting=SCHEMA_SETTING)
+    answer = settings.get(PRIVATE_NETWORK_SETTING, "").strip().lower()
+    private = PRIVATE_NETWORK_ANSWERS.get(answer)
+    if private is None:
+        raise SettingRefusedError("not yes or no", setting=PRIVATE_NETWORK_SETTING)
+    tls = tls_of(settings.get(TLS_SETTING, ""))
+    if tls.mode is TlsMode.NONE and not private:
+        raise SettingRefusedError(NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE, setting=TLS_SETTING)
+    host = settings.get(HOST_SETTING, "").strip().lower().removeprefix("[").removesuffix("]")
+    if not _is_host(host):
+        raise SettingRefusedError("not a server name or address", setting=HOST_SETTING)
+    port = _whole(settings, PORT_SETTING, most=MAX_PORT)
+    bounds = ReadBounds(
+        max_rows=_whole(settings, MAX_ROWS_SETTING, most=MAX_ROWS_EVER),
+        timeout_seconds=float(_whole(settings, TIMEOUT_SETTING, most=int(MAX_TIMEOUT_SECONDS))),
+    )
     try:
-        connection = LaravelConnection(
-            schema=schema,
-            bounds=ReadBounds(
-                max_rows=_whole(settings, MAX_ROWS_SETTING, most=MAX_ROWS_EVER),
-                timeout_seconds=float(
-                    _whole(settings, TIMEOUT_SETTING, most=int(MAX_TIMEOUT_SECONDS))
-                ),
-            ),
+        return LaravelConnection(
+            schema=schema, bounds=bounds, host=host, port=port, private_network=private, tls=tls
         )
-    except SettingRefusedError:
-        raise
     except ConnectorContractError as refused:
+        if _address_literal(host) is not None and not private:
+            raise SettingRefusedError("a private address", setting=HOST_SETTING) from refused
         raise SettingRefusedError("not a database name", setting=SCHEMA_SETTING) from refused
+
+
+def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
+    """The manifest a connection made on the Connectors screen declares (M11.7.7).
+
+    Each setting is judged by the rule the connection already holds it to and a refusal names the
+    setting: the server and the database by `connection_of`, each rule by `rule_of`,
+    `projection_for` and `A_RULE_THE_INDEX_CANNOT_CARRY_IS_REFUSED`, and the bound by `ReadBounds`,
+    which refuses a figure past its cap. Then the manifest is built, which is the check that they
+    agree.
+    """
+    connection = connection_of(settings)
     visibility: dict[str, Scope] = {}
     for entity, name in RULE_SETTING_FOR.items():
         try:
@@ -1693,7 +2032,121 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
             projection_for(entity, visibility=visibility[entity])
         except (ConnectorContractError, ValueError) as refused:
             raise SettingRefusedError("not a rule over the view", setting=name) from refused
+        if any(clause.op is not Op.EQ for clause in visibility[entity].clauses):
+            raise SettingRefusedError(A_RULE_THE_INDEX_CANNOT_CARRY_IS_REFUSED, setting=name)
     return laravel_manifest(connection, ref=ref, visibility=visibility)
+
+
+# ------------------------------------------------------------ reading it (M11.6.1, M11.9.2)
+#: How often the worker reads each view into the index, which is the interval its freshness is
+#: judged by. Xero's reconciliation interval, for the same reason: every value is read live when a
+#: question needs it, so the index only has to know which records exist and what they are called.
+REFRESH_EVERY: Final = timedelta(hours=1)
+
+#: What a record's id may be when it is read live: Laravel's auto-increment integer, or a UUID or
+#: ULID. It is bound as a parameter either way; the shape is refused first so a value that is not
+#: an id never reaches the database at all.
+LIVE_ID_PATTERN: Final = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+
+#: What opens one reader for one read: the checked address, the connection it is for (its port,
+#: the name its certificate must carry and how it is encrypted) and the login.
+ViewReaderOpener = Callable[[str, LaravelConnection, DatabaseLogin], ViewReader]
+
+
+def open_mysql(address: str, connection: LaravelConnection, login: DatabaseLogin) -> ViewReader:
+    """The executor, opened for one read. Imported here so importing this module imports no driver.
+
+    See `brain.ops.laravel_reader`, which is the only module that imports the driver, and the
+    module docstring's scope: this module decides, and that one runs the statement.
+    """
+    from brain.ops.laravel_reader import MySqlViewReader
+
+    return MySqlViewReader(
+        address=address,
+        port=connection.port,
+        login=login,
+        server_name=connection.host,
+        tls=connection.tls,
+    )
+
+
+@dataclass(frozen=True)
+class LaravelReading:
+    """This connector's `brain.connectors.declaration.ViewReading`: one bounded read per view.
+
+    Holds the opener it is handed and nothing else, so no login outlives the read it was handed
+    for: `read` builds the connection from the settings, checks the address, opens one reader and
+    runs the read through `connector_fetch`, and the reader goes out of scope when `read` returns.
+    A test or an install check hands it an opener over a recorded driver; the shipped declaration
+    hands it `open_mysql`.
+    """
+
+    opener: ViewReaderOpener = open_mysql
+
+    def entities(self) -> tuple[str, ...]:
+        return ENTITIES
+
+    def refresh_interval(self) -> timedelta:
+        return REFRESH_EVERY
+
+    def read(
+        self,
+        request: FetchRequest,
+        *,
+        settings: Mapping[str, str],
+        login: DatabaseLogin,
+        resolver: Resolver,
+        fetched_at: str,
+    ) -> PageReply:
+        connection = connection_of(settings)
+        address = checked_address(connection, resolver=resolver)
+        fetch = connector_fetch(
+            connection,
+            request.entity,
+            reader=self.opener(address, connection, login),
+            fetched_at=fetched_at,
+        )
+        try:
+            rows = fetch(request)
+        except LaravelDegraded as failed:
+            return PageReply(call=failed.call_outcome, rows=None)
+        return PageReply(
+            call=CallOutcome.TRUNCATED if rows.truncated else CallOutcome.OK, rows=rows
+        )
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        return projected_record(entity, row, last_seen_at=seen_at)
+
+
+class LaravelLiveLookup:
+    """One client or staff record, read from its view while somebody waits (M11.9.2).
+
+    The service's credentials, declared: a database connection is one user, and nobody here has a
+    MySQL login of their own that maps to their principal. The read is the scheduled read's,
+    narrowed to the record's id, so the same view, columns, row cap and time bound apply.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return ENTITIES
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        del entity
+        return IdentityMode.SERVICE
+
+    def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
+        if entity not in ENTITIES:
+            msg = f"this connector reads {sorted(ENTITIES)} live and was asked for {entity!r}"
+            raise LaravelError(msg)
+        if not LIVE_ID_PATTERN.match(source_id):
+            msg = "a record's id is a number, a UUID or a ULID, and this is none of them"
+            raise LaravelError(msg)
+        return {ID_COLUMN: source_id}
+
+    def operation(self, entity: str, *, settings: Mapping[str, str], resolver: Any) -> None:
+        """None: a view is read by its bounded read narrowed to the id, not by a REST call."""
+        del entity, settings, resolver
 
 
 #: What the Connectors screen asks for. The credential is the read-only user, as a name and a
@@ -1714,16 +2167,70 @@ CONSOLE: Final = ConsoleForm(
             ),
         ),
         Setting(
+            name=HOST_SETTING,
+            label="Database server's address",
+            hint=(
+                "The name or address this system's server reaches your database at, such as "
+                "db.example.com, with no port. If you run a tunnel, its local end, such as "
+                "127.0.0.1. There is no default: every company's database is somewhere else."
+            ),
+            refused=(
+                "That is not an address this system may reach. Type a server name such as "
+                "db.example.com or an address, with no port; an address inside a private network "
+                "is taken only when the database is on a private network."
+            ),
+        ),
+        Setting(
+            name=PORT_SETTING,
+            label="Database server's port",
+            hint=(
+                f"The port your database listens on. MySQL's own is {MYSQL_PORT}, so type "
+                f"{MYSQL_PORT} unless your database or your tunnel says another. Nothing is "
+                "filled in for you."
+            ),
+            refused=f"Type a port from 1 to {MAX_PORT}.",
+        ),
+        Setting(
+            name=PRIVATE_NETWORK_SETTING,
+            label="Database on a private network",
+            hint=(
+                "Type yes only if your database is on a private network that this system's server "
+                "reaches directly or through a tunnel, so its address may be a private one. "
+                "Otherwise type no, and a private address is refused, so this connection can "
+                "never be used to reach this server's own network."
+            ),
+            refused="Type yes or no.",
+        ),
+        Setting(
+            name=TLS_SETTING,
+            label="Encryption to the database",
+            hint=(
+                f"Type {VERIFY_WORD} to encrypt the connection and check the server's certificate "
+                "against the certificate authorities this system's server trusts. If your "
+                "database's certificate comes from your own certificate authority, paste that "
+                f"authority's certificate here instead. Type {NO_ENCRYPTION_WORD} only with the "
+                "private network setting at yes, when an SSH tunnel carries the encryption: "
+                "otherwise the password would cross the network in the clear."
+            ),
+            refused=(
+                f"Type {VERIFY_WORD}, or paste your certificate authority's certificate, or type "
+                f"{NO_ENCRYPTION_WORD} only when the database is on a private network through a "
+                "tunnel."
+            ),
+            max_chars=MAX_CA_CERTIFICATE_CHARS,
+        ),
+        Setting(
             name=CLIENT_RULE_SETTING,
             label="Who may be told a client",
             hint=(
                 "The rule the client view is kept under, read from its definition: one field it "
-                "keeps and the values, such as department = sales, or department in sales, "
-                "marketing. The fields are " + ", ".join(one.name for one in CLIENT_PROJECTED) + "."
+                "keeps and its value, such as department = sales. The fields are "
+                + ", ".join(one.name for one in CLIENT_PROJECTED)
+                + "."
             ),
             refused=(
-                "That is not a rule over the client view. Write one field it keeps, = or in, and "
-                "the values, such as department = sales."
+                "That is not a rule over the client view. Write one field it keeps, =, and one "
+                "value, such as department = sales."
             ),
         ),
         Setting(
@@ -1735,8 +2242,8 @@ CONSOLE: Final = ConsoleForm(
                 + "."
             ),
             refused=(
-                "That is not a rule over the staff view. Write one field it keeps, = or in, and "
-                "the values, such as department = operations."
+                "That is not a rule over the staff view. Write one field it keeps, =, and one "
+                "value, such as department = operations."
             ),
         ),
         Setting(
@@ -1768,26 +2275,35 @@ CONSOLE: Final = ConsoleForm(
     example=ConnectExample(
         settings={
             SCHEMA_SETTING: "portal",
+            HOST_SETTING: "db.example.invalid",
+            PORT_SETTING: "3306",
+            PRIVATE_NETWORK_SETTING: "no",
+            TLS_SETTING: "verify",
             CLIENT_RULE_SETTING: "department = sales",
-            USER_RULE_SETTING: "department in sales, operations",
+            USER_RULE_SETTING: "department = operations",
             MAX_ROWS_SETTING: "500",
             TIMEOUT_SETTING: "10",
         },
         fresh=lambda departments: {
             SCHEMA_SETTING: f"acceptance_{secrets.token_hex(4)}",
+            HOST_SETTING: f"acceptance-{secrets.token_hex(4)}.invalid",
+            PORT_SETTING: "3306",
+            PRIVATE_NETWORK_SETTING: "no",
+            TLS_SETTING: "verify",
             CLIENT_RULE_SETTING: f"department = {departments[0]}",
-            USER_RULE_SETTING: f"department in {', '.join(departments)}",
+            USER_RULE_SETTING: f"department = {departments[0]}",
             MAX_ROWS_SETTING: "500",
             TIMEOUT_SETTING: "10",
         },
         edit=CLIENT_RULE_SETTING,
-        edited=lambda: "status in active, pending",
+        edited=lambda: "status = active",
     ),
 )
 
 
 #: The screens that prepare your own database for this system, ending with the form that connects
-#: it: the database, each view's rule, the bound on a read and the read-only user (M11.7.7).
+#: it: where the server is, the database, each view's rule, the bound on a read and the read-only
+#: user (M11.7.7). The third is how this system's server reaches the database at all (M11.6.1).
 GUIDE: Final = keyed(
     (
         GuideStep(
@@ -1826,18 +2342,48 @@ GUIDE: Final = keyed(
             ),
         ),
         GuideStep(
-            key="connect",
-            title="Name the database, write each view's rule and give the user here",
+            key="reach",
+            title="Let this system's server reach the database",
             text=(
-                "Type the database the views are in, the rule each view is kept under as its "
-                "definition says, and the most rows and seconds one read may take, then the "
-                "read-only user's name and password, and press Connect Laravel database views."
+                "Your database must accept a connection from this system's server, on its port "
+                "only. The usual way is to allow the server's own address, as your hosting "
+                "provider lists it, in the database's firewall or security group. Where the "
+                "database is on a private network instead, run an SSH tunnel from this system's "
+                "server to a machine that reaches it, and type the tunnel's local end as the "
+                "server's address with private network set to yes and encryption none, because the "
+                "tunnel encrypts. The tunnel is yours to run and keep up: this system does not "
+                "start one."
+            ),
+            sketch=Sketch(
+                place="Your database's firewall",
+                heading="Inbound rules",
+                lines=(
+                    SketchLine(LineKind.ITEM, "Allow this system's server", mark=True),
+                    SketchLine(LineKind.TEXT, "On the database's port only"),
+                    SketchLine(LineKind.TEXT, "Or an SSH tunnel you run"),
+                ),
+            ),
+        ),
+        GuideStep(
+            key="connect",
+            title="Say where the database is, write each view's rule and give the user here",
+            text=(
+                "Type the database server's address and port, whether it is on a private network "
+                "and how the connection is encrypted, the database the views are in, the rule "
+                "each view is kept under as its definition says, and the most rows and seconds "
+                "one read may take, then the read-only user's name and password, and press "
+                "Connect Laravel database views."
             ),
             sketch=Sketch(
                 place="Company Brain",
                 heading="Connect Laravel database views",
                 lines=(
                     SketchLine(LineKind.FIELD, "Database", "portal", mark=True),
+                    SketchLine(
+                        LineKind.FIELD, "Server and port", "db.example.com, 3306", mark=True
+                    ),
+                    SketchLine(LineKind.FIELD, "Private network", "no", mark=True),
+                    SketchLine(LineKind.FIELD, "Encryption", VERIFY_WORD, mark=True),
                     SketchLine(LineKind.FIELD, "Clients", "department = sales", mark=True),
                     SketchLine(LineKind.FIELD, "Staff", "department = operations", mark=True),
                     SketchLine(LineKind.FIELD, "Most rows, seconds", "500, 10", mark=True),
@@ -1847,6 +2393,10 @@ GUIDE: Final = keyed(
             ),
             asks=(
                 SCHEMA_SETTING,
+                HOST_SETTING,
+                PORT_SETTING,
+                PRIVATE_NETWORK_SETTING,
+                TLS_SETTING,
                 CLIENT_RULE_SETTING,
                 USER_RULE_SETTING,
                 MAX_ROWS_SETTING,
@@ -1878,6 +2428,33 @@ CONNECTOR: Final = ConnectorDeclaration(
         findings=(LARAVEL_THE_CREDENTIAL_IS_READ_ONLY,),
     ),
     recorded=Recorded(tested=True),
+    reading=LaravelReading(),
+    live=LaravelLiveLookup(),
+    # Compiled from `LARAVEL_FIELD_RULES`; the department both views keep is the scope column,
+    # read under the row's own capability (`brain.knowledge.connector_rows`).
+    ask=AskRows(
+        scoped_by="department",
+        entities=(
+            AskEntity(
+                entity=ENTITY_CLIENT,
+                fields=of_entity(LARAVEL_FIELD_RULES, ENTITY_CLIENT),
+                description=(
+                    "Look up clients in the company's own database by name: status, department "
+                    "and account manager, and the contract value read live for a reader allowed it"
+                ),
+                named_by="name",
+            ),
+            AskEntity(
+                entity=ENTITY_USER,
+                fields=of_entity(LARAVEL_FIELD_RULES, ENTITY_USER),
+                description=(
+                    "Look up staff records in the company's own database by name: department, "
+                    "status and when the record last changed"
+                ),
+                named_by="display_name",
+            ),
+        ),
+    ),
     scopes=KeyScopes(
         request=("SELECT on the allowlisted views only",),
         refuse=("SELECT on tables", "any write"),

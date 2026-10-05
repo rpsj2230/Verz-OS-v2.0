@@ -22,7 +22,7 @@ import pytest
 
 import brain.connectors
 from brain.connectors.contract import AccessMode
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.write_verification import builds_a_manifest
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
@@ -52,9 +52,15 @@ REPO: Final = Path(__file__).resolve().parents[2]
 
 
 def in_scope(identifier: str, selectors: tuple[str, ...]) -> bool:
-    """Whether the scope names the identifier typed: as a selector, or as what each is inside, as
-    a database holds the views a Laravel connection names (`portal.v_client`)."""
-    return identifier in selectors or all(one.startswith(f"{identifier}.") for one in selectors)
+    """Whether the scope names the identifier typed: as a selector, as what each is inside, as
+    a database holds the views a Laravel connection names (`portal.v_client`), or as the list the
+    selectors are, as a domains connection's are."""
+    listed = tuple(one.strip() for one in identifier.split(","))
+    return (
+        identifier in selectors
+        or all(one.startswith(f"{identifier}.") for one in selectors)
+        or listed == selectors
+    )
 
 
 def settings_for(name: str, value: str | None = None) -> dict[str, str]:
@@ -119,8 +125,13 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_asks_for(name:
     Read off the declaration since 2026-10-05, rather than off the prose table of leased paths
     nothing reads, which every connector had to add a row to and every connector PR conflicted in.
     """
-    scopes = shipped()[name].scopes
     hint = CONNECTABLE[name].credential_hint
+    if CONNECTABLE[name].credential_shape is CredentialShape.NONE:
+        # A source that takes no key has no slot and no scope; its hint says nothing is kept.
+        assert "nothing is kept" in hint
+        assert shipped()[name].scopes is None
+        return
+    scopes = shipped()[name].scopes
 
     assert scopes is not None, f"{name} is offered and declares no scopes for its slot"
     assert scopes.request and scopes.refuse
