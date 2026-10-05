@@ -141,9 +141,9 @@ jobs:
           # reported with what the kernel said about it, because it is a finding about the
           # install whether or not the harness can carry on past it.
           for i in $(seq 1 10); do
-            before=$(docker inspect -f '{{.RestartCount}}' $(docker compose ps -aq) | paste -sd+ | bc)
+            before=$(docker inspect -f '{{.RestartCount}}' $(docker compose ps -aq) | awk '{ s += $1 } END { print s }')
             sleep 30
-            after=$(docker inspect -f '{{.RestartCount}}' $(docker compose ps -aq) | paste -sd+ | bc)
+            after=$(docker inspect -f '{{.RestartCount}}' $(docker compose ps -aq) | awk '{ s += $1 } END { print s }')
             [ "$before" = "$after" ] && break
           done
           ready https://localhost:8443/realms/brain/.well-known/openid-configuration
