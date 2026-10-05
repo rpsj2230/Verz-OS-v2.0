@@ -25,6 +25,7 @@ from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+from brain.core.redaction import ChannelPayload
 from brain.core.scope import Scope
 from brain.gate.abstain import Abstention, AbstentionReason, SearchScope
 from brain.gate.compose import ComposedAnswer
@@ -34,21 +35,30 @@ from brain.gate.roster import run_entitlement
 from brain.gate.runtime import (
     DEFAULT_MAX_TOOL_CALLS,
     DEFAULT_MAX_TURNS,
+    MAX_RESULT_CHARS,
     SEND_ONE_OBJECT,
     TOOL_NOT_AVAILABLE,
     AgentRuntime,
     FinalAnswer,
+    RunBounds,
     RunHaltedError,
     RunRecord,
     ToolProposal,
     ToolRefusedError,
     parse_reply,
+    result_text,
 )
 from brain.gate.screening import NOTHING_MATCHED
 from brain.gate.stop import StopReason
 from brain.knowledge.visibility import Visibility
 from brain.models.disclosure import DataCategory
-from brain.models.driver import DriverMessage, DriverResponse, TokenUsage
+from brain.models.driver import (
+    DriverFailure,
+    DriverMessage,
+    DriverResponse,
+    ProviderUnavailable,
+    TokenUsage,
+)
 from brain.models.metering import Meter
 from brain.tools.registry import ToolRegistry
 from tests.unit.test_answer_lane import Sink
@@ -333,6 +343,7 @@ def test_a_grant_revoked_mid_run_refuses_the_next_call_in_the_one_sentence() -> 
     assert made.tools.reaches == []
     assert TOOL_NOT_AVAILABLE in made.model.shown[1][-1].content
     assert isinstance(drafted.outcome, Abstention)
+    assert drafted.outcome.reason is AbstentionReason.NOTHING_RETRIEVED
 
 
 def test_a_tool_not_offered_and_arguments_refused_are_one_sentence() -> None:
@@ -577,3 +588,104 @@ def test_a_result_written_to_steer_a_model_is_counted_on_the_run() -> None:
     run(made)
 
     assert made.runs.kept[0].steered == 1
+
+
+# ------------------------------------------------------------------ what the guard audit found
+def test_a_bound_below_one_is_refused() -> None:
+    """A bound of nought is a run that cannot start and says nothing about why. Delete this and a
+    misconfigured bound produces runs that stop before their first turn as if they had answered."""
+    with pytest.raises(ValueError, match="at least one"):
+        RunBounds(max_turns=0)
+    assert RunBounds(max_turns=1).max_turns == 1
+
+
+def test_a_long_result_is_cut_before_the_model_and_says_so() -> None:
+    """A large read is cut at `MAX_RESULT_CHARS` and marked, so it cannot crowd the question out
+    of the prompt. Delete this and one wide table read can push a run past its tier's window."""
+    long = PriceNote(entity="price_note", id="n3", title="x" * (MAX_RESULT_CHARS * 2), amount="1")
+
+    shown = result_text(
+        "notes.read_note",
+        ChannelPayload(records=(long.model_dump(),), source="notes"),
+    )
+
+    assert shown.endswith("...(cut)")
+    assert len(shown) < MAX_RESULT_CHARS + 100
+
+
+def test_an_agent_whose_only_tools_write_is_refused_before_a_model_is_asked() -> None:
+    """An agent whose catalogue holds only tools with side effects has nothing this release may
+    offer, and is refused before any model is asked. Delete this and a model is asked with an
+    empty tool list, which answers from its training."""
+    write_only = AgentRecord(
+        agent_id="pricing_desk",
+        display_name="Pricing desk",
+        persona="Answers about prices.",
+        audience=AgentAudience(level=Visibility.COMPANY, owner_id="u_steward"),
+        authority=AgentAuthority(
+            scope=Scope.unrestricted(),
+            capabilities=(Capability(value=WRITE),),
+            allowed_tools=frozenset({"notes.update_note"}),
+            max_side_effect=SideEffect.WRITE,
+        ),
+        created_by="u_steward",
+    )
+    made = setup([ANSWER], record=write_only)
+
+    run(made)
+
+    assert made.model.shown == []
+    assert made.runs.kept[0].stop_reason is StopReason.REFUSED
+
+
+@dataclass
+class Declining(Model):
+    """A model that declines on content, by a raised refusal or a refusing finish reason."""
+
+    raised: bool = True
+
+    async def complete(self, messages: Sequence[DriverMessage], **kwargs: Any) -> DriverResponse:
+        if self.raised:
+            raise ProviderUnavailable(DriverFailure(deployment_id="d", refused=True))
+        found = await super().complete(messages, **kwargs)
+        return replace(found, finish_reason="content_filter")
+
+
+@pytest.mark.parametrize("raised", [True, False])
+def test_a_model_declining_on_content_is_the_refused_abstention(raised: bool) -> None:
+    """Both ways a provider declines, raised and as a finish reason, end the run as declined with
+    the refused abstention and nothing composed. Delete this and a declined call is answered as
+    if the refusal text were an answer, or retried as a failure."""
+    made = setup([ANSWER])
+    made = replace(made, model=Declining([ANSWER], raised=raised))
+
+    drafted = run(made)
+
+    assert made.runs.kept[0].stop_reason is StopReason.DECLINED
+    assert isinstance(drafted.outcome, Abstention)
+    assert drafted.outcome.reason is AbstentionReason.REFUSED
+
+
+def test_a_run_that_read_records_and_hit_a_bound_says_it_found_something_it_could_not_answer() -> (
+    None
+):
+    """Stopped at a bound after reading records, a run is the retrieved-but-not-answering
+    abstention; stopped having read nothing, it is nothing retrieved. Delete this and a run that
+    found the record and ran out of turns tells the person the record does not exist."""
+    read = setup([CALL] * 20, record=agent(PRICE, NAME, max_tool_calls=2))
+    empty = setup(["no"] * 20, record=agent(PRICE, NAME, max_turns=2))
+
+    assert run(read).outcome.reason is AbstentionReason.RETRIEVED_BUT_NOT_ANSWERING
+    assert run(empty).outcome.reason is AbstentionReason.NOTHING_RETRIEVED
+
+
+def test_an_answer_with_nothing_the_reader_may_see_behind_it_abstains() -> None:
+    """A run whose results were redacted to nothing a reader may see has no citation, and the
+    agent's citation policy abstains rather than handing over a model's unsupported prose. Delete
+    this and an agent answers from fields the asker was refused, by paraphrase."""
+    made = setup([CALL, ANSWER])
+    made = replace(made, runtime=replace(made.runtime, policy_for=lambda _: FieldPolicy()))
+
+    drafted = run(made)
+
+    assert isinstance(drafted.outcome, Abstention)

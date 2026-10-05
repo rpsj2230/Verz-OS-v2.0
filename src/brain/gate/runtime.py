@@ -259,8 +259,8 @@ def parse_reply(text: str) -> ToolProposal | FinalAnswer | None:
         found = json.loads(body)
     except ValueError:
         return None
-    if not isinstance(found, dict):
-        return None
+    # No check that `found` is an object: both shapes refuse anything else when validated, and
+    # the guard audit found a separate check could change nothing.
     for shape in (ToolProposal, FinalAnswer):
         try:
             return shape.model_validate(found)
