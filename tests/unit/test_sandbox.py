@@ -243,3 +243,55 @@ def test_a_memory_ceiling_is_a_kill_and_a_non_zero_exit_is_a_failure() -> None:
     assert answered(AnswerStatus.MEMORY_EXCEEDED, -9) is RunStatus.KILLED
     assert answered(AnswerStatus.FAILED, 1) is RunStatus.FAILED
     assert RUN_PATH == "/run"
+
+
+def test_the_kind_the_reach_and_standard_input_cross_the_wire_and_an_unknown_kind_is_refused() -> (
+    None
+):
+    """The three additions for connector code: a run names its kind, carries its reach (empty for
+    a connector, at the service's reach), and hands standard input as base64. A request naming no
+    kind or an unknown one is not read. Delete this and connector code can be sent as a skill, or
+    its input dropped on the way."""
+    from brain.ops.sandbox import A_CONNECTOR_RUN_IS_AT_THE_SERVICE_S_REACH, RunKind
+
+    sent = RunRequest(
+        run_id="r1",
+        skill="xero_adapter",
+        digest=DIGEST,
+        script="adapter.py",
+        files={"adapter.py": BYTES},
+        sha256={"adapter.py": script_sha256_of(BYTES)},
+        stdin=b'{"rows": []}',
+        kind=RunKind.CONNECTOR,
+    )
+    wire = json.loads(json.dumps(sent.to_json()))
+    assert wire["kind"] == "connector" and wire["reach"] == ""
+    assert RunRequest.from_json(wire) == sent
+    assert "stdin" not in RunRequest(**{**sent.__dict__, "stdin": b""}).to_json()
+    for broken in ({**wire, "kind": "script"}, {k: v for k, v in wire.items() if k != "kind"}):
+        with pytest.raises(SandboxContractError):
+            RunRequest.from_json(broken)
+    assert "service's reach" in A_CONNECTOR_RUN_IS_AT_THE_SERVICE_S_REACH
+
+
+def test_a_request_over_either_bound_is_refused_before_it_is_sent_and_never_cut() -> None:
+    """Files or standard input over their bound make `too_large` true, and the client refuses it
+    without asking the sandbox; at the bound it is sent whole. Delete this and an oversized input
+    is cut, and a connector reads half an answer as all of it."""
+    from brain.ops.sandbox import SANDBOX_FILES_BYTES, SANDBOX_STDIN_BYTES
+
+    def asking(stdin: bytes, files: dict[str, bytes]) -> RunRequest:
+        return RunRequest(
+            run_id="r", skill="s", digest=DIGEST, script=SCRIPT, files=files, sha256={}, stdin=stdin
+        )
+
+    assert not asking(b"x" * SANDBOX_STDIN_BYTES, {SCRIPT: BYTES}).too_large()
+    assert asking(b"x" * (SANDBOX_STDIN_BYTES + 1), {SCRIPT: BYTES}).too_large()
+    assert asking(b"", {SCRIPT: b"x" * (SANDBOX_FILES_BYTES + 1)}).too_large()
+    sandbox = Sandbox()
+    huge = {f"scripts/{i}.py": b"x" * (64 * 1024) for i in range(17)}
+    files = {SCRIPT: BYTES, **huge}
+    approved = tuple(sorted((path, script_sha256_of(content)) for path, content in files.items()))
+    with pytest.raises(SkillScriptError, match="too_large"):
+        runner(sandbox, files=files).run(spec(script_sha256=approved))
+    assert sandbox.seen == []

@@ -2,8 +2,8 @@
 
 One sandbox serves three things: a skill's scripts (M12.2.9), the code sandbox (M12.4.5) and the
 custom-code transport (M11.1.5). It is an optional service an install switches on
-(`INSTALL_SERVICES`), run under gVisor on a network of its own, each script in an empty network
-namespace. Two modules talk across it: `brain.ops.sandbox_client` asks, and
+(`INSTALL_SERVICES`), run under gVisor on a network of its own, each script in a container with no
+network. Two modules talk across it: `brain.ops.sandbox_client` asks, and
 `brain.ops.sandbox_runner` answers inside the service. **This module is the agreement between
 them and does no I/O**, so neither side can drift from the other without a test failing, and the
 runner never imports a client.
@@ -24,6 +24,16 @@ ceiling for each limit, so a client asking for more is given less rather than re
 client applies its own leash to what comes back whatever the sandbox says. The memory ceiling is
 256 MiB, which is what fits beside the analyser and the trace store on a small server; it is a
 named constant because the owner may move it.
+
+**A run says what kind it is, and a connector's runs at the service's reach.** A skill's script
+runs at the caller's reach, and the run carries that reach's hash for the client's record; a
+connector's custom code runs at the service's, so its reach is empty and that is right. The runner
+never reads it. See `A_CONNECTOR_RUN_IS_AT_THE_SERVICE_S_REACH`.
+
+**Standard input is bounded and refused over its bound, never cut.** It carries what a connector's
+code is handed to interpret, which would otherwise ride in `arguments` under their much smaller
+limit. Both sides refuse a request over `SANDBOX_STDIN_BYTES` or `SANDBOX_FILES_BYTES`: the client
+before sending, the runner with `too_large`.
 
 **A refusal is a code and nothing else.** The body of a 4xx is `{"refused": code}` with no
 sentence and no echo of the request, so a refusal can never carry a script's output, a path or an
@@ -59,6 +69,17 @@ SANDBOX_MEMORY_MIB: Final = 256
 SANDBOX_OUTPUT_BYTES: Final = 64 * 1024
 #: The most bytes every file of one run may total, decoded.
 SANDBOX_FILES_BYTES: Final = 1024 * 1024
+#: The most bytes a run's standard input may hold, decoded, apart from its files.
+SANDBOX_STDIN_BYTES: Final = 1024 * 1024
+
+#: Why a connector's run carries no reach.
+A_CONNECTOR_RUN_IS_AT_THE_SERVICE_S_REACH: Final = (
+    "A skill's script runs at the reach of the person whose run it is, and the run carries that "
+    "reach's hash for the record. A connector's custom code reads its source with the "
+    "connection's own key, as every connector does, so it runs at the service's reach and its "
+    "reach is empty; what reaches a person from it is redacted at their reach afterwards, as "
+    "every source's rows are."
+)
 
 #: The interpreter the sandbox runs a script with, chosen by its extension and by nothing else.
 INTERPRETERS: Final[Mapping[str, str]] = {".py": "python3", ".sh": "/bin/sh"}
@@ -95,6 +116,13 @@ class RefusalCode(enum.StrEnum):
     BUSY = "busy"
     #: A body that does not parse, or a path that is absolute or climbs out.
     BAD_REQUEST = "bad_request"
+
+
+class RunKind(enum.StrEnum):
+    """What is being run. Named as itself, so connector code is never dressed up as a skill."""
+
+    SKILL = "skill"
+    CONNECTOR = "connector"
 
 
 class AnswerStatus(enum.StrEnum):
@@ -134,9 +162,28 @@ class RunRequest:
             SANDBOX_WALL_CLOCK_SECONDS, SANDBOX_MEMORY_MIB, SANDBOX_OUTPUT_BYTES
         )
     )
+    #: Fed to the script's standard input and closed. Empty sends nothing.
+    stdin: bytes = b""
+    kind: RunKind = RunKind.SKILL
+    #: The caller's reach hash for a skill's run; empty for a connector's. Never read by the
+    #: runner. See `A_CONNECTOR_RUN_IS_AT_THE_SERVICE_S_REACH`.
+    reach: str = ""
+
+    def too_large(self) -> bool:
+        """Whether the files or the standard input are over their bound. Refused, never cut."""
+        files = sum(len(content) for content in self.files.values())
+        return files > SANDBOX_FILES_BYTES or len(self.stdin) > SANDBOX_STDIN_BYTES
 
     def to_json(self) -> dict[str, Any]:
+        body = self._body()
+        if self.stdin:
+            body["stdin"] = base64.b64encode(self.stdin).decode("ascii")
+        return body
+
+    def _body(self) -> dict[str, Any]:
         return {
+            "kind": self.kind.value,
+            "reach": self.reach,
             "run_id": self.run_id,
             "skill": self.skill,
             "digest": self.digest,
@@ -163,7 +210,11 @@ class RunRequest:
         try:
             files = {str(k): base64.b64decode(v, validate=True) for k, v in body["files"].items()}
             limits = body["limits"]
+            stdin = base64.b64decode(_text(body.get("stdin", "")), validate=True)
             return cls(
+                kind=RunKind(body["kind"]),
+                reach=_text(body.get("reach", "")),
+                stdin=stdin,
                 run_id=_text(body["run_id"]),
                 skill=_text(body["skill"]),
                 digest=_text(body["digest"]),

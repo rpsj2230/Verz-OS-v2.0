@@ -108,12 +108,15 @@ class SandboxRunner:
             sha256=dict(spec.script_sha256),
             arguments=spec.arguments,
             environment=dict(spec.environment),
+            reach=spec.reach_hash,
             limits=RunLimits(
                 wall_clock_seconds=min(spec.leash.wall_clock_seconds, SANDBOX_WALL_CLOCK_SECONDS),
                 memory_mib=min(spec.leash.memory_mib, SANDBOX_MEMORY_MIB),
                 output_bytes=min(spec.leash.output_bytes, SANDBOX_OUTPUT_BYTES),
             ),
         )
+        if request.too_large():
+            raise SkillScriptError(THE_SANDBOX_REFUSED.format(code=RefusalCode.TOO_LARGE.value))
         try:
             response = self._client.post(
                 self._url,
