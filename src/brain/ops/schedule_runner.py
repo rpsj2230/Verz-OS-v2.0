@@ -88,7 +88,7 @@ from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
 from brain.ops.retention_store import run_retention_sweep
-from brain.ops.schedule import TICK, Owed, owed, schedulable
+from brain.ops.schedule import TICK, AtTime, Owed, owed, schedulable, time_of_day
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
@@ -640,6 +640,38 @@ def side_effect_resume(now: datetime, report_only: bool, database_url: str) -> s
     return run_side_effect_resume_now(database_url, now=now, loop_factory=_loop_factory()).summary()
 
 
+#: Why the evening digest sends nothing in report-only mode.
+A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and a message removes nothing, so "
+    "brain.ops.schedule never asks for it. A runner that sent anyway when told to report would "
+    "ignore the mode it was given."
+)
+
+
+def evening_digest(now: datetime, report_only: bool, database_url: str) -> str:
+    """Send today's build digest once, to the conversation the install chose, or say why not.
+
+    `brain.ops.digest_run.run_evening_digest_now` is the literal call the registry reads, with the
+    worker's vault for the send's borrowed key (`brain.ops.channel_lease`). The schedule owes it
+    once a day at `INSTALL_DIGEST_TIME` in the install's zone (`Control.daily_at`). Declines in
+    report-only mode, see `A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING`, and takes the worker's
+    event loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return f"report only: no digest was sent. {A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING}"
+    from brain.ops.digest_run import run_evening_digest_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_evening_digest_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -768,6 +800,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="vault_audit_ship", run=vault_audit_ship),
     # Wired on 2026-09-28 with `ops.acceptance_result`. See `brain.ops.acceptance_run`.
     Runner(name="acceptance_run", run=acceptance_run),
+    # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
+    # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
+    Runner(name="evening_digest", run=evening_digest),
 )
 
 
@@ -828,6 +863,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return queue_redrive(now, report_only, database_url)
         case "side_effect_resume":
             return side_effect_resume(now, report_only, database_url)
+        case "evening_digest":
+            return evening_digest(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (
@@ -895,6 +932,33 @@ def lock_id(name: str) -> tuple[int, int]:
     return SCHEDULER_LOCK_NAMESPACE, unsigned - (1 << 32) if unsigned >= (1 << 31) else unsigned
 
 
+def times_of_day(
+    controls: Sequence[Control] | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, AtTime]:
+    """The time and zone each control owed at a time of day is read in, from the install's
+    settings as saved, the environment, or the setting's own default, in that order.
+
+    A value that is not a time on the 24-hour clock falls back to the declared default rather
+    than stopping the control: the Settings screen refuses such a value, so one here came from an
+    environment file, and a daily message at its default hour is better than none.
+    """
+    from brain.install import BY_NAME, value_of
+    from brain.locale import time_zone
+
+    found: dict[str, AtTime] = {}
+    for one in schedulable(controls):
+        if not one.daily_at:
+            continue
+        at = time_of_day(value_of(one.daily_at, env)) or time_of_day(BY_NAME[one.daily_at].default)
+        if at is None:
+            msg = f"{one.daily_at} declares a default that is not a time of day"
+            raise RunnerError(msg)
+        found[one.name] = AtTime(at=at, zone=time_zone(env))
+    return found
+
+
 def due_now(
     *,
     now: datetime,
@@ -902,6 +966,7 @@ def due_now(
     last_success: Mapping[str, datetime],
     controls: Sequence[Control] | None = None,
     released: Sequence[str] = (),
+    at: Mapping[str, AtTime] | None = None,
 ) -> tuple[Owed, ...]:
     """What is owed at `now`, with dueness on one clock and lateness on the other.
 
@@ -911,10 +976,10 @@ def due_now(
     decides *what* is returned; the lateness answer supplies `late_by` and `first_run` for the
     ones that survived. See `TRIED_RECENTLY_AND_WORKING_ARE_DIFFERENT_CLOCKS`.
     """
-    trying = owed(now=now, last_run=last_attempt, controls=controls, released=released)
+    trying = owed(now=now, last_run=last_attempt, controls=controls, released=released, at=at)
     by_success = {
         one.name: one
-        for one in owed(now=now, last_run=last_success, controls=controls, released=released)
+        for one in owed(now=now, last_run=last_success, controls=controls, released=released, at=at)
     }
     # `report_only` is taken from this run's answer, and a mutation says the choice does not
     # matter today: `owed` computes it from the control's name and the released set, neither

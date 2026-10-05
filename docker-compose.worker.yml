@@ -133,6 +133,10 @@ services:
       # this, so the worker read `unset` on every install and recorded the import as not run
       # whatever the install had named. The same line and default as the application's.
       INSTALL_ACCEPTANCE_SKILL_SOURCE: ${INSTALL_ACCEPTANCE_SKILL_SOURCE:-}
+      INSTALL_DIGEST_DESTINATION: ${INSTALL_DIGEST_DESTINATION:-}
+      INSTALL_DIGEST_TIME: ${INSTALL_DIGEST_TIME:-}
+      INSTALL_SERVICES: ${INSTALL_SERVICES:-}
+      INSTALL_TIME_ZONE: ${INSTALL_TIME_ZONE:-}
       # The install's sign-in issuer, which names the Keycloak realm the staff sync makes sign-in
       # accounts in (brain.ops.staff_accounts_run). The same line as the application's, so the
       # two read one value; without it every run says the issuer is unset and makes nobody.

@@ -8,11 +8,15 @@ Task ids: M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.connectors import laravel
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import CallOutcome
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import READ_AT, answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -82,7 +86,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "arrive, and the contract value must not be projected.",
         kind=Kind.LIST,
         tools=("laravel.read_clients",),
-        projects="client",
+        projects="laravel_client",
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference=LARAVEL_VIEW_CONTRACT,
@@ -108,7 +112,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         why="A staff record: a name and a department, and nothing that reaches a person.",
         kind=Kind.LIST,
         tools=("laravel.read_users",),
-        projects="user",
+        projects="laravel_user",
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference=LARAVEL_VIEW_CONTRACT,
@@ -128,7 +132,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "reaching it is the only sign there were more.",
         kind=Kind.PAGINATION,
         tools=("laravel.read_clients",),
-        projects="client",
+        projects="laravel_client",
         expect=Expect.MORE_TO_READ,
         origin=DOCUMENTED,
         reference=LARAVEL_VIEW_CONTRACT,
@@ -204,7 +208,14 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
     ),
 )
 
-RATE_LIMIT: Final = RateLimit(SOURCE, 0, "no ceiling", "Our own system.", True)
+RATE_LIMIT: Final = RateLimit(
+    SOURCE,
+    30,
+    "minute",
+    "This product's own pace against the company's own database, not a vendor's figure; "
+    "brain.ops.limits records it and laravel.THERE_IS_NO_MEASURED_CEILING_HERE says why.",
+    False,
+)
 
 
 def replay(recorded: Cassette) -> Replayed:
@@ -243,8 +254,47 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Laravel's read-back reading, as the view reply it records."""
+    if recorded.protocol is Protocol.HTTP:
+        reply = laravel.ViewReply(app_status=recorded.status)
+    elif "errno" in recorded.body:
+        reply = laravel.ViewReply(fault=laravel.fault_for_mysql_error(recorded.body["errno"]))
+    else:
+        reply = laravel.ViewReply(rows=tuple(recorded.body["rows"]))
+    connection = laravel.LaravelConnection(
+        schema="portal",
+        bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0),
+        host="db.example.invalid",
+        port=3306,
+        private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
+    )
+    read = laravel.read_plan(connection, laravel.ENTITY_CLIENT)
+    return answered(SOURCE, laravel.interpret(read, reply, fetched_at=READ_AT))
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "LARAVEL-500": Verification.INCONCLUSIVE,
+        "LARAVEL-rows-clients": Verification.FOUND,
+        "LARAVEL-rows-users": Verification.FOUND,
+        "LARAVEL-rows-at-cap": Verification.FOUND,
+        "LARAVEL-1142": Verification.INCONCLUSIVE,
+        "LARAVEL-1146": Verification.INCONCLUSIVE,
+        "LARAVEL-3024": Verification.INCONCLUSIVE,
+        "LARAVEL-2006": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

@@ -79,6 +79,8 @@ from brain.identity.staff_source import (
 )
 from brain.install import value_of
 from brain.ops.connector_lease import LeaseOutcome
+from brain.ops.connector_sync import NO_KEY
+from brain.ops.connector_sync_run import ConnectorKeyAbsentError
 from brain.ops.credentials import problems_with
 from brain.ops.secrets import SecretRef
 from brain.ops.staff_sync_run import (
@@ -315,6 +317,10 @@ class TypedKey:
 
     def key(self) -> str:
         return self.value
+
+    def user(self) -> str:
+        # A staff source's credential is one key, so there is no user beside it.
+        raise ConnectorKeyAbsentError(NO_KEY)
 
     def close(self, now: datetime) -> LeaseOutcome:
         # No token was minted, so nothing is revoked: `LeaseOutcome.NONE` is exactly that.

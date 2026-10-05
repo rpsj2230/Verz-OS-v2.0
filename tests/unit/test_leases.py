@@ -315,17 +315,19 @@ def test_the_roles_that_may_renew_are_exactly_those_their_vault_policy_grants_re
     policies = sorted(POLICY_DIR.glob("*.hcl"))
     assert policies, "no vault policies found; the path this test pins has moved"
 
-    # `connector-run` is carried by a child token minted per connector attempt and by no
-    # process, and `deploy` by the token a release's deploy step runs as on the host (needs-rupash
-    # 114), so neither names a role; they are the only two policy files that do not. Neither may
-    # renew a lease.
+    # `connector-run` and `channel-send` are carried by a child token minted per connector attempt
+    # or per send and by no process, and `deploy` by the token a release's deploy step runs as on
+    # the host (needs-rupash 114), so none names a role; they are the only three policy files that
+    # do not. None may renew a lease.
     from brain.deployment.vault_setup import DEPLOY_POLICY
+    from brain.ops.channel_lease import SEND_POLICY
     from brain.ops.connector_lease import RUN_POLICY
 
     granted: set[VaultRole] = set()
-    assert {RUN_POLICY, DEPLOY_POLICY} <= {path.stem for path in policies}
+    unheld = {RUN_POLICY, SEND_POLICY, DEPLOY_POLICY}
+    assert unheld <= {path.stem for path in policies}
     for path in policies:
-        if path.stem in {RUN_POLICY, DEPLOY_POLICY}:
+        if path.stem in unheld:
             assert 'path "sys/leases/renew"' not in path.read_text(encoding="utf-8")
             continue
         role = VaultRole(path.stem.replace("-", "_"))

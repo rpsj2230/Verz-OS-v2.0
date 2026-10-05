@@ -318,12 +318,19 @@ async def a_full_ingestion_queue_refuses_with_a_retry_hint(h: Harness) -> None:
     from brain.knowledge.uploads import admit_ingestion, queue_limits_for
     from brain.knowledge_intake_routes import DriverQueue
     from brain.ops.admission import CapacityState, Resource
+    from brain.ops.queue import queue_url_of
     from brain.ops.tuning import configured_budgets
 
-    if not h.settings.database_url:
+    # The queue's own connection, as the worker running this check opens its queue. Until
+    # 2026-09-30 this asked the application's pooler URL, which the driver refuses on every
+    # install: `brain.ops.queue.A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S`.
+    queue_url = queue_url_of(h.settings)
+    if not queue_url:
         raise CheckNotRunError("the process running this check names no database for the queue")
     try:
-        waiting, running = await DriverQueue(h.settings.database_url).counts()
+        waiting, running = await DriverQueue(
+            queue_url, database_url=h.settings.database_url
+        ).counts()
     except Exception as exc:
         raise CheckFailedError("the install's ingestion queue did not answer") from exc
     budgets = configured_budgets()

@@ -81,6 +81,7 @@ from types import MappingProxyType
 from typing import Any, Final
 from urllib.parse import quote, urlencode, urlsplit
 
+from brain.channels.lark import MISSING_SCOPE_CODE as LARK_MISSING_SCOPE_CODE
 from brain.connectors.staff_directories import (
     LARK_PLATFORMS,
     LARK_SCOPE_PURPOSE,
@@ -151,7 +152,8 @@ MESSAGE_EVENT: Final = "im.message.receive_v1"
 # --------------------------------------------------------------------- the figures
 
 #: Lark's code for a call whose token lacks a scope. The message lists the scopes that admit it.
-MISSING_SCOPE_CODE: Final = 99991672
+#: The chat wire's own, so the test here and the group list the digest reads cannot disagree.
+MISSING_SCOPE_CODE: Final = LARK_MISSING_SCOPE_CODE
 
 #: Codes Lark answers when the token itself is not accepted.
 TOKEN_REFUSED_CODES: Final = frozenset({99991661, 99991663, 99991668})
@@ -177,11 +179,19 @@ _SCOPE_IN_TEXT: Final = re.compile(r"[a-z]+(?::[a-z_.]+)+")
 #: space beyond these is declared by pasting its link.
 SPACES_LISTED: Final = 50
 
+#: Where the bot's groups are listed, which the chat channel's test asks for one of.
+CHAT_LIST_PATH: Final = "/open-apis/im/v1/chats"
+
 #: A chat id that names no chat, which the chat channel's test asks the members of. See `_channel`.
 MEMBERS_CHECK_CHAT: Final = "oc_brain_connect_check"
 
 #: The scope a group question reads who is present with.
 MEMBERS_SCOPE: Final = "im:chat.members:read"
+
+#: The scope the bot lists the groups it has been added to with, so a person choosing where a
+#: message goes picks a group from a list rather than typing its id (the evening digest's
+#: destination, `brain.ops.digest_destination`). Read-only: it lists groups and their names.
+CHAT_LIST_SCOPE: Final = "im:chat:read"
 
 #: The scope a wiki page's permission settings are read with, which is how the Lark Wiki
 #: connector knows whether a page was restricted (`brain.connectors.lark_wiki.restriction_of`).
@@ -325,6 +335,11 @@ USES: Final[Mapping[Use, UseSpec]] = MappingProxyType(
                 Scope(
                     MEMBERS_SCOPE,
                     "read who is in a group, so what the room reads fits everyone in it",
+                ),
+                Scope(
+                    CHAT_LIST_SCOPE,
+                    "list the groups the bot has been added to, so a group is chosen from a list "
+                    "and never typed",
                 ),
                 Scope(
                     "im:message:send_as_bot",
@@ -1278,6 +1293,11 @@ async def _channel(fetch: Fetch, base: str, token: str) -> UseResult:
     code = _code(members)
     if code == MISSING_SCOPE_CODE:
         return _missing(spec, (MEMBERS_SCOPE,))
+    groups = await _get(fetch, base, CHAT_LIST_PATH, token, page_size="1")
+    if _code(groups) == MISSING_SCOPE_CODE:
+        # Answered: the bot and the members read were granted, so this app's version is released
+        # and one scope is missing from it, which `_released` must not read as nothing granted.
+        return replace(_missing(spec, (CHAT_LIST_SCOPE,)), answered=True)
     if code in TOKEN_REFUSED_CODES:
         return UseResult(
             spec.use,
@@ -1291,7 +1311,8 @@ async def _channel(fetch: Fetch, base: str, token: str) -> UseResult:
     return UseResult(
         spec.use,
         Verdict.WORKING,
-        "Working: the bot is on and may read who is in a group. The two receiving scopes are "
+        "Working: the bot is on, may read who is in a group and may list the groups it is in. "
+        "The two receiving scopes are "
         "checked by Lark when the first message arrives: send the bot a direct message and watch "
         "Events arriving on this card.",
     )

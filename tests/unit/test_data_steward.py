@@ -46,11 +46,12 @@ from brain.identity.data_steward import (
 )
 from brain.identity.first_administrator import GRANTED_AT_APPOINTMENT, FirstAdministrators
 from brain.knowledge.rows import entity_capability
-from brain.ops.connectable import CONNECTABLE, manifest_for
+from brain.ops.connectable import DECLARED_FORMS, given, key_reference
 from brain.ops.connector_store import StoredConnections
 from brain.session import make_session_factory
 from brain.setup_routes import steward_of
 from brain.setup_wizard import StepId, answer, apply_install, new_draft, steward_answer
+from tests.fixtures.connector_examples import EXAMPLES
 from tests.fixtures.console_http import headers
 from tests.fixtures.retirable import has_pgvector
 from tests.fixtures.scratch_postgres import migrate, run, sql
@@ -68,14 +69,17 @@ STEWARD = "u_wide"
 SECOND = "u_narrow"
 CONNECTING = "u_elsewhere"
 
-#: One identifier per connectable source, as `tests/unit/test_connector_routes.py` names them.
-SETTINGS: Mapping[str, Mapping[str, str]] = {
-    "xero": {"tenant_id": "11111111-2222-3333-4444-555555555555"},
-    "hubspot": {"portal_id": "12345678"},
-    "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
-}
+#: Every declared form's settings, as each connector's own declaration gives them
+#: (`ConnectExample.settings`), so a connector added is covered here with nothing typed.
+SETTINGS: Mapping[str, Mapping[str, str]] = EXAMPLES
 
 FINANCE = "finance"
+
+
+def built(name: str, settings: Mapping[str, str]) -> Any:
+    """The manifest a declared console form builds, whether or not the console offers it yet."""
+    form = DECLARED_FORMS[name]
+    return form.build(given(form, settings), key_reference(name))
 
 
 # ------------------------------------------------------------------------- no server
@@ -114,13 +118,13 @@ def test_the_steward_holds_the_console_s_own_spellings_of_the_authority_and_the_
 
 
 def test_a_source_declares_each_entity_it_reaches_as_its_row_and_its_fields_and_no_write() -> None:
-    """Built from every connectable source's real manifest. Each entity a tool or a projection
-    reaches is declared as `entity_capability` and the wildcard over its fields, and nothing is a
-    write. Delete this and a source can declare a spelling the row reader never asks for, so the
-    steward holds reads that admit no row, or a write can reach the steward by connecting a
-    source."""
+    """Built from every declared console form's real manifest, offered yet or not. Each entity a
+    tool or a projection reaches is declared as `entity_capability` and the wildcard over its
+    fields, and nothing is a write. Delete this and a source can declare a spelling the row
+    reader never asks for, so the steward holds reads that admit no row, or a write can reach the
+    steward by connecting a source."""
     for name, settings in SETTINGS.items():
-        manifest = manifest_for(name, settings)
+        manifest = built(name, settings)
         entities = {one.entity for one in manifest.tools} | {
             one.entity for one in manifest.projections
         }
@@ -134,7 +138,8 @@ def test_a_source_declares_each_entity_it_reaches_as_its_row_and_its_fields_and_
         }
         assert list(declared) == sorted(declared)
         assert all(one.startswith("read:") for one in declared)
-    assert set(SETTINGS) == set(CONNECTABLE)
+    assert set(SETTINGS) == set(DECLARED_FORMS)
+    assert {"xero", "google_drive"} <= set(SETTINGS)
 
 
 def test_the_same_person_is_refused_unless_said_and_said_only_of_an_administrator() -> None:
@@ -278,7 +283,7 @@ def connect(
     declared: Sequence[str] | None = None,
 ) -> str:
     """Connect one source through the store, granting what its manifest declares unless told."""
-    manifest = manifest_for(name, SETTINGS[name])
+    manifest = built(name, SETTINGS[name])
 
     async def work(sessions: async_sessionmaker[AsyncSession]) -> str:
         try:
@@ -313,7 +318,7 @@ def reach_of(url: str, principal_id: str) -> EntitlementSet:
 
 
 def declared_by(name: str) -> tuple[str, ...]:
-    return declared_capabilities(manifest_for(name, SETTINGS[name]))
+    return declared_capabilities(built(name, SETTINGS[name]))
 
 
 def steward_rows(url: str) -> list[tuple[Any, ...]]:
@@ -343,10 +348,11 @@ A_STEWARD = NamedSteward(
 def test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrator_cannot() -> None:
     """The bootstrap Part 6.1 found missing, end to end through the People screen's real grant
     route. The wizard's appointment names a steward; HubSpot is connected; the steward, signed in
-    with the reach the resolver returns for them, grants `read:client.name` over one department to
-    a second person and is answered 201; the first administrator, with theirs, asks for the same
-    grant and is refused; the second person then resolves it over that department and nowhere
-    else; and the administrator still holds no content plane and no read of a client.
+    with the reach the resolver returns for them, grants `read:hubspot_company.name` over one
+    department to a second person and is answered 201; the first administrator, with theirs,
+    asks for the same grant and is refused; the second person then resolves it over that
+    department and nowhere else; and the administrator still holds no content plane and no read
+    of a HubSpot company.
 
     Delete this and every half can pass alone while nobody on an install can be granted a read of
     the company's data, which is where every install was until 2026-09-17. **Skips without a
@@ -374,7 +380,7 @@ def test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrato
                     f"{API_PREFIX}/govern/grants",
                     json={
                         "principal_id": SECOND,
-                        "capability": "read:client.name",
+                        "capability": "read:hubspot_company.name",
                         "scope_slug": FINANCE,
                         "reason": "reading client names for the finance close",
                     },
@@ -395,13 +401,13 @@ def test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrato
 
     assert (appointed, connected) == ("appointed", "connected")
     assert answered_to == {ADMIN: 404, STEWARD: 201}
-    granted = second.scope_for(Capability(value="read:client.name"), INSIDE)
+    granted = second.scope_for(Capability(value="read:hubspot_company.name"), INSIDE)
     assert granted is not None
     assert granted.matches({"department": FINANCE})
     assert not granted.matches({"department": "sales"})
     assert actor == STEWARD
     assert administrator.scope_for(plane_capability(Plane.CONTENT), INSIDE) is None
-    assert administrator.scope_for(entity_capability("client"), INSIDE) is None
+    assert administrator.scope_for(entity_capability("hubspot_company"), INSIDE) is None
 
 
 def test_the_administrator_is_the_steward_only_when_said_and_nobody_else_can_say_it() -> None:

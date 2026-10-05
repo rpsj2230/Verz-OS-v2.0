@@ -43,11 +43,13 @@ account or a bot token: the source is answering as us, and it never sees the per
 What stands between a person and a row in those sources is this system's own entitlements and
 nothing else. Read that as a requirement on how you grant, not as a gap to be worked around.
 
-**What it will run against.** Two of the seven have no measured rate ceiling, and the ones that
-do are the source's published limit rather than a number chosen here. Where the ceiling belongs
-to your own account rather than to a subscription, spending it is your outage: the accounting
-connector's allowance is five thousand calls a day for your whole organisation, shared with
-every other integration you run, and it does not refill until midnight.
+**What it will run against.** Every one of the eleven has a rate ceiling recorded. Each is the
+source's published limit rather than a number chosen here, except your own Laravel database's
+and the domains connector's, for which nobody publishes one figure: each is this product's own
+pace, and says so. Where the ceiling belongs to your own account rather than to a subscription,
+spending it is your outage: the accounting connector's allowance is five thousand calls a day for
+your whole organisation, shared with every other integration you run, and it does not refill until
+midnight.
 
 ## The table
 
@@ -60,12 +62,17 @@ exists, because a row for something that is gone reads as coverage.
 
 | Connector | Transport | Pinned at connect to | Access | What the source enforces | Rate ceiling |
 | --- | --- | --- | --- | --- | --- |
+| `cloudflare` | `rest` | `account` | `read_only` | `none` | `cloudflare` |
+| `domains` | `rest` | `domain` | `read_only` | `none` | `domains` |
 | `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |
-| `google_drive` | `rest` | `folder` | `read_only` | `none` | none measured |
+| `google_analytics` | `rest` | `analytics_property` | `read_only` | `none` | `google_analytics` |
+| `google_drive` | `rest` | `folder` | `read_only` | `none` | `google_drive` |
 | `hubspot` | `rest` | `portal` | `read_only` | `none` | `hubspot` |
-| `laravel` | `database` | `view` | `read_only` | `none` | none measured |
+| `laravel` | `database` | `view` | `read_only` | `none` | `laravel` |
 | `lark_base` | `rest` | `base_table` | `read_only` | `none` | `lark_base` |
 | `lark_wiki` | `rest` | `wiki_space` | `read_only` | `none` | `lark_base` |
+| `search_console` | `rest` | `search_site` | `read_only` | `none` | `search_console` |
+| `slack_messages` | `rest` | `workspace` | `read_only` | `none` | `slack_messages` |
 | `xero` | `rest` | `tenant` | `read_only` | `none` | `xero` |
 
 Two rows deserve a second look.
@@ -76,7 +83,7 @@ ceiling of its own would give the tenant two windows of a hundred where it has o
 hundred, and the first anybody would know is a refusal.
 
 `freshdesk` is the one connector whose access mode is whatever binding it is handed. The other
-six either fix it read-only or refuse a write binding at connect. Bind it read-only.
+seven either fix it read-only or refuse a write binding at connect. Bind it read-only.
 
 ## Before you connect anything
 
@@ -96,6 +103,46 @@ and it is checked against the fields the source exposes: a rule over a column th
 matches nothing, for ever, and looks exactly like a source with no records in it.
 
 ---
+
+## `cloudflare`
+
+Your DNS provider. Pinned to one Cloudflare account by its id, and connected from the Connectors
+screen with two settings and a token: the account's 32-character id, from the account's Overview
+page, and the short name of the one department whose people may be granted its zones and DNS
+records. Nothing is done on the server. The worker reads the account's zones every hour and each
+zone's DNS records under it, and keeps a zone's id, name, status and account and a record's id,
+zone, name and type; a record's content, time to live and proxying are read live when a question
+needs them and never kept. A zone's security events are read live for the past hour or the past
+day, never with the visitor's address or user agent.
+
+**Create** a custom API token (My Profile, API Tokens, Create Token) with exactly three
+permissions, Zone Read, DNS Read and Analytics Read, over all zones from the one account. Never a
+token with DNS Write or any Edit permission, and never the Global API Key.
+
+**A DNS change is only ever prepared.** An agent asking to change a record prepares the change for
+a person to approve, and the gate holds it whatever the agent's leash says, because changing DNS
+is one of the effects that always waits for a person. An approved change is not sent by this
+release: sending one needs a second token with DNS Write, which is a decision for whoever owns the
+install, and until then the change is made in Cloudflare by a person.
+
+**What it does not narrow.** The token is one user's, and Cloudflare counts 1,200 calls per five
+minutes across every token that user holds and the dashboard, so another integration on the same
+user spends the same allowance. A zone that turns out to belong to another account stops the read
+rather than being kept, so a token wider than the one account it was created for is noticed.
+
+## `domains`
+
+Your clients' domains: each one's registrar and expiry, and whether its site answers.
+
+**Nothing to create and nothing to keep.** A domain's registration record is published by its
+registry over RDAP, so this connector takes no key. List the domains, up to two hundred, and the
+department whose people may be told about them. **Only the listed domains are ever looked up**,
+whoever asks about another.
+
+**Where a registry publishes no RDAP**, as several country-code registries do not, the answer
+for that domain says so rather than guessing, and that registry is never asked. The registrar's
+name is read live and kept nowhere. The pace is this product's own, thirty lookups a minute,
+because registries publish no common figure.
 
 ## `freshdesk`
 
@@ -122,25 +169,51 @@ so pinning the account refuses a credential pointed at a different helpdesk and 
 inside this one. Inside this system, one department reads the whole helpdesk: a rule sending each
 Freshdesk group to a different department is not something a connection can hold yet.
 
+## `google_analytics`
+
+One Google Analytics property, pinned at connect by its property id.
+
+**Create** a service account, switch on the Google Analytics Data API and Admin API in its
+project, create a JSON key for it, and add its address to the one property as a Viewer. Do not
+grant domain-wide delegation: it reads the property as itself and needs nothing more. The key
+file is exchanged for a token that carries `analytics.readonly` and nothing else, for one read
+at a time, and never kept.
+
+**It keeps the property and never its figures.** The index holds the property's id, its name
+and when it was created and last changed. Sessions, users and conversions are read from Google
+when somebody asks, for yesterday or the last 7, 28 or 90 days, and are never stored anywhere
+here.
+
+**What it does not narrow.** One department reads the property: the one named at connect, whose
+people are then granted it by somebody holding it. A property several departments share is read
+by the one named.
+
 ## `google_drive`
 
-One folder of one Drive, pinned at connect by folder id.
+One folder of one Drive, pinned at connect by folder id or link, connected on the Connectors
+screen with the department it belongs to and the person answerable for it.
 
-**Create** a service account and share the one folder with it, read-only. Do not grant
-domain-wide delegation: it reads everything, for everyone, for ever, and no scope declared here
-would narrow it.
+**Create** a service account, share the one folder with it as a viewer, and choose its key file on
+the form. Do not grant domain-wide delegation: it reads everything, for everyone, for ever, and no
+scope declared here would narrow it. The key file is exchanged for a `drive.readonly` token for
+each read and is never sent.
 
-**Two tools and neither returns a file's bytes.** It lists the folder and it reads a file's
-metadata. Fetching contents is a separate decision with separate consequences, and this
-connector is not it.
+**What it keeps and what it reads.** The worker walks the folder and every subfolder under it
+every hour into the index: each file's and folder's name, type, dates and sharing verdict, never a
+word of a file. A question reads the words of the few files whose names hold its words, live, only
+for a reader granted the folder's files in its department: a Google Doc exported as plain text and
+a plain-text file as it is. A shortcut is never followed. A pass that reaches its bound before the
+tree's end is marked degraded and starts from the folder again on the next pass.
 
-**What it does not narrow.** The folder pin is this system's restriction rather than Google's.
-A service account reaches everything it has been granted, so the pin is enforced here, by
-refusing a file that is not in the declared folder, rather than by Google refusing to serve it.
+**What is never read.** A file Google shows as shared by link or outside your domain, a file in
+the bin, and a file or subfolder whose access was limited below its folder's, with everything in
+it. A viewer is not shown how each
+file is shared, so a file whose sharing Google does not show is read as the folder's (decided by
+the owner, needs-rupash 135).
 
-**No measured ceiling.** Nothing here has recorded a real exchange with Drive, so the rate
-limits are Google's published figures rather than something observed. Treat the absence as
-what it is: the connector will not invent a limit it has not measured.
+**Its ceiling** is Google's documented quota, 325,000 units a minute per user of the project,
+recorded at the dearest call a read makes. A project owner may ask for more on the Cloud console's
+Quotas page.
 
 ## `hubspot`
 
@@ -171,8 +244,17 @@ you change it, reviewable by you without reading any of this system's code.
 views is inside your database and not visible from here. This connector refuses to ask for
 anything else; it cannot stop a grant that is wider than it needs.
 
-**No measured ceiling**, because the limit is your own database's capacity rather than a
-vendor's published figure. Reads are bounded by a row count and a timeout supplied at connect.
+**Where the database is, you say.** The server's address and port have no default. Let this
+system's server reach the database on that port only: allow the server's own address in the
+database's firewall or security group, or, where the database is on a private network, run an
+SSH tunnel from this system's server to a machine that reaches it and give the tunnel's local end
+with the private network setting at yes. An address inside a private network is refused unless
+that setting says so, by the same rule every other source's address passes.
+
+**This product's own pace, not a measured ceiling**, because the limit is your own database's
+capacity rather than a vendor's published figure: thirty bounded reads a minute across the worker
+and every question together. Every read is also bounded by the row count and the timeout you
+give at connect, in a read-only session, one connection per read.
 
 ## `lark_base`
 
@@ -214,6 +296,41 @@ which is a document, and documents are handled by the knowledge layer with a cit
 every passage.
 
 **It shares `lark_base`'s ceiling.** See the note under the table.
+
+## `search_console`
+
+One Search Console property, pinned at connect by its name as Search Console lists it: an address
+ending in a slash, or `sc-domain:` and a domain.
+
+**Create** a service account (the Google Analytics one will do), switch on the Search Console API
+in its project, create a JSON key for it, and add its address to the one property as a user with
+restricted permission. Do not grant domain-wide delegation. The key file is exchanged for a token
+that carries `webmasters.readonly` and nothing else, for one read at a time, and never kept.
+
+**It keeps the site and never its figures.** The index holds the site's name and the permission
+the account has on it. Clicks and impressions for the last 7, 28 or 90 days, the top query and page
+for the last 28 days and the sitemaps' errors and warnings are read from Google when somebody asks,
+four calls made at once, and are never stored anywhere here.
+
+**What it does not narrow.** One department reads the site: the one named at connect. Indexing
+issues are the sitemaps' own counts, because the API offers no page-indexing report to read.
+
+## `slack_messages`
+
+Your Slack workspace, read as a source for answers. This is not the Slack channel, which answers
+questions asked in Slack; it is a separate app with its own token.
+
+**Create** a Slack app for your workspace with these bot scopes and no others: `channels:read`,
+`groups:read`, `channels:history`, `groups:history`, `users:read`, `users:read.email`. Nothing
+that writes, and no user token: a user token is one person's whole account and reads as them.
+Invite the app to each channel it may read; a channel it is not in is never read.
+
+**What is kept, and what is read.** The index keeps each channel's name and whether it is
+private, and each member as the digest of their confirmed work email. No message, no member
+list and no address is stored. On every question, the asker is matched to their Slack account
+by that digest, Slack is asked which of the app's channels they are in, and only those channels'
+recent messages are read, for that asker alone. **A private channel the asker is not in is never
+read for them, however well it matches.**
 
 ## `xero`
 

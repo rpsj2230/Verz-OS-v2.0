@@ -72,7 +72,15 @@ whether or not anything waits on them, so asking cannot learn whether an approva
 that reads one returns `Received.press` beside an event of its own, which `receive` claims as it
 claims a message, so a replayed press is refused by the database before anything reads its value.
 
+**A bound sender's address is kept as their message arrives (M10.3.5).** Every accepted message
+from a bound sender, and the code that binds one, offers the sender's identity to the
+`AddressBook`, which keeps it on the binding it is the fingerprint of where the channel keeps
+addresses at all. That is how an approval card can reach a person the moment it is raised
+(needs-rupash 118), and how a binding made before addresses were kept gains one: the next time its
+person writes.
+
 Task ids: M3.2.2, M3.9.8, M10.2.1, M10.2.6, M10.3.3, M10.6.1, M10.6.3, M1.8.5, M10.7.1, M10.2.3
+Task ids: M10.3.5
 """
 
 from __future__ import annotations
@@ -81,15 +89,16 @@ import asyncio
 import enum
 import hashlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.channels.adapter import (
     BOT_ID,
     Arrived,
+    BatchedWire,
     CardPress,
     ChannelAdapter,
     ChannelWire,
@@ -111,6 +120,9 @@ from brain.ops.channel_store import (
 )
 from brain.ops.idempotency import Intent
 from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
+
+if TYPE_CHECKING:
+    from brain.identity.oidc import KeySet
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -239,6 +251,9 @@ class Receipt:
     handshake: Mapping[str, str] | None = None
     inbound: Inbound | None = None
     reply_to: str = ""
+    #: The other messages of a request that carried several, each taken as far as it went; see
+    #: `brain.channels.adapter.A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL`.
+    more: tuple[Receipt, ...] = ()
 
 
 class ChannelBindings(Protocol):
@@ -291,6 +306,19 @@ class ChatBinder(Protocol):
 
     async def redeem(self, event: ChannelEvent, text: str, *, now: datetime) -> Redeemed:
         """Bind this event's sender with the code in `text`, or say why nothing was bound."""
+        ...
+
+
+class AddressBook(Protocol):
+    """Where a bound person's own address is kept when a verified event from them arrives.
+
+    `brain.ops.binding_store.StoredAddresses`. Told the channel and the identity the event came
+    from, and nothing about what it said; the store decides whether that channel keeps addresses
+    and keeps one only on the binding it is the fingerprint of (needs-rupash 118).
+    """
+
+    async def remember(self, channel: Channel, identity: str) -> bool:
+        """Keep this identity as its binding's address; True when a row changed."""
         ...
 
 
@@ -392,12 +420,17 @@ async def receive(
     claims: EventClaims,
     deliveries: DeliveryRecords,
     now: datetime,
+    keys: Callable[[], Awaitable[KeySet | None]] | None = None,
 ) -> Receipt:
     """One request to one channel, taken as far as it may go, and recorded however far that is.
 
     `body` is how the bytes are read, and it is called only once the record is on and the declared
     size is within bounds. `headers` have lower-cased names. Does not answer: a claimed message is
     handed back for `reply_for` and the route. See the module docstring for the order.
+
+    `keys` fetches the vendor's published signing keys for a wire that needs them, and is asked
+    only once the secret is held, just before verifying; see
+    `brain.channels.adapter.A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE`.
     """
     channel = wire.channel
     if record is None:
@@ -421,7 +454,9 @@ async def receive(
     try:
         # What verified is what is read: the same bytes, or, for a vendor that encrypts, the
         # body opened with the secret. Nothing below sees the request as it arrived.
-        opened = wire.verify(Arrived(headers=headers, body=raw, tenant=record.tenant), secret, now)
+        published = await keys() if keys is not None else None
+        arrived = Arrived(headers=headers, body=raw, tenant=record.tenant, keys=published)
+        opened = wire.verify(arrived, secret, now)
     except WebhookRefusedError:
         return await _refuse(deliveries, channel, RefusedBecause.BAD_SIGNATURE)
     del secret
@@ -429,7 +464,20 @@ async def receive(
     handshake = wire.handshake(opened)
     if handshake is not None:
         return Receipt(kind=ReceiptKind.HANDSHAKE, handshake=handshake)
-    return await accept(wire, opened=opened, claims=claims, deliveries=deliveries)
+    # Typed as an object: whether a vendor batches is a question about the wire's class.
+    batching: object = wire
+    if not isinstance(batching, BatchedWire):
+        return await accept(wire, opened=opened, claims=claims, deliveries=deliveries)
+    try:
+        parts = batching.parts(opened)
+    except ValueError:
+        return await _refuse(deliveries, channel, RefusedBecause.UNREADABLE)
+    if not parts:
+        return await _refuse(deliveries, channel, RefusedBecause.UNREADABLE)
+    receipts = [
+        await accept(wire, opened=one, claims=claims, deliveries=deliveries) for one in parts
+    ]
+    return replace(receipts[0], more=tuple(receipts[1:]))
 
 
 async def accept(
@@ -521,13 +569,16 @@ async def reply_for(
     now: datetime,
     binder: ChatBinder | None = None,
     offerer: ApprovalOfferer | None = None,
+    addresses: AddressBook | None = None,
 ) -> tuple[Outgoing, ...] | None:
     """What to send back to an accepted message: None when nothing on this install answers it,
     and nothing at all for a shared conversation's message that was not for the bot.
 
     A sender bound to nobody may be binding: a message in a conversation they alone read is
     offered to `binder` first (M1.8.5). Otherwise they are sent the unrecognised prompt, once and
-    to them alone (M10.3.3). A bound sender's decision word is `offerer`'s, or with none wired is
+    to them alone (M10.3.3). A bound sender's own address is offered to `addresses` on every message
+    and on the code that binds them, which is how a binding made before addresses were kept gains
+    one (M10.3.5). A bound sender's decision word is `offerer`'s, or with none wired is
     told `DECIDE_WHERE_TOLD` alone, in a conversation only they read (M10.7.1). Any other message
     from a bound sender is the answerer's; with none wired the caller records `not_answerable`.
     """
@@ -548,6 +599,8 @@ async def reply_for(
         private = conversation is None or not conversation.shared
         if binder is not None and private:
             redeemed = await binder.redeem(event, event.text.strip(), now=now)
+            if redeemed is Redeemed.BOUND and addresses is not None:
+                await addresses.remember(event.channel, event.channel_identity)
             if redeemed is not Redeemed.NOT_A_CODE:
                 told = LINKED_TOLD if redeemed is Redeemed.BOUND else CODE_REFUSED_TOLD
                 return (
@@ -566,6 +619,8 @@ async def reply_for(
                 text=Unrecognised(channel=event.channel).prompt,
             ),
         )
+    if addresses is not None:
+        await addresses.remember(event.channel, event.channel_identity)
     if is_decision_reply(inbound.address.question):
         # Never the answerer's, and never a decision. See `A_MESSAGE_NEVER_DECIDES_AN_APPROVAL`.
         if offerer is not None:

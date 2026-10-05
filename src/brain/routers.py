@@ -48,12 +48,14 @@ from brain.agent_about_routes import router as agent_about_router
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
 from brain.agent_builder_routes import router as agent_builder_router
+from brain.agent_capability_routes import router as agent_capability_router
 
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
+from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
 from brain.agent_model_routes import router as agent_model_router
@@ -62,6 +64,7 @@ from brain.agent_model_routes import router as agent_model_router
 # again: who may see an agent is its audience rather than a capability, and a hidden agent
 # and a missing one are one answer. The same `asking` dependency, imported.
 from brain.agent_routes import router as agent_router
+from brain.agent_workspace_routes import router as agent_workspace_router
 
 # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
 # finding, and the timeout middleware in `brain.app` is the most recent one.
@@ -165,6 +168,11 @@ from brain.data_steward_routes import router as data_steward_router
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
 
+# Send the evening digest to: the one setting naming a connected channel and a conversation in it,
+# chosen from what each channel offers now and saved as the Settings screen saves. See
+# `brain.digest_routes`.
+from brain.digest_routes import router as digest_router
+
 # Every person this install knows, one person's page, and a person added by hand where no staff
 # list is read (M27.11.2, M27.15.19). See `brain.directory_routes`.
 from brain.directory_routes import router as directory_router
@@ -238,6 +246,10 @@ from brain.knowledge_intake_routes import router as knowledge_intake_router
 # A stored document verified, handed over, replaced and proposed for the whole company, the
 # tasks each opens and captured solutions decided. See `brain.knowledge_lifecycle_routes`.
 from brain.knowledge_lifecycle_routes import router as knowledge_lifecycle_router
+
+# Whether a document is public for the website widget, read and changed from its detail page by a
+# person whose grant decides it for that document's department. See `brain.knowledge_public_routes`.
+from brain.knowledge_public_routes import router as knowledge_public_router
 
 # Adding a document to the knowledge layer from the Knowledge page, read by the text path and
 # placed where the uploader holds `admin:knowledge`. See `brain.knowledge_routes`.
@@ -366,6 +378,10 @@ from brain.skill_routes import router as skill_router
 # somebody else holds a capability. See `brain.staff_source_routes`.
 from brain.staff_source_routes import router as staff_source_router
 
+# What the signed-in person is told as a steward: grants people made to themselves that reach a
+# document, source or agent they answer for. See `brain.stewardship_routes`.
+from brain.stewardship_routes import router as stewardship_router
+
 # Storage: the buckets the product keeps, each one's retention and why, and where the store
 # is, behind `admin:storage` over everything. Never an object's name. See
 # `brain.storage_routes`.
@@ -397,8 +413,9 @@ from brain.vault_routes import router as vault_router
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
 
-# The website widget's front door: a stranger's browser is handed a session that holds nothing, or
-# told why not, with no sign-in and the origin proved instead. See `brain.widget_routes`.
+# The website widget's front door: a stranger's browser is handed a session, or told why not, and
+# its questions are answered from knowledge marked public alone, with no sign-in and the origin
+# proved instead. See `brain.widget_routes`.
 from brain.widget_routes import router as widget_router
 
 

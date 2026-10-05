@@ -115,6 +115,9 @@ export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
   INSTALL_CURRENCY: "A three-letter currency code, such as SGD.",
   INSTALL_TIME_ZONE: "A time zone name, such as Asia/Singapore.",
   INSTALL_MODEL_PROFILE: "Where questions may be answered: on this server only, or by online providers.",
+  INSTALL_DIGEST_TIME: "A time on the 24-hour clock in the install's time zone, such as 18:00.",
+  INSTALL_SERVICES:
+    "none, or presidio for the personal data detector. The next update starts it if this server has the memory for it.",
   INSTALL_LARK_CARD_APPROVALS:
     "Whether a Lark card's buttons may approve. A press relies on Lark's own sign-in and carries no second factor from the Brain, so switch it on only if your Lark requires two-step verification.",
 });

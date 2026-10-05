@@ -34,6 +34,7 @@ import pytest
 from brain import demo
 from brain.api_routes import MAX_FILTERS, row_readers
 from brain.app import Settings, create_app
+from brain.connectors.declaration import shipped
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import IdentityMode
 from brain.core.field_policy import Classification
@@ -369,9 +370,29 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         {**startup.SOURCE_ROW_DESCRIPTIONS, "xero": {"invoice": "Read Xero invoices."}},
     )
 
-    assert startup.connector_row_sources() == ("freshdesk", "xero")
+    # Read off the connectors' own declarations rather than typed, since 2026-10-05: every shipped
+    # connector declaring classified Ask rows is a row source, and its row tools are exactly the
+    # entities it declares, Xero's replaced by the one this test filed for it.
+    declared = {
+        name: tuple(one.entity for one in found.ask.entities)
+        for name, found in shipped().items()
+        if found.ask is not None and found.ask.entities
+    }
+    assert startup.connector_row_sources() == tuple(sorted(declared))
     registered = set(row_readers(build_registry(source="local", records=_Rows())))
-    assert registered == {("local", "price_list"), ("xero", "invoice"), ("freshdesk", "ticket")}
+    assert registered == {
+        ("local", "price_list"),
+        ("xero", "invoice"),
+        *(
+            (name, entity)
+            for name, entities in declared.items()
+            if name != "xero"
+            for entity in entities
+        ),
+    }
+    # The anchors: a discovery that found nothing, or Lark Wiki's passages, cannot pass.
+    assert {("freshdesk", "ticket"), ("hubspot", "hubspot_deal")} <= registered
+    assert "lark_wiki" not in startup.connector_row_sources()
     assert classification_for("invoice", source="xero") == xero_invoices
 
 
@@ -394,9 +415,17 @@ def test_every_column_of_every_classified_entity_can_be_filtered_on() -> None:
     a source's own entities are served by the same route, so the same bound has to reach every
     column of theirs. Measured against the route's own `MAX_FILTERS`.
 
+    A connected source's figures are read live and held by no row, so a filter on one matches
+    nothing whatever the bound; they are left out (`connector_rows.LIVE_ONLY`), and the count is of
+    the columns a row carries.
+
     Delete this and a source can bring an entity with more columns than a caller may name in one
     filter, and a column somebody is entitled to read is unfilterable by everybody."""
-    widest = max(len(c.columns()) for c in every_row_classification())
+    from brain.knowledge.connector_rows import LIVE_ONLY
+
+    widest = max(
+        len(set(c.columns()) - set(LIVE_ONLY.get(c.entity, ()))) for c in every_row_classification()
+    )
 
     assert widest <= MAX_FILTERS
 

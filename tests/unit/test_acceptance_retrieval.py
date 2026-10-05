@@ -77,11 +77,21 @@ def test_a_vector_placed_at_a_similarity_has_that_cosine_with_the_question() -> 
     further from the question than the reader's own passages, and the check proves nothing."""
     question = acceptance_retrieval._unit(64, {0: 1.0})
     for similarity in (0.3, 0.9, 0.95, 0.99):
-        placed = acceptance_retrieval._at(similarity, 7, 64)
+        placed = acceptance_retrieval._at(similarity, 7, 64, run="r1")
         assert math.isclose(sum(a * b for a, b in zip(question, placed, strict=True)), similarity)
         assert math.isclose(sum(one * one for one in placed), 1.0)
-    # Two seeds lean two ways, so no two passages sit on one point.
-    assert acceptance_retrieval._at(0.9, 1, 64) != acceptance_retrieval._at(0.9, 2, 64)
+    # Two seeds lean two ways, so no two passages sit on one point; one run places the same
+    # point twice; and two runs place different points, so a rolled-back run's dead index entries
+    # never stack onto the next run's (`A_PLACED_VECTOR_IS_THE_RUN_S_OWN`).
+    assert acceptance_retrieval._at(0.9, 1, 64, run="r1") != acceptance_retrieval._at(
+        0.9, 2, 64, run="r1"
+    )
+    assert acceptance_retrieval._at(0.9, 1, 64, run="r1") == acceptance_retrieval._at(
+        0.9, 1, 64, run="r1"
+    )
+    assert acceptance_retrieval._at(0.9, 1, 64, run="r1") != acceptance_retrieval._at(
+        0.9, 1, 64, run="r2"
+    )
 
 
 # --------------------------------------------------------------------- on an install
@@ -133,14 +143,19 @@ def _failed(url: str, name: str) -> str:
 
 
 @pytest.mark.needs_db
-def test_iterative_scan_left_off_fails_the_narrow_reader_check(
+def test_a_walk_not_told_to_keep_walking_fails_the_narrow_reader_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The index walk stopping at its default window, as it does without iterative scan: the
-    crowd fills it and the reader's own passages are never reached. Delete this and M15.2.3 and
-    M15.2.4 close on a check that would pass with the setting gone."""
+    """**A plan assertion now, not a recall one.** Since 2026-10-05 a vector leg the walk left
+    short is asked again exactly over the reader's reach, so a reader is given their passages
+    with iterative scan off as well, and only at the cost of the re-ask. So the check reads the
+    leg's own statement: the walk it plans must carry iterative scan. Delete this and M15.2.3 can
+    close on a leg that walks the default window and leans on the re-ask for every narrow
+    reader."""
     monkeypatch.setattr(document_tools, "iterative_scan_statements", lambda: ())
-    assert "walking the index" in _failed(install, NARROW)
+    assert _failed(install, NARROW) == (
+        "the vector leg's walk is not told to keep walking past the crowd"
+    )
 
 
 @pytest.mark.needs_db
@@ -160,8 +175,9 @@ def test_a_reach_applied_after_the_query_fails_the_narrow_reader_check(
         return original(question, reach=wide, kinds=kinds)
 
     monkeypatch.setattr(document_tools, "search_queries", widened)
-    monkeypatch.setattr(document_tools, "iterative_scan_statements", lambda: ())
-    assert _failed(install, NARROW)
+    assert (
+        _failed(install, NARROW) == "a narrow reader's text search lost their passages to the crowd"
+    )
 
 
 @pytest.mark.needs_db

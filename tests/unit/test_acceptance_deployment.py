@@ -8,7 +8,7 @@ need no database and run without one; the connection budget and the trace store 
 PostgreSQL at head. Each check is then broken the way it would break in practice and fails with
 its own sentence, and a process that is not a worker is told so by the three that read one.
 
-Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4
+Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4, M32.2.1.3
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import asyncio
 import json
 import re
 import sys
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -44,6 +45,7 @@ LEAVES = {
         "M32.1.2.5",
     ),
     "the_scrub_meets_its_budget_on_this_install_s_processor": ("M32.2.2.4",),
+    "singapore_identifiers_are_scrubbed_by_their_kind": ("M32.2.1.3",),
 }
 
 #: The checks that read the worker they run in.
@@ -55,6 +57,7 @@ READ_THE_WORKER = (
 
 LAYOUT = "the_worker_serves_each_traffic_class_from_its_own_slots"
 SCRUB = "the_scrub_meets_its_budget_on_this_install_s_processor"
+SINGAPORE = "singapore_identifiers_are_scrubbed_by_their_kind"
 
 #: Pinned far from any wall clock, for CLAUDE.md's reason about fixtures with dates in them.
 LONG_AGO = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
@@ -351,3 +354,64 @@ def test_the_trace_check_fails_when_a_trace_is_stored_unmasked(
         assert run_checks(url, (check,)) == {
             check.name: (FAILED, "a run's trace graph was not stored under its trace")
         }
+
+
+def test_the_scrub_is_timed_on_a_clock_that_does_not_count_waiting() -> None:
+    """`A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK`: the check's clock advances with the
+    thread's own processor time and stands still while the thread waits, which is the whole
+    difference between a scrubber's cost and a busy host. Asserted on the clock's behaviour rather
+    than its name: a quarter of a second asleep moves it by less than a twentieth, where a wall
+    clock moves by the full quarter. Delete this and the check can go back to the wall, and the
+    install's deploy runs fail it again whenever the host is busy."""
+    clock = deployment.SCRUB_CLOCK
+    before = clock()
+    time.sleep(0.25)
+    assert clock() - before < 0.05
+
+
+def test_the_scrub_s_log_line_carries_the_wall_time_beside_the_processor_rate(
+    monkeypatch: pytest.MonkeyPatch, in_a_worker: dict[str, str]
+) -> None:
+    """The waiting the processor clock leaves out is still recorded: the line names the clock and
+    the wall time of the whole run. Delete this and the evidence that a slow run was a busy host,
+    and not a slow scrubber, could be dropped from the only place an operator reads it."""
+    monkeypatch.setattr(deployment, "SCRUB_CLOCK", ticking(1.0))
+    with capture_logs() as logged:
+        assert ran(SCRUB) == (PASSED, "")
+    [line] = [one for one in logged if one["event"] == "acceptance.scrub_measured"]
+    assert line["clock"] == "thread_time"
+    assert line["wall_ms_all_samples"] > 0
+
+
+# --------------------------------------------------------------- Singapore's identifiers
+def test_singapore_identifiers_are_each_scrubbed_by_their_kind() -> None:
+    """The positive run: every made-up NRIC, FIN, UEN and number is found as its kind and
+    replaced by it, with no database and no worker needed. Delete this and the check can refuse
+    the recognisers the product ships, which reads on the Install page as personal data leaking."""
+    assert ran(SINGAPORE) == (PASSED, "")
+
+
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("uen", "a Singapore identifier was not found as its own kind"),
+        ("phone", "a Singapore identifier was not found as its own kind"),
+        ("kept", "a Singapore identifier was left in scrubbed text"),
+    ],
+)
+def test_the_singapore_check_fails_where_a_recogniser_or_the_scrub_is_broken(
+    monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """M32.2.1.3 broken three ways: the UEN recognisers removed, the number recogniser removed,
+    and a scrub that returns its text unchanged. Each fails the check with its own sentence.
+    Delete this and the check can pass with a Singapore identifier reaching a model."""
+    from brain.ops import pii
+
+    if broken == "kept":
+        monkeypatch.setattr(pii, "scrub", lambda text, detections=None: text)
+    else:
+        gone = pii.EntityKind.UEN if broken == "uen" else pii.EntityKind.SG_PHONE
+        monkeypatch.setattr(
+            pii, "RECOGNISERS", tuple(one for one in pii.RECOGNISERS if one.kind is not gone)
+        )
+    assert ran(SINGAPORE) == (FAILED, reason)

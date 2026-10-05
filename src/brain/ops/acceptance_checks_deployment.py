@@ -1,7 +1,7 @@
 """The install acceptance checks for what the install is made of: its worker, its database's
 connections, its trace store and the processor the scrub runs on.
 
-Four checks over things a person cannot see on a screen and a deploy can still get wrong. The first
+Five checks over things a person cannot see on a screen and a deploy can still get wrong. The first
 two read the worker the suite runs in: the allocation its container was started with, laid out per
 traffic class by the worker's own `plan_for`, and the connection bound it declares, held against the
 ceiling the install's database actually admits. The third writes a run's trace through the recorder
@@ -38,7 +38,21 @@ which an operator reads with the install's other logs. Timing in a thread keeps 
 and the heartbeat it writes, turning while a second of arithmetic runs. See
 `THE_SCRUB_IS_TIMED_WHERE_IT_WILL_RUN`.
 
-Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4
+**It is timed on the thread's processor clock, not the wall, since 2026-10-05.** Timed on the
+wall, the check failed on three deploy runs of one install and passed on every other run of the
+same code on the same processor, because a deploy is exactly when the host is busiest and the
+worker's own jobs share the interpreter. Rejected: raising the budget, which would hide a slow
+scrubber as well as a busy host, and retrying a failure, which turns a measurement into a vote.
+`A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK` holds the figures, and the wall time of the
+same run is still logged, so contention is shown rather than judged.
+
+**The fifth asks the same scrub what it finds (M32.2.1.3).** Singapore's identifiers are what the
+recognisers were written for and what a generic detector misses, so text carrying one made-up value
+of each form is scrubbed by the install's own `detect` and `scrub`, and every value has to be found
+where it stands, as its own kind, and replaced by it. The values are made up per run, checksums
+included, so the check scrubs nobody's.
+
+Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4, M32.2.1.3
 """
 
 from __future__ import annotations
@@ -46,6 +60,7 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
+import secrets
 import time
 from collections.abc import Callable, Mapping
 from functools import partial
@@ -98,10 +113,24 @@ SCRUB_SAMPLE_CHARS: Final = 16384
 #: `brain.ops.pii.MINIMUM_TIMED_SAMPLES` allows, so one slow sample is not the figure.
 SCRUB_SAMPLES: Final = 60
 
-#: The clock a scrub's timings are read from. A name of its own so the suite can hand the check a
-#: clock that ticks the same whatever else the machine running it is doing; on an install it is
-#: the processor's own.
-SCRUB_CLOCK: Callable[[], float] = time.perf_counter
+#: The clock a scrub's timings are read from: the processor time of the thread doing the scrub. A
+#: name of its own so the suite can hand the check a clock that ticks the same whatever else the
+#: machine running it is doing. See `A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK`.
+SCRUB_CLOCK: Callable[[], float] = time.thread_time
+
+#: Why the scrub is timed on the thread's processor clock and not on the wall.
+A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK: Final = (
+    "The budget is a cost: how much processor one kibibyte of scrubbing takes on this install's "
+    "machine. The check runs inside the worker straight after a deploy, while the new containers "
+    "start beside it on the same host and the worker's own jobs share its interpreter, so a wall "
+    "clock also counts every moment the thread waited for a core or for the interpreter lock. "
+    "Timed that way the same code on the same processor passed and failed by turns: 37 runs "
+    "passed and 3 failed on one install on 2026-10-05, every failure on a deploy run, and a "
+    "passing deploy run measured 1.549 ms per kibibyte at the ninety-fifth percentile against a "
+    "budget of 2.0 and 0.70 on the build machine. A clock that counts only the thread's own "
+    "processor time measures the scrubber, and the wall time of the same run is logged beside it "
+    "so the waiting stays visible rather than judged."
+)
 
 #: Why a check reads a trace, as `brain.ops.tracing.PayloadRead` requires a reason.
 TRACE_READ_REASON: Final = "An install acceptance check reading its own run's trace"
@@ -288,32 +317,46 @@ async def a_run_s_trace_is_stored_masked_and_read_only_after_its_row(h: Harness)
     ),
 )
 async def the_scrub_meets_its_budget_on_this_install_s_processor(h: Harness) -> None:
-    from brain.ops.pii import BUDGET_MS_PER_KIB, benchmark_text, budget_gaps, measure_scrub
+    from brain.ops.pii import (
+        BUDGET_MS_PER_KIB,
+        ScrubCost,
+        benchmark_text,
+        budget_gaps,
+        measure_scrub,
+    )
 
     _worker_environment()
-    cost = await asyncio.to_thread(
-        partial(
-            measure_scrub,
-            benchmark_text(SCRUB_SAMPLE_CHARS),
-            clock=SCRUB_CLOCK,
-            hardware=_this_processor(),
-            basis=(
-                "measure_scrub over benchmark_text(16384) by the install's acceptance check, "
-                "timed with time.perf_counter in a thread of the worker"
-            ),
-            excludes=(
-                "every leg that is not this process: a model leg is a call to another container "
-                "bounded by a timeout"
-            ),
-            taken_on=h.now.date(),
-            samples=SCRUB_SAMPLES,
-            on_the_client_cpu=True,
-        )
+    measure = partial(
+        measure_scrub,
+        benchmark_text(SCRUB_SAMPLE_CHARS),
+        clock=SCRUB_CLOCK,
+        hardware=_this_processor(),
+        basis=(
+            "measure_scrub over benchmark_text(16384) by the install's acceptance check, "
+            "timed with time.thread_time in a thread of the worker"
+        ),
+        excludes=(
+            "every leg that is not this process: a model leg is a call to another container "
+            "bounded by a timeout; and every moment the thread waited for a core or for the "
+            "interpreter lock, which the wall time logged beside it still shows"
+        ),
+        taken_on=h.now.date(),
+        samples=SCRUB_SAMPLES,
+        on_the_client_cpu=True,
     )
+
+    def timed() -> tuple[ScrubCost, float]:
+        started = time.perf_counter()
+        cost = measure()
+        return cost, (time.perf_counter() - started) * 1000.0
+
+    cost, wall_ms = await asyncio.to_thread(timed)
     log.info(
         "acceptance.scrub_measured",
         ms_per_kib=round(cost.ms_per_kib, 3),
         budget_ms_per_kib=BUDGET_MS_PER_KIB,
+        clock="thread_time",
+        wall_ms_all_samples=round(wall_ms, 1),
         chars=cost.chars,
         samples=cost.samples,
         cpus=os.cpu_count() or 0,
@@ -322,3 +365,59 @@ async def the_scrub_meets_its_budget_on_this_install_s_processor(h: Harness) -> 
         raise CheckFailedError(
             "the scrub cost more per kibibyte on this install's processor than its budget allows"
         )
+
+
+# ------------------------------------------------- 5. Singapore's identifiers, each by its kind
+def _digits(count: int) -> str:
+    """Digits made up for one run, so no value the check scrubs is anybody's."""
+    return "".join(str(secrets.randbelow(10)) for _ in range(count))
+
+
+def _singapore_identifiers() -> tuple[tuple[str, str], ...]:
+    """One made-up value of each form the recognisers name, with the kind it must be scrubbed as.
+
+    The NRIC and the FIN carry the check letter their digits give, so the checksum's confidence
+    is exercised too. A FIN is scrubbed as an NRIC: the two share one format exactly, and
+    `brain.ops.pii` gives FIN no recogniser of its own rather than a second label for the same
+    shape. The numbers start with the digits Singapore assigns, and the UENs take the local
+    company, other entity and business forms in that order.
+    """
+    from brain.ops.pii import EntityKind, nric_check_letter
+
+    nric, fin = _digits(7), _digits(7)
+    return (
+        (f"S{nric}{nric_check_letter('S', nric)}", EntityKind.NRIC.value),
+        (f"G{fin}{nric_check_letter('G', fin)}", EntityKind.NRIC.value),
+        (f"20{_digits(7)}K", EntityKind.UEN.value),
+        (f"T{_digits(2)}LL{_digits(4)}A", EntityKind.UEN.value),
+        (f"5{_digits(7)}C", EntityKind.UEN.value),
+        (f"+65 9{_digits(3)} {_digits(4)}", EntityKind.SG_PHONE.value),
+        (f"6{_digits(3)} {_digits(4)}", EntityKind.SG_PHONE.value),
+    )
+
+
+@check(
+    leaves=("M32.2.1.3",),
+    sentence=(
+        "Text carrying a made-up NRIC, a FIN, a UEN in each of its three forms and a Singapore "
+        "number with and without +65 is scrubbed by the recognisers this install runs: each value "
+        "is found where it stands and replaced by its own kind, a FIN by the NRIC's, and none of "
+        "them is left in the text."
+    ),
+)
+async def singapore_identifiers_are_scrubbed_by_their_kind(h: Harness) -> None:
+    from brain.ops.pii import detect, scrub
+
+    del h
+    values = _singapore_identifiers()
+    text = "; ".join(f"record {index}: {value}" for index, (value, _) in enumerate(values))
+    found = {(text[one.start : one.end], one.kind.value) for one in detect(text)}
+    for value, kind in values:
+        if (value, kind) not in found:
+            raise CheckFailedError("a Singapore identifier was not found as its own kind")
+    scrubbed = scrub(text)
+    if any(value in scrubbed for value, _ in values):
+        raise CheckFailedError("a Singapore identifier was left in scrubbed text")
+    expected = "; ".join(f"record {index}: [{kind}]" for index, (_, kind) in enumerate(values))
+    if scrubbed != expected:
+        raise CheckFailedError("scrubbed text was not each identifier replaced by its kind")

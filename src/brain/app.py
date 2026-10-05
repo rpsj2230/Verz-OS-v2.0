@@ -82,6 +82,7 @@ from brain.channels.widget import allowed_origins
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
+from brain.escalation_told import keep_telling_expired_askers
 from brain.firstrun import GRANTED_BY
 from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
@@ -90,6 +91,7 @@ from brain.gate.resolve import EntitlementCache
 from brain.gate.roster import AgentRoster
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
+from brain.gate.takeover_store import StoredTakeovers
 from brain.identity.administration_reconciliation import (
     TRACE_PREFIX as RECONCILIATION_TRACE,
 )
@@ -121,6 +123,7 @@ from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
+from brain.ops.live_read_run import live_records_for
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.matrix_gate_run import InstallMatrixGate
 from brain.ops.model_service import (
@@ -130,6 +133,7 @@ from brain.ops.model_service import (
 )
 from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.openbao import OpenBaoVault
+from brain.ops.pii import analyzer_address
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
@@ -258,6 +262,18 @@ AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN: Final = (
     "key cache has nothing to check it against."
 )
 
+#: Why the endpoints `create_app` defines read their application from the request.
+AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION: Final = (
+    "FastAPI keeps every endpoint and dependency it inspects in module-level caches of 4096 "
+    "entries (fastapi.dependencies.models), holding the function itself. An endpoint defined "
+    "inside create_app that closes over app therefore keeps that application, its engines and "
+    "its routing table alive for as long as the cache does. A server builds one application and "
+    "never notices. The test suite builds thousands, two cache entries each, so up to some two "
+    "thousand stayed alive at once; measured on 2026-09-30, five route test files left 122, and "
+    "in a full run one request took 504 seconds against a deadline of 30. So such an endpoint "
+    "takes request: Request and reads request.app."
+)
+
 
 class Health(BaseModel):
     status: Literal["ok", "degraded"]
@@ -354,6 +370,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # The email channel's mailbox, read every minute where the answer is made; it reads nothing
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
+    telling: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -415,6 +432,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             log.exception("installation settings could not be loaded")
         holding = asyncio.create_task(keep_holding(app.state.db_sessions))
         reading = asyncio.create_task(keep_reading_the_mailbox(app))
+        # An asker whose handed-on question expired is told in their own chat, by this process
+        # because the worker holds no channel's token. See `brain.escalation_told`.
+        telling = asyncio.create_task(keep_telling_expired_askers(app))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -505,7 +525,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # the same True. What would fix it is readiness knowing which profile it is in, which is
     # a change to what the check means rather than to this line.
     records = SessionRowSource(app.state.db_sessions) if app.state.db_sessions else None
-    app.state.tools = build_registry(source=settings.tool_source, records=records)
+    # The live reads a connected source's figure tools make (M11.7.1), kept on the state so the
+    # answer lane's refreshes share their throttle, breakers and fetches in flight
+    # (`brain.api_routes.live_records_of` finds this one).
+    live = live_records_for(app.state.db_sessions or None, app.state.vault)
+    if live is not None:
+        app.state.live_records = live
+    app.state.tools = build_registry(
+        source=settings.tool_source, records=records, figures=live if records else None
+    )
     app.state.ready["tools"] = True
     # Every call to a registered tool asks the switch table first, and each tool's catalogue row
     # is written so a stop has a row to name. Never fatal: a catalogue row a switch needs is
@@ -553,7 +581,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # per call from the ladder, the provider switches and the keys this process holds, so a
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
-    app.state.models = model_service_at_start(app.state.db_sessions)
+    # Every request to a third-party model is scrubbed of personal data on its way out, by the
+    # rules and by the install's analyser where its profile deploys one (`brain.ops.egress`).
+    app.state.models = model_service_at_start(
+        app.state.db_sessions,
+        analyser_address=analyzer_address(settings.profile, settings.presidio_url),
+    )
     # The matrix gate a Routing screen change is run through before it takes traffic (M5.6.2).
     # Reads the state above at each change, so it asks the rules and registry of that moment.
     app.state.matrix_gate = InstallMatrixGate(app.state)
@@ -620,6 +653,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Approvals are read and decided on the database, whose trigger keeps each decision's ledger
     # entry. See `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions)
+    # Where the autonomy breaker reads when an agent's work was taken over (M8.3.5), through the
+    # one function `0172` grants past the suspension policy. See `brain.gate.takeover_store`.
+    app.state.takeovers = (
+        StoredTakeovers(app.state.db_sessions) if app.state.db_sessions is not None else None
+    )
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
@@ -720,6 +758,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             reading.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await reading
+        if telling is not None:
+            telling.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await telling
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -1008,6 +1050,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.first_administrators = None
     # The same, for where approvals are read from and decided. See `suspension_store_for`.
     app.state.suspensions = None
+    # The same, for where the autonomy breaker reads takeovers. Built beside `suspensions`.
+    app.state.takeovers = None
     # The same, for an automation's registration and its owner's standing. Built beside `gate`
     # and never without it: see `wirings_for`.
     app.state.automation = None
@@ -1237,15 +1281,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Health(status="ok", commit=settings.resolved_commit())
 
     @app.get("/health/ready", response_model=Health, tags=["health"])
-    async def ready(response: Response) -> Health:
+    async def ready(request: Request, response: Response) -> Health:
         """Every dependency is reachable. Deployment gates on this, not on liveness.
 
         `checks` decide the status; `reported` are named beside them and decide nothing. See
-        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
+        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`. The application is the request's,
+        never the enclosing `app`: see `AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION`.
         """
-        await app.state.readings.refresh(app.state.ready)
-        checks: dict[str, bool] = dict(app.state.ready)
-        reported: dict[str, bool] = dict(getattr(app.state, "reported", {}))
+        state = request.app.state
+        await state.readings.refresh(state.ready)
+        checks: dict[str, bool] = dict(state.ready)
+        reported: dict[str, bool] = dict(getattr(state, "reported", {}))
         ok = all(checks.values()) if checks else True
         if not ok:
             response.status_code = 503

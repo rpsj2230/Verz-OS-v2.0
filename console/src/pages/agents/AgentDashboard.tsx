@@ -18,18 +18,26 @@
  * start and stop the API offers, which is `components/AgentAutomations.tsx` unchanged, and a link to
  * the gallery.
  *
- * Task ids: M27.10.2, M39.6.1.3
+ * **Spend, runs and messages lead, over a period chosen from four (M39.1.3.1, M39.1.3.2).** The three
+ * headline figures sit in their own strip above the answer figures, over 7, 30 or 90 days or the
+ * month to date. The chosen period belongs to the page and not to this view, so moving to the
+ * Profile and back keeps it (M39.1.2.3). Under the strips, the cost per person and the month against
+ * the agent's own budget, from `AgentSpend.tsx`.
+ *
+ * Task ids: M27.10.2, M39.6.1.3, M39.1.2.3, M39.1.3.1, M39.1.3.2
  */
 
 import { ArrowUpRight } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource, type Resource } from "../../api/useResource";
 import { AgentAutomations } from "../../components/AgentAutomations";
 import { Note, SectionCard, StatCard, StatsStrip } from "../../components/kit";
 import { cn } from "../../lib/utils";
 import { WORKS_AT } from "./agentActions";
+import { CostByPerson, MonthAgainstBudget } from "./AgentSpend";
 import {
+  AGENT_PERIODS,
   agentStatsApiPath,
   basisWords,
   COST_FIGURE,
@@ -45,6 +53,10 @@ import {
 } from "./agentStats";
 
 export const FIGURES_LABEL = "This agent's figures";
+export const HEADLINE_LABEL = "Spend, runs and messages";
+export const SPEND_LABEL = "Spend";
+export const MESSAGES_LABEL = "Messages";
+export const MESSAGES_SUB = "sent by a person, not by an automation";
 export const PERIOD_LABEL = "Period the figures cover";
 export const RUNS_LABEL = "Runs";
 export const ANSWERED_LABEL = "Answered";
@@ -63,13 +75,10 @@ export const WAITING_NOT_YET = "approvals for one agent. Every approval you may 
 export const AUTOMATIONS_HEADING = "Automations";
 export const OPEN_GALLERY = "Browse automations to install";
 
-/** The periods the switch offers. The route's own two. */
-const PERIODS = ["7d", "30d"] as const;
-
 function PeriodSwitch({ period, onChange }: { readonly period: string; readonly onChange: (period: string) => void }) {
   return (
     <div role="group" aria-label={PERIOD_LABEL} className="inline-flex rounded-md border border-line bg-sunk p-0.5">
-      {PERIODS.map((one) => (
+      {AGENT_PERIODS.map((one) => (
         <button
           key={one}
           type="button"
@@ -89,46 +98,72 @@ function PeriodSwitch({ period, onChange }: { readonly period: string; readonly 
   );
 }
 
+/** The period the Dashboard opens on, and the state a page holds it in across its views. */
+export function usePeriod(): readonly [string, (period: string) => void] {
+  const [period, setPeriod] = useState<string>(FIRST_PERIOD);
+  return [period, setPeriod] as const;
+}
+
 export function AgentDashboard({
   agentId,
+  period,
+  onPeriod,
   automationsAddress,
   automations,
   onAutomationsChanged,
 }: {
   readonly agentId: string;
+  /** The period shown, held by the page so a trip to the Profile and back keeps it. */
+  readonly period: string;
+  readonly onPeriod: (period: string) => void;
   /** The Automations section's address, or absent for a reader without that tab. */
   readonly automationsAddress?: string | undefined;
   /** This agent's installed automations, asked for by the page for a reader of that tab. */
   readonly automations?: Resource<unknown> | undefined;
   readonly onAutomationsChanged: () => void;
 }) {
-  const [period, setPeriod] = useState<string>(FIRST_PERIOD);
-  const stats = useResource<unknown>(agentStatsApiPath(agentId));
+  // Asked again under a new version once a monthly budget is saved, so the projection redraws.
+  const [statsVersion, setStatsVersion] = useState(0);
+  const onBudgetSaved = useCallback(() => {
+    setStatsVersion((count) => count + 1);
+  }, []);
+  const stats = useResource<unknown>(agentStatsApiPath(agentId), statsVersion);
   const read = stats.data === null ? null : readAgentStats(stats.data);
   const figures = periodOf(read, period);
   const whose = basisWords(read?.basis);
   const atLeast = read?.atLeast === true ? "at least, " : "";
   const sub = whose === undefined ? undefined : `${atLeast}${whose}`;
+  const costWhy = unrecordedWhy(read, COST_FIGURE);
 
   return (
     <div data-slot="agent-dashboard" className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="m-0 text-sm font-semibold text-ink">{FIGURES_LABEL}</h2>
-        <PeriodSwitch period={period} onChange={setPeriod} />
+        <h2 className="m-0 text-sm font-semibold text-ink">{HEADLINE_LABEL}</h2>
+        <PeriodSwitch period={period} onChange={onPeriod} />
       </div>
-      <StatsStrip label={FIGURES_LABEL} busy={stats.busy} failure={stats.failure} count={6}>
+      <StatsStrip label={HEADLINE_LABEL} busy={stats.busy} failure={stats.failure} count={3}>
+        <StatCard label={SPEND_LABEL} value={costWords(figures?.costMinor, read?.currency)} sub={basisWords(read?.costBasis)} unrecordedWhy={costWhy} />
         <StatCard label={RUNS_LABEL} value={countWords(figures?.runs)} sub={sub} />
+        <StatCard label={MESSAGES_LABEL} value={countWords(figures?.messages)} sub={MESSAGES_SUB} />
+      </StatsStrip>
+      <StatsStrip label={FIGURES_LABEL} busy={stats.busy} failure={stats.failure} count={4}>
         <StatCard label={ANSWERED_LABEL} value={countWords(figures?.answered)} sub={sub} />
         <StatCard label={NOTHING_RETURNED_LABEL} value={countWords(figures?.nothingReturned)} sub={NOTHING_RETURNED_SUB} />
         <StatCard label={LATENCY_LABEL} value={latencyWords(figures?.p50LatencyMs)} sub={sub} />
-        <StatCard
-          label={COST_LABEL}
-          value={costWords(figures?.costMinor, read?.currency)}
-          sub={basisWords(read?.costBasis)}
-          unrecordedWhy={unrecordedWhy(read, COST_FIGURE)}
-        />
         <StatCard label={LAST_ACTIVE_LABEL} value={whenWords(read?.lastActiveAt)} sub={whose} />
       </StatsStrip>
+
+      <div className="[display:grid] min-w-0 gap-4 lg:grid-cols-2">
+        <CostByPerson period={figures} currency={read?.currency} costBasis={read?.costBasis} />
+        <MonthAgainstBudget
+          agentId={agentId}
+          projection={read?.projection}
+          currency={read?.currency}
+          costBasis={read?.costBasis}
+          recorded={costWhy === undefined && figures?.costMinor !== undefined}
+          onSaved={onBudgetSaved}
+        />
+      </div>
 
       <div className="mt-1 [display:grid] min-w-0 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <SectionCard title={RECENT_RUNS} lede="Who asked, what happened and what it cost, newest first.">

@@ -582,6 +582,19 @@ class RowTool:
         return read
 
 
+def is_row_tool(definition: ToolDefinition) -> bool:
+    """Whether a registered tool is a row tool, which is named after its source and entity.
+
+    A source may register a second tool on the same entity (a Google source's figure tool,
+    `brain.knowledge.connector_figures`), which takes a range rather than a `RowRequest`. The fast
+    lane's readers and the records route are keyed by source and entity and call their tool with a
+    `RowRequest`, so they take the row tool alone, told apart by the name `RowTool.name` gives it.
+    """
+    return bool(definition.source and definition.entity) and definition.name == (
+        f"{definition.source}.read_{definition.entity}"
+    )
+
+
 # ----------------------------------------------------- the statement (M15.1.1, M15.1.4)
 
 

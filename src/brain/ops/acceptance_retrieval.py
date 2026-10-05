@@ -107,6 +107,17 @@ A_PLACED_VECTOR_LEANS_A_RANDOM_WAY: Final = (
     "corpus would build and every passage in it can be reached."
 )
 
+#: Why a placed vector is drawn from the run as well as from its position.
+A_PLACED_VECTOR_IS_THE_RUN_S_OWN: Final = (
+    "A check's rows are rolled back and their index entries stay until a vacuum. pgvector keeps "
+    "equal vectors in one HNSW element, ten heap entries to an element, so a check that placed "
+    "the same vectors on every run stacked each run's dead copies onto the last run's: from the "
+    "eleventh run on one database the narrow reader's own passages were no longer reached "
+    "(measured 2026-10-05, ten runs passing and the next two failing; one CI run in about eight "
+    "failed this check on its second pass). So the direction a vector leans is drawn from the run "
+    "and its position together, and no two runs place the same point."
+)
+
 # ------------------------------------------------------------------------ the figures
 #: What a vector read adds to the product's own settings, in its own savepoint: no sequential
 #: scan and no sort, so the only plan that gives the statement its order is the HNSW index walk.
@@ -192,12 +203,13 @@ def _unit(dimensions: int, weights: dict[int, float]) -> tuple[float, ...]:
     return tuple(values)
 
 
-def _at(similarity: float, seed: int, dimensions: int) -> tuple[float, ...]:
+def _at(similarity: float, seed: int, dimensions: int, *, run: str) -> tuple[float, ...]:
     """A unit vector whose cosine with the question's axis is `similarity`, the rest of it a
-    direction drawn from `seed`. See `A_PLACED_VECTOR_LEANS_A_RANDOM_WAY`."""
-    # A seeded generator on purpose: the same run places the same vectors, and nothing here is a
+    direction drawn from `run` and `seed`. See `A_PLACED_VECTOR_LEANS_A_RANDOM_WAY` and
+    `A_PLACED_VECTOR_IS_THE_RUN_S_OWN`."""
+    # A seeded generator on purpose: one run places the same vectors, and nothing here is a
     # secret or a key, which is the case the rule below is about.
-    draw = random.Random(seed)  # noqa: S311
+    draw = random.Random(f"{run}:{seed}")  # noqa: S311
     rest = [draw.gauss(0.0, 1.0) for _ in range(dimensions - 1)]
     length = math.sqrt(sum(one * one for one in rest))
     side = math.sqrt(1 - similarity * similarity)
@@ -274,8 +286,16 @@ def _walked(query: RowQuery) -> RowQuery:
 
 
 async def _nearest(h: Harness, reader: str, vector: tuple[float, ...]) -> list[str]:
-    """The vector leg for `reader`, as `document_tools.searcher` builds it, walking the index."""
-    from brain.knowledge.document_tools import reach_through, vector_search_query
+    """The vector leg for `reader`, as `document_tools.searcher` runs it: the index walk, and the
+    exact re-ask over the reader's reach when the walk came back short.
+
+    Not the bare walk. pgvector's walk loses passages while the index holds dead entries or a
+    vacuum runs (`search.A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`), and a
+    check rolls its rows back, so the bare walk failed this check on its own dead entries one run
+    in about thirty. What the reader is given is the leg as a whole, which is what is judged here;
+    that the leg walks the index, told to keep walking, is judged separately below.
+    """
+    from brain.knowledge.document_tools import nearest_passages, reach_through
     from brain.knowledge.embedding import EmbeddedVector
     from brain.knowledge.row_store import SessionRowSource
 
@@ -283,8 +303,10 @@ async def _nearest(h: Harness, reader: str, vector: tuple[float, ...]) -> list[s
     reach = await reach_through(records, await h.reach(reader), h.now)
     if reach is None:
         return []
-    query = vector_search_query(EmbeddedVector(model=_model(h), values=vector), reach=reach)
-    return [str(row["chunk_id"]) for row in await records.rows(_walked(query))]
+    found = await nearest_passages(
+        records, EmbeddedVector(model=_model(h), values=vector), reach=reach
+    )
+    return list(found)
 
 
 async def _plan(h: Harness, query: RowQuery) -> dict[str, Any]:
@@ -517,14 +539,16 @@ async def a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd(h: Har
     crowd = await _added(
         h, library_b, [" ".join([word] * 4)] * CROWD, filename=f"{word}.md", department=B
     )
-    own_words = await _embedded(h, library_a, own, lambda n: _at(OWN_SIMILARITY, n, dimensions))
+    own_words = await _embedded(
+        h, library_a, own, lambda n: _at(OWN_SIMILARITY, n, dimensions, run=h.run)
+    )
     own_ids = set(own_words)
     crowd_ids = set(
         await _embedded(
             h,
             library_b,
             crowd,
-            lambda n: _at(CROWD_SIMILARITY, len(own_ids) + n, dimensions),
+            lambda n: _at(CROWD_SIMILARITY, len(own_ids) + n, dimensions, run=h.run),
         )
     )
     if len(own_ids) < OWN or len(crowd_ids) < CROWD or len(own_ids) > CANDIDATE_DEPTH:
@@ -550,10 +574,13 @@ async def a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd(h: Har
     reach = await reach_through(SessionRowSource(h.sessions), await h.reach(reader_a), h.now)
     if reach is None:
         raise CheckFailedError("a reader of acceptance_a's documents reached none of them")
-    walk = _walked(
-        vector_search_query(EmbeddedVector(model=_model(h), values=question), reach=reach)
-    )
-    if not any(one.get("Index Name") == VECTOR_INDEX.name for one in _nodes(await _plan(h, walk))):
+    leg = vector_search_query(EmbeddedVector(model=_model(h), values=question), reach=reach)
+    told = " ".join(str(one.compile().params) for one in leg.settings)
+    if "hnsw.iterative_scan" not in told:
+        raise CheckFailedError("the vector leg's walk is not told to keep walking past the crowd")
+    if not any(
+        one.get("Index Name") == VECTOR_INDEX.name for one in _nodes(await _plan(h, _walked(leg)))
+    ):
         raise CheckFailedError("the vector leg did not walk the install's HNSW index")
 
 
@@ -597,8 +624,8 @@ async def hybrid_search_returns_what_each_leg_finds_fused_by_rank(h: Harness) ->
     word = h.word()
     worded = await _added(h, library, [f"This passage names {word}."])
     near = await _added(h, library, ["This passage names nothing the question says."])
-    await _embedded(h, library, worded, lambda n: _at(0.3, 2, dimensions))
-    await _embedded(h, library, near, lambda n: _at(0.99, 3, dimensions))
+    await _embedded(h, library, worded, lambda n: _at(0.3, 2, dimensions, run=h.run))
+    await _embedded(h, library, near, lambda n: _at(0.99, 3, dimensions, run=h.run))
     question = _unit(dimensions, {0: 1.0})
     embedder = QuestionEmbedder(
         service=_Service(model=_model(h), values=question), revision=f"acceptance-{h.run}"
