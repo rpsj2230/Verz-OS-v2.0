@@ -105,6 +105,27 @@ SKILL_FILE: Final = "SKILL.md"
 #: granted, so this line is a migration rather than an edit.
 DIGEST_SCHEMA: Final = "brain.skill.v1"
 
+#: Why a skill's digest covers the bytes of every script it carries (M12.4.11).
+THE_DIGEST_COVERS_EVERY_SCRIPTS_BYTES: Final = (
+    "An approval is an approval of a digest. A digest over a script's name and not its bytes is "
+    "an approval that survives an edit to the one part of a skill that is code, so every script "
+    "a stored skill carries is hashed into its digest, and a script whose bytes no longer hash "
+    "to the approved value is refused before it runs."
+)
+
+#: The most bytes one script may hold. A skill's script composes tools and does arithmetic; a
+#: file past this is a program somebody should review as one, not a step in a procedure.
+MAX_SCRIPT_BYTES: Final = 64 * 1024
+
+#: A sha256 in lowercase hex, which is how every digest here is written.
+SHA256_RE: Final = re.compile(r"^[0-9a-f]{64}$")
+
+
+def script_sha256_of(content: bytes) -> str:
+    """The sha256 of a script's bytes, as the digest and the sandbox both write it."""
+    return hashlib.sha256(content).hexdigest()
+
+
 #: What a `SKILL.md` may declare. Closed, because the alternative is that an unknown key is
 #: ignored, and a skill whose `capabilities:` line was silently ignored looks exactly like a
 #: skill whose `capabilities:` line was honoured.
@@ -461,6 +482,10 @@ class Skill(BaseModel):
     tools: tuple[str, ...] = ()
     #: Scripts inside the folder, run through one tool and no other. See `execution_tool`.
     scripts: tuple[str, ...] = ()
+    #: Each script's path and the sha256 of its bytes, sorted by path, or empty for a skill read
+    #: from its `SKILL.md` alone. In the digest, so an approval covers the bytes and a script
+    #: changed after it is a different skill. See `THE_DIGEST_COVERS_EVERY_SCRIPTS_BYTES`.
+    script_sha256: tuple[tuple[str, str], ...] = ()
     #: The instructions. Withheld until the skill is approved; see `body_of`.
     body: str = ""
     #: The queue a question goes to when nothing answered it, or empty. See
@@ -511,6 +536,31 @@ class Skill(BaseModel):
         return tuple(sorted(set(v)))
 
     @model_validator(mode="after")
+    def _every_script_has_its_bytes_digest_or_none_does(self) -> Self:
+        """Either no script is hashed, a skill read from its `SKILL.md` alone, or every declared
+        script is, once, with a sha256 in lowercase hex. A partial set would be an approval that
+        covers some of the code and not the rest."""
+        if not self.script_sha256:
+            return self
+        paths = [path for path, _ in self.script_sha256]
+        if sorted(paths) != list(self.scripts) or paths != sorted(paths):
+            msg = (
+                f"script_sha256 names {paths} and the skill declares {list(self.scripts)}; every "
+                "declared script is hashed once, in path order, or none is"
+            )
+            raise ValueError(msg)
+        bad = [path for path, sha in self.script_sha256 if not SHA256_RE.match(sha)]
+        if bad:
+            msg = f"the sha256 given for {bad} is not 64 lowercase hex digits"
+            raise ValueError(msg)
+        return self
+
+    @property
+    def scripts_are_covered(self) -> bool:
+        """Whether every declared script's bytes are in the digest: true with no scripts."""
+        return not self.scripts or bool(self.script_sha256)
+
+    @model_validator(mode="after")
     def _an_escalation_names_a_queue_and_what_it_needs(self) -> Self:
         """A queue with no sentence is a handoff nobody can judge, and a sentence or a deadline
         with no queue goes nowhere, so the three are declared together or not at all."""
@@ -552,6 +602,9 @@ class Skill(BaseModel):
             *self.tools,
             *self.scripts,
         ]
+        # Only when hashed, so a skill read from its `SKILL.md` alone digests as it always did.
+        # Tagged with a colon, which no script name can hold, so a hash cannot be read as a name.
+        parts += [f"sha256:{path}:{sha}" for path, sha in self.script_sha256]
         if self.escalate_to:
             # Only when declared, so every skill written before escalation digests as it did and
             # no approval is voided. Tagged with a colon, which no tool or script name can hold,
