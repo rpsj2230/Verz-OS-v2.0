@@ -183,4 +183,11 @@ CASSETTE_FILE: Final = CassetteFile(
     rate_limit=RATE_LIMIT,
     replay=replay,
     manifest=manifest,
+    not_recordable={
+        Kind.PAGINATION: (
+            "One record per domain, from the registry that holds it: an RDAP domain lookup "
+            "answers one object and has no pages (RFC 9083), and the reading's routes are the "
+            "listed domains themselves."
+        )
+    },
 )

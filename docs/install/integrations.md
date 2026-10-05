@@ -60,6 +60,7 @@ exists, because a row for something that is gone reads as coverage.
 
 | Connector | Transport | Pinned at connect to | Access | What the source enforces | Rate ceiling |
 | --- | --- | --- | --- | --- | --- |
+| `domains` | `rest` | `domain` | `read_only` | `none` | `domains` |
 | `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |
 | `google_drive` | `rest` | `folder` | `read_only` | `none` | none measured |
 | `hubspot` | `rest` | `portal` | `read_only` | `none` | `hubspot` |
@@ -96,6 +97,20 @@ and it is checked against the fields the source exposes: a rule over a column th
 matches nothing, for ever, and looks exactly like a source with no records in it.
 
 ---
+
+## `domains`
+
+Your clients' domains: each one's registrar and expiry, and whether its site answers.
+
+**Nothing to create and nothing to keep.** A domain's registration record is published by its
+registry over RDAP, so this connector takes no key. List the domains, up to two hundred, and the
+department whose people may be told about them. **Only the listed domains are ever looked up**,
+whoever asks about another.
+
+**Where a registry publishes no RDAP**, as several country-code registries do not, the answer
+for that domain says so rather than guessing, and that registry is never asked. The registrar's
+name is read live and kept nowhere. The pace is this product's own, thirty lookups a minute,
+because registries publish no common figure.
 
 ## `freshdesk`
 
