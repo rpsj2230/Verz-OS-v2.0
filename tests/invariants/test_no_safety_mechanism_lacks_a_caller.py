@@ -148,6 +148,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #:
 #: `evening_digest` joined on 2026-09-30 the day it was registered, sent once a day at the install's
 #: own hour to the conversation it chose, through `brain.ops.digest_run`.
+#:
+#: `approved_actions` joined on 2026-10-06 the day it was registered (`0176`, M13.7.6), running
+#: each approved action once through `brain.ops.approved_runs.run_approved_now`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -168,6 +171,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "side_effect_resume",
         "escalation_expiry",
         "evening_digest",
+        "approved_actions",
     }
 )
 

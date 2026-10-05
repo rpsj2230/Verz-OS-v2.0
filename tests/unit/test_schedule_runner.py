@@ -485,6 +485,9 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     arrived already wired, with `gate.escalation`, and `evening_digest` later that day, with its
     destination, its borrowed key and `brain.ops.digest_run`.
 
+    **And twenty-four on 2026-10-06, with two orphans still.** `approved_actions` arrived already
+    wired, with `gate.approved_to_run` and `brain.ops.approved_runs`.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
@@ -502,7 +505,8 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "acceptance_run" not in {one.name for one in orphans()}
     assert "escalation_expiry" not in {one.name for one in orphans()}
     assert "evening_digest" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 23
+    assert "approved_actions" not in {one.name for one in orphans()}
+    assert len(CONTROLS) == 24
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -543,6 +547,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "side_effect_resume",
         "escalation_expiry",
         "evening_digest",
+        "approved_actions",
     }
 
 

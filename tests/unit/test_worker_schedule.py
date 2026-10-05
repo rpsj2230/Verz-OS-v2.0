@@ -90,6 +90,7 @@ STARTED = [
     ("connector_sync", False),
     ("vault_audit_ship", False),
     ("acceptance_run", False),
+    ("approved_actions", False),
 ]
 
 
@@ -158,7 +159,7 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_nineteen_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
@@ -166,9 +167,10 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
     runner and the connector sync after it, and the vault audit shipper last. The staff sync
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
     2026-09-28 and the install acceptance checks the same day, and the escalation expiry, the
-    two recovery sweeps and the evening digest on 2026-09-30, in the registry's own order.
+    two recovery sweeps and the evening digest on 2026-09-30, and the approved actions on
+    2026-10-06, in the registry's own order.
 
-    Delete this and every assertion below that names the seventeen could be satisfied by a table
+    Delete this and every assertion below that names the nineteen could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -189,6 +191,7 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
         "vault_audit_ship",
         "acceptance_run",
         "evening_digest",
+        "approved_actions",
     ]
 
 
@@ -474,6 +477,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert starts.calls == STARTED
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
             ("acceptance_run", "ok", False, "acceptance_run ran"),
+            ("approved_actions", "ok", False, "approved_actions ran"),
             ("automation_run", "ok", False, "automation_run ran"),
             ("canary_run", "ok", False, "canary_run ran"),
             ("connector_sync", "ok", False, "connector_sync ran"),
@@ -577,6 +581,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
         assert starts.calls == [one for one in STARTED if one[0] != "spend_report_refresh"]
         assert [row[0] for row in recorded(url)] == [
             "acceptance_run",
+            "approved_actions",
             "automation_run",
             "canary_run",
             "connector_sync",
@@ -614,6 +619,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
         assert fake.calls == STARTED
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
             ("acceptance_run", "ok", "acceptance_run ran"),
+            ("approved_actions", "ok", "approved_actions ran"),
             ("automation_run", "ok", "automation_run ran"),
             ("canary_run", "ok", "canary_run ran"),
             ("connector_sync", "ok", "connector_sync ran"),
@@ -701,6 +707,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("connector_sync", False),
         ("vault_audit_ship", False),
         ("acceptance_run", False),
+        ("approved_actions", False),
     ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.
