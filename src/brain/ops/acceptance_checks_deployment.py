@@ -53,6 +53,7 @@ where it stands, as its own kind, and replaced by it. The values are made up per
 included, so the check scrubs nobody's.
 
 Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4, M32.2.1.3
+Task ids: M27.1.3, M27.1.4
 """
 
 from __future__ import annotations
@@ -263,7 +264,7 @@ async def every_database_client_is_bounded_within_the_install_s_ceiling(h: Harne
 
 # -------------------------------------------------------------------- 3. the trace store
 @check(
-    leaves=("M32.1.2.1", "M32.1.2.2", "M32.1.2.5"),
+    leaves=("M32.1.2.1", "M32.1.2.2", "M32.1.2.5", "M27.1.3", "M27.1.4"),
     sentence=(
         "A read of a reserved person's record by a member of acceptance_a is finished through the "
         "trace recorder the application installs, with a word nothing else holds in the record: "
