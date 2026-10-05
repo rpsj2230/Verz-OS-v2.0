@@ -59,7 +59,7 @@ nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7
 """
 
 from __future__ import annotations
@@ -166,6 +166,33 @@ class KeyScheme(enum.StrEnum):
 
 
 # ---------------------------------------------------------------- connecting from the console
+class CredentialShape(enum.StrEnum):
+    """What a source's credential is, as the console collects it and the vault keeps it (M11.7.7).
+
+    Closed, because each member is a way the console asks and a judgement before anything is sent.
+    Until 2026-09-30 every source took one unbroken key, and the two that did not (a service
+    account key file, a database user's name and password) could only be connected at the server.
+    See `A_CREDENTIAL_IS_ASKED_FOR_IN_THE_SHAPE_THE_SOURCE_ISSUES_IT`.
+    """
+
+    #: One unbroken key, pasted: Xero's, HubSpot's, Freshdesk's.
+    KEY = "key"
+    #: A key file the vendor issues, chosen as a file and kept whole: a service account's JSON.
+    KEY_FILE = "key_file"
+    #: A user's name and password, typed as two: a read-only database user.
+    DATABASE_USER = "database_user"
+
+
+#: Why a credential is asked for in its own shape rather than as one pasted key.
+A_CREDENTIAL_IS_ASKED_FOR_IN_THE_SHAPE_THE_SOURCE_ISSUES_IT: Final = (
+    "A key is pasted, a key file is chosen as a file, and a database user is typed as a name and a "
+    "password, because that is how each is issued. Asking for a key file as a pasted key would "
+    "have a person copy a private key through a text box, and asking for a name and password as "
+    "one string would have them invent a separator. Each shape is judged before anything is sent "
+    "and kept in the vault whole, and none is ever shown again."
+)
+
+
 @dataclass(frozen=True)
 class Setting:
     """One identifier a source is connected with: its name, its label, and where to find it."""
@@ -175,6 +202,9 @@ class Setting:
     hint: str
     #: What a person is told when the connector refuses what was typed here.
     refused: str
+    #: Whether the value is a person's id here, which the connect route checks names somebody live
+    #: on this install before anything is written (M11.7.7). A connector cannot: it reads no table.
+    names_a_person: bool = False
 
 
 @dataclass(frozen=True)
@@ -189,6 +219,8 @@ class ConsoleForm:
     credential_label: str
     credential_hint: str
     build: Callable[[Mapping[str, str], SecretRef], ConnectorManifest]
+    #: How the credential is asked for and kept. One key unless the source issues another shape.
+    credential_shape: CredentialShape = CredentialShape.KEY
 
     def __post_init__(self) -> None:
         if not self.settings:
@@ -298,6 +330,15 @@ class SourceReading(Protocol):
 
 
 # ------------------------------------------------------------------ reading one record live
+#: Why a live lookup may name an operation of its own.
+A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
+    "A record is read live by the source's own call for one record where the source has one and "
+    "its list cannot be narrowed to one id, or does not carry what a question asks for. The "
+    "reading's interpretation of the reply is still the one used, so a record read live and a "
+    "page read on a schedule are understood the same way; only the address differs."
+)
+
+
 class LiveLookup(Protocol):
     """How one record an index row names is read from the source while somebody waits (M11.9.2).
 
@@ -321,11 +362,23 @@ class LiveLookup(Protocol):
         ...
 
     def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
-        """The list operation's arguments narrowed to the one record with this id.
+        """The arguments that name the one record with this id.
 
-        Raises for an id that is not the shape the source issues, because an id is laid into the
-        source's own query language, and a value that could change the query is refused here
-        rather than escaped.
+        The list operation's, narrowed, where `operation` answers None; otherwise the arguments
+        of the operation it answers. Raises for an id that is not the shape the source issues,
+        because an id is laid into the source's own query language or address, and a value that
+        could change either is refused here rather than escaped.
+        """
+        ...
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        """The operation one record is read by, or None to narrow the reading's list operation.
+
+        Its own operation where the list cannot be narrowed to one record, or does not carry the
+        values a question asks for: a helpdesk's ticket list names no ticket by id and carries no
+        body, and its one-ticket read does both. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
         """
         ...
 

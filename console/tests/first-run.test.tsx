@@ -744,6 +744,8 @@ describe("connecting the sources named during setup", () => {
         ],
         credential_label: "The key Xero issued for this connection",
         credential_hint: "KEY-HINT-SENTINEL",
+        credential_shape: "key",
+        credential_max_chars: 1000,
         may_connect: true,
         steps: [],
       },

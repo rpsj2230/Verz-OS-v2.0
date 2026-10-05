@@ -101,7 +101,7 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
             ),
             SlotScopes(
                 "google_drive",
-                request=("read on the named shared drive only",),
+                request=("Viewer on the one folder shared with it",),
                 refuse=("domain-wide delegation",),
             ),
             SlotScopes(

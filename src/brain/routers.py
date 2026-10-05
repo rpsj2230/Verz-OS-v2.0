@@ -48,6 +48,7 @@ from brain.agent_about_routes import router as agent_about_router
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
 from brain.agent_builder_routes import router as agent_builder_router
+from brain.agent_capability_routes import router as agent_capability_router
 
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router
@@ -62,6 +63,7 @@ from brain.agent_model_routes import router as agent_model_router
 # again: who may see an agent is its audience rather than a capability, and a hidden agent
 # and a missing one are one answer. The same `asking` dependency, imported.
 from brain.agent_routes import router as agent_router
+from brain.agent_workspace_routes import router as agent_workspace_router
 
 # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
 # finding, and the timeout middleware in `brain.app` is the most recent one.
@@ -165,6 +167,11 @@ from brain.data_steward_routes import router as data_steward_router
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
 
+# Send the evening digest to: the one setting naming a connected channel and a conversation in it,
+# chosen from what each channel offers now and saved as the Settings screen saves. See
+# `brain.digest_routes`.
+from brain.digest_routes import router as digest_router
+
 # Every person this install knows, one person's page, and a person added by hand where no staff
 # list is read (M27.11.2, M27.15.19). See `brain.directory_routes`.
 from brain.directory_routes import router as directory_router
@@ -178,6 +185,10 @@ from brain.erasure_routes import router as erasure_router
 # that already says who may see it, and a field saying the process log is kept nowhere the
 # console can read. See `brain.error_routes`.
 from brain.error_routes import router as error_router
+
+# A question nothing answered, handed to the person named for its skill's queue, the caller's two
+# lists of them, and the naming form. See `brain.escalation_routes`.
+from brain.escalation_routes import router as escalation_router
 
 # The Knowledge, Learning and Memory screens. A router of its own because all three are the
 # estate-wide reads `brain.console.govern_estate` decides, and all three stand on a store

@@ -143,6 +143,8 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: `queue_redrive` and `side_effect_resume` joined on 2026-09-30 from `KNOWN_ORPHANS`:
 #: `brain.ops.recovery_run` re-drives what a dead worker or a transient failure left behind, and
 #: reads back an interrupted side effect where its connector can answer, listing the rest.
+#: `escalation_expiry` joined on 2026-09-30 the day it was registered (`0168`, M8.3.4), marking
+#: every handoff past its deadline expired through `brain.ops.escalation_store.run_expiry_now`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -161,6 +163,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "acceptance_run",
         "queue_redrive",
         "side_effect_resume",
+        "escalation_expiry",
     }
 )
 
