@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**35 items are open: 158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**36 items are open: 159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,27 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 159. When a client's name matches two records you can both see, the Brain says so
+
+**In plain terms:** ask "what does Acme owe us?" when two client records answer to "Acme" (one in
+Xero, one in HubSpot, say) and the Brain has not decided whether they are the same client. Today it
+gives the same sentence it gives when there is no such client at all. Your plan asks for the opposite
+(M14.6.5): say that the name matches more than one client, and never add their figures together.
+
+The rule it changes is one of the Brain's strictest: a person is never told *which kind* of nothing
+happened, because "two records matched" and "nothing exists" must not be told apart when one of the
+records is hidden from them. **That still holds.** The new sentence is given only when every matching
+record is one the person may already read, so it tells them nothing they could not look up. If one of
+the two is hidden from them, they are answered from the one they can see, exactly as if the hidden one
+did not exist, and a test checks the two replies are identical.
+
+Whoever may confirm a merge also gets a link to the "Possible duplicates" review; everybody else gets
+the plain sentence.
+
+**My recommendation:** allow it, as described. I am building it that way.
+
+**What I need from you:** nothing, or reply "159: no" to keep the old single sentence.
 
 ## 158. May an automation's canvas have a step where an agent thinks? (optional)
 
