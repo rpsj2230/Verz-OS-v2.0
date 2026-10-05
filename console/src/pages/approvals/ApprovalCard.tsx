@@ -21,7 +21,13 @@
  * that action, so it asks for a reason and then asks once more, in words, before it is sent. See
  * `TAKING_OVER_IS_CONFIRMED_BECAUSE_IT_LOWERS_THE_AGENT`.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M27.16.1, M33.6.1.3
+ * **An approval that would send nothing says so above its buttons, in the API's words.** A change to a
+ * source this install has not allowed to be written (Cloudflare's DNS changes before their key is
+ * given) can still be approved, and the approval is recorded, but nothing is sent; the card says
+ * that before the approver decides rather than after. The sentence is the card's own field, so a
+ * card with nothing to say draws nothing.
+ *
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M27.16.1, M33.6.1.3, M11.7.3
  */
 
 import { useCallback, useState, type ReactNode } from "react";
@@ -127,6 +133,11 @@ export function ApprovalCard({
           <When at={card.expiresAt} />
         </dd>
       </dl>
+      {card.unsentBecause === "" ? null : (
+        <p className="approval-card__unsent" role="note">
+          {card.unsentBecause}
+        </p>
+      )}
       {decision}
       {linked ? (
         <Link className="approval-card__link" to={approvalAddress(card.suspensionId)}>

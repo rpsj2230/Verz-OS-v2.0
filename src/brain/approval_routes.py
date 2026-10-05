@@ -103,20 +103,26 @@ is `pending_for`'s question and holding the action's own capability in the actio
 its answer; a second gate would be a second answer, and the two would disagree about the same
 approver on the same day.
 
+**A card says when approving it would send nothing (M11.7.3).** A connector's write is a grant of
+its own, off until the install gives its key (`brain.connectors.declaration.WriteGrant`), and an
+action it sends is held and approved as before on an install that has not given it. So the card
+carries the grant's own sentence in `unsent_because`, asked of the vault's metadata per grant
+(`unsent_of`), and the approver knows before pressing that nothing will change at the source.
+
 **The queue pages, searches, filters and orders through `brain.listing`**, over the cards the
 reach decided, soonest to lapse first unless asked otherwise. Approvals are never decided several
 at once: see `AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD`.
 
-Task ids: M35.3.1.2, M35.3.1.1, M27.8.6, M27.9.3, M7.4.4, M33.6.1.3, M8.3.5
+Task ids: M35.3.1.2, M35.3.1.1, M27.8.6, M27.9.3, M7.4.4, M33.6.1.3, M8.3.5, M11.7.3
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
-from typing import Annotated, Final, Protocol, Self, runtime_checkable
+from typing import Annotated, Final, Protocol, Self, cast, runtime_checkable
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -126,12 +132,16 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked
 from brain.audit.ledger import AuditChain, AuditEntry
 from brain.audit.record import ApprovalVerdict, AuditRecorder
+from brain.connectors.declaration import WriteGrant
 from brain.console.approvals import ApprovalError, Card, Decided, card, decide
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
+from brain.credential_routes import credentials_of
 from brain.gate.leash import SuspendedAction
 from brain.gate.suspension_store import NoLongerAppliesError
 from brain.listing import Column, ListAsked, Listing, Plan
+from brain.ops.connector_write_run import unsent_because
+from brain.ops.credentials import CredentialsUnavailableError, connector_write_slot
 from brain.people_names import names_for
 
 log = structlog.get_logger()
@@ -339,6 +349,8 @@ class ApprovalCardView(BaseModel):
     expires_at: datetime
     #: Whether taking the work over is offered. See `brain.console.approvals.Card.may_take_over`.
     may_take_over: bool = False
+    #: Why approving this sends nothing, or empty. `Card.unsent_because` (M11.7.3).
+    unsent_because: str = ""
 
 
 class ApprovalQueue(Page[ApprovalCardView]):
@@ -422,17 +434,26 @@ def card_view(shown: Card) -> ApprovalCardView:
         raised_at=shown.raised_at,
         expires_at=shown.expires_at,
         may_take_over=shown.may_take_over,
+        unsent_because=shown.unsent_because,
     )
 
 
-def shown_card(suspension: SuspendedAction, reach: EntitlementSet, now: datetime) -> Card | None:
+def shown_card(
+    suspension: SuspendedAction,
+    reach: EntitlementSet,
+    now: datetime,
+    *,
+    unsent: Callable[[str], str] | None = None,
+) -> Card | None:
     """The card this reach is shown for one suspension, or None, including when none can be built.
 
     A suspension whose artefact is only whitespace is refused by `Card` itself, and that
-    refusal is absence here rather than a status. See the module note.
+    refusal is absence here rather than a status. See the module note. `unsent` says, for the
+    suspended action's tool, why approving it would send nothing (`unsent_of`).
     """
+    because = "" if unsent is None else unsent(suspension.action.tool.name)
     try:
-        return card(suspension, reach, now)
+        return card(suspension, reach, now, unsent_because=because)
     except ApprovalError:
         log.warning("suspension does not make a card", suspension=suspension.id)
         return None
@@ -459,11 +480,13 @@ def queue(
     reach: EntitlementSet,
     now: datetime,
     plan: Plan[ApprovalCardView] | None = None,
+    *,
+    unsent: Callable[[str], str] | None = None,
 ) -> ApprovalQueue:
     """One page of the cards this reach may decide, soonest to lapse first, cut after filtering."""
     cards = [
         card_view(shown)
-        for shown in (shown_card(one, reach, now) for one in suspensions)
+        for shown in (shown_card(one, reach, now, unsent=unsent) for one in suspensions)
         if shown is not None
     ]
     chosen = plan or QUEUE.plan(ListAsked(limit=MAX_QUEUE_CARDS), reader=reach.principal_id)
@@ -622,6 +645,40 @@ A_SOURCE_THAT_ONLY_READS_CANNOT_TAKE_A_DECISION: Final = (
 )
 
 
+def unsent_of(request: Request) -> Callable[[str], str]:
+    """Why approving an action of a tool would send nothing on this install, per tool (M11.7.3).
+
+    `app.state.unsent_because` when a test put one there. Otherwise a connector write whose grant's
+    key this install has not given is told the grant's own sentence, asked of the vault's metadata
+    once per grant and never for a tool no grant sends; a process with no vault holds no key, and a
+    vault that could not answer is said nothing about. See
+    `brain.ops.connector_write_run.unsent_because`.
+    """
+    found = getattr(request.app.state, "unsent_because", None)
+    if callable(found):
+        # `app.state` is untyped, and a test's lookup is the only thing put there under this name.
+        return cast("Callable[[str], str]", found)
+    credentials = credentials_of(request)
+    asked: dict[str, bool | None] = {}
+
+    def held(connector: str, grant: WriteGrant) -> bool | None:
+        slot = connector_write_slot(connector, grant.name)
+        if slot.path not in asked:
+            if not credentials.configured:
+                asked[slot.path] = False
+            else:
+                try:
+                    asked[slot.path] = credentials.held(slot).held
+                except CredentialsUnavailableError:
+                    asked[slot.path] = None
+        return asked[slot.path]
+
+    def unsent(tool: str) -> str:
+        return unsent_because(tool, held)
+
+    return unsent
+
+
 def _no_approval_here() -> Absent:
     """The one refusal this router makes about an approval.
 
@@ -639,7 +696,9 @@ async def approvals(request: Request, asked: Asked, listed: QueueQuery) -> Appro
     """One page of the approvals this caller may decide, at their admitted reach."""
     plan = QUEUE.plan(listed, reader=asked.caller.principal.id)
     source = _require_source(request, asked.reach, asked.now)
-    answered = queue(await source.open_suspensions(), asked.reach, asked.now, plan)
+    answered = queue(
+        await source.open_suspensions(), asked.reach, asked.now, plan, unsent=unsent_of(request)
+    )
     named = await names_for(request, {one.runs_as for one in answered.items})
     return answered.model_copy(update={"people": named})
 
@@ -651,7 +710,11 @@ async def approval(request: Request, suspension_id: str, asked: Asked) -> Approv
     """One approval's card, or the answer an approval that does not exist gets."""
     source = _require_source(request, asked.reach, asked.now)
     found = await source.suspension(suspension_id)
-    shown = shown_card(found, asked.reach, asked.now) if found is not None else None
+    shown = (
+        shown_card(found, asked.reach, asked.now, unsent=unsent_of(request))
+        if found is not None
+        else None
+    )
     if shown is None:
         log.info("approval not answerable", principal=asked.caller.principal.id)
         raise _no_approval_here()

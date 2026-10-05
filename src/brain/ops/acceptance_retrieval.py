@@ -286,8 +286,16 @@ def _walked(query: RowQuery) -> RowQuery:
 
 
 async def _nearest(h: Harness, reader: str, vector: tuple[float, ...]) -> list[str]:
-    """The vector leg for `reader`, as `document_tools.searcher` builds it, walking the index."""
-    from brain.knowledge.document_tools import reach_through, vector_search_query
+    """The vector leg for `reader`, as `document_tools.searcher` runs it: the index walk, and the
+    exact re-ask over the reader's reach when the walk came back short.
+
+    Not the bare walk. pgvector's walk loses passages while the index holds dead entries or a
+    vacuum runs (`search.A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`), and a
+    check rolls its rows back, so the bare walk failed this check on its own dead entries one run
+    in about thirty. What the reader is given is the leg as a whole, which is what is judged here;
+    that the leg walks the index, told to keep walking, is judged separately below.
+    """
+    from brain.knowledge.document_tools import nearest_passages, reach_through
     from brain.knowledge.embedding import EmbeddedVector
     from brain.knowledge.row_store import SessionRowSource
 
@@ -295,8 +303,10 @@ async def _nearest(h: Harness, reader: str, vector: tuple[float, ...]) -> list[s
     reach = await reach_through(records, await h.reach(reader), h.now)
     if reach is None:
         return []
-    query = vector_search_query(EmbeddedVector(model=_model(h), values=vector), reach=reach)
-    return [str(row["chunk_id"]) for row in await records.rows(_walked(query))]
+    found = await nearest_passages(
+        records, EmbeddedVector(model=_model(h), values=vector), reach=reach
+    )
+    return list(found)
 
 
 async def _plan(h: Harness, query: RowQuery) -> dict[str, Any]:
@@ -564,10 +574,13 @@ async def a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd(h: Har
     reach = await reach_through(SessionRowSource(h.sessions), await h.reach(reader_a), h.now)
     if reach is None:
         raise CheckFailedError("a reader of acceptance_a's documents reached none of them")
-    walk = _walked(
-        vector_search_query(EmbeddedVector(model=_model(h), values=question), reach=reach)
-    )
-    if not any(one.get("Index Name") == VECTOR_INDEX.name for one in _nodes(await _plan(h, walk))):
+    leg = vector_search_query(EmbeddedVector(model=_model(h), values=question), reach=reach)
+    told = " ".join(str(one.compile().params) for one in leg.settings)
+    if "hnsw.iterative_scan" not in told:
+        raise CheckFailedError("the vector leg's walk is not told to keep walking past the crowd")
+    if not any(
+        one.get("Index Name") == VECTOR_INDEX.name for one in _nodes(await _plan(h, _walked(leg)))
+    ):
         raise CheckFailedError("the vector leg did not walk the install's HNSW index")
 
 
