@@ -915,14 +915,15 @@ def test_every_route_under_the_prefix_authenticates_its_caller() -> None:
     `tests/unit/test_channel_pipeline.py`. And `brain.widget_routes.MINTED_FOR_NOBODY`: where a
     website visitor's browser asks for a session, which has nobody to sign in and proves the
     site is on the install's list instead, and hands out a session that holds no entitlement
-    set; its refusals are driven in `tests/unit/test_widget_routes.py`. Each is held to exactly
-    its one path here.
+    set; and where that session asks a question, answered from knowledge marked public alone.
+    Their refusals are driven in `tests/unit/test_widget_routes.py`. Each exception is held to
+    exactly its paths here.
 
     Delete this and the next route under this prefix is public until somebody notices."""
     app: FastAPI = create_app(Settings(env="development"))
     document = app.openapi()["paths"]
     assert {f"{API_PREFIX}/channels/{{name}}/events"} == SIGNED_NOT_SIGNED_IN
-    assert {f"{API_PREFIX}/widget/sessions"} == MINTED_FOR_NOBODY
+    assert {f"{API_PREFIX}/widget/sessions", f"{API_PREFIX}/widget/questions"} == MINTED_FOR_NOBODY
     excepted = SIGNED_NOT_SIGNED_IN | MINTED_FOR_NOBODY
     assert set(document) >= excepted
     paths = [p for p in document if p.startswith(API_PREFIX) and p not in excepted]

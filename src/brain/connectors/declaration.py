@@ -56,6 +56,30 @@ that holds its form, asking for exactly the form's settings and its key, so the 
 form cannot drift apart; a source connected at the server ends with the hand-over and asks for
 nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
 
+**A source that is views in a company's own database is read by a `ViewReading`, which is a small
+typed branch of the one worker loop rather than a second loop (M11.6.1).** A REST reading hands the
+worker an operation, a page's arguments and one header, and the worker makes the call. A database
+has no operation, no page and no header: one read of one view is one bounded statement, and what the
+worker holds for it is a user and a password. So `reading` is either shape, the worker, the test
+of a connection and the live read each branch on which it is, and everything else about a reading
+(the entities, the interval, the projection into the minimal index, the ceiling admitting each read,
+the lease on the credential) is the same code for both. The login is a `DatabaseLogin` the worker
+builds from the lease for one attempt, sealed so a traceback prints no password. See
+`A_DATABASE_IS_READ_BY_THE_SAME_LOOP`. Rejected: a second worker loop for databases, which would
+be a second copy of the admission, the lease, the page write and the backoff, each free to drift
+from the first; and a `RestOperation` that pretended a view read was a GET, which would put a
+statement's parts in a URL.
+
+**A write a connector can make is a grant of its own (M11.7.3).** `writes` declares each, with the
+key it asks for and what an approver is told without it; the key is kept in a slot of its own and
+the grant is off until it is given. See `A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+
+**A reading may list one entity under each record of another (M11.7.3).** Cloudflare lists a DNS
+record only under its zone, so its reading says so with `ListedUnder`, the worker reads the entity
+once per parent it kept earlier in the same run, and the index names each record by both ids. The
+capability is optional and asked with `isinstance` (`ReadsListedUnder`), so no other reading
+changes. See `A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH`.
+
 **A source whose values are figures, not records, says how its figures are read (M11.7.1).**
 Google Analytics keeps an index of one property and answers a question with that property's
 traffic for a named date range, which is not the property read again: it is a report, asked for
@@ -81,7 +105,8 @@ put every other open one in conflict. See `A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.1
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4, M11.6.1
+Task ids: M11.7.3, M11.7.1
 """
 
 from __future__ import annotations
@@ -96,11 +121,11 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.ask import AskRows
-from brain.connectors.contract import ConnectorContractError
+from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
@@ -110,8 +135,12 @@ from brain.connectors.transports import SourceRecord
 from brain.connectors.write_verification import ReadBack, builds_a_manifest
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.ops.connect_steps import GuideStep
+from brain.ops.leases import SealedSecret
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
+
+if TYPE_CHECKING:
+    from brain.gate.leash import Action
 
 # ------------------------------------------------------------------ written-down reasons
 #: The owner's rule, stated on 18 and 21 September and restated in every connector brief since.
@@ -150,6 +179,16 @@ A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED: Final = (
     "that screen asks for exactly the form's settings and its key, so a setting added to the "
     "form is a step's field too. A source connected at the server ends with the hand-over and "
     "asks for nothing, because this screen has nothing to take."
+)
+
+#: Why a database's views are read by a branch of the one worker loop, not by a loop of their own.
+A_DATABASE_IS_READ_BY_THE_SAME_LOOP: Final = (
+    "A source that is views in a company's own database is read one bounded statement per view, "
+    "with a user and a password rather than a key in a header. Everything else about reading it is "
+    "what every source has: the ceiling admits each read, the credential is leased for the attempt "
+    "and given back, each record is held to the minimal index before it is written, and a failure "
+    "backs off. So the worker, the connection test and the live read each take one typed branch "
+    "for it, and a second loop that would copy all of that is not written."
 )
 
 #: Why a source's figures are declared apart from its records.
@@ -214,6 +253,9 @@ class KeyScheme(enum.StrEnum):
     #: HTTP Basic with the key as the user name and `X` as the password, which is how Freshdesk
     #: documents its API key (https://developers.freshdesk.com/api/#authentication).
     BASIC_KEY_AS_USER = "basic_key_as_user"
+    #: No key at all: a source whose publisher gives its record to anybody who asks, as a registry
+    #: gives its RDAP record (M11.7.4). The worker takes no lease and sends no `Authorization`.
+    NONE = "none"
     #: A service account's key file, exchanged by the run for a bearer token carrying the
     #: reading's scope (`ScopedReading`) and sent as `Authorization: Bearer <token>`, which is how
     #: Google documents a server reading its APIs as itself
@@ -238,6 +280,9 @@ class CredentialShape(enum.StrEnum):
     KEY_FILE = "key_file"
     #: A user's name and password, typed as two: a read-only database user.
     DATABASE_USER = "database_user"
+    #: Nothing: the source's record is published to anybody who asks, and nothing is kept in the
+    #: vault because there is nothing to keep (M11.7.4). The form says so and asks for nothing.
+    NONE = "none"
 
 
 #: Why a credential is asked for in its own shape rather than as one pasted key.
@@ -248,6 +293,11 @@ A_CREDENTIAL_IS_ASKED_FOR_IN_THE_SHAPE_THE_SOURCE_ISSUES_IT: Final = (
     "one string would have them invent a separator. Each shape is judged before anything is sent "
     "and kept in the vault whole, and none is ever shown again."
 )
+
+
+#: The longest setting accepted unless a setting says otherwise, which is `ConnectorScope`'s own
+#: ceiling on a selector.
+DEFAULT_SETTING_CHARS: Final = 200
 
 
 @dataclass(frozen=True)
@@ -262,6 +312,10 @@ class Setting:
     #: Whether the value is a person's id here, which the connect route checks names somebody live
     #: on this install before anything is written (M11.7.7). A connector cannot: it reads no table.
     names_a_person: bool = False
+    #: The longest value accepted. A list the connection is scoped to, such as the domains a
+    #: domains connection reads, is longer than one identifier (M11.7.4), and so is a certificate
+    #: authority's certificate (M11.6.1).
+    max_chars: int = DEFAULT_SETTING_CHARS
 
 
 @dataclass(frozen=True)
@@ -430,6 +484,189 @@ class SourceReading(Protocol):
         ...
 
 
+#: Why a reading may send each page to a server of its own.
+A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER: Final = (
+    "Most sources are one service, so a reading's pages all go to one address. A registry's RDAP "
+    "record is not: each top-level domain is published by its own registry at its own address, "
+    "so a domains connection's pages go one to a domain, each to the server that domain's "
+    "registry publishes. A routed reading is told the connection's settings for every page, "
+    "because the pages are the connection's own list, and a domain it cannot route is written "
+    "into the index as unpublished without a call rather than left out."
+)
+
+
+@runtime_checkable
+class RoutedReading(Protocol):
+    """A reading whose pages each go to a server of their own (M11.7.4).
+
+    The worker's run and the live read ask a reading that is one of these for each page's
+    operation, and for the first and next page with the connection's settings; every other method
+    is `SourceReading`'s. See `A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER`.
+    """
+
+    def first_route(self, entity: str, *, settings: Mapping[str, str]) -> Mapping[str, str] | None:
+        """The arguments of the first page this connection reads, or None when it reads none."""
+        ...
+
+    def next_route(
+        self, entity: str, asked: Mapping[str, str], *, settings: Mapping[str, str]
+    ) -> Mapping[str, str] | None:
+        """The arguments of the page after `asked`, or None when that was the last."""
+        ...
+
+    def operation_for(
+        self,
+        entity: str,
+        page: Mapping[str, str],
+        *,
+        settings: Mapping[str, str],
+        resolver: Resolver,
+    ) -> RestOperation:
+        """The operation one page is read by, at the server that page's record is published at."""
+        ...
+
+    def unrouted(
+        self, entity: str, *, settings: Mapping[str, str], seen_at: datetime
+    ) -> tuple[ProjectedRecord, ...]:
+        """The index entries of records no server publishes, kept without a call."""
+        ...
+
+    def unpublished(
+        self, entity: str, source_id: str, *, settings: Mapping[str, str], fetched_at: str
+    ) -> TypedResult[SourceRecord] | None:
+        """What a live read of a record no server publishes is told, or None for a routed one.
+
+        The record said as unpublished, read with no call, so a question about it is answered
+        with that rather than with a source that could not be reached.
+        """
+        ...
+
+
+class OneCall(Protocol):
+    """One GET, as the worker's and the live read's caller makes it. Never raises."""
+
+    def get(self, url: str, *, address: str, headers: Mapping[str, str], max_bytes: int) -> Any:
+        """The answer: a status, headers and a body, or that it came back not at all."""
+        ...
+
+
+@runtime_checkable
+class ChecksLiveFacts(Protocol):
+    """A live lookup that adds facts read from somewhere other than its source's record (M11.7.4).
+
+    A domain's registry says who registered it and until when; whether its site answers is asked
+    of the site itself. The facts are values read for the question and kept nowhere, like every
+    other value a live read returns.
+    """
+
+    def facts(
+        self, entity: str, source_id: str, *, caller: OneCall, resolver: Resolver
+    ) -> Mapping[str, str]:
+        """The facts one record carries besides its source's record, by field name."""
+        ...
+
+
+# ---------------------------------------------------------- a record listed under another
+#: Why an entity may be read under each record of another, and is named by both ids.
+A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH: Final = (
+    "Some sources list a record only under another: Cloudflare lists a DNS record under its zone, "
+    "and neither its list nor its one-record call can be reached without the zone's id. So the "
+    "worker reads such an entity once under each record of its parent kept earlier in the same "
+    "run, with the parent's id laid into the path, and the index names the record by both ids, "
+    "the parent's first. A question then reads the record live from its index row alone, and the "
+    "record read live is named the same way, so the one is matched to the other."
+)
+
+#: What joins a parent's id to the record's own in the id the index keeps. A dot, because the
+#: joined id is still a record id the redactor cites by (`brain.core.redaction`'s id grammar is
+#: letters, digits and `_.@-`), and a record it cannot cite is dropped whole. A slash was the first
+#: choice and the Cloudflare install check found every live record dropped as unidentified.
+LISTED_UNDER_SEPARATOR: Final = "."
+
+
+@dataclass(frozen=True)
+class ListedUnder:
+    """Where one entity's records are listed: under each record of `parent`, by `parameter`.
+
+    See `A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH`. The id both halves agree on is built and
+    taken apart here and nowhere else, so the worker's walk and the live read cannot come to name
+    one record two ways.
+    """
+
+    parent: str
+    #: The path parameter the parent's id is laid into, and the field it is carried in on a row.
+    parameter: str
+
+    def __post_init__(self) -> None:
+        for one in (self.parent, self.parameter):
+            if not _NAME_RE.match(one):
+                msg = f"{one!r} is not a name, and a record listed under another is named by it"
+                raise DeclarationError(msg)
+
+    def source_id(self, parent_id: str, own_id: str) -> str:
+        """The id the index keeps for a record of this entity read under `parent_id`."""
+        for one in (parent_id, own_id):
+            if not one.strip() or LISTED_UNDER_SEPARATOR in one:
+                msg = (
+                    "an id holding nothing or the separator cannot be joined, because the joined "
+                    "id would be taken apart differently. "
+                    f"{A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
+                )
+                raise ConnectorContractError(msg)
+        return f"{parent_id}{LISTED_UNDER_SEPARATOR}{own_id}"
+
+    def split(self, source_id: str) -> tuple[str, str]:
+        """The parent's id and the record's own, from the id the index keeps."""
+        parent_id, joined, own_id = source_id.partition(LISTED_UNDER_SEPARATOR)
+        if not (joined and parent_id.strip() and own_id.strip()) or (
+            LISTED_UNDER_SEPARATOR in own_id
+        ):
+            msg = (
+                f"an id of a {self.parent}'s record names its {self.parent} and itself, and this "
+                "one does not"
+            )
+            raise ConnectorContractError(msg)
+        return parent_id, own_id
+
+    def named(self, rows: TypedResult[SourceRecord], parent_id: str) -> TypedResult[SourceRecord]:
+        """Rows read under `parent_id`, each named by both ids and carrying the parent's id."""
+        return TypedResult[SourceRecord](
+            records=tuple(
+                SourceRecord.model_validate(
+                    {
+                        **one.model_dump(),
+                        "id": self.source_id(parent_id, one.id),
+                        self.parameter: parent_id,
+                    }
+                )
+                for one in rows.records
+            ),
+            source=rows.source,
+            fetched_at=rows.fetched_at,
+            truncated=rows.truncated,
+        )
+
+
+@runtime_checkable
+class ReadsListedUnder(Protocol):
+    """A reading one of whose entities is listed under each record of another.
+
+    Optional, and asked with `isinstance`, so a reading whose every entity is listed on its own
+    says nothing and needs no change.
+    """
+
+    def listed_under(self, entity: str) -> ListedUnder | None:
+        """Where `entity` is listed, or None for an entity listed on its own."""
+        ...
+
+
+def listed_under(reading: object, entity: str) -> ListedUnder | None:
+    """How this reading lists `entity`: under a parent, or on its own (None)."""
+    if isinstance(reading, ReadsListedUnder):
+        return reading.listed_under(entity)
+    return None
+
+
 @runtime_checkable
 class ScopedReading(Protocol):
     """A reading whose key is exchanged for a token, and the read-only scopes that token carries.
@@ -498,6 +735,86 @@ class LiveLookup(Protocol):
         ...
 
 
+# ------------------------------------------------------------ reading a database's views
+class DatabaseLogin:
+    """A database user's name and password, for the reads of one attempt, and nothing else.
+
+    Built by whoever holds the lease, from the slot's two fields
+    (`brain.ops.credentials.user_and_password`), and handed to a `ViewReading` for as long as the
+    attempt's reads take. The password stays a `SealedSecret` until the one line that opens the
+    connection reveals it, and this object has no rendering of its own that could show it, so a
+    traceback or a log line holding one prints the user and not the password. Not a dataclass, for
+    `SealedSecret`'s reason: a generated `__repr__` is a rendering nobody chose.
+    """
+
+    __slots__ = ("password", "user")
+
+    def __init__(self, user: str, password: SealedSecret) -> None:
+        if not user.strip():
+            msg = "a database login names no user; the vault holds the password beside a user"
+            raise ConnectorContractError(msg)
+        self.user = user
+        self.password = password
+
+    def __repr__(self) -> str:
+        return f"DatabaseLogin(user={self.user!r})"
+
+    __str__ = __repr__
+
+
+@runtime_checkable
+class ViewReading(Protocol):
+    """How the worker reads a source that is views in a company's own database (M11.6.1).
+
+    One bounded read per entity: the connector's `read` builds the read from the connection's
+    settings, checks the address the connection names, runs it through its own executor and
+    classifies the answer, so the worker holds no statement, no address and no driver. A failure the
+    database gave is a `PageReply` whose call is REJECTED or UNAVAILABLE; an address the rule
+    refuses raises `brain.tools.fetch.UnsafeAddressError`, as a REST reading's operation does.
+    See `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+
+    **There is no method returning a document**, for `SourceReading`'s reason.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind the source projects, in the order a run reads them."""
+        ...
+
+    def refresh_interval(self) -> timedelta:
+        """How often a healthy source is read, which is the interval its freshness is judged by."""
+        ...
+
+    def read(
+        self,
+        request: FetchRequest,
+        *,
+        settings: Mapping[str, str],
+        login: DatabaseLogin,
+        resolver: Resolver,
+        fetched_at: str,
+    ) -> PageReply:
+        """One bounded read of the view this request's entity is kept in, as the source answered."""
+        ...
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """The index entry kept for one row, or None for a row with nothing to keep."""
+        ...
+
+
+# ------------------------------------------------------------------ a write, granted apart
+#: Why a connector's write is a grant of its own, with a key of its own.
+A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN: Final = (
+    "A connection reads with a key that can only read, and the guide, the form and the vault slot "
+    "say so. A write the connector can make is a separate, deliberate grant: its own step on the "
+    "source's page, its own key in its own slot, off until that key is given, and used only to "
+    "send a change a person approved, which is then read back with the read key before it is "
+    "reported done. One key for both would make every read a call made with the power to change "
+    "the source, and the approval would be the only thing standing between a question and a write."
+)
+
+
 # ---------------------------------------------------------- reading one record's figures live
 #: Why a report may be several calls, and what one of them failing means.
 A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER: Final = (
@@ -507,6 +824,75 @@ A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER: Final = (
     "answered: it is never shown with some of its figures missing, which would read as figures "
     "that are nought."
 )
+
+
+@dataclass(frozen=True)
+class WriteCall:
+    """One approved change as the call that sends it and the record it is read back by.
+
+    `operation` is the source's own write, built from its specification like every read, so its
+    address is prepared and checked by the same rule; `source_id` is the index id the change is
+    read back by, through the connector's live lookup, with the read key.
+    """
+
+    operation: RestOperation
+    arguments: Mapping[str, str]
+    body: Mapping[str, Any]
+    entity: str
+    source_id: str
+
+
+class PreparesWrite(Protocol):
+    """How a connector turns an approved action into its call, and judges the record read back."""
+
+    def call_for(self, action: Action) -> WriteCall:
+        """The call that sends this approved action. Raises for an action it cannot send.
+
+        Builds the call and sends nothing, which is why it is not named `call`: `brain.ops.effects`
+        presumes a method of that name issues, and this one only reads the action.
+        """
+        ...
+
+    def differs(self, action: Action, found: Mapping[str, Any]) -> tuple[str, ...]:
+        """The names of the fields the record read back holds other than the action set them."""
+        ...
+
+
+@dataclass(frozen=True)
+class WriteGrant:
+    """A write a connector can be allowed to make, off until its own key is given (M11.7.3).
+
+    `tools` are the prepared actions the grant sends; `not_allowed` is what an approver is told
+    about one of them on an install that has not given the key. See
+    `A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+    """
+
+    name: str
+    label: str
+    tools: tuple[str, ...]
+    credential_label: str
+    credential_hint: str
+    not_allowed: str
+    #: How an approved action becomes its call and how the record read back is judged.
+    prepares: PreparesWrite
+    credential_shape: CredentialShape = CredentialShape.KEY
+    #: What its own key must be allowed to do and never be given, which its slot is defined with.
+    scopes: KeyScopes | None = None
+
+    def __post_init__(self) -> None:
+        if not _NAME_RE.match(self.name):
+            msg = f"write grant {self.name!r} is not a name, and its key slot is named by it"
+            raise DeclarationError(msg)
+        if not self.tools:
+            msg = f"write grant {self.name!r} sends no tool, so the key it asks for sends nothing"
+            raise DeclarationError(msg)
+        for one in (self.label, self.credential_label, self.credential_hint, self.not_allowed):
+            if not one.strip():
+                msg = (
+                    f"write grant {self.name!r} must say what it allows, which key it asks for "
+                    "and what an approver is told without it"
+                )
+                raise DeclarationError(msg)
 
 
 @dataclass(frozen=True)
@@ -596,14 +982,17 @@ class ConnectorDeclaration:
     console: ConsoleForm | None = None
     #: Why the console cannot connect this source yet. Empty exactly when `console` is set.
     not_from_the_console: str = ""
-    #: How the worker reads it on a schedule, or None when nothing does.
-    reading: SourceReading | None = None
+    #: How the worker reads it on a schedule, or None when nothing does. A REST source's reading
+    #: or a database's views (`ViewReading`); see `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+    reading: SourceReading | ViewReading | None = None
     #: How one of its records is read live at question time, or None when none is.
     live: LiveLookup | None = None
     #: How the figures one of its records names are read live, or None when it has none (M11.7.1).
     report: LiveReport | None = None
     #: The screens the console's connect flow shows for it. See the module docstring.
     guide: tuple[GuideStep, ...] = ()
+    #: The writes it can be allowed to make, each off until its own key is given. See `WriteGrant`.
+    writes: tuple[WriteGrant, ...] = ()
     #: What Ask answers from it, or None when Ask answers nothing from it yet.
     ask: AskRows | None = None
     #: What its key must be allowed to do and never be given, which its vault slot is defined with.
@@ -630,11 +1019,11 @@ class ConnectorDeclaration:
             raise DeclarationError(msg)
         if self.guide:
             last = self.guide[-1].asks
-            wanted = (
-                ()
-                if self.console is None
-                else (*(one.name for one in self.console.settings), CREDENTIAL_ASK)
-            )
+            wanted: tuple[str, ...] = ()
+            if self.console is not None:
+                wanted = tuple(one.name for one in self.console.settings)
+                if self.console.credential_shape is not CredentialShape.NONE:
+                    wanted = (*wanted, CREDENTIAL_ASK)
             if tuple(last) != wanted:
                 msg = (
                     f"connector {self.name!r} ends its guide asking for {list(last)}, and "
@@ -647,6 +1036,27 @@ class ConnectorDeclaration:
                 "live is read through the reading's operation and interpretation"
             )
             raise DeclarationError(msg)
+        if self.writes and self.console is None:
+            msg = (
+                f"connector {self.name!r} declares a write and no console form; a write is granted "
+                f"to a connection. {A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN}"
+            )
+            raise DeclarationError(msg)
+        granted = [one.name for one in self.writes]
+        if len(granted) != len(set(granted)):
+            msg = f"connector {self.name!r} declares one write grant twice"
+            raise DeclarationError(msg)
+        if self.reading is not None:
+            read = self.reading.entities()
+            for index, entity in enumerate(read):
+                under = listed_under(self.reading, entity)
+                if under is not None and under.parent not in read[:index]:
+                    msg = (
+                        f"connector {self.name!r} lists {entity!r} under {under.parent!r}, which "
+                        "it does not read first, so the walk would have no parent to list it "
+                        f"under. {A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
+                    )
+                    raise DeclarationError(msg)
         if self.report is not None and self.reading is None:
             msg = (
                 f"connector {self.name!r} declares a report and no reading; a report is read with "
@@ -699,6 +1109,15 @@ def discover(package: ModuleType) -> Mapping[str, ConnectorDeclaration]:
 def shipped() -> Mapping[str, ConnectorDeclaration]:
     """Every connector this release ships. Found once per process, at start-up."""
     return discover(brain.connectors)
+
+
+def write_grant_for(tool: str) -> tuple[str, WriteGrant] | None:
+    """The shipped connector and the write grant that sends `tool`, or None for any other tool."""
+    for name, declared in shipped().items():
+        for grant in declared.writes:
+            if tool in grant.tools:
+                return name, grant
+    return None
 
 
 def read_backs() -> Mapping[str, ReadBack]:

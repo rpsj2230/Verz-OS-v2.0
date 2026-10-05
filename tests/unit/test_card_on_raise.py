@@ -303,10 +303,11 @@ def test_the_code_that_binds_a_sender_offers_their_address_at_once() -> None:
     assert book.offered == [(Channel.LARK, WIDE)]
 
 
-def test_only_lark_keeps_an_address_and_an_erasure_clears_it() -> None:
-    """The declarations the column rests on. Delete this and an address is kept for a channel
-    nobody decided about, or survives an erasure on a row the trail keeps."""
-    assert frozenset({Channel.LARK}) == ADDRESS_KEPT_ON
+def test_a_person_s_own_channels_keep_an_address_and_an_erasure_clears_it() -> None:
+    """The declarations the column rests on: needs-rupash 118, applied to every channel whose
+    identity is a person's own, and never a webhook's. Delete this and an address is kept for a
+    channel nobody decided about, or survives an erasure on a row the trail keeps."""
+    assert frozenset({Channel.LARK, Channel.SLACK, Channel.EMAIL}) == ADDRESS_KEPT_ON
     assert CLEARED == {"auth.principal_identity": ("channel_address",)}
 
 
@@ -384,7 +385,7 @@ def _kept(url: str) -> list[tuple[str, str, str | None, bool]]:
 
 
 @pytest.mark.needs_db
-def test_an_address_is_kept_only_on_its_own_binding_only_for_lark_and_cleared_on_unbind(
+def test_an_address_is_kept_only_on_its_own_binding_never_a_webhook_s_and_cleared_on_unbind(
     migrated: str,
 ) -> None:
     """**M10.3.5 against a server.** An address is kept on the one live Lark binding it is the

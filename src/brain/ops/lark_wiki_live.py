@@ -366,6 +366,11 @@ class WithWiki:
         self._library = library
         self._wiki = wiki
 
+    @property
+    def library(self) -> Any:
+        """The search the Wiki was put beside, which a question narrowed to kinds reads alone."""
+        return self._library
+
     async def passages(
         self, question: str, *, entitlement: EntitlementSet, now: datetime
     ) -> TypedResult[KnowledgePassage]:

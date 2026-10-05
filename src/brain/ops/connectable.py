@@ -16,9 +16,11 @@ type and a credential in the shape its vendor issues it**, and this install can 
 Xero is pinned to one organisation, HubSpot to one account and Freshdesk to one helpdesk and the
 one department that reads it. Google Drive's form names one folder, the department it belongs to
 and the person answerable for it, with a service account's key file, and the Laravel database's
-names one schema's views, each with the visibility rule written by whoever read its definition,
-with a read-only user's name and password; both are declared and neither is offered until this
-install can read them. Each connection class already refuses a setting that narrows nothing.
+names its server, one schema's views, each with the visibility rule written by whoever read its
+definition, with a read-only user's name and password. Both were declared before either could be
+read; Laravel is offered since M11.6.1 because it now reads, by the rule below and nothing else,
+and Drive is listed until it does. Each connection class already refuses a setting that narrows
+nothing.
 Lark's Base and Wiki are connected on Connect Lark, which says so, and the screen shows that
 sentence rather than leaving them out.
 
@@ -64,10 +66,12 @@ from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import (
+    DEFAULT_SETTING_CHARS,
     ConnectorDeclaration,
     CredentialShape,
     Setting,
     SettingRefusedError,
+    WriteGrant,
     shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
@@ -113,8 +117,9 @@ A_SETTING_IS_REFUSED_BY_THE_CONNECTOR_THAT_WOULD_USE_IT: Final = (
 #: The role a connected source's key is read under when something runs the connector.
 READING_ROLE: Final = VaultRole.WORKER
 
-#: The longest setting accepted, which is `ConnectorScope`'s own ceiling on a selector.
-MAX_SETTING_CHARS: Final = 200
+#: The longest setting accepted unless the setting says otherwise, which is `ConnectorScope`'s own
+#: ceiling on a selector. The declaration's own default, named here for the screens that read it.
+MAX_SETTING_CHARS: Final = DEFAULT_SETTING_CHARS
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -138,6 +143,8 @@ class Connectable:
     guide: tuple[GuideStep, ...] = ()
     #: How the credential is asked for and kept (M11.7.7).
     credential_shape: CredentialShape = CredentialShape.KEY
+    #: The writes it can be allowed to make, each with a key of its own (M11.7.3).
+    writes: tuple[WriteGrant, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -224,6 +231,7 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
             build=one.console.build,
             guide=one.guide,
             credential_shape=one.console.credential_shape,
+            writes=one.writes,
         )
         for name, one in declarations.items()
         if one.console is not None
@@ -295,13 +303,13 @@ def settings_problems(kind: Connectable, settings: Mapping[str, str]) -> tuple[S
         value = settings.get(one.name, "").strip()
         if not value:
             found.append(SettingProblem(field=one.name, code="blank", message=blank_sentence(one)))
-        elif len(value) > MAX_SETTING_CHARS:
+        elif len(value) > one.max_chars:
             found.append(
                 SettingProblem(
                     field=one.name,
                     code="too_long",
                     message=(
-                        f"That is longer than {MAX_SETTING_CHARS} characters, which is longer "
+                        f"That is longer than {one.max_chars} characters, which is longer "
                         f"than any {one.label.lower()}. Check what was copied."
                     ),
                 )

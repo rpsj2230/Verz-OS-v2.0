@@ -183,3 +183,7 @@ class CassetteFile:
     #: rather than inferred: a recording that dropped the header to match a connector would
     #: otherwise pass as a vendor that never sends one (`tests/invariants/test_cassettes.py`).
     wait_not_in_retry_after: str = ""
+    #: The connection settings these recordings were made under, laid over the connector's own
+    #: example settings when a test connects it to replay them: a folder or an account a recording
+    #: names, which a connection pinned elsewhere would refuse as outside its scope.
+    recorded_under: Mapping[str, str] = field(default_factory=dict)

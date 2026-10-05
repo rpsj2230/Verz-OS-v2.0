@@ -91,7 +91,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/knowledge/tasks": KNOWLEDGE_TASKS,
     },
   },
-  // One document's Dashboard: the record with every act offered, and the reader's task on it.
+  // One document's Dashboard: the record with every act offered, the reader's task on it, and
+  // whether the website widget answers from it, with who made it public.
   "/library/:itemId": {
     address: `/library/${UNBROKEN}`,
     signedIn: true,
@@ -99,6 +100,15 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     answers: {
       [`/api/v1/knowledge/items/${UNBROKEN}`]: KNOWLEDGE_DETAIL,
       "/api/v1/knowledge/tasks": KNOWLEDGE_TASKS,
+      [`/api/v1/knowledge/items/${UNBROKEN}/public`]: {
+        item_id: UNBROKEN,
+        public: true,
+        marked_by: UNBROKEN,
+        marked_by_name: UNBROKEN,
+        marked_at: "2019-03-04T09:00:00Z",
+        may_change: true,
+        says: null,
+      },
     },
   },
   // One document's Profile: its record, the text behind a press, and Advanced. The About view reads

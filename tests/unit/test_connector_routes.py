@@ -84,15 +84,18 @@ from brain.ops.connectable import (
     manifest_for,
 )
 from brain.ops.connector_admin import (
+    ALLOWING_A_WRITE,
     CONNECTED,
     CONNECTING_A_SOURCE,
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
     EDITED,
     KEY_REPLACED,
+    NO_SUCH_WRITE,
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
+    WRITE_ALLOWED,
 )
 from brain.ops.connector_probe import (
     TEST_WAITING,
@@ -736,9 +739,11 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
     for one in body["connectable"]:
         keys = [step["key"] for step in one["steps"]]
         assert keys == [step.key for step in declared[one["name"]].guide]
+        # A source that takes no key (M11.7.4) asks for its settings alone.
+        key = [] if one["credential_shape"] == "none" else ["credential"]
         assert one["steps"][-1]["asks"] == [
             *(setting["name"] for setting in one["settings"]),
-            "credential",
+            *key,
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
     # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
@@ -1450,6 +1455,48 @@ def test_a_replaced_key_is_a_credential_write_and_changes_no_connection(
     attach(app, records, None)
     assert post(client, "u_admin", key_path("xero"), {"credential": KEY}).status_code == 409
     assert len(vault.written) == 1
+
+
+def test_a_write_grants_key_goes_to_its_own_slot_and_the_screen_says_the_write_is_allowed(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**A write is a grant of its own (M11.7.3).** The key route naming Cloudflare's DNS change
+    grant keeps the key in that grant's slot and never the read key's, recorded as a credential
+    write by the person, and says the write is now allowed; a grant the source does not declare is
+    a problem on the field, and nothing is written. The screen lists the grant on the form and says
+    which grants this install has given: none while the slot is empty, this one once it holds a
+    key. Delete this and the second key can land in the read key's slot, or the screen can say a
+    write is allowed that is not."""
+    records, vault, writes = ChangingRecords((a_connection("cloudflare"),)), Vault(), Recorded()
+    attach(app, records, vault, writes)
+    body = {"credential": KEY, "grant": "dns_changes"}
+
+    answered = post(client, "u_admin", key_path("cloudflare"), body)
+    unknown = post(client, "u_admin", key_path("cloudflare"), {**body, "grant": "zone_changes"})
+
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["told"] == WRITE_ALLOWED
+    assert vault.written == [("connector_keys/cloudflare_dns_changes", {KEY_FIELD: KEY})]
+    assert [one["slot"] for one in writes.records] == ["connector_keys/cloudflare_dns_changes"]
+    assert unknown.status_code == 422
+    assert [(one["field"], one["code"], one["message"]) for one in unknown.json()["problems"]] == [
+        ("grant", "unknown", NO_SUCH_WRITE)
+    ]
+    assert len(vault.written) == 1 and KEY not in answered.text
+    form = next(
+        one for one in get(client, "u_admin").json()["connectable"] if one["name"] == "cloudflare"
+    )
+    assert [one["name"] for one in form["writes"]] == ["dns_changes"]
+    assert "DNS Edit" in form["writes"][0]["credential_hint"]
+    assert form["writes"][0]["confirmation"] == ALLOWING_A_WRITE
+    empty = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    attach(app, records, held_vault())
+    held = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    assert (empty["writes_allowed"], held["writes_allowed"]) == ([], ["dns_changes"])
 
 
 # ------------------------------------------------------------------ testing a connection

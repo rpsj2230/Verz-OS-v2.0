@@ -15,9 +15,12 @@ poster answering with a recorded token; and the key arrives through a fake lease
 is the worker's whole path: the attempt reads to an end, keeps the index rows the recording holds,
 and never puts a key file into a header.
 
-**A reading this cannot drive from its recordings is named in `NOT_DRIVEN` with the reason**, and
-none is today. Xero (a bearer key) and Google Analytics (a key file exchanged for a token) are the
-anchors, so a discovery that found nothing fails rather than passing by having nothing to drive.
+**A reading this cannot drive from its recordings is named in `NOT_DRIVEN` with the reason**:
+Cloudflare's DNS records, listed under every zone its zones page names when only one zone's are
+recorded; the domains source, routed to each registry; and the Laravel database, read as views over
+a database connection. Xero (a bearer key) and Google Analytics (a key file exchanged for a token)
+are the anchors, so a discovery that found nothing fails rather than passing by having nothing to
+drive.
 
 Task ids: M11.1.6, M11.7.1
 """
@@ -37,13 +40,13 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from brain.connectors.declaration import KeyScheme
+from brain.connectors.declaration import KeyScheme, ViewReading
 from brain.connectors.manifest import manifest_digest
 from brain.ops.connectable import manifest_for
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection
 from brain.ops.connector_sync import READINGS, SyncOutcome, plan_for
-from brain.ops.connector_sync_run import SourceAnswer, attempt
+from brain.ops.connector_sync_run import ConnectorKeyAbsentError, SourceAnswer, attempt
 from brain.ops.connector_sync_store import LiveConnection
 from brain.ops.secrets import SecretRef
 from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind
@@ -65,7 +68,21 @@ PUBLIC: Final = "93.184.216.34"
 #: Readings this test cannot drive from their recordings, by name, with the reason. A reading
 #: routed by its settings, listed under another source's recordings or read through a database
 #: view rather than a GET belongs here, said in words, rather than being silently skipped.
-NOT_DRIVEN: Final[Mapping[str, str]] = {}
+NOT_DRIVEN: Final[Mapping[str, str]] = {
+    "cloudflare": (
+        "a listed-under reading: its DNS records are walked under every zone the zones page "
+        "names, and the recordings hold one zone's records, so the second zone's call has no "
+        "recording to answer it"
+    ),
+    "domains": (
+        "a routed reading: each domain is read from the registry its suffix names, chosen from the "
+        "RDAP server list, so the address it asks is not a path any recording was made at"
+    ),
+    "laravel": (
+        "a view reading, read over a database connection through the bounded executor rather "
+        "than by a GET, so no HTTP recording can answer it; its executor is driven by test_laravel"
+    ),
+}
 
 #: Which recording answers a call when several share its path: a page that ends, then one record,
 #: then a full page, which the reading follows until the page cap.
@@ -101,6 +118,9 @@ class Leased:
     def key(self) -> str:
         return self.given
 
+    def user(self) -> str:
+        raise ConnectorKeyAbsentError("a key slot keeps no user")
+
     def close(self, now: datetime) -> LeaseOutcome:
         self.closed.append(now)
         return LeaseOutcome.REVOKED
@@ -117,6 +137,13 @@ class Keys:
         del now
         self.asked.append(ref)
         return Leased(self.given)
+
+
+def scheme(name: str) -> KeyScheme:
+    """How `name`'s reading presents its key. A view reading presents none and is not driven."""
+    reading = READINGS[name]
+    assert not isinstance(reading, ViewReading), f"{name} is read as views, not by a GET"
+    return reading.key_scheme()
 
 
 def path_of(request: str) -> tuple[str, str]:
@@ -235,7 +262,7 @@ def key_file() -> str:
 
 def drive(name: str, key_file: str) -> tuple[Any, Recorded, Poster, Sessions]:
     """One attempt at `name`'s connection, as the worker makes it, answered from its recordings."""
-    settings = example_settings(name)
+    settings = {**example_settings(name), **FILES[name].recorded_under}
     connection = Connection(
         connector=name,
         settings=settings,
@@ -245,7 +272,7 @@ def drive(name: str, key_file: str) -> tuple[Any, Recorded, Poster, Sessions]:
     )
     plan = plan_for(connection, last=None, now=NOW)
     assert plan.refused == "", (name, plan.refused)
-    google = READINGS[name].key_scheme() is KeyScheme.GOOGLE_SERVICE_ACCOUNT
+    google = scheme(name) is KeyScheme.GOOGLE_SERVICE_ACCOUNT
     caller, poster, sessions = Recorded(name), Poster(name), Sessions()
     done = asyncio.run(
         attempt(
@@ -285,7 +312,7 @@ def test_every_shipped_reading_is_read_from_its_recordings_through_the_workers_a
     assert done.outcome is SyncOutcome.SYNCED, (name, done.detail)
     assert caller.answered, f"{name}: no call was answered by a recording"
     assert done.records >= 1 and sessions.executed, (name, caller.answered)
-    google = READINGS[name].key_scheme() is KeyScheme.GOOGLE_SERVICE_ACCOUNT
+    google = scheme(name) is KeyScheme.GOOGLE_SERVICE_ACCOUNT
     token = recorded_token(name).body["access_token"]
     for url, headers in caller.asked:
         sent = " ".join(headers.values())
@@ -303,6 +330,6 @@ def test_the_discovery_drives_a_bearer_source_and_a_google_source() -> None:
     driven = set(READINGS) - set(NOT_DRIVEN)
 
     assert {"xero", "google_analytics"} <= driven
-    assert READINGS["xero"].key_scheme() is KeyScheme.BEARER
-    assert READINGS["google_analytics"].key_scheme() is KeyScheme.GOOGLE_SERVICE_ACCOUNT
+    assert scheme("xero") is KeyScheme.BEARER
+    assert scheme("google_analytics") is KeyScheme.GOOGLE_SERVICE_ACCOUNT
     assert all(name in READINGS for name in NOT_DRIVEN)

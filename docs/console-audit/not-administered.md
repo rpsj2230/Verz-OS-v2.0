@@ -17,6 +17,7 @@
 | `POST /api/v1/answer` | The answer lane behind Ask, which writes no row an administrator manages. |
 | `POST /api/v1/automation/tool-call` | Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part. |
 | `POST /api/v1/threads/{thread_id}/corrections` | A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage. |
+| `POST /api/v1/widget/questions` | Where a website visitor's question is answered from knowledge marked public, which writes nothing; what is public is decided on each document's page, by the marking route. |
 | `POST /api/v1/widget/sessions` | Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting. |
 
 **Every write to a route no area claims, followed to the system.**

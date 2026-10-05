@@ -36,6 +36,6 @@ def reading_of(source: str) -> Callable[..., Any]:
     return found
 
 
-def answered(source: str, *reply: Any) -> Verification:
+def answered(source: str, *reply: Any, **named: Any) -> Verification:
     """The verdict `source`'s read-back reading gives on this reply."""
-    return verdict(reading_of(source)(*reply))
+    return verdict(reading_of(source)(*reply, **named))

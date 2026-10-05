@@ -36,26 +36,29 @@ expires_at > now RETURNING`, so of two presentations of one code exactly one get
 back. `keep` shortens every unused code the person holds for the channel to now before it inserts
 the new one, which is `brain.channels.binding.A_NEWER_CODE_ENDS_THE_OLDER_ONE`.
 
-**A Lark binding keeps the person's address, and only a Lark binding, and only their own
-(needs-rupash 118).** `StoredAddresses.remember` writes `channel_address` on the live row whose
-fingerprint the address digests to, so the column can only ever hold the identity the row already
-stands for, and only on a channel `ADDRESS_KEPT_ON` names: the one where a card is sent to a person
-nobody asked us to write to. It is written when a verified event from that person arrives, the code
-that binds them or any later message, and a binding made before `0166` gains it the next time its
-person writes; nothing is backfilled, because nothing holds an address to backfill from. Every
-retirement here clears it in the same statement, so an unbound or replaced account keeps no
-address, and `brain.ops.erasure_store.CLEARED` clears it for an erased person. It is read by one
-function, `addressed`, for sending a card, and selected by no read a screen serves. See
-`AN_ADDRESS_IS_KEPT_ONLY_WHERE_A_CARD_IS_SENT_UNASKED`.
+**A binding keeps the person's address on a channel whose identity is their own, and only
+their own (needs-rupash 118).** `StoredAddresses.remember` writes `channel_address` on the live row
+whose fingerprint the address digests to, so the column can only ever hold the identity the row
+already stands for, and only on a channel `ADDRESS_KEPT_ON` names: Lark, Slack and email, where a
+person is written to unasked, by a card the moment an approval is raised or by something told
+later. A webhook keeps none: see `A_WEBHOOK_ADDRESS_IS_A_SYSTEM_S_AND_NOT_A_PERSON_S`. It is written
+when a verified event from that person arrives, the code that binds them or any later message, and a
+binding made before `0166` gains it the next time its person writes; nothing is backfilled, because
+nothing holds an address to backfill from. Every retirement here clears it in the same statement,
+so an unbound or replaced account keeps no address, and `brain.ops.erasure_store.CLEARED` clears it
+for an erased person. It is read by two functions, `addressed` for sending a card and `last_used`
+for telling one person something later, and selected by no read a screen serves. See
+`AN_ADDRESS_IS_KEPT_ONLY_WHERE_A_PERSON_IS_WRITTEN_TO_UNASKED` and
+`THE_CHANNEL_LAST_USED_IS_KEPT_TO_THE_HOUR`.
 
-Task ids: M10.3.1, M10.3.2, M10.3.4, M10.3.5
+Task ids: M10.3.1, M10.3.2, M10.3.4, M10.3.5, M8.3.4
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 
 from sqlalchemy import func, insert, or_, select, text, update
@@ -96,17 +99,39 @@ A_BIND_READS_AND_WRITES_UNDER_ONE_LOCK: Final = (
     "each retire it, and both stay live, which is the second account nobody notices."
 )
 
-#: Why an address is kept on a Lark binding and on no other.
-AN_ADDRESS_IS_KEPT_ONLY_WHERE_A_CARD_IS_SENT_UNASKED: Final = (
+#: Why an address is kept on a person's own channel and on no other.
+AN_ADDRESS_IS_KEPT_ONLY_WHERE_A_PERSON_IS_WRITTEN_TO_UNASKED: Final = (
     "A binding keeps the digest of a chat identity so a sender can be looked up and nobody can "
     "read a phone book out of the table. The owner decided that an approval card reaches the "
-    "approver in Lark the moment it is raised (needs-rupash 118), which needs an address, so a "
-    "Lark binding keeps its person's open id beside the digest: only one whose digest is the "
-    "row's own, cleared when the binding is retired or the person erased, and shown on no screen."
+    "approver the moment it is raised (needs-rupash 118), which needs an address, and delivery is "
+    "channel-agnostic (items 125 and 126), so the decision covers every channel whose identity is "
+    "a person's own: Lark, Slack and email. A binding there keeps its person's address beside "
+    "the digest: only one whose digest is the row's own, cleared when the binding is retired or "
+    "the person erased, and shown on no screen."
 )
 
-#: The channels a binding keeps its person's address on: where a card is sent unasked.
-ADDRESS_KEPT_ON: Final[frozenset[Channel]] = frozenset({Channel.LARK})
+#: Why a webhook binding keeps no address.
+A_WEBHOOK_ADDRESS_IS_A_SYSTEM_S_AND_NOT_A_PERSON_S: Final = (
+    "A webhook's identity is the calling system's endpoint, not a person, and a message sent to "
+    "it later is that system's business: it would reach whatever the caller runs, which is not the "
+    "person the Brain would be writing to. So a webhook binding keeps no address, and nothing is "
+    "ever sent to one unasked."
+)
+
+#: The channels a binding keeps its person's address on: those whose identity is a person's own.
+ADDRESS_KEPT_ON: Final[frozenset[Channel]] = frozenset({Channel.LARK, Channel.SLACK, Channel.EMAIL})
+
+#: How fresh a kept address's `updated_at` is held, as the mark of the channel last used.
+LAST_USE_IS_KEPT_TO: Final = timedelta(hours=1)
+
+#: Why the channel last used is read off the row's own `updated_at`, to the hour.
+THE_CHANNEL_LAST_USED_IS_KEPT_TO_THE_HOUR: Final = (
+    "Something told later goes to the channel its person last wrote on, which is where they are "
+    "reading. The binding already has updated_at, so remember writes it when the address changes "
+    "and when the last write is more than an hour old: a person writing every minute writes the "
+    "row once an hour, and the channel they last used is known to within that hour, with no "
+    "column and no write per message."
+)
 
 #: The prefix of the advisory lock key a bind and an unbind take, so no other lock collides.
 LOCK_PREFIX: Final = "channel_binding"
@@ -365,10 +390,11 @@ def _retire(binding: Binding) -> Any:
 
 @dataclass(frozen=True)
 class StoredAddresses:
-    """Where a bound person's own Lark address is kept and read.
+    """Where a bound person's own address is kept and read, on a channel `ADDRESS_KEPT_ON` names.
 
-    `brain.channels.inbound.AddressBook`, and what `brain.approval_cards.send_raised` reads. See
-    `AN_ADDRESS_IS_KEPT_ONLY_WHERE_A_CARD_IS_SENT_UNASKED`.
+    `brain.channels.inbound.AddressBook`, what `brain.approval_cards.send_raised` reads, and what
+    `brain.channels.later.tell` reads for the channel a person last used. See
+    `AN_ADDRESS_IS_KEPT_ONLY_WHERE_A_PERSON_IS_WRITTEN_TO_UNASKED`.
     """
 
     sessions: async_sessionmaker[AsyncSession]
@@ -392,13 +418,42 @@ class StoredAddresses:
                 # Only the row this identity is the fingerprint of: an address can never be kept
                 # on somebody else's binding, whatever called this.
                 PrincipalIdentityRow.identity_hash == identity_hash(channel, identity),
-                PrincipalIdentityRow.channel_address.is_distinct_from(identity),
+                # A changed address, or the mark of the channel last used gone an hour stale. See
+                # THE_CHANNEL_LAST_USED_IS_KEPT_TO_THE_HOUR.
+                or_(
+                    PrincipalIdentityRow.channel_address.is_distinct_from(identity),
+                    PrincipalIdentityRow.updated_at < func.now() - LAST_USE_IS_KEPT_TO,
+                ),
             )
             .values(channel_address=identity, updated_at=func.now())
         )
         async with self.sessions() as session, session.begin():
             changed = await session.execute(keep)
         return bool(getattr(changed, "rowcount", 0) == 1)
+
+    async def last_used(self, principal_id: str) -> tuple[Channel, str] | None:
+        """The channel this person last wrote on and their address there, or None.
+
+        Among their live bindings on a channel `ADDRESS_KEPT_ON` names that hold an address, the
+        one whose row was written last, which `remember` keeps to the hour. None for somebody who
+        has linked no such channel, or has not written since `0166`: nothing is sent to them.
+        """
+        query = (
+            select(PrincipalIdentityRow.channel, PrincipalIdentityRow.channel_address)
+            .where(
+                *_LIVE_CHAT,
+                PrincipalIdentityRow.principal_id == principal_id,
+                PrincipalIdentityRow.channel.in_(sorted(one.value for one in ADDRESS_KEPT_ON)),
+                PrincipalIdentityRow.channel_address.is_not(None),
+            )
+            .order_by(PrincipalIdentityRow.updated_at.desc(), PrincipalIdentityRow.channel)
+            .limit(1)
+        )
+        async with self.sessions() as session, session.begin():
+            row = (await session.execute(query)).first()
+        if row is None or not row[1]:
+            return None
+        return Channel(row[0]), str(row[1])
 
     async def addressed(self, channel: Channel) -> tuple[tuple[str, str], ...]:
         """Every live binding on this channel holding an address: the person and the address.

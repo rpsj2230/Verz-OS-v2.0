@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**22 items are open: 142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**27 items are open: 152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -13,6 +13,120 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 152. Lark Base and Lark Wiki are connected through Connect Lark, not this list
+
+**In plain terms:** these two are not on the Connectors list's Connect buttons, because their records
+and pages are read live and never synced. In the console open **Knowledge and data**,
+**Connectors**, and press **Connect Lark**, which creates the Lark app, tests it, and switches on
+knowledge from one Base and from the shared wiki spaces. If Connect Lark is already done on your
+install, nothing more is needed here. Tell me "connected Lark" if you run it now and I prove it on
+your install.
+
+## 146. Connect Domains and hosting (ready now)
+
+**In plain terms:** the Brain can now say when each client domain expires, who its registrar is and
+whether its site answers. It needs no key: a domain's registry publishes that to anyone. Only the
+domains you list are ever looked up. In the console open **Knowledge and data**, **Connectors**,
+**Domains and hosting**, **Connect**:
+
+1. **Gather the domains.** List every client domain you look after, up to two hundred.
+2. **Choose the department.** Pick the one department whose people may be told about them.
+3. **Connect it.** Type the domains, separated by commas or new lines, and that department's short
+   name, and press **Connect Domains and hosting**. No key is asked for.
+4. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:domain` and the facts they may be told (expiry, registrar, whether the site answers),
+   scoped to that department, with a reason.
+
+A domain whose registry publishes nothing (some country domains) is answered as that rather than
+guessed. Tell me "connected Domains" afterwards and I prove it on your install.
+
+## 145. Connect Cloudflare (ready now)
+
+**In plain terms:** the Brain can now answer about your Cloudflare zones and DNS records, and read a
+record's content and a zone's security events live. It reads with a token that can only read. A DNS
+change is only ever prepared for a person to approve; sending an approved change needs a second
+token, and that part is optional. In the console open **Knowledge and data**, **Connectors**,
+**Cloudflare**, **Connect**:
+
+1. **Make a read-only token.** In the Cloudflare dashboard open **My Profile**, **API Tokens**,
+   **Create Token**, **Create Custom Token**. Give it exactly three permissions: **Zone Read**, **DNS
+   Read** and **Analytics Read**. Nothing marked Edit or Write, and never the Global API Key.
+2. **Limit it to one account and copy it.** Under **Zone Resources** choose **Include**, **All zones
+   from an account**, and your account. **Continue to summary**, **Create Token**, and copy the token:
+   Cloudflare shows it once.
+3. **Copy the account's id.** On the account's **Overview** page, copy **Account ID** (32
+   characters).
+4. **Connect it.** On the console's last step type the account id, the short name of the department
+   whose people may be told its zones and records, paste the token and press **Connect Cloudflare**.
+5. **Optional, approved DNS changes.** Only if you want an approved change sent by the Brain rather
+   than made by hand: make a second custom token with one permission, **DNS Edit**, over the same
+   account's zones, and on the Cloudflare connector's page use **Allow approved DNS changes** to paste
+   it. It sits in its own vault slot and is used only for a change a person in that department
+   approved.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:zone` and `read:dns_record` (and the record fields they may see, such as its content),
+   scoped to that department, with a reason.
+
+Tell me "connected Cloudflare" afterwards and I prove it on your install.
+
+## 144. Connect Search Console (ready now)
+
+**In plain terms:** the Brain can now answer about one verified site's clicks, impressions, top
+queries and pages and sitemap problems, for any range in the last sixteen months. It reads as a
+service account with restricted permission on that one site, keeps only the site's name, and reads
+every figure from Google when asked. The service account made for item 143 can be reused. In the
+console open **Knowledge and data**, **Connectors**, **Search Console**, **Connect**:
+
+1. **Use or make a service account.** In Google Cloud console, **IAM & Admin**, **Service Accounts**:
+   use the one from item 143, or **Create service account** with **no role** and no domain-wide
+   delegation.
+2. **Switch on the API.** **APIs & Services**, **Library**, search for **Google Search Console API**,
+   **Enable**.
+3. **Make its key file** (skip if you reuse item 143's and still have its file): the account,
+   **Keys**, **Add key**, **Create new key**, **JSON**, **Create**.
+4. **Add it to the one site.** In Search Console choose the verified property, **Settings**, **Users
+   and permissions**, **Add user**: paste the service account's email address and choose
+   **Restricted**. No other property.
+5. **Connect it.** On the console's last step type the property exactly as Search Console's property
+   list shows it (a domain property starts with sc-domain:), the short name of the department whose
+   people may be told its figures, choose the key file and press **Connect Search Console**.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:search_site` and the figures they may see, scoped to that department, with a reason.
+
+Tell me "connected Search Console" afterwards and I prove it on your install.
+
+## 143. Connect Google Analytics (ready now)
+
+**In plain terms:** the Brain can now answer "how many sessions did the site have last month" from
+one Google Analytics property. It reads as a Google service account that can only view that one
+property, keeps only the property's name, and reads every figure from Google when somebody asks. In
+the console open **Knowledge and data**, **Connectors**, **Google Analytics**, **Connect**, which
+shows each step:
+
+1. **Make a service account.** In Google Cloud console open **IAM & Admin**, **Service Accounts**,
+   **Create service account** (the console's step links to it). Name it after the Brain and give it
+   **no role**. Never tick domain-wide delegation.
+2. **Switch on two APIs.** In the same project open **APIs & Services**, **Library**: search for
+   **Google Analytics Data API** and press **Enable**, then search for **Google Analytics Admin API**
+   and press **Enable**.
+3. **Make its key file.** Back in **Service Accounts**, open the account, **Keys**, **Add key**,
+   **Create new key**, **JSON**, **Create**. A key file downloads; keep it only until step 6.
+4. **Let it view the one property.** In Google Analytics open **Admin**, choose the property,
+   **Property access management**, the plus, **Add users**: paste the service account's email
+   address (it is on the account's page in Google Cloud) and give it **Viewer**. Nothing else.
+5. **Copy the property's id.** Still in **Admin**, **Property details**: copy the **Property ID**,
+   which is a number.
+6. **Connect it.** Back on the console's last step type the **Property ID** from step 5, the short
+   name of the one department whose people may be told its figures (as **People and access**,
+   **Departments** shows it), choose the key file from step 3 and press **Connect Google
+   Analytics**. The key file goes to the vault and is never shown again.
+7. **Give people the read.** In **People and access**, **People**, open each person who should be
+   told the figures and press **Grant a capability**: choose `read:analytics_property` and the figures
+   they may see (each is its own grant, such as the last 28 days' sessions), the scope of that
+   department, write a reason and save.
+
+Tell me "connected Google Analytics" afterwards and I prove it on your install.
 
 ## 142. Connect WhatsApp (ready now)
 
@@ -934,6 +1048,9 @@ What is being built:
 2. **The card is sent to the approver the moment the approval is raised**, in their own Lark chat.
    Whether pressing it decides the approval is item 117's setting.
 3. The same stored address is what signing in with Lark (item 115, option A) will use later.
+
+The decision is applied to every channel that carries a person's own address (Lark, Slack and
+email), because items 125 and 126 made delivery channel-agnostic.
 
 **What you do:** nothing.
 

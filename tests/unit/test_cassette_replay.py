@@ -206,9 +206,11 @@ def test_the_exemptions_name_connectors_and_kinds_that_exist() -> None:
     """The guard on the lists above: an exemption naming a typo exempts nothing and reads as a
     considered decision.
 
-    Delete this and `NOT_RECORDABLE` can quietly outlive the connector it described."""
+    Delete this and `NOT_RECORDABLE` can quietly outlive the connector it described. No
+    projection has been exempt since 2026-09-30, when Google Drive's listing gained the reading
+    that reduces its permissions to a verdict, so the second list may be empty."""
     names = _connector_names()
-    assert NOT_RECORDABLE and PROJECTION_NOT_REPLAYABLE
+    assert NOT_RECORDABLE
     assert {name for name, _ in NOT_RECORDABLE} <= names
     for (name, entity), _why in PROJECTION_NOT_REPLAYABLE.items():
         assert entity in _declared(name, _manifests()[name])[1]
