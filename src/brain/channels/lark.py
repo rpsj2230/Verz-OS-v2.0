@@ -69,7 +69,21 @@ shapes are the vendor's documented ones as a generated SDK records them (`chyroc
 `api_message_send.go`, `api_message_send_ephemeral.go`, `api_chat_member_get_list.go`,
 `api_bot_info.go`), and `judge` reads Lark's `code`, which is where it refuses inside a 200.
 
-Task ids: M10.2.2, M10.2.5, M10.2.6, M10.2.1, M10.6.1
+**An approval card is posted, pressed and replaced on the same address (M10.2.3, M10.2.4).**
+`card_request` posts an interactive card whose controls carry `brain.channels.cards.press_value`,
+an Approve button and a Reject choice of the reasons the console offers. A press arrives as a
+`card.action.trigger` callback, signed, encrypted and tokened exactly as an event is, which is how
+Lark's server SDK dispatches both (`lark_oapi/event/callback/model/p2_card_action_trigger.py`:
+an `operator` with the presser's open id, an `action` with the control's `value` and any `option`,
+and a `context` naming the card's `open_message_id`). `read` turns one into a `CardPress` beside an
+event of its own, keyed on the callback's `event_id`, so a replayed press is refused by the claim
+as a replayed message is. The press is answered in the callback's own body, a toast and, for a
+press that decided nothing, the card replaced by a closed one, which costs no call against the
+card ceiling; a card replaced after a decision goes by `PATCH /open-apis/im/v1/messages/{id}`,
+the address `edit_address` names, as an ordinary reply that `deliver` sends once and records.
+Both cards declare `update_multi`, which Lark requires of a card it is asked to update.
+
+Task ids: M10.2.2, M10.2.5, M10.2.6, M10.2.1, M10.6.1, M10.2.3, M10.2.4
 """
 
 from __future__ import annotations
@@ -93,6 +107,8 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from brain.channels.adapter import (
     BOT_ID,
     Arrived,
+    CardAction,
+    CardPress,
     ChannelCapabilities,
     Conversation,
     DeliveryRefusedError,
@@ -804,6 +820,11 @@ SIGNATURE_HEADER: Final = "x-lark-signature"
 MESSAGE_RECEIVED: Final = "im.message.receive_v1"
 URL_VERIFICATION: Final = "url_verification"
 
+#: The callback a press on a card arrives as, and what its claim's key begins with, so a press and
+#: a message can never share a dedupe key.
+CARD_PRESSED: Final = "card.action.trigger"
+PRESS_PREFIX: Final = "press."
+
 #: The tenant fields the Lark channel's record holds: the app, the platform it was made on, and
 #: the bot's own open id, which is how a group message is known to be for it.
 APP_ID_FIELD: Final = "app_id"
@@ -823,10 +844,27 @@ MAX_CARD_BYTES: Final = 30 * 1024
 #: How many people one page of a chat's members holds. Lark's documented maximum.
 MEMBERS_PAGE: Final = 100
 
-#: The three address kinds a reply is sent to, in the `to` string the ledger keys on.
+#: How many groups one page of the bot's groups holds. Lark's documented maximum.
+CHATS_PAGE: Final = 100
+
+#: Lark's code for a token without the scope a call needs.
+MISSING_SCOPE_CODE: Final = 99991672
+
+#: Said when Lark refuses the group list for the scope: what to add, in Lark's own words.
+CANNOT_LIST_GROUPS: Final = (
+    "The Lark app may not list the groups its bot is in. Add the im:chat:read scope under "
+    "Permissions & Scopes and release a new version of the app."
+)
+
+#: The three address kinds a reply is sent to, in the `to` string the ledger keys on, and the
+#: fourth, a card already sent, which a reply to replaces rather than follows.
 ROOM_ADDRESS: Final = "chat"
 SENDER_ADDRESS: Final = "user"
 ASIDE_ADDRESS: Final = "aside"
+EDIT_ADDRESS: Final = "edit"
+
+#: What a closed card's header says, whoever closed it and however.
+CLOSED_TITLE: Final = "Approval"
 
 
 def _refused() -> WebhookRefusedError:
@@ -1000,6 +1038,118 @@ def card_for(text: str) -> dict[str, Any]:
     }
 
 
+def _plain(text: str) -> dict[str, str]:
+    return {"tag": "plain_text", "content": text}
+
+
+def _control(action: CardAction) -> dict[str, Any]:
+    """One control: a button, or a choice of options when the action offers several."""
+    if not action.options:
+        return {
+            "tag": "button",
+            "text": _plain(action.text),
+            "type": "primary",
+            "value": dict(action.value),
+        }
+    return {
+        "tag": "select_static",
+        "placeholder": _plain(action.text),
+        "value": dict(action.value),
+        "options": [{"text": _plain(words), "value": value} for value, words in action.options],
+    }
+
+
+def approval_card(text: str, actions: Sequence[CardAction]) -> dict[str, Any]:
+    """An approval card: `text` as plain text, then its controls, when it has any (M10.2.3).
+
+    Plain text for `card_for`'s reason, so the label a payload carries survives exactly as the one
+    renderer wrote it. `update_multi` because Lark updates only a card that declares it.
+    """
+    elements: list[dict[str, Any]] = [{"tag": "div", "text": _plain(text)}]
+    if actions:
+        elements.append({"tag": "action", "actions": [_control(one) for one in actions]})
+    return {
+        "config": {"wide_screen_mode": True, "update_multi": True},
+        "header": {"title": _plain(CLOSED_TITLE)},
+        "elements": elements,
+    }
+
+
+def closed_card(text: str) -> dict[str, Any]:
+    """A card with nothing left to press: `text` alone, in the shape the open card had."""
+    return {
+        "config": {"wide_screen_mode": True, "update_multi": True},
+        "header": {"title": _plain(CLOSED_TITLE)},
+        "elements": [{"tag": "div", "text": _plain(text)}],
+    }
+
+
+def _strings(node: object, what: str) -> dict[str, str]:
+    """A mapping of strings to strings, or `ValueError`: a press value is identifiers only."""
+    if not isinstance(node, Mapping) or not all(
+        isinstance(key, str) and isinstance(value, str) for key, value in node.items()
+    ):
+        raise ValueError(f"{what} is not a set of identifiers")
+    return {str(key): str(value) for key, value in node.items()}
+
+
+def _pressed_at(raw: object) -> datetime:
+    """A callback's `create_time`. Lark's reference writes it in microseconds for a card callback
+    where its message events use milliseconds, so the width says which; either is read."""
+    if not isinstance(raw, str) or not raw.isdigit():
+        raise ValueError("the callback has no create_time")
+    scale = 1_000_000 if len(raw) > 13 else 1000
+    try:
+        return datetime.fromtimestamp(int(raw) / scale, tz=UTC)
+    except (OverflowError, OSError) as exc:
+        raise ValueError("the callback's create_time is not a time") from exc
+
+
+def read_press(event: Mapping[str, Any]) -> Received:
+    """A `card.action.trigger` callback as a press, beside an event of its own (M10.2.3).
+
+    The event's id is the callback's `event_id` behind `PRESS_PREFIX`, so the claim refuses a
+    replay of the same callback; its sender is the presser's open id and it carries no text. A
+    reply to a press goes to the presser's own chat with the bot, never to where the card was.
+    `ValueError` for a callback missing any of what a press needs: its id, who pressed, the
+    control's value and the card's message.
+    """
+    header = event.get("header")
+    body = event.get("event")
+    if not isinstance(header, Mapping) or not isinstance(body, Mapping):
+        raise ValueError("a card callback has a header and an event")
+    event_id = header.get("event_id")
+    operator = body.get("operator")
+    action = body.get("action")
+    context = body.get("context")
+    if not isinstance(event_id, str) or not event_id:
+        raise ValueError("a card callback names its event")
+    if not isinstance(operator, Mapping) or not isinstance(action, Mapping):
+        raise ValueError("a card callback names who pressed and what")
+    open_id = operator.get("open_id")
+    message_id = context.get("open_message_id") if isinstance(context, Mapping) else None
+    if not isinstance(open_id, str) or not open_id:
+        raise ValueError("a card callback names who pressed")
+    if not isinstance(message_id, str) or not message_id:
+        raise ValueError("a card callback names the card it came from")
+    option = action.get("option")
+    return Received(
+        event=ChannelEvent(
+            channel=Channel.LARK,
+            external_id=f"{PRESS_PREFIX}{event_id}",
+            channel_identity=open_id,
+            text="",
+            received_at=_pressed_at(header.get("create_time")),
+        ),
+        reply_to=_address(SENDER_ADDRESS, open_id),
+        press=CardPress(
+            value=_strings(action.get("value"), "the pressed control's value"),
+            option=option if isinstance(option, str) else "",
+            message_id=message_id,
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class LarkWire:
     """`brain.channels.adapter.ChannelWire` for Lark. Holds no secret and opens nothing."""
@@ -1047,8 +1197,9 @@ class LarkWire:
     def read(self, arrived: Arrived) -> Received:
         """A received message as the gate's event, and the three places a reply may go.
 
-        Anything but `im.message.receive_v1` from a person is `ValueError`: no other event is
-        subscribed to, and a message another app sent is not a question anybody asked.
+        Anything but `im.message.receive_v1` from a person, or a press on a card, is `ValueError`:
+        no other event is subscribed to, and a message another app sent is not a question anybody
+        asked. A press is `read_press`'s.
         """
         try:
             event = _json_object(arrived.body)
@@ -1056,6 +1207,8 @@ class LarkWire:
             raise ValueError("an opened Lark event is a JSON object") from exc
         header = event.get("header")
         kind = header.get("event_type") if isinstance(header, Mapping) else None
+        if kind == CARD_PRESSED:
+            return read_press(event)
         if kind != MESSAGE_RECEIVED:
             raise ValueError(f"this channel reads {MESSAGE_RECEIVED} and nothing else")
         body = event.get("event")
@@ -1087,9 +1240,10 @@ class LarkWire:
     ) -> VendorRequest:
         """The send for one address, with the token exchange that authorises it beside it.
 
-        `chat:` posts to a conversation, `user:` sends to one person's own chat with the bot, and
-        `aside:` sends a card only that person sees inside a group. `ValueError` for an address
-        of no kind, a record short of what Lark needs, or a card larger than Lark takes.
+        `chat:` posts to a conversation, `user:` sends to one person's own chat with the bot,
+        `aside:` sends a card only that person sees inside a group, and `edit:` replaces the card
+        in a message already sent with `text` and nothing to press. `ValueError` for an address of
+        no kind, a record short of what Lark needs, or a card larger than Lark takes.
         """
         del now  # Lark stamps its own time; the parameter is the protocol's.
         kept = LarkSecret.parse(secret)
@@ -1103,6 +1257,19 @@ class LarkWire:
                 "msg_type": "text",
                 "content": json.dumps({"text": text}),
             }
+        elif kind == EDIT_ADDRESS and rest:
+            # A card already sent, replaced in place: the text becomes a card with nothing left
+            # to press, and the request is the one Lark takes to update a message it delivered.
+            card = closed_card(text)
+            if len(json.dumps(card).encode("utf-8")) > MAX_CARD_BYTES:
+                raise ValueError("this card is larger than a Lark card takes")
+            return VendorRequest(
+                url=f"{host}/open-apis/im/v1/messages/{quote(rest, safe='')}",
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                body=json.dumps({"content": json.dumps(card)}, separators=(",", ":")).encode(),
+                method="PATCH",
+                exchange=_exchange(host, tenant, kept),
+            )
         elif kind == ASIDE_ADDRESS and rest.count(":") == 1:
             chat_id, open_id = rest.split(":")
             url = f"{host}/open-apis/ephemeral/v1/send"
@@ -1122,6 +1289,56 @@ class LarkWire:
             body=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
             exchange=_exchange(host, tenant, kept),
         )
+
+    def card_request(
+        self,
+        *,
+        to: str,
+        text: str,
+        actions: tuple[CardAction, ...],
+        secret: str,
+        tenant: Mapping[str, str],
+    ) -> VendorRequest:
+        """An approval card posted to a conversation or to one person's chat with the bot.
+
+        `chat:` and `user:` only: an aside is a card only its reader sees inside a group, and a
+        control on it is a control in a room, so an approval card is never one. `ValueError` for
+        any other address, a record short of what Lark needs, or a card larger than Lark takes.
+        """
+        kept = LarkSecret.parse(secret)
+        host = _host(tenant)
+        kind, _, rest = to.partition(":")
+        if kind not in (ROOM_ADDRESS, SENDER_ADDRESS) or not rest:
+            raise ValueError(f"{to!r} is not an address this channel posts a card to")
+        card = approval_card(text, actions)
+        if len(json.dumps(card).encode("utf-8")) > MAX_CARD_BYTES:
+            raise ValueError("this card is larger than a Lark card takes")
+        id_type = "chat_id" if kind == ROOM_ADDRESS else "open_id"
+        payload = {"receive_id": rest, "msg_type": "interactive", "content": json.dumps(card)}
+        return VendorRequest(
+            url=f"{host}/open-apis/im/v1/messages?{urlencode({'receive_id_type': id_type})}",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            body=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            exchange=_exchange(host, tenant, kept),
+        )
+
+    def edit_address(self, message_id: str) -> str:
+        """Where a reply goes to replace the card in this message."""
+        return _address(EDIT_ADDRESS, message_id)
+
+    def person_address(self, identity: str) -> str:
+        """A person's own chat with the bot: `user:`, which `card_request` posts to by open id in
+        the body and names only as `receive_id_type` in the URL."""
+        return _address(SENDER_ADDRESS, identity)
+
+    def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:
+        """Lark's callback answer: a toast, and the card replaced when `closed` says with what."""
+        answer: dict[str, Any] = {
+            "toast": {"type": "success" if decided else "info", "content": told}
+        }
+        if closed:
+            answer["card"] = {"type": "raw", "data": closed_card(closed)}
+        return answer
 
     def judge(self, answer: VendorAnswer) -> CallOutcome:
         """Lark's `code` decides, because Lark refuses inside a 200.
@@ -1192,6 +1409,59 @@ class LarkWire:
         more = data.get("has_more") is True
         token = data.get("page_token")
         return frozenset(found), (token if more and isinstance(token, str) else "")
+
+    def conversations_request(
+        self, *, page: str, secret: str, tenant: Mapping[str, str]
+    ) -> VendorRequest:
+        """One page of the groups the bot has been added to (M38.3.3.1).
+
+        What a person chooses a destination from, so a group is picked and never typed. Needs
+        `brain.ops.lark_connect.CHAT_LIST_SCOPE`; an app without it is refused inside a 200, and
+        `conversations_page` says so.
+        """
+        kept = LarkSecret.parse(secret)
+        host = _host(tenant)
+        query = {"page_size": str(CHATS_PAGE)}
+        if page:
+            query["page_token"] = page
+        return VendorRequest(
+            url=f"{host}/open-apis/im/v1/chats?{urlencode(query)}",
+            headers={},
+            body=b"",
+            method="GET",
+            exchange=_exchange(host, tenant, kept),
+        )
+
+    def room_of(self, conversation: str) -> str:
+        """The address a message to one of the listed groups is sent to (M38.3.3.4)."""
+        return _address(ROOM_ADDRESS, conversation)
+
+    def conversations_page(self, answer: VendorAnswer) -> tuple[tuple[tuple[str, str], ...], str]:
+        """The groups on one page as (id, name), and the next page's token or empty.
+
+        `ValueError` for anything that is not a page, naming the scope when that is the refusal:
+        a list read from a failed answer would offer nothing and say nothing about why.
+        """
+        if _code(answer.body) == MISSING_SCOPE_CODE:
+            raise ValueError(CANNOT_LIST_GROUPS)
+        if self.judge(answer) is not CallOutcome.OK:
+            raise ValueError("Lark did not answer with the groups the bot is in")
+        data = _json_object(answer.body).get("data")
+        if not isinstance(data, Mapping):
+            raise ValueError("Lark's page of groups has no data")
+        items = data.get("items") or []
+        if not isinstance(items, list):
+            raise ValueError("Lark's page of groups is not a list")
+        found: list[tuple[str, str]] = []
+        for item in items:
+            chat_id = item.get("chat_id") if isinstance(item, Mapping) else None
+            if not isinstance(chat_id, str) or not chat_id:
+                raise ValueError("a group on Lark's page has no id")
+            name = item.get("name") if isinstance(item, Mapping) else None
+            found.append((chat_id, name if isinstance(name, str) and name.strip() else chat_id))
+        more = data.get("has_more") is True
+        token = data.get("page_token")
+        return tuple(found), (token if more and isinstance(token, str) else "")
 
 
 def _code(body: bytes) -> int | None:

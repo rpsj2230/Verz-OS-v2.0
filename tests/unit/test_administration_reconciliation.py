@@ -183,7 +183,11 @@ def test_the_first_administrator_holds_no_content_plane_and_approves_no_action()
     decisions = [
         one for one in GRANTED_AT_APPOINTMENT if one.split(":", 1)[0] not in {"read", "admin"}
     ]
-    assert decisions == list(GOVERNANCE) == ["approve:grant", "approve:knowledge.visibility"]
+    assert (
+        decisions
+        == list(GOVERNANCE)
+        == ["approve:grant", "approve:knowledge.visibility", "approve:knowledge.public"]
+    )
     assert not any(one.endswith(".*") for one in GRANTED_AT_APPOINTMENT)
     console = {one for one in OVERSIGHT if one.startswith(CONSOLE_CAPABILITY_PREFIX)}
     assert console == {

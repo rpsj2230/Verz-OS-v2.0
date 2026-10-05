@@ -20,6 +20,16 @@ should not have it. The column carries a check constraint pinning it to sixty-fo
 lowercase hex characters, so a raw number cannot be written there even by a hand-typed
 statement: the shape of the column refuses it, rather than a convention asking nicely.
 
+**Except, since needs-rupash 118, one address beside the digest where the owner asked for it.**
+The owner decided on 2026-09-29 that an approval card is sent to the approver the moment it is
+raised, which needs somewhere to send it, and the decision covers every channel whose identity is a
+person's own, because delivery is channel-agnostic. So `channel_address` holds the person's own
+address on Lark, Slack or email, and only that: written only with an address whose digest is the
+row's own `identity_hash`, only for the channels `brain.ops.binding_store.ADDRESS_KEPT_ON` names,
+cleared whenever the row is retired and by every erasure, and selected by no read a screen serves.
+The digest stays the only thing a sender is looked up by, and a table of addresses exists for
+writing to people who linked their own account, and for nothing else.
+
 **`disabled_at` and `deleted_at` are different facts.** Disabling is reversible and is what
 M1.2.3 cascades to sessions; a disabled principal must stay visible, because somebody has
 to be able to re-enable them and because the ledger refers to them. Deleting is offboarding,
@@ -85,6 +95,10 @@ DISPLAY_NAME_CHARS = 200
 #: here - an import-time digest is a surprising thing to find in a table definition - but
 #: `tests/unit/test_tables.py` calls it and compares, so the two cannot drift apart quietly.
 IDENTITY_HASH_CHARS = 64
+
+#: The longest channel address kept on a binding: an identity a chat vendor issued, such as a Lark
+#: open id, never a document. Held equal to `0166`'s width by a test.
+CHANNEL_ADDRESS_CHARS = 255
 
 #: The shape `identity_hash` produces, as a POSIX regex. Written from the function's own
 #: return rather than from a comment about it, so a change to the digest breaks the check
@@ -266,6 +280,15 @@ class PrincipalIdentityRow(TimestampMixin, SoftDeleteMixin, Base):
         index=True,
     )
     bound_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    #: The person's own address on the channel, kept only where they are written to unasked
+    #: (Lark, Slack and email, needs-rupash 118), and only when its digest is this row's
+    #: `identity_hash`. Personal data: cleared when the row is retired and by an erasure, and read
+    #: by nothing a screen serves. See the module docstring and
+    #: `brain.ops.binding_store.ADDRESS_KEPT_ON`.
+    channel_address: Mapped[str | None] = mapped_column(
+        String(CHANNEL_ADDRESS_CHARS), nullable=True
+    )
 
     #: `Binding.__post_init__` refuses anything above BOUND: a binding is evidence about
     #: the day it was made, not about this request. Stored as the integer the `IntEnum`

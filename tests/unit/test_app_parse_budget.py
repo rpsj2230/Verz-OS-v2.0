@@ -25,11 +25,13 @@ from brain.knowledge.app_parse_budget import (
     app_parse_budget_bytes,
     app_parse_gaps,
     largest_in_app_cost,
+    resident_mib_for,
 )
 from brain.knowledge.ingest import AdmittedUpload, MediaType
 from brain.knowledge.parse_budget import MIB, fits_parse_budget, parse_budget_bytes
 from brain.knowledge.text_path import TEXT_PATH_TYPES
 from brain.ops.compose import BASELINE_FILE, service_mib
+from brain.runtime import MEASURED_SUPERVISOR_MB, MEASURED_WORKER_PEAK_MB, most_workers
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -50,14 +52,33 @@ def test_the_application_s_memory_figure_is_the_limit_the_compose_file_declares(
 
 
 def test_the_budget_is_the_spare_memory_shared_among_the_processes_the_container_starts() -> None:
-    """Worked from the figures rather than from the functions: a 1024 MiB container starts
-    (1024 - 256) // 180 = 4 processes, each may be reading one document, and 1024 - 955 = 69 MiB
-    is spare. A 16 GiB one would start 89 by memory and is held to the pooler's 10. Delete this
-    and the budget can drop the division, which hands every process the whole of the spare
-    memory at once, or forget the pooler's cap, which starves a large container for nothing."""
-    assert app_parse_budget_bytes(memory_mib=1024, resident_mib=955) == 69 * MIB // 4
-    assert app_parse_budget_bytes(memory_mib=2048, resident_mib=955) == 1093 * MIB // 9
-    assert app_parse_budget_bytes(memory_mib=16384, resident_mib=955) == 15429 * MIB // 10
+    """Worked from the figures rather than from the functions. A 1024 MiB container starts
+    (1024 - 96) // 220 = 4 processes and holds 96 + 4 x 220 = 976 MiB before any read, so
+    48 MiB is spare and each process may be reading one document. A 2048 MiB one starts 8 and
+    holds 1856; a 16 GiB one would start 74 by memory and is held to the pooler's 10, holding
+    2296. Delete this and the budget can drop the division, which hands every process the whole
+    of the spare memory at once, forget the pooler's cap, or forget that each process brings its
+    own memory, which promises a larger container room it does not have."""
+    assert app_parse_budget_bytes(memory_mib=1024) == 48 * MIB // 4
+    assert app_parse_budget_bytes(memory_mib=2048) == 192 * MIB // 8
+    assert app_parse_budget_bytes(memory_mib=16384) == 14088 * MIB // 10
+
+
+def test_the_model_covers_what_the_deployed_container_was_measured_to_hold() -> None:
+    """The resident figure is modelled from per-process measurements, and the model has to be at
+    least what the whole container was seen to hold at its peak. Delete this and a sizing figure
+    lowered below the measurement promises the deployed container room it did not have."""
+    assert resident_mib_for(APP_MEMORY_MIB) >= APP_RESIDENT_MIB
+
+
+def test_the_per_process_measurements_add_up_to_the_whole_container_s() -> None:
+    """Two measurements taken independently, the cgroup's peak for the whole container and each
+    process's own share, have to agree to within a MiB per process of rounding. Delete this and
+    either measured figure can be edited to suit a worker count, since every other test takes
+    the measurements as given."""
+    processes = most_workers(APP_MEMORY_MIB)
+    summed = MEASURED_SUPERVISOR_MB + processes * MEASURED_WORKER_PEAK_MB
+    assert abs(summed - APP_RESIDENT_MIB) <= processes
 
 
 def test_a_container_already_full_refuses_every_document() -> None:
@@ -156,7 +177,7 @@ def test_the_finding_names_what_the_application_can_read_when_the_door_admits_mo
 def test_there_is_no_finding_when_the_container_can_read_everything_the_door_admits() -> None:
     """The sibling: a container large enough is told nothing. Delete this and a finding that
     fired on every install whatever its size would pass the test above."""
-    assert app_parse_gaps(memory_mib=16384, resident_mib=APP_RESIDENT_MIB) == ()
+    assert app_parse_gaps(memory_mib=16384) == ()
 
 
 def test_the_largest_in_app_cost_is_over_the_text_path_s_own_types() -> None:

@@ -362,18 +362,24 @@ class DriverQueue:
     """`IntakeQueue` over the queue driver, opened for each question as the upload route opens it.
 
     Opened per call rather than held, for `brain.knowledge_routes.store_upload`'s reason: the web
-    process holds no queue of its own for the others.
+    process holds no queue of its own for the others. **Opened on the queue's own URL**, and the
+    tasks registered with the application's, which is what they read and write rows through:
+    `brain.ops.queue.A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S`.
     """
 
-    def __init__(self, database_url: str) -> None:
-        self._url = database_url
+    def __init__(self, queue_url: str, *, database_url: str = "") -> None:
+        self._queue_url = queue_url
+        self._database_url = database_url
 
     def _app(self) -> Any:
-        from brain.ops.queue import queue_app
+        from brain.ops.queue import QueueError, queue_app
         from brain.ops.worker import register_tasks
 
-        app = queue_app(self._url, pool_max=1)
-        register_tasks(app, database_url=self._url)
+        if not self._queue_url:
+            msg = "this process is given no queue connection (QUEUE_URL is empty)"
+            raise QueueError(msg)
+        app = queue_app(self._queue_url, pool_max=1)
+        register_tasks(app, database_url=self._database_url or self._queue_url)
         return app
 
     async def counts(self) -> tuple[int, int]:
@@ -393,8 +399,12 @@ class DriverQueue:
 
 def queue_for(request: Request) -> IntakeQueue:
     """The job queue this process enqueues onto. A function so a test can stand one in."""
+    from brain.ops.queue import queue_url_of
+
     settings = getattr(request.app.state, "settings", None)
-    return DriverQueue(str(getattr(settings, "database_url", "") or ""))
+    return DriverQueue(
+        queue_url_of(settings), database_url=str(getattr(settings, "database_url", "") or "")
+    )
 
 
 def store_of(request: Request) -> ObjectStore | None:

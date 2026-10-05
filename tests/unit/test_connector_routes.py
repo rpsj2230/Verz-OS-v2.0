@@ -28,6 +28,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import Any, Final
 
 import pytest
@@ -75,17 +76,26 @@ from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
 from brain.identity.data_steward import declared_capabilities
-from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE, manifest_for
+from brain.ops.connectable import (
+    CONNECTABLE,
+    DECLARED_FORMS,
+    NOT_FROM_THE_CONSOLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
+    manifest_for,
+)
 from brain.ops.connector_admin import (
+    ALLOWING_A_WRITE,
     CONNECTED,
     CONNECTING_A_SOURCE,
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
     EDITED,
     KEY_REPLACED,
+    NO_SUCH_WRITE,
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
+    WRITE_ALLOWED,
 )
 from brain.ops.connector_probe import (
     TEST_WAITING,
@@ -148,10 +158,35 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "cloudflare": "0123456789abcdef0123456789abcdef",
+    "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
+    "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
+    "laravel": "portal",
+    "domains": "example.com, example.org",
+    "slack_messages": "T0123ABCD",
 }
 
-#: The settings after the first that a source asks for, for the one source that asks for two.
-FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {"freshdesk": {"department": "support"}}
+#: The settings after the first that a source asks for, for the sources that ask for more than one.
+FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
+    "freshdesk": {"department": "support"},
+    "cloudflare": {"department": "operations"},
+    "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "domains": {"department": "operations"},
+    "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
+    "laravel": {
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
+        "client_rule": "department = sales",
+        "user_rule": "department = operations",
+        "max_rows": "500",
+        "timeout_seconds": "10",
+    },
+    "slack_messages": {"department": "operations"},
+}
 
 
 def _grant(capability: Any, scope: Scope) -> Grant:
@@ -209,10 +244,11 @@ class NoDatabase:
 
 
 def settings_for(name: str) -> dict[str, str]:
-    """The settings a connectable source takes, and none for a source the console cannot connect."""
-    if name not in CONNECTABLE:
+    """The settings a declared form takes, and none for a source with no form."""
+    if name not in DECLARED_FORMS:
         return {}
-    return {CONNECTABLE[name].settings[0].name: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
+    first = DECLARED_FORMS[name].settings[0].name
+    return {first: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
 
 
 def a_connection(
@@ -306,12 +342,19 @@ def client(app: FastAPI) -> Iterator[TestClient]:
         yield c
 
 
+async def everybody_is_live(principal_id: str) -> bool:
+    """A directory in which every id names somebody, for the routes' own tests."""
+    del principal_id
+    return True
+
+
 def attach(
     app: FastAPI, records: Records | None, vault: Vault | None, writes: Recorded | None = None
 ) -> None:
     if records is not None:
         app.state.connector_records = records
     app.state.credentials = Credentials(vault, environ={}, writes=writes)
+    app.state.people_are_live = everybody_is_live
 
 
 def headers(pid: str, claims: Mapping[str, object] | None = None) -> dict[str, str]:
@@ -349,6 +392,39 @@ def held_vault() -> Vault:
 
 
 # ------------------------------------------------------------------ what a reader is told
+
+
+@pytest.fixture
+def hubspot_unmeasured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HubSpot with its recorded ceiling taken away, so its plan refuses as an unmeasured source's
+    does. Since 2026-09-30 every source the console offers has a ceiling, so a refusal for want
+    of one is shown on a source that had it taken away."""
+    from brain.ops import limits
+
+    kept = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    monkeypatch.setattr(limits, "_BY_NAME", kept)
+
+
+@pytest.fixture
+def forms_offered_as_if_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Google Drive's and Laravel's declared forms offered as though this install could read them,
+    so their route halves (a key file, a database user, an answerable person) are proved before
+    their readings land. See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS` in
+    `brain.ops.connectable`."""
+    import brain.connector_routes as routes
+    import brain.ops.connectable as connectable
+    import brain.ops.connector_admin as admin
+
+    both = ("google_drive", "laravel")
+    offered = MappingProxyType(
+        {**connectable.CONNECTABLE, **{one: connectable.DECLARED_FORMS[one] for one in both}}
+    )
+    listed = {k: v for k, v in connectable.NOT_FROM_THE_CONSOLE.items() if k not in both}
+    for module in (routes, connectable, admin):
+        if hasattr(module, "CONNECTABLE"):
+            monkeypatch.setattr(module, "CONNECTABLE", offered)
+        if hasattr(module, "NOT_FROM_THE_CONSOLE"):
+            monkeypatch.setattr(module, "NOT_FROM_THE_CONSOLE", MappingProxyType(listed))
 
 
 def test_a_reader_is_told_which_sources_are_connected_and_what_each_may_read(
@@ -423,7 +499,7 @@ def an_attempt(name: str, **changed: Any) -> SyncState:
 
 
 def test_a_connected_source_shows_when_it_was_last_read_and_how_that_went(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, hubspot_unmeasured: None
 ) -> None:
     """**The screen's half of the leaf.** A source read to the end shows the attempt's time and
     health in its trust row and its last read beside them. A source whose key was declined shows
@@ -677,7 +753,9 @@ def test_the_screen_lists_every_shipped_connector_from_its_own_declaration(
     for name, label in offered.items():
         assert declared[name].console is not None and label == declared[name].label
     for name, (label, why) in explained.items():
-        assert (label, why) == (declared[name].label, declared[name].not_from_the_console)
+        # A form this install cannot read yet says so; a source with no form, in its own words.
+        said = declared[name].not_from_the_console or THIS_INSTALL_CANNOT_READ_IT_YET
+        assert (label, why) == (declared[name].label, said)
 
 
 def test_every_source_is_served_with_the_steps_of_its_connect_flow(
@@ -695,13 +773,17 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
     for one in body["connectable"]:
         keys = [step["key"] for step in one["steps"]]
         assert keys == [step.key for step in declared[one["name"]].guide]
+        # A source that takes no key (M11.7.4) asks for its settings alone.
+        key = [] if one["credential_shape"] == "none" else ["credential"]
         assert one["steps"][-1]["asks"] == [
             *(setting["name"] for setting in one["settings"]),
-            "credential",
+            *key,
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
-    drive = next(one for one in body["not_connectable"] if one["name"] == "google_drive")
-    assert drive["steps"][-1]["asks"] == [] and len(drive["steps"]) == 4
+    # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
+    # own. Laravel's form is offered since M11.6.1 and Drive's since M11.6.7, because each reads.
+    served = {one["name"]: one for one in body["not_connectable"]}
+    assert set(served) == {"lark_base", "lark_wiki"}
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -723,6 +805,13 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "xero": True,
         "hubspot": False,
         "freshdesk": False,
+        "cloudflare": False,
+        "domains": False,
+        "google_analytics": False,
+        "google_drive": False,
+        "search_console": False,
+        "laravel": False,
+        "slack_messages": False,
     }
 
 
@@ -813,6 +902,94 @@ def test_an_administrator_connects_a_source_and_its_key_is_kept_in_its_slot_and_
     assert KEY not in answered.text
 
 
+def test_a_key_file_and_a_database_user_reach_their_slots_in_their_own_shapes(
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
+) -> None:
+    """M11.7.7 through the route: Google Drive's key file is kept whole as its slot's key, and the
+    Laravel user as its password with its name beside it, and the forms say which shape each
+    takes. Delete this and the two sources connect with their credentials kept where no reader
+    looks, or a form offers a key box for a key file."""
+    from brain.ops.credentials import MAX_KEY_FILE_CHARS, SERVICE_ACCOUNT, USER_FIELD
+
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    key_file = json.dumps(
+        {"type": SERVICE_ACCOUNT, "client_email": "a@b.example", "private_key": "FILE-SENTINEL"},
+        indent=2,
+    )
+    user = json.dumps({"user": "brain_reader", "password": "PASSWORD-SENTINEL"})
+    drive = post(client, "u_admin", LISTING, connection_body("google_drive", credential=key_file))
+    views = post(client, "u_admin", LISTING, connection_body("laravel", credential=user))
+
+    assert (drive.status_code, views.status_code) == (200, 200)
+    assert vault.written == [
+        ("connector_keys/google_drive", {KEY_FIELD: key_file}),
+        ("connector_keys/laravel", {KEY_FIELD: "PASSWORD-SENTINEL", USER_FIELD: "brain_reader"}),
+    ]
+    assert "FILE-SENTINEL" not in drive.text and "PASSWORD-SENTINEL" not in views.text
+    forms = {one["name"]: one for one in get(client, "u_admin").json()["connectable"]}
+    assert (forms["google_drive"]["credential_shape"], forms["laravel"]["credential_shape"]) == (
+        "key_file",
+        "database_user",
+    )
+    assert forms["google_drive"]["credential_max_chars"] == MAX_KEY_FILE_CHARS
+    assert forms["xero"]["credential_shape"] == "key"
+
+
+def test_an_answerable_person_who_is_nobody_here_is_refused_and_nothing_is_kept(
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
+) -> None:
+    """`Setting.names_a_person`: Google Drive's steward must be somebody live on this install. The
+    connector reads no table, so the route asks. Delete this and a mistyped id is kept as the
+    person answerable for a folder, and nobody is ever asked to re-check its files."""
+    from brain.ops.credentials import SERVICE_ACCOUNT
+
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    asked: list[str] = []
+
+    async def only_one(principal_id: str) -> bool:
+        asked.append(principal_id)
+        return principal_id == "u_steward"
+
+    app.state.people_are_live = only_one
+    key_file = json.dumps({"type": SERVICE_ACCOUNT, "client_email": "a", "private_key": "b"})
+    nobody = connection_body(
+        "google_drive",
+        settings={**settings_for("google_drive"), "steward": "u_nobody"},
+        credential=key_file,
+    )
+    refused = post(client, "u_admin", LISTING, nobody)
+    kept = post(client, "u_admin", LISTING, connection_body("google_drive", credential=key_file))
+
+    assert refused.status_code == 422
+    assert [(one["field"], one["code"]) for one in refused.json()["problems"]] == [
+        ("steward", "refused")
+    ]
+    assert kept.status_code == 200 and asked == ["u_nobody", "u_steward"]
+    assert [slot for slot, _ in vault.written] == ["connector_keys/google_drive"]
+
+
+def test_a_credential_in_the_wrong_shape_is_refused_and_nothing_is_kept(
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
+) -> None:
+    """Delete this and a pasted key is kept as though it were a key file, or a user with no
+    password is kept and every read fails at the database."""
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    drive = post(client, "u_admin", LISTING, connection_body("google_drive", credential=KEY))
+    views = post(client, "u_admin", LISTING, connection_body("laravel", credential='{"user": "u"}'))
+
+    assert (drive.status_code, views.status_code) == (422, 422)
+    assert [(one["field"], one["code"]) for one in drive.json()["problems"]] == [
+        ("credential", "not_a_key_file")
+    ]
+    assert [(one["field"], one["code"]) for one in views.json()["problems"]] == [
+        ("credential", "blank")
+    ]
+    assert records.asked == 0 and vault.written == []
+
+
 def test_a_connection_hands_the_store_what_the_source_declares_for_the_data_steward(
     app: FastAPI, client: TestClient
 ) -> None:
@@ -852,7 +1029,7 @@ def test_a_caller_who_may_not_connect_this_source_is_refused_before_anything_is_
         post(client, "u_elsewhere", LISTING, connection_body()),
         post(client, "u_narrow", LISTING, connection_body("hubspot")),
         post(client, "u_none", LISTING, connection_body(settings={}, credential="")),
-        post(client, "u_narrow", LISTING, connection_body("laravel")),
+        post(client, "u_narrow", LISTING, connection_body("lark_base")),
     ]
     for refused in refusals:
         assert (refused.status_code, without_trace(refused)) == (
@@ -888,7 +1065,7 @@ def test_every_problem_with_a_connection_is_told_at_once_and_nothing_is_written(
     records, vault = Records(), Vault()
     attach(app, records, vault)
     both = post(client, "u_admin", LISTING, connection_body(settings={}, credential="one two"))
-    unknown = post(client, "u_admin", LISTING, connection_body("laravel"))
+    unknown = post(client, "u_admin", LISTING, connection_body("lark_base"))
     refused = post(client, "u_admin", LISTING, connection_body(settings={"tenant_id": "*"}))
 
     assert both.status_code == unknown.status_code == refused.status_code == 422
@@ -1154,7 +1331,7 @@ def test_the_module_lists_every_shipped_source_and_a_connection_only_adds_to_its
         "console",
         "lark",
     )
-    assert rows["laravel"]["connect_from"] == "server"
+    assert rows["laravel"]["connect_from"] == "console"
     assert body["total"] is None
     narrowed = read(client, "u_admin", f"{SOURCES}?filter=status:connected").json()
     assert [one["name"] for one in narrowed["items"]] == ["xero"]
@@ -1320,6 +1497,48 @@ def test_a_replaced_key_is_a_credential_write_and_changes_no_connection(
     assert len(vault.written) == 1
 
 
+def test_a_write_grants_key_goes_to_its_own_slot_and_the_screen_says_the_write_is_allowed(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**A write is a grant of its own (M11.7.3).** The key route naming Cloudflare's DNS change
+    grant keeps the key in that grant's slot and never the read key's, recorded as a credential
+    write by the person, and says the write is now allowed; a grant the source does not declare is
+    a problem on the field, and nothing is written. The screen lists the grant on the form and says
+    which grants this install has given: none while the slot is empty, this one once it holds a
+    key. Delete this and the second key can land in the read key's slot, or the screen can say a
+    write is allowed that is not."""
+    records, vault, writes = ChangingRecords((a_connection("cloudflare"),)), Vault(), Recorded()
+    attach(app, records, vault, writes)
+    body = {"credential": KEY, "grant": "dns_changes"}
+
+    answered = post(client, "u_admin", key_path("cloudflare"), body)
+    unknown = post(client, "u_admin", key_path("cloudflare"), {**body, "grant": "zone_changes"})
+
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["told"] == WRITE_ALLOWED
+    assert vault.written == [("connector_keys/cloudflare_dns_changes", {KEY_FIELD: KEY})]
+    assert [one["slot"] for one in writes.records] == ["connector_keys/cloudflare_dns_changes"]
+    assert unknown.status_code == 422
+    assert [(one["field"], one["code"], one["message"]) for one in unknown.json()["problems"]] == [
+        ("grant", "unknown", NO_SUCH_WRITE)
+    ]
+    assert len(vault.written) == 1 and KEY not in answered.text
+    form = next(
+        one for one in get(client, "u_admin").json()["connectable"] if one["name"] == "cloudflare"
+    )
+    assert [one["name"] for one in form["writes"]] == ["dns_changes"]
+    assert "DNS Edit" in form["writes"][0]["credential_hint"]
+    assert form["writes"][0]["confirmation"] == ALLOWING_A_WRITE
+    empty = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    attach(app, records, held_vault())
+    held = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    assert (empty["writes_allowed"], held["writes_allowed"]) == ([], ["dns_changes"])
+
+
 # ------------------------------------------------------------------ testing a connection
 
 
@@ -1369,7 +1588,7 @@ def test_an_administrator_asks_for_a_test_and_is_told_it_waits_for_the_worker(
 
 
 def test_a_test_is_refused_before_anything_is_asked_when_it_should_be(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, hubspot_unmeasured: None
 ) -> None:
     """A caller who may not manage the source, a source not connected and a name that is not a
     source are the one refusal; a source whose plan refuses it is a problem in the plan's own words.

@@ -84,7 +84,22 @@ lives on the other side of `sent`, for the reason `channels.whatsapp` gives: the
 testing is an answer reaching a chat it was not computed for, and a module that owned an
 HTTP client could only be tested for it against a live bot.
 
-Task ids: M10.5.4
+**`TelegramWire` is how an install receives and answers, and the install tells Telegram where it
+is.** Telegram posts only to an address a `setWebhook` call named, so there is nothing for a
+person to paste into Telegram: saving the set-up makes that call, with this install's events
+address and the header to send, and a set-up Telegram refused is not saved (see
+`brain.channels.adapter.A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE`). **The header is
+made from the bot token**, keyed and one way, so the one secret a person pastes is the token
+BotFather gave them (`THE_HEADER_IS_MADE_FROM_THE_KEY_BOTFATHER_GAVE`). Rejected: a second value
+for the header, typed by hand into the form and into a `setWebhook` call made in a browser, which
+is a secret invented to be pasted twice and the token left in a browser's history. A group has
+no reader of its members and no per-viewer message, so `brain.chat_answer` answers it as a floor
+of nothing, which is the Ask link and carries nothing, as `GROUP_DEFLECTION` argues for.
+
+**The Bot API puts the token in the address**, `/bot<token>/sendMessage`, which is why
+`brain.channels.adapter.VendorRequest` keeps its address out of its repr.
+
+Task ids: M10.5.4, M10.6.1
 """
 
 from __future__ import annotations
@@ -92,24 +107,37 @@ from __future__ import annotations
 import enum
 import hashlib
 import hmac
+import json
+import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Final, assert_never
+from urllib.parse import urlsplit
 
 from brain.channels.adapter import (
+    BOT_ID,
+    SECRET_ASK,
+    Arrived,
     ChannelCapabilities,
+    Conversation,
     Feature,
+    Received,
+    RegistrationRefusedError,
+    VendorAnswer,
+    VendorRequest,
     assert_can_send,
     send_operation,
 )
 from brain.channels.cards import assert_label_survives, render_body
-from brain.connectors.throttle import CallOutcome
+from brain.channels.webhook import WebhookRefusedError
+from brain.connectors.throttle import CallOutcome, classify
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
@@ -834,3 +862,341 @@ def deliver(
 
     operation = send_operation(intent, channel=Channel.TELEGRAM, to=str(to_chat_id))
     return issue_once(ledger, operation, send)
+
+
+# ------------------------------------------------------------ the wire (M10.5.4, M10.6.1)
+
+#: Why the header Telegram is told to send is made from the bot token rather than asked for.
+THE_HEADER_IS_MADE_FROM_THE_KEY_BOTFATHER_GAVE: Final = (
+    "Telegram sends back, on every update, a secret the install named when it registered its "
+    "address. Making that secret from the bot token, keyed and one way, means one value to paste, "
+    "a header that tells an observer nothing about the token, and a new token from BotFather "
+    "changing both at once; asking for a second value would ask a person to invent a secret "
+    "nobody else ever reads."
+)
+
+#: Telegram's Bot API, where a message is sent and the events address registered.
+TELEGRAM_API_URL: Final = "https://api.telegram.org"
+
+#: Where the steps send a person to make the bot: BotFather, Telegram's own bot for bots.
+BOTFATHER_URL: Final = "https://t.me/BotFather"
+
+#: What the webhook secret is keyed on beside the token, so it is this system's and no other's.
+WEBHOOK_SECRET_PURPOSE: Final = b"company-brain telegram webhook secret, version 1"
+
+#: The longest message Telegram delivers, in characters.
+MAX_TEXT_CHARS: Final = 4096
+
+#: The ports Telegram posts updates to, from its setWebhook documentation.
+WEBHOOK_PORTS: Final = frozenset({443, 80, 88, 8443})
+
+#: The one update kind the install asks Telegram for; see `normalise_update` for the rest.
+ASKED_UPDATES: Final = ("message",)
+
+_BOT_TOKEN: Final = re.compile(r"^[0-9]{1,20}:[A-Za-z0-9_-]{20,100}$")
+_CHAT_ID: Final = re.compile(r"^-?[0-9]{1,20}$")
+_USERNAME: Final = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
+_LEADING_MENTION: Final = re.compile(r"^(?:\s*@[A-Za-z0-9_]{1,32})+\s*")
+
+
+def _refused() -> WebhookRefusedError:
+    return WebhookRefusedError(UPDATE_NOT_ACCEPTED)
+
+
+#: What a person saving something that is not a bot token is told.
+NOT_WHAT_BOTFATHER_GIVES: Final = (
+    "The secret is not a bot token as BotFather gives one: digits, a colon, then a long key."
+)
+#: What a person saving a username with an @, or none, is told.
+NOT_A_BOT_USERNAME: Final = f"{BOT_ID} is the bot's username as BotFather gave it, without the @."
+#: What a person whose install is not on an address Telegram posts to is told.
+NOT_AN_ADDRESS_TELEGRAM_POSTS_TO: Final = (
+    "Telegram posts only to an https address on port 443, 80, 88 or 8443, and this install's "
+    "address is not one."
+)
+
+
+def bot_token_of(secret: str) -> str:
+    """The bot token the vault keeps, or `ValueError` for anything BotFather does not issue."""
+    token = secret.strip()
+    if not _BOT_TOKEN.fullmatch(token):
+        raise ValueError(NOT_WHAT_BOTFATHER_GIVES)
+    return token
+
+
+def webhook_secret_of(bot_token: str) -> str:
+    """The header Telegram is told to send. See `THE_HEADER_IS_MADE_FROM_THE_KEY_BOTFATHER_GAVE`.
+
+    Sixty-four hexadecimal characters, inside the alphabet and the length Telegram allows and
+    past `MINIMUM_SECRET_LENGTH`.
+    """
+    return hmac.new(bot_token.encode("utf-8"), WEBHOOK_SECRET_PURPOSE, hashlib.sha256).hexdigest()
+
+
+def question_of(text: str) -> str:
+    """The words asked, with the mentions that open the message left out."""
+    return _LEADING_MENTION.sub("", text, count=1).strip()
+
+
+def _utf16_slice(text: str, offset: object, length: object) -> str:
+    """Part of a message by Telegram's offsets, which count UTF-16 code units, not characters."""
+    if isinstance(offset, bool) or isinstance(length, bool):
+        return ""
+    if not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length < 1:
+        return ""
+    encoded = text.encode("utf-16-le")
+    return encoded[2 * offset : 2 * (offset + length)].decode("utf-16-le", "replace")
+
+
+def _addressed(message: Mapping[str, Any]) -> frozenset[str]:
+    """The digests of every username the message names: by a mention, in a command, or by
+    replying to that account's own message. Compared against the record's `BOT_ID`."""
+    text = message.get("text")
+    found: set[str] = set()
+    entities = message.get("entities")
+    for entity in entities if isinstance(entities, list) and isinstance(text, str) else ():
+        if not isinstance(entity, Mapping):
+            continue
+        part = _utf16_slice(str(text), entity.get("offset"), entity.get("length"))
+        if entity.get("type") == "mention":
+            found.add(part.removeprefix("@"))
+        elif entity.get("type") == "bot_command" and "@" in part:
+            found.add(part.partition("@")[2])
+    replied = message.get("reply_to_message")
+    author = replied.get("from") if isinstance(replied, Mapping) else None
+    if isinstance(author, Mapping) and isinstance(author.get("username"), str):
+        found.add(author["username"])
+    return frozenset(identity_hash(Channel.TELEGRAM, one) for one in found if one)
+
+
+def _ok(body: bytes) -> bool | None:
+    """Telegram's own `ok` out of an answer, or None when the answer is not one it wrote."""
+    try:
+        parsed = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    ok = parsed.get("ok") if isinstance(parsed, Mapping) else None
+    return ok if isinstance(ok, bool) else None
+
+
+@dataclass(frozen=True)
+class TelegramWire:
+    """`brain.channels.adapter.ChannelWire` and `RegisteredWire` for Telegram. Holds no secret.
+
+    The channel's secret is the bot token alone. `verify` compares the header against the secret
+    made from it (`webhook_secret_of`), `read` reads a message as `normalise_update` does,
+    `request_for` sends with `sendMessage`, and `registration_for` is the `setWebhook` call the
+    route makes when the set-up is saved, which is what tells Telegram where this install is.
+    """
+
+    @property
+    def channel(self) -> Channel:
+        return Channel.TELEGRAM
+
+    @property
+    def tenant_fields(self) -> tuple[str, ...]:
+        """The bot's username, which is how a message in a group names it."""
+        return (BOT_ID,)
+
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """One bot token, so no parts. See `THE_HEADER_IS_MADE_FROM_THE_KEY_BOTFATHER_GAVE`."""
+        return ()
+
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
+        """The header against the secret made from the bot token, before a byte is parsed.
+
+        The header carries no time, so a replay is caught by the claim on `update_id`; see the
+        module docstring.
+        """
+        del now
+        presented = arrived.headers.get(AUTHENTICATING_HEADER.lower(), "")
+        try:
+            configured = webhook_secret_of(bot_token_of(secret))
+            assert_from_telegram(configured=configured, presented=presented)
+        except (ValueError, TelegramRefusedError) as exc:
+            raise _refused() from exc
+        return arrived
+
+    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
+        """Telegram does not check the address before it posts; the install registered it."""
+        del arrived
+        return None
+
+    def read(self, arrived: Arrived) -> Received:
+        """A person's message as the gate's event, and where a reply to it goes.
+
+        A private chat is answered in it, and its id is the sender's own. A group is shared and
+        its members cannot be read, so `brain.chat_answer` answers it as a floor of nothing,
+        which is the Ask link, and a sender there has no chat of their own to be told in: a bot
+        may not write first to somebody who has not started it.
+        """
+        try:
+            body = _mapping(json.loads(arrived.body), "the update")
+            message = normalise_update(VerifiedUpdate(body=body, token=_VERIFIED_TOKEN))
+        except TelegramRefusedError as exc:
+            raise ValueError(str(exc)) from exc
+        text = question_of(message.event.text)
+        if not text:
+            raise ValueError("this message names somebody and asks nothing")
+        chat = str(message.chat_id)
+        shared = not audience_is_one_person(message.chat_kind)
+        return Received(
+            event=replace(message.event, text=text),
+            reply_to=chat,
+            conversation=Conversation(
+                room_to=chat,
+                sender_to="" if shared else chat,
+                conversation_id=chat,
+                shared=shared,
+                addressed=_addressed(_mapping(body[MESSAGE_UPDATE], "the message")),
+            ),
+        )
+
+    def request_for(
+        self, *, to: str, text: str, secret: str, tenant: Mapping[str, str], now: datetime
+    ) -> VendorRequest:
+        """One message into one chat, on the bot token. `ValueError` for anything but a chat id,
+        and for a text longer than Telegram delivers."""
+        del tenant, now  # Telegram stamps its own time and the token is the credential.
+        token = bot_token_of(secret)
+        if not _CHAT_ID.fullmatch(to):
+            msg = f"{to!r} is not a Telegram chat id"
+            raise ValueError(msg)
+        if len(text) > MAX_TEXT_CHARS:
+            raise ValueError("this answer is longer than a Telegram message is")
+        return VendorRequest(
+            url=f"{TELEGRAM_API_URL}/bot{token}/sendMessage",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            body=json.dumps({"chat_id": int(to), "text": text}, separators=(",", ":")).encode(
+                "utf-8"
+            ),
+        )
+
+    def registration_for(
+        self, *, address: str, secret: str, tenant: Mapping[str, str]
+    ) -> VendorRequest:
+        """`setWebhook`: this install's events address, the header to send and the one update
+        kind asked for. `RegistrationRefusedError`, in words for the person saving, for a secret
+        that is not a bot token, an address Telegram does not post to, and a record whose `BOT_ID`
+        is not a Telegram username."""
+        if not _BOT_TOKEN.fullmatch(secret.strip()):
+            raise RegistrationRefusedError(NOT_WHAT_BOTFATHER_GIVES)
+        token = secret.strip()
+        parts = urlsplit(address)
+        try:
+            port = parts.port or 443
+        except ValueError as exc:
+            raise RegistrationRefusedError(NOT_AN_ADDRESS_TELEGRAM_POSTS_TO) from exc
+        if parts.scheme != "https" or not parts.hostname or port not in WEBHOOK_PORTS:
+            raise RegistrationRefusedError(NOT_AN_ADDRESS_TELEGRAM_POSTS_TO)
+        if not _USERNAME.fullmatch(tenant.get(BOT_ID, "")):
+            raise RegistrationRefusedError(NOT_A_BOT_USERNAME)
+        told = {
+            "url": address,
+            "secret_token": webhook_secret_of(token),
+            "allowed_updates": list(ASKED_UPDATES),
+        }
+        return VendorRequest(
+            url=f"{TELEGRAM_API_URL}/bot{token}/setWebhook",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            body=json.dumps(told, separators=(",", ":")).encode("utf-8"),
+        )
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome:
+        """Telegram's `ok` decides, beside its status: a 200 saying `ok` true is delivered.
+
+        A 200 whose body cannot be read may have been delivered, so it is not known rather than
+        sent; a 429 is a quota; everything else is `classify`'s, and a refusal otherwise.
+        """
+        if answer.unsafe_address:
+            return CallOutcome.REJECTED
+        if answer.status == 200:
+            ok = _ok(answer.body)
+            if ok is None:
+                return CallOutcome.UNAVAILABLE
+            return CallOutcome.OK if ok else CallOutcome.REJECTED
+        outcome = classify(
+            status=answer.status,
+            timed_out=answer.timed_out,
+            connection_failed=answer.connection_failed,
+        )
+        return CallOutcome.REJECTED if outcome is CallOutcome.OK else outcome
+
+
+#: This channel's wire, found by `brain.channels.adapter.channel_wires`.
+WIRE: Final = TelegramWire()
+
+
+# ------------------------------------------------------------ the connect steps (M10.5.4)
+
+#: The steps that connect Telegram, found by `brain.channels.adapter.channel_guides`.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="bot",
+            title="Make a bot with BotFather",
+            text=(
+                "In Telegram open BotFather, Telegram's own bot for making bots, and send "
+                "/newbot. Give it the name people will see, such as Company Brain, and a "
+                "username ending in bot, such as company_brain_bot. BotFather answers with the "
+                "bot's token, a line of digits, a colon and a long key. Keep it for the last "
+                "step and give it to nobody else: whoever holds it can speak as the bot."
+            ),
+            sketch=Sketch(
+                place="Telegram",
+                heading="BotFather",
+                lines=(
+                    SketchLine(LineKind.TEXT, "/newbot"),
+                    SketchLine(LineKind.FIELD, "Username", "company_brain_bot", mark=True),
+                    SketchLine(LineKind.FIELD, "Token", "123456789:AA...", mark=True),
+                ),
+            ),
+            link=BOTFATHER_URL,
+            link_label="Open BotFather",
+        ),
+        GuideStep(
+            key="groups",
+            title="Decide whether it may join groups",
+            text=(
+                "The Brain answers in a private chat. In a group it answers only a message that "
+                "names it, and then only with a link to ask it privately, because nobody can "
+                "read who is in a Telegram group. To keep the bot out of groups altogether, send "
+                "BotFather /setjoingroups, pick the bot and choose Disable."
+            ),
+            sketch=Sketch(
+                place="Telegram",
+                heading="BotFather",
+                lines=(
+                    SketchLine(LineKind.TEXT, "/setjoingroups"),
+                    SketchLine(LineKind.ITEM, "Disable", mark=True),
+                ),
+            ),
+            link=BOTFATHER_URL,
+            link_label="Open BotFather",
+        ),
+        GuideStep(
+            key="save",
+            title="Save the bot here",
+            text=(
+                "Type the bot's username, without the @, into bot_id, paste its token into the "
+                "secret field, tick Switched on and press Save set-up. The Brain tells Telegram "
+                "this install's address itself, and keeps the token in the vault; if Telegram "
+                "does not accept it, nothing is saved and you are told why. Then open the bot "
+                "in Telegram, press Start and write to it: the first answer asks you to link "
+                "your Telegram account to your Brain account."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Telegram",
+                lines=(
+                    SketchLine(LineKind.FIELD, BOT_ID, "company_brain_bot", mark=True),
+                    SketchLine(LineKind.FIELD, "Secret (write only)", "********", mark=True),
+                    SketchLine(LineKind.TOGGLE, "Switched on", mark=True),
+                ),
+                button="Save set-up",
+            ),
+            asks=(BOT_ID, SECRET_ASK),
+        ),
+    )
+)

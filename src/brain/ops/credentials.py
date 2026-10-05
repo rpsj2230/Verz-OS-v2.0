@@ -109,7 +109,7 @@ is a write through this same function. See `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_
 relay's holds its password under `password`, so `keep_fields` writes named fields, judging each
 one as `keep` judges a key, and `keep` is `keep_fields` with the one field start-up reads.
 
-Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50
+Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50, M11.7.7, M11.7.3
 """
 
 from __future__ import annotations
@@ -241,6 +241,21 @@ KEY_FIELD: Final = "api_key"
 #: paste, not a statement about any provider's format.
 MAX_CREDENTIAL_CHARS: Final = 1000
 
+#: The longest key file accepted. A service account's key file is about two and a half thousand
+#: characters; this is room for a longer private key and not for a document (M11.7.7).
+MAX_KEY_FILE_CHARS: Final = 16_000
+
+#: The fields a service account's key file must carry for anything to sign in with it: which
+#: kind of file it is, the account's address and its private key. Google's shape on every install.
+KEY_FILE_FIELDS: Final = ("type", "client_email", "private_key")
+
+#: What a service account's key file says it is.
+SERVICE_ACCOUNT: Final = "service_account"
+
+#: The slot field a user's name is kept under beside the password, which is kept as the key, so a
+#: reader asking a slot for its key is handed the secret half.
+USER_FIELD: Final = "user"
+
 
 class VaultState(enum.StrEnum):
     """Whether this install's vault can be asked, and if not, which of three things is wrong."""
@@ -351,6 +366,26 @@ def connector_key_slot(connector: str) -> ConnectorKeySlot:
     return ConnectorKeySlot(
         path=f"{CONNECTOR_KEY_PREFIX}{connector}",
         description=f"The key {connector} issued for this company's connection.",
+        connector=connector,
+    )
+
+
+def connector_write_slot(connector: str, grant: str) -> ConnectorKeySlot:
+    """Where the key a connected source issued for one write grant is kept, beside its read key.
+
+    `connector_keys/<source>_<grant>`, one path segment like the read key's, so the worker's run
+    lease reads it and nothing else does, and the read key's slot is never the one a write is sent
+    with. See `brain.connectors.declaration.A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+    """
+    name = f"{connector}_{grant}"
+    if not _CONNECTOR_NAME_RE.fullmatch(name):
+        msg = f"{name!r} is not a slot name a write key can be kept under"
+        raise ValueError(msg)
+    return ConnectorKeySlot(
+        path=f"{CONNECTOR_KEY_PREFIX}{name}",
+        description=(
+            f"The key {connector} issued for {grant}, sent only with a change a person approved."
+        ),
         connector=connector,
     )
 
@@ -484,6 +519,81 @@ def problems_with(value: str) -> tuple[Problem, ...]:
     return tuple(found)
 
 
+def key_file_problems(value: str) -> tuple[Problem, ...]:
+    """Everything wrong with a service account key file as chosen, judged before it is sent.
+
+    A key file is one JSON object with line breaks inside its private key, so `problems_with`'s
+    one unbroken run of characters is not the test; this is. It must parse, say it is a service
+    account's, and carry the account's address and a private key, and it must be no longer than
+    `MAX_KEY_FILE_CHARS`. A problem names no value from the file.
+    """
+    import json
+
+    given = value.strip()
+    if not given:
+        return (Problem(code="blank", message="Nothing was given. Choose the key file."),)
+    if len(given) > MAX_KEY_FILE_CHARS:
+        return (
+            Problem(
+                code="too_long",
+                message=(
+                    f"That file is longer than {MAX_KEY_FILE_CHARS} characters, which is longer "
+                    "than a key file. Choose the key file Google Cloud downloaded."
+                ),
+            ),
+        )
+    try:
+        parsed = json.loads(given)
+    except ValueError:
+        parsed = None
+    held = parsed if isinstance(parsed, dict) else {}
+    if held.get("type") != SERVICE_ACCOUNT or not all(
+        isinstance(held.get(one), str) and held[one].strip() for one in KEY_FILE_FIELDS
+    ):
+        return (
+            Problem(
+                code="not_a_key_file",
+                message=(
+                    "That is not a service account's key file. Choose the JSON file Google Cloud "
+                    "downloaded when the key was created."
+                ),
+            ),
+        )
+    return ()
+
+
+def user_and_password(value: str) -> tuple[dict[str, str], tuple[Problem, ...]]:
+    """A database user's name and password as the console sends them, and what is wrong with them.
+
+    The console sends the two as one JSON object with `user` and `password`, so the request keeps
+    the one `credential` field every connection has. Each half is judged by `problems_with`, and a
+    problem names the half it is about. The fields returned are the ones a slot keeps: the password
+    as the key, and the name beside it.
+    """
+    import json
+
+    try:
+        parsed = json.loads(value) if value.strip() else {}
+    except ValueError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        return {}, (
+            Problem(
+                code="not_user_and_password",
+                message="Give the user's name and its password.",
+            ),
+        )
+    user, password = str(parsed.get("user", "")), str(parsed.get("password", ""))
+    problems = (
+        *(
+            Problem(code=one.code, message=one.message, field=USER_FIELD)
+            for one in problems_with(user)
+        ),
+        *problems_with(password),
+    )
+    return {KEY_FIELD: password.strip(), USER_FIELD: user.strip()}, problems
+
+
 class Credentials:
     """This process's way into the vault for credentials, or its lack of one.
 
@@ -609,13 +719,15 @@ class Credentials:
         actor: str,
         trace_id: str,
         ent_hash: str = "",
+        judge: Callable[[str], tuple[Problem, ...]] = problems_with,
     ) -> Kept:
         """`keep` for a slot of named fields: every field judged, then one write of all of them.
 
         One write, because a slot's fields are one version in the vault: a key pair written a
         field at a time would stand for a moment as a new access key beside the old secret, which
         is a pair no store accepts. A problem names its field, and nothing is sent while any field
-        has one.
+        has one. `judge` is `problems_with` unless the credential is another shape, which today is
+        a key file (`key_file_problems`).
         """
         vault = self._vault
         if vault is None:
@@ -624,7 +736,7 @@ class Credentials:
         problems = tuple(
             Problem(code=one.code, message=one.message, field=name)
             for name, value in values.items()
-            for one in problems_with(value)
+            for one in judge(value)
         )
         if not values:
             problems = (Problem(code="blank", message="Nothing was given."),)

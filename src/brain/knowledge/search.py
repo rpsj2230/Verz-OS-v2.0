@@ -1012,6 +1012,72 @@ def reach_for(
     return Reach(principal_id=entitlement.principal_id, departments=reachable)
 
 
+#: Why an anonymous visitor's reach is a type of its own and is not a `Reach`.
+PUBLIC_IS_A_PROPERTY_OF_THE_KNOWLEDGE_AND_NEVER_OF_THE_QUESTION: Final = (
+    "A website visitor holds one grant, over knowledge an administrator marked public. It is not "
+    "a Reach, because every Reach admits company-visible passages and a stranger must reach none "
+    "of them, and it is not a filter applied to a staff search, because a filter would then be "
+    "the only thing standing between a stranger and everything else. So the public reach builds "
+    "its own predicate into the same statements every other reach does, and its transaction runs "
+    "as brain_public, a role whose only policies admit a published item marked public and that "
+    "item's live passages. Either wall alone refuses everything else."
+)
+
+#: The database role a public read runs as. `0171` creates it with a read policy on the two
+#: knowledge tables and nothing else. Written out, as `brain.session.SET_APPLICATION_ROLE` is.
+PUBLIC_ROLE: Final = "brain_public"
+SET_PUBLIC_ROLE: Final = "SET LOCAL ROLE brain_public"
+
+
+@dataclass(frozen=True)
+class PublicReach:
+    """The one grant an anonymous caller holds: published knowledge an administrator marked public.
+
+    No fields, and that is the design rather than an omission. There is no principal to name, no
+    department to reduce a scope to and no owner a draft could belong to, so there is nothing a
+    caller could pass that would widen it. `PUBLIC` is the only value anybody needs. See
+    `PUBLIC_IS_A_PROPERTY_OF_THE_KNOWLEDGE_AND_NEVER_OF_THE_QUESTION`.
+    """
+
+
+#: The public reach. One value, so "which public reach" is never a question.
+PUBLIC: Final = PublicReach()
+
+#: The columns of `know.item` the public predicate asks, as a lightweight table. Not the model:
+#: `brain.tables.knowledge` imports this module, and the predicate needs four columns of it.
+_MARKED: Final = sa.table(
+    "item",
+    sa.column("item_id"),
+    sa.column("state"),
+    sa.column("visibility"),
+    sa.column("public_at"),
+    schema="know",
+)
+
+
+def public_predicate() -> ColumnElement[bool]:
+    """Every passage an anonymous caller may see, as one boolean expression (M10.7.2).
+
+    A live passage of a published item that is not personal, whose item is marked public and is
+    itself published and not personal. The item is asked rather than a copy on the chunk, so
+    marking or unmarking takes effect on the next question with no passage rewritten, and a new
+    version, which is a new item nobody marked, is public only when somebody marks it. `0171`'s
+    policy for `brain_public` states the same condition, so a statement missing this conjunct
+    still returns nothing else.
+    """
+    marked = sa.select(_MARKED.c.item_id).where(
+        _MARKED.c.public_at.is_not(None),
+        _MARKED.c.state == KnowledgeState.PUBLISHED.value,
+        _MARKED.c.visibility != Visibility.PERSONAL.value,
+    )
+    return sa.and_(
+        CHUNK.c.deleted_at.is_(None),
+        CHUNK.c.state == KnowledgeState.PUBLISHED.value,
+        CHUNK.c.visibility != Visibility.PERSONAL.value,
+        CHUNK.c.document_id.in_(marked),
+    )
+
+
 def _assert_reducible_to_departments(scope: Scope) -> None:
     """Refuse a grant scope that cannot become a list of department names without loss.
 
@@ -1091,10 +1157,13 @@ def _level_branch(level: Visibility, reach: Reach) -> ColumnElement[bool]:
     assert_never(level)
 
 
-def reach_predicate(reach: Reach) -> ColumnElement[bool]:
+def reach_predicate(reach: Reach | PublicReach) -> ColumnElement[bool]:
     """Everything the caller may see, as one boolean expression (M15.2.6, M15.2.7).
 
-    Four conjuncts and each one closes a different hole:
+    The public reach is `public_predicate` and nothing else: it shares no branch with a person's,
+    so nothing a person reaches can arrive in a stranger's statement (M10.7.2).
+
+    For a person, four conjuncts and each one closes a different hole:
 
     Retired chunks are excluded, which is how a re-chunked document stops answering with the
     spans it had before the re-parse.
@@ -1108,6 +1177,8 @@ def reach_predicate(reach: Reach) -> ColumnElement[bool]:
 
     And the visibility disjunction itself, one branch per level.
     """
+    if isinstance(reach, PublicReach):
+        return public_predicate()
     return sa.and_(
         CHUNK.c.deleted_at.is_(None),
         CHUNK.c.state.in_(RETRIEVABLE_STATE_VALUES),
@@ -1148,7 +1219,9 @@ def _tsquery(question: str) -> ColumnElement[Any]:
     )
 
 
-def lexical_query(question: str, *, reach: Reach, depth: int = CANDIDATE_DEPTH) -> Select[Any]:
+def lexical_query(
+    question: str, *, reach: Reach | PublicReach, depth: int = CANDIDATE_DEPTH
+) -> Select[Any]:
     """The full-text leg (M15.2.1, M15.2.6).
 
     The reach predicate is conjoined into the same `WHERE` the `LIMIT` applies to, so the
@@ -1208,7 +1281,9 @@ def chunk_text_fields(body: str) -> ChunkTextFields:
     return ChunkTextFields(cjk=" ".join(lexical_tokens(body)), language=detected.tag)
 
 
-def cjk_lexical_query(question: str, *, reach: Reach, depth: int = CANDIDATE_DEPTH) -> Select[Any]:
+def cjk_lexical_query(
+    question: str, *, reach: Reach | PublicReach, depth: int = CANDIDATE_DEPTH
+) -> Select[Any]:
     """The Han leg of the lexical search (M35.1.2.1).
 
     The question is segmented by the same function that segmented the text, and asked with the
@@ -1267,7 +1342,7 @@ THE_VECTOR_LEG_IS_ORDERED_BY_DISTANCE_ALONE_SO_THE_INDEX_CAN_SERVE_IT: Final = (
 def vector_query(
     embedding: Sequence[float],
     *,
-    reach: Reach,
+    reach: Reach | PublicReach,
     model: str,
     depth: int = CANDIDATE_DEPTH,
 ) -> Select[Any]:
@@ -1314,6 +1389,79 @@ def vector_query(
     )
 
 
+#: Why a short vector leg is asked again by exact distance over the caller's reach.
+A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH: Final = (
+    "pgvector's HNSW walk loses passages while the index holds dead entries or a vacuum is "
+    "working on it: measured on 0.8.6 on 2026-10-05, with rows committed, read in a separate "
+    "transaction and retired as re-ingestion does, 16 of 300 narrow reads missed a passage the "
+    "reader may see, one still missing ten seconds later. No setting removed it (ef_search 200 "
+    "and strict_order both still missed). The filter is inside the walk, so the walk returns "
+    "fewer than asked rather than wrong rows; a leg that came back short is therefore asked "
+    "again as an exact distance sort over the same reach, which cannot miss. The re-ask scans the "
+    "reach, so it runs only when the reach holds at most EXACT_RESCAN_CEILING embedded passages; "
+    "above that the leg stays as the walk returned it and the lexical leg carries the answer."
+)
+
+
+#: The most embedded passages a reach may hold for a short vector leg to be asked again exactly.
+#: Measured on 2026-10-05 on the development Mac (PostgreSQL 18, pgvector 0.8.6, 1024 dimensions,
+#: one reach, the exact sort over the whole of it, best of three): 10,000 passages 0.02 s,
+#: 100,000 passages 0.19 s, 500,000 passages 1.8 s. Fifty thousand keeps the re-ask near a
+#: tenth of a second, inside an answer's budget, and a reach that large walks the index past
+#: fifty matches far more often than a narrow one, so the re-ask is rarely wanted there.
+EXACT_RESCAN_CEILING: Final = 50_000
+
+
+def exact_vector_query(
+    embedding: Sequence[float],
+    *,
+    reach: Reach | PublicReach,
+    model: str,
+    depth: int = CANDIDATE_DEPTH,
+) -> Select[Any]:
+    """The vector leg by exact distance, which no HNSW walk can serve (M15.2.3).
+
+    The same conjuncts as `vector_query`, ordered by the distance plus nothing, which the index
+    cannot provide, so the planner reads the reach and sorts it. Asked only after the walk came
+    back short and only over a reach no larger than `EXACT_RESCAN_CEILING`: see
+    `A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    target = sa.cast(
+        sa.bindparam(EMBEDDING_PARAM, to_vector_literal(embedding), type_=sa.Text),
+        Vector(EMBEDDING_DIMENSIONS),
+    )
+    distance = CHUNK.c.embedding.op("<=>", return_type=sa.Float)(target)
+    return (
+        sa.select(CHUNK.c.chunk_id, distance.label("distance"))
+        .where(
+            sa.and_(
+                reach_predicate(reach),
+                CHUNK.c.embedding.is_not(None),
+                CHUNK.c[EMBEDDING_MODEL_FIELD] == sa.bindparam(MODEL_PARAM, model),
+            )
+        )
+        # `+ 0` is what makes this a sort rather than a walk: the operator class serves
+        # `embedding <=> :q` and nothing built on it.
+        .order_by((distance + 0).asc(), CHUNK.c.chunk_id.asc())
+        .limit(_depth(depth))
+    )
+
+
+def embedded_in_reach(*, reach: Reach | PublicReach, model: str) -> Select[Any]:
+    """The embedded passages of one model a reach holds, as chunk ids, for counting.
+
+    Unlimited here: the caller bounds it, so the count costs at most the bound's rows whatever
+    the reach's size. See `A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    return sa.select(CHUNK.c.chunk_id).where(
+        sa.and_(
+            reach_predicate(reach),
+            CHUNK.c.embedding.is_not(None),
+            CHUNK.c[EMBEDDING_MODEL_FIELD] == sa.bindparam(MODEL_PARAM, model),
+        )
+    )
+
+
 # ------------------------------------------------------- the session's two walls
 
 
@@ -1333,14 +1481,20 @@ def _set_config(name: str, value: str) -> TextClause:
     return sa.text("SELECT set_config(:name, :value, true)").bindparams(name=name, value=value)
 
 
-def session_settings(reach: Reach) -> tuple[TextClause, ...]:
+def session_settings(reach: Reach | PublicReach) -> tuple[TextClause, ...]:
     """What the row-level security policy reads, for this caller (M15.2.7).
 
     Run in the same transaction as the query. A connection that does not run these sees
     nothing but company-visibility chunks, because `current_setting(..., true)` returns NULL
     when nobody set it and every comparison against NULL is NULL rather than true. That is
     the correct direction and it is the *default* direction rather than something written.
+
+    The public reach sets no person and takes `brain_public` for the rest of the transaction,
+    whose policies admit a marked item's passages and nothing else (M10.7.2). `SET LOCAL`, so it
+    ends with the transaction, for `_set_config`'s reason about the pooler.
     """
+    if isinstance(reach, PublicReach):
+        return (sa.text(SET_PUBLIC_ROLE),)
     return (
         _set_config(PRINCIPAL_SETTING, reach.principal_id),
         _set_config(DEPARTMENTS_SETTING, reach.departments_setting),

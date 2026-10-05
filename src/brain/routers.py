@@ -168,6 +168,11 @@ from brain.data_steward_routes import router as data_steward_router
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
 
+# Send the evening digest to: the one setting naming a connected channel and a conversation in it,
+# chosen from what each channel offers now and saved as the Settings screen saves. See
+# `brain.digest_routes`.
+from brain.digest_routes import router as digest_router
+
 # Every person this install knows, one person's page, and a person added by hand where no staff
 # list is read (M27.11.2, M27.15.19). See `brain.directory_routes`.
 from brain.directory_routes import router as directory_router
@@ -181,6 +186,10 @@ from brain.erasure_routes import router as erasure_router
 # that already says who may see it, and a field saying the process log is kept nowhere the
 # console can read. See `brain.error_routes`.
 from brain.error_routes import router as error_router
+
+# A question nothing answered, handed to the person named for its skill's queue, the caller's two
+# lists of them, and the naming form. See `brain.escalation_routes`.
+from brain.escalation_routes import router as escalation_router
 
 # The Knowledge, Learning and Memory screens. A router of its own because all three are the
 # estate-wide reads `brain.console.govern_estate` decides, and all three stand on a store
@@ -237,6 +246,10 @@ from brain.knowledge_intake_routes import router as knowledge_intake_router
 # A stored document verified, handed over, replaced and proposed for the whole company, the
 # tasks each opens and captured solutions decided. See `brain.knowledge_lifecycle_routes`.
 from brain.knowledge_lifecycle_routes import router as knowledge_lifecycle_router
+
+# Whether a document is public for the website widget, read and changed from its detail page by a
+# person whose grant decides it for that document's department. See `brain.knowledge_public_routes`.
+from brain.knowledge_public_routes import router as knowledge_public_router
 
 # Adding a document to the knowledge layer from the Knowledge page, read by the text path and
 # placed where the uploader holds `admin:knowledge`. See `brain.knowledge_routes`.
@@ -396,8 +409,9 @@ from brain.vault_routes import router as vault_router
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
 
-# The website widget's front door: a stranger's browser is handed a session that holds nothing, or
-# told why not, with no sign-in and the origin proved instead. See `brain.widget_routes`.
+# The website widget's front door: a stranger's browser is handed a session, or told why not, and
+# its questions are answered from knowledge marked public alone, with no sign-in and the origin
+# proved instead. See `brain.widget_routes`.
 from brain.widget_routes import router as widget_router
 
 

@@ -29,6 +29,7 @@ from brain.core.department import SLUG_PATTERN
 from brain.ops import (
     acceptance,
     acceptance_audit,
+    acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_recovery,
     acceptance_run,
@@ -571,6 +572,11 @@ WRITTEN_BY_CHECKS = (
     "mem.adaptive",
     "mem.learning",
     "mem.correction",
+    "auth.binding_code",
+    "auth.session",
+    "auth.service_account",
+    "auth.api_key",
+    "ops.credential_write",
     "agent.browser_envelope",
     "agent.browser_session",
     "obs.trace_step",
@@ -663,6 +669,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert (
         outcomes.pop("a_document_is_added_answered_replaced_and_falls_due_for_review")[0] == NOT_RUN
     )
+    # Both escalation checks ask through the stand-in; `tests/unit/test_acceptance_escalation.py`
+    # runs them with the hosted profile and a vault the test answers for.
+    for escalation_check in registered(("brain.ops.acceptance_escalation",)):
+        assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
@@ -671,6 +681,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("mail_in_the_mailbox_is_read_answered_and_marked") == (
         NOT_RUN,
         acceptance_checks_channels.NO_RELAY_IS_SAVED_FOR_THE_MAILBOX,
+    )
+    # No relay here either; `tests/unit/test_acceptance_accounts.py` saves one and passes.
+    assert outcomes.pop("forgot_password_is_sent_through_the_relay_on_notifications") == (
+        NOT_RUN,
+        acceptance_checks_accounts.NO_RELAY_FOR_THE_RESET_EMAIL,
     )
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to

@@ -39,6 +39,11 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
+    "Adding a work email binds an address to a person who has none. It retires the staff list's " +
+    "person for that address only when they have never signed in and hold nothing but what the sync " +
+    "wrote, which the sync writes again; anything else is written only from the page's confirmation, " +
+    "which tests/people-access-pages.test.tsx and tests/unit/test_work_email.py hold.",
   "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)":
     "Previewing a run through an agent for the person on the page writes nothing: it is the agent " +
     "Profile's own preview route, which asks the gate and keeps no row.",
@@ -172,6 +177,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
     "and it reaches no agent until it is approved and assigned, both of which are confirmed.",
+  "src/pages/skills/SkillForms.tsx PROCEDURE_PATH":
+    "Imports a written procedure into the library as a new draft, undecided, exactly as an added " +
+    "package is: the same words twice are refused, a revised document is a new version beside the " +
+    "old one, and it reaches no agent until it is approved and assigned, both of which are confirmed.",
   "src/pages/skills/SkillForms.tsx versionsPath(one.digest)":
     "Saves an edit as a new, undecided version beside the one it came from, which is never changed; " +
     "every agent keeps the version it runs, which tests/unit/test_skill_routes.py holds, so nothing " +

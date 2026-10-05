@@ -223,6 +223,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, Asking, reachable_sources
 from brain.channels.adapter import ChannelAdapter, ChannelCapabilities, channel_adapters
 from brain.console.agent_profile import (
+    NOT_TAKEN_OVER,
     RUN_SPEND_IS_RECORDED,
     LeashRow,
     ToolRow,
@@ -230,6 +231,7 @@ from brain.console.agent_profile import (
     leash_rows,
     leash_up_to,
     rung_key,
+    taken_over,
     tool_rows,
 )
 from brain.console.agent_tabs import SKILL_SCREEN, rendering_profile
@@ -258,13 +260,15 @@ from brain.console.workspace_capabilities import (
 from brain.core.entitlement import Capability
 from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.errors import Absent, Failed
-from brain.core.field_policy import FieldPolicy
+from brain.core.field_policy import FieldPolicy, FieldRule
 from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.abstain import AutonomyBreaker
 from brain.gate.context import TrafficClass
 from brain.gate.leash import Leash
 from brain.gate.roster import viewer_for
+from brain.gate.takeover_store import TakeoverStandings
 from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.registry import ModelPin
@@ -701,6 +705,11 @@ class LeashRowView(BaseModel):
     configured: bool
     acts: bool
     entries: list[LeashEntryView] = []
+    #: The rung the autonomy breaker holds this target to, when lower than `rung` (M8.3.5).
+    lowered_to: str | None = None
+    #: When people took this agent's work on the target over inside the week, oldest first.
+    #: When and nothing else; see `A_LOWERED_RUNG_IS_SHOWN_WITH_THE_TAKEOVERS_BEHIND_IT`.
+    taken_over_at: list[datetime] = []
 
 
 class AgentCeilingView(BaseModel):
@@ -1226,12 +1235,23 @@ def product_field_policy() -> FieldPolicy:
     has to fail in: the policy decides the most sensitive thing a run could return, which
     decides which surfaces may carry it, so a policy missing a rule offers a channel that
     should not have been offered. `brain.tools.startup.every_row_classification` is the one
-    list of what this product classifies, and one classification per entity is pinned by that
-    module's own test, so the rules cannot collide here.
+    list of what this product classifies.
+
+    **Two sources may classify one field, and the stricter classification is kept.** Since
+    2026-09-30 the connected sources' entities are classified beside the demo's, and the demo's
+    `invoice.amount_due` is confidential where Xero's is restricted. Each source is still redacted
+    by its own rules (`brain.api_routes.source_field_policies`); this policy only decides which
+    surfaces a run could be carried on, so where two sources disagree the more sensitive reading
+    is the one that must decide, and keeping the first would offer a channel a restricted value
+    must not reach.
     """
-    return FieldPolicy(
-        rules=tuple(rule for one in every_row_classification() for rule in one.policy().rules)
-    )
+    strictest: dict[tuple[str, str], FieldRule] = {}
+    for one in every_row_classification():
+        for rule in one.policy().rules:
+            held = strictest.get(rule.key)
+            if held is None or rule.classification.rank > held.classification.rank:
+                strictest[rule.key] = rule
+    return FieldPolicy(rules=tuple(strictest.values()))
 
 
 def offered_surfaces(record: AgentRecord, asked: Asking) -> tuple[ChannelCapabilities, ...]:
@@ -1434,7 +1454,12 @@ def configured(
     return Configured(tools=tools, leash=rows)
 
 
-def profile_view(record: AgentRecord, setup: Configured, asked: Asking) -> ProfileView:
+def profile_view(
+    record: AgentRecord,
+    setup: Configured,
+    asked: Asking,
+    standings: Mapping[str, AutonomyBreaker] | None = None,
+) -> ProfileView:
     """The Profile block for a reader of the Settings tab (M27.11.15's content, not its page).
 
     The capability names are `ceiling_block`'s for this reader, whole or locked. See
@@ -1467,19 +1492,25 @@ def profile_view(record: AgentRecord, setup: Configured, asked: Asking) -> Profi
             for one in setup.tools
         ],
         leash=[
-            LeashRowView(
-                target=one.target,
-                rung=rung_key(one.highest),
-                rungs=[rung_key(rung) for rung in one.rungs],
-                configured=one.configured,
-                acts=one.acts,
-                entries=[
-                    LeashEntryView(rung=rung_key(entry.rung), where=entry.where)
-                    for entry in one.entries
-                ],
-            )
-            for one in setup.leash
+            leash_row_view(one, (standings or {}).get(one.target), asked.now) for one in setup.leash
         ],
+    )
+
+
+def leash_row_view(row: LeashRow, standing: AutonomyBreaker | None, now: datetime) -> LeashRowView:
+    """One leash row under the wire names, with the breaker's standing on its target at `now`."""
+    held = NOT_TAKEN_OVER if standing is None else taken_over(row, standing, now)
+    return LeashRowView(
+        target=row.target,
+        rung=rung_key(row.highest),
+        rungs=[rung_key(rung) for rung in row.rungs],
+        configured=row.configured,
+        acts=row.acts,
+        entries=[
+            LeashEntryView(rung=rung_key(entry.rung), where=entry.where) for entry in row.entries
+        ],
+        lowered_to=None if held.lowered_to is None else rung_key(held.lowered_to),
+        taken_over_at=list(held.at),
     )
 
 
@@ -1497,6 +1528,7 @@ def workspace(
     spend: Sequence[Actual] = (),
     created_at: datetime | None = None,
     owner_name: str | None = None,
+    standings: Mapping[str, AutonomyBreaker] | None = None,
 ) -> WorkspaceView:
     """One visible agent's workspace at this caller's reach.
 
@@ -1549,7 +1581,7 @@ def workspace(
         connectors=connector_view(install, record, registry, asked),
         channels=list(channel_views(record, asked)),
         headline=headline_view(record.agent_id, spend, asked),
-        profile=None if setup is None else profile_view(record, setup, asked),
+        profile=None if setup is None else profile_view(record, setup, asked, standings),
     )
 
 
@@ -1776,15 +1808,45 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
         names = await steward_names(session, [record.audience.owner_id])
     install = install_of(pair[0], pair[1], record) if pair is not None else None
     spend = [one for one in (actual_of(row) for row in costs) if one is not None]
+    registry = _tool_registry(request)
     return workspace(
         record,
         install,
         asked,
-        registry=_tool_registry(request),
+        registry=registry,
         spend=spend,
         created_at=created_at,
         owner_name=names.get(record.audience.owner_id),
+        standings=await standings_for(request, record, install, registry, asked),
     )
+
+
+async def standings_for(
+    request: Request,
+    record: AgentRecord,
+    install: Install | None,
+    registry: ToolRegistry | None,
+    asked: Asking,
+) -> Mapping[str, AutonomyBreaker]:
+    """The autonomy breaker's standing on each leash target, for a reader of the Settings tab.
+
+    Read only for a reader the Profile is sent to, at the request's own instant, and nothing on a
+    process with nowhere takeovers are kept. A read that fails is logged and drawn as no standing
+    rather than failing the whole page: the rung the agent is held to is decided by the leash,
+    and the page only describes it. See
+    `brain.console.agent_profile.A_LOWERED_RUNG_IS_SHOWN_WITH_THE_TAKEOVERS_BEHIND_IT`.
+    """
+    found = getattr(request.app.state, "takeovers", None)
+    if not isinstance(found, TakeoverStandings) or not may_read_settings(asked):
+        return {}
+    targets = [one.target for one in configured(record, install, registry).leash]
+    try:
+        return await found.standings(record.agent_id, targets, asked.now)
+    except Exception as exc:
+        # Broad for the reason `brain.app` gives about a table it cannot read at start: the
+        # page describes, and a description it cannot complete is still a page.
+        log.warning("takeover standings could not be read", error=type(exc).__name__)
+        return {}
 
 
 @router.get("/agent-templates", response_model=TemplateGallery, responses=COMMON_RESPONSES)

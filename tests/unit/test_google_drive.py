@@ -56,6 +56,7 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.google_drive import (
+    CONNECTOR_NAME,
     DEFAULT_PAGE_SIZE,
     FILE,
     FILE_FIELDS,
@@ -124,7 +125,7 @@ from brain.connectors.manifest import (
 from brain.connectors.manifest import projectability as clauses_for
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import RestSpecError
-from brain.connectors.throttle import CallOutcome, UnmeasuredSourceError, is_retryable, limits_for
+from brain.connectors.throttle import CallOutcome, is_retryable, limits_for
 from brain.core.envelope import IdentityMode, SideEffect
 from brain.core.errors import Degraded
 from brain.core.projection import (
@@ -614,15 +615,20 @@ def test_every_sharing_state_says_what_it_means() -> None:
         assert text.strip(), f"{state} is classified with no explanation"
 
 
-def test_the_visibility_predicate_is_the_folder_and_never_an_enumeration_of_people() -> None:
+def test_the_visibility_predicate_is_the_folder_and_its_department_and_never_people() -> None:
     """A projection stored with a resolved ACL wearing a predicate's shape does not
     re-evaluate against the live entitlement set, so it is wrong from the next leaver
     onwards. The folder is the half of Drive's model that can be carried as a predicate at
-    all, and the manifest refuses the other half rather than trusting this module."""
+    all, the department is this install's half that a grant of `read:drive_file` is scoped by, and
+    the manifest refuses the other half rather than trusting this module. Delete this and the
+    stored rows can lose the department a reader's grant is judged against."""
     connection = a_connection()
 
     assert connection.visibility_predicate() == Scope(
-        clauses=(Clause(field="folder_id", op=Op.EQ, value=FOLDER),)
+        clauses=(
+            Clause(field="folder_id", op=Op.EQ, value=FOLDER),
+            Clause(field="department", op=Op.EQ, value=DEPARTMENT),
+        )
     )
     assert file_projection(connection).visibility == connection.visibility_predicate()
 
@@ -714,14 +720,18 @@ def test_a_field_drive_omitted_contributes_nothing_rather_than_a_null() -> None:
     assert "revision_id" not in fields
 
 
-def test_a_row_may_not_be_projected_without_a_sharing_state_somebody_reached() -> None:
-    """The refusal carried into the projection, so a file whose sharing was never read cannot
-    reach `proj.record` by a different door from the knowledge one. Two paths with one
-    refusal between them is one path with a bypass."""
+def test_a_row_whose_sharing_drive_did_not_show_is_kept_as_undetermined() -> None:
+    """`WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT` (needs-rupash 135, decided A): a
+    Viewer is shown no file's sharing, so the index keeps such a file with its verdict said
+    rather than refusing it, and the knowledge layer's door still refuses it. Until 2026-09-30
+    this refused the row, which with the account a Viewer kept nothing. Delete this and the
+    index can go back to keeping nothing, or keep a file under a verdict nobody reached."""
     row = listing_operation().project(a_listing(1))[0]
 
+    kept = projected_fields(row, connection=a_connection(), sharing=SharingState.UNDETERMINED)
+    assert kept["sharing_state"] == SharingState.UNDETERMINED.value
     with pytest.raises(DriveError, match="undetermined"):
-        projected_fields(row, connection=a_connection(), sharing=SharingState.UNDETERMINED)
+        a_connection().knowledge_visibility(SharingState.UNDETERMINED)
 
 
 def test_every_field_this_connector_projects_passes_all_five_clauses() -> None:
@@ -1327,16 +1337,21 @@ def test_every_tool_declares_the_identity_it_actually_runs_under() -> None:
         assert tool.identity_mode is IdentityMode.SERVICE
 
 
-def test_the_connector_declares_no_ceiling_because_nobody_has_measured_one() -> None:
-    """The honest declaration and a real gap in one assertion. `brain.ops.limits` records no
-    figure for this source and there is no recording to derive one from, so `limits_for`
-    refuses rather than inventing a number that would look verified. Nothing paces this
-    connector today, and naming a ceiling here would hide that rather than fix it."""
-    declared = a_manifest()
+def test_the_connector_is_paced_by_google_s_quota_at_its_dearest_call() -> None:
+    """`THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL`. The manifest names Drive's own row in
+    `brain.ops.limits`, and that row is Google's 325,000 units a minute for one user of one
+    project over the 200 a download costs, so no mix of listings, reads and downloads can spend
+    more than Google allows. Until 2026-09-30 the manifest named none and nothing paced this
+    connector. Delete this and the ceiling can be a figure nobody derived, or name another
+    source's row."""
+    from brain.ops.limits import connector_ceiling
 
-    assert declared.ceiling == ""
-    with pytest.raises(UnmeasuredSourceError, match="declares no ceiling"):
-        limits_for(declared, principal_id="p_rupash")
+    declared = a_manifest()
+    ceiling = connector_ceiling(declared.ceiling)
+
+    assert declared.ceiling == CONNECTOR_NAME
+    assert ceiling is not None and ceiling.per_minute == 325_000 // 200
+    assert limits_for(declared, principal_id="p_reader")
 
 
 def test_the_subscription_declares_an_id_sweep_because_absence_is_the_only_signal() -> None:

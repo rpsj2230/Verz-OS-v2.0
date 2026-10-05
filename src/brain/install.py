@@ -460,6 +460,19 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="unset",
     ),
+    # --- approval cards in Lark, M10.2.3 (brain.approval_cards), needs-rupash 117
+    Setting(
+        name="INSTALL_LARK_CARD_APPROVALS",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Whether an approver may approve or reject with the buttons on an approval card in "
+            "Lark: `on` or `off`. A press on a card relies on Lark's own sign-in and carries no "
+            "second factor from the Brain, where a decision in the console asks for one, so switch "
+            "it on only if the company's Lark requires two-step verification. `off`, the default, "
+            "still sends the card, with no buttons and a link to decide it in the console."
+        ),
+        default="off",
+    ),
     # --- the knowledge scanner, M7.1.3 (brain.knowledge.scanners)
     Setting(
         name="INSTALL_KNOWLEDGE_SCANNER",
@@ -482,6 +495,26 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         default="clamav:3310",
     ),
     # --- the skill import acceptance check, M38.5.1 (brain.ops.acceptance_checks_skills)
+    # --- the evening digest, M38.3.3 (brain.ops.digest_destination)
+    Setting(
+        name="INSTALL_DIGEST_DESTINATION",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Where the evening build digest is sent, as channel:conversation, chosen on Install, "
+            "Settings from the conversations each connected channel offers and never typed. "
+            "`unset` sends nothing."
+        ),
+        default="unset",
+    ),
+    Setting(
+        name="INSTALL_DIGEST_TIME",
+        belongs=Belongs.LOCALE,
+        meaning=(
+            "The time of day the evening digest is sent, as HH:MM on the 24-hour clock in the "
+            "install's time zone. Changed on Install, Settings."
+        ),
+        default="18:00",
+    ),
     Setting(
         name="INSTALL_ACCEPTANCE_SKILL_SOURCE",
         belongs=Belongs.CONNECTORS,
