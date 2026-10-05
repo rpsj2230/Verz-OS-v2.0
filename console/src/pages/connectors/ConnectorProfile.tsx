@@ -17,7 +17,11 @@
  * agents whose manifest names it, among those the reader may see, and skills whose tools come from
  * it, for a reader of the skill library. An empty list says so in one sentence.
  *
- * Task ids: M27.11.9, M27.15.58, M11.2.1, M11.2.4
+ * **The steward is the person who answers for the source** (M7.7.2): whoever was named last, or
+ * until then the data steward or the person who connected it, as the API decides. They are the one
+ * told when somebody grants themselves access to what the source holds.
+ *
+ * Task ids: M27.11.9, M27.15.58, M11.2.1, M11.2.4, M7.7.2
  */
 
 import { Link } from "react-router-dom";
@@ -36,6 +40,8 @@ export const NOT_CONNECTED_NOTE = "It is not connected, so it keeps nothing and 
 export const NO_AGENT = "No agent you can see names this source.";
 export const NO_SKILL = "No skill you can see uses its tools.";
 export const SOURCE_NAME = "Source name";
+export const STEWARD_LABEL = "Steward";
+export const STEWARD_ID_LABEL = "Steward's person id";
 
 export function ConnectorProfile({
   detail,
@@ -65,6 +71,9 @@ export function ConnectorProfile({
               <Fact label="Connected">
                 {dateWords(latest.connectedAt)} by {personWords(detail.people, latest.connectedBy)}
               </Fact>
+            )}
+            {detail.steward === undefined ? null : (
+              <Fact label={STEWARD_LABEL}>{personWords(detail.people, detail.steward)}</Fact>
             )}
           </FactList>
         )}
@@ -150,6 +159,11 @@ export function ConnectorProfile({
             {latest === undefined ? null : (
               <Fact label="Connected by">
                 <code>{latest.connectedBy}</code>
+              </Fact>
+            )}
+            {detail.steward === undefined ? null : (
+              <Fact label={STEWARD_ID_LABEL}>
+                <code>{detail.steward}</code>
               </Fact>
             )}
           </FactList>

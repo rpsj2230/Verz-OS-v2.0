@@ -142,6 +142,7 @@ from brain.tables.skill import (
 from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
+from brain.tables.stewardship import ConnectorStewardRow, SelfGrantRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -413,6 +414,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0168_escalation. Points at nothing: the asker, the named person, the agent and the skill are
     # values, so a handoff outlives all four.
     "gate.escalation",
+    # 0167_stewards_and_self_grants. Neither points at anything: a steward, a source and a
+    # grant are values, so each record outlives what it names.
+    "ops.connector_steward",
+    "gate.self_grant",
 )
 
 __all__ = [
@@ -448,6 +453,7 @@ __all__ = [
     "ClassifiedRecordRow",
     "ClassifiedTableRow",
     "ConnectorConnectionRow",
+    "ConnectorStewardRow",
     "ConnectorSyncRow",
     "ControlRunRow",
     "ConversationRow",
@@ -506,6 +512,7 @@ __all__ = [
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",
+    "SelfGrantRow",
     "SensitiveReadRow",
     "SensitiveReferralRow",
     "ServiceAccountRow",
