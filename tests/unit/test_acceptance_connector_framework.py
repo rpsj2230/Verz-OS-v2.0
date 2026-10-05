@@ -19,7 +19,7 @@ run; and the notice check against a notice that names every source it failed.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1, M11.3.4
-Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5
+Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.5.2
 """
 
 from __future__ import annotations
@@ -53,6 +53,7 @@ LEAVES = {
         "M11.2.5",
         "M11.5.1",
         "M11.5.4",
+        "M11.5.2",
     ),
     "a_burst_is_paced_by_the_source_s_documented_ceiling": ("M11.3.1", "M11.3.5"),
     "failures_open_the_breaker_and_a_refusal_is_retried_in_budget": ("M11.3.2", "M11.3.3"),
@@ -270,6 +271,44 @@ def test_the_live_read_check_fails_when_a_silent_source_is_waited_for(
     assert ran("a_live_read_uses_the_service_key_ends_on_time_and_is_made_once") == (
         FAILED,
         "a read of a silent source did not end at its timeout in budget",
+    )
+
+
+def test_the_live_read_check_fails_when_independent_reads_are_made_one_after_another(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M11.5.2 broken: the executor awaits each read of a wave before starting the next, so a
+    fan-out takes the sum of its reads rather than its critical path. Delete this and three
+    sources asked about one question are read in turn with the check green."""
+    import types
+
+    import brain.connectors.live_read as live_read
+
+    async def in_turn(*awaitables: Any) -> list[Any]:
+        return [await one for one in awaitables]
+
+    sequential = types.SimpleNamespace(**{**vars(asyncio), "gather": in_turn})
+    monkeypatch.setattr(live_read, "asyncio", sequential)
+    assert ran("a_live_read_uses_the_service_key_ends_on_time_and_is_made_once") == (
+        FAILED,
+        "independent live reads were made one after another, not at once",
+    )
+
+
+def test_the_live_read_check_fails_when_a_dependent_read_does_not_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M11.5.2's other half broken: the plan puts every read in one wave, ignoring what a read
+    waits on. Delete this and a read built from another's answer can be sent before that answer
+    exists with the check green, because only its timing would show it."""
+    from brain.connectors.federation import FanOutPlan
+
+    monkeypatch.setattr(
+        FanOutPlan, "waves", lambda self: (tuple(one.call_id for one in self.calls),)
+    )
+    assert ran("a_live_read_uses_the_service_key_ends_on_time_and_is_made_once") == (
+        FAILED,
+        "a read in a fan-out, or one waiting on another, was not answered",
     )
 
 
