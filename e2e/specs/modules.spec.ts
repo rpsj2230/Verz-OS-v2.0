@@ -45,7 +45,7 @@ for (const [group, module] of MODULE_PAGES) {
     expect(section, `the administrator's menu has the ${group} module`).toBeDefined();
     for (const address of section ? addressesOf(section) : []) {
       reset(seen);
-      await openFromMenu(page, address.to);
+      await openFromMenu(page, address.to, section?.heading);
       await checkPage(page, seen, `${address.label} (${address.to})`, info);
     }
     reset(seen);

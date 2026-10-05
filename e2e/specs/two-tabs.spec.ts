@@ -12,6 +12,9 @@ import { checkPage, reset, watch } from "../lib/checklist";
 import { signInAsAdmin } from "../lib/signin";
 import { openFromMenu } from "../pages/module";
 
+/** The menu group both pages are in, as the navigation API heads it. */
+const PEOPLE = "People and access";
+
 test("a second tab signs in from the first tab's session and both keep working", async ({ browser }, info) => {
   const context = await browser.newContext();
   const first = await context.newPage();
@@ -33,7 +36,7 @@ test("a second tab signs in from the first tab's session and both keep working",
     [first, firstSeen, "first tab again"],
   ] as const) {
     reset(seen);
-    await openFromMenu(page, "/people");
+    await openFromMenu(page, "/people", PEOPLE);
     await checkPage(page, seen, `${name}: People`, info);
   }
 
@@ -42,7 +45,7 @@ test("a second tab signs in from the first tab's session and both keep working",
     timeout: 30_000,
   });
   reset(secondSeen);
-  await openFromMenu(second, "/sessions");
+  await openFromMenu(second, "/sessions", PEOPLE);
   await checkPage(second, secondSeen, "second tab after the first reloaded", info);
   await context.close();
 });

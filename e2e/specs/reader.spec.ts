@@ -28,11 +28,11 @@ test("the reader signs in with a password alone and is served no page the admini
   await signInWithPassword(page, READER);
   await expect(page.locator("#otp"), "no one-time code is asked of an account without one").toHaveCount(0);
   const menu = await served;
-  const theirs = menu.sections.flatMap((section) => addressesOf(section));
+  const theirs = menu.sections.flatMap((section) => addressesOf(section).map((one) => ({ ...one, heading: section.heading })));
   expect(theirs.filter((one) => !everything.has(one.to)), "pages served to the reader alone").toEqual([]);
   for (const address of theirs) {
     reset(seen);
-    await openFromMenu(page, address.to);
+    await openFromMenu(page, address.to, address.heading);
     await checkPage(page, seen, `reader: ${address.label} (${address.to})`, info);
   }
   await page.close();

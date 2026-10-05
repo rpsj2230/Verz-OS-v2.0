@@ -21,10 +21,25 @@ export interface ModulePage {
   readonly cases: (page: Page) => Promise<void>;
 }
 
-/** Open `to` from the console's menu or from a module's own tabs. */
-export async function openFromMenu(page: Page, to: string): Promise<void> {
+/**
+ * Open `to` from the console's menu or from a module's own tabs.
+ *
+ * The menu's groups fold, and a folded group keeps its links in the page but hidden, so a link
+ * that is there and not visible is opened by unfolding the group named `heading` first, as a
+ * person would. A link that stays hidden after that is a failure of the menu, not of the spec.
+ */
+export async function openFromMenu(page: Page, to: string, heading?: string): Promise<void> {
   const link = page.locator(`a[href="${to}"]`).first();
   await expect(link, `a link to ${to}`).toBeAttached({ timeout: 20_000 });
+  if (!(await link.isVisible()) && heading !== undefined) {
+    const group = page
+      .locator('nav[aria-label="Sections"]')
+      .getByRole("button", { name: heading, exact: true });
+    if ((await group.getAttribute("aria-expanded")) !== "true") {
+      await group.click();
+    }
+  }
+  await expect(link, `the link to ${to} can be seen`).toBeVisible({ timeout: 10_000 });
   await link.click();
   await expect(page).toHaveURL((url) => url.pathname === to, { timeout: 20_000 });
 }
