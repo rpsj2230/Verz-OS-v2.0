@@ -587,6 +587,8 @@ WRITTEN_BY_CHECKS = (
     "agent.learning_pause",
     "ops.operation",
     "ops.budget_version",
+    # A Lark Base indexed by a check offers its table's grants on the grants screen.
+    "gate.capability_registry",
 )
 
 
