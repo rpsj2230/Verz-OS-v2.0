@@ -32,6 +32,8 @@ from brain.gate.leash import Leash
 from brain.gate.model_lane import ModelLane
 from brain.gate.roster import run_entitlement
 from brain.gate.runtime import (
+    DEFAULT_MAX_TOOL_CALLS,
+    DEFAULT_MAX_TURNS,
     SEND_ONE_OBJECT,
     TOOL_NOT_AVAILABLE,
     AgentRuntime,
@@ -281,6 +283,7 @@ def test_a_run_reads_through_a_tool_and_answers_citing_what_it_read() -> None:
 
     assert isinstance(drafted.outcome, ComposedAnswer)
     assert drafted.outcome.text == "Hosting is 40 a month."
+    assert drafted.outcome.payload.source == "notes"
     assert {(one.entity, one.record_id, one.field) for one in drafted.outcome.citations} == {
         ("price_note", "n1", "amount"),
         ("price_note", "n1", "title"),
@@ -504,14 +507,18 @@ def test_the_wall_clock_stops_a_run() -> None:
 
 def test_an_agent_can_lower_its_tool_call_bound_and_never_raise_it() -> None:
     """The tool-call default is a ceiling too: an agent setting the stored maximum still stops at
-    the product's. Delete this and the tool-call setting becomes a way to run without a bound."""
+    the product's, which is below the turn bound so it is the one reached. Delete this and the
+    tool-call setting becomes a way to run without a bound."""
     made = setup([CALL] * 40, record=agent(PRICE, NAME, max_turns=50, max_tool_calls=200))
 
     run(made)
 
     [kept] = made.runs.kept
-    assert kept.tool_calls <= 16
-    assert kept.stop_reason in {StopReason.TOOL_CALL_BOUND, StopReason.TURN_BOUND}
+    assert (kept.stop_reason, kept.tool_calls) == (
+        StopReason.TOOL_CALL_BOUND,
+        DEFAULT_MAX_TOOL_CALLS,
+    )
+    assert DEFAULT_MAX_TOOL_CALLS < DEFAULT_MAX_TURNS
 
 
 def test_a_tool_with_a_side_effect_never_reaches_the_caller_even_if_offered() -> None:

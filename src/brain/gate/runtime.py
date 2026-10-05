@@ -156,8 +156,11 @@ SEND_ONE_OBJECT: Final = (
 # ------------------------------------------------------------------------ the bounds
 #: The most model turns one run takes, unless its agent sets fewer.
 DEFAULT_MAX_TURNS: Final = 8
-#: The most tool calls one run makes, unless its agent sets fewer.
-DEFAULT_MAX_TOOL_CALLS: Final = 16
+#: The most tool calls one run makes, unless its agent sets fewer. Fewer than the turns, because a
+#: reply asks for one tool at most: a bound at or above the turn bound could never be reached, and a
+#: run that has spent its calls keeps turns to answer from what it read. A mutation found the first
+#: figure, sixteen, unreachable; see `A_TOOL_CALL_BOUND_BELOW_THE_TURN_BOUND_IS_ONE_THAT_BITES`.
+DEFAULT_MAX_TOOL_CALLS: Final = 6
 #: The most tokens, in and out across every turn, one run may spend.
 DEFAULT_MAX_TOKENS: Final = 60_000
 #: How long a run may take from its first turn, by lane. A person is waiting on the answer lane.
@@ -166,6 +169,13 @@ MAX_SECONDS_BY_LANE: Final[Mapping[Lane, float]] = {Lane.ANSWER: 90.0, Lane.TASK
 #: model is told it was, so a large read cannot crowd out the question.
 MAX_RESULT_CHARS: Final = 12_000
 
+
+#: Why the tool-call default sits below the turn default.
+A_TOOL_CALL_BOUND_BELOW_THE_TURN_BOUND_IS_ONE_THAT_BITES: Final = (
+    "A reply asks for one tool at most, so a run makes at most one call a turn and a tool-call "
+    "bound at or above the turn bound is never reached. The default is below it, so a model that "
+    "calls on every turn stops at its call bound with turns left to answer from what it read."
+)
 
 #: Why an agent's stored bound can only narrow the product's.
 AN_AGENT_MAY_LOWER_A_BOUND_AND_NEVER_RAISE_IT: Final = (
