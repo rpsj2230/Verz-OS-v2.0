@@ -7,7 +7,7 @@ were handed instead of writing it. What is proved is that `brain.api_routes.answ
 function the web and every chat channel answer through, hands formation the turn a person's words
 were, at the run's reach and in their department, and hands the model the hints recall admitted.
 
-Task ids: M16.6.3, M16.7.12
+Task ids: M16.6.3, M16.7.12, M16.6.4
 """
 
 from __future__ import annotations
@@ -22,10 +22,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from brain.api import API_PREFIX
-from brain.api_routes import formations_of, recall_of
+from brain.api_routes import MARK_COUNTED, formations_of, recall_of
 from brain.app import Settings, create_app
 from brain.core.entitlement import EntitlementSet
 from brain.memory.turn import Turn
+from brain.ops.learning_signal_store import StoredMarks
 from brain.ops.memory_store import Formed, StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
 from brain.tools.startup import build_registry
@@ -191,3 +192,46 @@ def test_a_process_with_no_database_forms_nothing_and_recalls_nothing() -> None:
     assert type(recall_of(with_database)) is StoredRecall
     own = KeptFormations()
     assert formations_of(SimpleNamespace(memory_formations=own, db_sessions=None)) is own
+
+
+# ------------------------------------------------------------------------ a mark (M16.6.4)
+class KeptMarks(StoredMarks):
+    """A mark store answering from the traces it was told are the asker's, keeping each mark."""
+
+    def __init__(self, *theirs: tuple[str, str]) -> None:
+        self.theirs = set(theirs)
+        self.kept: list[tuple[str, str, bool]] = []
+
+    async def mark(self, *, principal_id: str, trace_id: str, helpful: bool, now: datetime) -> bool:
+        if (principal_id, trace_id) not in self.theirs:
+            return False
+        self.kept.append((principal_id, trace_id, helpful))
+        return True
+
+
+def test_a_person_marks_an_answer_they_were_given_with_one_action_and_no_words(
+    wired: tuple[TestClient, KeptFormations, KeptRecall],
+) -> None:
+    """**One action, one bit, no free text** (M16.6.4). A mark on the person's own answer is
+    counted and answered in the one sentence; a mark on somebody else's answer, or one that never
+    ran, is the one 404 and counts nothing; and a body carrying anything but the trace and the bit,
+    a note or the answer, is refused before any store is reached.
+
+    Delete this and the mark can grow a text box, which is where the answer gets pasted, or count
+    against answers other people were given."""
+    client, _, _ = wired
+    marks = KeptMarks((READER, "trace-mine"))
+    client.app.state.answer_marks = marks  # type: ignore[attr-defined]
+
+    def mark(body: dict[str, object]) -> Any:
+        return client.post(f"{API_PREFIX}/answer/mark", headers=headers(READER), json=body)
+
+    counted = mark({"trace_id": "trace-mine", "helpful": False})
+    theirs = mark({"trace_id": "trace-theirs", "helpful": True})
+    noted = mark({"trace_id": "trace-mine", "helpful": False, "note": "it said 12"})
+
+    assert counted.status_code == 200
+    assert counted.json() == {"counted": True, "told": MARK_COUNTED}
+    assert theirs.status_code == 404
+    assert noted.status_code == 422
+    assert marks.kept == [(READER, "trace-mine", False)]

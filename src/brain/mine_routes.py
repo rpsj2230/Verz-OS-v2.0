@@ -32,9 +32,15 @@ activity_this_month` counts them from chat turns, and no store writes a turn.
 reaches; and the memories formed from their own conversations that they may still read back,
 through `subject_memory`, which asks `may_recall` about them as they are now. A memory formed
 while they held a grant since revoked is absent here, which is
-`brain.member_activity.OWNERSHIP_ADMITS_THE_ROW_AND_RECALL_ADMITS_THE_WORDS`. No undo control:
-nothing stores a correction, so an undo would reach neither a row nor a behaviour, which is
-`brain.estate_routes.AN_UNDO_WITH_NO_CORRECTION_STORE_REACHES_NEITHER_A_ROW_NOR_A_BEHAVIOUR`.
+`brain.member_activity.OWNERSHIP_ADMITS_THE_ROW_AND_RECALL_ADMITS_THE_WORDS`.
+
+**Forget and edit, since 2026-09-29** (M16.4.2). `POST /me/memory/forget` and `/me/memory/edit`
+act on one memory formed from this person's own words, decided by `brain.console.own_things`
+and written through `brain.ops.memory_store.StoredMemoryRecords`, the store the Learning screen's
+undo writes through: a forget is a mark and an edit is a replacement and a supersession, so nothing
+is deleted and the next recall reads the change. Until then this card said nothing stored a
+correction, which stopped being true when `mem.correction` landed and the sentence did not move.
+See `A_PERSON_FORGETS_AND_EDITS_WHAT_WAS_FORMED_FROM_THEIR_OWN_WORDS`.
 
 **Given.** The agents this person can call, each with where it runs at their own run's reach
 and how often they used it, which is `brain.member_activity.my_agents`; their own ceilings and
@@ -55,17 +61,19 @@ nothing under it is never read as nothing having happened.
 is tested is the statements they compile to, every refusal and its order, and each decision
 reached through the real application.
 
-Task ids: M27.7.28
+Task ids: M27.7.28, M16.4.2
 """
 
 from __future__ import annotations
 
+import hashlib
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
 import structlog
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Row, Select, String, column, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -77,23 +85,34 @@ from brain.agent_routes import (
     record_of,
     viewer_of,
 )
-from brain.api import API_PREFIX, COMMON_RESPONSES
+from brain.api import API_PREFIX, COMMON_RESPONSES, bound_trace_id
 from brain.api_routes import Asked
 from brain.console.govern_estate import subject_memory
-from brain.console.own_things import is_own
+from brain.console.own_things import OwnThingsError, delete_own_memory, edit_own_memory, is_own
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.core.errors import Absent, Failed
-from brain.estate_routes import MAX_MEMORIES_CONSIDERED, RememberedAbout, remembered_about
+from brain.estate_routes import (
+    MAX_MEMORIES_CONSIDERED,
+    RememberedAbout,
+    learning_of,
+    memory_records_of,
+    remembered_about,
+)
 from brain.knowledge.search import PRINCIPAL_SETTING
 from brain.member.shell import disclosure_line, member_screen
 from brain.member_activity import my_agents, personal_budget
+from brain.memory.digest import Learning
+from brain.memory.signals import Signal
+from brain.memory.turn import MAX_STATEMENT_CHARS, MEMORY_ID_DIGEST_CHARS, MEMORY_ID_PREFIX
 from brain.ops.budget_store import in_force
 from brain.ops.budgets import BudgetLevel, BudgetPeriod, BudgetRow
+from brain.ops.memory_store import MemoryRecords
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
+from brain.tables.learning import MEMORY_ID_CHARS
 from brain.tables.spend import SpendActualRow
 
 log = structlog.get_logger()
@@ -140,10 +159,21 @@ CORRECTIONS_ARE_NOT_RECORDED: Final = (
     "wrong."
 )
 
-#: Why the learned card has no undo control.
-UNDO_IS_NOT_RECORDED: Final = (
-    "Nothing here can be undone from this page yet: nothing on this install stores an undo, so a "
-    "button would change neither what is kept nor any answer you are given."
+#: What the learned card says beside its controls.
+FORGET_AND_EDIT_SAY: Final = (
+    "Forget stops a memory being used at once and keeps the record of it; if it replaced an "
+    "earlier one, the earlier one is used again. Edit keeps what you write instead, in the same "
+    "place, and the old words stay in its history."
+)
+
+#: Why a person may forget or edit a memory of theirs and nobody else's, here.
+A_PERSON_FORGETS_AND_EDITS_WHAT_WAS_FORMED_FROM_THEIR_OWN_WORDS: Final = (
+    "Who a memory is about is who was asking when it formed, and this page offers forget and edit "
+    "on those memories alone, decided by brain.console.own_things, which is the ownership the "
+    "page reads its list by. A memory of somebody else's is refused in the words a memory that "
+    "does not exist is refused in. Forget writes a mark and edit writes a replacement and a mark, "
+    "through the store the Learning screen's undo writes through, so nothing is ever deleted and "
+    "the next recall, the next answer and the Memory screen all read the change at once."
 )
 
 #: What the connected accounts card says.
@@ -215,6 +245,35 @@ class MineLearnedView(BaseModel):
     stated: bool
     confidence: float
     formed_at: datetime
+
+
+class MineMemoryAsked(BaseModel):
+    """Which of this person's memories to forget: its id and nothing else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    memory_id: str = Field(min_length=1, max_length=MEMORY_ID_CHARS, pattern=r"^\S+$")
+
+
+class MineMemoryEdited(BaseModel):
+    """Which of this person's memories to edit, and what it should say instead."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    memory_id: str = Field(min_length=1, max_length=MEMORY_ID_CHARS, pattern=r"^\S+$")
+    statement: str = Field(min_length=1, max_length=MAX_STATEMENT_CHARS)
+
+
+class MineMemoryChangedView(BaseModel):
+    """What a forget or an edit did: whether it took effect, the store's sentence, and the id of
+    the memory an edit wrote in its place."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    memory_id: str
+    took_effect: bool
+    told: str
+    replacement_id: str | None = None
 
 
 class MineWorkspaceView(BaseModel):
@@ -470,8 +529,183 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
                 for one in remembered.memory.extracted
             ),
         ],
-        learned_undo=UNDO_IS_NOT_RECORDED,
+        learned_undo=FORGET_AND_EDIT_SAY,
         can_ask_about=disclosure_line(asked.reach, now),
         accounts=ACCOUNTS_ARE_NOT_READ_HERE,
         staleness=served.banner,
     )
+
+
+# ------------------------------------------------------------ forgetting and editing
+def replacement_for(
+    learning: Learning, *, principal_id: str, statement: str, at: datetime
+) -> Learning:
+    """The memory an edit writes in place of `learning`: what it says is new, and nothing else.
+
+    Everything `brain.memory.review.replacement_gaps` holds equal is copied, and it is formed now,
+    because a person restating a thing is a new statement of it. Its id is derived from the memory
+    it replaces, the person, the words and the instant, and never minted.
+    """
+    source = f"{principal_id}\n{learning.memory_id}\n{statement}\n{at.isoformat()}"
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    return Learning(
+        memory_id=f"{MEMORY_ID_PREFIX}{digest[:MEMORY_ID_DIGEST_CHARS]}",
+        proposal=learning.proposal,
+        formation=replace(learning.formation, formed_at=at),
+        formed_confidence=learning.formed_confidence,
+        replaced_id=learning.memory_id,
+        agent_id=learning.agent_id,
+    )
+
+
+async def stored_learning(
+    sessions: async_sessionmaker[AsyncSession], memory_id: str
+) -> Learning | None:
+    """The memory asked about, as the domain's `Learning`, or None when there is no such memory.
+
+    Whose it is is not asked here: `brain.console.own_things.delete_own_memory` and
+    `edit_own_memory` ask it, so ownership is decided in one place rather than in two that could
+    disagree, and a memory of somebody else's is refused by them in the words a missing one is.
+    """
+    async with sessions() as session:
+        return await learning_of(session, memory_id)
+
+
+async def forgotten(
+    sessions: async_sessionmaker[AsyncSession],
+    records: MemoryRecords,
+    *,
+    principal_id: str,
+    memory_id: str,
+    ent_hash: str,
+    trace_id: str,
+    now: datetime,
+) -> MineMemoryChangedView | None:
+    """Forget one of this person's memories, or None when it is not theirs or not there.
+
+    `brain.console.own_things.delete_own_memory` decides it is theirs and what a forget is, and the
+    store writes it under the lock the Learning screen's undo takes. The body of
+    `forget_my_memory`, and what the install's acceptance check calls.
+    """
+    found = await stored_learning(sessions, memory_id)
+    if found is None:
+        return None
+    try:
+        delete_own_memory(found, principal_id=principal_id, at=now)
+    except OwnThingsError:
+        return None
+    decided = await records.undo(found, actor=principal_id, trace_id=trace_id, ent_hash=ent_hash)
+    return MineMemoryChangedView(
+        memory_id=found.memory_id, took_effect=decided.took_effect, told=decided.reason
+    )
+
+
+async def edited(
+    sessions: async_sessionmaker[AsyncSession],
+    records: MemoryRecords,
+    *,
+    principal_id: str,
+    memory_id: str,
+    statement: str,
+    ent_hash: str,
+    trace_id: str,
+    now: datetime,
+) -> MineMemoryChangedView | None:
+    """Edit what one of this person's memories says, or None when it is not theirs or not there.
+
+    `brain.console.own_things.edit_own_memory` decides it is theirs and that the replacement changes
+    the words and nothing else, and the store writes the replacement, its learning record and the
+    supersession in one transaction. The body of `edit_my_memory`.
+    """
+    said = statement.strip()
+    found = None if not said else await stored_learning(sessions, memory_id)
+    if found is None:
+        return None
+    replacement = replacement_for(found, principal_id=principal_id, statement=said, at=now)
+    try:
+        edit_own_memory(found, replacement, principal_id=principal_id, at=now)
+    except (OwnThingsError, ValueError):
+        return None
+    decided = await records.edit(
+        found,
+        replacement,
+        said,
+        prompted_by=Signal.REJECTED,
+        actor=principal_id,
+        trace_id=trace_id,
+        ent_hash=ent_hash,
+    )
+    return MineMemoryChangedView(
+        memory_id=found.memory_id,
+        took_effect=decided.replacement is not None,
+        told=decided.reason,
+        replacement_id=None if decided.replacement is None else decided.replacement.memory_id,
+    )
+
+
+def _stores(
+    request: Request, asked: Asked
+) -> tuple[async_sessionmaker[AsyncSession], MemoryRecords]:
+    """The member grant first, then this process's sessions and memory store, or a fault."""
+    if not permitted(member_screen(MEMBER_HOME).read, asked.reach, asked.now):
+        log.info("own memory not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    sessions = sessions_of(request)
+    records = memory_records_of(request)
+    if sessions is None or records is None:
+        raise Failed("no database on this process")
+    return sessions, records
+
+
+@router.post("/me/memory/forget", response_model=MineMemoryChangedView, responses=COMMON_RESPONSES)
+async def forget_my_memory(
+    request: Request, body: MineMemoryAsked, asked: Asked
+) -> MineMemoryChangedView:
+    """Forget one memory formed from this person's own words, and say what was written.
+
+    See `A_PERSON_FORGETS_AND_EDITS_WHAT_WAS_FORMED_FROM_THEIR_OWN_WORDS`. Somebody else's memory
+    and one that does not exist are the one 404. A second forget is answered 200 with
+    `took_effect` false and the store's sentence.
+    """
+    sessions, records = _stores(request, asked)
+    done = await forgotten(
+        sessions,
+        records,
+        principal_id=asked.caller.principal.id,
+        memory_id=body.memory_id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=bound_trace_id(request),
+        now=asked.now,
+    )
+    if done is None:
+        log.info("own memory not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    log.info("own memory forgotten", principal=asked.caller.principal.id, took=done.took_effect)
+    return done
+
+
+@router.post("/me/memory/edit", response_model=MineMemoryChangedView, responses=COMMON_RESPONSES)
+async def edit_my_memory(
+    request: Request, body: MineMemoryEdited, asked: Asked
+) -> MineMemoryChangedView:
+    """Edit what one memory formed from this person's own words says, and say what was written.
+
+    The old memory stays on the record, marked as replaced, and its words are in the history.
+    Somebody else's memory, one that does not exist and a statement of white space are the one 404.
+    """
+    sessions, records = _stores(request, asked)
+    done = await edited(
+        sessions,
+        records,
+        principal_id=asked.caller.principal.id,
+        memory_id=body.memory_id,
+        statement=body.statement,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=bound_trace_id(request),
+        now=asked.now,
+    )
+    if done is None:
+        log.info("own memory not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    log.info("own memory edited", principal=asked.caller.principal.id, took=done.took_effect)
+    return done

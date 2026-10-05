@@ -44,13 +44,13 @@ from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import UnmeasuredSourceError
 from brain.ops.limits import (
     FRESHDESK_SEARCH_MAX_RECORDS,
-    SOURCE_CEILINGS,
     LimiterState,
     LimitKey,
     LimitScope,
     WindowState,
     check,
     principal_share_of,
+    source_ceilings,
     source_limits,
 )
 from brain.ops.secrets import SecretRef, VaultRole
@@ -249,7 +249,7 @@ def test_the_daily_ceiling_is_reserved_too_so_a_backfill_cannot_take_the_whole_d
     assert check(now=NOW, limits=source_limits("xero", principal_id=ASKER), state=state).allowed
 
 
-@pytest.mark.parametrize("ceiling", sorted({c.per_minute for c in SOURCE_CEILINGS}))
+@pytest.mark.parametrize("ceiling", sorted({c.per_minute for c in source_ceilings()}))
 def test_a_backfills_share_always_leaves_room_and_is_never_nothing(ceiling: int) -> None:
     """Both directions, against every ceiling anybody has actually verified. A share that
     rounds to nothing takes the backfill out of service while the connector reads as idle,

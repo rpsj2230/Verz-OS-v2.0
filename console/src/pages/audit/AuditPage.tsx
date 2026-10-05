@@ -45,6 +45,7 @@ import {
   type AuditFilters,
   type LedgerPage,
 } from "../auditQuery";
+import { TRACE_PAGE_PATH } from "../traceQuery";
 import { ACTION_LABELS, kindWords, NO_NAME } from "./auditWords";
 import { LedgerTable } from "./LedgerTable";
 import { useLedger } from "./useLedger";
@@ -56,6 +57,7 @@ export const READING_THE_LEDGER = "Reading the ledger.";
 export const ENTRIES_LABEL = "Audit entries";
 export const FILTERS_LABEL = "Narrow the ledger";
 export const VERIFY_LINK = "Verify the ledger";
+export const TRACE_LINK = "Read a run's trace";
 export const EXPORT_LINK = "Export the trail";
 /** Where a whole-window export of the trail is taken, with its reason, on Import and export. */
 export const EXPORT_ADDRESS = "/import-export";
@@ -328,9 +330,14 @@ export function AuditPage() {
         title={AUDIT_HEADING}
         lede={AUDIT_LEDE}
         actions={
-          <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
-            <Link to={EXPORT_ADDRESS}>{EXPORT_LINK}</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+              <Link to={TRACE_PAGE_PATH}>{TRACE_LINK}</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+              <Link to={EXPORT_ADDRESS}>{EXPORT_LINK}</Link>
+            </Button>
+          </>
         }
         primary={
           <Button asChild size="sm" className="min-h-11 no-underline sm:min-h-8">

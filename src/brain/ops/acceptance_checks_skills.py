@@ -61,9 +61,11 @@ from brain.ops.acceptance import (
 from brain.ops.acceptance_run import Harness
 
 if TYPE_CHECKING:
+    from brain.connectors.registry import ConnectorRegistry
     from brain.console.skill_library import Assignment, LibrarySkill
     from brain.core.entitlement import EntitlementSet
     from brain.tools.fetch import FetchedBytes, Fetcher, Resolver
+    from brain.tools.registry import ToolRegistry
 
 #: Where this module's checks stand on the Install page, before every larger key. See
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
@@ -515,6 +517,10 @@ async def _an_agent(
     *,
     tier: Tier = DEFAULT_TIER,
     capabilities: Sequence[str] = (),
+    named: str = "",
+    scope: Scope | None = None,
+    connectors: Sequence[str] = (),
+    settled: tuple[ConnectorRegistry, ToolRegistry] | None = None,
 ) -> str:
     """An agent of acceptance_a installed from a template signed with a key made for this check.
 
@@ -522,8 +528,15 @@ async def _an_agent(
     has them. The instance row is written field by field because that module builds it from a
     wizard's `Installation`, which a check with no connectors and no tools does not have.
     `tier` and `capabilities` are the template's, for a check asking through the agent: its model
-    level, and the ceiling its runs are narrowed to, over acceptance_a.
+    level, and the ceiling its runs are narrowed to, over acceptance_a, or over `scope` when one
+    is given. `named` follows the run's id, for a check holding two agents at once.
+
+    `connectors` are the sources the template names, and `settled` the install's connector and
+    tool registries: with them the agent is finished by `brain.agents.install.settle`, as an
+    install is, so an agent naming a source the install does not serve is refused here rather
+    than stored disabled and asked as if it could answer.
     """
+    from brain.agents.install import settle
     from brain.agents.install_store import agent_values, version_values
     from brain.agents.model import AgentAudience
     from brain.agents.template import (
@@ -539,7 +552,7 @@ async def _an_agent(
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 
-    agent_id, key = f"acceptance_{h.run}", secrets.token_hex(32)
+    agent_id, key = f"acceptance_{h.run}{named}", secrets.token_hex(32)
     signed = publish(
         TemplateManifest(
             identity=ManifestIdentity(
@@ -551,20 +564,34 @@ async def _an_agent(
             persona="Answers an install acceptance check and nobody else.",
             tier=tier,
             authority=ManifestAuthority(
-                scope=Scope.department(A),
+                scope=Scope.department(A) if scope is None else scope,
                 capabilities=tuple(Capability(value=one) for one in capabilities),
             ),
+            connectors=tuple(connectors),
         ),
         key=key,
         signed_by=owner,
         at=h.now,
     )
     instance = install(signed, key=key, instance_id=agent_id, created_by=owner, at=h.now)
-    effective = materialise(
-        signed,
-        instance,
-        audience=AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A),
-    )
+    audience = AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A)
+    if settled is None:
+        effective = materialise(signed, instance, audience=audience)
+        record = effective.record
+    else:
+        connected, tools = settled
+        finished = settle(
+            signed,
+            instance,
+            audience=audience,
+            unanswered=(),
+            registry=connected,
+            tools=tools,
+            at=h.now,
+        )
+        if not finished.completeness.is_ready:
+            raise CheckFailedError("an agent naming a source this install serves was not ready")
+        effective, record = finished.effective, finished.record
     await h.execute(
         *h.attributed(owner),
         insert(TemplateVersionRow).values(**version_values(signed)),
@@ -582,7 +609,7 @@ async def _an_agent(
             effective_hash=effective.config_hash,
             created_by=owner,
         ),
-        insert(AgentRow).values(**agent_values(effective.record)),
+        insert(AgentRow).values(**agent_values(record)),
     )
     return agent_id
 

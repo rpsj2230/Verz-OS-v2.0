@@ -44,8 +44,12 @@ interface FormCase {
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
+  // A memory's edit opens in place on My workspace, the first form on the page once opened.
+  "src/pages/MyWorkspace.tsx": [{ pattern: "/me", opener: "Edit", index: 0, writes: true }],
   // The one form checks a published head; the ledger's filters are on the Audit log's own page.
   "src/pages/audit/VerifyPage.tsx": [{ pattern: "/audit/verify", index: 0, writes: true }],
+  // The one form names a trace and says why; sending it writes the row recording who read it.
+  "src/pages/audit/TracePage.tsx": [{ pattern: "/audit/trace", index: 0, writes: true }],
   // One column's editor (a rule, or a mark for an uploaded table), the one form on a table's page;
   // and on the module's first page, the naming form and then the upload.
   "src/pages/classification/ClassificationPage.tsx": [

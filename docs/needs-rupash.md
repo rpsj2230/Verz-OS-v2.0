@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**31 items are open: 151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**32 items are open: 155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,45 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 155. Recognising the same client across your systems: two choices before it is switched on
+
+**In plain terms:** the Brain can tell that "Acme Pte Ltd" in Xero, "ACME" in HubSpot and a Freshdesk
+requester at acme are the same client, so a question about one client gathers what every connected
+system knows (Wave 3, M14). The matching code is written and nothing uses it yet. Before it runs, two
+choices are yours.
+
+**1. A little more in the index.** You set the rule that connectors never copy your data: the Brain
+keeps only a small index and reads the rest live when somebody asks. Matching clients needs one more
+thing in that index for each record: a scrambled fingerprint of its email address, phone number or
+company registration number, made with a secret key the Brain keeps in its vault. The fingerprint
+cannot be turned back into the address or number, and nothing else is copied.
+
+- **Option A:** allow the fingerprints in the index, so clients are matched in the background.
+- **Option B:** no fingerprints. Clients are matched only by name, which finds far fewer and needs a
+  person to confirm almost every match.
+
+**My recommendation: A.** It keeps your rule's purpose (none of your data is copied in readable form)
+and makes matching useful.
+
+**2. Matching without a person, for the clearest cases only.** When two records share the same email
+address or registration number and neither carries money (no invoices or deals), the Brain can join
+them by itself, recorded and reversible with one press. Anything less certain, and anything touching
+money, waits for a person.
+
+- **Option A:** join the clearest cases automatically, with a switch to turn it off.
+- **Option B:** a person confirms every match.
+
+**My recommendation: A.** It saves confirming hundreds of obvious matches, and anything involving
+money always waits for a person.
+
+**What I decided myself (tell me if you disagree):**
+
+- Only an Owner or an Admin may confirm or undo a match, as a new permission you can grant to others.
+- The secret key for the fingerprints is created by the installer on every install.
+- Each connector says in its own description which records carry money.
+
+**What I need from you:** reply "155: 1A 2A" (my recommendation), or the options you prefer.
 
 ## 151. Connect Slack as a source (ready now)
 
@@ -36,7 +75,7 @@ Slack app from the one that answers questions in Slack. In the console open **Kn
 
 Tell me "connected Slack" afterwards and I prove it on your install.
 
-## 154. One server change for the sealed sandbox: a restart of every container, about two minutes
+## 154. One server change for the sealed sandbox: probably no downtime
 
 **In plain terms:** three things you asked for run code the Brain did not write: scripts inside
 imported skills, the code sandbox, and connectors written as custom code. They must run sealed off,
@@ -45,12 +84,15 @@ to seal them is gVisor, a small program Docker uses to run a container inside it
 layer. Your server does not have it yet (checked read-only on 2026-10-06: Ubuntu 24.04, Docker with
 its standard runtime only).
 
-Installing it is one change no release can make on its own: gVisor is installed on the server, added
-to Docker's settings file, and Docker is restarted. **Restarting Docker restarts every container on
-the server for a minute or two**, the Brain's and your other project's (Activepieces) alike. Nothing
-is lost; they all come back by themselves.
+Installing it is one change no release can make on its own: gVisor is installed on the server and
+added to Docker's settings. Docker can usually take that by **reloading** its settings, which
+restarts nothing, so there is **probably no downtime at all**. Only if the reload does not take it
+does Docker need a full restart, which restarts every container on the server for about a minute,
+the Brain's and your other project's (Activepieces) alike. Nothing is lost either way; they all come
+back by themselves.
 
-**Option A: yes, at a quiet time.** I install gVisor and restart Docker myself, at a time you name
+**Option A: yes, at a quiet time.** I install gVisor and reload Docker myself (restarting it only if
+the reload is not enough), at a time you name
 (for example a weekday night, Singapore time), then confirm everything is back and run the
 sandbox's own check: a script that tries to reach the internet and is stopped, and one that runs
 past its time and memory limits and is stopped.
@@ -899,6 +941,113 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+13. **Every knowledge requirement (M7.7.7), about 25 minutes.** Record against the Knowledge area.
+Use the two test people from "Before you start".
+
+- Step 1. **Add and ask (OWN-31, FEAT-5.1, FEAT-1.4, ARC-A-057).**
+  1. As yourself, open **Knowledge** and press **Add**.
+  2. Upload a short Word or PDF document, at the first person's department.
+  3. As the first person, ask a question on **Ask** that the document answers. The answer cites
+     the document, says when it was read, and carries a trace reference.
+  4. Record this against each of those rows.
+- Step 2. **Uploading never widens (ARC-A-124, FEAT-5.6, FEAT-5.5).**
+  1. As the other person, ask the same question. You are told there is nothing, exactly as if the
+     document did not exist.
+  2. As yourself, open the document on **Knowledge** and widen it to the company.
+  3. As the other person, ask again. Now it answers.
+  4. Put the visibility back.
+- Step 3. **A link as knowledge (FEAT-5.3, ANY-039).** On **Knowledge**, press **Add**, choose
+  **From a link**, and give the address of a public page with text on it. Then ask a question the
+  page answers.
+- Step 4. **Owner, verified date and review date (FEAT-5.9, ARC-A-119, FEAT-5.10, CONA-37, GAP2-31).**
+  1. On the document, set yourself as owner, mark it verified today, and set a review date of
+     tomorrow.
+  2. Ask the question again: the answer shows the verification badge.
+  3. The day after, ask again. The badge says the document is due for re-verification, and you
+     are reminded.
+  4. Then supersede it with a new version, and archive the old one. The old version no longer
+     answers.
+- Step 5. **The price list (ARC-A-126, FEAT-5.7, OWN-163).**
+  1. On **Knowledge > Price list**, add one row with a sell price and a cost.
+  2. As a person with no cost grant, ask the cost of that item. You are told what an absent
+     record is told.
+  3. Ask its sell price: it answers.
+- Step 6. **Unanswered questions (RWD-05).**
+  1. Ask something no document answers.
+  2. As the document's owner, open **Reports > Questions and gaps**. The question is listed.
+- **What still waits, and I tell you when each is live:**
+  - Scanned pages, tables in PDFs, layout and OCR notes in citations, and large documents (GAP-02,
+    GAP3-04, GAP3-05, GAP3-06, FEAT-5.2, ARC-A-116). These need the model server, row 2 of item
+    120.
+  - Embedding by meaning and the rebuild when the embedding model changes (GAP-03, DEC-13,
+    FEAT-5.11). These need the same server.
+  - A person's library of files produced for them (ANY-010) and templates used to produce
+    documents (OWN-29). These need the artifact store.
+- **The rest.** For each Knowledge row still "Not checked yet", read what it needs, try it and
+  record it. Rows that need a part still waiting stay "Not checked yet" until I tell you.
+
+14. **Every connectors requirement (M11.8.13), about 30 minutes.** Record against the Connectors
+area. Use one source you have a key for. Freshdesk or Xero is quickest, and Google Drive if you
+have set up its service account (item 150).
+
+- Step 1. **Connect, scoped, read-only (CON-14, ARC-A-139, FEAT-4.2, FEAT-4.3, ARC-A-140, CONB-10).**
+  1. Open **Connectors** and choose the source. Before connecting, read what it says it reads,
+     its access mode in words, the key it asks for and its ceiling.
+  2. Connect it to one narrow slice: one folder, one helpdesk or one organisation. Leave every
+     write switched off.
+  3. Its details say it reads only, and that writing is a separate grant.
+- Step 2. **The key is never shown back (ARC-A-084, FEAT-4.5, OWN-167, CONB-11).**
+  1. Open the connector's details. They say a key is held, and when and by whom it was written,
+     but never the key itself.
+  2. Download its connection record (**Export**). It holds no key (CONA-36).
+- Step 3. **Test and health (CON-62, CONB-12, CON-61, CON-64).**
+  1. Press **Test**. It says the source answered, and shows no business rows.
+  2. The connector's health shows the last read and its time.
+- Step 4. **Live answers at the asker's reach (FEAT-1.2, OWN2-1, GAP-04, OWN-12, OWN-13).**
+  1. As yourself, grant the first person the source's read on its steward card.
+  2. As them, ask about one record by its number on **Ask**. The answer gives the value and cites
+     the record, the field and when it was read.
+  3. As the other person, ask the same. You are told there is nothing.
+- Step 5. **Replace the key, disconnect and reconnect (CON-63, FEAT-4.4, CONB-13).**
+  1. Press **Replace key** and paste a new key. The next test answers with no restart.
+  2. Disconnect. The confirmation says the key stays held in the vault.
+  3. Reconnect. The history shows both connections.
+- Step 6. **Each source you connect (OWN-9 to OWN-20, OWN2-C1 to OWN2-C12).** For each source you
+  connect, record its own row ("can be connected and read") and its "ready as soon as it is
+  connected" row with what you asked and saw.
+- **What still waits, and I tell you when each is live:**
+  - Writes approved and read back (GAP-35, OWN-24, ARC-B-144, GAP2-14).
+  - MCP and custom-code connectors (ARC-A-138, FEAT-4.1, OWN-21, ARC-A-142, FEAT-4.7). Custom code
+    needs the script sandbox.
+  - The nightly schema-drift check (REQ-33).
+  - Deleted records (GAP-06) and token refresh without you (GAP-07).
+- **The rest.** As in check 13.
+
+15. **Every tools requirement (M12.4.15), about 15 minutes now, more as the browser lands.**
+Record against the Tools area.
+
+- Step 1. **The catalogue (CONA-32, FEAT-3.7, FEAT-3.8, ARC-A-141).**
+  1. On **Skills > Tools**, every tool is listed with its capability and side effect.
+  2. Open an agent's profile. Only the tools assigned to it are offered to its runs.
+  3. Each tool says whose identity it runs as.
+- Step 2. **A website is working (ARC-B-027, OWN-104, the HTTP half).**
+  1. As yourself, grant the first person `read:website_check` scoped to one website host that you
+     own.
+  2. In an automation step, or once the agent runtime offers it, ask whether that site is working.
+     The answer gives the status, any redirects, the days until its certificate expires, and the
+     response time.
+  3. Ask about a host outside the grant. It is refused.
+- **What still waits, and I tell you when each is live:**
+  - The read-only browser, browser writes, the browser scheduler, the independent judge and the
+    signed exceptions (ARC-A-007, ARC-A-008, FEAT-9.x, ARC-B-012 to ARC-B-026, ARC-B-148, GAP-26,
+    GAP3-07 to GAP3-10, OWN-97). These need the browser worker.
+  - Skill scripts and code in a sandbox (FEAT-3.6, OWN-96). These need the script sandbox: the
+    deploy agent's overlay, switched on in the installation settings.
+  - Artifacts an agent produces (GAP-28, OWN-101).
+  - Computer use (CONA-25, ARC-B-028, OWN-98, OWN-106, ANY-022). This is deferred by your own
+    requirement until the browser checks are done.
+- **The rest.** As in check 13.
 
 ## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
 
@@ -4391,6 +4540,16 @@ nothing was ever exposed. The difference is that when they are wired, the leak c
 reintroduced by writing the natural code.
 
 ---
+
+**REOPENED 2026-10-06: the gap came back, and is being fixed again.** A check written on 2026-10-06
+found that the approval screens built since then show the approver the requester's whole request,
+values included: the console's Approvals card since 2026-09-09, and the Lark card since #258
+(2026-09-30). The guard described above was still there and still passing, but the request travelled
+in a free-form part of the card the guard did not look at, and the reach check compared a value the
+caller asserted rather than one it worked out. Nobody was shown anything: agent actions do not reach
+approvers on your install yet, and no sources are connected. The fix renders every approval at the
+approver's own reach on both screens, shows locked any field the approver cannot read, and extends
+the guard to the whole card, with a check on your install that proves it. Nothing for you to do.
 
 ## 13. Can a leash rule say "supervise everywhere except maintenance"? - DECIDED: strictest wins
 

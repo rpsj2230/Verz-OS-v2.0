@@ -141,6 +141,7 @@ MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
 MIGRATION_SKILL_LIFECYCLE = VERSIONS / "0139_skill_retirement_and_detachment.py"
 MIGRATION_AUTOMATION_CHANGE = VERSIONS / "0145_automation_change.py"
 MIGRATION_MANIFEST_DRAFT = VERSIONS / "0149_agent_manifest_draft.py"
+MIGRATION_LEARNING_SIGNAL = VERSIONS / "0154_answer_marks_and_learning_pause.py"
 MIGRATION_ACCESS_REQUEST_HANDLED = (
     VERSIONS / "0146_access_request_handled_and_certification_export.py"
 )
@@ -391,6 +392,8 @@ MANIFEST_DRAFT_TABLES: tuple[str, ...] = (
 )
 #: And the one 0146 adds: an access request its owner has marked handled.
 ACCESS_REQUEST_HANDLED_TABLES: tuple[str, ...] = ("gate.access_request_handled",)
+#: And the two 0154 adds: a mark on an answer, and a pause on what an agent's runs teach.
+LEARNING_SIGNAL_TABLES: tuple[str, ...] = ("mem.mark", "agent.learning_pause")
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -487,6 +490,7 @@ ALL_TABLES = (
     + MANIFEST_DRAFT_TABLES
     + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
+    + LEARNING_SIGNAL_TABLES
     + ESCALATION_TABLES
     + STEWARDS_TABLES
 )
@@ -1313,6 +1317,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert access_request_handled.TABLES == ACCESS_REQUEST_HANDLED_TABLES
     trace_and_browser_session = migration_module(MIGRATION_TRACE_AND_BROWSER_SESSION)
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
+    learning_signal = migration_module(MIGRATION_LEARNING_SIGNAL)
+    assert learning_signal.TABLES == LEARNING_SIGNAL_TABLES
     escalation = migration_module(MIGRATION_ESCALATION)
     assert escalation.TABLES == ESCALATION_TABLES
     stewards = migration_module(MIGRATION_STEWARDS)
@@ -1409,6 +1415,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(manifest_draft.TABLES)
         + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
+        + tuple(learning_signal.TABLES)
         + tuple(escalation.TABLES)
         + tuple(stewards.TABLES)
     )
@@ -1484,6 +1491,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(manifest_draft.TABLES),
         set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
+        set(learning_signal.TABLES),
         set(escalation.TABLES),
         set(stewards.TABLES),
     )
