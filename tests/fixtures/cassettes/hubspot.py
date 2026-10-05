@@ -28,7 +28,9 @@ SOURCE: Final = "hubspot"
 
 HUBSPOT_OBJECTS_DOC = "https://developers.hubspot.com/docs/api/crm/companies"
 HUBSPOT_ASSOCIATIONS_DOC = "https://developers.hubspot.com/docs/api/crm/associations"
-HUBSPOT_LIMITS_DOC = "https://developers.hubspot.com/docs/api/usage-details"
+HUBSPOT_LIMITS_DOC = (
+    "https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines"
+)
 HUBSPOT_ERRORS_DOC = "https://developers.hubspot.com/docs/api/error-handling"
 
 
@@ -209,7 +211,15 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
     ),
 )
 
-RATE_LIMIT: Final = RateLimit(SOURCE, 10_000, "day", "Per app, per account.", True)
+RATE_LIMIT: Final = RateLimit(
+    SOURCE,
+    100,
+    "calls per 10 seconds per private app, on the Free and Starter tiers",
+    "250,000 a day per account on those tiers; Professional and Enterprise allow 190 per 10 "
+    "seconds, and the API Limit Increase add-on raises both. Read from the usage guidelines on "
+    "2026-09-30; the 10,000 a day this recorded before was not the documented figure.",
+    True,
+)
 
 
 def _hubspot_entity(recorded: Cassette) -> str:

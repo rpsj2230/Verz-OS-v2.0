@@ -129,17 +129,15 @@ only adds accounts.
 a Brain account with no email sent, and gets in by pressing **Forgot password** on the sign-in page.
 Two things on your install have to be in place first, one of them only you can do.
 
-**Part 1, yours: the sign-in service's email settings.** Forgot password sends its link by email,
-so the sign-in service (Keycloak) needs an email account to send from. Without it nobody can set a
-password. You need the details of a mailbox that may send mail: its server address (SMTP host),
-port, and a username and password; your email provider's help pages list them.
-
-1. Open the Keycloak admin console (the same place you added users for item 91) and sign in.
-2. Choose your realm, then **Realm settings**, then the **Email** tab.
-3. Fill in **From** (for example no-reply at your domain), **Host**, **Port**, **Encryption**
-   (usually StartTLS on port 587), turn on **Authentication** and fill in the **Username** and
-   **Password**.
-4. Press **Test connection**; Keycloak sends a test mail to your own address. Then **Save**.
+**Part 1, yours: one mail relay, typed once.** Forgot password sends its link by email through the
+same mail relay the Brain uses for everything else. Open **Notifications**, fill in **Email relay**
+(host, port, sender address, user name and password; your email provider's help pages list them)
+and press **Send a test message**. These are the same details item 132 asks for, so do it once for
+both. Nothing needs typing into Keycloak: once #311 is deployed and the deploy script in Part 2 is
+installed, every release gives the sign-in service the relay itself, and a relay you change later is
+picked up by the next release. If you already typed mail settings into Keycloak, the next release
+replaces them with the relay's. To confirm: on the **Install** page, the check *Forgot password is
+sent through the relay on Notifications* passes.
 
 **Part 2, mine with your go-ahead: three server steps.**
 
@@ -150,7 +148,7 @@ port, and a username and password; your email provider's help pages list them.
 - Add one setting the worker needs (the sign-in address, `INSTALL_OIDC_ISSUER`) to the worker in the
   hosting panel's stored configuration.
 
-**What you do:** fill in Part 1 whenever suits you, and reply "131: do the server steps" for Part 2.
+**What you do:** fill in the relay whenever suits you, and reply "131: do the server steps" for Part 2.
 I tell you when both are done and the next staff sync has made the accounts; then you can tell
 people: "Your account is ready. Go to the sign-in page, press Forgot password and enter your work
 email."
@@ -549,6 +547,38 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 135. Google Drive: Viewer or Editor on the folder - DECIDED 2026-09-30: A, Viewer
+
+**In plain terms:** when you connect Google Drive (item 126's list; its steps come to this page when
+it can read), you share one folder with an account made just for the Brain. The Brain promises that
+a file shared outside your company is never read. The catch: Google only tells an account who a file
+is shared with if that account is allowed to share the file itself, and a Viewer is not. So with
+Viewer access the Brain cannot see, for most files, whether they have been shared outside.
+
+**Option A: Viewer on the folder.** If the Brain's key file ever leaked, whoever held it could read
+that one folder and change nothing.
+- A file whose sharing Google does not show is treated as the folder's, because you chose to share
+  the folder.
+- A file Google does show as shared by link or shared outside is never read.
+- A file with its own, narrower permissions is never read (a Viewer can see that much).
+- So the promise becomes "a file shared outside your company is left out wherever Google shows its
+  sharing".
+
+**Option B: Editor on the folder.** Every file's sharing is visible, so "a file shared outside is
+never read" holds for every file. The Brain still only ever asks Google to read, so it cannot change
+anything itself, but a leaked key file could be used to change or delete files in that folder.
+
+**My recommendation: A.** The folder is already your decision about what the Brain may read, and a
+key that can only read is the safer thing to keep on a server. A is what is being built; switching
+to B later is one small change and one step in the guide.
+
+**Your answer, 2026-09-30:** "135: A".
+
+**What that means:** the Brain's Google account is a Viewer on the one folder. Files Google shows
+as shared by link or outside your company, and files with their own narrower permissions, are never
+read; a file whose sharing Google does not show is read as the folder's. Drive's connect steps come
+to this page when it can read.
 
 ## 125. Where the evening build digest is sent - DECIDED 2026-09-30: a group with just you, on any channel
 

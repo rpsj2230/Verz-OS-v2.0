@@ -25,7 +25,13 @@ Rejected: calling the install's Keycloak with the release's accounts client and 
 which would make a real account on the owner's sign-in service, and a real reset email if anybody
 pressed Forgot password for it. The coordinator's rule for this check was that it must not.
 
-Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15
+**The third check is Forgot password's mail (M40.7.1)**: the host the sign-in service reported,
+when the release last gave it the relay, against the relay saved on Notifications. The report is the
+release's, read inside Keycloak's container by its own administrator, because nothing in the
+application may read a realm's settings (`brain.ops.sign_in_mail`); the password is never compared
+or read, and Keycloak shows it masked anyway.
+
+Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15, M40.7.1
 """
 
 from __future__ import annotations
@@ -56,7 +62,12 @@ from brain.identity.staff_source import (
 )
 from brain.identity.standing import standings
 from brain.install import InstallError, value_of
-from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
+from brain.ops.acceptance import (
+    RESERVED_DEPARTMENTS,
+    CheckFailedError,
+    CheckNotRunError,
+    check,
+)
 from brain.ops.acceptance_run import Harness
 from brain.ops.staff_accounts_run import person_for
 from brain.ops.standing_run import apply_standing, plan_standing
@@ -71,6 +82,18 @@ SOURCE = "acceptance"
 
 #: The check's refusal when the process running it has no sign-in address.
 NO_ISSUER_HERE = "the worker is not given this install's sign-in address, so no account is made"
+
+#: Why the mail check is not run on an install with no relay saved.
+NO_RELAY_FOR_THE_RESET_EMAIL: Final = (
+    "no mail relay is saved on Notifications, so the sign-in service is given none and its own "
+    "email settings are left as they are"
+)
+
+#: Why the mail check is not run before a release has given the realm the relay.
+NOT_GIVEN_TO_THE_SIGN_IN_SERVICE_YET: Final = (
+    "no release has given the sign-in service this install's relay yet; the release does after "
+    "its next deploy, and a sign-in service that is not beside the application sets its own"
+)
 
 
 def _address(h: Harness, principal_id: str) -> str:
@@ -305,3 +328,28 @@ async def the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own(
         raise CheckFailedError("somebody the list lets back in is still kept out")
     if await principals.live_principal(by_hand) is not None:
         raise CheckFailedError("the list let back in somebody an administrator had disabled")
+
+
+@check(
+    leaves=("M40.7.1",),
+    sentence=(
+        "The sign-in service sends Forgot password through the mail relay saved on "
+        "Notifications: the host it reported, when the release last gave it the relay, is the "
+        "relay's host. The password is never read or compared."
+    ),
+)
+async def forgot_password_is_sent_through_the_relay_on_notifications(h: Harness) -> None:
+    from brain.ops.mail import settings_from_rows, settings_rows
+    from brain.ops.sign_in_mail import mirrored_of
+
+    async with h.sessions() as session:
+        relay = settings_from_rows(await settings_rows(session))
+        mirrored = await mirrored_of(session)
+    if relay is None:
+        raise CheckNotRunError(NO_RELAY_FOR_THE_RESET_EMAIL)
+    if mirrored is None:
+        raise CheckNotRunError(NOT_GIVEN_TO_THE_SIGN_IN_SERVICE_YET)
+    if mirrored.host != relay.host:
+        raise CheckFailedError(
+            "the sign-in service reported a mail host that is not the relay saved on Notifications"
+        )

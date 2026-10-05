@@ -78,6 +78,8 @@ import {
   type SettingRow,
   type SettingsBody,
 } from "../settingsQuery";
+import { DIGEST_DESTINATION_SETTING } from "../digestDestinationQuery";
+import { DigestDestination } from "./DigestDestination";
 
 export const NO_SETTINGS = "No settings to show";
 export const NO_SETTINGS_DESCRIPTION = "The answer carried no group of settings, so there is nothing to change here.";
@@ -264,7 +266,9 @@ function SettingLine({
         <h3 className="m-0 text-[13.5px] font-medium text-ink">{row.label}</h3>
         <Chip>{sourceWords(row.source)}</Chip>
       </div>
-      {row.editable ? (
+      {row.name === DIGEST_DESTINATION_SETTING ? (
+        <DigestDestination label={row.label} />
+      ) : row.editable ? (
         <EditableSetting key={`${row.value} ${row.source}`} row={row} onSaved={onSaved} />
       ) : (
         <>
