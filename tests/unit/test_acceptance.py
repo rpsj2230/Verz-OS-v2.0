@@ -679,6 +679,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # runs them with the hosted profile and a vault the test answers for.
     for escalation_check in registered(("brain.ops.acceptance_escalation",)):
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
+    # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
+    assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     # No optional service is switched on here; `tests/unit/test_acceptance_services.py` switches
