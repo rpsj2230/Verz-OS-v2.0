@@ -846,7 +846,7 @@ DEPARTMENT_SEPARATOR: Final = ","
 #: cost. Values are constants here rather than settings, because a scan bound tuned per
 #: deployment is a recall cliff that moves between environments.
 ITERATIVE_SCAN: Final[tuple[tuple[str, str], ...]] = (
-    ("hnsw.iterative_scan", "relaxed_order"),
+    ("hnsw.iterative_scan", "strict_order"),
     ("hnsw.max_scan_tuples", "20000"),
 )
 
