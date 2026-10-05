@@ -33,11 +33,53 @@ export interface Watch {
   readonly faults: string[];
   readonly refusals: string[];
   readonly thrown: string[];
+  /** API requests sent and not yet answered. */
+  inFlight: number;
+}
+
+/** How long the API must have been quiet before a page is judged: its lists have loaded. */
+export const QUIET_MS = 500;
+
+/**
+ * Wait until no API request has been in flight for `QUIET_MS`, or `limitMs` has passed.
+ *
+ * Playwright's own `networkidle` describes the first load of a document and is already reached on
+ * every page a single-page console navigates to afterwards, so it waits for nothing there. A list
+ * that loads after the heading is where a failure notice or a server fault appears, so the page is
+ * judged after the requests it started have been answered.
+ */
+export async function settle(page: Page, seen: Watch, limitMs = 20_000): Promise<void> {
+  const until = Date.now() + limitMs;
+  let quietSince = Date.now();
+  while (Date.now() < until) {
+    if (seen.inFlight > 0) {
+      quietSince = Date.now();
+    } else if (Date.now() - quietSince >= QUIET_MS) {
+      return;
+    }
+    await page.waitForTimeout(100);
+  }
 }
 
 /** Record every API answer and every uncaught exception on `page` from now on. */
 export function watch(page: Page): Watch {
-  const seen: Watch = { faults: [], refusals: [], thrown: [] };
+  const seen: Watch = { faults: [], refusals: [], thrown: [], inFlight: 0 };
+  const isApi = (url: string): boolean => {
+    const path = new URL(url).pathname;
+    return path.startsWith("/api/") || path.startsWith("/setup/");
+  };
+  page.on("request", (request) => {
+    if (isApi(request.url())) {
+      seen.inFlight += 1;
+    }
+  });
+  const answered = (url: string): void => {
+    if (isApi(url)) {
+      seen.inFlight = Math.max(0, seen.inFlight - 1);
+    }
+  };
+  page.on("requestfinished", (request) => answered(request.url()));
+  page.on("requestfailed", (request) => answered(request.url()));
   page.on("response", (response) => {
     const path = new URL(response.url()).pathname;
     if (!path.startsWith("/api/") && !path.startsWith("/setup/")) {
@@ -69,7 +111,7 @@ export async function checkPage(page: Page, seen: Watch, label: string, info: Te
   await expect(main.getByRole("heading", { level: 1 }).first(), `${label}: a heading`).toBeVisible({
     timeout: 20_000,
   });
-  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+  await settle(page, seen);
   const text = await main.innerText();
   expect(text, `${label}: no task id is shown`).not.toMatch(TASK_ID);
   expect(text, `${label}: no API route is shown`).not.toMatch(API_ROUTE);

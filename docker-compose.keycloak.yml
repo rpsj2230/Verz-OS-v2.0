@@ -171,11 +171,11 @@ services:
     # **It builds only when what it was built for changed.** Beside the build it writes a marker
     # naming the distribution (a digest of the jar list the image ships) and every build-time
     # option, and a deploy whose marker matches exits at once without starting a JVM, so the
-    # 1024M is paid on the first install and on a Keycloak upgrade, not on every release. The
-    # build-time options here and on `keycloak` below must be the same, which
+    # build's memory is paid on the first install and on a Keycloak upgrade, not on every
+    # release. The build-time options here and on `keycloak` below must be the same, which
     # `tests/unit/test_keycloak_build.py` holds.
     #
-    # Rejected: raising the server's own limit to 1024M for a peak that lasts one start, and a
+    # Rejected: raising the server's own limit for a peak that lasts one start, and a
     # second published image with the build baked in, which is cleaner and adds an image to
     # every release (the follow-up, if boot time or the volume ever becomes the problem).
     image: quay.io/keycloak/keycloak:26.0
@@ -205,10 +205,13 @@ services:
       - keycloak-build:/opt/keycloak/lib/quarkus
     networks:
       - identity
+    # 896M against a measured peak of 828 and 863 MiB (its cgroup's memory.peak, page cache
+    # included, on two harness runs at a 1024M limit). The build prints its own peak on every
+    # run, so a Keycloak upgrade that needs more says so in the deploy's log.
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 896M
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
