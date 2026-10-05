@@ -221,3 +221,35 @@ def test_an_issuer_that_does_not_answer_as_itself_is_not_ready(document: object)
     _, get = serving(document)
 
     assert issuer_answers(get, ISSUER) is False
+
+
+# ------------------------------------------------- the database, as requests reach it
+def test_readiness_asks_the_engine_the_sessions_are_bound_to_when_it_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`brain.session.READINESS_ASKS_THE_ENGINE_REQUESTS_USE`. The sessions moved onto a class
+    pooler are what the probe asks, and moved home again it asks the home engine. Delete this and
+    the probe can go back to the engine the process started on, so a stopped class pooler is
+    noticed only by the requests it refuses."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    import brain.session as session
+
+    home = create_async_engine("postgresql+psycopg://home.invalid/brain")
+    moved = create_async_engine("postgresql+psycopg://pgbouncer-classes.invalid/brain_interactive")
+    asked: list[object] = []
+
+    async def reachable(engine: object) -> bool:
+        asked.append(engine)
+        return engine is home
+
+    monkeypatch.setattr(session, "check_reachable", reachable)
+    sessions = async_sessionmaker(bind=home)
+    probe = session.database_probe(sessions, home)
+
+    assert asyncio.run(probe()) is True
+    sessions.configure(bind=moved)
+    assert asyncio.run(probe()) is False
+    sessions.configure(bind=home)
+    assert asyncio.run(probe()) is True
+    assert asked == [home, moved, home]
