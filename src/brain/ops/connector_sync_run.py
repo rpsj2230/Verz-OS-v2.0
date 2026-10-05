@@ -32,15 +32,38 @@ Xero's `X-DayLimit-Remaining`, is what catches the calls other integrations made
 `brain.ops.webhook_delivery` sends through, for its reason: a name that answered outside to the
 check and inside to the connection is the ordinary way past the rule.
 
-**A page is written when it is read.** Each page's records are upserted in a transaction of their
-own before the next page is asked for, so a run that fails on page four keeps pages one to three,
-with the reading time each was read at.
+**A page is written when it is read, and the read's place moves with it.** Each page's records are
+upserted in a transaction of their own before the next page is asked for, so a run that fails on
+page four keeps pages one to three, with the reading time each was read at, and the attempt's row
+records that page four is where the next attempt starts (`brain.ops.connector_sync.
+A_READ_CUT_SHORT_CARRIES_ON_WHERE_IT_STOPPED`). The first page a read asks is the one
+`brain.ops.connector_sync.next_read` decides: where the last attempt stopped, the source's changes
+since the last complete read, or everything.
 
-**An entity listed under another is walked once under each parent this run kept (M11.7.3).**
+**A page that changes what the index says advances the source's epoch in its own transaction**,
+and a complete read of everything retires, in one more, the rows it did not see. The comparison is
+with the live rows the page names, read in the same transaction just before they are written, so
+a page that only confirms them moves no epoch. See
+`brain.ops.connector_sync.A_CHANGED_READ_ADVANCES_ITS_SOURCE_S_EPOCH` and
+`WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
+
+**An entity listed under another is walked once under each parent this read kept (M11.7.3).**
 Cloudflare lists a DNS record only under its zone, so the zones are read first and the records then
 read zone by zone, each page named by the zone's id and its own (`walks`,
 `brain.connectors.declaration.ListedUnder`). Rejected: the parents read from the index the last run
 left, which would list records under a zone the source has since removed and miss one it added.
+**A read carried on over several attempts reads its parents from the index all the same, and that
+is not the rejected design**: the rows it reads are the ones this read wrote, since it began
+(`brain.ops.connector_sync_store.seen_since`), so a zone removed before the read is not among them
+and one added is, exactly as if the read had kept them in memory.
+
+**A pass cut short is carried on whatever shape its walk takes (M11.9.15).** The walk's place is the
+arguments of the page it would ask next, which a Drive walk fills with the folders still to list, a
+routed reading with its next route, and a walk under a parent with that parent's id; a walk ended
+by `MAX_PAGES_PER_ENTITY` stops its entity there, and the next attempt asks that page first. A pass
+that skipped something to reach its end, a routed server that did not answer or a folder past a
+`brain.connectors.declaration.BoundedWalk`'s bound, is partial and retires nothing. A database's
+views are read again from the start: see `brain.ops.connector_sync.A_VIEW_READ_IS_ONE_BOUNDED_READ`.
 
 **What is written is the minimal index and nothing else.** Every record passes
 `brain.ops.connector_sync.kept_fields` before its page is written, and the run hands nothing to the
@@ -76,7 +99,7 @@ cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
 Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.6.1, M11.7.3, M11.7.1
-Task ids: M11.1.2, M11.1.5
+Task ids: M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15, M11.1.2, M11.1.5
 """
 
 from __future__ import annotations
@@ -95,9 +118,11 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.connectors.backfill import BackfillCursor
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.custom_code import CustomCodeError, KeyInSandboxError
 from brain.connectors.declaration import (
+    BoundedWalk,
     CodeReading,
     DatabaseLogin,
     KeyScheme,
@@ -151,23 +176,34 @@ from brain.ops.connector_sync import (
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
     Attempt,
+    ReadPass,
+    ReadState,
     SourceReading,
     StoredValue,
     SyncOutcome,
     SyncPlan,
     SyncState,
     after_attempt,
+    after_the_read,
+    changed,
     database_failure_detail,
     failure_detail,
     kept_fields,
+    next_read,
+    page_cursor,
+    page_to_ask,
     plan_for,
 )
 from brain.ops.connector_sync_store import (
     LiveConnection,
+    advance_epoch,
     attempt_row,
+    live_fields,
     read_live,
     read_states,
     record_upsert,
+    retire_unseen,
+    seen_since,
 )
 from brain.ops.credentials import KEY_FIELD, USER_FIELD
 from brain.ops.custom_code_run import CodeRunFailedError, installed_runner, read_once
@@ -247,32 +283,45 @@ def walks(
     reading: SourceReading,
     entity: str,
     under: ListedUnder | None,
-    kept_ids: Mapping[str, Sequence[str]],
+    parents: Sequence[str],
     *,
+    read: ReadPass,
+    walk: BackfillCursor,
     settings: Mapping[str, str],
 ) -> tuple[tuple[str | None, Mapping[str, str]], ...]:
-    """Where each walk of one entity starts: once, or once under every parent kept in this run.
+    """Where this attempt's walks of one entity start: where the read stopped, then the rest.
 
-    An entity listed on its own is walked once from its first page. One listed under another
-    (`brain.connectors.declaration.ListedUnder`) is walked once per record of its parent this run
-    kept, the parent's id laid into the path, and a parent that kept nothing lists nothing under it.
-    Each walk is bounded by `MAX_PAGES_PER_ENTITY` on its own, so one zone with many records
-    cannot cut every other zone's walk short.
-
-    **The first page is `first_arguments`, so a routed reading starts at the connection's own
-    first route** and one with no route at all is not walked. A routed reading is never listed
-    under another, so the two never meet on one entity, but taking the start from the one place
-    that knows both means neither can be walked from the wrong first page.
+    An entity listed on its own is walked once, from the page `page_to_ask` names: where an
+    earlier attempt of this read stopped, else its first page, its changes' first page, or a
+    routed reading's first route. One listed under another
+    (`brain.connectors.declaration.ListedUnder`) is walked once per parent this read kept, in the
+    order of the parents' ids, the parent's id laid into the path, and a parent that kept nothing
+    lists nothing under it. A walk carried on starts at the page it stopped at, under the parent
+    that page names, and goes on to every parent whose id comes after it. Each walk is bounded by
+    `MAX_PAGES_PER_ENTITY` on its own, so a zone with few records is never cut short by one with
+    many. See `brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`.
     """
-    first = first_arguments(reading, entity, settings=settings)
-    if first is None:
+    asked = page_to_ask(reading, read, walk, settings=settings)
+    if asked is None:
         return ()
     if under is None:
-        return ((None, first),)
-    return tuple(
-        (parent_id, MappingProxyType({**first, under.parameter: parent_id}))
-        for parent_id in kept_ids.get(under.parent, ())
-    )
+        return ((None, asked),)
+    ordered = sorted(set(parents))
+    if not walk.cursor:
+        return tuple(
+            (parent_id, MappingProxyType({**asked, under.parameter: parent_id}))
+            for parent_id in ordered
+        )
+    stopped_under = asked.get(under.parameter, "")
+    first = page_to_ask(reading, read, replace(walk, cursor=""), settings=settings)
+    later: tuple[tuple[str | None, Mapping[str, str]], ...] = ()
+    if first is not None:
+        later = tuple(
+            (parent_id, MappingProxyType({**first, under.parameter: parent_id}))
+            for parent_id in ordered
+            if parent_id > stopped_under
+        )
+    return ((stopped_under, asked), *later)
 
 
 def _plain(key: str | AccessToken) -> str:
@@ -809,9 +858,26 @@ class _Reading:
 
     plan: SyncPlan
     started_at: datetime
+    #: The read this attempt makes or carries on, moved on page by page.
+    read: ReadPass
+    #: Where reading stood before this attempt, from the newest attempt that recorded it.
+    before: ReadState | None = None
     records: int = 0
     cut_short: bool = False
     waited: float = 0.0
+
+
+def _state_after(one: _Reading, entities: Sequence[str]) -> ReadState | None:
+    """What this attempt leaves as the read's place: moved on, or as it found it.
+
+    An attempt that read no page and carried on nothing, a key the vault would not give, leaves the
+    state it found rather than a read begun at its own instant, so the cursor a later read of
+    changes asks from is never moved by an attempt that asked the source nothing.
+    """
+    carried = one.before is not None and one.before.walking is not None
+    if not one.read.walks and not carried:
+        return one.before
+    return after_the_read(one.before, one.read, entities)
 
 
 def _finish(
@@ -838,18 +904,76 @@ def _finish(
         retry_after_seconds=retry_after_seconds,
         records=one.records,
         cut_short=one.cut_short,
+        read_state=_state_after(one, reading.entities()),
     )
 
 
 async def _write_page(
     sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    entity: str,
     kept: Sequence[tuple[ProjectedRecord, Mapping[str, StoredValue]]],
-) -> None:
+) -> bool:
+    """Write one page's index rows, and advance the source's epoch if that changed any.
+
+    One transaction: the live rows the page names are read, the page is written over them, and
+    the epoch moves with them or not at all. See
+    `brain.ops.connector_sync.A_CHANGED_READ_ADVANCES_ITS_SOURCE_S_EPOCH`.
+    """
     if not kept:
-        return
+        return False
     async with sessions() as session, session.begin():
+        found = await session.execute(
+            live_fields(source, entity, [record.source_id for record, _ in kept])
+        )
+        held = {str(source_id): dict(fields) for source_id, fields in found.all()}
         for record, fields in kept:
             await session.execute(record_upsert(record, fields))
+        moved = changed(held, kept)
+        if moved:
+            await session.execute(advance_epoch(source))
+    return moved
+
+
+async def _parents(
+    sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    under: ListedUnder,
+    read: ReadPass,
+    kept_ids: Mapping[str, Sequence[str]],
+) -> tuple[str, ...]:
+    """Every record of `under.parent` this read kept, in this attempt or an earlier one of it.
+
+    A read begun in this attempt kept its parents in this attempt's memory; one carried on kept
+    some of them in an attempt that has ended, and those are the live index rows of the parent
+    seen since the read began. See
+    `brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`.
+    """
+    here = tuple(kept_ids.get(under.parent, ()))
+    async with sessions() as session:
+        found = await session.execute(seen_since(source, under.parent, read.started_at))
+        earlier = tuple(str(one) for one in found.scalars().all())
+    return tuple(sorted({*here, *earlier}))
+
+
+async def _retire(
+    sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    entities: Sequence[str],
+    before: datetime,
+) -> int:
+    """Retire what a complete read of everything did not see, and advance the epoch if it did.
+
+    See `brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
+    """
+    retired = 0
+    async with sessions() as session, session.begin():
+        for entity in entities:
+            # One row back per row retired: see `retire_unseen` for why it is not a row count.
+            retired += len((await session.execute(retire_unseen(source, entity, before))).all())
+        if retired:
+            await session.execute(advance_epoch(source))
+    return retired
 
 
 async def attempt(
@@ -913,7 +1037,21 @@ async def _read_under(
     """Read one connection to the end, or as far as it can be read, and say what that came to."""
     manifest, reading = plan.manifest, plan.reading
     assert manifest is not None and reading is not None  # SyncPlan holds this for a runnable plan
-    one = _Reading(plan=plan, started_at=clock())
+    started_at = clock()
+    before = None if previous is None else previous.read_state
+    try:
+        # A database's views keep no place: see `A_VIEW_READ_IS_ONE_BOUNDED_READ`. Neither do an
+        # MCP server's tools or custom code, which are read whole on every attempt.
+        read = (
+            ReadPass(started_at=started_at)
+            if isinstance(reading, ViewReading | ToolReading | CodeReading)
+            else next_read(reading, before, now=started_at)
+        )
+    except Exception:
+        # A subscription the reading could not build: everything is read, which asks for at
+        # least what any cursor would have and loses nothing.
+        read = ReadPass(started_at=started_at)
+    one = _Reading(plan=plan, started_at=started_at, read=read, before=before)
 
     def finish(
         outcome: SyncOutcome,
@@ -988,17 +1126,43 @@ async def _read_under(
 
     settings = live.connection.settings
     routed = isinstance(reading, RoutedReading)
-    for entity in reading.entities():
+    entities = reading.entities()
+    for entity in entities:
+        walk = one.read.walk(plan.connector, entity)
+        if walk.exhausted:
+            # Read to its last page by an earlier attempt of this read.
+            continue
         under = listed_under(reading, entity)
-        if isinstance(reading, RoutedReading):
+        if isinstance(reading, RoutedReading) and not walk.cursor:
             # What no server publishes is kept as that, without a call. See
-            # A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER.
+            # A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER. Once a read, at the start of its walk.
             unrouted = reading.unrouted(entity, settings=settings, seen_at=clock())
             await _write_page(
-                sessions, [(record, kept_fields(record, manifest)) for record in unrouted]
+                sessions,
+                plan.connector,
+                entity,
+                [(record, kept_fields(record, manifest)) for record in unrouted],
             )
             one.records += len(unrouted)
-        for parent_id, first in walks(reading, entity, under, kept_ids, settings=settings):
+        try:
+            parents: Sequence[str] = ()
+            if under is not None:
+                parents = await _parents(sessions, plan.connector, under, one.read, kept_ids)
+            starts = walks(
+                reading, entity, under, parents, read=one.read, walk=walk, settings=settings
+            )
+        except UnsafeAddressError:
+            return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+        except Exception:
+            return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+        if not starts:
+            # Nothing to list: no route, or no parent kept. The entity is read to its end.
+            one.read = one.read.advanced(replace(walk, cursor="", exhausted=True))
+            continue
+        stopped = False
+        for index, (parent_id, first) in enumerate(starts):
+            # Where the walk goes once this one ends: the next parent's first page, or nowhere.
+            then = starts[index + 1][1] if index + 1 < len(starts) else None
             arguments: Mapping[str, str] | None = first
             pages = 0
             while arguments is not None:
@@ -1014,7 +1178,10 @@ async def _read_under(
                 except Exception:
                     return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
                 if pages >= MAX_PAGES_PER_ENTITY:
+                    # The walk's place is the page not asked, so the next attempt asks it. See
+                    # A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE.
                     one.cut_short = True
+                    stopped = True
                     break
                 decision = check(now=clock(), limits=plan.limits, state=limiter)
                 if not decision.allowed:
@@ -1057,9 +1224,21 @@ async def _read_under(
                     if routed and isinstance(reading, RoutedReading):
                         # One server failing is one page, not the source: the rest are still
                         # read, the record keeps what an earlier read kept, and the run says it
-                        # stopped short of the whole list.
+                        # stopped short of the whole list. The read is partial, so it retires
+                        # nothing: the record that server publishes was not asked for.
                         one.cut_short = True
-                        arguments = reading.next_route(entity, arguments, settings=settings)
+                        try:
+                            following = reading.next_route(entity, arguments, settings=settings)
+                            after = following if following is not None else then
+                            walk = walk.advance(
+                                cursor="" if after is None else page_cursor(after),
+                                returned=0,
+                                exhausted=after is None,
+                            )
+                        except Exception:
+                            return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+                        one.read = replace(one.read.advanced(walk), partial=True)
+                        arguments = following
                         continue
                     return finish(
                         SyncOutcome.FAILED,
@@ -1092,21 +1271,42 @@ async def _read_under(
                             kept.append((projected, kept_fields(projected, manifest)))
                             kept_ids.setdefault(entity, []).append(projected.source_id)
                     returned = len(operation.project(body))
+                    following = (
+                        reading.next_route(entity, arguments, settings=settings)
+                        if isinstance(reading, RoutedReading)
+                        else reading.next_page(entity, arguments, body, returned)
+                    )
+                    after = following if following is not None else then
+                    # Refuses a next page that is the page just read, which is a loop.
+                    walk = walk.advance(
+                        cursor="" if after is None else page_cursor(after),
+                        returned=returned,
+                        exhausted=after is None,
+                    )
+                    skipped = isinstance(reading, BoundedWalk) and reading.left_out(
+                        entity, arguments, body
+                    )
                 except Exception:
                     # Broad on purpose, and the type is not kept either: a refusal raised while
                     # reading a row can quote the row. Nothing from this page was written.
                     return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
-                await _write_page(sessions, kept)
+                await _write_page(sessions, plan.connector, entity, kept)
                 one.records += len(kept)
+                one.read = one.read.advanced(walk)
+                if skipped:
+                    # The walk reached a bound of its own and left part of the source out. See
+                    # `brain.connectors.declaration.BoundedWalk`.
+                    one.cut_short = True
+                    one.read = replace(one.read, partial=True)
                 pages += 1
-                arguments = (
-                    reading.next_route(entity, arguments, settings=settings)
-                    if isinstance(reading, RoutedReading)
-                    else reading.next_page(entity, arguments, body, returned)
-                )
-                if arguments is not None and reading.allowance_spent(said):
+                arguments = following
+                if after is not None and reading.allowance_spent(said):
                     return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
+            if stopped:
+                break
 
+    if one.read.retires(entities):
+        await _retire(sessions, plan.connector, entities, one.read.started_at)
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
     return finish(SyncOutcome.SYNCED, detail)
 
@@ -1174,7 +1374,7 @@ async def _read_views(
                     kept.append((projected, kept_fields(projected, manifest)))
         except Exception:
             return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
-        await _write_page(sessions, kept)
+        await _write_page(sessions, one.plan.connector, entity, kept)
         one.records += len(kept)
         one.cut_short = one.cut_short or page.call is CallOutcome.TRUNCATED
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
@@ -1287,7 +1487,7 @@ async def _read_by_calls(
                 projected = reading.projected(entity, row, seen_at=read_at)
                 if projected is not None:
                     kept.append((projected, kept_fields(projected, manifest)))
-            await _write_page(sessions, kept)
+            await _write_page(sessions, one.plan.connector, entity, kept)
             one.records += len(kept)
     except CallNotAdmittedError:
         return finish(SyncOutcome.QUOTA, OWN_SHARE_SPENT, retry_after_seconds=admit.retry_after)

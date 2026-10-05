@@ -445,6 +445,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.webhook_change",
         "ops.webhook_subscriber",
         "proj.record",
+        # A retired projected row keeps what `proj.record` kept, pointers and no principal, and a
+        # source's epoch is its name and a count: `0179` keeps no principal in either.
+        "proj.record_retired",
+        "proj.source_epoch",
         # A channel's record names the administrator who last switched it, an actor and not an
         # owner, and a delivery keeps a channel, an outcome and a reason and never a sender or a
         # message (`0114`), so neither is anybody's.

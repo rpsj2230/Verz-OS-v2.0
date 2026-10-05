@@ -673,6 +673,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.laravel_reader:Cursor.fetchall": Repeat.READS,
         "brain.ops.laravel_reader:Session.cursor": Repeat.READS,
         "brain.ops.laravel_reader:Session.close": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # A reading asked for only what changed (M11.4.6) computes a first page's arguments and its
+        # subscription from what it is handed, so a repeat is the same page and the same promise.
+        "brain.connectors.declaration:ChangedSince.changed_since": Repeat.READS,
+        "brain.connectors.declaration:ChangedSince.subscription": Repeat.READS,
+        # Whether a walk left part of its source out (M11.9.15) is read off the page arguments and
+        # the answer it is handed, so a repeat is the same verdict.
+        "brain.connectors.declaration:BoundedWalk.left_out": Repeat.READS,
         # A run's vault lease (0093): a child token minted per attempt that expires at its own
         # TTL, read through once and revoked at the attempt's end, where a second revoke finds it
         # gone. See `brain.ops.connector_lease`.
@@ -732,6 +739,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.live_records:PartialRead.notice": Repeat.READS,
         "brain.gate.live_records:PartialRead.trace_lines": Repeat.READS,
         "brain.ops.connector_sync_store:ConnectorSyncRecords.states": Repeat.READS,
+        # Each source's epoch, read into the answer cache's key (M11.8.4). The advance is a
+        # statement the worker runs in its own transaction, not a door.
+        "brain.ops.connector_sync_store:SourceEpochs.epochs": Repeat.READS,
         # Asking for a test of a connection is one row in `ops.setting` a second press moves to a
         # later instant; the worker makes one test for however many presses it finds.
         "brain.ops.connector_sync_store:ConnectorProbes.ask": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
