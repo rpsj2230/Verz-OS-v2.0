@@ -212,7 +212,7 @@ def test_a_form_with_no_way_to_be_read_is_listed_and_not_offered() -> None:
     assert offers == {}
     assert (listed["xero"].why, listed["xero"].guide) == (THIS_INSTALL_CANNOT_READ_IT_YET, ())
 
-    unmeasured = dataclasses.replace(real, name="nowhere")
+    unmeasured = dataclasses.replace(real, name="nowhere", ceiling=None)
     offers, listed = offered({"nowhere": unmeasured})
     assert offers == {} and listed["nowhere"].why == THIS_INSTALL_CANNOT_READ_IT_YET
 
@@ -226,9 +226,9 @@ def test_a_source_read_and_answerable_by_nothing_is_not_offered(
     offered, as Xero itself is through its classifications. Delete this and the screen can offer
     a source that is read into the index and never answers a question, which HubSpot was."""
     import brain.ops.connectable as connectable
-    from brain.connectors import xero
+    from brain.connectors import lark_base, xero
 
-    read_only = dataclasses.replace(xero.CONNECTOR, name="lark_base")
+    read_only = dataclasses.replace(xero.CONNECTOR, name="lark_base", ceiling=lark_base.CEILING)
     offers, listed = offered({"lark_base": read_only})
     assert offers == {} and listed["lark_base"].why == THIS_INSTALL_CANNOT_READ_IT_YET
 

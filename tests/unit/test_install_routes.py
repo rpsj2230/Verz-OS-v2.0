@@ -562,7 +562,8 @@ def test_the_ceilings_are_the_connected_sources_in_the_words_the_connectors_scre
         body = get(c, "u_admin", LIMITS_PATH).json()
 
     shipped_ceilings = {one.name for one in ceilings()}
-    assert [one["name"] for one in body["ceilings"]] == ["Xero", "Lark Base"]
+    # In the order of the sources' names, which is the order their ceilings are found in.
+    assert [one["name"] for one in body["ceilings"]] == ["Lark Base", "Xero"]
     assert not {one["name"] for one in body["ceilings"]} & shipped_ceilings
     assert all("derived" in one for one in body["ceilings"])
     applies = {one["applies_to"] for one in body["windows"]}
