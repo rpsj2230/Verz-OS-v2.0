@@ -384,6 +384,7 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
     from brain.ops.drive_passages import READ_FILE
     from brain.ops.feedback import FLAG_CAPABILITY
     from brain.ops.jobs import DEAD_LETTER_CAPABILITY
+    from brain.ops.slack_messages_live import READ_MESSAGE
     from brain.tools.run_skill import SCRIPT_CAPABILITY
     from brain.tools.website_check import WEBSITE_CHECK_CAPABILITY
 
@@ -409,6 +410,11 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
             READ_FILE,
             "Reads a connected Google Drive folder's files, their words read live, in the "
             "folder's department.",
+        ),
+        (
+            READ_MESSAGE,
+            "Reads a connected Slack workspace's messages, live, in the channels Slack says the "
+            "reader is in, in the connection's department.",
         ),
     )
 
