@@ -159,7 +159,7 @@ def test_the_keys_handed_over_must_be_the_ledger_s_shapes() -> None:
     a deploy that handed over a blank or swapped pair keeps it, and every send is refused with no
     sentence anywhere saying why."""
     assert keys_from(["pk-lf-0123\n", "sk-lf-4567\n"]).public == "pk-lf-0123"
-    shapes = (
+    shapes: tuple[list[str], ...] = (
         ["sk-lf-4567", "pk-lf-0123"],
         ["xx-lf-0123", "sk-lf-4567"],
         ["pk-lf-0123"],
