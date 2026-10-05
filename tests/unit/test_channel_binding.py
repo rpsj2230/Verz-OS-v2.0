@@ -898,10 +898,10 @@ def test_the_channels_screen_shows_what_each_channel_declares_and_how_it_is_doin
     assert found["max_classification"] == declared.max_classification.value
     assert found["can_carry_label"] is declared.can_carry_label
     assert (found["receives"], found["health"], found["last_fault"]) == (True, "working", None)
-    teams = client.get(API_PREFIX + "/channels/teams/health", headers=as_("u_admin")).json()
-    assert (teams["receives"], teams["health"]) == (False, "not_set_up")
-    declared_teams = adapter_for(Channel.TEAMS).capabilities().max_classification
-    assert teams["max_classification"] == declared_teams
+    telegram = client.get(API_PREFIX + "/channels/telegram/health", headers=as_("u_admin")).json()
+    assert (telegram["receives"], telegram["health"]) == (False, "not_set_up")
+    declared_telegram = adapter_for(Channel.TELEGRAM).capabilities().max_classification
+    assert telegram["max_classification"] == declared_telegram
     refused = client.get(API_PREFIX + "/channels/webhook/health", headers=as_("u_narrow"))
     nothing = client.get(API_PREFIX + "/channels/carrier-pigeon/health", headers=as_("u_admin"))
     assert refused.status_code == nothing.status_code == 404
@@ -936,13 +936,13 @@ def test_the_module_list_is_every_channel_the_reader_manages_with_its_state_and_
     assert (webhook["status"], webhook["secret"], webhook["health"]) == ("on", "held", "working")
     assert webhook["receives"] is True and webhook["changed_by"] == "u_admin"
     assert webhook["last_delivered_at"] is not None
-    teams = rows["teams"]
-    assert (teams["status"], teams["secret"], teams["health"]) == (
+    telegram = rows["telegram"]
+    assert (telegram["status"], telegram["secret"], telegram["health"]) == (
         "not_set_up",
         "none",
         "not_set_up",
     )
-    assert (teams["receives"], teams["tenant"], teams["changed_by"]) == (False, {}, None)
+    assert (telegram["receives"], telegram["tenant"], telegram["changed_by"]) == (False, {}, None)
     # A channel's connect steps ride on its row, so its page and its flow read one answer: email
     # has its own and ends in its form, a channel with none has none, and with no public address
     # named on this install there is no events address to paste yet.
@@ -1009,14 +1009,14 @@ def test_each_channel_says_the_verbs_it_carries_and_how_a_group_is_answered(
 ) -> None:
     """**M27.15.43.** The verbs are the admission rule's for the channel, and how a group is
     answered follows the wire: at the floor on one that reads who is present (Lark, Slack), as a
-    floor of nothing on one that cannot (the webhook), and not at all where nothing is received
-    (Teams).
+    floor of nothing on one that cannot (the webhook, Teams), and not at all where nothing is
+    received (Telegram).
 
     Delete this and the screen can say a channel approves what admission refuses, or that a room
     is answered at its floor on a wire that never reads one."""
     found = {
         name: client.get(f"{API_PREFIX}/channels/{name}/health", headers=as_("u_admin")).json()
-        for name in ("lark", "webhook", "slack", "teams")
+        for name in ("lark", "webhook", "slack", "teams", "telegram")
     }
     assert found["lark"]["verbs"] == sorted(CHANNEL_VERBS[Channel.LARK])
     assert "approve" in found["lark"]["verbs"] and "approve" not in found["slack"]["verbs"]
@@ -1024,7 +1024,8 @@ def test_each_channel_says_the_verbs_it_carries_and_how_a_group_is_answered(
         "lark": "at_the_floor",
         "webhook": "as_nothing",
         "slack": "at_the_floor",
-        "teams": "not_received",
+        "teams": "as_nothing",
+        "telegram": "not_received",
     }
     assert isinstance(channel_wires()[Channel.LARK], RoomReader)
     assert isinstance(channel_wires()[Channel.SLACK], RoomReader)

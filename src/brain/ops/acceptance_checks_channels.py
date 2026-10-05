@@ -437,3 +437,143 @@ async def mail_in_the_mailbox_is_read_answered_and_marked(h: Harness) -> None:
     (kept,) = relayed.kept.sent
     if (kept.to, kept.body.rstrip()) != (colleague, Unrecognised(channel=Channel.EMAIL).prompt):
         raise CheckFailedError("the colleague was not told how to link their address")
+
+
+# ------------------------------------------------------------------------------ teams
+@dataclass
+class _TeamsKept(_Kept):
+    """The webhook check's transport, answering each send as the Bot Connector documents."""
+
+    def send(self, request: Any) -> Any:
+        from brain.channels.adapter import VendorAnswer
+
+        self.sent.append(request)
+        return VendorAnswer(status=201, body=b'{"id":"1"}')
+
+
+def _teams_token(private: Any, *, kid: str, app_id: str, service: str) -> str:
+    """A compact RS256 token shaped as the Bot Framework mints one, signed by `private`."""
+    import base64
+
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+
+    from brain.channels.teams import BOT_FRAMEWORK_ISSUER
+
+    def b64(blob: bytes) -> str:
+        return base64.urlsafe_b64encode(blob).decode("ascii").rstrip("=")
+
+    now = int(time.time())
+    head = {"alg": "RS256", "kid": kid, "typ": "JWT"}
+    claims = {
+        "iss": BOT_FRAMEWORK_ISSUER,
+        "aud": app_id,
+        "serviceurl": service,
+        "nbf": now - 60,
+        "exp": now + 1800,
+    }
+    signing = f"{b64(json.dumps(head).encode())}.{b64(json.dumps(claims).encode())}"
+    signature = private.sign(signing.encode("ascii"), padding.PKCS1v15(), hashes.SHA256())
+    return f"{signing}.{b64(signature)}"
+
+
+@check(
+    leaves=("M10.5.2",),
+    sentence=(
+        "A Teams channel set up with ids and a key the check made accepts a personal message "
+        "whose token that key signed for the bot and tenant, refuses one signed by another key "
+        "and one from another tenant, and answers the sender in the chat through Microsoft's "
+        "reply host on a token exchanged at the tenant's own login, kept rather than sent."
+    ),
+)
+async def a_teams_message_is_taken_signed_and_answered_in_its_chat(h: Harness) -> None:
+    import uuid
+    from datetime import UTC, datetime
+
+    import httpx
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from fastapi import FastAPI
+
+    from brain.channel_routes import router
+    from brain.channels.adapter import BOT_ID
+    from brain.channels.teams import BOT_FRAMEWORK_ISSUER, MICROSOFT_LOGIN_URL, TENANT_ID
+    from brain.gate.context import Channel
+    from brain.gate.ingress import Unrecognised
+    from brain.identity.oidc import KeySet, SigningKey
+    from brain.ops.channel_store import StoredChannels
+
+    app_id, tenant_id, other_tenant = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    service, chat, kid = "https://smba.trafficmanager.net/emea/", f"a:{h.run}", f"k-{h.run}"
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    stranger = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = (
+        private.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode("ascii")
+    )
+    await StoredChannels(h.sessions).save(
+        Channel.TEAMS,
+        enabled=True,
+        tenant={BOT_ID: app_id, TENANT_ID: tenant_id},
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    kept = _TeamsKept()
+    app = FastAPI()
+    app.include_router(router)
+    state = app.state
+    state.settings = h.settings
+    state.db_sessions = h.sessions
+    state.channel_secrets = _Secret(secrets.token_hex(24))
+    state.channel_transport = kept
+    state.operation_ledger = _HeldLedger()
+    state.channel_keys = KeySet(
+        issuer=BOT_FRAMEWORK_ISSUER,
+        keys=(SigningKey(kid=kid, algorithm="RS256", material=pem, use="sig"),),
+        fetched_at=datetime.now(UTC),
+    )
+    person = str(uuid.uuid4())
+
+    async def post(n: int, signer: Any, tenant: str) -> Any:
+        activity = {
+            "type": "message",
+            "id": f"{h.run}-{n}",
+            "channelId": "msteams",
+            "serviceUrl": service,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "from": {"id": f"29:{h.run}", "aadObjectId": person},
+            "conversation": {"id": chat, "conversationType": "personal"},
+            "text": h.word(),
+            "channelData": {"tenant": {"id": tenant}},
+        }
+        bearer = _teams_token(signer, kid=kid, app_id=app_id, service=service)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="https://acceptance.invalid"
+        ) as c:
+            return await c.post(
+                f"/api/v1/channels/{Channel.TEAMS.value}/events",
+                content=json.dumps(activity).encode("utf-8"),
+                headers={"Authorization": f"Bearer {bearer}"},
+            )
+
+    forged = await post(1, stranger, tenant_id)
+    if forged.status_code == 200 or kept.sent:
+        raise CheckFailedError("a token no published key signed was accepted")
+    elsewhere = await post(2, private, other_tenant)
+    if elsewhere.status_code == 200 or kept.sent:
+        raise CheckFailedError("an activity from another tenant was accepted")
+    accepted = await post(3, private, tenant_id)
+    if accepted.status_code != 200 or accepted.json().get("status") != "accepted":
+        raise CheckFailedError("a personal message Microsoft signed for this bot was not accepted")
+    if len(kept.sent) != 1:
+        raise CheckFailedError("a message from somebody bound to nobody was not answered once")
+    (built,) = kept.sent
+    if not built.url.startswith(f"{service}v3/conversations/"):
+        raise CheckFailedError("the answer was not built for Microsoft's reply host")
+    exchange = built.exchange
+    if exchange is None or exchange.url != f"{MICROSOFT_LOGIN_URL}/{tenant_id}/oauth2/v2.0/token":
+        raise CheckFailedError("the answer was not authorised at the tenant's own login")
+    if json.loads(built.body).get("text") != Unrecognised(channel=Channel.TEAMS).prompt:
+        raise CheckFailedError("the answer was not the binding prompt")

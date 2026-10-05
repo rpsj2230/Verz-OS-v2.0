@@ -46,6 +46,8 @@ SH = shutil.which("sh")
 SECRET = "SENTINEL-accounts-client-secret-7c1e"
 #: Keycloak's own administrator password, as its container's environment holds it.
 ADMIN_PASSWORD = "SENTINEL-keycloak-admin-password-2b9d"
+#: The mail relay's password, as the application prints it into the pipe.
+RELAY_PASSWORD = "SENTINEL-relay-password-9e3c"
 
 
 # ------------------------------------------------------------------ the command
@@ -181,6 +183,10 @@ if [ "$who" = app-x ]; then
     *"accounts_key --client"*) echo '{"clientId": "brain-accounts"}'; exit 0 ;;
     *"accounts_key --profile"*) cat; exit 0 ;;
     *"accounts_key --keep"*) cat > "$S/kept"; [ -s "$S/kept" ] || exit 1; exit 0 ;;
+    *"sign_in_mail --decide"*) cat > "$S/decided-on"; cat "$S/decision"; exit 0 ;;
+    *"sign_in_mail --server"*)
+      printf '{"smtpServer": {"password": "%s"}}' "$SENTINEL_RELAY"; exit 0 ;;
+    *"sign_in_mail --read-back"*) cat > "$S/read-back"; exit 0 ;;
   esac
   exit 1
 fi
@@ -196,6 +202,8 @@ case "$*" in
   "add-roles"*) exit 0 ;;
   "get users/profile"*) echo '{"attributes": [{"name": "email"}]}'; exit 0 ;;
   "update users/profile"*) cat > "$S/profile"; exit 0 ;;
+  "get realms/brain"*) echo '{"smtpServer": {"host": "smtp.example.net"}}'; exit 0 ;;
+  "update realms/brain"*) cat > "$S/realm-update"; exit "$(cat "$S/update-exit")" ;;
 esac
 exit 1
 """
@@ -222,12 +230,16 @@ def run_script(
     keycloak: bool = True,
     made: bool = False,
     login_exit: int = 0,
+    decision: str = "unset",
+    update_exit: int = 0,
 ) -> Ran:
     state, bin_dir = tmp_path / "state", tmp_path / "bin"
     state.mkdir()
     bin_dir.mkdir()
     (state / "calls").write_text("", encoding="utf-8", newline="\n")
     (state / "login-exit").write_text(str(login_exit), encoding="utf-8", newline="\n")
+    (state / "decision").write_text(decision + "\n", encoding="utf-8", newline="\n")
+    (state / "update-exit").write_text(str(update_exit), encoding="utf-8", newline="\n")
     for flag, name in ((is_held, "held"), (not keycloak, "no-keycloak"), (made, "made")):
         if flag:
             (state / name).write_text("", encoding="utf-8", newline="\n")
@@ -239,6 +251,7 @@ def run_script(
         "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
         "STUB_STATE": state.as_posix(),
         "SENTINEL_SECRET": SECRET,
+        "SENTINEL_RELAY": RELAY_PASSWORD,
         "BRAIN_APP_CONTAINER": "app-x",
         # Keycloak's own environment is its container's; on this host it must never be read.
         "KC_BOOTSTRAP_ADMIN_PASSWORD": ADMIN_PASSWORD,
@@ -326,18 +339,22 @@ def test_the_script_never_asks_keycloak_to_send_anybody_anything(tmp_path: Path)
 
 
 @pytestmark_sh
-def test_once_held_it_does_nothing_and_a_realm_that_has_the_client_is_not_given_a_second(
+def test_once_held_the_client_is_left_alone_and_a_realm_that_has_it_is_not_given_a_second(
     tmp_path: Path,
 ) -> None:
-    """Idempotent both ways. Delete this and every deploy rewrites the secret, or makes a second
-    client beside the first."""
+    """Idempotent both ways. Once the vault holds the credential no client step runs, and since
+    M40.7.1 Keycloak is still signed in to, for the realm's mail step alone.
+
+    Delete this and every deploy rewrites the secret, or makes a second client beside the first."""
     (tmp_path / "held").mkdir()
     (tmp_path / "made").mkdir()
     done = run_script(tmp_path / "held", is_held=True)
     existing = run_script(tmp_path / "made", made=True)
 
-    assert done.code == 0
-    assert done.calls == ["exec -i app-x python -m brain.ops.accounts_key --held"]
+    assert done.code == 0, done.output
+    for step in ("get clients", "create clients", "add-roles", "users/profile", "--keep"):
+        assert not [one for one in done.calls if step in one], step
+    assert [one for one in done.calls if "sign_in_mail --decide" in one]
     assert existing.code == 0, existing.output
     assert not [one for one in existing.calls if "create clients" in one]
     assert existing.read("kept").strip() == SECRET
@@ -367,3 +384,87 @@ def test_a_refused_administrator_sign_in_fails_the_step_and_keeps_nothing(tmp_pa
     assert "could not sign in" in ran.output
     assert ran.read("kept") == ""
     assert ran.read("removed").strip() != ""
+
+
+# ------------------------------------------------------------------ the realm's mail (M40.7.1)
+
+
+def _index(ran: Ran, marker: str) -> int:
+    return next(i for i, one in enumerate(ran.calls) if marker in one)
+
+
+@pytestmark_sh
+def test_a_changed_relay_is_piped_from_the_application_into_the_realm_and_read_back(
+    tmp_path: Path,
+) -> None:
+    """**The relay reaches the realm through a pipe, and what the realm kept is read back.** Asked
+    first, then the application's settings piped into `kcadm update realms/<realm> --merge -f -`,
+    then the realm read again and handed to the application to record.
+
+    Delete this and a step can go missing, the update can drop `--merge` and replace the whole
+    realm with its mail settings, or the read-back can be skipped so the install check reports a
+    relay the realm never kept."""
+    ran = run_script(tmp_path, is_held=True, decision="write")
+
+    assert ran.code == 0, ran.output
+    update = next(one for one in ran.calls if "update realms/brain" in one)
+    assert "--merge" in update and "-f -" in update
+    assert json.loads(ran.read("realm-update")) == {"smtpServer": {"password": RELAY_PASSWORD}}
+    assert json.loads(ran.read("decided-on")) == {"smtpServer": {"host": "smtp.example.net"}}
+    assert json.loads(ran.read("read-back")) == {"smtpServer": {"host": "smtp.example.net"}}
+    decided, piped = _index(ran, "--decide"), _index(ran, "update realms/brain")
+    assert decided < piped < _index(ran, "--read-back")
+    assert "gave the realm the mail relay" in ran.output
+
+
+@pytestmark_sh
+def test_the_relay_s_password_is_never_an_argument_or_a_line_of_output(tmp_path: Path) -> None:
+    """Arguments are readable by every user on the server, and output lands in the deploy's
+    journal. Delete this and a change that passes the relay's password as `-s password=...`, or
+    echoes it, ships."""
+    ran = run_script(tmp_path, decision="write")
+
+    assert ran.code == 0, ran.output
+    assert RELAY_PASSWORD not in "\n".join([*ran.calls, ran.output])
+    assert RELAY_PASSWORD in ran.read("realm-update")
+
+
+@pytestmark_sh
+@pytest.mark.parametrize("decision", ["unset", "same"])
+def test_with_no_relay_or_the_same_relay_the_realm_is_not_written(
+    tmp_path: Path, decision: str
+) -> None:
+    """**No relay, nothing touched; the same relay, nothing written.** Delete this and an install
+    with no relay has mail settings a person set in Keycloak overwritten on every deploy, or every
+    deploy rewrites a realm that already holds the relay."""
+    ran = run_script(tmp_path, is_held=True, decision=decision)
+
+    assert ran.code == 0, ran.output
+    assert not [one for one in ran.calls if "update realms" in one]
+    assert not [one for one in ran.calls if "sign_in_mail --server" in one or "--read-back" in one]
+    said = {"unset": "left as they are", "same": "already sends Forgot password"}[decision]
+    assert said in ran.output
+
+
+@pytestmark_sh
+def test_a_realm_that_refuses_the_relay_is_said_and_fails_no_deploy(tmp_path: Path) -> None:
+    """Delete this and a Keycloak refusing the relay would fail the accounts step, which the
+    deploy reports as the accounts client not set up, or would be recorded as given."""
+    ran = run_script(tmp_path, decision="write", update_exit=1)
+
+    assert ran.code == 0, ran.output
+    assert "SIGN-IN MAIL NOT SET" in ran.output
+    assert not [one for one in ran.calls if "--read-back" in one]
+    assert ran.read("kept").strip() == SECRET
+
+
+@pytestmark_sh
+def test_with_no_keycloak_beside_the_application_the_relay_is_not_asked_for(
+    tmp_path: Path,
+) -> None:
+    """Delete this and an install signing in elsewhere would print its relay's password into a
+    pipe with nothing at the other end, on every deploy."""
+    ran = run_script(tmp_path, keycloak=False, decision="write")
+
+    assert ran.code == 0, ran.output
+    assert not [one for one in ran.calls if "sign_in_mail" in one]

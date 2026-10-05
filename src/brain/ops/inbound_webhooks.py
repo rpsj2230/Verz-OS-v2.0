@@ -138,7 +138,8 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         check="brain.channels.teams:verified_activity",
         how=(
             "Microsoft sends a token it signed; the check verifies it against Microsoft's "
-            "published keys, the bot's app id and the one tenant the install is pinned to."
+            "published keys, the bot's app id and the one tenant the install is pinned to. It is "
+            "received at its channel's events address while its record is switched on."
         ),
     ),
     InboundChannel(

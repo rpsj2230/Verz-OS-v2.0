@@ -258,6 +258,18 @@ AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN: Final = (
     "key cache has nothing to check it against."
 )
 
+#: Why the endpoints `create_app` defines read their application from the request.
+AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION: Final = (
+    "FastAPI keeps every endpoint and dependency it inspects in module-level caches of 4096 "
+    "entries (fastapi.dependencies.models), holding the function itself. An endpoint defined "
+    "inside create_app that closes over app therefore keeps that application, its engines and "
+    "its routing table alive for as long as the cache does. A server builds one application and "
+    "never notices. The test suite builds thousands, two cache entries each, so up to some two "
+    "thousand stayed alive at once; measured on 2026-09-30, five route test files left 122, and "
+    "in a full run one request took 504 seconds against a deadline of 30. So such an endpoint "
+    "takes request: Request and reads request.app."
+)
+
 
 class Health(BaseModel):
     status: Literal["ok", "degraded"]
@@ -1237,15 +1249,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Health(status="ok", commit=settings.resolved_commit())
 
     @app.get("/health/ready", response_model=Health, tags=["health"])
-    async def ready(response: Response) -> Health:
+    async def ready(request: Request, response: Response) -> Health:
         """Every dependency is reachable. Deployment gates on this, not on liveness.
 
         `checks` decide the status; `reported` are named beside them and decide nothing. See
-        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
+        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`. The application is the request's,
+        never the enclosing `app`: see `AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION`.
         """
-        await app.state.readings.refresh(app.state.ready)
-        checks: dict[str, bool] = dict(app.state.ready)
-        reported: dict[str, bool] = dict(getattr(app.state, "reported", {}))
+        state = request.app.state
+        await state.readings.refresh(state.ready)
+        checks: dict[str, bool] = dict(state.ready)
+        reported: dict[str, bool] = dict(getattr(state, "reported", {}))
         ok = all(checks.values()) if checks else True
         if not ok:
             response.status_code = 503

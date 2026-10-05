@@ -18,7 +18,14 @@
  * a refusal counted apart from an absence tells a reader how often an agent was asked about
  * something they may not see.
  *
- * Task ids: M27.10.2
+ * **Four periods, and three more figures, for the agent's own page (M39.1.3).** The route sends 7, 30
+ * and 90 days and the month to date; each period carries `messages` (the runs a person started, so an
+ * automation's run is a run and not a message) and `callers`, the cost per person, heaviest first,
+ * at the cost's basis, so a reader of their own spend is given their own row and no remainder. The
+ * body carries `projection`, the month-end projection against the agent's own monthly budget, only
+ * for a reader of everybody's spend and only when a budget is set.
+ *
+ * Task ids: M27.10.2, M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.1.3.4
  */
 
 /** The module name the agents pages ask the stats route about. */
@@ -37,17 +44,37 @@ export function agentStatsApiPath(agentId: string): string {
   return statsApiPath(AGENTS_MODULE, agentId);
 }
 
+/** One person's spend through the agent over one period, heaviest first. */
+export interface CallerSpend {
+  readonly principalId: string;
+  /** The directory's name, absent for an id it does not hold. */
+  readonly name?: string;
+  readonly spendMinor: number;
+}
+
 /** One agent's figures over one period. A figure is absent when none was sent. */
 export interface AgentPeriod {
-  /** As the API spells it: "7d" or "30d". */
+  /** As the API spells it: "7d", "30d", "90d" or "mtd". */
   readonly range: string;
   readonly runs?: number;
+  /** The runs a person started. */
+  readonly messages?: number;
   readonly answered?: number;
   /** Refused and abstained together. */
   readonly nothingReturned?: number;
   readonly p50LatencyMs?: number;
   /** In the install's minor units. Absent while nothing records a run's cost. */
   readonly costMinor?: number;
+  /** The cost per person, heaviest first; empty while nothing records a run's cost. */
+  readonly callers: readonly CallerSpend[];
+}
+
+/** Where the month ends against the agent's own monthly budget if nothing changes. */
+export interface Projection {
+  readonly spentMinor: number;
+  readonly projectedMinor: number;
+  readonly ceilingMinor: number;
+  readonly overCeiling: boolean;
 }
 
 /** A figure the page asks for that nothing on this install records, and why. */
@@ -69,6 +96,8 @@ export interface AgentStats {
   readonly atLeast: boolean;
   readonly periods: readonly AgentPeriod[];
   readonly unrecorded: readonly Unrecorded[];
+  /** Sent only to a reader of everybody's spend, and only with a monthly budget set. */
+  readonly projection?: Projection;
 }
 
 /** The figure `unrecorded` names a run's cost by. `brain.console.entity_stats.RUN_COST_IS_NOT_RECORDED`. */
@@ -117,9 +146,22 @@ function readPeriod(value: unknown): AgentPeriod | null {
   const nothingReturned = counted(fields["nothing_returned"]);
   const p50LatencyMs = measured(fields["p50_latency_ms"]);
   const costMinor = counted(fields["cost_minor"]);
+  const messages = counted(fields["messages"]);
+  const callers: CallerSpend[] = [];
+  for (const one of listOf(fields["callers"])) {
+    const row = fieldsOf(one);
+    const principalId = said(row?.["principal_id"]);
+    const spendMinor = counted(row?.["spend_minor"]);
+    const name = said(row?.["name"]);
+    if (principalId !== undefined && spendMinor !== undefined) {
+      callers.push({ principalId, spendMinor, ...(name === undefined ? {} : { name }) });
+    }
+  }
   return {
     range,
+    callers,
     ...(runs === undefined ? {} : { runs }),
+    ...(messages === undefined ? {} : { messages }),
     ...(answered === undefined ? {} : { answered }),
     ...(nothingReturned === undefined ? {} : { nothingReturned }),
     ...(p50LatencyMs === undefined ? {} : { p50LatencyMs }),
@@ -155,15 +197,28 @@ export function readAgentStats(payload: unknown): AgentStats | null {
       unrecorded.push({ figure, why });
     }
   }
+  const projection = readProjection(fields["projection"]);
   return {
     ...(basis === undefined ? {} : { basis }),
     ...(costBasis === undefined ? {} : { costBasis }),
     ...(currency === undefined ? {} : { currency }),
     ...(lastActiveAt === undefined ? {} : { lastActiveAt }),
+    ...(projection === undefined ? {} : { projection }),
     atLeast: fields["at_least"] === true,
     periods,
     unrecorded,
   };
+}
+
+function readProjection(value: unknown): Projection | undefined {
+  const fields = fieldsOf(value);
+  const spentMinor = counted(fields?.["spent_minor"]);
+  const projectedMinor = counted(fields?.["projected_minor"]);
+  const ceilingMinor = counted(fields?.["ceiling_minor"]);
+  if (fields === null || spentMinor === undefined || projectedMinor === undefined || ceilingMinor === undefined) {
+    return undefined;
+  }
+  return { spentMinor, projectedMinor, ceilingMinor, overCeiling: fields["over_ceiling"] === true };
 }
 
 /** One period's figures, or the first sent when that period was not. */
@@ -208,9 +263,18 @@ export function whenWords(at: string | undefined): string | undefined {
 
 /** A period in words. */
 export function rangeWords(range: string | undefined): string {
+  if (range === MONTH_TO_DATE) {
+    return "Month to date";
+  }
   const days = range === undefined ? null : /^(\d+)d$/.exec(range);
   return days?.[1] === undefined ? "recent" : `${days[1]} days`;
 }
+
+/** The month-to-date period's key, as `brain.console.workspace.Range` spells it. */
+export const MONTH_TO_DATE = "mtd";
+
+/** The four periods an agent's page offers, in the route's order (M39.1.3.2). */
+export const AGENT_PERIODS = ["7d", "30d", "90d", MONTH_TO_DATE] as const;
 
 /** Whose figures, in words: the API's two bases. */
 export function basisWords(basis: string | undefined): string | undefined {

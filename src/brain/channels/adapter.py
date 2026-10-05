@@ -76,7 +76,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
@@ -85,6 +85,9 @@ from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent
 from brain.ops.connect_steps import GuideStep
 from brain.ops.idempotency import Intent, Operation, operation_for
+
+if TYPE_CHECKING:
+    from brain.identity.oidc import KeySet
 
 
 class DeliveryRefusedError(Exception):
@@ -466,12 +469,18 @@ class Arrived:
 
     Bytes and never a parsed body, for `brain.channels.webhook`'s first argument: a signature
     covers what was sent, and a re-serialisation is something the sender never signed.
+
+    `tenant` and `keys` are what a vendor that signs with a published key needs besides the
+    secret: the record's identifiers, which such a token names, and the keys the vendor
+    publishes, fetched by the route for a `KeyedWire` and absent for every other. See
+    `A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE`.
     """
 
     headers: Mapping[str, str]
     body: bytes = field(repr=False)
     #: The record's identifiers, for a wire whose check depends on how the record is set up.
     tenant: Mapping[str, str] = field(default_factory=dict)
+    keys: KeySet | None = None
 
 
 @dataclass(frozen=True)
@@ -579,6 +588,8 @@ class TokenExchange:
     url: str
     body: bytes = field(repr=False)
     answered_in: str = "access_token"  # the JSON key, not a value
+    #: How the body is written: JSON for most vendors, a form for an OAuth token endpoint.
+    content_type: str = "application/json; charset=utf-8"
 
 
 @dataclass(frozen=True)
@@ -656,6 +667,30 @@ class ChannelWire(Protocol):
         """What the vendor's answer says about the delivery. A vendor that answers 200 with a
         refusal in its body is judged here, by the wire that knows that vendor."""
         ...
+
+
+#: Why a vendor's published keys are fetched outside the wire and read inside it.
+A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE: Final = (
+    "A vendor that signs with a key it publishes, rather than with a secret shared with the "
+    "install, needs those keys to verify anything. The route fetches them from the one address "
+    "the wire names and caches them for every request; the wire, which opens no connection, "
+    "judges the token against them, and refuses whatever arrives when none could be fetched."
+)
+
+
+@runtime_checkable
+class KeyedWire(Protocol):
+    """A wire whose vendor signs with published keys: where they are, and how to read them.
+
+    `keys_address` is the vendor's OpenID metadata document. `key_set_of` reads that document
+    and the key set it points to into the keys `verify` is handed on `Arrived.keys`; the route
+    fetches both, and only from an address this names or the document gives on the same host.
+    """
+
+    @property
+    def keys_address(self) -> str: ...
+
+    def key_set_of(self, metadata: bytes, keys: bytes, now: datetime) -> KeySet: ...
 
 
 @runtime_checkable

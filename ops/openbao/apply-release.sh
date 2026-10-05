@@ -97,11 +97,11 @@ if ! slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs an
   fi
   slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs and delete tickets scopes:an agent API key with read access]' || missing "the credential slot for freshdesk"
 fi
-if ! slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:read on the named shared drive only]'; then
+if ! slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewer on the one folder shared with it]'; then
   if test "$CHECK_ONLY" = no; then
-    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=read on the named shared drive only' -custom-metadata='not_requested=domain-wide delegation' google_drive >/dev/null || fail "the vault would not define the credential slot for google_drive"
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=Viewer on the one folder shared with it' -custom-metadata='not_requested=domain-wide delegation' google_drive >/dev/null || fail "the vault would not define the credential slot for google_drive"
   fi
-  slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:read on the named shared drive only]' || missing "the credential slot for google_drive"
+  slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewer on the one folder shared with it]' || missing "the credential slot for google_drive"
 fi
 if ! slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.contacts.read; crm.objects.deals.read]'; then
   if test "$CHECK_ONLY" = no; then
