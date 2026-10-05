@@ -109,11 +109,11 @@ if ! slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewe
   fi
   slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewer on the one folder shared with it]' || missing "the credential slot for google_drive"
 fi
-if ! slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.contacts.read; crm.objects.deals.read]'; then
+if ! slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read]'; then
   if test "$CHECK_ONLY" = no; then
-    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=crm.objects.contacts.read; crm.objects.deals.read' -custom-metadata='not_requested=crm.objects.*.write; anything touching settings' hubspot >/dev/null || fail "the vault would not define the credential slot for hubspot"
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read' -custom-metadata='not_requested=crm.objects.*.write; anything touching settings' hubspot >/dev/null || fail "the vault would not define the credential slot for hubspot"
   fi
-  slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.contacts.read; crm.objects.deals.read]' || missing "the credential slot for hubspot"
+  slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read]' || missing "the credential slot for hubspot"
 fi
 if ! slot_ok laravel 'map[not_requested:SELECT on tables; any write scopes:SELECT on the allowlisted views only]'; then
   if test "$CHECK_ONLY" = no; then
@@ -159,4 +159,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 9 credential slots"
+say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 10 credential slots"

@@ -17,7 +17,7 @@ later" is a scope nobody removes.
 | `connectors/creds/lark_base` | Lark Base | `bitable:app:readonly`, `base:record:read` | `base:record:write`, `drive:drive`. Read-only is already what the existing bot holds |
 | `connectors/creds/lark_wiki` | Lark Wiki | `wiki:wiki:readonly` | Anything under `docs:document` that would allow editing |
 | `connectors/creds/freshdesk` | Freshdesk | Agent key, read scope | An admin key. An admin key can change SLAs and delete tickets |
-| `connectors/creds/hubspot` | HubSpot | `crm.objects.contacts.read`, `crm.objects.deals.read` | `crm.objects.*.write`, and anything touching `settings` |
+| `connectors/creds/hubspot` | HubSpot | `crm.objects.companies.read`, `crm.objects.contacts.read`, `crm.objects.deals.read` | `crm.objects.*.write`, and anything touching `settings` |
 | `connectors/creds/laravel_readonly` | Laravel MySQL | A database user with SELECT on the allowlisted views only | SELECT on tables. The views are the contract; tables change shape without warning |
 | `connectors/creds/google_analytics` | Google Analytics | A service account's key file, the account a Viewer on the one property, asking only for `analytics.readonly` | `analytics.edit`, and domain-wide delegation. It reads one property as itself |
 | `connectors/creds/slack_messages` | Slack | A bot token with `channels:read`, `groups:read`, `channels:history`, `groups:history`, `users:read`, `users:read.email` | `chat:write` or any other write scope, and a user token. A user token is one person's whole account and reads as them |
@@ -211,7 +211,7 @@ is the catalogue, and a test holds this table to it):
 | `connector_keys/freshdesk` | freshdesk | an agent API key with read access | an admin key, which can change SLAs and delete tickets |
 | `connector_keys/google_analytics` | google_analytics | analytics.readonly; Viewer on the one property | analytics.edit; domain-wide delegation |
 | `connector_keys/google_drive` | google_drive | Viewer on the one folder shared with it | domain-wide delegation |
-| `connector_keys/hubspot` | hubspot | crm.objects.contacts.read; crm.objects.deals.read | crm.objects.*.write; anything touching settings |
+| `connector_keys/hubspot` | hubspot | crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read | crm.objects.*.write; anything touching settings |
 | `connector_keys/laravel` | laravel | SELECT on the allowlisted views only | SELECT on tables; any write |
 | `connector_keys/lark_base` | lark_base | bitable:app:readonly; base:record:read | base:record:write; drive:drive |
 | `connector_keys/lark_wiki` | lark_wiki | wiki:wiki:readonly | docs:document edit scopes |

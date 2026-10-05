@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
+from brain.connectors import hubspot
 from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
 from brain.ops.credentials import connector_key_slot
 
@@ -111,7 +112,7 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
             ),
             SlotScopes(
                 "hubspot",
-                request=("crm.objects.contacts.read", "crm.objects.deals.read"),
+                request=hubspot.required_scopes(),
                 refuse=("crm.objects.*.write", "anything touching settings"),
             ),
             SlotScopes(
