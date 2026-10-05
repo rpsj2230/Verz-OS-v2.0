@@ -11,7 +11,7 @@ an install with no record of its furnishing.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 The template signing clock is 2999, for the reason CLAUDE.md records about fixtures.
 
-Task ids: M27.1.6, M27.6.1, M27.8.10, M27.15.51, M27.12.7, M27.7.27, M27.9.5
+Task ids: M27.1.6, M27.6.1, M27.15.51, M27.12.7, M27.7.27, M27.9.5
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (TRAFFIC, ("M27.1.6",)),
         (INSTALL, ("M27.6.1",)),
-        (FEATURE, ("M27.8.10", "M27.15.51")),
+        (FEATURE, ("M27.15.51",)),
         (SETTING, ("M27.12.7",)),
         (LIMITS, ("M27.7.27",)),
         (FURNISHED, ("M27.9.5",)),
@@ -112,16 +112,31 @@ def install() -> Iterator[str]:
 
     with at_head("brain_acceptance_ops_console") as url:
         sessions = _sessions(url)
-        trace = "install.furnish.0123456789abcdef"
-        run(lambda: furnish(sessions, actor=GRANTED_BY, trace_id=trace))
-        run(lambda: sign_built_ins(sessions, key=KEY, at=AT, actor=GRANTED_BY, trace_id=trace))
+        # Two traces, as a start gives each of its two writes its own.
+        furnished, signed = "install.furnish.0123456789abcdef", "install.furnish.fedcba9876543210"
+        run(lambda: furnish(sessions, actor=GRANTED_BY, trace_id=furnished))
+        run(lambda: sign_built_ins(sessions, key=KEY, at=AT, actor=GRANTED_BY, trace_id=signed))
         yield url
+
+
+#: A cache address nothing answers at: `held_cache` hands the window store an in-memory one.
+CACHE = "redis://cache.invalid:6379/0"
+
+
+@pytest.fixture(autouse=True)
+def held_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The install's cache, answered in memory as Valkey answers the window store's statements."""
+    import brain.cache as cache
+    from tests.unit.test_acceptance_capacity import HeldCache
+
+    held = HeldCache()
+    monkeypatch.setattr(cache, "make_client", lambda url: held)
 
 
 def run_ops(url: str, *names: str) -> dict[str, tuple[str, str]]:
     from brain.db import normalise_database_url
 
-    settings = settings_from({"BRAIN_DATABASE_URL": url})
+    settings = settings_from({"BRAIN_DATABASE_URL": url, "BRAIN_VALKEY_URL": CACHE})
     checks = [one for one in registered((MODULE,)) if not names or one.name in names]
     _, results = asyncio.run(
         acceptance_run.run_acceptance(
@@ -232,7 +247,7 @@ def test_a_release_check_reading_only_the_environment_fails_the_feature_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Version and updates ignoring the console's switch, as it did before M27.15.51. Delete this
-    and the switch closes M27.8.10 and M27.15.51 while reaching nothing."""
+    and the switch closes M27.15.51 while reaching nothing."""
     from brain import install_routes
 
     async def never(session: Any, one: Any) -> bool:
@@ -246,8 +261,8 @@ def test_a_release_check_reading_only_the_environment_fails_the_feature_check(
 def test_a_switch_anybody_may_turn_fails_the_feature_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The Features screen's authority removed. Delete this and a feature anybody can switch
-    closes M27.8.10."""
+    """The Features screen's authority removed. Delete this and a release check anybody can
+    switch on closes M27.15.51."""
     from brain import feature_routes
 
     monkeypatch.setattr(feature_routes, "may_switch", lambda reach, now: True)
@@ -303,3 +318,27 @@ def test_a_capability_left_unregistered_fails_the_furnished_check(
     )
     monkeypatch.setattr(starter, "vocabulary", lambda: (*real, extra))
     assert "is not registered" in _failed(install, FURNISHED)
+
+
+@pytest.mark.needs_db
+def test_a_furnishing_that_wrote_a_person_fails_the_furnished_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A furnishing whose trace carries a person's row, as a demo seed would. Delete this and
+    M27.9.5 closes on an install furnished with somebody's data."""
+    from brain.ops import acceptance_operations_console as console
+
+    monkeypatch.setattr(console, "FURNISHING_WRITES_ONLY", frozenset({"setting", "scope"}))
+    assert "not the product's own" in _failed(install, FURNISHED)
+
+
+@pytest.mark.needs_db
+def test_rate_limits_that_cannot_read_the_cache_fail_the_limits_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The route reading no live windows whatever the process holds. Delete this and M27.7.27
+    closes on a screen that never says what is throttled now."""
+    from brain import install_routes
+
+    monkeypatch.setattr(install_routes, "throttle_source_of", lambda request: None)
+    assert "throttled now" in _failed(install, LIMITS)

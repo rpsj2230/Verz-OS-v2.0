@@ -651,6 +651,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
+    assert outcomes.pop("rate_limits_and_capacity_answer_their_readers")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
