@@ -8,7 +8,7 @@ need no database and run without one; the connection budget and the trace store 
 PostgreSQL at head. Each check is then broken the way it would break in practice and fails with
 its own sentence, and a process that is not a worker is told so by the three that read one.
 
-Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4
+Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4, M32.2.1.3
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ LEAVES = {
         "M32.1.2.5",
     ),
     "the_scrub_meets_its_budget_on_this_install_s_processor": ("M32.2.2.4",),
+    "singapore_identifiers_are_scrubbed_by_their_kind": ("M32.2.1.3",),
 }
 
 #: The checks that read the worker they run in.
@@ -56,6 +57,7 @@ READ_THE_WORKER = (
 
 LAYOUT = "the_worker_serves_each_traffic_class_from_its_own_slots"
 SCRUB = "the_scrub_meets_its_budget_on_this_install_s_processor"
+SINGAPORE = "singapore_identifiers_are_scrubbed_by_their_kind"
 
 #: Pinned far from any wall clock, for CLAUDE.md's reason about fixtures with dates in them.
 LONG_AGO = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
@@ -379,3 +381,37 @@ def test_the_scrub_s_log_line_carries_the_wall_time_beside_the_processor_rate(
     [line] = [one for one in logged if one["event"] == "acceptance.scrub_measured"]
     assert line["clock"] == "thread_time"
     assert line["wall_ms_all_samples"] > 0
+
+
+# --------------------------------------------------------------- Singapore's identifiers
+def test_singapore_identifiers_are_each_scrubbed_by_their_kind() -> None:
+    """The positive run: every made-up NRIC, FIN, UEN and number is found as its kind and
+    replaced by it, with no database and no worker needed. Delete this and the check can refuse
+    the recognisers the product ships, which reads on the Install page as personal data leaking."""
+    assert ran(SINGAPORE) == (PASSED, "")
+
+
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("uen", "a Singapore identifier was not found as its own kind"),
+        ("phone", "a Singapore identifier was not found as its own kind"),
+        ("kept", "a Singapore identifier was left in scrubbed text"),
+    ],
+)
+def test_the_singapore_check_fails_where_a_recogniser_or_the_scrub_is_broken(
+    monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """M32.2.1.3 broken three ways: the UEN recognisers removed, the number recogniser removed,
+    and a scrub that returns its text unchanged. Each fails the check with its own sentence.
+    Delete this and the check can pass with a Singapore identifier reaching a model."""
+    from brain.ops import pii
+
+    if broken == "kept":
+        monkeypatch.setattr(pii, "scrub", lambda text, detections=None: text)
+    else:
+        gone = pii.EntityKind.UEN if broken == "uen" else pii.EntityKind.SG_PHONE
+        monkeypatch.setattr(
+            pii, "RECOGNISERS", tuple(one for one in pii.RECOGNISERS if one.kind is not gone)
+        )
+    assert ran(SINGAPORE) == (FAILED, reason)
