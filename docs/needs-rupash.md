@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**28 items are open: 150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**29 items are open: 153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,35 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 153. Questions written in Chinese: how much is hidden before they go to an outside model?
+
+**In plain terms:** your requirement GAP-23 is now built (#344): before a question or passage goes
+to an outside model provider, names, ID numbers, phone numbers and email addresses are replaced
+with placeholders, and put back in the answer for the person who asked. Names written in Chinese
+characters are hard to tell from other Chinese words, so the built-in rules treat any run of two to
+four Chinese characters as a possible name. A question in English with a Chinese name in it works
+well: the name is hidden and the rest is sent. But a question written entirely in Chinese reaches
+the model as nothing but placeholders, and the model cannot answer it.
+
+**Option A: keep it as it is.** Nothing that could be a name leaves your install. Questions written
+in Chinese cannot be answered by an outside model.
+
+**Option B: hide a Chinese run only where it stands alone inside non-Chinese text,** as a name does
+in an English sentence. Questions written in Chinese then go through and are answered, but a
+Chinese name inside Chinese text is sent to the provider as written. Once the personal-data detector
+(item 120, row 1) runs with a Chinese model, it finds those names too and hides them again.
+
+**Option C: answer questions written in Chinese only with a model running on your own server.**
+Nothing leaves, and Chinese questions are answered, but only once such a model runs (it needs the
+model server from item 120, row 2, which does not fit on this server today).
+
+**My recommendation: B,** with the detector's Chinese model added once it is installed. It answers
+the questions your people actually ask, and hides every name written in an English sentence today.
+Until you reply, A holds, because it is the safe side: it only ever hides more.
+
+**What I need from you:** reply "153: A", "153: B" or "153: C". It is worth knowing first whether
+your staff ever ask the Brain in Chinese; if they never do, A costs nothing.
 
 ## 150. Connect Google Drive (ready now)
 

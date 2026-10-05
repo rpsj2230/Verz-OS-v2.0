@@ -18,17 +18,20 @@ to. See `A_RECORDED_DATABASE_IS_NEVER_A_CONNECTION`.
 view's rule; a reader granted a client's contract value is told the value read live from the view
 while they wait, narrowed to the client's id; a reader not granted it is told what a client
 nobody has tells them; the value is in no table afterwards; and every read the check made carried
-the connection's row cap as a bound `LIMIT`.
+the connection's row cap as a bound `LIMIT`. **And only the views the connection allowlists were
+read (M11.1.4):** every statement the driver was sent is one `SELECT` from a view on the allowlist,
+and a view off it is refused by `DatabaseTransport.plan` before the database is asked anything.
 
 **The check steps aside where the install has Laravel connected already**, for
 `brain.ops.acceptance_checks_sources.A_SOURCE_IS_CONNECTED_HERE_ALREADY`'s reason: connecting a
 source that is connected is refused, and a real connection would stand in the check's place.
 
-Task ids: M11.6.1, M11.7.7
+Task ids: M11.6.1, M11.7.7, M11.1.4
 """
 
 from __future__ import annotations
 
+import re
 import secrets
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -36,6 +39,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Final
 
+from brain.connectors.transports import DatabaseTransport, TransportError
 from brain.core.scope import Scope
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_checks_connectors import (
@@ -205,14 +209,41 @@ async def _connect_and_read(h: Harness, connection: Connection, reading: Laravel
         raise CheckFailedError("the worker did not read both of the database's views to the end")
 
 
+#: The view the check asks for that no connection allowlists: the framework's own users table.
+OFF_THE_LIST: Final = f"{SCHEMA}.users"
+
+
+def _only_allowlisted_views(views: _Views, allowlist: DatabaseTransport) -> None:
+    """Every statement was one `SELECT` from an allowlisted view, and a view off the list is
+    refused by the transport before the driver is sent anything (M11.1.4)."""
+    read_from = set()
+    for query, _ in views.selected:
+        found = re.search(r"\bFROM\s+(\S+)", query)
+        if not query.startswith("SELECT") or ";" in query or found is None:
+            raise CheckFailedError("a statement sent to the database was not one SELECT of a view")
+        read_from.add(found.group(1).replace("`", ""))
+    if not read_from or not read_from <= set(allowlist.views):
+        raise CheckFailedError("the database was read from something other than its allowlist")
+    asked = len(views.selected)
+    try:
+        allowlist.plan(OFF_THE_LIST, limit=MAX_ROWS)
+    except TransportError:
+        pass
+    else:
+        raise CheckFailedError("a view off the connection's allowlist was planned for reading")
+    if len(views.selected) != asked:
+        raise CheckFailedError("the database was asked about a view off the allowlist")
+
+
 # ------------------------------------------------ 1. the database answers on Ask
 @check(
-    leaves=("M11.6.1", "M11.7.7"),
+    leaves=("M11.6.1", "M11.7.7", "M11.1.4"),
     sentence=(
-        "A Laravel database made up for the check is connected as the Connectors screen does and "
-        "read by the worker through the executor over a recorded driver: a client's contract value "
-        "is read live from its view for a reader granted it, withheld as if absent from one who is "
-        "not, and in no table, and every read carried the row cap as its limit."
+        "A Laravel database made up for the check is connected and read by the worker through the "
+        "executor over a recorded driver: a client's contract value is read live for a reader "
+        "granted it, withheld as if absent from one who is not, and in no table; every read was "
+        "one SELECT of an allowlisted view carrying the row cap, and a view off the list is "
+        "refused before the database is asked."
     ),
 )
 async def a_laravel_database_answers_on_ask_from_its_views(h: Harness) -> None:
@@ -392,3 +423,6 @@ async def a_laravel_database_answers_on_ask_from_its_views(h: Harness) -> None:
     # Nothing a live read returned was kept anywhere.
     if await _search(h, canary):
         raise CheckFailedError("a contract value read live was found in a table")
+
+    # M11.1.4: only allowlisted views were read, and one off the list is refused unasked.
+    _only_allowlisted_views(views, laravel.connection_of(settings).transport())

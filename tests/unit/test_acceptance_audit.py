@@ -10,7 +10,7 @@ export that carries the release history each fail it.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 The clock in the deploy recorded here is 2019, for the reason CLAUDE.md records about fixtures.
 
-Task ids: M38.5.1, M24.3.4
+Task ids: M38.5.1, M24.3.4, M32.1.2.4
 """
 
 from __future__ import annotations
@@ -230,6 +230,20 @@ def test_a_browser_session_the_ledger_does_not_record_fails_the_check() -> None:
         sql(url, "DROP TRIGGER browser_session_is_audited ON agent.browser_session")
         said = run_audit(url)
     assert said == (FAILED, "an act did not reach the ledger with the actor who made it")
+
+
+@pytest.mark.needs_db
+def test_a_trace_read_by_any_realm_role_fails_the_check(
+    deployed: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M32.1.2.4 broken: the trace route reads the payload role off any sign-in carrying a realm
+    role at all, so an administrator's token reads payloads. Delete this and the role that should
+    be held apart for an incident can become every administrator's with the check green."""
+    import brain.trace_routes as trace_routes
+    from brain.ops.tracing import PAYLOAD_ROLE
+
+    monkeypatch.setattr(trace_routes, "payload_roles_of", lambda claims: frozenset({PAYLOAD_ROLE}))
+    assert run_audit(deployed) == (FAILED, "a trace was read without the separate role")
 
 
 @pytest.mark.needs_db
