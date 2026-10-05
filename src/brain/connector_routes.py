@@ -177,7 +177,6 @@ from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.connectable import (
     CONNECTABLE,
-    MAX_SETTING_CHARS,
     NOT_FROM_THE_CONSOLE,
     NotConnectableError,
     SettingProblem,
@@ -239,6 +238,7 @@ from brain.ops.credentials import (
     Held,
     Kept,
     KeySlot,
+    Problem,
     VaultState,
     connector_key_slot,
     connector_write_slot,
@@ -1011,11 +1011,7 @@ def write_grant_view(grant: WriteGrant) -> WriteGrantView:
         credential_label=grant.credential_label,
         credential_hint=grant.credential_hint,
         credential_shape=grant.credential_shape.value,
-        credential_max_chars=(
-            MAX_KEY_FILE_CHARS
-            if grant.credential_shape is CredentialShape.KEY_FILE
-            else MAX_CREDENTIAL_CHARS
-        ),
+        credential_max_chars=_credential_chars(grant.credential_shape),
         not_allowed=grant.not_allowed,
         confirmation=ALLOWING_A_WRITE,
     )
@@ -1066,7 +1062,7 @@ def _page(
                         name=one.name,
                         label=one.label,
                         hint=one.hint,
-                        max_chars=MAX_SETTING_CHARS,
+                        max_chars=one.max_chars,
                         blank=blank_sentence(one),
                     )
                     for one in kind.settings
@@ -1074,11 +1070,7 @@ def _page(
                 credential_label=kind.credential_label,
                 credential_hint=kind.credential_hint,
                 credential_shape=kind.credential_shape.value,
-                credential_max_chars=(
-                    MAX_KEY_FILE_CHARS
-                    if kind.credential_shape is CredentialShape.KEY_FILE
-                    else MAX_CREDENTIAL_CHARS
-                ),
+                credential_max_chars=_credential_chars(kind.credential_shape),
                 may_connect=may_connect_source(reach, kind.name, now),
                 steps=[step_view(step) for step in kind.guide],
                 writes=[write_grant_view(one) for one in kind.writes],
@@ -1150,6 +1142,17 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     )
 
 
+def _credential_chars(shape: CredentialShape) -> int:
+    """The longest credential, or each half of a database user, a source's form accepts."""
+    match shape:
+        case CredentialShape.KEY_FILE:
+            return MAX_KEY_FILE_CHARS
+        case CredentialShape.NONE:
+            return 0
+        case CredentialShape.KEY | CredentialShape.DATABASE_USER:
+            return MAX_CREDENTIAL_CHARS
+
+
 def _person_is_live(request: Request) -> Callable[[str], Awaitable[bool]]:
     """Whether an id names somebody live on this install, for a setting that names a person.
 
@@ -1169,6 +1172,13 @@ def _person_is_live(request: Request) -> Callable[[str], Awaitable[bool]]:
         return await StoredPrincipals(sessions).live_principal(principal_id) is not None
 
     return is_live
+
+
+#: What the key routes say of a source that takes no key (M11.7.4).
+NO_KEY_TO_KEEP: Final = (
+    "This source takes no key: its records are published to anybody who asks, so nothing is kept "
+    "in the vault for it and there is nothing to replace."
+)
 
 
 async def keep_credential(
@@ -1208,6 +1218,8 @@ async def keep_credential(
             return await credentials.keep_fields(
                 slot, fields, actor=actor, trace_id=trace_id, ent_hash=ent_hash
             )
+        case CredentialShape.NONE:
+            raise CredentialProblemError((Problem(code="no_key", message=NO_KEY_TO_KEEP),))
 
 
 @router.post(CONNECTORS_PATH, response_model=ConnectorChangedView, responses=_WRITE_RESPONSES)
@@ -1224,13 +1236,14 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     )
     if found:
         return _problems(found)
+    kind = CONNECTABLE[body.connector]
     credentials = credentials_of(request)
-    if not credentials.configured:
+    # A source that takes no key keeps nothing in the vault, so an install with none may connect it.
+    if not credentials.configured and kind.credential_shape is not CredentialShape.NONE:
         return _not_kept(VaultState.ABSENT)
     records = records_of(request)
     if records is None:
         raise Failed("no database on this process")
-    kind = CONNECTABLE[body.connector]
     settings = given(kind, body.settings)
     manifest = kind.build(settings, key_reference(kind.name))
     digest = manifest_digest(manifest)
@@ -1241,6 +1254,8 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     written: list[datetime | None] = []
 
     async def keep_key() -> datetime | None:
+        if kind.credential_shape is CredentialShape.NONE:
+            return None
         kept = await keep_credential(
             credentials,
             slot,
@@ -1893,6 +1908,12 @@ async def replace_key(
             grant.credential_shape,
             connector_write_slot(connector, grant.name),
             WRITE_ALLOWED,
+        )
+    if shape is CredentialShape.NONE:
+        # Judged on the shape the slot asks for, so a keyless source's read key is refused and a
+        # write grant it declares would still be judged by its own shape (M11.7.4).
+        return _problems(
+            (SettingProblem(field="credential", code="no_key", message=NO_KEY_TO_KEEP),)
         )
     found = credential_problems(shape, body.credential)
     if found:

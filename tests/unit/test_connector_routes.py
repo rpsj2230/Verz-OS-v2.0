@@ -163,6 +163,7 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "google_analytics": "123456789",
     "search_console": "sc-domain:example.com",
     "laravel": "portal",
+    "domains": "example.com, example.org",
 }
 
 #: The settings after the first that a source asks for, for the sources that ask for more than one.
@@ -170,6 +171,7 @@ FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
     "freshdesk": {"department": "support"},
     "cloudflare": {"department": "operations"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "domains": {"department": "operations"},
     "google_analytics": {"department": "marketing"},
     "search_console": {"department": "marketing"},
     "laravel": {
@@ -765,9 +767,11 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
     for one in body["connectable"]:
         keys = [step["key"] for step in one["steps"]]
         assert keys == [step.key for step in declared[one["name"]].guide]
+        # A source that takes no key (M11.7.4) asks for its settings alone.
+        key = [] if one["credential_shape"] == "none" else ["credential"]
         assert one["steps"][-1]["asks"] == [
             *(setting["name"] for setting in one["settings"]),
-            "credential",
+            *key,
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
     # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
@@ -797,6 +801,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "hubspot": False,
         "freshdesk": False,
         "cloudflare": False,
+        "domains": False,
         "google_analytics": False,
         "search_console": False,
     }

@@ -63,9 +63,11 @@ EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
     "google_analytics": ("property", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
     "search_console": ("site", lambda: f"sc-domain:acceptance-{secrets.token_hex(4)}.example"),
     "laravel": ("client_rule", lambda: "status in active, pending"),
+    "domains": ("domains", lambda: f"acceptance-{secrets.token_hex(4)}.example"),
 }
 
-#: A credential in the wrong shape for each kind, which the connect route must refuse.
+#: A credential in the wrong shape for each kind that takes one, which the connect route must
+#: refuse. A source that takes no key ignores whatever is sent and keeps nothing.
 WRONG_SHAPE: Final = {
     "key": "two words",
     "key_file": json.dumps({"type": "authorized_user"}),
@@ -147,12 +149,15 @@ async def each_source_is_connected_edited_and_switched_off_in_the_console(
             kind, settings, is_live=is_live
         ):
             raise CheckFailedError("the connect route refused a source connected as its form asks")
-        wrong = [
-            (one.field, one.code)
-            for one in connection_problems(name, settings, WRONG_SHAPE[kind.credential_shape.value])
-        ]
-        if not wrong or {field for field, _ in wrong} != {"credential"}:
-            raise CheckFailedError("a credential in the wrong shape was not refused as the key")
+        if kind.credential_shape.value in WRONG_SHAPE:
+            wrong = [
+                (one.field, one.code)
+                for one in connection_problems(
+                    name, settings, WRONG_SHAPE[kind.credential_shape.value]
+                )
+            ]
+            if not wrong or {field for field, _ in wrong} != {"credential"}:
+                raise CheckFailedError("a credential in the wrong shape was not refused as the key")
         if (await h.execute(live(name))).scalar_one_or_none() is not None:
             continue  # See A_CONNECTED_SOURCE_IS_JUDGED_ONLY.
 

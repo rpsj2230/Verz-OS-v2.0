@@ -51,7 +51,7 @@ is read from HubSpot's one-record read while the asker waits. Until then HubSpot
 Connectors screen and read into its index, and no question on Ask could reach it, which is why
 `brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.3, M11.7.1, M11.7.2
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4, M11.7.3, M11.7.1, M11.7.2
 """
 
 from __future__ import annotations
@@ -60,7 +60,15 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import cloudflare, freshdesk, google_analytics, hubspot, search_console, xero
+from brain.connectors import (
+    cloudflare,
+    domains,
+    freshdesk,
+    google_analytics,
+    hubspot,
+    search_console,
+    xero,
+)
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -92,6 +100,7 @@ SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
         xero.CONNECTOR_NAME: "tenant_id",
         freshdesk.FRESHDESK: "department",
         cloudflare.CLOUDFLARE: cloudflare.DEPARTMENT_SETTING,
+        domains.CONNECTOR_NAME: "department",
         google_analytics.GOOGLE_ANALYTICS: "department",
         hubspot.CONNECTOR_NAME: "portal_id",
         search_console.SEARCH_CONSOLE: "department",
@@ -226,6 +235,24 @@ def cloudflare_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def domains_classifications() -> tuple[TableClassification, ...]:
+    """A domain's kept fields and the three read live, each behind its own capability (M11.7.4).
+
+    `read:domain.expiry`, `read:domain.registrar` and so on, INTERNAL, in Freshdesk's pattern: a
+    domain is reached with `read:domain` in the department the connection names, and each fact a
+    person is told is a further grant. The live facts are classified here because a value read
+    live and classified by nobody is withheld from everybody.
+    """
+    return (
+        _kept_and_read_live(
+            domains.CONNECTOR_NAME,
+            domains.DOMAIN,
+            tuple(one.name for one in domains.FIELDS),
+            tuple(domains.LIVE_ONLY),
+        ),
+    )
+
+
 def google_analytics_classifications() -> tuple[TableClassification, ...]:
     """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
 
@@ -263,6 +290,7 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
         cloudflare.CLOUDFLARE: cloudflare_classifications(),
+        domains.CONNECTOR_NAME: domains_classifications(),
         google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
         hubspot.CONNECTOR_NAME: hubspot_classifications(),
         search_console.SEARCH_CONSOLE: search_console_classifications(),
@@ -282,6 +310,7 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (freshdesk.FRESHDESK, freshdesk.TICKET): "subject",
         (cloudflare.CLOUDFLARE, cloudflare.ZONE): "name",
         (cloudflare.CLOUDFLARE, cloudflare.DNS_RECORD): "name",
+        (domains.CONNECTOR_NAME, domains.DOMAIN): "name",
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
             google_analytics.LABEL_FIELD
         ),
@@ -314,6 +343,12 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
             cloudflare.DNS_RECORD: (
                 "Look up DNS records by name: type and zone, and the content read live from "
                 "Cloudflare for a reader allowed it"
+            ),
+        },
+        domains.CONNECTOR_NAME: {
+            domains.DOMAIN: (
+                "Look up the agency's domains by name: when each expires and its registration "
+                "status, and its registrar and whether its site answers, read live"
             ),
         },
         google_analytics.GOOGLE_ANALYTICS: {

@@ -371,6 +371,7 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
 
     assert startup.connector_row_sources() == (
         "cloudflare",
+        "domains",
         "freshdesk",
         "google_analytics",
         "hubspot",
@@ -384,6 +385,7 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         ("freshdesk", "ticket"),
         ("cloudflare", "zone"),
         ("cloudflare", "dns_record"),
+        ("domains", "domain"),
         ("google_analytics", "analytics_property"),
         ("hubspot", "hubspot_company"),
         ("hubspot", "hubspot_contact"),

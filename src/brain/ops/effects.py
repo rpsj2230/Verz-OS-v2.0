@@ -686,6 +686,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:LiveLookup.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.arguments_for": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.operation": Repeat.READS,
+        # A keyless source read by routes (M11.7.4): each route is computed from the settings and
+        # a record, the one call is a GET to a registry or a site, and a fact about a site is
+        # asked of it while somebody waits. None changes anything.
+        "brain.connectors.declaration:RoutedReading.first_route": Repeat.READS,
+        "brain.connectors.declaration:RoutedReading.next_route": Repeat.READS,
+        "brain.connectors.declaration:RoutedReading.operation_for": Repeat.READS,
+        "brain.connectors.declaration:RoutedReading.unpublished": Repeat.READS,
+        "brain.connectors.declaration:RoutedReading.unrouted": Repeat.READS,
+        "brain.connectors.declaration:OneCall.get": Repeat.READS,
+        "brain.connectors.declaration:ChecksLiveFacts.facts": Repeat.READS,
         "brain.connectors.live_read:LiveSources.reads": Repeat.READS,
         "brain.connectors.live_read:LiveSources.source_for": Repeat.READS,
         "brain.gate.live_records:LiveRecords.refresh": Repeat.READS,

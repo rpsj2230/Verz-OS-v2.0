@@ -280,6 +280,9 @@ def credential_problems(shape: CredentialShape, value: str) -> tuple[SettingProb
             found = key_file_problems(value)
         case CredentialShape.DATABASE_USER:
             _, found = user_and_password(value)
+        case CredentialShape.NONE:
+            # Nothing is asked, so nothing given is judged; a value sent anyway is not kept.
+            return ()
     return tuple(
         SettingProblem(field=KEY_FIELD, code=one.code, message=one.message) for one in found
     )

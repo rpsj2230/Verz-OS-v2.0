@@ -32,6 +32,8 @@ import yaml
 from brain.connectors.cloudflare import CloudflareConnection
 from brain.connectors.cloudflare import manifest as cloudflare_manifest
 from brain.connectors.contract import AccessMode, CredentialBinding
+from brain.connectors.domains import DomainsConnection
+from brain.connectors.domains import manifest as domains_manifest
 from brain.connectors.freshdesk import manifest as freshdesk_manifest
 from brain.connectors.google_analytics import AnalyticsConnection
 from brain.connectors.google_analytics import manifest as analytics_manifest
@@ -265,6 +267,10 @@ def manifests() -> tuple[ConnectorManifest, ...]:
         search_console_manifest(
             SearchConsoleConnection(site="sc-domain:example.com", department="one"),
             ref=ref("connectors/creds/search_console"),
+        ),
+        domains_manifest(
+            DomainsConnection(domains=("example.com", "example.org"), department="one"),
+            ref=ref("connectors/creds/domains"),
         ),
     )
 
@@ -780,6 +786,7 @@ def test_the_nine_connectors_are_discovered_from_the_package() -> None:
     connector added tomorrow is not a finding but a gap nobody notices."""
     assert connector_modules(CONNECTOR_PACKAGE) == (
         "cloudflare",
+        "domains",
         "freshdesk",
         "google_analytics",
         "google_drive",

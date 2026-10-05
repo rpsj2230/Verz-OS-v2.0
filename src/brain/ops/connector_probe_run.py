@@ -74,8 +74,11 @@ from brain.ops.connector_sync_run import (
     KeyLease,
     SourceCaller,
     SourcePoster,
+    borrowed,
     call_headers,
+    first_arguments,
     key_detail,
+    page_operation,
     presented,
     worker_connector_keys,
 )
@@ -158,8 +161,12 @@ def _call_under(
         return finish(detail, call=refused.call)
     try:
         entity = reading.entities()[0]
-        operation = reading.operation(entity, settings=settings, resolver=resolver)
-        checked = operation.prepare(reading.first_page(entity), resolver=resolver)
+        first = first_arguments(reading, entity, settings=settings)
+        if first is None:
+            # A routed reading whose list holds nothing a server publishes has no call to test.
+            return finish(SHAPE_DISAGREED)
+        operation = page_operation(reading, entity, first, settings=settings, resolver=resolver)
+        checked = operation.prepare(first, resolver=resolver)
     except UnsafeAddressError:
         return finish(ADDRESS_REFUSED)
     except Exception:
@@ -235,7 +242,7 @@ def probe_one(
     limits = probe_limits(manifest)
     if not check(now=started, limits=limits, state=windows_after(recent, limits)).allowed:
         return finish(PROBE_NOT_SENT_SHARE_SPENT)
-    lease = keys.lease(manifest.credential.ref, now=clock())
+    lease = borrowed(keys, reading, manifest.credential.ref, now=clock())
     try:
         done = _call_under(
             live,

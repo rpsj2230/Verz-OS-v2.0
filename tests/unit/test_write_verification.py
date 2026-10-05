@@ -28,6 +28,7 @@ import pytest
 
 from brain.connectors import (
     cloudflare,
+    domains,
     freshdesk,
     google_analytics,
     google_drive,
@@ -275,6 +276,12 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_drive", "DRIVE-403-user-rate-limit"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-429"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-401"): Verification.INCONCLUSIVE,
+    # A registry's record of one domain is complete when answered; a refusal or an outage
+    # proves nothing, and a registry's 404 is not read as an absence by the read-back.
+    ("domains", "DOMAINS-200-domain"): Verification.FOUND,
+    ("domains", "DOMAINS-404"): Verification.INCONCLUSIVE,
+    ("domains", "DOMAINS-429"): Verification.INCONCLUSIVE,
+    ("domains", "DOMAINS-503"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-200-property"): Verification.FOUND,
     # A report, a token and every refusal hold no property, and a property read never proves one
@@ -385,6 +392,10 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             return lark_base_answer(lark_reply(recorded.cid))
         case "lark_wiki":
             return lark_wiki_answer(wiki_reply(recorded.cid))
+        case "domains":
+            said = domains.Reply(status=recorded.status, body=recorded.body)
+            operation = domains.operation_at("https://rdap.example")
+            return verdict(reading("domains")(operation, said))
     msg = f"no way to drive {connector!r} from a recording is written in this test"
     raise AssertionError(msg)
 

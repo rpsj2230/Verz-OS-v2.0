@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
+from brain.connectors.declaration import CredentialShape
 from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
 from brain.ops.credentials import connector_key_slot, connector_write_slot
 from brain.ops.openbao import CONNECTOR_KEY_PREFIX
@@ -176,12 +177,16 @@ def slot_gaps() -> tuple[str, ...]:
     A source with no slot, a slot for no source, and a connectable source whose hint does not name
     a scope its slot asks for, each as a sentence. Empty is the only acceptable answer.
     """
+    # A source that takes no key has no slot to define (M11.7.4): its records are published.
+    keyless = {
+        name for name, kind in CONNECTABLE.items() if kind.credential_shape is CredentialShape.NONE
+    }
     writes = {
         write_slot_name(name, grant.name): grant
         for name, kind in CONNECTABLE.items()
         for grant in kind.writes
     }
-    known = set(CONNECTABLE) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST} | set(writes)
+    known = (set(CONNECTABLE) - keyless) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST} | set(writes)
     found = [
         f"{name} has a connector and no credential slot"
         for name in sorted(known - set(SLOT_SCOPES))
