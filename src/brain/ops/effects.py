@@ -291,6 +291,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.SAME_RESULT_WHEN_REPEATED
         ),
         "brain.ops.template_key:TemplateKeyVault.read_static_kv": Repeat.READS,
+        # The join-key pepper's slot, created once for the template key's reason: a repeat of the
+        # create is refused and leaves the first pepper in place, and the read reads.
+        "brain.ops.join_key_pepper:PepperKeeper.create_static_kv_once": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.join_key_pepper:PepperReader.read_static_kv": Repeat.READS,
         # The record of a kept key (0054): a row in this system's own table, whose trigger appends
         # the ledger entry. A repeat is a second row and a second entry, which is right, because a
         # repeated call follows a second write to the vault.
