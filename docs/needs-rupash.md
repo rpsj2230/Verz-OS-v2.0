@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**29 items are open: 153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**30 items are open: 154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,37 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 154. One server change for the sealed sandbox: a restart of every container, about two minutes
+
+**In plain terms:** three things you asked for run code the Brain did not write: scripts inside
+imported skills, the code sandbox, and connectors written as custom code. They must run sealed off,
+with no internet, no access to the Brain's data and hard time and memory limits. The standard way
+to seal them is gVisor, a small program Docker uses to run a container inside its own protective
+layer. Your server does not have it yet (checked read-only on 2026-10-06: Ubuntu 24.04, Docker with
+its standard runtime only).
+
+Installing it is one change no release can make on its own: gVisor is installed on the server, added
+to Docker's settings file, and Docker is restarted. **Restarting Docker restarts every container on
+the server for a minute or two**, the Brain's and your other project's (Activepieces) alike. Nothing
+is lost; they all come back by themselves.
+
+**Option A: yes, at a quiet time.** I install gVisor and restart Docker myself, at a time you name
+(for example a weekday night, Singapore time), then confirm everything is back and run the
+sandbox's own check: a script that tries to reach the internet and is stopped, and one that runs
+past its time and memory limits and is stopped.
+
+**Option B: not now.** The sandbox stays off. Skills with scripts are refused with a sentence saying
+this install runs no sandbox, and custom-code connectors are not offered. Everything else works.
+
+**Memory:** the sandbox is sized at 256 MB a script, so it fits beside the personal-data detector
+and Langfuse (item 120) with about 180 MB to spare. A larger limit per script would need more room.
+
+**My recommendation: A,** at a quiet time you choose.
+
+**What I need from you:** reply "154: A, after 11pm on a weekday" (or whichever time suits), or
+"154: B". Then, on your one visit to **Install, Settings**, **Optional services this server runs**
+becomes `presidio,langfuse,sandbox` instead of `presidio,langfuse`; I tell you when that is ready.
 
 ## 153. Questions written in Chinese: how much is hidden before they go to an outside model?
 

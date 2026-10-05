@@ -32,6 +32,7 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_recovery,
+    acceptance_checks_services,
     acceptance_people_console_2,
     acceptance_run,
 )
@@ -685,6 +686,17 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    # No optional service is switched on here; `tests/unit/test_acceptance_services.py` switches
+    # each on and answers for it.
+    assert outcomes.pop("the_detector_finds_every_entity_the_scrub_relies_on_it_for") == (
+        NOT_RUN,
+        acceptance_checks_services.NO_DETECTOR_HERE,
+    )
+    for ledger_check in (
+        "the_trace_ledger_runs_as_its_five_services",
+        "every_trace_ledger_service_runs_under_its_budgeted_limit",
+    ):
+        assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
