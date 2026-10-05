@@ -126,6 +126,7 @@ from brain.tables.resolution import (
     EntityIdentifierRow,
     EntityLinkRow,
 )
+from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
@@ -423,6 +424,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # grant are values, so each record outlives what it names.
     "ops.connector_steward",
     "gate.self_grant",
+    # 0182_entity_registry_observations. None points at anything: each names a source record or a
+    # digest by value, so each outlives what it names.
+    "er.observation",
+    "er.blocked_value",
 )
 
 __all__ = [
@@ -442,6 +447,7 @@ __all__ = [
     "AutomationRunRow",
     "AutomationScheduleRow",
     "BindingCodeRow",
+    "BlockedValueRow",
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
@@ -494,6 +500,7 @@ __all__ = [
     "MessageRow",
     "ModelAttemptRow",
     "ModelProviderRow",
+    "ObservationRow",
     "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",

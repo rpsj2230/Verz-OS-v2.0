@@ -45,12 +45,13 @@ chooses pairs for Splink and none for this statement, and an unblocked self join
 record against every other however cheap each term is. See
 `THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN`.
 
-**None of these columns exists.** `cascade.SQL_PREDICATES` says so about the comparison columns
-and the same is true of the key columns here: no migration in this repository creates a table
-this statement could run against, no pg_trgm extension is installed, and nothing has executed
-it against PostgreSQL. What has been executed is the arithmetic, in SQLite, against the Python
-scorer, which is what makes the agreement between the two halves a measurement rather than a
-reading. See `NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
+**The table exists and nothing has scored against it yet.** Migration 0182 created
+`er.observation` with the columns `cascade.SQL_PREDICATES` names, `brain.resolution.registry_store`
+writes it, and pg_trgm has been installed since 0001 (`EXTENSIONS`), which this paragraph denied
+until 2026-10-06. What has not happened is a scoring run: nothing calls this statement yet, and
+what has been executed is the arithmetic, in SQLite, against the Python scorer, which is what
+makes the agreement between the two halves a measurement rather than a reading. See
+`NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
 
 Rejected: rendering the whole thing in `cascade`. That module states, in its own scope note,
 that nothing in it opens a connection or knows a table, and a statement needs a table name. The
@@ -140,8 +141,8 @@ THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN: Final = (
 
 #: The gap this module does not close, kept as a constant so it has to be deleted.
 NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES: Final = (
-    "No migration in this repository creates a table with these columns, the pg_trgm extension "
-    "is not installed by anything here, and no deployment has executed this statement. What "
+    "Migration 0182 creates er.observation with these columns and pg_trgm has been installed "
+    "since 0001, but nothing calls this statement yet and no deployment has executed it. What "
     "has been executed is the arithmetic: the rendered expression is evaluated in SQLite "
     "against the Python scorer, over pairs chosen to hit every branch, which is what makes the "
     "agreement between the two halves a measurement rather than a reading. The parts that "
@@ -248,9 +249,9 @@ def score_query(
     second copy of it. The filter is `compile_where`, compiled once per side, for the same
     reason in the permission direction.
 
-    `table` is required and has no default. A default would be a table name this repository
-    does not create, written where a reader would take it for one that exists; the columns are
-    already invented and saying so once is enough. See `NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
+    `table` is required and has no default. The table this is meant for is `er.observation`,
+    and the caller names it, so a statement over a test's own table and over the install's are
+    the same text with a different name in it. See `NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
 
     The join condition is a row comparison over the three key columns, which yields each
     unordered pair exactly once and never a record against itself. Written as a row comparison

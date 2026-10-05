@@ -1288,9 +1288,10 @@ def evidence_for(
 #: pair, and the two guarded terms would otherwise agree on the collapsed form of two names
 #: neither of which may be matched on.
 #:
-#: `l` and `r` are the two sides of the self join. None of these columns exists: no migration
-#: in this repository declares them, and the phonetic one assumes a text array materialised at
-#: write time, which is the point `WHAT_WOULD_BREAK_THE_SQL_SHAPE` makes.
+#: `l` and `r` are the two sides of the self join over `er.observation`, which migration 0182
+#: created with exactly these columns and which `brain.resolution.registry_store` writes. The
+#: phonetic one is a text array materialised at write time, which is the point
+#: `WHAT_WOULD_BREAK_THE_SQL_SHAPE` makes.
 SQL_PREDICATES: Mapping[Feature, str] = MappingProxyType(
     {
         Feature.UEN: "l.uen_hash = r.uen_hash",
