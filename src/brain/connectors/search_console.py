@@ -65,6 +65,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -72,6 +73,7 @@ from types import MappingProxyType
 from typing import Any, Final, Self
 from urllib.parse import quote
 
+from brain.connectors.ask import AskEntity, AskRows, each_behind_its_own
 from brain.connectors.contract import (
     ConnectorContractError,
     ConnectorScope,
@@ -82,10 +84,12 @@ from brain.connectors.contract import (
 from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     ReportCall,
@@ -927,6 +931,15 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.KEY_FILE,
+    example=ConnectExample(
+        settings={SITE_SETTING: "sc-domain:example.com", DEPARTMENT_SETTING: "marketing"},
+        fresh=lambda departments: {
+            SITE_SETTING: f"sc-domain:acceptance-{secrets.token_hex(4)}.example",
+            DEPARTMENT_SETTING: departments[0],
+        },
+        edit=SITE_SETTING,
+        edited=lambda: f"sc-domain:acceptance-{secrets.token_hex(4)}.example",
+    ),
 )
 
 
@@ -953,4 +966,30 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=SearchConsoleReading(),
     report=SearchConsoleReport(),
+    # The connected site, as Google Analytics' property is: its index fields and its figures,
+    # each behind its own capability, the figures read live and the ranged ones asked by nobody.
+    ask=AskRows(
+        scoped_by=DEPARTMENT_SETTING,
+        entities=(
+            AskEntity(
+                entity=ENTITY_SITE,
+                fields=each_behind_its_own(
+                    ENTITY_SITE,
+                    (*(one.name for one in SITE_FIELDS), *FIGURE_FIELDS, *RANGE_FIGURE_FIELDS),
+                ),
+                description=(
+                    "Look up the connected Search Console site by name: its clicks and "
+                    "impressions for the last 7, 28 or 90 days, its top query and page and its "
+                    "sitemaps' errors, read live from Google for a reader allowed them"
+                ),
+                named_by=LABEL_FIELD,
+                live_only=(*FIGURE_FIELDS, *RANGE_FIGURE_FIELDS),
+                unasked=frozenset(set(RANGE_FIGURE_FIELDS) - set(FIGURE_FIELDS)),
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("webmasters.readonly", "restricted permission on the one property"),
+        refuse=("webmasters", "domain-wide delegation"),
+    ),
 )

@@ -404,7 +404,12 @@ def test_a_narrowed_question_reads_the_library_alone() -> None:
 
         assert narrowed is not None and whole is not None
         assert narrowed.search == DocumentSearchTool(handler=handler, kinds=(KnowledgeKind.FAQ,))
-        assert isinstance(whole.search, WithDrive) and whole.search.library is library
+        # Unnarrowed, Drive sits beside the library, under any other live source beside it
+        # (Slack's, where its sessions are given).
+        beside = whole.search
+        while not isinstance(beside, WithDrive) and hasattr(beside, "library"):
+            beside = beside.library
+        assert isinstance(beside, WithDrive) and beside.library is library
         assert "Google Drive" in A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE
     finally:
         owned.close()

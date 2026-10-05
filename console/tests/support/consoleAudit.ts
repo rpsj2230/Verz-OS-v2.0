@@ -142,6 +142,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
       "/api/v1/access-requests*",
+      "/api/v1/stewardship/self-grants",
       "/api/v1/escalations",
       "/api/v1/govern/roles/holders",
       "/api/v1/govern/roles/appointment",
@@ -172,6 +173,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.role_grant",
       "auth.group_role_rule",
       "gate.break_glass_notice",
+      "gate.self_grant",
+      "ops.connector_steward",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -239,6 +242,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_TIME_ZONE",
       "INSTALL_DIGEST_DESTINATION",
       "INSTALL_DIGEST_TIME",
+      "INSTALL_SERVICES",
     ],
     gaps: [
       {
@@ -312,6 +316,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/budget",
       "/api/v1/agents/{agent_id}/capabilities",
       "/api/v1/agents/{agent_id}/preview",
+      "/api/v1/agents/{agent_id}/memory",
+      "/api/v1/agents/{agent_id}/memory/{memory_id}/deletion",
+      "/api/v1/agents/{agent_id}/memory/{memory_id}/edit",
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
@@ -440,6 +447,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/key",
       "/api/v1/connectors/{connector}/probe",
       "/api/v1/connectors/{connector}/accept",
+      "/api/v1/connectors/{connector}/steward",
       "/api/v1/console/connectors",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",

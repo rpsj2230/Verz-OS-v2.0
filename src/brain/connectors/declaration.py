@@ -96,6 +96,12 @@ from the key file for one read (`brain.connectors.google_token`), and a reading 
 `ScopedReading`, which says which read-only scope that token carries. See
 `A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR`.
 
+**And a connector says what the rest of the product used to type about it by hand (M11.1.6).**
+Its Ask rows (`ask`, `brain.connectors.ask`), the scopes its vault slot is defined with (`scopes`),
+and the settings a test or an acceptance check connects it with (`ConsoleForm.example`). Each was a
+literal in a module or a test that every connector PR appended to, so every connector that landed
+put every other open one in conflict. See `A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS_OWN_FIXTURES`.
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
@@ -110,7 +116,7 @@ import importlib
 import inspect
 import pkgutil
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import cache
@@ -118,6 +124,7 @@ from types import MappingProxyType, ModuleType
 from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
+from brain.connectors.ask import AskRows
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
@@ -200,6 +207,15 @@ A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR: Final = (
     "is shared by every source, so the scope comes from the reading, which is the source's own "
     "declaration, and a reading naming the Google scheme without one is refused before any key "
     "is read."
+)
+
+#: Why the lists that named every connector are read off the declarations.
+A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS_OWN_FIXTURES: Final = (
+    "Every list that names each connector is a place two connector changes edit at once, and on "
+    "2026-10-05 six open connector changes conflicted in such lists one after another. So what a "
+    "connector is asked about, the scopes its key may carry and the settings it is connected with "
+    "in a test are declared in its own module, and every list is derived from the declarations, "
+    "so adding a connector is its module and its own test and fixture files."
 )
 
 #: What the last screen of a console source's guide asks for besides its settings.
@@ -303,6 +319,40 @@ class Setting:
 
 
 @dataclass(frozen=True)
+class ConnectExample:
+    """The settings a test or an acceptance check connects this source with.
+
+    `settings` are fixed and name nobody, shaped as the source's own identifiers would be, and are
+    what every unit test builds this source's manifest from. `fresh` is what an acceptance check on
+    a running install connects it with: identifiers nothing else holds, made up per call, with
+    every department taken from `departments`, which are the ones that check may write grants in.
+    `edit` is the setting a person would change after connecting, and `edited` a new value for it.
+    """
+
+    settings: Mapping[str, str]
+    fresh: Callable[[Sequence[str]], dict[str, str]]
+    edit: str
+    edited: Callable[[], str]
+
+    def __post_init__(self) -> None:
+        if self.edit not in self.settings:
+            msg = f"an example edits {self.edit!r}, which is not one of its settings"
+            raise DeclarationError(msg)
+
+
+@dataclass(frozen=True)
+class KeyScopes:
+    """What a source's key must be allowed to do, and what it must never be given.
+
+    The vault slot `brain.ops.connector_slots` defines for the source carries these as its
+    metadata, and the form's credential hint names every one it requests.
+    """
+
+    request: tuple[str, ...]
+    refuse: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ConsoleForm:
     """What the Connectors screen asks for to connect this source, and how it builds the manifest.
 
@@ -316,6 +366,8 @@ class ConsoleForm:
     build: Callable[[Mapping[str, str], SecretRef], ConnectorManifest]
     #: How the credential is asked for and kept. One key unless the source issues another shape.
     credential_shape: CredentialShape = CredentialShape.KEY
+    #: What a test or an acceptance check connects it with. See `ConnectExample`.
+    example: ConnectExample | None = None
 
     def __post_init__(self) -> None:
         if not self.settings:
@@ -327,6 +379,14 @@ class ConsoleForm:
         if not (self.credential_label.strip() and self.credential_hint.strip()):
             msg = "a console form must say which key it asks for and what that key may do"
             raise DeclarationError(msg)
+        if self.example is not None:
+            asked = [one.name for one in self.settings]
+            if sorted(self.example.settings) != sorted(asked):
+                msg = (
+                    f"a console form asks for {asked} and its example gives "
+                    f"{sorted(self.example.settings)}"
+                )
+                raise DeclarationError(msg)
 
 
 # ------------------------------------------------------------------ what the tests were run on
@@ -816,6 +876,8 @@ class WriteGrant:
     #: How an approved action becomes its call and how the record read back is judged.
     prepares: PreparesWrite
     credential_shape: CredentialShape = CredentialShape.KEY
+    #: What its own key must be allowed to do and never be given, which its slot is defined with.
+    scopes: KeyScopes | None = None
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -931,6 +993,10 @@ class ConnectorDeclaration:
     guide: tuple[GuideStep, ...] = ()
     #: The writes it can be allowed to make, each off until its own key is given. See `WriteGrant`.
     writes: tuple[WriteGrant, ...] = ()
+    #: What Ask answers from it, or None when Ask answers nothing from it yet.
+    ask: AskRows | None = None
+    #: What its key must be allowed to do and never be given, which its vault slot is defined with.
+    scopes: KeyScopes | None = None
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):

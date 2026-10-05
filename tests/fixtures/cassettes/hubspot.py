@@ -8,10 +8,14 @@ Task ids: M38.4.1.1, M38.4.1.2
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Final
 
 from brain.connectors import hubspot
 from brain.connectors.manifest import ConnectorManifest
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import READ_AT, PublicResolver, answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -313,8 +317,55 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def _read_back_entity(recorded: Cassette) -> str:
+    """Which operation a HubSpot recording was made against, read off its request line."""
+    for fragment, entity in (
+        ("/associations/", hubspot.ENTITY_ASSOCIATION),
+        ("/contacts", hubspot.ENTITY_CONTACT),
+        ("/deals", hubspot.ENTITY_DEAL),
+    ):
+        if fragment in recorded.request:
+            return entity
+    return hubspot.ENTITY_CLIENT
+
+
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through HubSpot's read-back reading, by its own list or one-record read."""
+    build = (
+        hubspot.one_record_operation
+        if ONE_RECORD.search(recorded.request)
+        else hubspot.operation_for
+    )
+    operation = build(_read_back_entity(recorded), resolver=PublicResolver())
+    reply = hubspot.interpret(
+        operation, status=recorded.status, body=recorded.body, fetched_at=READ_AT
+    )
+    return answered(SOURCE, reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "HUBSPOT-200-empty": Verification.ABSENT,
+        "HUBSPOT-200-companies-page": Verification.FOUND,
+        "HUBSPOT-200-contacts": Verification.FOUND,
+        "HUBSPOT-200-deals": Verification.FOUND,
+        # One deal read by its id, through its own operation: it is there.
+        "HUBSPOT-200-deal": Verification.FOUND,
+        "HUBSPOT-200-associations": Verification.FOUND,
+        "HUBSPOT-429": Verification.INCONCLUSIVE,
+        "HUBSPOT-401": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    wait_not_in_retry_after="no wait header documented; X-HubSpot-RateLimit-* state the allowance",
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

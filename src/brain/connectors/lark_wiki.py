@@ -168,6 +168,7 @@ from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
+from brain.connectors.ask import AskRows
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     AccessMode,
@@ -181,7 +182,7 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
-from brain.connectors.declaration import ConnectorDeclaration, Recorded
+from brain.connectors.declaration import ConnectorDeclaration, KeyScopes, Recorded
 from brain.connectors.lark_base import MinuteBudget
 from brain.connectors.manifest import ChangeSignal, ConnectorManifest, ToolDeclaration
 from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestOperation
@@ -2190,6 +2191,9 @@ CONNECTOR: Final = ConnectorDeclaration(
         ),
         findings=(LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY,),
     ),
+    # Its pages are read live as passages for the question's model step, not classified.
+    ask=AskRows(by_passages=True),
+    scopes=KeyScopes(request=("wiki:wiki:readonly",), refuse=("docs:document edit scopes",)),
     recorded=Recorded(
         tested=True,
         finding=(

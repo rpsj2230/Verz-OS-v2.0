@@ -235,10 +235,16 @@ from brain.ops.limits import (
     retry_after_header,
     retry_hint,
 )
-from brain.ops.live_read_run import base_schema_for, live_records_for, wiki_passages_for
+from brain.ops.live_read_run import (
+    base_schema_for,
+    live_records_for,
+    slack_passages_for,
+    wiki_passages_for,
+)
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
+from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
@@ -1146,6 +1152,10 @@ def model_lane_of(state: Any) -> ModelLane | None:
     drive = drive_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
     if drive is not None:
         search = WithDrive(search, drive)
+    # And a connected Slack workspace, the asker's own channels read live (M11.7.5).
+    slack = slack_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if slack is not None:
+        search = Alongside(search, slack)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 
@@ -1229,9 +1239,9 @@ A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH: Final = (
 #: Why a question narrowed to kinds of knowledge reads the library alone.
 A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE: Final = (
     "A question narrowed to kinds of knowledge (M7.6.1) is answered from those kinds in the "
-    "company's own library and nothing else: the Lark Wiki and a Google Drive folder read live "
-    "beside the library hold no kind, so they are left out of a narrowed question rather than "
-    "asked and shown. Each live source's wrapper names the search it was put beside as "
+    "company's own library and nothing else: the Lark Wiki, a Google Drive folder and Slack read "
+    "live beside the library hold no kind, so they are left out of a narrowed question rather "
+    "than asked and shown. Each live source's wrapper names the search it was put beside as "
     "`library`, and a narrowed question unwraps to it."
 )
 

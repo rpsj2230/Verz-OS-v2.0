@@ -47,6 +47,14 @@ computed from the compose files by that module and compared against this page on
 
 4. Save. Coolify now lists every variable the file names.
 
+**The optional services need no merge.** On an install that deploys with the pull timer
+(`ops/deploy/brain-deploy`), the services named on **Install, Settings** under *Optional
+services this server runs* (`INSTALL_SERVICES`; today `presidio`, the personal data detector)
+are started by every release beside Coolify's copy, as a compose project of their own, after
+the release measures the server's memory and finds room for them. The deploy's journal says what
+was started, what was refused for memory and why. Nothing is pasted into Coolify for them, and
+switching one off stops it at the next release with its data kept.
+
 The same merge is how an optional overlay reaches a Coolify install: the Cloudflare Tunnel's
 two files, `docker-compose.replica.yml`, or anything else this documentation composes with a
 second `-f`. Add them to the command above and paste the result. The two-host split in

@@ -123,12 +123,14 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.connectors.ask import AskEntity, AskRows, of_entity
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     AccessMode,
@@ -143,9 +145,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -751,6 +755,40 @@ def spec_document() -> Mapping[str, Any]:
             },
         },
     }
+
+
+#: Why the private app's scopes are read off the specification rather than typed.
+EVERY_CALL_NAMES_ITS_OWN_SCOPE: Final = (
+    "HubSpot answers a call on an object type only for a private app holding that type's read "
+    "scope, and an association read only for one holding the read scope of both ends. The guide "
+    "once asked for contacts and deals alone while the worker listed companies and a question "
+    "read a company live, so every company read would have been refused on a real account. The "
+    "scopes the guide, the form and the vault slot ask for are therefore read off the same "
+    "specification the calls are built from, and a call added to it adds its scope."
+)
+
+
+def required_scopes() -> tuple[str, ...]:
+    """Every scope a private app needs for the calls this connector makes, sorted.
+
+    One `crm.objects.<type>.read` for each object type a path in `spec_document` names. The
+    association path names its two ends as parameters, and the ends an edge may join are the
+    types the lists read (`AssociationEdge` refuses any other), so it adds no scope of its own.
+    See `EVERY_CALL_NAMES_ITS_OWN_SCOPE`.
+    """
+    types = {
+        segment
+        for path in spec_document()["paths"]
+        for segment in path.split("/")[4:5]
+        if not segment.startswith("{")
+    }
+    return tuple(f"crm.objects.{one}.read" for one in sorted(types))
+
+
+def _scopes_in_words() -> str:
+    """The required scopes as a sentence names them: a, b and c."""
+    scopes = required_scopes()
+    return ", ".join(scopes[:-1]) + f" and {scopes[-1]}" if len(scopes) > 1 else scopes[0]
 
 
 def load_hubspot_spec(*, resolver: Resolver) -> RestSpec:
@@ -2001,9 +2039,8 @@ GUIDE: Final = keyed(
             key="scopes",
             title="Give it read scopes only and copy its token",
             text=(
-                "On the Scopes tab tick crm.objects.contacts.read and crm.objects.deals.read and "
-                "nothing with write in it or touching settings. Click Create app, confirm, and "
-                "copy the access token it shows."
+                f"On the Scopes tab tick {_scopes_in_words()}, and nothing with write in it or "
+                "touching settings. Click Create app, confirm, and copy the access token it shows."
             ),
             sketch=Sketch(
                 place="HubSpot settings",
@@ -2011,8 +2048,7 @@ GUIDE: Final = keyed(
                 tabs=("Basic info", "Scopes"),
                 tab_mark="Scopes",
                 lines=(
-                    SketchLine(LineKind.ITEM, "crm.objects.contacts.read", mark=True),
-                    SketchLine(LineKind.ITEM, "crm.objects.deals.read", mark=True),
+                    *(SketchLine(LineKind.ITEM, one, mark=True) for one in required_scopes()),
                     SketchLine(LineKind.TEXT, "Nothing with write, nothing on settings"),
                 ),
                 button="Create app",
@@ -2062,11 +2098,17 @@ CONNECTOR: Final = ConnectorDeclaration(
         ),
         credential_label="The access token of a private app",
         credential_hint=(
-            "Give the private app crm.objects.contacts.read and crm.objects.deals.read, and "
-            "no write scope or anything touching settings. Paste its token as one piece. It "
-            "is kept in the vault and never shown again."
+            f"Give the private app {_scopes_in_words()}, and no write scope or anything "
+            "touching settings. Paste its token as one piece. It is kept in the vault and never "
+            "shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={"portal_id": "12345678"},
+            fresh=lambda _: {"portal_id": str(10**8 + secrets.randbelow(9 * 10**8))},
+            edit="portal_id",
+            edited=lambda: str(10**8 + secrets.randbelow(9 * 10**8)),
+        ),
     ),
     read_back=ReadBack(
         reading=classified_reading,
@@ -2085,4 +2127,44 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=HubSpotReading(),
     live=HubSpotLiveLookup(),
+    # Compiled from `HUBSPOT_FIELD_RULES`. The deal's amount is CONFIDENTIAL there and never in the
+    # index, so a person is told it only from HubSpot's own answer, read while they wait. A contact
+    # is kept with no name, by `A_CRM_IS_MOSTLY_THE_DENYLIST`, so a person asks about a company or a
+    # deal by name and reaches its contacts through it.
+    ask=AskRows(
+        scoped_by="portal_id",
+        entities=(
+            AskEntity(
+                entity=ENTITY_CLIENT,
+                fields=of_entity(HUBSPOT_FIELD_RULES, ENTITY_CLIENT),
+                description=(
+                    "Look up HubSpot companies by name: lifecycle stage, web domain and owner, "
+                    "read live from HubSpot"
+                ),
+                named_by="name",
+            ),
+            AskEntity(
+                entity=ENTITY_CONTACT,
+                fields=of_entity(HUBSPOT_FIELD_RULES, ENTITY_CONTACT),
+                description=(
+                    "Look up HubSpot contacts: lifecycle stage and company, read live from HubSpot"
+                ),
+            ),
+            AskEntity(
+                entity=ENTITY_DEAL,
+                fields=of_entity(HUBSPOT_FIELD_RULES, ENTITY_DEAL),
+                description=(
+                    "Look up HubSpot deals by name: stage, pipeline and close date, and the amount "
+                    "read live from HubSpot for a reader allowed it"
+                ),
+                named_by="deal_name",
+            ),
+        ),
+    ),
+    # Read off the scopes the readings' own calls need, so the slot, the hint and the guide are held
+    # to one account of them (`required_scopes`).
+    scopes=KeyScopes(
+        request=required_scopes(),
+        refuse=("crm.objects.*.write", "anything touching settings"),
+    ),
 )

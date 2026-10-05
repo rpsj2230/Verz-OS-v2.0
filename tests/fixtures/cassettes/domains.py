@@ -8,11 +8,15 @@ Task ids: M11.7.4
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Final
 
 from brain.connectors import domains
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import CallOutcome, classify
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -177,8 +181,29 @@ def manifest() -> ConnectorManifest:
     )
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through the domains read-back reading, as one registry's answer."""
+    said = domains.Reply(status=recorded.status, body=recorded.body)
+    return answered(SOURCE, domains.operation_at("https://rdap.example"), said)
+
+
+#: How each recording this connector's read-back names is answered. A registry's record of one
+#: domain is complete when answered; a refusal or an outage proves nothing, and a registry's 404
+#: is not read as an absence by the read-back.
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "DOMAINS-200-domain": Verification.FOUND,
+        "DOMAINS-404": Verification.INCONCLUSIVE,
+        "DOMAINS-429": Verification.INCONCLUSIVE,
+        "DOMAINS-503": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

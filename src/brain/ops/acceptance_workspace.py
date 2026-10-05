@@ -31,7 +31,9 @@ from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final
 
-from sqlalchemy import insert, text
+from sqlalchemy import Connection, event, insert, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Session, SessionTransaction
 
 from brain.core.scope import Scope
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
@@ -71,6 +73,36 @@ def _planes() -> tuple[str, ...]:
     return tuple(plane_capability(one).value for one in Plane)
 
 
+class _WorkerSession(Session):
+    """A session of the check's connection whose every transaction runs as the login.
+
+    The worker's schedule runs automations through `brain.session.make_session_factory`, which sets
+    no role, and `agent.automation_run` is written by that login and never by the application role
+    (`0067` grants the application SELECT on it). So the check runs the worker's step as the
+    worker does, which is `brain.ops.acceptance_checks_lifecycle._swept`'s arrangement for the
+    re-verification sweep, and every write it makes is still inside the check's transaction.
+    """
+
+
+@event.listens_for(_WorkerSession, "after_begin")
+def _as_the_login(
+    session: Session, transaction: SessionTransaction, connection: Connection
+) -> None:
+    del session, transaction
+    connection.exec_driver_sql("RESET ROLE")
+
+
+def worker_sessions(h: Harness) -> async_sessionmaker[AsyncSession]:
+    """Sessions of the check's connection as the worker's schedule opens them."""
+    return async_sessionmaker(
+        bind=h.connection,
+        join_transaction_mode="create_savepoint",
+        expire_on_commit=False,
+        autoflush=False,
+        sync_session_class=_WorkerSession,
+    )
+
+
 async def installed_agent(
     h: Harness,
     owner: str,
@@ -81,6 +113,7 @@ async def installed_agent(
     capabilities: Sequence[str] = (),
     allowed_tools: Sequence[str] = (),
     suffix: str = "",
+    scope: Scope | None = None,
 ) -> str:
     """An agent of acceptance_a installed from a template the check signs, with `overlay` set here.
 
@@ -117,7 +150,7 @@ async def installed_agent(
             skills=tuple(SkillRef(name=name, digest=digest) for name, digest in skills),
             connectors=tuple(connectors),
             authority=ManifestAuthority(
-                scope=Scope.department(A),
+                scope=Scope.department(A) if scope is None else scope,
                 capabilities=tuple(Capability(value=one) for one in capabilities),
                 allowed_tools=tuple(allowed_tools),
             ),
@@ -838,3 +871,375 @@ async def an_agent_is_found_by_its_audience_and_previewed_as_a_person(
         raise CheckFailedError("a person holding nothing was previewed as reaching something")
     if await preview(holder, await h.reach(holder)) is not None:
         raise CheckFailedError("a reader who may not read grants was given somebody's preview")
+
+
+# ------------------------------------------------------------- 7. memory and learning
+@check(
+    leaves=(
+        "M39.4.1.1",
+        "M39.4.1.2",
+        "M39.4.1.3",
+        "M39.4.1.4",
+        "M39.4.1.5",
+        "M39.4.2.1",
+        "M39.4.2.2",
+        "M39.4.2.4",
+    ),
+    sentence=(
+        "Memories formed from a person's turn with an agent read as text, stated apart from "
+        "inferred, to its steward, and to the person as what it keeps about them; the steward's "
+        "edit shows in the history with its diff and the person's delete takes theirs out of "
+        "recall; a colleague sees neither; the tiers say which learn and route a gated change "
+        "to its department."
+    ),
+)
+async def an_agents_memory_is_text_its_owner_corrects_and_its_tiers_route(
+    h: Harness,
+) -> None:
+    from brain.agent_memory_routes import agent_entries, changeable, memory_view, replacement_for
+    from brain.console.govern_estate import UNDO_AUTHORITY
+    from brain.console.reach_view import BACK_LINK, run_reach
+    from brain.console.reads import Plane, plane_capability
+    from brain.console.screens import screen
+    from brain.console.workspace import Tab, tab
+    from brain.core.entitlement import Capability
+    from brain.memory.digest import Learning
+    from brain.memory.formation import Formation, MemoryKind
+    from brain.memory.signals import Signal
+    from brain.memory.tiers import Change, Tier, propose
+    from brain.memory.turn import Turn
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.memory_store import (
+        StoredFormations,
+        StoredMemoryRecords,
+        learning_row,
+        memory_row,
+    )
+
+    await h.found_departments()
+    steward, person, colleague = (
+        h.principal(A, "steward"),
+        h.principal(A, "person"),
+        h.principal(A, "colleague"),
+    )
+    memory_read = tab(Tab.MEMORY).read.requires.value
+    content = plane_capability(Plane.CONTENT).value
+    await h.person(
+        steward,
+        department=A,
+        grants=_everywhere(
+            LOCAL_READ,
+            memory_read,
+            *_planes(),
+            screen("scopes").read.requires.value,
+            UNDO_AUTHORITY.value,
+        ),
+    )
+    for one in (person, colleague):
+        await h.person(one, department=A, grants=_in(A, LOCAL_READ, memory_read, content))
+    agent_id = await installed_agent(
+        h,
+        steward,
+        capabilities=(LOCAL_READ,),
+        allowed_tools=(LOCAL_TOOL,),
+        scope=Scope.unrestricted(),
+    )
+    record = await stored_agent(h, agent_id)
+
+    # The person's own turn, answered at their run reach, formed by the product's own step.
+    stated, inferred = "my invoices go to the finance inbox", "I prefer short answers"
+    turn = Turn(
+        trace_id=f"{h.trace_id}-turn",
+        principal_id=person,
+        said=f"Remember that {stated}. {inferred}.",
+        answered=True,
+        reach=run_reach(await h.reach(person), record),
+        at=h.now,
+        agent_id=agent_id,
+    )
+    formed = await StoredFormations(h.sessions).form(turn)
+    if len(formed.memory_ids) != 2:
+        raise CheckFailedError("a person's turn with the agent did not form its two memories")
+
+    # A gated change the agent proposed in acceptance_a, written as the formation step writes one.
+    gated = Learning(
+        memory_id=f"m{h.word().lower()[2:]}{'0' * 25}"[:26],
+        proposal=propose(Change.LEASH_INCREASE, subject=f"agent:{agent_id}"),
+        formation=Formation(
+            principal_id=steward,
+            capabilities=(Capability(value=LOCAL_READ),),
+            scope=Scope.department(A),
+            ent_hash="0" * 32,
+            formed_at=h.now,
+            kind=MemoryKind.PERSISTENT,
+        ),
+        agent_id=agent_id,
+    )
+    await h.execute(
+        memory_row(gated, "Raise the agent's rung for price lists"), learning_row(gated)
+    )
+
+    async def seen(who: str) -> Any:
+        async with h.sessions() as session:
+            stored, entries = await agent_entries(session, record)
+        return stored, memory_view(
+            record, stored, entries, reader=await h.reach(who), department=A, now=h.now
+        )
+
+    stored, by_steward = await seen(steward)
+    curated = [one.statement for one in by_steward.curated]
+    if stated not in curated or [one.statement for one in by_steward.extracted] != [inferred]:
+        raise CheckFailedError("the agent's memory did not read as stated apart from inferred")
+    if not all(one.changeable for one in (*by_steward.curated, *by_steward.extracted)):
+        raise CheckFailedError("the agent's steward was not offered its memory to change")
+    _, by_person = await seen(person)
+    if sorted(one.statement for one in by_person.about_you) != sorted((stated, inferred)):
+        raise CheckFailedError("a person was not shown what the agent keeps about them")
+    _, by_colleague = await seen(colleague)
+    theirs = {
+        one.statement
+        for one in (*by_colleague.curated, *by_colleague.extracted, *by_colleague.about_you)
+    }
+    if theirs & {stated, inferred}:
+        raise CheckFailedError("a colleague was shown what the agent keeps about somebody else")
+    if Tier.GATED.value in by_steward.active_tiers or Tier.AUTOMATIC.value not in (
+        by_steward.active_tiers
+    ):
+        raise CheckFailedError("the active tiers did not say the agent learns short of tier three")
+    if not by_steward.tier_one or not all(one.undo_offered for one in by_steward.tier_one):
+        raise CheckFailedError("the automatic changes were not listed with their undo")
+    routed = [(one.department, one.back_to) for one in by_steward.tier_three or []]
+    if routed != [(A, BACK_LINK.format(agent_id=agent_id))]:
+        raise CheckFailedError("a gated change was not routed to its department's queue")
+
+    # The steward corrects the stated memory; the person deletes the inferred one.
+    records = StoredMemoryRecords(h.sessions)
+    by_id = {one.memory_id: one for one in stored.learnings}
+    first = next(one.memory_id for one in by_steward.curated if one.statement == stated)
+    corrected = "my invoices go to the accounts inbox"
+    if changeable(by_colleague, first) is not None:
+        raise CheckFailedError("a colleague was offered a memory they are not shown")
+    edited = await records.edit(
+        by_id[first],
+        replacement_for(by_id[first], corrected, at=h.now),
+        corrected,
+        prompted_by=Signal.REJECTED,
+        actor=steward,
+        trace_id=h.trace_id,
+        ent_hash="0" * 32,
+    )
+    if edited.replacement is None:
+        raise CheckFailedError("the steward's correction of the agent's memory was not written")
+    extracted_id = next(one.memory_id for one in by_person.about_you if one.statement == inferred)
+    if not changeable(by_person, extracted_id):
+        raise CheckFailedError("a person was not offered to delete a memory about themselves")
+    undone = await records.undo(
+        by_id[extracted_id], actor=person, trace_id=h.trace_id, ent_hash="0" * 32
+    )
+    if undone.correction is None:
+        raise CheckFailedError("a person's delete of a memory about themselves was not written")
+
+    _, after = await seen(steward)
+    now_curated = [one.statement for one in after.curated]
+    if corrected not in now_curated or stated in now_curated or after.extracted:
+        raise CheckFailedError("an edit or a delete did not change what the agent remembers")
+    step = next((one for one in after.history if one.replaced_id == first), None)
+    if step is None or step.trigger != Signal.REJECTED.value:
+        raise CheckFailedError("the history did not record the correction and what caused it")
+    if not any(line.startswith("-") and "finance" in line for line in step.diff) or not any(
+        line.startswith("+") and "accounts" in line for line in step.diff
+    ):
+        raise CheckFailedError("the history did not show the correction as a diff")
+
+
+# --------------------------------------------------------------------------- 8. automations
+@check(
+    leaves=(
+        "M39.6.1.1",
+        "M39.6.1.2",
+        "M39.6.1.3",
+        "M39.6.1.4",
+        "M39.6.1.5",
+        "M39.6.2.1",
+        "M39.6.2.2",
+        "M39.6.2.4",
+    ),
+    sentence=(
+        "An automation installed from the gallery in one step is listed under its own agent and "
+        "no other, named as an outcome, registered with what it guards; its owner cannot start it "
+        "and a second administrator can; it runs as its owner and its run is listed with the next "
+        "one; stopping and removing it are rows written with the schedule, and it runs no more."
+    ),
+)
+async def an_agents_automation_is_installed_started_run_and_removed(
+    h: Harness,
+) -> None:
+    from sqlalchemy import update
+
+    from brain.console.agent_automations import (
+        automations_for,
+        outcome_name_refusals,
+        registry_gaps,
+    )
+    from brain.console.automation_gallery import (
+        AUTOMATION_AUTHORITY,
+        install,
+        new_automation_id,
+        preview,
+        template_by_id,
+    )
+    from brain.console.automation_schedule import (
+        changed,
+        may_start,
+        may_stop,
+        shown_start,
+        shown_stop,
+    )
+    from brain.console.automations import Change, ChangeKind, may_remove, shown
+    from brain.console.questions_view import QUESTION_AUTHORITY
+    from brain.console.workspace import Tab, tab
+    from brain.gate.entitlement_store import StoredEntitlements
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.ops.agent_automation_store import StoredAgentAutomations
+    from brain.ops.automation_run import PausedBecause, RunOutcome
+    from brain.ops.automation_run_store import StoredAutomationSchedules, run_one
+    from brain.tables.agent_automation import AgentAutomationRow
+    from brain.tables.automation_run import STARTED
+
+    await h.found_departments()
+    owner, approver = h.principal(A, "owner"), h.principal(A, "approver")
+    tab_read = tab(Tab.AUTOMATIONS).read.requires.value
+    for one in (owner, approver):
+        await h.person(
+            one,
+            department=A,
+            grants=_everywhere(
+                AUTOMATION_AUTHORITY.value, tab_read, QUESTION_AUTHORITY.value, *_planes()
+            ),
+        )
+    agent_id = await installed_agent(
+        h, owner, capabilities=(QUESTION_AUTHORITY.value,), scope=Scope.unrestricted()
+    )
+    other_id = await installed_agent(h, owner, suffix="_other")
+    record = await stored_agent(h, agent_id)
+    people = StoredPrincipals(h.sessions)
+    owner_principal = await people.live_principal(owner)
+    template = template_by_id("unanswered_questions")
+    if owner_principal is None or template is None:
+        raise CheckFailedError("the check's owner or the gallery's template did not read back")
+
+    # One step: the preview the gallery shows, confirmed, installed paused.
+    owner_reach = await h.reach(owner)
+    shown_install = preview(
+        template, record, installer=owner_principal, installer_reach=owner_reach
+    )
+    installation = install(
+        shown_install,
+        confirmation=shown_install.confirmation,
+        automation_id=new_automation_id(),
+    )
+    done = await StoredAgentAutomations(h.sessions).install(
+        installation, ent_hash=owner_reach.ent_hash(), trace_id=h.trace_id
+    )
+    if not done.created:
+        raise CheckFailedError("installing an automation from the gallery wrote nothing")
+    automation_id = done.automation_id
+
+    schedules = StoredAutomationSchedules(h.sessions)
+    listed = await schedules.listed(agent_id)
+    if [one.automation.automation_id for one in listed] != [automation_id]:
+        raise CheckFailedError("the automation was not listed under the agent that owns it")
+    if await schedules.listed(other_id):
+        raise CheckFailedError("an automation was listed under an agent that does not own it")
+    [held] = listed
+    if outcome_name_refusals(held.automation.name):
+        raise CheckFailedError("an installed automation was not named as an outcome")
+    if held.guards != template.guards or registry_gaps([held.automation], [installation.entry]):
+        raise CheckFailedError("the automation's registry entry did not say what it guards")
+    if not held.automation.paused:
+        raise CheckFailedError("an installed automation was scheduled before anybody started it")
+    seen = automations_for(agent_id, [held.automation], await h.reach(approver), h.now)
+    if [one.automation_id for one in seen] != [automation_id]:
+        raise CheckFailedError("a reader of the agent's automations was not shown it")
+
+    # A start is a gated change: never by whom it runs as, and by another administrator.
+    cadence = held.cadence or template.cadence
+    start = shown_start(held.automation, cadence, now=h.now)
+    becomes = start.becomes
+    if becomes is None:
+        raise CheckFailedError("the automation's cadence gave no next run to start at")
+    if may_start(held.automation, owner_reach, agent=record, becomes=becomes, now=h.now):
+        raise CheckFailedError("an automation's owner could start it without a second person")
+    approver_reach = await h.reach(approver)
+    if not may_start(held.automation, approver_reach, agent=record, becomes=becomes, now=h.now):
+        raise CheckFailedError("a second administrator could not start the automation")
+    written = await schedules.change(
+        changed(start, confirmation=start.confirmation, guards=held.guards),
+        reason=STARTED,
+        actor=approver,
+        ent_hash=approver_reach.ent_hash(),
+        trace_id=h.trace_id,
+        at=h.now,
+    )
+    [started] = await schedules.listed(agent_id)
+    if not written or started.automation.next_run_at != becomes:
+        raise CheckFailedError("starting the automation did not schedule its next run")
+
+    # Due now, and run as its owner by the worker's own step.
+    await h.execute(
+        *h.attributed(approver),
+        update(AgentAutomationRow)
+        .where(AgentAutomationRow.automation_id == automation_id)
+        .values(next_run_at=h.now),
+    )
+    ran = await run_one(
+        worker_sessions(h),
+        automation_id,
+        now=h.now,
+        principals=people,
+        entitlements=StoredEntitlements(h.sessions),
+    )
+    if ran is None or ran.outcome is not RunOutcome.SUCCEEDED:
+        raise CheckFailedError("a due automation did not run as its owner")
+    [after_run] = await schedules.listed(agent_id)
+    last = after_run.runs[0] if after_run.runs else None
+    if last is None or last.principal_id != owner or last.ent_hash is None:
+        raise CheckFailedError("the automation's run was not recorded as its owner's")
+    if after_run.automation.next_run_at is None or after_run.automation.next_run_at <= h.now:
+        raise CheckFailedError("after a run the automation was not scheduled again")
+
+    # Stopped by whom it runs as, then removed, each a row written with the schedule.
+    if not may_stop(after_run.automation, owner_reach, now=h.now):
+        raise CheckFailedError("an automation's owner could not stop it")
+    stop = shown_stop(after_run.automation, after_run.cadence or template.cadence)
+    await schedules.change(
+        changed(stop, confirmation=stop.confirmation, guards=after_run.guards),
+        reason=PausedBecause.STOPPED.value,
+        actor=owner,
+        ent_hash=owner_reach.ent_hash(),
+        trace_id=h.trace_id,
+        at=h.now,
+    )
+    [stopped] = await schedules.listed(agent_id)
+    if not stopped.automation.paused:
+        raise CheckFailedError("stopping the automation left it scheduled")
+    if not may_remove(stopped.automation, owner_reach, removed=False, now=h.now):
+        raise CheckFailedError("an automation's owner could not remove it")
+    removed = await schedules.apply(
+        automation_id,
+        Change(kind=ChangeKind.REMOVED, at=h.now, changed_by=owner),
+        expect=shown(stopped.automation, cadence=stopped.cadence, removed=False),
+        ent_hash=owner_reach.ent_hash(),
+        trace_id=h.trace_id,
+    )
+    [gone] = await schedules.listed(agent_id)
+    if not removed or not gone.removed or len(gone.runs) != 1:
+        raise CheckFailedError("removing the automation did not keep it and its run as a row")
+    if await run_one(
+        worker_sessions(h),
+        automation_id,
+        now=h.now,
+        principals=people,
+        entitlements=StoredEntitlements(h.sessions),
+    ):
+        raise CheckFailedError("a removed automation ran again")

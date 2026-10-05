@@ -340,7 +340,7 @@ describe("where the page is reachable", () => {
   test("an address naming a section this reader cannot open lands where the bare address does", async () => {
     // What breaks if this is deleted: a probe for a tab ("memory", "automations" for a reader without
     // it) that answers differently from an address with no tab, which tells the prober the tab exists.
-    const strip = stripWire().filter((one) => one["tab"] !== "automations");
+    const strip = stripWire().filter((one) => one["tab"] !== "automations" && one["tab"] !== "memory");
     const answers = agentAnswers("quote-helper", { ...body(), tabs: strip });
     const bare = await consoleAt("/agents/quote-helper", answers);
     const bareView = currentView(bare.container);

@@ -66,14 +66,15 @@ from brain.ops.controls import control
 from brain.ops.credentials import connector_key_slot
 from brain.tables.connector_sync import HEALTH_STATES, OUTCOMES
 from tests.fixtures.cassettes import CASSETTES
+from tests.fixtures.connector_examples import example_settings, identifier
 
 #: Far outside any plausible wall clock. See `CLAUDE.md` on a fixture with a date in it.
 NOW: Final = datetime(2999, 1, 1, 9, 0, tzinfo=UTC)
 CONNECTED_AT: Final = datetime(2019, 1, 1, tzinfo=UTC)
 
 #: Shaped as the sources' own identifiers are, naming nobody.
-TENANT: Final = "11111111-2222-3333-4444-555555555555"
-PORTAL: Final = "12345678"
+TENANT: Final = identifier("xero")
+PORTAL: Final = identifier("hubspot")
 
 #: A place-holder resolver: every name answers with one public address.
 PUBLIC: Final = "93.184.216.34"
@@ -102,21 +103,8 @@ def a_connection(name: str = "xero", *, settings: Mapping[str, str] | None = Non
 
 
 def _settings(name: str) -> dict[str, str]:
-    return {
-        "xero": {"tenant_id": TENANT},
-        "hubspot": {"portal_id": PORTAL},
-        "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
-        "cloudflare": {"account_id": "0" * 32, "department": "operations"},
-        "domains": {"domains": "example.com, example.org", "department": "operations"},
-        "google_analytics": {"property": "123456789", "department": "marketing"},
-        "google_drive": {
-            "folder": "1AbCdEfGhIjKlMnOpQrStUv",
-            "domain": "example.com",
-            "department": "operations",
-            "steward": "u_steward",
-        },
-        "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
-    }[name]
+    """The settings `name` is connected with, as its own declaration's example gives them."""
+    return example_settings(name)
 
 
 def a_state(**changed: Any) -> SyncState:

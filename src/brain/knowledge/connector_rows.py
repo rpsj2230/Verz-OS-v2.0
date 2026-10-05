@@ -9,14 +9,21 @@ and was told nothing was found, which is the answer the product gives for a reco
 exist.
 
 **The classifications are the connectors' own field rules, compiled here, and none is invented.**
-Xero declares `XERO_FIELD_RULES` beside its mapping, each field with the capability that reaches it
-and its classification, and `amount_due` RESTRICTED. This module turns those rules into the
-`TableClassification` the row plane and the redactor read, so the capability a person needs to be
-told an invoice's amount is the one the connector already names. Freshdesk declares no field rules,
-so its ticket classification is written here over exactly its projected fields, each behind its own
-field capability, in the pattern `brain.demo.row_classifications` uses. Rejected: reading them off
-`brain.connectors.declaration`, which is on the scheduled sync's path and imports nothing from
-`brain.knowledge` (`tests/invariants/test_minimal_index.py`). The dependency runs the other way.
+Each connector declares its Ask rows on its own `CONNECTOR` (`brain.connectors.ask`): every field
+with the capability that reaches it and its classification, the field its visibility predicate
+tests, the field a record is named by and its tool's words. Xero's are `XERO_FIELD_RULES`, with
+`amount_due` RESTRICTED; Freshdesk declares no field rules, so its ticket's fields are each behind
+their own capability, in the pattern `brain.demo.row_classifications` uses. This module turns them
+into the `TableClassification` the row plane and the redactor read, so the capability a person
+needs to be told an invoice's amount is the one the connector already names.
+
+**Assembled by discovery over `shipped()`, and nothing here names a connector (M11.1.6).** Until
+2026-10-05 the maps below were typed here, one entry per connector in each, and every connector PR
+appended to all of them, so every one that landed put every other open one in conflict. The names
+and types are unchanged, so no caller moved. The declarations are stated in `brain.core` types
+rather than `brain.knowledge` ones because `brain.connectors.declaration` is on the scheduled sync's
+path and imports nothing from `brain.knowledge` (`tests/invariants/test_minimal_index.py`); the
+compiling happens here, on this side of that line. See `THE_ROWS_ARE_READ_OFF_THE_DECLARATIONS`.
 
 **The Laravel database's clients and staff records are classified by `laravel.LARAVEL_FIELD_RULES`,
 and their department is read by whoever reaches the row (M11.6.1).** Its visibility rule is written
@@ -58,7 +65,7 @@ is read from HubSpot's one-record read while the asker waits. Until then HubSpot
 Connectors screen and read into its index, and no question on Ask could reach it, which is why
 `brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4, M11.7.3, M11.7.1, M11.7.2, M11.6.1, M11.6.7
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4, M11.7.3, M11.7.1, M11.7.2, M11.6.1, M11.6.7, M11.1.6
 """
 
 from __future__ import annotations
@@ -67,18 +74,10 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import (
-    cloudflare,
-    domains,
-    freshdesk,
-    google_analytics,
-    hubspot,
-    laravel,
-    search_console,
-    xero,
-)
+from brain.connectors.ask import AskEntity, AskRows
+from brain.connectors.declaration import ConnectorDeclaration, shipped
 from brain.core.entitlement import Capability
-from brain.core.field_policy import Classification, FieldRule
+from brain.core.field_policy import Classification
 from brain.gate.fast_lane import FastPathRule
 from brain.knowledge.classified_rows import questions_over
 from brain.knowledge.columns import ColumnRule, TableClassification
@@ -99,21 +98,37 @@ A_SOURCE_NOBODY_CONNECTED_ASKS_NOTHING: Final = (
     "connected contributes none."
 )
 
+#: Why nothing in this module names a connector.
+THE_ROWS_ARE_READ_OFF_THE_DECLARATIONS: Final = (
+    "A connector's Ask rows are declared in its own module and read off the declarations here, so "
+    "adding a connector edits no map in this file, and two connectors added at once cannot "
+    "conflict in it. A map typed here would also be a second account of the connector that could "
+    "disagree with its first."
+)
+
+# ---------------------------------------------------------------- the declarations, read once
+
+
+def _classified(
+    declared: Mapping[str, ConnectorDeclaration],
+) -> Mapping[str, tuple[AskRows, tuple[AskEntity, ...]]]:
+    """Each connector that declares classified Ask rows, with its rows and its entities."""
+    return {
+        name: (one.ask, one.ask.entities)
+        for name, one in declared.items()
+        if one.ask is not None and one.ask.entities
+    }
+
+
+_CLASSIFIED: Final = _classified(shipped())
+
+
 # ---------------------------------------------------------------- the classifications
 
 
 #: The field each source's visibility predicate tests on every row it keeps.
 SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
-    {
-        xero.CONNECTOR_NAME: "tenant_id",
-        freshdesk.FRESHDESK: "department",
-        laravel.CONNECTOR_NAME: "department",
-        cloudflare.CLOUDFLARE: cloudflare.DEPARTMENT_SETTING,
-        domains.CONNECTOR_NAME: "department",
-        google_analytics.GOOGLE_ANALYTICS: "department",
-        hubspot.CONNECTOR_NAME: "portal_id",
-        search_console.SEARCH_CONSOLE: "department",
-    }
+    {name: rows.scoped_by for name, (rows, _) in _CLASSIFIED.items()}
 )
 
 
@@ -133,8 +148,8 @@ def _scope_column(source: str, entity: str) -> ColumnRule:
     )
 
 
-def _from_rules(source: str, entity: str, rules: Iterable[FieldRule]) -> TableClassification:
-    """One entity's classification out of a connector's field rules for it, and its scope column.
+def compiled(source: str, entity: AskEntity) -> TableClassification:
+    """One entity's classification out of its declared field rules, and its scope column.
 
     A rule the connector wrote for the scope column itself gives way to `_scope_column`, which is
     the whole of `THE_COLUMN_A_SCOPE_TESTS_IS_READ_BY_WHOEVER_REACHES_THE_ROW`: Laravel names a
@@ -142,7 +157,7 @@ def _from_rules(source: str, entity: str, rules: Iterable[FieldRule]) -> TableCl
     dropped whole by the redactor.
     """
     return TableClassification(
-        entity=entity,
+        entity=entity.entity,
         rules=(
             *(
                 ColumnRule(
@@ -151,159 +166,10 @@ def _from_rules(source: str, entity: str, rules: Iterable[FieldRule]) -> TableCl
                     classification=rule.classification,
                     derived_from=frozenset(rule.derived_from),
                 )
-                for rule in rules
-                if rule.entity == entity and rule.field != SCOPED_BY[source]
+                for rule in entity.fields
+                if rule.field != SCOPED_BY[source]
             ),
-            _scope_column(source, entity),
-        ),
-    )
-
-
-def xero_classifications() -> tuple[TableClassification, ...]:
-    """Xero's invoices and contacts, from `xero.XERO_FIELD_RULES`."""
-    rules = xero.XERO_FIELD_RULES
-    return (
-        _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_INVOICE, rules),
-        _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_CONTACT, rules),
-    )
-
-
-def laravel_classifications() -> tuple[TableClassification, ...]:
-    """The Laravel database's clients and staff records, from `laravel.LARAVEL_FIELD_RULES`."""
-    rules = laravel.LARAVEL_FIELD_RULES
-    return (
-        _from_rules(laravel.CONNECTOR_NAME, laravel.ENTITY_CLIENT, rules),
-        _from_rules(laravel.CONNECTOR_NAME, laravel.ENTITY_USER, rules),
-    )
-
-
-def hubspot_classifications() -> tuple[TableClassification, ...]:
-    """HubSpot's companies, contacts and deals, from `hubspot.HUBSPOT_FIELD_RULES`.
-
-    The deal's amount is CONFIDENTIAL there and is never in the index, so a person is told it only
-    from HubSpot's own answer, read while they wait, and only with `read:deal.amount`.
-    """
-    rules = hubspot.HUBSPOT_FIELD_RULES
-    return tuple(
-        _from_rules(hubspot.CONNECTOR_NAME, entity, rules)
-        for entity in (hubspot.ENTITY_CLIENT, hubspot.ENTITY_CONTACT, hubspot.ENTITY_DEAL)
-    )
-
-
-def freshdesk_classifications() -> tuple[TableClassification, ...]:
-    """Freshdesk's tickets, over the fields its index keeps and the body read live.
-
-    Each field behind its own capability (`read:ticket.status`, ...), INTERNAL, in
-    `brain.demo.row_classifications`' pattern: reaching a ticket is `read:ticket` in the department
-    the connection names, and each field a person is told is a further grant. The ticket's body in
-    plain text (`freshdesk.LIVE_BODY_FIELD`) is read from the helpdesk when a question asks for it
-    and never kept, and is classified here like any field, so being told it is a grant of its own.
-    """
-    return (
-        TableClassification(
-            entity=freshdesk.TICKET,
-            rules=(
-                *(
-                    ColumnRule(
-                        column=name,
-                        required_capability=Capability(value=f"read:{freshdesk.TICKET}.{name}"),
-                        classification=Classification.INTERNAL,
-                    )
-                    for name in (*freshdesk.projected_field_names(), freshdesk.LIVE_BODY_FIELD)
-                ),
-                _scope_column(freshdesk.FRESHDESK, freshdesk.TICKET),
-            ),
-        ),
-    )
-
-
-def _kept_and_read_live(
-    source: str, entity: str, kept: tuple[str, ...], figures: tuple[str, ...]
-) -> TableClassification:
-    """A connected source's one entity: the fields its index keeps and the figures read live."""
-    return TableClassification(
-        entity=entity,
-        rules=(
-            *(
-                ColumnRule(
-                    column=name,
-                    required_capability=Capability(value=f"read:{entity}.{name}"),
-                    classification=Classification.INTERNAL,
-                )
-                for name in (*kept, *figures)
-            ),
-            _scope_column(source, entity),
-        ),
-    )
-
-
-def cloudflare_classifications() -> tuple[TableClassification, ...]:
-    """Cloudflare's zones and DNS records, over the fields the index keeps and the values read live.
-
-    Each behind its own capability, as Freshdesk's are. A record's content, time to live and
-    proxying (`cloudflare.LIVE_DNS_FIELDS`) are read from Cloudflare when a question asks and never
-    kept, and are classified here like any field, so being told a record's content is a grant of
-    its own (M11.7.3).
-    """
-    source = cloudflare.CLOUDFLARE
-    return (
-        _kept_and_read_live(
-            source, cloudflare.ZONE, tuple(one.name for one in cloudflare.ZONE_FIELDS), ()
-        ),
-        _kept_and_read_live(
-            source,
-            cloudflare.DNS_RECORD,
-            tuple(one.name for one in cloudflare.DNS_RECORD_FIELDS),
-            tuple(cloudflare.LIVE_DNS_FIELDS),
-        ),
-    )
-
-
-def domains_classifications() -> tuple[TableClassification, ...]:
-    """A domain's kept fields and the three read live, each behind its own capability (M11.7.4).
-
-    `read:domain.expiry`, `read:domain.registrar` and so on, INTERNAL, in Freshdesk's pattern: a
-    domain is reached with `read:domain` in the department the connection names, and each fact a
-    person is told is a further grant. The live facts are classified here because a value read
-    live and classified by nobody is withheld from everybody.
-    """
-    return (
-        _kept_and_read_live(
-            domains.CONNECTOR_NAME,
-            domains.DOMAIN,
-            tuple(one.name for one in domains.FIELDS),
-            tuple(domains.LIVE_ONLY),
-        ),
-    )
-
-
-def google_analytics_classifications() -> tuple[TableClassification, ...]:
-    """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
-
-    Every field behind its own capability (`read:analytics_property.sessions_last_28_days`, ...),
-    in Freshdesk's pattern, so a reader may be told the property's name and not its traffic, or one
-    range and not another. See the module docstring.
-    """
-    return (
-        _kept_and_read_live(
-            google_analytics.GOOGLE_ANALYTICS,
-            google_analytics.ENTITY_PROPERTY,
-            tuple(one.name for one in google_analytics.PROPERTY_FIELDS),
-            (*google_analytics.FIGURE_FIELDS, *google_analytics.RANGE_FIGURE_FIELDS),
-        ),
-    )
-
-
-def search_console_classifications() -> tuple[TableClassification, ...]:
-    """The connected site, as the property is: its index fields and its figures, each INTERNAL."""
-    return (
-        _kept_and_read_live(
-            search_console.SEARCH_CONSOLE,
-            search_console.ENTITY_SITE,
-            tuple(one.name for one in search_console.SITE_FIELDS),
-            tuple(
-                dict.fromkeys((*search_console.FIGURE_FIELDS, *search_console.RANGE_FIGURE_FIELDS))
-            ),
+            _scope_column(source, entity.entity),
         ),
     )
 
@@ -311,111 +177,36 @@ def search_console_classifications() -> tuple[TableClassification, ...]:
 #: Every connected source's classifications, by the source's name.
 CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
     {
-        xero.CONNECTOR_NAME: xero_classifications(),
-        freshdesk.FRESHDESK: freshdesk_classifications(),
-        laravel.CONNECTOR_NAME: laravel_classifications(),
-        cloudflare.CLOUDFLARE: cloudflare_classifications(),
-        domains.CONNECTOR_NAME: domains_classifications(),
-        google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
-        hubspot.CONNECTOR_NAME: hubspot_classifications(),
-        search_console.SEARCH_CONSOLE: search_console_classifications(),
+        name: tuple(compiled(name, one) for one in entities)
+        for name, (_, entities) in _CLASSIFIED.items()
     }
 )
 
 #: The sources Ask answers through a passage reader rather than a classification: what they hold
 #: is read live as passages for the question's model step, as the Lark Wiki's pages are. Each such
-#: source adds its own name here with its reader. See `brain.ops.connectable.answers`. Google
-#: Drive's folder is read by `brain.ops.drive_passages` (M11.6.7).
-ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset({"google_drive", "lark_wiki"})
+#: source says so in its own declaration (`AskRows.by_passages`). See
+#: `brain.ops.connectable.answers`. Google Drive's folder is read by `brain.ops.drive_passages`
+#: (M11.6.7), and Slack's messages by `brain.ops.slack_messages_live.SlackPassages` (M11.7.5).
+ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset(
+    name for name, one in shipped().items() if one.ask is not None and one.ask.by_passages
+)
 
-#: The field a person names a record by, per source and entity: the question's slot.
+#: The field a person names a record by, per source and entity: the question's slot. An entity a
+#: connector reaches through another (HubSpot's contacts, kept with no name) names none.
 NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
     {
-        (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE): "invoice_number",
-        (xero.CONNECTOR_NAME, xero.ENTITY_CONTACT): "name",
-        (freshdesk.FRESHDESK, freshdesk.TICKET): "subject",
-        (laravel.CONNECTOR_NAME, laravel.ENTITY_CLIENT): "name",
-        (laravel.CONNECTOR_NAME, laravel.ENTITY_USER): "display_name",
-        (cloudflare.CLOUDFLARE, cloudflare.ZONE): "name",
-        (cloudflare.CLOUDFLARE, cloudflare.DNS_RECORD): "name",
-        (domains.CONNECTOR_NAME, domains.DOMAIN): "name",
-        (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
-            google_analytics.LABEL_FIELD
-        ),
-        # A contact is kept with no name, by `hubspot.A_CRM_IS_MOSTLY_THE_DENYLIST`, so a person
-        # asks about a company or a deal by name and reaches its contacts through it.
-        (hubspot.CONNECTOR_NAME, hubspot.ENTITY_CLIENT): "name",
-        (hubspot.CONNECTOR_NAME, hubspot.ENTITY_DEAL): "deal_name",
-        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): search_console.LABEL_FIELD,
+        (name, one.entity): one.named_by
+        for name, (_, entities) in _CLASSIFIED.items()
+        for one in entities
+        if one.named_by
     }
 )
 
 #: What each source's row tools are described as in the catalogue.
 CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
     {
-        xero.CONNECTOR_NAME: {
-            xero.ENTITY_INVOICE: (
-                "Look up Xero invoices by number: status, due date and the contact, and the "
-                "amount due read live from Xero for a reader allowed it"
-            ),
-            xero.ENTITY_CONTACT: "Look up Xero contacts by name: status and when they last changed",
-        },
-        freshdesk.FRESHDESK: {
-            freshdesk.TICKET: (
-                "Look up Freshdesk tickets by subject: status, priority, due date and when it "
-                "last changed"
-            ),
-        },
-        laravel.CONNECTOR_NAME: {
-            laravel.ENTITY_CLIENT: (
-                "Look up clients in the company's own database by name: status, department and "
-                "account manager, and the contract value read live for a reader allowed it"
-            ),
-            laravel.ENTITY_USER: (
-                "Look up staff records in the company's own database by name: department, status "
-                "and when the record last changed"
-            ),
-        },
-        cloudflare.CLOUDFLARE: {
-            cloudflare.ZONE: "Look up Cloudflare zones by domain name: status and account",
-            cloudflare.DNS_RECORD: (
-                "Look up DNS records by name: type and zone, and the content read live from "
-                "Cloudflare for a reader allowed it"
-            ),
-        },
-        domains.CONNECTOR_NAME: {
-            domains.DOMAIN: (
-                "Look up the agency's domains by name: when each expires and its registration "
-                "status, and its registrar and whether its site answers, read live"
-            ),
-        },
-        google_analytics.GOOGLE_ANALYTICS: {
-            google_analytics.ENTITY_PROPERTY: (
-                "Look up the connected Google Analytics property by name: its sessions, users "
-                "and conversions for yesterday or the last 7, 28 or 90 days, read live from Google "
-                "for a reader allowed them"
-            ),
-        },
-        hubspot.CONNECTOR_NAME: {
-            hubspot.ENTITY_CLIENT: (
-                "Look up HubSpot companies by name: lifecycle stage, web domain and owner, read "
-                "live from HubSpot"
-            ),
-            hubspot.ENTITY_CONTACT: (
-                "Look up HubSpot contacts: lifecycle stage and company, read live from HubSpot"
-            ),
-            hubspot.ENTITY_DEAL: (
-                "Look up HubSpot deals by name: stage, pipeline and close date, and the amount "
-                "read live from HubSpot for a reader allowed it"
-            ),
-        },
-        search_console.SEARCH_CONSOLE: {
-            search_console.ENTITY_SITE: (
-                "Look up the connected Search Console site by name: its clicks and impressions "
-                "for the last 7, 28 or 90 days, its top query and page and its sitemaps' errors, "
-                "read live from Google for a reader allowed them"
-            ),
-        },
+        name: MappingProxyType({one.entity: one.description for one in entities})
+        for name, (_, entities) in _CLASSIFIED.items()
     }
 )
 
@@ -426,14 +217,10 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
 #: columns a filter may name is a bound on the columns a row carries, and these are not among them.
 LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
     {
-        google_analytics.ENTITY_PROPERTY: (
-            *google_analytics.FIGURE_FIELDS,
-            *google_analytics.RANGE_FIGURE_FIELDS,
-        ),
-        search_console.ENTITY_SITE: (
-            *search_console.FIGURE_FIELDS,
-            *search_console.RANGE_FIGURE_FIELDS,
-        ),
+        one.entity: one.live_only
+        for _, entities in _CLASSIFIED.values()
+        for one in entities
+        if one.live_only
     }
 )
 
@@ -441,12 +228,10 @@ LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
 #: because a question's range is in its words: see `A_TOOL_S_RANGE_IS_NOT_A_QUESTION_S`.
 UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = MappingProxyType(
     {
-        (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): frozenset(
-            google_analytics.RANGE_FIGURE_FIELDS
-        ),
-        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): frozenset(
-            set(search_console.RANGE_FIGURE_FIELDS) - set(search_console.FIGURE_FIELDS)
-        ),
+        (name, one.entity): one.unasked
+        for name, (_, entities) in _CLASSIFIED.items()
+        for one in entities
+        if one.unasked
     }
 )
 

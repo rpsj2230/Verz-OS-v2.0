@@ -311,9 +311,12 @@ ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED: Final = (
     "tab_strip shows a tab that is permitted and populated, and a heading over an empty panel "
     "is a count of hidden things spelled out. This route holds the agent's record and its "
     "install, which is what the Settings tab reads, and the Automations tab always holds the "
-    "product's automation gallery, which its own route serves behind the same tab's read. "
-    "Marking the other five populated would draw five headings over nothing; marking Settings "
-    "empty would withhold a tab whose content is already in the response."
+    "product's automation gallery, which its own route serves behind the same tab's read. The "
+    "Memory tab always holds how the agent learns, its tiers and which are active, which "
+    "brain.agent_memory_routes serves behind the Memory tab's read for every agent alike, so it "
+    "says nothing about whether any memory exists. Marking the other four populated would draw "
+    "four headings over nothing; marking Settings empty would withhold a tab whose content is "
+    "already in the response."
 )
 
 #: Why a malformed row is refused as though it were missing.
@@ -415,7 +418,7 @@ THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS: Final
 MAX_ROSTER_ENTRIES: Final = 500
 
 #: The tabs with something in them for every agent. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
-POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB})
+POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB, Tab.MEMORY})
 
 #: The most templates one gallery answer carries. A resource bound, as the roster's is.
 MAX_TEMPLATE_ENTRIES: Final = 500

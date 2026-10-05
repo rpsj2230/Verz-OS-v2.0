@@ -37,7 +37,7 @@ Rejected: a preference per person. `brain.member.connections` models which chann
 each kind on, and nothing sends anything to a person yet for it to apply to. An install-wide
 switch is the one a person can turn today and see change something.
 
-Task ids: M27.8.11, M27.7.12, M8.3.2
+Task ids: M27.8.11, M27.7.12, M8.3.2, M7.7.2
 """
 
 from __future__ import annotations
@@ -266,10 +266,16 @@ NOTICES: Final[tuple[Notice, ...]] = (
     ),
     Notice(
         kind=NoticeKind.SELF_GRANT,
-        title="An administrator granted themselves something",
-        told="A standing super administrator who is not that administrator.",
-        about="What was granted, to whom and by whom.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        title="Somebody granted themselves something",
+        told=(
+            "A standing super administrator who is not that person, and the steward of each "
+            "document, source or agent the grant reaches, when the steward is somebody else."
+        ),
+        about="What was granted and by whom, and to a steward which of their things it reaches.",
+        how=(
+            "Listed for each steward on their Access requests page for ninety days. No channel "
+            "sends it by email or chat yet."
+        ),
         composed_by="brain.console.global_surfaces:self_grant_notices",
         fixed_because=A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH,
     ),

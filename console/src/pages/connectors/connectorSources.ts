@@ -5,8 +5,8 @@
  * (`brain.connector_routes.connector_sources`, over the list contract), one source's page is
  * `GET /api/v1/console/connectors/{name}` and its export the same with `/export`; the page's
  * connection, forms and confirmations still come from `GET /api/v1/connectors`
- * (`pages/connectorsQuery.ts`). The writes are connect and disconnect (as before), edit and
- * replacing a key.
+ * (`pages/connectorsQuery.ts`). The writes are connect and disconnect (as before), edit,
+ * replacing a key, and naming the source's steward (M7.7.2).
  *
  * **A reader keeps only what was sent.** Every field is read back through a check of its type, and
  * a field the API did not send is absent from the row rather than defaulted, so a cell for a source
@@ -16,7 +16,7 @@
  * **No key and no vault path is read out of any answer here**, because none is sent; the reader has
  * no field that could hold one, so a key added to a response by mistake is dropped at this line.
  *
- * Task ids: M27.11.9, M27.15.39, M27.15.58, M27.16.1
+ * Task ids: M27.11.9, M27.15.39, M27.15.58, M27.16.1, M7.7.2
  */
 
 /** The module's list, one source's page and its export, under the API base. */
@@ -37,6 +37,11 @@ export function editApiPath(name: string): string {
 
 export function keyApiPath(name: string): string {
   return `/connectors/${encodeURIComponent(name)}/key`;
+}
+
+/** Where a connected source's steward is named (M7.7.2). */
+export function stewardApiPath(name: string): string {
+  return `/connectors/${encodeURIComponent(name)}/steward`;
 }
 
 /** The module's own address, which is the screen's key in `brain.console.screens`. */
@@ -216,6 +221,10 @@ export interface SourceDetail {
   readonly skills: readonly NamedSkill[];
   readonly confirmEdit: string;
   readonly confirmKey: string;
+  /** Who answers for the source, by principal id, when it is connected and the reader may be told. */
+  readonly steward?: string;
+  /** The API's sentence for what naming a steward agrees to. */
+  readonly confirmSteward: string;
 }
 
 function readSettings(value: unknown): readonly SettingValue[] {
@@ -311,6 +320,7 @@ export function readSourceDetail(payload: unknown): SourceDetail | null {
   const ceiling = said(fields["ceiling"]);
   const recorded = said(fields["recorded"]);
   const departmentSays = said(fields["department_says"]);
+  const steward = said(fields["steward"]);
   return {
     source,
     ...(elsewhere === undefined ? {} : { elsewhere }),
@@ -327,6 +337,8 @@ export function readSourceDetail(payload: unknown): SourceDetail | null {
     skills,
     confirmEdit: said(fields["confirm_edit"]) ?? "",
     confirmKey: said(fields["confirm_key"]) ?? "",
+    ...(steward === undefined ? {} : { steward }),
+    confirmSteward: said(fields["confirm_steward"]) ?? "",
   };
 }
 

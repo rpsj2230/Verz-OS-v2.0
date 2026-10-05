@@ -72,6 +72,7 @@ exists, because a row for something that is gone reads as coverage.
 | `lark_base` | `rest` | `base_table` | `read_only` | `none` | `lark_base` |
 | `lark_wiki` | `rest` | `wiki_space` | `read_only` | `none` | `lark_base` |
 | `search_console` | `rest` | `search_site` | `read_only` | `none` | `search_console` |
+| `slack_messages` | `rest` | `workspace` | `read_only` | `none` | `slack_messages` |
 | `xero` | `rest` | `tenant` | `read_only` | `none` | `xero` |
 
 Two rows deserve a second look.
@@ -313,6 +314,23 @@ four calls made at once, and are never stored anywhere here.
 
 **What it does not narrow.** One department reads the site: the one named at connect. Indexing
 issues are the sitemaps' own counts, because the API offers no page-indexing report to read.
+
+## `slack_messages`
+
+Your Slack workspace, read as a source for answers. This is not the Slack channel, which answers
+questions asked in Slack; it is a separate app with its own token.
+
+**Create** a Slack app for your workspace with these bot scopes and no others: `channels:read`,
+`groups:read`, `channels:history`, `groups:history`, `users:read`, `users:read.email`. Nothing
+that writes, and no user token: a user token is one person's whole account and reads as them.
+Invite the app to each channel it may read; a channel it is not in is never read.
+
+**What is kept, and what is read.** The index keeps each channel's name and whether it is
+private, and each member as the digest of their confirmed work email. No message, no member
+list and no address is stored. On every question, the asker is matched to their Slack account
+by that digest, Slack is asked which of the app's channels they are in, and only those channels'
+recent messages are read, for that asker alone. **A private channel the asker is not in is never
+read for them, however well it matches.**
 
 ## `xero`
 

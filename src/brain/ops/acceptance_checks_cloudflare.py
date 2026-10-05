@@ -25,7 +25,13 @@ connected already is refused, and the owner's real connection is never moved. Se
 one. And nothing in the product resumes an approved action by itself yet: the checks resume it
 through `brain.ops.connector_write_run.send_approved`, which is what the agent runtime will call.
 
-Task ids: M11.7.3
+**They are also the install's proof that a connector reads by default and writes only on a
+separate, deliberate grant (M11.2.4).** The first finds no Cloudflare tool that changes anything
+registered and an approved change sending nothing without the grant's key; the second sees the
+change sent with that key and never the read key. A connector that wrote with the key it reads
+with, or wrote on an install that never gave the grant, fails one of them.
+
+Task ids: M11.7.3, M11.2.4
 """
 
 from __future__ import annotations
@@ -401,13 +407,13 @@ def _send(h: Harness, source: _Connected, leases: _Leases, done: _Approved, ledg
 
 # ------------------------------------------------ 1. read live, and a change held and not sent
 @check(
-    leaves=("M11.7.3",),
+    leaves=("M11.7.3", "M11.2.4"),
     sentence=(
-        "A Cloudflare account made up for the check is connected, its zones and each zone's DNS "
-        "records are read into its index, a record's content is read live on Ask for a reader "
-        "granted it and kept in no table, a reader without the grant is told what an absent record "
-        "is told, and on an install that has not allowed DNS changes an agent's change is held, "
-        "its card says so, and approved it sends nothing."
+        "A Cloudflare account made up for the check is connected and its DNS records indexed; a "
+        "record's content is read live on Ask for a reader granted it and kept in no table, and "
+        "one without the grant is told what an absent record is told. By default nothing writes: "
+        "no Cloudflare tool changes anything, and an agent's DNS change is held, its card says so, "
+        "and approved it sends nothing."
     ),
 )
 async def cloudflare_is_read_live_and_a_dns_change_waits_for_a_person(h: Harness) -> None:
@@ -523,11 +529,12 @@ async def cloudflare_is_read_live_and_a_dns_change_waits_for_a_person(h: Harness
 
 # ------------------------------------------------ 2. allowed: sent once, read back as approved
 @check(
-    leaves=("M11.7.3",),
+    leaves=("M11.7.3", "M11.2.4"),
     sentence=(
-        "On an install that has given Cloudflare's DNS change key, a change an agent prepares is "
-        "approved by a person in its department, sent once with that key and read back with the "
-        "read key holding what was approved, and resuming the approval again sends nothing."
+        "On an install that has given Cloudflare's DNS change key, a separate grant from the read "
+        "key, a change an agent prepares is approved by a person in its department, sent once with "
+        "that key and never the read key, read back with the read key holding what was approved, "
+        "and resuming the approval again sends nothing."
     ),
 )
 async def an_allowed_dns_change_is_sent_once_and_read_back(h: Harness) -> None:

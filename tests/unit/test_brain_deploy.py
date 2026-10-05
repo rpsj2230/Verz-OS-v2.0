@@ -18,7 +18,7 @@ of the new image, with the deploy token the server keeps root-only, before anyth
 image. The stub carries a stand-in for the image's `ops/openbao` directory whose apply script
 records that it ran and exits as the scenario says.
 
-Task ids: M38.1.3.3, M38.1.3.4, M38.1.3.5, M31.3.2.2
+Task ids: M38.1.3.3, M38.1.3.4, M38.1.3.5, M31.3.2.2, M32.2.1.1
 """
 
 from __future__ import annotations
@@ -142,6 +142,8 @@ case "$1" in
       *:/app/ops/openbao/.) [ -d "$S/openbao" ] || exit 1; cp -R "$S/openbao/." "$3"; exit 0 ;;
       *:/app/ops/keycloak/accounts-client.sh)
         [ -f "$S/accounts" ] || exit 1; cp "$S/accounts" "$3"; exit 0 ;;
+      *:/app/ops/deploy/overlays/.)
+        [ -d "$S/overlays" ] || exit 1; cp -R "$S/overlays/." "$3"; exit 0 ;;
     esac
     printf '{\n  "task_ids": [\n    "M1.1.1",\n    "M2.2.2"\n  ]\n}\n' ;;
 esac
@@ -160,6 +162,7 @@ class Ran:
     applied: str
     containers: dict[str, list[str]]
     accounts: str
+    overlays: str
 
 
 #: The app's networks as `docker inspect` lists them, by name, each with the compose project
@@ -180,6 +183,7 @@ def deploy(
     deploy_token: bool = False,
     apply_exit: int | None = None,
     accounts_exit: int | None = None,
+    overlays_exit: int | None = None,
 ) -> Ran:
     """Run the real script once: the app runs `running`, the registry's tag is `NEW`.
 
@@ -187,6 +191,8 @@ def deploy(
     image an `ops/openbao/apply-release.sh` that exits with it, and None gives it none, as an image
     from before the vault changes shipped in it. `accounts_exit` gives the running application an
     `ops/keycloak/accounts-client.sh` that records whom it was pointed at and exits with it.
+    `overlays_exit` gives the new image an `ops/deploy/overlays/apply.sh` that does the same, and
+    None gives it none, as an image from before the optional services step shipped in it.
     """
     state = tmp_path / "state"
     bin_dir = tmp_path / "bin"
@@ -239,6 +245,15 @@ def deploy(
             newline="\n",
         )
 
+    if overlays_exit is not None:
+        carried = state / "overlays"
+        carried.mkdir()
+        (carried / "apply.sh").write_text(
+            f'#!/bin/sh\necho "ran with $1" > "{state}/overlays-ran"\nexit {overlays_exit}\n',
+            encoding="utf-8",
+            newline="\n",
+        )
+
     env = {
         **os.environ,
         "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
@@ -259,6 +274,7 @@ def deploy(
     published = state / "published"
     applied = state / "applied"
     accounts = state / "accounts-ran"
+    overlays = state / "overlays-ran"
     return Ran(
         code=done.returncode,
         calls=(state / "calls").read_text(encoding="utf-8").splitlines(),
@@ -268,6 +284,7 @@ def deploy(
         output=done.stdout + done.stderr,
         applied=applied.read_text(encoding="utf-8").strip() if applied.exists() else "",
         accounts=accounts.read_text(encoding="utf-8").strip() if accounts.exists() else "",
+        overlays=overlays.read_text(encoding="utf-8").strip() if overlays.exists() else "",
         containers={
             line.split()[0]: line.split()
             for line in (state / "containers").read_text(encoding="utf-8").splitlines()
@@ -683,3 +700,53 @@ def test_an_image_held_back_or_older_than_the_step_never_runs_it(tmp_path: Path)
     assert held.accounts == ""
     assert older.code == 0, older.output
     assert "carries no accounts client step" in older.output
+
+
+# ------------------------------------------------------- the optional services step (M32.2.1.1)
+def test_once_the_app_and_its_workers_are_ready_the_release_s_optional_services_step_runs(
+    tmp_path: Path,
+) -> None:
+    """The release's own `ops/deploy/overlays/apply.sh`, copied out of the image just deployed and
+    run here with the application's container, after the application and every sibling were
+    recreated: a recreate drops the joins the step makes, so the step has to come after the last
+    one. Delete this and the step can run before the worker is recreated, which leaves the worker
+    off the detector's network until the next deploy, or not run at all."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, containers=INSTALL, overlays_exit=0)
+
+    assert ran.code == 0, ran.output
+    assert ran.overlays == f"ran with app-{UUID}"
+    copied = first(ran.calls, "cp cid:/app/ops/deploy/overlays/.")
+    recreated = max(i for i, call in enumerate(ran.calls) if call.startswith("compose up"))
+    assert recreated < copied
+    assert [one["outcome"] for one in ran.records] == ["deployed"]
+
+
+def test_an_optional_services_step_that_fails_is_said_and_the_deploy_still_succeeds(
+    tmp_path: Path,
+) -> None:
+    """The application is serving, so a service that did not start is a line in the journal and is
+    tried again on the next deploy. Delete this and a detector that is slow to load rolls back or
+    fails every release."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, overlays_exit=1)
+
+    assert ran.code == 0, ran.output
+    assert "OPTIONAL SERVICES NOT ALL STARTED" in ran.output
+    assert ran.running == NEW
+    assert [one["outcome"] for one in ran.records] == ["deployed"]
+
+
+def test_an_image_held_back_or_older_than_the_optional_services_step_never_runs_it(
+    tmp_path: Path,
+) -> None:
+    """A held-back image never reaches the step, and an image from before it shipped says so and
+    deploys. Delete this and the step can start services beside an application that never answered
+    ready, or a rollback to an older image fails for want of a script it never had."""
+    (tmp_path / "held").mkdir()
+    (tmp_path / "older").mkdir()
+    held = deploy(tmp_path / "held", running=OLD, good={OLD}, overlays_exit=0)
+    older = deploy(tmp_path / "older", running=OLD, good={OLD, NEW}, overlays_exit=None)
+
+    assert held.code == 1
+    assert held.overlays == ""
+    assert older.code == 0, older.output
+    assert "carries no optional services step" in older.output

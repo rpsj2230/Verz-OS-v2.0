@@ -427,6 +427,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # question no connected source covered is nobody's once the question ledger's row is gone.
         "ops.question_gap",
         "ops.report_refresh",
+        # A source's steward names the person who answers for it, an actor and not an owner, and
+        # the source itself is nobody's (`0167`), as `ops.connector_connection`'s actors are.
+        "ops.connector_steward",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",
@@ -476,6 +479,8 @@ RETAINED: Final[Mapping[str, str]] = MappingProxyType(
         # 0150: who read a trace's payload, under the separate role, is the reader's accountability.
         "obs.trace_read": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
         "ops.halt": A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT,
+        # 0167: a grant somebody made to themselves is the record their stewards are told from.
+        "gate.self_grant": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
     }
 )
 

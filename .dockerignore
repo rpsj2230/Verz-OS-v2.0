@@ -26,6 +26,8 @@ ops
 # applies before starting it (Dockerfile says why). Policies and the script that loads them only.
 !ops/openbao/apply-release.sh
 !ops/openbao/policies/*.hcl
+# And the optional services step the deploy hook copies out of the image (brain.ops.overlays).
+!ops/deploy/overlays/apply.sh
 docs/wbs
 *.md
 !README.md

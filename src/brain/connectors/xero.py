@@ -139,12 +139,15 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
+import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.connectors.ask import AskEntity, AskRows, of_entity
 from brain.connectors.contract import (
     AccessMode,
     ConnectorContractError,
@@ -158,9 +161,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -1622,6 +1627,12 @@ CONNECTOR: Final = ConnectorDeclaration(
             "one. Paste it as one piece. It is kept in the vault and never shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={"tenant_id": "11111111-2222-3333-4444-555555555555"},
+            fresh=lambda _: {"tenant_id": str(uuid.uuid4())},
+            edit="tenant_id",
+            edited=lambda: "22222222-3333-4444-5555-" + secrets.token_hex(6),
+        ),
     ),
     read_back=ReadBack(
         reading=classified_reading,
@@ -1637,4 +1648,30 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=XeroReading(),
     live=XeroLiveLookup(),
+    # Compiled from `XERO_FIELD_RULES`, so the capability a person needs to be told an invoice's
+    # amount is the one this connector's own policy names.
+    ask=AskRows(
+        scoped_by="tenant_id",
+        entities=(
+            AskEntity(
+                entity=ENTITY_INVOICE,
+                fields=of_entity(XERO_FIELD_RULES, ENTITY_INVOICE),
+                description=(
+                    "Look up Xero invoices by number: status, due date and the contact, and the "
+                    "amount due read live from Xero for a reader allowed it"
+                ),
+                named_by="invoice_number",
+            ),
+            AskEntity(
+                entity=ENTITY_CONTACT,
+                fields=of_entity(XERO_FIELD_RULES, ENTITY_CONTACT),
+                description="Look up Xero contacts by name: status and when they last changed",
+                named_by="name",
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("accounting.transactions.read", "accounting.contacts.read"),
+        refuse=("any .write scope",),
+    ),
 )

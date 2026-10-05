@@ -83,12 +83,14 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Self
 
+from brain.connectors.ask import AskEntity, AskRows, each_behind_its_own
 from brain.connectors.contract import (
     ConnectorContractError,
     ConnectorScope,
@@ -99,10 +101,12 @@ from brain.connectors.contract import (
 from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     ReportCall,
@@ -921,6 +925,15 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.KEY_FILE,
+    example=ConnectExample(
+        settings={PROPERTY_SETTING: "123456789", DEPARTMENT_SETTING: "marketing"},
+        fresh=lambda departments: {
+            PROPERTY_SETTING: str(10**8 + secrets.randbelow(9 * 10**8)),
+            DEPARTMENT_SETTING: departments[0],
+        },
+        edit=PROPERTY_SETTING,
+        edited=lambda: str(10**8 + secrets.randbelow(9 * 10**8)),
+    ),
 )
 
 
@@ -947,4 +960,36 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=AnalyticsReading(),
     report=AnalyticsReport(),
+    # The fields the index keeps and the figures read live, each behind its own capability, so a
+    # reader may be told the property's name and not its traffic, or one range and not another.
+    # The figures are classified although never kept, because the redactor withholds a field
+    # nothing classifies from everybody. A figure tool's ranged fields are asked by no question.
+    ask=AskRows(
+        scoped_by=DEPARTMENT_SETTING,
+        entities=(
+            AskEntity(
+                entity=ENTITY_PROPERTY,
+                fields=each_behind_its_own(
+                    ENTITY_PROPERTY,
+                    (
+                        *(one.name for one in PROPERTY_FIELDS),
+                        *FIGURE_FIELDS,
+                        *RANGE_FIGURE_FIELDS,
+                    ),
+                ),
+                description=(
+                    "Look up the connected Google Analytics property by name: its sessions, users "
+                    "and conversions for yesterday or the last 7, 28 or 90 days, read live from "
+                    "Google for a reader allowed them"
+                ),
+                named_by=LABEL_FIELD,
+                live_only=(*FIGURE_FIELDS, *RANGE_FIGURE_FIELDS),
+                unasked=frozenset(RANGE_FIGURE_FIELDS),
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("analytics.readonly", "Viewer on the one property"),
+        refuse=("analytics.edit", "domain-wide delegation"),
+    ),
 )

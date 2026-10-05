@@ -55,6 +55,7 @@ from brain.agent_capability_routes import router as agent_capability_router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
+from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
 from brain.agent_model_routes import router as agent_model_router
@@ -376,6 +377,10 @@ from brain.skill_routes import router as skill_router
 # the four govern screens make, and refusing instead would let a caller read off whether
 # somebody else holds a capability. See `brain.staff_source_routes`.
 from brain.staff_source_routes import router as staff_source_router
+
+# What the signed-in person is told as a steward: grants people made to themselves that reach a
+# document, source or agent they answer for. See `brain.stewardship_routes`.
+from brain.stewardship_routes import router as stewardship_router
 
 # Storage: the buckets the product keeps, each one's retention and why, and where the store
 # is, behind `admin:storage` over everything. Never an object's name. See
