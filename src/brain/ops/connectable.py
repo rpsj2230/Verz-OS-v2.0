@@ -75,7 +75,7 @@ from brain.connectors.declaration import (
     shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
-from brain.connectors.oauth import OAuthConsent
+from brain.connectors.oauth import ConsentKind, OAuthConsent
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
 from brain.ops.credentials import (
@@ -91,7 +91,8 @@ from brain.ops.secrets import SecretRef, VaultRole
 #: Why a declared form is not enough to be offered. See the module docstring.
 A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS: Final = (
     "The Connectors screen offers a source only when this install can read it: the worker reads it "
-    "into its index on a schedule or a question reads it live, and its call ceiling is recorded, "
+    "into its index on a schedule, a question reads it live, or each person's question reads their "
+    "own account with their own consent, and its call ceiling is recorded, "
     "since nothing is read against a ceiling nobody measured. A connector that declares a form "
     "and cannot be read is listed as not connectable yet, so nobody is shown a connection that "
     "saves its key and reads nothing."
@@ -180,11 +181,15 @@ class NotConnectableError(Exception):
 
 # ------------------------------------------------------------------------ the sources
 def reads(declaration: ConnectorDeclaration) -> bool:
-    """Whether this install can read the source: a reading or a live lookup, and a ceiling.
+    """Whether this install can read the source: a reading, a live lookup, or each person's own
+    consent read live for their question, and a ceiling.
 
-    See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`.
+    A source each person consents to has no reading and no lookup by design (M11.7.6): nothing
+    reads it with nobody present, and its question reads it as passages with the asker's own
+    token. See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`.
     """
-    has_a_way = declaration.reading is not None or declaration.live is not None
+    personal = declaration.oauth is not None and declaration.oauth.kind is ConsentKind.PERSON
+    has_a_way = declaration.reading is not None or declaration.live is not None or personal
     return has_a_way and connector_ceiling(declaration.name) is not None
 
 

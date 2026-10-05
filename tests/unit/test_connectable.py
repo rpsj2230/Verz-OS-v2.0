@@ -24,6 +24,7 @@ import brain.connectors
 from brain.connectors.contract import AccessMode
 from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import manifest_digest
+from brain.connectors.oauth import ConsentKind
 from brain.connectors.write_verification import builds_a_manifest
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connectable import (
@@ -172,7 +173,8 @@ def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
 
 def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every declaration: a form
-    is offered exactly when it has a reading or a live lookup, a recorded ceiling, and an answer
+    is offered exactly when it has a reading, a live lookup or a consent each person gives for
+    their own account (Google Workspace, read live per question), a recorded ceiling, and an answer
     on Ask. Delete this and the screen can offer a connection that keeps its key and reads
     nothing, which is what Google Drive and Laravel were until 2026-09-30, and HubSpot, which had
     a reading and no ceiling.
@@ -185,14 +187,19 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
         name
         for name, one in declared.items()
         if one.console is not None
-        and (one.reading is not None or one.live is not None)
+        # A reading, a live lookup, or each person's own consent read live (M11.7.6).
+        and (
+            one.reading is not None
+            or one.live is not None
+            or (one.oauth is not None and one.oauth.kind is ConsentKind.PERSON)
+        )
         and connector_ceiling(name) is not None
         # `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`: and Ask answers from it.
         and (name in CONNECTOR_ROW_ENTITIES or name in ANSWERED_BY_PASSAGES)
     }
 
     assert set(CONNECTABLE) == expected
-    assert {"xero", "freshdesk"} <= set(CONNECTABLE)
+    assert {"xero", "freshdesk", "google_workspace"} <= set(CONNECTABLE)
     assert not {"lark_base", "lark_wiki"} & set(CONNECTABLE)
 
 

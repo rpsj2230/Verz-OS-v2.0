@@ -45,6 +45,7 @@ from brain.ops.erasure_store import (
     NO_CACHE_ERASER,
     NO_INDEX_ERASER,
     NO_OBJECT_STORE_ERASER,
+    OWN_TOKENS_NOT_REACHED,
     RETAINED,
     SUBJECT_COLUMNS,
     ErasureRefusedError,
@@ -560,7 +561,9 @@ def test_the_queue_carries_a_request_out_and_writes_what_each_store_did_and_what
         said = drain(url)
         again = drain(url)
 
-        assert said == f"erasure request {request}: incomplete"
+        # No vault is handed to this drain, and a shipped source (Google Workspace) keeps each
+        # person's own refresh token in it, so the line says those were not reached (M11.8.6).
+        assert said == f"erasure request {request}: incomplete; {OWN_TOKENS_NOT_REACHED}"
         assert again == "no erasure request was open"
         [(outcome, stores, holds, finished_at)] = sql(
             url,

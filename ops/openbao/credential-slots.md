@@ -24,6 +24,7 @@ later" is a scope nobody removes.
 | `connectors/creds/google_analytics` | Google Analytics | A service account's key file, the account a Viewer on the one property, asking only for `analytics.readonly` | `analytics.edit`, and domain-wide delegation. It reads one property as itself |
 | `connectors/creds/search_console` | Search Console | A service account's key file, the account a restricted user on the one property, asking only for `webmasters.readonly` | `webmasters`, which can change a property, and domain-wide delegation |
 | `connectors/creds/slack_messages` | Slack | A bot token with `channels:read`, `groups:read`, `channels:history`, `groups:history`, `users:read`, `users:read.email` | `chat:write` or any other write scope, and a user token. A user token is one person's whole account and reads as them |
+| `connectors/creds/google_workspace` | Google Workspace | The client secret of a Web application OAuth client; each person consents at Google for their own account to `gmail.readonly`, `calendar.readonly` or `drive.readonly`, only for the services chosen | Any scope that writes or sends, and domain-wide delegation. One person's refresh token is kept at `connector_keys/oauth_refresh/google_workspace/<person>` and read only for their questions |
 | `connectors/creds/google_drive` | Drive or M365 | A service account with Viewer on the one folder shared with it | Domain-wide delegation. It reads everything, for everyone, for ever |
 | `browser/creds/*` | Browser runner | One credential per site, per task | Anything reusable across sites |
 
@@ -216,6 +217,7 @@ is the catalogue, and a test holds this table to it):
 | `connector_keys/freshdesk` | freshdesk | an agent API key with read access | an admin key, which can change SLAs and delete tickets |
 | `connector_keys/google_analytics` | google_analytics | analytics.readonly; Viewer on the one property | analytics.edit; domain-wide delegation |
 | `connector_keys/google_drive` | google_drive | Viewer on the one folder shared with it | domain-wide delegation |
+| `connector_keys/google_workspace` | google_workspace | the client secret of a Web application OAuth client; gmail.readonly, calendar.readonly, drive.readonly, only for the services chosen; a consent given by each person at Google for their own account | any scope that writes or sends; domain-wide delegation of a service account |
 | `connector_keys/hubspot` | hubspot | crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read | crm.objects.*.write; anything touching settings |
 | `connector_keys/laravel` | laravel | SELECT on the allowlisted views only | SELECT on tables; any write |
 | `connector_keys/lark_base` | lark_base | bitable:app:readonly; base:record:read | base:record:write; drive:drive |

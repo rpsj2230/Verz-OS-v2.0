@@ -175,6 +175,7 @@ from brain.connectors.oauth import (
     YOUR_CONSENT_WITHDRAWN,
     ConsentKind,
     OAuthConsent,
+    asked_scopes,
     code_exchange,
     consent_address,
     consent_return_address,
@@ -2360,6 +2361,7 @@ async def start_consent(
         client_id=connection.settings.get(consent.client_id_setting, ""),
         redirect_uri=back,
         start=start,
+        scopes=asked_scopes(consent, connection.settings),
     )
     await consents.issue(
         connector=declared.name,

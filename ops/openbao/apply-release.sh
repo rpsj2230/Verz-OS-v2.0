@@ -135,6 +135,12 @@ if ! slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewe
   fi
   slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewer on the one folder shared with it]' || missing "the credential slot for google_drive"
 fi
+if ! slot_ok google_workspace 'map[not_requested:any scope that writes or sends; domain-wide delegation of a service account scopes:the client secret of a Web application OAuth client; gmail.readonly, calendar.readonly, drive.readonly, only for the services chosen; a consent given by each person at Google for their own account]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=the client secret of a Web application OAuth client; gmail.readonly, calendar.readonly, drive.readonly, only for the services chosen; a consent given by each person at Google for their own account' -custom-metadata='not_requested=any scope that writes or sends; domain-wide delegation of a service account' google_workspace >/dev/null || fail "the vault would not define the credential slot for google_workspace"
+  fi
+  slot_ok google_workspace 'map[not_requested:any scope that writes or sends; domain-wide delegation of a service account scopes:the client secret of a Web application OAuth client; gmail.readonly, calendar.readonly, drive.readonly, only for the services chosen; a consent given by each person at Google for their own account]' || missing "the credential slot for google_workspace"
+fi
 if ! slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read]'; then
   if test "$CHECK_ONLY" = no; then
     bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read' -custom-metadata='not_requested=crm.objects.*.write; anything touching settings' hubspot >/dev/null || fail "the vault would not define the credential slot for hubspot"
@@ -191,4 +197,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 4 token roles (connector-run, channel-send, connector-rotate, connector-person) and 13 credential slots"
+say "in force: 4 engines, $POLICIES policies, 4 token roles (connector-run, channel-send, connector-rotate, connector-person) and 14 credential slots"

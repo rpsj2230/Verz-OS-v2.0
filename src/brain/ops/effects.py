@@ -697,6 +697,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # M11.8.6: removing a person's own refresh token slot on erasure leaves it removed however
         # often it is asked; a slot already gone is removed as nothing.
         "brain.ops.erasure_store:RemovesSlots.remove_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # M11.7.6: a personal passage reader reads the asker's own account and writes nothing.
+        "brain.ops.slack_messages_live:PersonalPassages.passages": Repeat.READS,
         "brain.connectors.declaration:LiveReport.entities": Repeat.READS,
         "brain.connectors.declaration:LiveReport.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveReport.request_for": Repeat.READS,
