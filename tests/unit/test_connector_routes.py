@@ -156,6 +156,7 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
+    "google_analytics": "123456789",
     "laravel": "portal",
 }
 
@@ -163,6 +164,7 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
 FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
     "freshdesk": {"department": "support"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "google_analytics": {"department": "marketing"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -787,6 +789,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "xero": True,
         "hubspot": False,
         "freshdesk": False,
+        "google_analytics": False,
     }
 
 

@@ -369,9 +369,14 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         {**startup.SOURCE_ROW_DESCRIPTIONS, "xero": {"invoice": "Read Xero invoices."}},
     )
 
-    assert startup.connector_row_sources() == ("freshdesk", "xero")
+    assert startup.connector_row_sources() == ("freshdesk", "google_analytics", "xero")
     registered = set(row_readers(build_registry(source="local", records=_Rows())))
-    assert registered == {("local", "price_list"), ("xero", "invoice"), ("freshdesk", "ticket")}
+    assert registered == {
+        ("local", "price_list"),
+        ("xero", "invoice"),
+        ("freshdesk", "ticket"),
+        ("google_analytics", "analytics_property"),
+    }
     assert classification_for("invoice", source="xero") == xero_invoices
 
 
@@ -394,9 +399,17 @@ def test_every_column_of_every_classified_entity_can_be_filtered_on() -> None:
     a source's own entities are served by the same route, so the same bound has to reach every
     column of theirs. Measured against the route's own `MAX_FILTERS`.
 
+    A connected source's figures are read live and held by no row, so a filter on one matches
+    nothing whatever the bound; they are left out (`connector_rows.LIVE_ONLY`), and the count is of
+    the columns a row carries.
+
     Delete this and a source can bring an entity with more columns than a caller may name in one
     filter, and a column somebody is entitled to read is unfilterable by everybody."""
-    widest = max(len(c.columns()) for c in every_row_classification())
+    from brain.knowledge.connector_rows import LIVE_ONLY
+
+    widest = max(
+        len(set(c.columns()) - set(LIVE_ONLY.get(c.entity, ()))) for c in every_row_classification()
+    )
 
     assert widest <= MAX_FILTERS
 
