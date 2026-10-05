@@ -300,8 +300,8 @@ class StoredMatching:
             ]
             if not pairs:
                 return Matched()
-            records = await _records(session, {one for pair in pairs for one in pair})
-            current = await _current_ids(session, [one[0] for one in records.values()])
+            records = await linked_records(session, {one for pair in pairs for one in pair})
+            current = await current_ids(session, [one[0] for one in records.values()])
             raised_before = await _raised_pairs(session, pairs)
             blocked = await blocked_digests(session)
 
@@ -411,8 +411,8 @@ class StoredMatching:
     async def _merge_or_hold(self, one: _Match, *, now: datetime) -> _Raised | None:
         """Merge one match, or say what held it. See the module docstring for the four holds."""
         async with self._sessions() as session:
-            families = await _families(session, (one.left_current, one.right_current))
-            survivor, merged_id = await _survivor_first(
+            families = await families_of(session, (one.left_current, one.right_current))
+            survivor, merged_id = await survivor_first(
                 session, (one.left_current, one.right_current)
             )
             identifiers = await _identifiers(session, families)
@@ -493,7 +493,7 @@ class StoredMatching:
 
 
 # ------------------------------------------------------------------------- reading
-async def _records(
+async def linked_records(
     session: AsyncSession, refs: set[SourceRef]
 ) -> dict[SourceRef, tuple[str, ProjectedRecordRow]]:
     """Each live record with the entity it is linked to."""
@@ -528,7 +528,7 @@ async def _records(
     }
 
 
-async def _current_ids(session: AsyncSession, entity_ids: Sequence[str]) -> dict[str, str]:
+async def current_ids(session: AsyncSession, entity_ids: Sequence[str]) -> dict[str, str]:
     rows = (await session.execute(text(CURRENT_IDS), {"ids": list(set(entity_ids))})).all()
     return {str(start): str(current) for start, current in rows}
 
@@ -563,7 +563,7 @@ async def _raised_pairs(
     return {(SourceRef(*one[0:3]), SourceRef(*one[3:6])) for one in found}
 
 
-async def _families(
+async def families_of(
     session: AsyncSession, current: Sequence[str]
 ) -> dict[str, dict[str, tuple[str, str]]]:
     """Each current entity's family: entity id to the (connector, entity) of its record."""
@@ -576,7 +576,7 @@ async def _families(
     return found
 
 
-async def _survivor_first(session: AsyncSession, pair: Sequence[str]) -> tuple[str, str]:
+async def survivor_first(session: AsyncSession, pair: Sequence[str]) -> tuple[str, str]:
     """The entity minted first survives, so an id issued earlier stays the one others resolve to."""
     rows = (
         await session.execute(
