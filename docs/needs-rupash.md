@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**30 items are open: 154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**31 items are open: 151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,29 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 151. Connect Slack as a source (ready now)
+
+**In plain terms:** the Brain can now answer from Slack messages, and each person is read only the
+channels Slack says they are in. Nothing is kept: a message is read when asked. This is a separate
+Slack app from the one that answers questions in Slack. In the console open **Knowledge and data**,
+**Connectors**, **Slack**, **Connect**:
+
+1. **Make a Slack app.** On Slack's **Your Apps** page (the console's step links to it) press
+   **Create New App**, **From scratch**, name it after the Brain and pick your workspace.
+2. **Give it read scopes only.** **OAuth & Permissions**, **Bot Token Scopes**: add channels:read,
+   groups:read, channels:history, groups:history, users:read and users:read.email. Nothing that
+   writes.
+3. **Install it and invite it.** **Install to Workspace**, **Allow**. Then in each channel the Brain
+   may read, type /invite and the app's name. A channel it is not in is never read.
+4. **Connect it.** Type the workspace id (it starts with T, on the app's **Basic Information** page),
+   the department whose people may be told what Slack holds, paste the **Bot User OAuth Token** from
+   **OAuth & Permissions** and press **Connect Slack**.
+5. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:slack_message`, scoped to that department, with a reason. A person is matched to their
+   Slack account by their verified work email, and is read only their own channels.
+
+Tell me "connected Slack" afterwards and I prove it on your install.
 
 ## 154. One server change for the sealed sandbox: a restart of every container, about two minutes
 
@@ -576,6 +599,9 @@ sent through the relay on Notifications* passes.
 
 **Part 2, mine with your go-ahead: three server steps.**
 
+The first step also lets item 120's optional services start: the personal-data detector and
+Langfuse are started by the updated deploy script after each release, so they wait for this too.
+
 - Install the updated deploy script, so releases set up the accounts client and apply their own
   vault changes (this is also item 129's prerequisite).
 - Run the accounts-client setup once, which creates the sign-in service client the sync uses and
@@ -626,15 +652,19 @@ picture of each step. Paste keys only into the console, never into chat.
 3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
    **Connect Xero**.
 
-**HubSpot** (contacts and deals, read only)
+**HubSpot** (companies, contacts and deals, read only)
 
 1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
    (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
    Name it "Company Brain".
-2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
-   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+2. On the **Scopes** tab tick `crm.objects.companies.read`, `crm.objects.contacts.read` and
+   `crm.objects.deals.read`, and nothing with "write" in it or touching settings. Press **Create
+   app**, confirm, and copy the access token.
 3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
    account's settings) and the token, and press **Connect HubSpot**.
+4. Give people the read: **People and access**, **People**, the person, **Grant a capability**:
+   `read:hubspot_company`, `read:hubspot_contact` and `read:hubspot_deal`, and the fields they may
+   see (a deal's amount is its own grant).
 
 **Freshdesk** (tickets, read live)
 
