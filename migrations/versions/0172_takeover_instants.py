@@ -46,13 +46,8 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0172"
-<<<<<<< HEAD
-# Stacked after #268's 0166 on this branch, as the train lands them. Re-pointed at whichever
-# migration is the head when it lands: nothing here depends on a table a later migration builds.
-=======
 # The head of origin/main when this was written. Re-pointed at whichever migration is the head
 # when it lands: nothing here depends on a table a later migration builds.
->>>>>>> origin/M8/w2-takeover
 down_revision = "0166"
 branch_labels = None
 depends_on = None
