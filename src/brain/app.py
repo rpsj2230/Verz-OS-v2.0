@@ -40,7 +40,7 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, MutableMapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Any, Final, Literal
+from typing import Final, Literal
 
 import httpx
 import structlog
@@ -55,7 +55,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from brain.agent_routes import every_agent, record_of
 from brain.agents.model import AgentRecord
 from brain.api import (
-    API_PREFIX,
     ErrorBody,
     FailureBodyMiddleware,
     TimeoutMiddleware,
@@ -64,7 +63,7 @@ from brain.api import (
     status_sentence,
     unexpected_failure,
 )
-from brain.api_routes import GateWiring, passage_search_for, second_factor_needed
+from brain.api_routes import GateWiring, second_factor_needed
 from brain.attribution import trace_of_request
 from brain.audit.ledger import TRACE_ID
 from brain.automation_routes import AutomationWiring
@@ -145,7 +144,6 @@ from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.template_key import TemplateKeyState, keep_trying, template_key_at_start
 from brain.ops.template_key import hold as hold_template_key
-from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.trace_store import TraceRecorder
 from brain.ops.usage_store import UsageRecorder
@@ -166,6 +164,7 @@ from brain.readiness import (
     vault_answers,
     vault_configured,
 )
+from brain.reviewed_connectors import install_tools
 from brain.routers import ROUTERS
 from brain.session import (
     check_login_row_security,
@@ -289,29 +288,6 @@ class Health(BaseModel):
     reported: dict[str, bool] = {}
     #: Every part in one list, the four headline parts always present. See `brain.readiness`.
     parts: list[ReadinessPart] = []
-
-
-async def install_tools(state: Any, registry: ToolRegistry) -> None:
-    """Put a built registry on the application, governed, recorded, and its passage search with it.
-
-    Every call to a registered tool asks the switch table first, and each tool's catalogue row is
-    written so a stop has a row to name. Never fatal: a catalogue row a switch needs is written by
-    the switch itself. See `brain.tools.registry.ToolRegistry.govern`. The passage search the
-    answer lane's model step reads through is the registered document tool's own handler, so the
-    reach is decided where the tool decides it; None without a row source, which is a lane that
-    abstains on a question no rule answers (`brain.api_routes.model_lane_of`).
-
-    Called at start, and again whenever the connectors reviewed on this install change (M11.7.8),
-    so a registry is only ever replaced whole: a request holding the old one finishes with it.
-    """
-    if state.db_sessions:
-        registry.govern(SessionSwitchSource(state.db_sessions))
-        try:
-            await record_catalogue(state.db_sessions, registry)
-        except Exception:
-            log.exception("tool catalogue could not be recorded")
-    state.tools = registry
-    state.passage_search = passage_search_for(registry)
 
 
 @asynccontextmanager
@@ -564,7 +540,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     website = WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber())
     # The connectors a second person reviewed on this install are read before the registry is
     # built, so their row tools are in it from the start (M11.7.8); a change after start rebuilds
-    # it through the same function, from `catalogue_refresh` below.
+    # it through the same builder, where a declaration is next served
+    # (`brain.reviewed_connectors.current`).
     await refresh_catalogue(app.state.db_sessions or None)
 
     def tools() -> ToolRegistry:
@@ -1194,26 +1171,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["x-frame-options"] = "DENY"
         response.headers["referrer-policy"] = "no-referrer"
         return response
-
-    @app.middleware("http")
-    async def catalogue_refresh(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        """The connectors reviewed on this install are read before every API request (M11.7.8).
-
-        One indexed read of the approved rows, so a definition approved a moment ago is offered,
-        has its tools and is answered from on this request, and one changed since its approval is
-        none of those, in every process at once and with nothing restarted. The registry is
-        rebuilt whole when the set changed, through the builder start-up used. See
-        `brain.ops.connector_catalogue.A_REVIEWED_CONNECTOR_IS_READ_AT_EVERY_REQUEST_AND_EVERY_CYCLE`.
-        """
-        state = request.app.state
-        sessions = getattr(state, "db_sessions", None)
-        if sessions and request.url.path.startswith(API_PREFIX):
-            builder = getattr(state, "build_tools", None)
-            if await refresh_catalogue(sessions) and callable(builder):
-                await install_tools(state, builder())
-        return await call_next(request)
 
     @app.exception_handler(BrainError)
     async def handle_brain_error(request: Request, exc: BrainError) -> JSONResponse:

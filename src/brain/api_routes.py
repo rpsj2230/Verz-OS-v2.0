@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.7.8
 """
 
 from __future__ import annotations
@@ -246,6 +246,7 @@ from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
+from brain.reviewed_connectors import current as reviewed_now
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
 
@@ -735,6 +736,9 @@ async def records(
             ]
         )
     narrowing = filter_scope(filters)
+    # Before the registry is looked at, for every caller alike, so a connector changed since its
+    # approval has no row tool here (M11.7.8). See `brain.reviewed_connectors`.
+    await reviewed_now(request.app.state)
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):
         # A process-level fault, identical for every caller and every entity, so it discloses
@@ -1622,6 +1626,9 @@ async def answered_for(
     passes its own, and a chat channel passes the vendor's event request. A refusal by a
     window is returned rather than rendered, because a stream and a chat say it differently.
     """
+    # Before the registry, its row tools and the live reads are looked at, for every question
+    # alike (M11.7.8). See `brain.reviewed_connectors`.
+    await reviewed_now(request.app.state)
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):
         # A process-level fault, identical for every caller and every question, so it

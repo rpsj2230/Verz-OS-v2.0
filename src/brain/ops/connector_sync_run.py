@@ -1161,7 +1161,7 @@ async def sync_on(
 
     The connectors reviewed on this install are read first, so a definition approved since the last
     cycle is read in this one and one changed since is not (M11.7.8). See
-    `brain.ops.connector_catalogue.A_REVIEWED_CONNECTOR_IS_READ_AT_EVERY_REQUEST_AND_EVERY_CYCLE`.
+    `brain.ops.connector_catalogue.A_REVIEWED_CONNECTOR_IS_READ_BEFORE_IT_IS_SERVED`.
     """
     await refresh(sessions)
     async with sessions() as session, session.begin():

@@ -260,6 +260,7 @@ from brain.ops.credentials import (
 )
 from brain.ops.lark_connect import uses_switched_on
 from brain.ops.stewardship_store import NamedSteward, StoredStewardship
+from brain.reviewed_connectors import current as reviewed_now
 from brain.routing_routes import sessions_of
 from brain.skill_routes import SkillLibrary
 
@@ -1183,6 +1184,7 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     there is a connection to describe.
     """
     _permitted(asked.reach, asked.now)
+    await reviewed_now(request.app.state)
     credentials = credentials_of(request)
     records = records_of(request)
     if records is None:
@@ -1299,6 +1301,7 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     if not may_connect_source(asked.reach, body.connector, asked.now):
         log.info("connecting a source not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("connect")
+    await reviewed_now(request.app.state)
     found = connection_problems(body.connector, body.settings, body.credential)
     if found:
         return _problems(found)
@@ -1641,6 +1644,7 @@ async def connector_sources(
     attempts only when there is a connection to describe.
     """
     _permitted(asked.reach, asked.now)
+    await reviewed_now(request.app.state)
     plan = SOURCES.plan(listed, reader=asked.caller.principal.id)
     records = records_of(request)
     if records is None:
@@ -1671,6 +1675,7 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
     not be told is connected is answered as one nobody connected, with no history and no users.
     """
     _permitted(asked.reach, asked.now)
+    await reviewed_now(request.app.state)
     declared = declarations().get(connector)
     if declared is None:
         raise _not_answerable("connector source")
@@ -1712,6 +1717,7 @@ async def export_connector(request: Request, connector: str, asked: Asked) -> Co
     manifest, neither of which has anywhere to hold one, and says so in `credential`.
     """
     _permitted(asked.reach, asked.now)
+    await reviewed_now(request.app.state)
     declared = declarations().get(connector)
     if declared is None:
         raise _not_answerable("connector export")
@@ -1862,6 +1868,7 @@ async def edit(
     if not may_connect_source(asked.reach, connector, asked.now):
         log.info("editing a source not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("edit")
+    await reviewed_now(request.app.state)
     kind = CONNECTABLE.get(connector)
     if kind is None:
         # `connection_problems`' own answer for a source this screen cannot connect, which is the
@@ -1941,6 +1948,7 @@ async def declaration_drift(request: Request, connector: str, asked: Asked) -> D
     alike. See `brain.console.declaration_drift`.
     """
     _permitted(asked.reach, asked.now)
+    await reviewed_now(request.app.state)
     if declarations().get(connector) is None:
         raise _not_answerable("declaration drift")
     one = await _one_source(request, connector, asked)
@@ -1995,6 +2003,7 @@ async def accept_declaration(
     if not may_connect_source(asked.reach, connector, asked.now):
         log.info("accepting a declaration not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("accept")
+    await reviewed_now(request.app.state)
     kind = CONNECTABLE.get(connector)
     changes = changes_of(request)
     if changes is None:
@@ -2050,6 +2059,7 @@ async def replace_key(
     if not may_connect_source(asked.reach, connector, asked.now):
         log.info("replacing a key not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("replace key")
+    await reviewed_now(request.app.state)
     kind = CONNECTABLE.get(connector)
     shape = CredentialShape.KEY if kind is None else kind.credential_shape
     slot = connector_key_slot(connector)
@@ -2134,6 +2144,7 @@ async def connector_probe(request: Request, connector: str, asked: Asked) -> Con
     and one the reader may not see, are the screen's one refusal.
     """
     _permitted(asked.reach, asked.now)
+    await reviewed_now(request.app.state)
     records = records_of(request)
     probes = probes_of(request)
     if records is None or probes is None:
@@ -2155,6 +2166,7 @@ async def ask_probe(request: Request, connector: str, asked: Asked) -> JSONRespo
     if not may_connect_source(asked.reach, connector, asked.now):
         log.info("testing a source not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("test")
+    await reviewed_now(request.app.state)
     current = await _live_connection(request, connector)
     if current is None:
         raise _not_answerable("test")

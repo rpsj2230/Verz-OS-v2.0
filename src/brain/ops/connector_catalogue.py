@@ -14,14 +14,15 @@ from `declarations()` when the reviewed set changes, so no caller of any of them
 definition named like a shipped connector could never replace it here; it is also refused at submit
 (`brain.ops.custom_connector`), so the shadowed case is one that cannot be written.
 
-**Re-read at the start of every request and of every worker cycle, never on a timer.** The reviewed
-set lives in `ops.custom_connector`, and a definition changed after approval goes back to waiting,
-which has to take it off the screen, out of the registry and out of the worker's plan in every
-process at once. A timer would leave a window in which a definition nobody has reviewed since its
-change is still offered and still read, and the size of the window would be a setting somebody tuned
-for speed. One indexed read of the approved rows per request is the price, and compiling a
-definition is paid once per revision, because `install` keeps what it compiled by name and revision.
-See `A_REVIEWED_CONNECTOR_IS_READ_AT_EVERY_REQUEST_AND_EVERY_CYCLE`.
+**Re-read immediately before a declaration is served, never on a timer and never on every
+request.** The reviewed set lives in `ops.custom_connector`, and a definition changed after
+approval goes back to waiting, which has to take it off the screen, out of the registry and out of
+the worker's plan in every process before it is used again. So every path that serves a declaration
+reads the approved revisions first (`brain.reviewed_connectors.current` on the web side, `sync_on`
+and `probe_on` in the worker), and the first use after a change is the use that drops it. A timer
+would leave a window of whatever length somebody tuned; a read on every request was the first shape
+and put a statement in front of every route's refusal, including routes that read no connector.
+See `A_REVIEWED_CONNECTOR_IS_READ_BEFORE_IT_IS_SERVED`.
 
 **What a check or a test lays over the catalogue is scoped to its own context.** `overlaid` sets a
 context variable rather than the process's set, so an install acceptance check that approves a
@@ -53,13 +54,14 @@ K = TypeVar("K")
 V = TypeVar("V")
 
 # ------------------------------------------------------------------ written-down reasons
-#: Why the reviewed set is read at every request and every cycle rather than on a timer.
-A_REVIEWED_CONNECTOR_IS_READ_AT_EVERY_REQUEST_AND_EVERY_CYCLE: Final = (
+#: Why the reviewed set is read before a declaration is served rather than on a timer.
+A_REVIEWED_CONNECTOR_IS_READ_BEFORE_IT_IS_SERVED: Final = (
     "A connector added from the console is offered, given tools and read only while its "
     "definition is approved, and a definition changed after approval waits for a second person "
-    "again. So every request and every worker cycle reads the approved set first: a timer would "
-    "leave a window, of whatever length somebody chose, in which a definition nobody reviewed "
-    "since its change is still offered and still read."
+    "again. So every path that serves a declaration reads the approved revisions first, after "
+    "its own refusal, and the first use after a change drops it in whichever process makes it; "
+    "a timer would leave a window, and a read on every request would put a statement in front of "
+    "every refusal, including those of routes that read no connector."
 )
 
 #: Why a shipped connector's name cannot be taken by a reviewed one.

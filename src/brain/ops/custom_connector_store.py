@@ -3,7 +3,8 @@
 `brain.ops.custom_connector` says what a definition is and compiles one; this keeps them and reads
 them back. Three writes and two reads, and one function the rest of the product calls: `refresh`,
 which reads the approved rows and lays them under the shipped connectors
-(`brain.ops.connector_catalogue.install`), at the start of every request and every worker cycle.
+(`brain.ops.connector_catalogue.install`), immediately before a declaration is served
+(`brain.reviewed_connectors.current`) and at the start of every worker cycle.
 
 **Nobody approves their own, refused here before the database refuses it too.** `decide` refuses a
 reviewer who submitted the revision under review (`OwnDefinitionError`), and the row's check
@@ -34,7 +35,7 @@ from datetime import datetime
 from typing import Any, Final
 
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -206,30 +207,51 @@ def _columns(definition: CustomDefinition) -> dict[str, Any]:
 _compiled: dict[tuple[str, int], ConnectorDeclaration] = {}
 
 
+def _approved() -> ColumnElement[bool]:
+    """The rows the catalogue may serve: approved, and nothing waiting or rejected."""
+    return CustomConnectorRow.state == ReviewState.APPROVED.value
+
+
 async def approved_in(session: AsyncSession) -> dict[str, ConnectorDeclaration]:
-    """Every approved definition, compiled, by name. One that no longer compiles is left out."""
+    """Every approved definition, compiled, by name. One that no longer compiles is left out.
+
+    **A revision check first, and a whole row only for a revision this process has not compiled.**
+    The first statement reads the approved names and revisions, which is all a request needs when
+    nothing changed; a definition approved or re-approved since this process last looked is read
+    whole by a second, which asks for it approved again, so a change landing between the two is
+    left out rather than compiled. See `brain.reviewed_connectors`.
+    """
+    listed = (
+        await session.execute(
+            select(CustomConnectorRow.name, CustomConnectorRow.revision).where(_approved())
+        )
+    ).all()
+    found: dict[str, ConnectorDeclaration] = {}
+    missing: list[str] = []
+    for name, revision in listed:
+        declared = _compiled.get((name, revision))
+        if declared is None:
+            missing.append(name)
+        else:
+            found[name] = declared
+    if not missing:
+        return found
     rows = (
         (
             await session.execute(
-                select(CustomConnectorRow).where(
-                    CustomConnectorRow.state == ReviewState.APPROVED.value
-                )
+                select(CustomConnectorRow).where(_approved(), CustomConnectorRow.name.in_(missing))
             )
         )
         .scalars()
         .all()
     )
-    found: dict[str, ConnectorDeclaration] = {}
     for row in rows:
-        key = (row.name, row.revision)
-        declared = _compiled.get(key)
-        if declared is None:
-            try:
-                declared = declaration_of(definition_of(row))
-            except Exception:
-                log.warning("an approved connector definition no longer compiles", name=row.name)
-                continue
-            _compiled[key] = declared
+        try:
+            declared = declaration_of(definition_of(row))
+        except Exception:
+            log.warning("an approved connector definition no longer compiles", name=row.name)
+            continue
+        _compiled[(row.name, row.revision)] = declared
         found[row.name] = declared
     return found
 

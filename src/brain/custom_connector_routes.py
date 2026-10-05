@@ -7,7 +7,8 @@ shipped source, connected through the same form and its key kept by
 `brain.connector_routes.keep_credential`, read by the worker and answered from on Ask. This router
 is the first two steps. `brain.ops.custom_connector` judges a definition,
 `brain.ops.custom_connector_store` keeps it and refuses a self-approval, and
-`brain.ops.connector_catalogue` is how an approved one becomes available, read at the next request.
+`brain.ops.connector_catalogue` is how an approved one becomes available, read where a declaration
+is next served (`brain.reviewed_connectors`).
 
 **Every write is asked of the authority a connection asks, for the definition's own name**
 (`brain.ops.connector_admin.may_connect_source`), before anything is judged, so a person who may not
@@ -79,6 +80,7 @@ from brain.ops.custom_connector_store import (
     entities_json,
 )
 from brain.ops.skill_fetch import SystemResolver
+from brain.reviewed_connectors import current as reviewed_now
 from brain.routing_routes import sessions_of
 from brain.tools.fetch import Resolver
 from brain.tools.startup import BUILT_IN_ROW_ENTITIES
@@ -376,6 +378,7 @@ async def definitions(request: Request, asked: Asked) -> DefinitionsPage:
     """Every definition, for a reader of the Connectors screen, and what the form chooses from."""
     if not permitted(screen("connectors").read, asked.reach, asked.now):
         raise _not_answerable("custom connectors")
+    await reviewed_now(request.app.state)
     found = await store_of(request).listed()
     return DefinitionsPage(
         definitions=[view_of(one, asked.reach, asked.now) for one in found],
@@ -540,5 +543,7 @@ async def change(request: Request, name: str, body: DefinitionAsked, asked: Aske
 async def review(request: Request, name: str, body: ReviewAsked, asked: Asked) -> JSONResponse:
     """Approve or reject the revision the reviewer read, as a second person, or say why not."""
     found = await deciding(store_of(request), name, body, reach=asked.reach, now=asked.now)
+    # Read again, so an approval made here is said to be offered in this same answer.
+    await reviewed_now(request.app.state)
     log.info("connector definition reviewed", name=name, principal=asked.reach.principal_id)
     return _answered(found, asked.reach, asked.now, APPROVED if body.approve else REJECTED)
