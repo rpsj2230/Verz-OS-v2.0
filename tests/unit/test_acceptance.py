@@ -584,6 +584,11 @@ WRITTEN_BY_CHECKS = (
     "obs.trace_read",
     "ops.operation",
     "ops.budget_version",
+    "gate.role_grant",
+    "auth.staff_member",
+    "agent.manifest_draft",
+    "agent.manifest_revision",
+    "agent.manifest_act",
 )
 
 
