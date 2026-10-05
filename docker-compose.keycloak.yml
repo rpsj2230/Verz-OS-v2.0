@@ -13,7 +13,7 @@
 #
 # | service        | cgroup | process-side          | why the gap |
 # |----------------|--------|-----------------------|-------------|
-# | keycloak       | 768M   | MaxRAMPercentage 70   | metaspace, code cache, GC structures, threads |
+# | keycloak       | 768M   | MaxRAMPercentage 50   | metaspace, code cache, GC structures, threads |
 # | keycloak-db    | 256M   | shared_buffers 64MB   | work_mem per sort, WAL buffers, the backends |
 #
 # A cgroup limit is enforced by the kernel killing the process, so it protects the
@@ -23,10 +23,16 @@
 # while collecting. `MaxRAMPercentage` reads the cgroup limit rather than the host, which is
 # why it is a percentage here and a fixed number in the Node services.
 #
-# 70 rather than 100 because the heap is not the process. Metaspace, the code cache, thread
-# stacks and the GC's own structures live outside it, and on a small Keycloak they are
-# comfortably 150 MiB. A heap sized at the whole cgroup is a container that dies under load
-# with a perfectly healthy heap.
+# 50 rather than 100 because the heap is not the process. Metaspace, the code cache, thread
+# stacks and the GC's own structures live outside it. A heap sized at the whole cgroup is a
+# container that dies under load with a perfectly healthy heap.
+#
+# **It was 70 until 2026-10-06, on an assumption that outside the heap was about 150 MiB.** The
+# browser harness measured otherwise. With the build moved out of the server (`keycloak-build`
+# below), an optimized first start at 70 per cent ran its changesets and imported the realm,
+# held 765 MiB of its 768M, and was killed once requests arrived. At 70 per cent the heap may
+# take 538 MiB, and what lives beside it is past 200 MiB once the realm is loaded, so the two
+# together are the whole cgroup. 50 per cent leaves 384 MiB beside a 384 MiB heap.
 #
 # ---------------------------------------------------------------------------------------
 # Its own database, and that is deliberate rather than lazy.
@@ -281,8 +287,8 @@ services:
       KC_HOSTNAME_STRICT: "true"
       KC_HEALTH_ENABLED: "true"
       # The process-side cap. Reads the cgroup limit rather than the host; see the header
-      # for why it is 70 and not 100.
-      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40"
+      # for why it is 50, and why it is no longer 70.
+      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40"
     volumes:
       # The build `keycloak-build` made for these options. See `--optimized` above.
       - keycloak-build:/opt/keycloak/lib/quarkus

@@ -224,6 +224,19 @@ jobs:
         working-directory: e2e
         run: npx playwright test
 
+      - name: Nothing restarted while the browser used the install
+        # A container killed under load comes back by its restart policy, and a spec that
+        # happened to wait through it passes. So the run is judged at its end as well as at its
+        # start: no container restarted at any point, and the kernel killed nothing for memory.
+        if: always()
+        run: |
+          docker inspect -f '{{.Name}} restarts={{.RestartCount}}' $(docker compose ps -aq)
+          killed=$(sudo dmesg | grep -E "Memory cgroup out of memory|Killed process" || true)
+          [ -z "$killed" ] || { echo "$killed"; echo "::error::the kernel killed a process for memory during the run"; exit 1; }
+          restarted=$(docker inspect -f '{{.Name}} restarts={{.RestartCount}}' $(docker compose ps -aq) | grep -v ' restarts=0$' || true)
+          [ -z "$restarted" ] || { echo "::error::restarted during the run: $restarted"; exit 1; }
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}'
+
       - name: What the install said, when anything failed
         if: failure()
         run: |
