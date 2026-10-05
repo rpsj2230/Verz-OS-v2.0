@@ -7,7 +7,7 @@ half of the control that reads them. It opens no connection, reads no clock and 
 `brain.ops.connector_sync_run` is the worker's half and `brain.ops.connector_sync_store` the SQL,
 for the split CLAUDE.md names: nothing that decides policy owns a client.
 
-**A source is read only when four things already in the repository agree that it may be.**
+**A source is read only when five things already in the repository agree that it may be.**
 `plan_for` asks them in order and stops at the first that refuses, and each refusal is a sentence
 the Connectors screen shows rather than a source quietly left out:
 
@@ -18,7 +18,10 @@ the Connectors screen shows rather than a source quietly left out:
   what a connector declares waits for a person, it is not read under a declaration nobody accepted;
 - every entity it projects keeps a visibility predicate this store can carry (see below);
 - `brain.connectors.throttle.limits_for` finds a verified ceiling, which it refuses to invent. That
-  is why HubSpot is not read today: `hubspot.A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING`.
+  is why HubSpot is not read today: `hubspot.A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING`;
+- and a source whose connector is custom code has a sandbox runner to run it in
+  (`brain.connectors.custom_code.A_CUSTOM_SOURCE_WITH_NO_RUNNER_IS_NOT_READ`), which no install
+  has until the sandbox service is running (needs-rupash 154).
 
 **The source's visibility travels on the record as fields, because that is the only place the row
 plane can evaluate it.** `brain.tables.projection` has no visibility column, and argues why: the
@@ -91,13 +94,14 @@ so the quarantine would last one run, and it would add a second in-memory opinio
 source is connected beside the table that already says so.
 
 Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8, M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15
+Task ids: M11.1.2, M11.1.5
 """
 
 from __future__ import annotations
 
 import enum
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
@@ -105,7 +109,13 @@ from typing import Any, Final
 
 from brain.connectors.backfill import BackfillCursor
 from brain.connectors.contract import ConnectorContractError, HealthState
-from brain.connectors.declaration import ChangedSince, RoutedReading, shipped
+from brain.connectors.declaration import (
+    ChangedSince,
+    CodeReading,
+    Reading,
+    RoutedReading,
+    shipped,
+)
 from brain.connectors.declaration import PageReply as PageReply
 from brain.connectors.declaration import SourceReading as SourceReading
 from brain.connectors.declaration import ViewReading as ViewReading
@@ -118,6 +128,7 @@ from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection
 from brain.ops.limits import Limit
+from brain.tools.run_skill import ScriptRunner
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -321,6 +332,11 @@ NO_VERIFIED_CEILING: Final = (
     "Nothing reads this source: no verified call ceiling is recorded for it, and it is not read "
     "against a ceiling nobody measured."
 )
+#: A custom-code source on an install that runs no sandbox (M11.1.5).
+NO_SANDBOX: Final = (
+    "Nothing reads this source: its connector is custom code, and this install runs no sandbox to "
+    "run it in."
+)
 
 #: What an attempt came to, one per kind of thing that happened. Constants, for
 #: `A_RUN_RECORD_CARRIES_NO_VALUE_FROM_THE_SOURCE`.
@@ -377,6 +393,29 @@ NO_KEY_FILE_EXCHANGE: Final = (
     "This process was given no way to exchange the source's key file for a token, so the source "
     "was not asked."
 )
+#: An MCP server that no longer lists a tool the connector calls as it was reviewed (M11.1.2).
+TOOL_NOT_AS_REVIEWED: Final = (
+    "The source's server no longer lists a tool this connector calls as it was reviewed, so no "
+    "tool was called. It is read again once the connector is reviewed against the new definition."
+)
+#: A source whose calls are posts, read by a process given no way to post (M11.1.2, M11.1.5).
+NO_WAY_TO_POST: Final = (
+    "This process was given no way to post, and this source is read by posting, so it was not "
+    "asked."
+)
+#: Custom code handed something carrying the source's key, so it was not run (M11.1.5).
+KEY_KEPT_OUT: Final = (
+    "What the connector's code would have been handed carried the source's key, so the code was "
+    "not run and nothing was kept."
+)
+#: An MCP tool, or a custom connector's answer, that said in so many words that the read failed.
+TOOL_SAID_IT_FAILED: Final = (
+    "The source answered that it could not do the read, so nothing from that answer was kept."
+)
+#: Custom code that did not complete in its sandbox (M11.1.5).
+CODE_DID_NOT_COMPLETE: Final = (
+    "The connector's code did not complete in its sandbox, so nothing from that read was kept."
+)
 NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
 
 #: The screen's words for an attempt's outcome, by what follows it.
@@ -400,6 +439,11 @@ PROBE_NOT_SENT_WHILE_WAITING: Final = (
 PROBE_NOT_SENT_SHARE_SPENT: Final = (
     "No call was made: tests have used this install's share of the source's call allowance for "
     "now. Test again later."
+)
+#: What a test on request says of an MCP or custom-code source, which it does not test yet.
+PROBE_NOT_BUILT: Final = (
+    "No call was made: testing this kind of source on request is not built yet. Its scheduled "
+    "read says whether it works."
 )
 #: What the screen puts before a test's sentence, so it is not read as a scheduled read.
 TESTED_ON_REQUEST: Final = "Tested on request:"
@@ -827,7 +871,7 @@ def kept_fields(record: ProjectedRecord, manifest: ConnectorManifest) -> dict[st
 #: Every source this release reads on a schedule, by connector name, read off each connector's
 #: `CONNECTOR` declaration at start-up. `PageReply`, `SourceReading` and `ViewReading` are
 #: `brain.connectors.declaration`'s, named here for the modules that read them from this one.
-READINGS: Final[Mapping[str, SourceReading | ViewReading]] = MappingProxyType(
+READINGS: Final[Mapping[str, Reading]] = MappingProxyType(
     {name: one.reading for name, one in shipped().items() if one.reading is not None}
 )
 
@@ -846,7 +890,7 @@ class SyncPlan:
     connector: str
     refused: str = ""
     manifest: ConnectorManifest | None = None
-    reading: SourceReading | ViewReading | None = None
+    reading: Reading | None = None
     limits: tuple[Limit, ...] = ()
     #: Whether its next attempt is owed now. False for a refused plan.
     due: bool = False
@@ -869,15 +913,25 @@ def plan_for(
     *,
     last: SyncState | None,
     now: datetime,
-    readings: Mapping[str, SourceReading | ViewReading] = READINGS,
+    readings: Mapping[str, Reading] = READINGS,
+    runner: ScriptRunner | None = None,
+    manifests: Callable[[str, Mapping[str, str]], ConnectorManifest] | None = None,
 ) -> SyncPlan:
-    """Whether this connection may be read now, asked in the order the module docstring gives."""
+    """Whether this connection may be read now, asked in the order the module docstring gives.
+
+    `runner` is the sandbox runner this install runs custom code with, or None when it runs none
+    (`brain.ops.custom_code_run.installed_runner`); only a custom-code reading asks for it.
+    `manifests` builds a connection's manifest from its settings: the console's own
+    `manifest_for` when None, for every shipped connector; an acceptance check hands in one
+    built for a connector it made up, so it reads that connector by this same plan.
+    """
     name = connection.connector
     reading = readings.get(name)
     if reading is None:
         return SyncPlan(connector=name, refused=NO_READING)
     try:
-        manifest = manifest_for(name, connection.settings)
+        build = manifest_for if manifests is None else manifests
+        manifest = build(name, connection.settings)
     except (NotConnectableError, ConnectorContractError):
         return SyncPlan(connector=name, refused=DECLARATION_CANNOT_BE_REBUILT)
     if manifest_digest(manifest) != connection.digest:
@@ -888,6 +942,8 @@ def plan_for(
         limits = limits_for(manifest, principal_id=SYNC_PRINCIPAL)
     except UnmeasuredSourceError:
         return SyncPlan(connector=name, refused=NO_VERIFIED_CEILING)
+    if isinstance(reading, CodeReading) and runner is None:
+        return SyncPlan(connector=name, refused=NO_SANDBOX)
     return SyncPlan(
         connector=name,
         manifest=manifest,

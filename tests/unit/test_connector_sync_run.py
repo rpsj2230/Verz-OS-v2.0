@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from structlog.testing import capture_logs
 
 from brain.connectors import hubspot, xero
+from brain.connectors.declaration import Reading
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.minimal_index import fresh_canary, planted, sightings
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -66,8 +67,6 @@ from brain.ops.connector_sync import (
     SOURCE_UNREACHABLE,
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
-    SourceReading,
-    ViewReading,
 )
 from brain.ops.connector_sync_run import (
     THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES,
@@ -288,7 +287,7 @@ def sync(
     *,
     at: datetime = NOW,
     keys: Any = None,
-    readings: Mapping[str, SourceReading | ViewReading] | None = None,
+    readings: Mapping[str, Reading] | None = None,
 ) -> SyncRun:
     clock = iter(at + timedelta(seconds=n) for n in range(10_000))
 
