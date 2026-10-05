@@ -150,11 +150,12 @@ jobs:
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}'
           # The most each container has held since it started, from its own cgroup: a first
           # start's peak is the figure a memory limit has to clear, and steady use is not it.
-          for id in $(docker compose ps -q); do
+          for id in $(docker compose ps -aq); do
             name=$(docker inspect -f '{{.Name}}' "$id")
             peak=$(cat "/sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' "$id").scope/memory.peak" 2>/dev/null || echo unknown)
             echo "peak $name $peak"
           done
+          docker compose logs keycloak-build | tail -5
           restarted=$(docker inspect -f '{{.Name}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}' $(docker compose ps -aq) | grep -v ' restarts=0 ' || true)
           if [ -n "$restarted" ]; then
             echo "::warning::a container restarted during the start: $restarted"
