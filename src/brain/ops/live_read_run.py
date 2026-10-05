@@ -100,6 +100,7 @@ from brain.connectors.live_read import (
 )
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.rest import MAX_RESPONSE_BYTES
+from brain.connectors.slack_messages import CONNECTOR_NAME as SLACK
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import SourceRecord
 from brain.core.envelope import IdentityMode, TypedResult
@@ -126,6 +127,7 @@ from brain.ops.lark_wiki_spaces import declared_spaces
 from brain.ops.leases import SealedSecret
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
+from brain.ops.slack_messages_live import SlackPassages
 from brain.ops.webhook_delivery import SystemResolver
 from brain.tools.fetch import Fetchable, Resolver, UnsafeAddressError, assert_fetchable
 
@@ -531,6 +533,32 @@ def wiki_passages_for(
         resolver=SystemResolver(),
         issuer=HttpsTokenIssuer(),
         withheld=withheld,
+    )
+
+
+def slack_passages_for(
+    sessions: async_sessionmaker[AsyncSession] | None, vault: RunTokenVault | None
+) -> SlackPassages | None:
+    """Slack's passages for the answer lane's model step, or None with no database.
+
+    The connection is read from the database on each question, so a workspace connected or
+    disconnected on the Connectors screen is read or not from the next one, and a process with
+    no Slack connection asks Slack nothing (`brain.ops.slack_messages_live`).
+    """
+    if sessions is None:
+        return None
+    stored = StoredConnections(sessions)
+
+    async def connected() -> Connection | None:
+        return next((one for one in await stored.connected() if one.connector == SLACK), None)
+
+    return SlackPassages(
+        connected,
+        sessions=sessions,
+        keys=WorkerConnectorKeys(vault),
+        caller=HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000),
+        resolver=SystemResolver(),
+        clock=_utc_now,
     )
 
 

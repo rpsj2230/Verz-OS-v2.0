@@ -757,6 +757,40 @@ def spec_document() -> Mapping[str, Any]:
     }
 
 
+#: Why the private app's scopes are read off the specification rather than typed.
+EVERY_CALL_NAMES_ITS_OWN_SCOPE: Final = (
+    "HubSpot answers a call on an object type only for a private app holding that type's read "
+    "scope, and an association read only for one holding the read scope of both ends. The guide "
+    "once asked for contacts and deals alone while the worker listed companies and a question "
+    "read a company live, so every company read would have been refused on a real account. The "
+    "scopes the guide, the form and the vault slot ask for are therefore read off the same "
+    "specification the calls are built from, and a call added to it adds its scope."
+)
+
+
+def required_scopes() -> tuple[str, ...]:
+    """Every scope a private app needs for the calls this connector makes, sorted.
+
+    One `crm.objects.<type>.read` for each object type a path in `spec_document` names. The
+    association path names its two ends as parameters, and the ends an edge may join are the
+    types the lists read (`AssociationEdge` refuses any other), so it adds no scope of its own.
+    See `EVERY_CALL_NAMES_ITS_OWN_SCOPE`.
+    """
+    types = {
+        segment
+        for path in spec_document()["paths"]
+        for segment in path.split("/")[4:5]
+        if not segment.startswith("{")
+    }
+    return tuple(f"crm.objects.{one}.read" for one in sorted(types))
+
+
+def _scopes_in_words() -> str:
+    """The required scopes as a sentence names them: a, b and c."""
+    scopes = required_scopes()
+    return ", ".join(scopes[:-1]) + f" and {scopes[-1]}" if len(scopes) > 1 else scopes[0]
+
+
 def load_hubspot_spec(*, resolver: Resolver) -> RestSpec:
     """Parse the document and refuse its address before anything is built.
 
@@ -2005,9 +2039,8 @@ GUIDE: Final = keyed(
             key="scopes",
             title="Give it read scopes only and copy its token",
             text=(
-                "On the Scopes tab tick crm.objects.contacts.read and crm.objects.deals.read and "
-                "nothing with write in it or touching settings. Click Create app, confirm, and "
-                "copy the access token it shows."
+                f"On the Scopes tab tick {_scopes_in_words()}, and nothing with write in it or "
+                "touching settings. Click Create app, confirm, and copy the access token it shows."
             ),
             sketch=Sketch(
                 place="HubSpot settings",
@@ -2015,8 +2048,7 @@ GUIDE: Final = keyed(
                 tabs=("Basic info", "Scopes"),
                 tab_mark="Scopes",
                 lines=(
-                    SketchLine(LineKind.ITEM, "crm.objects.contacts.read", mark=True),
-                    SketchLine(LineKind.ITEM, "crm.objects.deals.read", mark=True),
+                    *(SketchLine(LineKind.ITEM, one, mark=True) for one in required_scopes()),
                     SketchLine(LineKind.TEXT, "Nothing with write, nothing on settings"),
                 ),
                 button="Create app",
@@ -2066,9 +2098,9 @@ CONNECTOR: Final = ConnectorDeclaration(
         ),
         credential_label="The access token of a private app",
         credential_hint=(
-            "Give the private app crm.objects.contacts.read and crm.objects.deals.read, and "
-            "no write scope or anything touching settings. Paste its token as one piece. It "
-            "is kept in the vault and never shown again."
+            f"Give the private app {_scopes_in_words()}, and no write scope or anything "
+            "touching settings. Paste its token as one piece. It is kept in the vault and never "
+            "shown again."
         ),
         build=built_from_the_console,
         example=ConnectExample(
@@ -2129,8 +2161,10 @@ CONNECTOR: Final = ConnectorDeclaration(
             ),
         ),
     ),
+    # Read off the scopes the readings' own calls need, so the slot, the hint and the guide are held
+    # to one account of them (`required_scopes`).
     scopes=KeyScopes(
-        request=("crm.objects.contacts.read", "crm.objects.deals.read"),
+        request=required_scopes(),
         refuse=("crm.objects.*.write", "anything touching settings"),
     ),
 )

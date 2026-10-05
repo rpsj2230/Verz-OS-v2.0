@@ -186,7 +186,7 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
 #: is read live as passages for the question's model step, as the Lark Wiki's pages are. Each such
 #: source says so in its own declaration (`AskRows.by_passages`). See
 #: `brain.ops.connectable.answers`. Google Drive's folder is read by `brain.ops.drive_passages`
-#: (M11.6.7).
+#: (M11.6.7), and Slack's messages by `brain.ops.slack_messages_live.SlackPassages` (M11.7.5).
 ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset(
     name for name, one in shipped().items() if one.ask is not None and one.ask.by_passages
 )

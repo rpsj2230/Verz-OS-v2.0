@@ -2,17 +2,61 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**27 items are open: 152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**27 items are open: 148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
-vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
-it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
+vault open itself), **121 to 124,** whose conversations an agent's page lists, where uploaded documents are stored, a task
 that names a table library, and the automation canvas, each with my recommendation, **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 149. Your developer's part for the Laravel database
+
+**In plain terms:** four things in the database and its hosting, done once, before item 148.
+Send this to your developer:
+
+1. **Two views, holding only what the Brain may see.** In the application's database create
+   `v_client` with the columns name, status, department, manager_id, updated_at, and `v_user` with
+   display_name, department, status, updated_at. A view is the statement of what may be read and
+   changes only when you change it; a new column in a table is not read until a view names it.
+2. **A read-only user.** Create a database user with SELECT on those two views only: not on any
+   table, and no write. Give its name and password to the owner for item 148.
+3. **Let the Brain's server reach the database, on its port only.** Either allow the Brain server's
+   own address (from its hosting provider) in the database's firewall or security group, or, where
+   the database is on a private network, run an SSH tunnel from the Brain's server to a machine that
+   reaches it and keep it running: the Brain does not start one.
+4. **The certificate.** If the database's certificate is from a public authority, nothing is needed
+   (the owner types verify). If it is from your own certificate authority, give the owner that
+   authority's certificate to paste. Only a tunnel may go without encryption.
+
+## 148. Connect the Laravel database (ready now)
+
+**In plain terms:** the Brain can now answer about clients and staff from your Laravel application's
+own database, through two views your developer writes and a user that can read only those views.
+Every read stops at a row limit and a time limit you set. Your developer does item 149 first; then,
+in the console open **Knowledge and data**, **Connectors**, **Laravel database views**, **Connect**,
+and type what they give you:
+
+1. **Database holding the views**: the database name your developer gives you.
+2. **Database server's address** and **port**: as your developer or hosting provider gives them (the
+   port is usually 3306). With a tunnel, the tunnel's local end.
+3. **Private network**: yes only if the database is reached directly on a private network or
+   through a tunnel; otherwise no.
+4. **Encryption**: verify, or paste your own certificate authority's certificate if your developer
+   says the database uses one. none only with private network yes and a tunnel.
+5. **Who may be told a client** and **a staff record**: the rule each view is kept under, as your
+   developer writes it, for example department = sales.
+6. **Most rows** (up to 5000) and **longest read in seconds** (up to 30).
+7. **The read-only user's name and password**, from your developer. Press **Connect Laravel database
+   views**; the login goes to the vault and is never shown again.
+8. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:laravel_client` and `read:laravel_user` and the fields they may see, scoped to the
+   department each view's rule names, with a reason.
+
+Tell me "connected Laravel" afterwards and I prove it on your install.
 
 ## 152. Lark Base and Lark Wiki are connected through Connect Lark, not this list
 
@@ -637,177 +681,6 @@ nobody sees through the Brain what they could not see themselves.
 **What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
 safe either way: B only ever adds to it.
 
-## 120. Memory on your server: what is waiting for it, and in what order
-
-**In plain terms:** four things the Brain needs are waiting for memory on your server. Together
-they need **7,424 MB**, and up to 2,048 MB more if you choose option B in item 119. Your server has
-**248 MB** that nothing has claimed. This is the one memory question: how to make room, and which
-of the four gets it first. (The automation canvas in item 124 would need another 512 MB, and I
-recommend it waits.)
-
-**What is waiting, in the order I would give it memory:**
-
-| | What | Memory | What it unblocks |
-|---|---|---|---|
-| 1 | **The personal-data detector** (Presidio) | 1,536 MB | Your requirement GAP-23: before a question or passage goes to an outside model, names, ID numbers, phone numbers and email addresses in it are replaced with placeholders, and put back in the answer. Today text goes to the model provider as written. How it works is settled; only the memory is yours to decide. Task M32.2.1.1 |
-| 2 | **The model server**, with the document worker and the file store | 3,840 MB (3,072 + 512 + 256) | Ten document tasks: tables and page layout in PDFs, scanned pages, Excel and PowerPoint, and search by meaning (M7.2.1, M7.2.3, M7.2.4, M7.2.6, M7.3.3, M7.3.4, M7.3.5, M7.7.8, M7.7.9, M7.7.10). Also the rest of GAP-23: the model server finds the names and details the detector's standard rules miss (M32.2.1.2). Also item 119's option A. The file store is item 122's option A |
-| 3 | **Langfuse**, the screen engineers use to inspect each model call | 2,048 MB | M32.1.1.1 and M32.1.1.2. The Brain already records every call in its own ledger; Langfuse adds the screen. It keeps its files in the file store from row 2 (256 MB more if row 2 is not there) |
-| 4 | **More memory for the Brain's program**, so it reads larger uploads itself | 512 to 2,048 MB | Item 119's option B. Not needed once row 2 runs, which reads every file people may upload |
-
-**Why that order.** Row 1 first: it is a requirement you set, it is unmet on every question asked
-today, and it is the cheapest. Row 2 next: eleven tasks, and the rest of GAP-23. Row 3 after: it
-helps engineers, and the Brain already keeps its own record of every call. Row 4 last, and I would
-not spend memory on it: row 2 does the same job and reads far larger files.
-
-**What I measured (29 and 30 September), read-only, on the live server.** The machine has 11,960
-MB. The figure that decides this is not what is free at this moment but what each container is
-allowed to take, because a container can take its allowance the moment it gets busy. Those
-allowances add up to 11,456 MB:
-
-| Whose | Containers | Allowed |
-|---|---|---|
-| The Company Brain | 9: the program, its database, cache, worker, two connection poolers, the vault, and Keycloak with its database | 5,440 MB |
-| Your other project: Dify | 10 | 3,712 MB |
-| Your other project: the old Langfuse | 2 | 1,280 MB |
-| Your other project: the old v1 worker (`verz-brain-worker-1`) | 1 | 1,024 MB |
-
-The other project's three rows are the same 6,016 MB as in item 25. Two more have no allowance and
-use real memory: Activepieces (827 MB) and Coolify with its proxy (about 600 MB), about 1,430 MB
-together. The server keeps 256 MB for itself, so 11,960 less 11,456 less 256 leaves the 248 MB
-above. It is also using 1,233 MB of its 2,047 MB of swap, which means it has already run short of
-real memory at some point. None of the four rows has run on your server yet, so their figures are
-the product's own sizes; I measure each one once it runs.
-
-**Which of the other project's containers are in use.** Lines each wrote to its log in the last 24
-hours: Dify's API 0, the old Langfuse 0, the old v1 worker 1 (a timeout warning), Activepieces
-17,414. So Activepieces is in use and I leave it out of every option below. v1's nightly Laravel
-sync is a separate run at 02:15, allowed 768 MB for the few minutes it runs, and does not use the
-old worker.
-
-**Option A: take down Dify, the old Langfuse and the old v1 worker.** That frees their 6,016 MB, so
-6,264 MB is unclaimed; after what Activepieces and Coolify really use, about 4,830 MB is there. That
-is room for rows 1 and 3 with the file store (3,840 MB, about 990 to spare), or for row 2 alone (the
-same 3,840), but **not rows 1 and 2 together**: 5,376 MB would be about 550 MB short on a server
-that is already using swap. It costs nothing and can be undone: their data stays on disk, and one
-command brings each back. Only you know whether anything of v1 still needs them.
-
-**Option B: a larger server, for example 24 GB instead of 12.** About 12,000 MB more. Rows 1 to 3
-all fit with about 3,400 MB to spare even without A, and the other project is untouched. It costs a
-monthly fee and a restart of a few minutes while your provider resizes it.
-
-**Option C: nothing now.** The fourteen tasks above move to a later wave and GAP-23 stays unmet.
-Until then the console reads plain text, Markdown, PDF and Word as text only (item 119 says how
-large), and Excel and PowerPoint are not accepted.
-
-**My recommendation: A now, then B.** A is free and makes room today for the detector (row 1), so
-GAP-23 is met for everything but the names only the model server finds, and for Langfuse (row 3).
-B then makes room for the model server (row 2) beside them, with a margin, so the ten document tasks
-run without pushing the server into swap. If you would rather not pay for a larger server, reply A
-alone: rows 1 and 3 go ahead and row 2 waits. If you are not sure about v1, choose B alone rather
-than C. Building every one of these is my work and needs nothing more from you than the room.
-
-**What I need from you:** reply "120: A then B", "120: A", "120: B" or "120: C".
-
-For A (about five minutes):
-
-1. On your Mac, open **Terminal**.
-2. Type `ssh verz-vps` and press Return. You are now on your server.
-3. Take down Dify: type `cd /opt/verz-dify/dify/docker && docker compose down` and press Return. It
-   stops and removes Dify's ten containers. Its data stays in that folder.
-4. Take down the old Langfuse: type `cd /opt/verz-langfuse && docker compose down` and press Return.
-5. Stop the old v1 worker, and only the worker: type `cd /opt/verz-brain/infra/vps && docker compose
-   stop worker` and press Return. The nightly Laravel sync in the same folder carries on as before.
-6. Type `exit` and press Return.
-7. Tell me "120: A done". I measure the server again and record the new figure in the product's
-   budget, so each service is sized against what is really there.
-
-To undo any of it later, run `docker compose up -d` in the same folder (or `docker compose start
-worker` for step 5).
-
-For B:
-
-1. Sign in to the control panel of the company you rent the server from.
-2. Open this server (6 cores, 12 GB of memory, 193 GB of disk) and choose the option to upgrade or
-   resize its plan.
-3. Choose a plan with 24 GB of memory. Keep the same disk and the same address.
-4. Confirm. The server restarts, and the Brain is offline for those few minutes.
-5. Tell me "120: B done". I measure the server again, as for A.
-
-## 119. How large a file may people upload?
-
-**In plain terms:** the door to Knowledge accepts PDFs up to 50 MB, Word files up to 25 MB, and plain
-text and Markdown up to 5 MB. The console cannot read files anywhere near that size today, because it
-reads them inside the Brain's own program, which has little memory to spare. Two things are for you to
-choose: how the console reads larger files now, and the size limit once the model server (item 120,
-row 2) runs.
-
-**What was measured (29 September), read-only.** The Brain's program is allowed 1,024 MB. It runs four
-copies of itself so it can answer several people at once. Each copy holds up to 218 MB at its peak,
-which is when the four start together, and the process that looks after them holds 82 MB, so the
-program has used at most 955 MB. Almost all of that is the program's own memory; less than 1 MB is
-file cache. Reading a file takes several times its size (the product's rule is four times for text,
-six for a PDF, eight for Word), and each of the four copies may be reading a file at the same moment.
-
-**What changes on its own with the next release.** Two fixes in the product need nothing from you:
-
-- Until now the Brain checked each file against the wrong budget, so a large PDF could have run the
-  program out of memory (pull request 265). It now checks against the program's own spare memory:
-  48 MB, shared among the four copies, so **12 MB for each file**. The console then reads **text and
-  Markdown up to 3 MB, PDFs up to 2 MB and Word files up to 1.5 MB**, and refuses anything larger
-  with a message asking for it to be split.
-- The program chose how many copies to start from its memory, allowing 180 MB a copy when each really
-  needs 218. So "just give it more memory" was unsafe until now: at 1,536 MB it would have started
-  seven copies, which need about 1,608 MB at start, and it would have been killed every time it
-  started. Each copy is now sized at 220 MB (pull request 269), so more memory is safe, but it buys
-  little, as option B shows.
-
-**Question 1: how should the console read larger files?**
-
-**Option A: send larger files to the document worker.** The document worker is a separate part built
-for exactly this, with 448 MB to read one file, which is enough for everything the door accepts:
-**text 5 MB, PDF 50 MB, Word 25 MB.** It needs row 2 of item 120 (512 MB for the worker and 256 MB for
-the file store) and some building by me to hand it the console's uploads.
-
-**Option B: give the program more memory.** More memory makes it start more copies, up to ten (the
-most its database connections allow), and each copy may read a file at the same moment, so each gets
-only a share of what is added:
-
-| The program's memory | Copies | Room for one file | Largest PDF | Largest Word | Largest text |
-|---|---|---|---|---|---|
-| 1,024 MB (today) | 4 | 12 MB | 2.0 MB | 1.5 MB | 3.0 MB |
-| 1,536 MB | 6 | 20 MB | 3.3 MB | 2.5 MB | 5 MB |
-| 2,048 MB | 8 | 24 MB | 4.0 MB | 3.0 MB | 5 MB |
-| 3,072 MB | 10 | 77 MB | 12.9 MB | 9.7 MB | 5 MB |
-
-Text stops at 5 MB because that is the door's own limit. The extra memory is row 4 of item 120.
-
-**Option C: read one file at a time across the whole program.** One file gets all 48 MB instead of a
-quarter: **text 5 MB, PDF 8 MB, Word 6 MB**, with no memory and no server change. The cost is that two
-people adding documents at the same moment wait for each other, a few seconds each. A small build for
-me.
-
-**My recommendation: C now, then A once row 2 of item 120 runs.** C quadruples the largest PDF this
-week at no cost, and uploads are rare enough that a few seconds' wait is seldom noticed. A then reads
-everything the door accepts. B is the poorest use of memory: 2,048 MB more buys PDFs of 12.9 MB, while
-A's 768 MB reads PDFs of 50.
-
-**Question 2: the size limit once the model server runs.** The model server (item 120, row 2) reads
-PDFs with their tables and scanned pages, and Excel and PowerPoint. As sized it has 64 MB to read one
-file, which is a PDF of about 10 MB or an Office file of about 8 MB. Reading bigger files means a
-bigger model server:
-
-- **25 MB for every document type:** it grows by 136 MB, to 3,208 MB. Word and Excel stay where they
-  are; PDF and PowerPoint come down from 50.
-- **Keep 50 MB:** it grows by 336 MB, to 3,408 MB.
-- **10 MB (8 MB for Office files):** no extra memory, and ordinary PDFs of 15 to 30 MB are refused.
-
-**My recommendation: 25 MB.** One figure for every document is easy for people to remember, it covers
-nearly all everyday documents, and it costs the least memory of the choices that do not refuse
-ordinary files.
-
-**What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
-in MB). Nothing on your server changes for either answer.
-
 ## 91. Checks only you can do on your install (about 75 minutes, one sitting)
 
 **In plain terms:** some requirements are about how the Brain behaves for real people, so the proof
@@ -911,6 +784,183 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
+
+**Your answer, 2026-10-05:** "Option A: take down Dify, the old Langfuse and the old v1 worker."
+
+**What happens now:** I take the three down on the server myself (their data stays on disk and one command brings each back), measure the memory again, and give the freed room to row 1 (the personal-data detector) and row 3 (Langfuse with the file store). Row 2, the model server, waits: it does not fit beside row 1 on this server.
+
+**In plain terms:** four things the Brain needs are waiting for memory on your server. Together
+they need **7,424 MB**, and up to 2,048 MB more if you choose option B in item 119. Your server has
+**248 MB** that nothing has claimed. This is the one memory question: how to make room, and which
+of the four gets it first. (The automation canvas in item 124 would need another 512 MB, and I
+recommend it waits.)
+
+**What is waiting, in the order I would give it memory:**
+
+| | What | Memory | What it unblocks |
+|---|---|---|---|
+| 1 | **The personal-data detector** (Presidio) | 1,536 MB | Your requirement GAP-23: before a question or passage goes to an outside model, names, ID numbers, phone numbers and email addresses in it are replaced with placeholders, and put back in the answer. Today text goes to the model provider as written. How it works is settled; only the memory is yours to decide. Task M32.2.1.1 |
+| 2 | **The model server**, with the document worker and the file store | 3,840 MB (3,072 + 512 + 256) | Ten document tasks: tables and page layout in PDFs, scanned pages, Excel and PowerPoint, and search by meaning (M7.2.1, M7.2.3, M7.2.4, M7.2.6, M7.3.3, M7.3.4, M7.3.5, M7.7.8, M7.7.9, M7.7.10). Also the rest of GAP-23: the model server finds the names and details the detector's standard rules miss (M32.2.1.2). Also item 119's option A. The file store is item 122's option A |
+| 3 | **Langfuse**, the screen engineers use to inspect each model call | 2,048 MB | M32.1.1.1 and M32.1.1.2. The Brain already records every call in its own ledger; Langfuse adds the screen. It keeps its files in the file store from row 2 (256 MB more if row 2 is not there) |
+| 4 | **More memory for the Brain's program**, so it reads larger uploads itself | 512 to 2,048 MB | Item 119's option B. Not needed once row 2 runs, which reads every file people may upload |
+
+**Why that order.** Row 1 first: it is a requirement you set, it is unmet on every question asked
+today, and it is the cheapest. Row 2 next: eleven tasks, and the rest of GAP-23. Row 3 after: it
+helps engineers, and the Brain already keeps its own record of every call. Row 4 last, and I would
+not spend memory on it: row 2 does the same job and reads far larger files.
+
+**What I measured (29 and 30 September), read-only, on the live server.** The machine has 11,960
+MB. The figure that decides this is not what is free at this moment but what each container is
+allowed to take, because a container can take its allowance the moment it gets busy. Those
+allowances add up to 11,456 MB:
+
+| Whose | Containers | Allowed |
+|---|---|---|
+| The Company Brain | 9: the program, its database, cache, worker, two connection poolers, the vault, and Keycloak with its database | 5,440 MB |
+| Your other project: Dify | 10 | 3,712 MB |
+| Your other project: the old Langfuse | 2 | 1,280 MB |
+| Your other project: the old v1 worker (`verz-brain-worker-1`) | 1 | 1,024 MB |
+
+The other project's three rows are the same 6,016 MB as in item 25. Two more have no allowance and
+use real memory: Activepieces (827 MB) and Coolify with its proxy (about 600 MB), about 1,430 MB
+together. The server keeps 256 MB for itself, so 11,960 less 11,456 less 256 leaves the 248 MB
+above. It is also using 1,233 MB of its 2,047 MB of swap, which means it has already run short of
+real memory at some point. None of the four rows has run on your server yet, so their figures are
+the product's own sizes; I measure each one once it runs.
+
+**Which of the other project's containers are in use.** Lines each wrote to its log in the last 24
+hours: Dify's API 0, the old Langfuse 0, the old v1 worker 1 (a timeout warning), Activepieces
+17,414. So Activepieces is in use and I leave it out of every option below. v1's nightly Laravel
+sync is a separate run at 02:15, allowed 768 MB for the few minutes it runs, and does not use the
+old worker.
+
+**Option A: take down Dify, the old Langfuse and the old v1 worker.** That frees their 6,016 MB, so
+6,264 MB is unclaimed; after what Activepieces and Coolify really use, about 4,830 MB is there. That
+is room for rows 1 and 3 with the file store (3,840 MB, about 990 to spare), or for row 2 alone (the
+same 3,840), but **not rows 1 and 2 together**: 5,376 MB would be about 550 MB short on a server
+that is already using swap. It costs nothing and can be undone: their data stays on disk, and one
+command brings each back. Only you know whether anything of v1 still needs them.
+
+**Option B: a larger server, for example 24 GB instead of 12.** About 12,000 MB more. Rows 1 to 3
+all fit with about 3,400 MB to spare even without A, and the other project is untouched. It costs a
+monthly fee and a restart of a few minutes while your provider resizes it.
+
+**Option C: nothing now.** The fourteen tasks above move to a later wave and GAP-23 stays unmet.
+Until then the console reads plain text, Markdown, PDF and Word as text only (item 119 says how
+large), and Excel and PowerPoint are not accepted.
+
+**My recommendation: A now, then B.** A is free and makes room today for the detector (row 1), so
+GAP-23 is met for everything but the names only the model server finds, and for Langfuse (row 3).
+B then makes room for the model server (row 2) beside them, with a margin, so the ten document tasks
+run without pushing the server into swap. If you would rather not pay for a larger server, reply A
+alone: rows 1 and 3 go ahead and row 2 waits. If you are not sure about v1, choose B alone rather
+than C. Building every one of these is my work and needs nothing more from you than the room.
+
+**What I need from you:** reply "120: A then B", "120: A", "120: B" or "120: C".
+
+For A (about five minutes):
+
+1. On your Mac, open **Terminal**.
+2. Type `ssh verz-vps` and press Return. You are now on your server.
+3. Take down Dify: type `cd /opt/verz-dify/dify/docker && docker compose down` and press Return. It
+   stops and removes Dify's ten containers. Its data stays in that folder.
+4. Take down the old Langfuse: type `cd /opt/verz-langfuse && docker compose down` and press Return.
+5. Stop the old v1 worker, and only the worker: type `cd /opt/verz-brain/infra/vps && docker compose
+   stop worker` and press Return. The nightly Laravel sync in the same folder carries on as before.
+6. Type `exit` and press Return.
+7. Tell me "120: A done". I measure the server again and record the new figure in the product's
+   budget, so each service is sized against what is really there.
+
+To undo any of it later, run `docker compose up -d` in the same folder (or `docker compose start
+worker` for step 5).
+
+For B:
+
+1. Sign in to the control panel of the company you rent the server from.
+2. Open this server (6 cores, 12 GB of memory, 193 GB of disk) and choose the option to upgrade or
+   resize its plan.
+3. Choose a plan with 24 GB of memory. Keep the same disk and the same address.
+4. Confirm. The server restarts, and the Brain is offline for those few minutes.
+5. Tell me "120: B done". I measure the server again, as for A.
+
+## 119. How large a file may people upload - DECIDED 2026-10-05: C now, then A once row 2 of item 120 runs
+
+**Your answer, 2026-10-05:** "My recommendation: C now, then A once row 2 of item 120 runs."
+
+**In plain terms:** the door to Knowledge accepts PDFs up to 50 MB, Word files up to 25 MB, and plain
+text and Markdown up to 5 MB. The console cannot read files anywhere near that size today, because it
+reads them inside the Brain's own program, which has little memory to spare. Two things are for you to
+choose: how the console reads larger files now, and the size limit once the model server (item 120,
+row 2) runs.
+
+**What was measured (29 September), read-only.** The Brain's program is allowed 1,024 MB. It runs four
+copies of itself so it can answer several people at once. Each copy holds up to 218 MB at its peak,
+which is when the four start together, and the process that looks after them holds 82 MB, so the
+program has used at most 955 MB. Almost all of that is the program's own memory; less than 1 MB is
+file cache. Reading a file takes several times its size (the product's rule is four times for text,
+six for a PDF, eight for Word), and each of the four copies may be reading a file at the same moment.
+
+**What changes on its own with the next release.** Two fixes in the product need nothing from you:
+
+- Until now the Brain checked each file against the wrong budget, so a large PDF could have run the
+  program out of memory (pull request 265). It now checks against the program's own spare memory:
+  48 MB, shared among the four copies, so **12 MB for each file**. The console then reads **text and
+  Markdown up to 3 MB, PDFs up to 2 MB and Word files up to 1.5 MB**, and refuses anything larger
+  with a message asking for it to be split.
+- The program chose how many copies to start from its memory, allowing 180 MB a copy when each really
+  needs 218. So "just give it more memory" was unsafe until now: at 1,536 MB it would have started
+  seven copies, which need about 1,608 MB at start, and it would have been killed every time it
+  started. Each copy is now sized at 220 MB (pull request 269), so more memory is safe, but it buys
+  little, as option B shows.
+
+**Question 1: how should the console read larger files?**
+
+**Option A: send larger files to the document worker.** The document worker is a separate part built
+for exactly this, with 448 MB to read one file, which is enough for everything the door accepts:
+**text 5 MB, PDF 50 MB, Word 25 MB.** It needs row 2 of item 120 (512 MB for the worker and 256 MB for
+the file store) and some building by me to hand it the console's uploads.
+
+**Option B: give the program more memory.** More memory makes it start more copies, up to ten (the
+most its database connections allow), and each copy may read a file at the same moment, so each gets
+only a share of what is added:
+
+| The program's memory | Copies | Room for one file | Largest PDF | Largest Word | Largest text |
+|---|---|---|---|---|---|
+| 1,024 MB (today) | 4 | 12 MB | 2.0 MB | 1.5 MB | 3.0 MB |
+| 1,536 MB | 6 | 20 MB | 3.3 MB | 2.5 MB | 5 MB |
+| 2,048 MB | 8 | 24 MB | 4.0 MB | 3.0 MB | 5 MB |
+| 3,072 MB | 10 | 77 MB | 12.9 MB | 9.7 MB | 5 MB |
+
+Text stops at 5 MB because that is the door's own limit. The extra memory is row 4 of item 120.
+
+**Option C: read one file at a time across the whole program.** One file gets all 48 MB instead of a
+quarter: **text 5 MB, PDF 8 MB, Word 6 MB**, with no memory and no server change. The cost is that two
+people adding documents at the same moment wait for each other, a few seconds each. A small build for
+me.
+
+**My recommendation: C now, then A once row 2 of item 120 runs.** C quadruples the largest PDF this
+week at no cost, and uploads are rare enough that a few seconds' wait is seldom noticed. A then reads
+everything the door accepts. B is the poorest use of memory: 2,048 MB more buys PDFs of 12.9 MB, while
+A's 768 MB reads PDFs of 50.
+
+**Question 2: the size limit once the model server runs.** The model server (item 120, row 2) reads
+PDFs with their tables and scanned pages, and Excel and PowerPoint. As sized it has 64 MB to read one
+file, which is a PDF of about 10 MB or an Office file of about 8 MB. Reading bigger files means a
+bigger model server:
+
+- **25 MB for every document type:** it grows by 136 MB, to 3,208 MB. Word and Excel stay where they
+  are; PDF and PowerPoint come down from 50.
+- **Keep 50 MB:** it grows by 336 MB, to 3,408 MB.
+- **10 MB (8 MB for Office files):** no extra memory, and ordinary PDFs of 15 to 30 MB are refused.
+
+**My recommendation: 25 MB.** One figure for every document is easy for people to remember, it covers
+nearly all everyday documents, and it costs the least memory of the choices that do not refuse
+ordinary files.
+
+**What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
+in MB). Nothing on your server changes for either answer.
 
 ## 135. Google Drive: Viewer or Editor on the folder - DECIDED 2026-09-30: A, Viewer
 

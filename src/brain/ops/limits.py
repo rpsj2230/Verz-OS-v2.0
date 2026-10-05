@@ -551,6 +551,21 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
             "is below every limit a registry publishes. Not a vendor's figure, and said so."
         ),
     ),
+    ConnectorLimit(
+        name="slack_messages",
+        per_minute=20,
+        raisable=False,
+        note=(
+            "Slack limits each Web API method per workspace and per app by tier "
+            "(https://docs.slack.dev/apis/web-api/rate-limits). The index reads "
+            "conversations.list and users.list, which are Tier 2, 20 or more a minute; a "
+            "question's users.conversations and conversations.history are Tier 3, 50 or more. "
+            "Recorded at Tier 2, the lowest this connector calls. The tier is Slack's and no plan "
+            "moves it. An app a workspace builds for itself keeps Tier 3 history; the one a "
+            "minute limit Slack set in 2025 is for commercially distributed apps outside its "
+            "Marketplace, which this is not."
+        ),
+    ),
 )
 
 _BY_NAME: Mapping[str, ConnectorLimit] = MappingProxyType({c.name: c for c in SOURCE_CEILINGS})
