@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T10:03:52.658657+00:00",
-  "commit": "31cad079",
-  "commit_subject": "Trace retention closes on the install's own daily reports: the four observation stores are reached and judged every day since #231 (#328)",
+  "generated_at": "2026-10-05T10:15:13.550047+00:00",
+  "commit": "e91a656a",
+  "commit_subject": "Main is green again: the channel-send policy names Teams' and WhatsApp's slots (#327)",
   "total": 1584,
   "done": 472,
   "percent": 29.8,
