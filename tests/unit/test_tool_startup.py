@@ -369,7 +369,13 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         {**startup.SOURCE_ROW_DESCRIPTIONS, "xero": {"invoice": "Read Xero invoices."}},
     )
 
-    assert startup.connector_row_sources() == ("freshdesk", "google_analytics", "hubspot", "xero")
+    assert startup.connector_row_sources() == (
+        "freshdesk",
+        "google_analytics",
+        "hubspot",
+        "search_console",
+        "xero",
+    )
     registered = set(row_readers(build_registry(source="local", records=_Rows())))
     assert registered == {
         ("local", "price_list"),
@@ -379,6 +385,7 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         ("hubspot", "hubspot_company"),
         ("hubspot", "hubspot_contact"),
         ("hubspot", "hubspot_deal"),
+        ("search_console", "search_site"),
     }
     assert classification_for("invoice", source="xero") == xero_invoices
 

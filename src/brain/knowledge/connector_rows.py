@@ -25,14 +25,15 @@ from the connections live at that moment, so a source connected on the Connector
 from the next question and one disconnected does not, with nothing restarted, and a source nobody
 connected contributes no question shape that could tell a person it exists.
 
-**A connected property's figures are classified beside its index fields, and never kept (M11.7.1).**
-Google Analytics keeps the property's name and dates; its sessions, users and conversions for each
-named range are read from Google when a question asks (`google_analytics.AnalyticsReport`). They
-are classified here all the same, each behind its own field capability, because the redactor
-withholds a field nothing classifies from everybody, and a figure read live is a field of the
-property's record by the time the redactor sees it. So "what is the sessions last 28 days of
-<property>" is asked in the words every other question is, and answered only to a reader granted
-that figure in the property's department.
+**A connected property's or site's figures are classified beside its index fields, and never
+kept (M11.7.1, M11.7.2).** Google Analytics keeps the property's name and dates, and Search Console
+the site's name and permission; their traffic and search figures for each named range are read
+from Google when a question asks (`google_analytics.AnalyticsReport`,
+`search_console.SearchConsoleReport`). They are classified here all the same, each behind its own
+field capability, because the redactor withholds a field nothing classifies from everybody, and a
+figure read live is a field of the record by the time the redactor sees it. So "what is the
+sessions last 28 days of <property>" is asked in the words every other question is, and answered
+only to a reader granted that figure in the source's department.
 
 **What each answer reads, and what it never keeps.** The fast lane finds the record in the index
 at the asker's reach, `brain.ops.live_records.SourceRecords` reads that record from its source
@@ -46,7 +47,7 @@ is read from HubSpot's one-record read while the asker waits. Until then HubSpot
 Connectors screen and read into its index, and no question on Ask could reach it, which is why
 `brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1, M11.7.2
 """
 
 from __future__ import annotations
@@ -55,7 +56,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, google_analytics, hubspot, xero
+from brain.connectors import freshdesk, google_analytics, hubspot, search_console, xero
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -88,6 +89,7 @@ SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
         freshdesk.FRESHDESK: "department",
         google_analytics.GOOGLE_ANALYTICS: "department",
         hubspot.CONNECTOR_NAME: "portal_id",
+        search_console.SEARCH_CONSOLE: "department",
     }
 )
 
@@ -177,6 +179,26 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def _kept_and_read_live(
+    source: str, entity: str, kept: tuple[str, ...], figures: tuple[str, ...]
+) -> TableClassification:
+    """A connected source's one entity: the fields its index keeps and the figures read live."""
+    return TableClassification(
+        entity=entity,
+        rules=(
+            *(
+                ColumnRule(
+                    column=name,
+                    required_capability=Capability(value=f"read:{entity}.{name}"),
+                    classification=Classification.INTERNAL,
+                )
+                for name in (*kept, *figures)
+            ),
+            _scope_column(source, entity),
+        ),
+    )
+
+
 def google_analytics_classifications() -> tuple[TableClassification, ...]:
     """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
 
@@ -184,25 +206,25 @@ def google_analytics_classifications() -> tuple[TableClassification, ...]:
     in Freshdesk's pattern, so a reader may be told the property's name and not its traffic, or one
     range and not another. See the module docstring.
     """
-    entity = google_analytics.ENTITY_PROPERTY
-    kept = tuple(one.name for one in google_analytics.PROPERTY_FIELDS)
     return (
-        TableClassification(
-            entity=entity,
-            rules=(
-                *(
-                    ColumnRule(
-                        column=name,
-                        required_capability=Capability(value=f"read:{entity}.{name}"),
-                        classification=Classification.INTERNAL,
-                    )
-                    for name in (
-                        *kept,
-                        *google_analytics.FIGURE_FIELDS,
-                        *google_analytics.RANGE_FIGURE_FIELDS,
-                    )
-                ),
-                _scope_column(google_analytics.GOOGLE_ANALYTICS, entity),
+        _kept_and_read_live(
+            google_analytics.GOOGLE_ANALYTICS,
+            google_analytics.ENTITY_PROPERTY,
+            tuple(one.name for one in google_analytics.PROPERTY_FIELDS),
+            (*google_analytics.FIGURE_FIELDS, *google_analytics.RANGE_FIGURE_FIELDS),
+        ),
+    )
+
+
+def search_console_classifications() -> tuple[TableClassification, ...]:
+    """The connected site, as the property is: its index fields and its figures, each INTERNAL."""
+    return (
+        _kept_and_read_live(
+            search_console.SEARCH_CONSOLE,
+            search_console.ENTITY_SITE,
+            tuple(one.name for one in search_console.SITE_FIELDS),
+            tuple(
+                dict.fromkeys((*search_console.FIGURE_FIELDS, *search_console.RANGE_FIGURE_FIELDS))
             ),
         ),
     )
@@ -215,6 +237,7 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
         freshdesk.FRESHDESK: freshdesk_classifications(),
         google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
         hubspot.CONNECTOR_NAME: hubspot_classifications(),
+        search_console.SEARCH_CONSOLE: search_console_classifications(),
     }
 )
 
@@ -236,6 +259,7 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         # asks about a company or a deal by name and reaches its contacts through it.
         (hubspot.CONNECTOR_NAME, hubspot.ENTITY_CLIENT): "name",
         (hubspot.CONNECTOR_NAME, hubspot.ENTITY_DEAL): "deal_name",
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): search_console.LABEL_FIELD,
     }
 )
 
@@ -275,6 +299,13 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
                 "read live from HubSpot for a reader allowed it"
             ),
         },
+        search_console.SEARCH_CONSOLE: {
+            search_console.ENTITY_SITE: (
+                "Look up the connected Search Console site by name: its clicks and impressions "
+                "for the last 7, 28 or 90 days, its top query and page and its sitemaps' errors, "
+                "read live from Google for a reader allowed them"
+            ),
+        },
     }
 )
 
@@ -289,6 +320,10 @@ LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
             *google_analytics.FIGURE_FIELDS,
             *google_analytics.RANGE_FIGURE_FIELDS,
         ),
+        search_console.ENTITY_SITE: (
+            *search_console.FIGURE_FIELDS,
+            *search_console.RANGE_FIGURE_FIELDS,
+        ),
     }
 )
 
@@ -298,6 +333,9 @@ UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = MappingProxyType(
     {
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): frozenset(
             google_analytics.RANGE_FIGURE_FIELDS
+        ),
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): frozenset(
+            set(search_console.RANGE_FIGURE_FIELDS) - set(search_console.FIGURE_FIELDS)
         ),
     }
 )
