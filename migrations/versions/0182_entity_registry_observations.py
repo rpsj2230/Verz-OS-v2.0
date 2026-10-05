@@ -33,7 +33,7 @@ not apply anyway.
 Task ids: M14.1.3, M14.6.1, M14.7.3
 
 Revision ID: 0182
-Revises: 0154
+Revises: 0162
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0182"
-down_revision = "0154"
+down_revision = "0162"
 branch_labels = None
 depends_on = None
 
