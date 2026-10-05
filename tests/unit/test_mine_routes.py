@@ -16,7 +16,7 @@ member surface's own since 2026-09-17: `read:member.content`, never the console'
 The present is the wall clock, because the route reads it through `brain.api_routes.asking` and a
 month, a day and recall are all measured from it. Rows here are an hour old, never dated.
 
-Task ids: M27.7.28
+Task ids: M27.7.28, M16.4.2
 """
 
 from __future__ import annotations
@@ -45,10 +45,13 @@ from brain.identity.bearer import TokenAuthority
 from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.knowledge.search import PRINCIPAL_SETTING
 from brain.member.shell import DISCLOSURE_PREFIX
+from brain.memory.digest import Learning, Undo, undo
+from brain.memory.review import Edit, edit
+from brain.memory.signals import Signal
 from brain.mine_routes import (
+    FORGET_AND_EDIT_SAY,
     MAX_OWN_RUNS,
     MORE_SPEND_THAN_THIS_PAGE_READS,
-    UNDO_IS_NOT_RECORDED,
     month_start,
 )
 from brain.ops.budgets import BudgetLevel, BudgetPeriod
@@ -56,6 +59,7 @@ from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.knowledge import KnowledgeItemRow
+from brain.tables.learning import LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.spend import SpendActualRow
 from tests.fixtures.http_client import Response
@@ -70,7 +74,7 @@ from tests.unit.test_api_routes import (
     token_for,
     verifier,
 )
-from tests.unit.test_estate_routes import CLIENT_NAME, an_item, inferred, stated
+from tests.unit.test_estate_routes import CLIENT_NAME, an_item, inferred, learnt, stated
 
 WORKSPACE = f"{API_PREFIX}/me/workspace"
 
@@ -179,6 +183,9 @@ class StubResult:
 
     def scalar_one(self) -> int:
         return len(self._rows)
+
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
 
 
 def _function_called(statement: Any) -> tuple[str, list[Any]] | None:
@@ -332,7 +339,7 @@ def test_a_member_sees_what_they_asked_kept_and_were_given_and_nothing_of_anybod
         ("mem_guess", False),
         ("mem_mine", True),
     ]
-    assert body["learned_undo"] == UNDO_IS_NOT_RECORDED
+    assert body["learned_undo"] == FORGET_AND_EDIT_SAY
     assert body["can_ask_about"].startswith(DISCLOSURE_PREFIX)
 
 
@@ -415,3 +422,119 @@ def test_there_is_no_way_to_ask_about_somebody_else() -> None:
 
     assert operation.get("parameters", []) == []
     assert set(app.openapi()["paths"][WORKSPACE]) == {"get"}
+
+
+# ------------------------------------------------------------ forgetting and editing
+FORGET = f"{API_PREFIX}/me/memory/forget"
+EDIT = f"{API_PREFIX}/me/memory/edit"
+
+
+class KeptRecords:
+    """`brain.ops.memory_store.MemoryRecords` deciding with the domain and writing nothing."""
+
+    def __init__(self) -> None:
+        self.undone: list[tuple[Learning, str]] = []
+        self.edited: list[tuple[Learning, Learning, str, str]] = []
+
+    async def undo(self, learning: Learning, *, actor: str, trace_id: str, ent_hash: str) -> Undo:
+        self.undone.append((learning, actor))
+        return undo(learning, at=datetime.now(UTC))
+
+    async def edit(
+        self,
+        learning: Learning,
+        replacement: Learning,
+        statement: str,
+        *,
+        prompted_by: Signal,
+        actor: str,
+        trace_id: str,
+        ent_hash: str,
+    ) -> Edit:
+        self.edited.append((learning, replacement, statement, actor))
+        return edit(learning, replacement, at=datetime.now(UTC), prompted_by=prompted_by)
+
+
+@pytest.fixture
+def records(client: TestClient) -> KeptRecords:
+    kept = KeptRecords()
+    client.app.state.memory_records = kept  # type: ignore[attr-defined]
+    return kept
+
+
+def post(c: TestClient, pid: str, path: str, body: dict[str, str]) -> Response:
+    response: Response = c.post(
+        path, json=body, headers={"authorization": f"Bearer {token_for(pid)}"}
+    )
+    return response
+
+
+def memories_with_records(rows: dict[type, list[Any]]) -> None:
+    """Two people's memories, each with the learning record a conversation leaves."""
+    two_people(rows)
+    rows[LearningRow] = [
+        learnt("mem_mine", agent_id=None),
+        learnt("mem_guess", agent_id=None),
+        learnt("mem_theirs", agent_id=None),
+    ]
+
+
+def test_a_member_forgets_a_memory_formed_from_their_own_words(
+    client: TestClient, rows: dict[type, list[Any]], records: KeptRecords
+) -> None:
+    """**A person reads, edits and forgets what is remembered about them** (M16.4.2, M16.7.7's
+    person's half). Forget reaches the store the Learning screen's undo writes through, with their
+    own memory and their own name, and answers what it wrote.
+
+    Delete this and the forget control can answer success with nothing handed to the store."""
+    memories_with_records(rows)
+
+    response = post(client, ME, FORGET, {"memory_id": "mem_mine"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["took_effect"] is True
+    assert [(one.memory_id, actor) for one, actor in records.undone] == [("mem_mine", ME)]
+
+
+def test_a_member_edits_a_memory_and_the_replacement_changes_the_words_and_nothing_else(
+    client: TestClient, rows: dict[type, list[Any]], records: KeptRecords
+) -> None:
+    """The replacement names the memory it replaces, keeps its person, place, capabilities, kind
+    and change, and carries what they wrote. Delete this and an edit could hand a memory to
+    somebody else or move it somewhere more readers reach."""
+    memories_with_records(rows)
+
+    response = post(client, ME, EDIT, {"memory_id": "mem_mine", "statement": "Dates before hours"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    [(original, replacement, statement, actor)] = records.edited
+    assert (body["took_effect"], body["replacement_id"]) == (True, replacement.memory_id)
+    assert (statement, actor, replacement.replaced_id) == ("Dates before hours", ME, "mem_mine")
+    assert replacement.formation.principal_id == original.formation.principal_id == ME
+    assert replacement.formation.scope == original.formation.scope
+    assert replacement.formation.capabilities == original.formation.capabilities
+    assert replacement.formation.kind is original.formation.kind
+    assert replacement.memory_id != original.memory_id
+
+
+def test_somebody_elses_memory_is_refused_as_a_missing_one_and_reaches_no_store(
+    client: TestClient, rows: dict[type, list[Any]], records: KeptRecords
+) -> None:
+    """Forget and edit on another person's memory, on one that does not exist, on a statement of
+    white space, and by somebody without the member grant are the one 404, and nothing reaches the
+    store. Delete this and a person could forget or rewrite what is remembered about somebody else
+    by its id."""
+    memories_with_records(rows)
+
+    refused = [
+        post(client, ME, FORGET, {"memory_id": "mem_theirs"}),
+        post(client, ME, FORGET, {"memory_id": "mem_nothing"}),
+        post(client, ME, EDIT, {"memory_id": "mem_theirs", "statement": "Mine now"}),
+        post(client, ME, EDIT, {"memory_id": "mem_mine", "statement": "   "}),
+        post(client, "u_admin", FORGET, {"memory_id": "mem_mine"}),
+    ]
+
+    assert [one.status_code for one in refused] == [404] * 5
+    assert len({one.json()["message"] for one in refused[:4]}) == 1
+    assert (records.undone, records.edited) == ([], [])
