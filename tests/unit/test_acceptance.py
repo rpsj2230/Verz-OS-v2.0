@@ -584,6 +584,7 @@ WRITTEN_BY_CHECKS = (
     "obs.trace_read",
     "ops.operation",
     "ops.budget_version",
+    "ops.control_run",
 )
 
 
