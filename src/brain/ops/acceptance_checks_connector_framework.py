@@ -52,6 +52,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import re
 import secrets
 import threading
 import time
@@ -64,7 +65,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qs, urlsplit
 
 from brain.connectors.contract import FetchRequest, HealthState, identity_mode_default
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import ViewReading, shipped
 from brain.connectors.federation import CONNECTOR_TIMEOUT_MS, FEDERATION_TIMEOUT_MS, FailureReason
 from brain.connectors.live_read import (
     LIVE_READ_BUDGET_MS,
@@ -101,6 +102,7 @@ from brain.ops.connector_store import Connection, StoredConnections, live
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
     KEY_DECLINED,
+    NO_READING,
     NO_VERIFIED_CEILING,
     READ_TO_THE_END,
     READINGS,
@@ -137,8 +139,9 @@ CHECK_ORDER: Final = 130
 #: Why each connectable source is connected with identifiers the check made up.
 A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN: Final = (
     "The interface and the scope at connect are about every source the console connects, so the "
-    "check fills each source's form as a person would, with an organisation, account or helpdesk "
-    "made up for the run in the shape the source's own connection class accepts. Nothing is "
+    "check fills each source's form as a person would, with an organisation, account, helpdesk, "
+    "folder or database made up for the run in the shape the source's own connection class "
+    "accepts, and a credential in the shape the source takes. Nothing is "
     "connected by filling a form, and a source the console gains without a row here fails the "
     "check rather than passing it unexamined."
 )
@@ -178,7 +181,41 @@ FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
             "department": RESERVED_DEPARTMENTS[0],
         },
         "hubspot": lambda: {"portal_id": str(10**8 + secrets.randbelow(9 * 10**8))},
+        "cloudflare": lambda: {
+            "account_id": secrets.token_hex(16),
+            "department": RESERVED_DEPARTMENTS[0],
+        },
         SOURCE: _settings,
+        "google_drive": lambda: {
+            "folder": f"acceptance{secrets.token_hex(8)}",
+            "domain": f"acceptance-{secrets.token_hex(4)}.example",
+            "department": RESERVED_DEPARTMENTS[0],
+            "steward": f"acceptance-steward-{secrets.token_hex(4)}",
+        },
+        "domains": lambda: {
+            "domains": f"acceptance-{secrets.token_hex(4)}.example, "
+            f"acceptance-{secrets.token_hex(4)}.example",
+            "department": RESERVED_DEPARTMENTS[0],
+        },
+        "google_analytics": lambda: {
+            "property": str(10**8 + secrets.randbelow(9 * 10**8)),
+            "department": RESERVED_DEPARTMENTS[0],
+        },
+        "search_console": lambda: {
+            "site": f"sc-domain:acceptance-{secrets.token_hex(4)}.example",
+            "department": RESERVED_DEPARTMENTS[0],
+        },
+        "laravel": lambda: {
+            "schema": f"acceptance_{secrets.token_hex(4)}",
+            "host": f"acceptance-{secrets.token_hex(4)}.invalid",
+            "port": "3306",
+            "private_network": "no",
+            "tls": "verify",
+            "client_rule": f"department = {RESERVED_DEPARTMENTS[0]}",
+            "user_rule": f"department = {RESERVED_DEPARTMENTS[0]}",
+            "max_rows": "500",
+            "timeout_seconds": "10",
+        },
     }
 )
 
@@ -357,6 +394,41 @@ def _form(name: str) -> dict[str, str]:
     if fill is None:
         raise CheckFailedError("a source the console can connect has no form this check fills")
     return fill()
+
+
+def _typed(selector: str, value: str) -> bool:
+    """Whether a scope's selector is what was typed into one setting: the setting itself, a name
+    inside it (a database's `schema.v_client`), or one item of a list it holds (a domain)."""
+    items = [one.strip().lower().rstrip(".") for one in re.split(r"[\s,;]+", value)]
+    return selector in (value, *items) or selector.startswith(f"{value}.")
+
+
+def _credential(name: str) -> str:
+    """A credential made up for the check in the shape this source takes it (M11.7.7).
+
+    A key, a service account key file or a database user's name and password, each random and
+    good for nothing: the check judges it as the connect route would and keeps it nowhere real.
+    """
+    from brain.connectors.declaration import CredentialShape
+    from brain.ops.credentials import SERVICE_ACCOUNT
+
+    match CONNECTABLE[name].credential_shape:
+        case CredentialShape.KEY:
+            return secrets.token_hex(24)
+        case CredentialShape.KEY_FILE:
+            return json.dumps(
+                {
+                    "type": SERVICE_ACCOUNT,
+                    "client_email": f"acceptance-{secrets.token_hex(4)}@acceptance.example",
+                    "private_key": secrets.token_hex(32),
+                }
+            )
+        case CredentialShape.DATABASE_USER:
+            return json.dumps(
+                {"user": f"acceptance_{secrets.token_hex(4)}", "password": secrets.token_hex(16)}
+            )
+        case CredentialShape.NONE:
+            return ""
 
 
 @dataclass
@@ -559,6 +631,8 @@ async def a_source_is_read_by_its_declaration_and_its_key_is_in_no_table(
     plan = plan_for(connected.connection, last=None, now=h.now)
     if plan.refused or not plan.due or plan.reading is None:
         raise CheckFailedError("the worker's plan would not read a source connected as declared")
+    if isinstance(plan.reading, ViewReading):
+        raise CheckFailedError("the source this check reads is not read over HTTP")
     answered = _Answering(_listed)
     read = await attempt(
         connected,
@@ -626,6 +700,8 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 
     rig = _rig(h)
     reading = READINGS[SOURCE]
+    if isinstance(reading, ViewReading):
+        raise CheckFailedError("the source this check reads is not read over HTTP")
     for entity in reading.entities():
         try:
             reading.operation(entity, settings=rig.settings, resolver=_Inside())
@@ -677,9 +753,10 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 @check(
     leaves=("M11.2.3",),
     sentence=(
-        "Each source the console connects is connected to the one organisation, account or "
-        "helpdesk typed and admits no other, and the connect route refuses a selector of *, **, "
-        "all or everything for it in that source's own words before any manifest is built."
+        "Each source the console connects is connected to the organisation, account, helpdesk, "
+        "folder, database or domains typed and admits no other, and the connect route refuses a "
+        "selector of *, **, all or everything for it in that source's own words before any "
+        "manifest is built."
     ),
 )
 async def a_source_is_connected_to_one_named_thing_and_never_to_everything(h: Harness) -> None:
@@ -688,20 +765,27 @@ async def a_source_is_connected_to_one_named_thing_and_never_to_everything(h: Ha
 
     for name, kind in CONNECTABLE.items():
         settings = _form(name)
-        key = secrets.token_hex(24)
+        key = _credential(name)
         if connection_problems(name, settings, key):
             raise CheckFailedError("the connect route refused a source connected as its form asks")
         scope = manifest_for(name, settings).scope
-        named = [one for one in kind.settings if settings[one.name] in scope.selectors]
-        if len(scope.selectors) != 1 or len(named) != 1:
+        # The one thing typed is the setting every selector is, or is inside: a database's views
+        # are named within it (`schema.v_client`), everything else is the one selector itself.
+        named = [
+            one
+            for one in kind.settings
+            if all(_typed(selector, settings[one.name]) for selector in scope.selectors)
+        ]
+        if not scope.selectors or len(named) != 1:
             raise CheckFailedError(
                 "a connected source's scope names other than the one thing typed"
             )
-        selector, setting = scope.selectors[0], named[0]
-        if not scope.admits(selector) or any(
-            scope.admits(one) for one in (*EVERYTHING, f"{selector}0")
-        ):
-            raise CheckFailedError("a connected source's scope admits other than what it names")
+        setting = named[0]
+        for selector in scope.selectors:
+            if not scope.admits(selector) or any(
+                scope.admits(one) for one in (*EVERYTHING, f"{selector}0")
+            ):
+                raise CheckFailedError("a connected source's scope admits other than what it names")
         for wide in EVERYTHING:
             everything = {**settings, setting.name: wide}
             told = [
@@ -881,7 +965,7 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
         "Every connectable source's plan and live-read bucket follow its documented row in "
         "brain.ops.limits, and Xero's row states its daily figure in its own note; live reads past "
         "the bucket's burst are refused as quota with no call, and a source with no documented "
-        "row, HubSpot today, is not read at all."
+        "row is not read at all."
     ),
 )
 async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> None:
@@ -901,7 +985,10 @@ async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> Non
         plan = plan_for(connection, last=None, now=h.now)
         row = connector_ceiling(manifest.ceiling)
         if row is None:
-            if plan.refused != NO_VERIFIED_CEILING:
+            # Refused for its missing ceiling, or before that for having no reading at all: either
+            # way it is not read. No source offered today lacks a row, and the branch stays for
+            # the next one that does.
+            if plan.refused not in (NO_VERIFIED_CEILING, NO_READING):
                 raise CheckFailedError(
                     "a source with no documented ceiling was planned for reading"
                 )

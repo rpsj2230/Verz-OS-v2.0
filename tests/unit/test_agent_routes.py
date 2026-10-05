@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import ast
 import inspect
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -83,8 +83,10 @@ from brain.core.errors import Absent
 from brain.core.lane import Lane
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
+from brain.gate.abstain import AutonomyBreaker
 from brain.gate.context import TrafficClass
 from brain.gate.injection import AutonomyTier
+from brain.gate.takeover_store import standing_from
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
 from brain.models.routing import DEFAULT_TIER
@@ -867,6 +869,8 @@ def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it
         "created_at": "2019-03-01T09:00:00Z",
         "state": None,
         "leash_up_to": None,
+        "department": None,
+        "template_name": "Pricing desk",
     }
 
 
@@ -1097,6 +1101,8 @@ def test_an_install_that_does_not_construct_is_an_agent_with_no_lineage_and_no_c
         "created_at": None,
         "state": "enabled",
         "leash_up_to": None,
+        "department": None,
+        "template_name": None,
     }
     assert spoiled.json()["composition"] == []
     # And every block the install supplies goes with it, rather than half a workspace drawn
@@ -1747,6 +1753,8 @@ def test_the_profile_is_the_agents_setup_for_a_reader_of_the_settings_tab_and_no
             "configured": True,
             "acts": True,
             "entries": [{"rung": "assisted", "where": None}],
+            "lowered_to": None,
+            "taken_over_at": [],
         },
         {
             "target": READS,
@@ -1755,6 +1763,8 @@ def test_the_profile_is_the_agents_setup_for_a_reader_of_the_settings_tab_and_no
             "configured": True,
             "acts": False,
             "entries": [{"rung": "autonomous", "where": None}],
+            "lowered_to": None,
+            "taken_over_at": [],
         },
         {
             "target": SENDS,
@@ -1763,10 +1773,86 @@ def test_the_profile_is_the_agents_setup_for_a_reader_of_the_settings_tab_and_no
             "configured": False,
             "acts": True,
             "entries": [],
+            "lowered_to": None,
+            "taken_over_at": [],
         },
     ]
     assert workspace_of(client, "u_narrow", "quote_helper").json()["profile"] is None
     assert workspace_of(client, "u_prefix", "quote_helper").json()["profile"] is None
+
+
+class Standings:
+    """A `TakeoverStandings` over instants per target, recording who it was asked about."""
+
+    def __init__(self, instants: dict[str, tuple[datetime, ...]]) -> None:
+        self.instants = instants
+        self.asked: list[str] = []
+
+    async def standing(self, agent_id: str, target: str, now: datetime) -> AutonomyBreaker:
+        return (await self.standings(agent_id, (target,), now))[target]
+
+    async def standings(
+        self, agent_id: str, targets: Sequence[str], now: datetime
+    ) -> dict[str, AutonomyBreaker]:
+        self.asked.append(agent_id)
+        return {one: standing_from(agent_id, one, self.instants.get(one, ())) for one in targets}
+
+
+def test_a_rung_people_keep_taking_over_is_shown_lowered_with_when_to_a_settings_reader_alone(
+    client: TestClient, stored: Stored
+) -> None:
+    """M8.3.5 on the page. Three takeovers inside the week on the drafting action show it held a
+    step lower, with when; two on the reading action show when and lower nothing; the sending
+    action nobody took over shows neither. A member of the audience is sent no profile and the
+    standings are not even read for them. Delete this and the Profile states a rung the agent is
+    no longer held to, or tells a reader outside the configuration plane when people did an
+    agent's work."""
+    an_acting_agent(stored)
+    app_of(client).state.tools = tools_acting()
+    now = datetime.now(UTC)
+    three = tuple(now - timedelta(days=days) for days in (3, 2, 1))
+    two = three[1:]
+    store = Standings({DRAFTS: three, READS: two})
+    app_of(client).state.takeovers = store
+
+    member = workspace_of(client, "u_narrow", "quote_helper").json()["profile"]
+    asked_for_member = list(store.asked)
+    leash = {
+        one["target"]: one
+        for one in workspace_of(client, "u_admin", "quote_helper").json()["profile"]["leash"]
+    }
+
+    assert member is None and asked_for_member == []
+    assert leash[DRAFTS]["rung"] == "assisted"
+    assert leash[DRAFTS]["lowered_to"] == "shadow"
+    assert [datetime.fromisoformat(one) for one in leash[DRAFTS]["taken_over_at"]] == list(three)
+    assert leash[READS]["lowered_to"] is None
+    assert len(leash[READS]["taken_over_at"]) == 2
+    assert (leash[SENDS]["lowered_to"], leash[SENDS]["taken_over_at"]) == (None, [])
+    assert store.asked == ["quote_helper"]
+
+
+def test_a_standing_that_cannot_be_read_leaves_the_page_drawn_without_it(
+    client: TestClient, stored: Stored
+) -> None:
+    """The page describes the leash and does not decide it, so a failed read is drawn as no
+    standing rather than as a broken page. Delete this and a missing function on an install that
+    has not migrated fails every agent's page for its administrators."""
+
+    class Broken(Standings):
+        async def standings(
+            self, agent_id: str, targets: Sequence[str], now: datetime
+        ) -> dict[str, AutonomyBreaker]:
+            raise RuntimeError("function gate.takeover_instants does not exist")
+
+    an_acting_agent(stored)
+    app_of(client).state.tools = tools_acting()
+    app_of(client).state.takeovers = Broken({})
+
+    response = workspace_of(client, "u_admin", "quote_helper")
+
+    assert response.status_code == 200, response.text
+    assert all(one["lowered_to"] is None for one in response.json()["profile"]["leash"])
 
 
 def test_the_ceilings_capability_names_reach_a_reader_of_the_vocabulary_whole_and_nobody_else(

@@ -7,6 +7,7 @@
  * Task ids: none
  */
 
+import { agentPreviewApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { STEWARD_API_PATH } from "../../../src/pages/dataStewardQuery";
 import {
   DISABLE_API_PATH,
@@ -22,6 +23,7 @@ import {
   REMOVAL_API_PATH,
   SEVERAL_GRANTS_API_PATH,
   transferApiPath as personTransferApiPath,
+  workEmailApiPath,
 } from "../../../src/pages/people/peopleQuery";
 import { END_SESSION_API_PATH, END_SESSIONS_API_PATH } from "../../../src/pages/sessionsQuery";
 import { LINK_API_PATH, UNLINK_API_PATH } from "../../../src/pages/signInLinksQuery";
@@ -44,6 +46,9 @@ const DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN = t(
 );
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)": [
+    at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
+  ],
   "src/pages/people/PersonPlacements.tsx MEMBERSHIP_API_PATH": [
     at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
   ],
@@ -66,6 +71,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
     at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
   ],
+  "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)": [
+    at("POST /api/v1/govern/directory/{principal_id}/work-email", "workEmailApiPath", workEmailApiPath("u_first")),
+  ],
   "src/pages/people/PersonOverview.tsx transferApiPath(waiting.agentId)": [
     at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", personTransferApiPath("a_quotes")),
   ],
@@ -85,6 +93,15 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/govern/directory/{principal_id}/work-email": {
+    row: t("test_work_email", "test_the_list_person_who_holds_nothing_is_joined_retired_and_recorded", true),
+    audit: t("test_work_email", "test_the_list_person_who_holds_nothing_is_joined_retired_and_recorded", true),
+    behaviour: t(
+      "test_work_email",
+      "test_a_list_person_somebody_granted_something_is_joined_only_after_the_page_asks",
+      true,
+    ),
+  },
   "POST /api/v1/govern/directory": {
     row: PERSON_ADDED_BY_HAND,
     audit: PERSON_ADDED_BY_HAND,

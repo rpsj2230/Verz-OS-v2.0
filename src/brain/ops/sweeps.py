@@ -250,6 +250,18 @@ class _NoRows:
         return []
 
 
+class _NoFigures:
+    """Live figure reads that read nothing, so `build_registry` registers the figure tools too.
+
+    The application hands its registry a real reader (`brain.app`), so a sweep counting what the
+    application names has to take the same branch, or it would count two tools fewer than the
+    process registers.
+    """
+
+    async def figures(self, *args: object, **kwargs: object) -> None:
+        return None
+
+
 def _registered_tool_names() -> tuple[str, ...]:
     """The names the application actually registers at boot.
 
@@ -260,7 +272,11 @@ def _registered_tool_names() -> tuple[str, ...]:
     try:
         from brain.tools.startup import build_registry
 
-        registry = build_registry(source="freshdesk", records=_NoRows())  # type: ignore[arg-type]
+        registry = build_registry(
+            source="freshdesk",
+            records=_NoRows(),  # type: ignore[arg-type]
+            figures=_NoFigures(),
+        )
         return tuple(sorted(registry.names()))
     except Exception:
         return ()

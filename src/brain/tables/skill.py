@@ -46,7 +46,11 @@ applies, because a label is not part of the procedure and changing one must not 
 to review. Every constraint `0121` adds binds only a column it added, for
 `brain.deployment.compatibility`'s reason about the release still running during a deploy.
 
-Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13
+**A skill's escalation is three columns on its row (`0168`, M8.3.1)**, null together on every skill
+that declares none, so every row written before them reads back as the skill it was. Nullable rather
+than defaulted, because a default of an empty queue would be a declaration nobody wrote.
+
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M8.3.1
 """
 
 from __future__ import annotations
@@ -63,6 +67,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Identity,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -117,6 +122,14 @@ COMMIT_PATTERN: Final = r"^[0-9a-f]{40}$"
 #: lookahead, and the domain refuses them before a row is written.
 PATH_PATTERN: Final = r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"
 
+#: `brain.tools.skills.ESCALATION_QUEUE_RE`, restated for the reason `SKILL_NAME_PATTERN` gives.
+ESCALATION_QUEUE_PATTERN: Final = r"^[a-z][a-z0-9_]{0,59}$"
+ESCALATION_QUEUE_CHARS: Final = 60
+
+#: `brain.tools.skills.ESCALATION_NEEDS_CHARS` and `MAX_ESCALATION_HOURS`, restated likewise.
+ESCALATION_NEEDS_CHARS: Final = 300
+MAX_ESCALATION_HOURS: Final = 72
+
 #: `brain.console.skill_library.MAX_CATEGORIES`, restated for the same reason.
 MAX_CATEGORIES: Final = 8
 
@@ -164,6 +177,14 @@ class SkillRow(Base):
     edited_from: Mapped[str | None] = mapped_column(
         String(DIGEST_CHARS), ForeignKey("agent.skill.digest"), nullable=True
     )
+    #: The queue its question goes to when nothing answered it. `0168`, M8.3.1.
+    escalate_to: Mapped[str | None] = mapped_column(String(ESCALATION_QUEUE_CHARS), nullable=True)
+    #: What would unblock the question, in the author's words. `0168`.
+    escalation_needs: Mapped[str | None] = mapped_column(
+        String(ESCALATION_NEEDS_CHARS), nullable=True
+    )
+    #: Hours a person has to pick it up, or null for the product default. `0168`.
+    escalate_within: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"digest ~ '{DIGEST}'", name="digest_shape"),
@@ -195,6 +216,20 @@ class SkillRow(Base):
         CheckConstraint(
             f"edited_from IS NULL OR (edited_from ~ '{DIGEST}' AND edited_from <> digest)",
             name="edited_from_another_version",
+        ),
+        CheckConstraint(
+            f"escalate_to IS NULL OR escalate_to ~ '{ESCALATION_QUEUE_PATTERN}'",
+            name="escalate_to_shape",
+        ),
+        CheckConstraint(
+            "(escalate_to IS NULL) = (escalation_needs IS NULL)"
+            " AND (escalation_needs IS NULL OR length(btrim(escalation_needs)) > 0)",
+            name="an_escalation_says_what_it_needs",
+        ),
+        CheckConstraint(
+            "escalate_within IS NULL OR (escalate_to IS NOT NULL"
+            f" AND escalate_within BETWEEN 1 AND {MAX_ESCALATION_HOURS})",
+            name="escalate_within_hours",
         ),
         {"schema": "agent"},
     )

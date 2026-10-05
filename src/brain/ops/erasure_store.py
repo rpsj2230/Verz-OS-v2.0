@@ -68,7 +68,13 @@ decision about one person, confirmed on the screen by somebody holding the autho
 a second release would be the same decision asked twice. See
 `A_FILED_REQUEST_IS_ALREADY_THE_DECISION`.
 
-Task ids: M27.7.24
+**A column that is how a person is reached is cleared, even on a row kept as the trail.** Retiring
+a row keeps it; a binding's Lark address (`0166`, needs-rupash 118) is not a record of what the
+person did but the way to reach them, so `CLEARED` names it and the executor nulls it on every row
+about the person, retired rows included, before the row's own rule runs. See
+`A_RETIRED_ROW_KEEPS_NO_ADDRESS`.
+
+Task ids: M27.7.24, M10.3.5
 """
 
 from __future__ import annotations
@@ -252,6 +258,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "gate.capability_pack_assignment": "principal_id",
         "gate.department_lead": "principal_id",
         "gate.elevation_request": "principal_id",
+        # A question handed to a person, in the asker's words (`0168`). `0168` grants no way for a
+        # row to leave, so an erasure keeps these and reports them kept, as it does a referral.
+        "gate.escalation": "asker_id",
         "gate.grants_version": "principal_id",
         "gate.review_decision": "principal_id",
         # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
@@ -441,6 +450,20 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     }
 )
 
+#: Columns cleared on every row about the person, retired rows included, where the row itself is
+#: retired and kept: a value that is the person's own and must not outlive the erasure in a row the
+#: trail keeps. The Lark address a binding holds since `0166` (needs-rupash 118).
+CLEARED: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {"auth.principal_identity": ("channel_address",)}
+)
+
+#: Why a column is cleared on rows the erasure retires or finds retired.
+A_RETIRED_ROW_KEEPS_NO_ADDRESS: Final = (
+    "a retired row is kept as the trail of what happened and is readable by nobody, but an address "
+    "is how a person is reached rather than a record of what they did, so an erasure clears it on "
+    "every row about them, including rows retired before it ran"
+)
+
 #: Tables an erasure keeps on purpose, and why.
 RETAINED: Final[Mapping[str, str]] = MappingProxyType(
     {
@@ -464,8 +487,10 @@ def declaration_gaps(
     through: Mapping[str, Through] = THROUGH,
     about_nobody: frozenset[str] = ABOUT_NOBODY,
     retained: Mapping[str, str] = RETAINED,
+    cleared: Mapping[str, tuple[str, ...]] = CLEARED,
 ) -> tuple[str, ...]:
-    """Every table in an erasable PostgreSQL store that is declared in no way, or in two.
+    """Every table in an erasable PostgreSQL store that is declared in no way, or in two, and a
+    table whose columns are cleared that names nobody.
 
     `tables` is handed in rather than read from `brain.db.metadata` here, for the reason
     `brain.ops.retention.store_gaps` takes its facts: a check that can only run against the
@@ -490,6 +515,8 @@ def declaration_gaps(
     for table, via in sorted(through.items()):
         if via.parent not in subjects:
             findings.append(f"{table} reaches a person through {via.parent}, which names nobody")
+    for table in sorted((set(cleared) & set(tables)) - set(subjects)):
+        findings.append(f"{table} has columns cleared on erasure and names nobody whose they are")
     return tuple(findings)
 
 
@@ -529,6 +556,7 @@ class PostgresEraser:
         through: Mapping[str, Through] = THROUGH,
         about_nobody: frozenset[str] = ABOUT_NOBODY,
         retained: Mapping[str, str] = RETAINED,
+        cleared: Mapping[str, tuple[str, ...]] = CLEARED,
         role: str = APPLICATION_ROLE,
     ) -> None:
         self.conn = conn
@@ -536,6 +564,7 @@ class PostgresEraser:
         self.through = through
         self.about_nobody = about_nobody
         self.retained = retained
+        self.cleared = cleared
         self.role = role
 
     # -------------------------------------------------------------------- the protocol
@@ -553,6 +582,9 @@ class PostgresEraser:
             with self.conn.transaction():
                 for table in tables:
                     rule = rules[table]
+                    # Before the row's own rule, and on every row about the person: see
+                    # `A_RETIRED_ROW_KEEPS_NO_ADDRESS`.
+                    self._clear(table, subject_id)
                     if rule.retire:
                         self._retire(table, subject_id)
                         retired += self._count(table, subject_id, retired=True)
@@ -666,6 +698,22 @@ class PostgresEraser:
             "UPDATE {table} SET deleted_at = statement_timestamp() "
             "WHERE {condition} AND deleted_at IS NULL"
         ).format(table=_identifier(table), condition=condition)
+        return self.conn.execute(query, params).rowcount
+
+    def _clear(self, table: str, subject_id: str) -> int:
+        """Null the columns `cleared` names on every row about the person, retired or not."""
+        columns = self.cleared.get(declared_as(table), ())
+        if not columns:
+            return 0
+        condition, params = self._whose(table, subject_id)
+        query = sql.SQL("UPDATE {table} SET {assignments} WHERE {condition}").format(
+            table=_identifier(table),
+            assignments=sql.SQL(", ").join(
+                sql.SQL("{column} = NULL").format(column=sql.Identifier(column))
+                for column in columns
+            ),
+            condition=condition,
+        )
         return self.conn.execute(query, params).rowcount
 
     def _delete(self, table: str, subject_id: str) -> int:
