@@ -501,8 +501,8 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         meaning=(
             "Comma-separated optional services this server runs beside its profile, started by "
             "the next release only where the server's measured memory has room for them: "
-            "presidio for the personal data detector. `none` runs none of them. Changed on "
-            "Install, Settings."
+            "presidio for the personal data detector, langfuse for the trace ledger and its file "
+            "store. `none` runs none of them. Changed on Install, Settings."
         ),
         default="none",
     ),
