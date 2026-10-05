@@ -126,6 +126,9 @@ class Card:
     runs_as: str
     raised_at: datetime
     expires_at: datetime
+    #: Why approving this sends nothing, in the grant's own words, or empty when it would run
+    #: (M11.7.3): a connector write this install has not allowed. Never a tool call's detail.
+    unsent_because: str = ""
 
     def __post_init__(self) -> None:
         if not self.artefact.strip():
@@ -158,7 +161,13 @@ def card_gaps(shape: type = Card) -> tuple[str, ...]:
     )
 
 
-def card(suspension: SuspendedAction, entitlement: EntitlementSet, now: datetime) -> Card | None:
+def card(
+    suspension: SuspendedAction,
+    entitlement: EntitlementSet,
+    now: datetime,
+    *,
+    unsent_because: str = "",
+) -> Card | None:
     """What this approver is shown for this suspension, or `None`.
 
     `None` for a suspension this approver is not offered, and it is the same `None` for one
@@ -177,6 +186,7 @@ def card(suspension: SuspendedAction, entitlement: EntitlementSet, now: datetime
         runs_as=suspension.principal_id,
         raised_at=suspension.raised_at,
         expires_at=suspension.expires_at,
+        unsent_because=unsent_because,
     )
 
 

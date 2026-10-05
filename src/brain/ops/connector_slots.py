@@ -24,12 +24,16 @@ slot is defined here beside the connected sources' with scopes that cover every 
 service account named outright because it is the one kind whose account is a person-shaped login
 an administrator creates by hand. A slot per kind would be three slots nothing reads.
 
+**A write grant has a slot of its own, beside the read key's (M11.7.3).** Cloudflare's approved DNS
+changes are sent with a key that can edit DNS, kept at `connector_keys/cloudflare_dns_changes` and
+defined here like every other slot, so the read key's slot never has to hold a write permission.
+
 **The words go into a shell command, so their alphabet is closed.** `SAFE_SCOPE` admits letters,
 digits, spaces and `._:*,-`, and no quote, so the installer can single-quote a value without
 escaping anything. A scope that needs another character is a reason to change this constant and
 the installer's quoting together, deliberately.
 
-Task ids: M38.4.1.3, M1.6.6
+Task ids: M38.4.1.3, M1.6.6, M11.7.3
 """
 
 from __future__ import annotations
@@ -42,7 +46,8 @@ from typing import Final
 
 from brain.connectors.declaration import CredentialShape
 from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
-from brain.ops.credentials import connector_key_slot
+from brain.ops.credentials import connector_key_slot, connector_write_slot
+from brain.ops.openbao import CONNECTOR_KEY_PREFIX
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -96,6 +101,16 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
         one.connector: one
         for one in (
             SlotScopes(
+                "cloudflare",
+                request=("Zone Read", "DNS Read", "Analytics Read"),
+                refuse=("DNS Write", "any Edit permission", "the Global API Key"),
+            ),
+            SlotScopes(
+                "cloudflare_dns_changes",
+                request=("DNS Edit",),
+                refuse=("Zone Edit", "any Account permission", "the Global API Key"),
+            ),
+            SlotScopes(
                 "freshdesk",
                 request=("an agent API key with read access",),
                 refuse=("an admin key, which can change SLAs and delete tickets",),
@@ -131,6 +146,11 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
                 refuse=("docs:document edit scopes",),
             ),
             SlotScopes(
+                "search_console",
+                request=("webmasters.readonly", "restricted permission on the one property"),
+                refuse=("webmasters", "domain-wide delegation"),
+            ),
+            SlotScopes(
                 STAFF_LIST,
                 request=(
                     "read on the staff directory only",
@@ -161,7 +181,12 @@ def slot_gaps() -> tuple[str, ...]:
     keyless = {
         name for name, kind in CONNECTABLE.items() if kind.credential_shape is CredentialShape.NONE
     }
-    known = (set(CONNECTABLE) - keyless) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST}
+    writes = {
+        write_slot_name(name, grant.name): grant
+        for name, kind in CONNECTABLE.items()
+        for grant in kind.writes
+    }
+    known = (set(CONNECTABLE) - keyless) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST} | set(writes)
     found = [
         f"{name} has a connector and no credential slot"
         for name in sorted(known - set(SLOT_SCOPES))
@@ -179,7 +204,21 @@ def slot_gaps() -> tuple[str, ...]:
             for scope in slot.request
             if scope not in kind.credential_hint
         ]
+    for name, grant in sorted(writes.items()):
+        slot = SLOT_SCOPES.get(name)
+        if slot is None:
+            continue
+        found += [
+            f"{name}'s hint does not ask for {scope}"
+            for scope in slot.request
+            if scope not in grant.credential_hint
+        ]
     return tuple(found)
+
+
+def write_slot_name(connector: str, grant: str) -> str:
+    """The catalogue's name for a write grant's slot, which is its path's last segment."""
+    return connector_write_slot(connector, grant).path.removeprefix(CONNECTOR_KEY_PREFIX)
 
 
 def metadata_arguments(slot: SlotScopes) -> str:

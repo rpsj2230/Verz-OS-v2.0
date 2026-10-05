@@ -109,7 +109,7 @@ is a write through this same function. See `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_
 relay's holds its password under `password`, so `keep_fields` writes named fields, judging each
 one as `keep` judges a key, and `keep` is `keep_fields` with the one field start-up reads.
 
-Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50, M11.7.7
+Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50, M11.7.7, M11.7.3
 """
 
 from __future__ import annotations
@@ -366,6 +366,26 @@ def connector_key_slot(connector: str) -> ConnectorKeySlot:
     return ConnectorKeySlot(
         path=f"{CONNECTOR_KEY_PREFIX}{connector}",
         description=f"The key {connector} issued for this company's connection.",
+        connector=connector,
+    )
+
+
+def connector_write_slot(connector: str, grant: str) -> ConnectorKeySlot:
+    """Where the key a connected source issued for one write grant is kept, beside its read key.
+
+    `connector_keys/<source>_<grant>`, one path segment like the read key's, so the worker's run
+    lease reads it and nothing else does, and the read key's slot is never the one a write is sent
+    with. See `brain.connectors.declaration.A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+    """
+    name = f"{connector}_{grant}"
+    if not _CONNECTOR_NAME_RE.fullmatch(name):
+        msg = f"{name!r} is not a slot name a write key can be kept under"
+        raise ValueError(msg)
+    return ConnectorKeySlot(
+        path=f"{CONNECTOR_KEY_PREFIX}{name}",
+        description=(
+            f"The key {connector} issued for {grant}, sent only with a change a person approved."
+        ),
         connector=connector,
     )
 

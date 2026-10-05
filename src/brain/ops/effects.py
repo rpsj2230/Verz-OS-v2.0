@@ -28,6 +28,13 @@ name some issuing port declares is treated as issuing, because a concrete adapte
 channel's `send`, and the mistake worth making is a finding somebody reads rather than a send
 nobody keyed. See `A_RECEIVER_THIS_CANNOT_NAME_IS_PRESUMED_TO_ISSUE`.
 
+**A function handed to the leash as its execution is inside the door.** `brain.gate.leash`'s
+`govern`, `resume` and `run_real` run the `execute` they are handed only through `run_real`, which
+calls it inside the effect it hands `issue_once`. So a function named as `execute=` in a call to one
+of them, where the module imported that name from the leash, is admitted as a function handed to
+`issue_once` is; a `resume` imported from anywhere else admits nothing. See
+`AN_EXECUTION_HANDED_TO_THE_LEASH_IS_HANDED_TO_THE_DOOR`.
+
 **A callable over an agent's action is a door too.** `brain.gate.leash` runs an `Action` by
 calling a function its caller hands in, so a parameter typed `Callable[[Action], ...]` that its
 own function calls is found and classified in `CALLABLES` the way a protocol method is in
@@ -48,6 +55,7 @@ owned by work in flight, with the same completeness check needed afterwards to f
 was not decorated. The classification lives here, once, and the check reads the source both ways.
 
 Task ids: M17.3.1
+Task ids: M11.7.3
 """
 
 from __future__ import annotations
@@ -69,6 +77,11 @@ SRC: Final[Path] = Path(__file__).resolve().parents[1]
 DOOR: Final = "issue_once"
 NO_EFFECT_GUARD: Final = "assert_no_side_effect"
 
+#: The leash, and its entry points that run the `execute` they are handed only through `run_real`.
+LEASH_MODULE: Final = "brain.gate.leash"
+LEASH_DOORS: Final = frozenset({"govern", "resume", "run_real"})
+LEASH_EXECUTION: Final = "execute"
+
 # ------------------------------------------------------------------ written-down reasons
 #: Why every protocol method has to be classified, including the ones that plainly read.
 A_DOOR_NOBODY_CLASSIFIED_IS_A_SIDE_EFFECT_NOBODY_KEYED: Final = (
@@ -84,6 +97,17 @@ A_RECEIVER_THIS_CANNOT_NAME_IS_PRESUMED_TO_ISSUE: Final = (
     "adapter, not the protocol, and a self attribute has no annotation at the call. Resolving "
     "those as not issuing would let every concrete send through; resolving them as issuing makes "
     "the check ask for a key it may not need, which is a finding somebody reads and answers."
+)
+
+
+#: Why a function handed to the leash as its execution is admitted as keyed.
+AN_EXECUTION_HANDED_TO_THE_LEASH_IS_HANDED_TO_THE_DOOR: Final = (
+    "The leash runs an approved or autonomous action by calling the execute it was handed, and it "
+    "calls it in one place: inside the effect run_real hands issue_once. A connector's approved "
+    "write is sent from such an execute. Reading only direct arguments to issue_once would call "
+    "that send unkeyed and push its author to key it twice. So an execute handed to the leash's "
+    "own govern, resume or run_real is inside the door; a function of that name imported from "
+    "anywhere else is not, because only the leash's are known to route through run_real."
 )
 
 
@@ -616,6 +640,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:SourceReading.retry_after": Repeat.READS,
         "brain.connectors.declaration:SourceReading.allowance_spent": Repeat.READS,
         "brain.connectors.declaration:SourceReading.projected": Repeat.READS,
+        "brain.connectors.declaration:ReadsListedUnder.listed_under": Repeat.READS,
         # A run's vault lease (0093): a child token minted per attempt that expires at its own
         # TTL, read through once and revoked at the attempt's end, where a second revoke finds it
         # gone. See `brain.ops.connector_lease`.
@@ -628,6 +653,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_sync_run:RunKeyReader.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.connector_sync_store:LeaseCounts.tallies": Repeat.READS,
         "brain.ops.connector_sync_run:SourceCaller.get": Repeat.READS,
+        # Sending a change a person approved (M11.7.3). Turning the action into its call and
+        # judging the record read back are computed from what they are handed; the send is a PATCH
+        # to the source and issues, made only inside the execution `brain.gate.leash.resume` runs
+        # through `run_real`. See `AN_EXECUTION_HANDED_TO_THE_LEASH_IS_HANDED_TO_THE_DOOR`.
+        "brain.connectors.declaration:PreparesWrite.call_for": Repeat.READS,
+        "brain.connectors.declaration:PreparesWrite.differs": Repeat.READS,
+        "brain.ops.connector_write_run:SourceSender.send": Repeat.ISSUES,
         # A POST to a source is one of two things (M11.7.1): a report asked for with a body, which
         # changes nothing, or a Google key file exchanged for a token, of which a second exists
         # until its hour ends and is never read. The stronger of the two is what is recorded.
@@ -699,6 +731,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.digest_destination:ConversationLister.conversations_request": Repeat.READS,
         "brain.ops.digest_destination:ConversationLister.conversations_page": Repeat.READS,
         "brain.ops.channel_lease:ChannelSecretLeases.lease": Repeat.EXPIRES_ON_ITS_OWN,
+        # The digest's send is made once per day and room inside `issue_once`
+        # (`brain.ops.digest_delivery`); these build the request, name the room, judge the
+        # answer and read the channel's record, and none of them sends anything.
+        "brain.ops.digest_run:DigestWire.room_of": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.request_for": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.judge": Repeat.READS,
+        "brain.ops.digest_run:ChannelRecordReader.get": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.read": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.write": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
@@ -839,6 +880,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
         "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
+        # A bound person's Lark address, kept as their verified message arrives (`0166`): an update
+        # of their own live row that a second call with the same address leaves unchanged.
+        "brain.channels.adapter:CardWire.person_address": Repeat.READS,
+        "brain.channels.inbound:AddressBook.remember": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
     }
 )
 
@@ -1076,27 +1121,85 @@ def _holder(
     return tree
 
 
-def _keyed_scopes(tree: ast.Module, parents: Mapping[ast.AST, ast.AST]) -> set[ast.AST]:
-    """Every function or lambda handed to `issue_once` as its effect, in this module."""
-    keyed: set[ast.AST] = set()
+def _leash_names(tree: ast.Module) -> tuple[frozenset[str], frozenset[str]]:
+    """The names this module binds to the leash's doors, and to the leash module itself."""
+    doors: set[str] = set()
+    modules: set[str] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or _call_name(node) != DOOR:
+        if isinstance(node, ast.ImportFrom) and node.module == LEASH_MODULE:
+            doors.update(one.asname or one.name for one in node.names if one.name in LEASH_DOORS)
+        elif isinstance(node, ast.ImportFrom) and node.module == LEASH_MODULE.rpartition(".")[0]:
+            leaf = LEASH_MODULE.rpartition(".")[2]
+            modules.update(one.asname or one.name for one in node.names if one.name == leaf)
+        elif isinstance(node, ast.Import):
+            modules.update(
+                one.asname for one in node.names if one.name == LEASH_MODULE and one.asname
+            )
+    return frozenset(doors), frozenset(modules)
+
+
+def _handed_to_the_leash(call: ast.Call, doors: frozenset[str], modules: frozenset[str]) -> bool:
+    """Whether this is a call to one of the leash's own doors. See the module docstring."""
+    func = call.func
+    if isinstance(func, ast.Name):
+        return func.id in doors
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr in LEASH_DOORS
+        and isinstance(func.value, ast.Name)
+        and func.value.id in modules
+    )
+
+
+def _keyed_scopes(tree: ast.Module, parents: Mapping[ast.AST, ast.AST]) -> set[ast.AST]:
+    """Every function or lambda handed to `issue_once` as its effect, or to the leash as its
+    execution, in this module."""
+    keyed: set[ast.AST] = set()
+    doors, modules = _leash_names(tree)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
             continue
-        effect: ast.expr | None = next(
-            (one.value for one in node.keywords if one.arg == "effect"), None
-        )
-        if effect is None and len(node.args) >= 3:
-            effect = node.args[2]
+        effect: ast.expr | None
+        if _call_name(node) == DOOR:
+            effect = next((one.value for one in node.keywords if one.arg == "effect"), None)
+            if effect is None and len(node.args) >= 3:
+                effect = node.args[2]
+        elif _handed_to_the_leash(node, doors, modules):
+            effect = next((one.value for one in node.keywords if one.arg == LEASH_EXECUTION), None)
+        else:
+            continue
         if isinstance(effect, ast.Lambda):
             keyed.add(effect)
         elif isinstance(effect, ast.Name):
-            holder = _holder(node, parents, tree)
-            keyed.update(
-                one
-                for one in holder.body
-                if isinstance(one, ast.FunctionDef | ast.AsyncFunctionDef) and one.name == effect.id
-            )
+            keyed.update(_defined_in(_holder(node, parents, tree).body, effect.id))
     return keyed
+
+
+def _defined_in(
+    body: list[ast.stmt], name: str
+) -> Iterator[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Every function of this name defined in this scope, a `try`, `with` or `if` block included.
+
+    Python binds a `def` inside a block to the enclosing function's scope, so a function defined
+    in the `try` around the call is the one the call names. A function defined inside another
+    function or a class is in another scope, and is not looked into.
+    """
+    for statement in body:
+        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+            if statement.name == name:
+                yield statement
+            continue
+        if isinstance(statement, ast.ClassDef):
+            continue
+        for field in ("body", "orelse", "finalbody", "handlers", "cases"):
+            inner = getattr(statement, field, None)
+            if not isinstance(inner, list):
+                continue
+            for one in inner:
+                if isinstance(one, ast.ExceptHandler | ast.match_case):
+                    yield from _defined_in(one.body, name)
+                elif isinstance(one, ast.stmt):
+                    yield from _defined_in([one], name)
 
 
 def _annotation_name(annotation: ast.expr | None) -> str:

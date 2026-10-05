@@ -72,6 +72,13 @@ a key is a credential write through `brain.ops.credentials.Credentials.keep`, re
 ledger by its own trigger, and leaves the connection alone. A source with no live connection is the
 one refusal for both, for a caller who may manage it and so can see the list.
 
+**A write a source can be allowed to make is a key of its own, given through the same key route
+(M11.7.3).** `POST /connectors/{connector}/key` naming a `grant` keeps that grant's key in its own
+slot (`brain.ops.credentials.connector_write_slot`) and never the read key's, which is the smallest
+extension of the key drawer the console already has; the screen lists each source's grants and
+which of them this install has given, and a grant is off until its key is given. See
+`brain.connectors.declaration.A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+
 **Testing a connection is asked for here and made by the worker.** Only the worker reads a source's
 key, so `POST /connectors/{connector}/probe` writes the asking down (`brain.ops.connector_probe`)
 under the authority an edit asks, and the worker makes one call on its next pass and records what it
@@ -89,6 +96,7 @@ configuration. The identifiers arrive from the person connecting the source, and
 install's database.
 
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
+Task ids: M11.7.3
 """
 
 from __future__ import annotations
@@ -118,7 +126,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute, Page
 from brain.api_routes import Asked, Asking
 from brain.audit.record import ConnectorChange
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.declaration import CredentialShape, shipped
+from brain.connectors.declaration import CredentialShape, WriteGrant, shipped
 from brain.connectors.manifest import ConnectorManifest, digest_input, manifest_digest
 from brain.connectors.registry import may_install
 from brain.console.connector_detail import (
@@ -179,6 +187,7 @@ from brain.ops.connectable import (
     settings_problems,
 )
 from brain.ops.connector_admin import (
+    ALLOWING_A_WRITE,
     CONNECTED,
     CONNECTING_A_SOURCE,
     DISCONNECTED,
@@ -188,12 +197,14 @@ from brain.ops.connector_admin import (
     KEY_REPLACED,
     KEY_SENTENCES,
     NO_KEY_IS_EXPORTED,
+    NO_SUCH_WRITE,
     NOTHING_TO_EDIT,
     REPLACING_A_KEY,
     SOURCE_FIELD,
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
+    WRITE_ALLOWED,
     connection_problems,
     credential_problems,
     may_connect_source,
@@ -230,6 +241,7 @@ from brain.ops.credentials import (
     Problem,
     VaultState,
     connector_key_slot,
+    connector_write_slot,
     key_file_problems,
     user_and_password,
 )
@@ -333,6 +345,9 @@ class ConnectedView(BaseModel):
     next_sync_at: datetime | None
     #: What reading it came to, or why nothing reads it, in the worker's own words.
     sync: str
+    #: The write grants whose key this install has given (M11.7.3). Empty when none, or when the
+    #: vault could not be asked, which `key_held` being None already says.
+    writes_allowed: list[str] = []
 
 
 class CopyLineView(BaseModel):
@@ -386,6 +401,29 @@ class ConnectableView(BaseModel):
     may_connect: bool
     #: The screens of its connect flow, the form last. The same on every install.
     steps: list[GuideStepView]
+    #: The writes it can be allowed to make, each with a key of its own. Empty for most sources.
+    writes: list[WriteGrantView] = []
+
+
+class WriteGrantView(BaseModel):
+    """A write a source can be allowed to make, and the key it asks for (M11.7.3).
+
+    `brain.connectors.declaration.WriteGrant`, by field. The key is asked for through the same key
+    route as the read key, naming this grant, and kept in a slot of its own.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    credential_label: str
+    credential_hint: str
+    credential_shape: str
+    credential_max_chars: int
+    #: What an approver is told of a change this grant sends while its key is not given.
+    not_allowed: str
+    #: What giving the key agrees to, said before it is sent.
+    confirmation: str
 
 
 class NotConnectableView(BaseModel):
@@ -588,11 +626,16 @@ class ConnectorAcceptedView(BaseModel):
 
 
 class ConnectorKeyAsked(BaseModel):
-    """A replacement key. No length on the field, for `ConnectAsked`'s reason."""
+    """A replacement key, or a write grant's key when `grant` names one (M11.7.3).
+
+    No length on the field, for `ConnectAsked`'s reason. A grant's key goes to the grant's own
+    slot and never the read key's, and the read key is untouched.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     credential: str
+    grant: str | None = None
 
 
 class ConnectorEditedView(BaseModel):
@@ -842,9 +885,12 @@ def evidence_view(one: EvidenceRow) -> EvidenceView:
     )
 
 
-def connected_view(one: ConnectedRow, *, may_disconnect: bool) -> ConnectedView:
+def connected_view(
+    one: ConnectedRow, *, may_disconnect: bool, writes_allowed: Sequence[str] = ()
+) -> ConnectedView:
     """One connection, copied field by field, for `TrustView`'s reason."""
     return ConnectedView(
+        writes_allowed=list(writes_allowed),
         name=one.name,
         connected_by=one.connected_by,
         connected_at=one.connected_at,
@@ -935,6 +981,42 @@ def keys_held(store: Credentials, names: Sequence[str]) -> tuple[VaultState, dic
         return unavailable.state, {}
 
 
+def writes_held(store: Credentials, names: Sequence[str]) -> dict[str, list[str]]:
+    """The write grants whose key is held, by source, for the sources that declare any (M11.7.3).
+
+    Empty for a source whose grants hold no key and for every source when the vault is not
+    configured or could not answer.
+    """
+    if not store.configured:
+        return {}
+    try:
+        return {
+            name: [
+                grant.name
+                for grant in CONNECTABLE[name].writes
+                if store.held(connector_write_slot(name, grant.name)).held
+            ]
+            for name in names
+            if name in CONNECTABLE and CONNECTABLE[name].writes
+        }
+    except CredentialsUnavailableError:
+        return {}
+
+
+def write_grant_view(grant: WriteGrant) -> WriteGrantView:
+    """One write grant, by field."""
+    return WriteGrantView(
+        name=grant.name,
+        label=grant.label,
+        credential_label=grant.credential_label,
+        credential_hint=grant.credential_hint,
+        credential_shape=grant.credential_shape.value,
+        credential_max_chars=_credential_chars(grant.credential_shape),
+        not_allowed=grant.not_allowed,
+        confirmation=ALLOWING_A_WRITE,
+    )
+
+
 def _problems(found: Sequence[SettingProblem]) -> JSONResponse:
     told = ConnectorProblemsView(
         problems=[
@@ -991,6 +1073,7 @@ def _page(
                 credential_max_chars=_credential_chars(kind.credential_shape),
                 may_connect=may_connect_source(reach, kind.name, now),
                 steps=[step_view(step) for step in kind.guide],
+                writes=[write_grant_view(one) for one in kind.writes],
             )
             for kind in CONNECTABLE.values()
         ],
@@ -1039,6 +1122,7 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     found: tuple[Connection, ...] = await records.connected()
     shown = admitted_connections(found, asked.reach, asked.now)
     vault, held = await asyncio.to_thread(keys_held, credentials, [one.connector for one in shown])
+    allowed = await asyncio.to_thread(writes_held, credentials, [one.connector for one in shown])
     sync = sync_records_of(request)
     synced = {} if sync is None or not shown else await sync.states()
     rows = connected_rows(shown, asked.reach, now=asked.now, held=held, vault=vault, synced=synced)
@@ -1046,7 +1130,11 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
         asked.reach,
         asked.now,
         connections=[
-            connected_view(one, may_disconnect=may_connect_source(asked.reach, one.name, asked.now))
+            connected_view(
+                one,
+                may_disconnect=may_connect_source(asked.reach, one.name, asked.now),
+                writes_allowed=allowed.get(one.name, ()),
+            )
             for one in rows
         ],
         vault=vault,
@@ -1807,7 +1895,23 @@ async def replace_key(
         raise _not_answerable("replace key")
     kind = CONNECTABLE.get(connector)
     shape = CredentialShape.KEY if kind is None else kind.credential_shape
+    slot = connector_key_slot(connector)
+    told = KEY_REPLACED
+    if body.grant is not None:
+        # A write grant's key: its own shape and its own slot, never the read key's (M11.7.3).
+        grant = next((one for one in (kind.writes if kind else ()) if one.name == body.grant), None)
+        if grant is None:
+            return _problems(
+                (SettingProblem(field="grant", code="unknown", message=NO_SUCH_WRITE),)
+            )
+        shape, slot, told = (
+            grant.credential_shape,
+            connector_write_slot(connector, grant.name),
+            WRITE_ALLOWED,
+        )
     if shape is CredentialShape.NONE:
+        # Judged on the shape the slot asks for, so a keyless source's read key is refused and a
+        # write grant it declares would still be judged by its own shape (M11.7.4).
         return _problems(
             (SettingProblem(field="credential", code="no_key", message=NO_KEY_TO_KEEP),)
         )
@@ -1823,7 +1927,7 @@ async def replace_key(
     try:
         kept = await keep_credential(
             credentials,
-            connector_key_slot(connector),
+            slot,
             shape,
             body.credential,
             actor=actor,
@@ -1834,10 +1938,8 @@ async def replace_key(
         return _problems(credential_problems(shape, body.credential))
     except CredentialsUnavailableError as unavailable:
         return _not_kept(unavailable.state)
-    log.info("source key replaced", connector=connector, principal=actor)
-    answered = ConnectorKeyReplacedView(
-        connector=connector, key_written_at=kept.set_at, told=KEY_REPLACED
-    )
+    log.info("source key replaced", connector=connector, principal=actor, grant=body.grant)
+    answered = ConnectorKeyReplacedView(connector=connector, key_written_at=kept.set_at, told=told)
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 
 

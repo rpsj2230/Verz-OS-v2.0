@@ -43,7 +43,10 @@ measured (`brain.ops.connector_sync.NO_VERIFIED_CEILING`). A connector with a fo
 be read is listed as not connectable yet, in `THIS_INSTALL_CANNOT_READ_IT_YET`'s words, and never
 offered. Until 2026-09-30 the Google Drive and Laravel forms were offered with nothing behind
 them, so a connection saved its settings and its key and read nothing, and HubSpot was offered
-with no ceiling recorded, so its reading never ran; its documented ceiling is recorded now.
+with no ceiling recorded, so its reading never ran; its documented ceiling is recorded now. And
+**a source is offered only when Ask can answer from it** too
+(`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`): HubSpot, once read, still reached no
+question until its records were classified for the answer lane.
 
 Rejected: a `ConnectorRegistry` built from these at start. The registry is a runtime record of what
 somebody installed; this is the product's list of what could be, and a registry holding every
@@ -66,9 +69,11 @@ from brain.connectors.declaration import (
     CredentialShape,
     Setting,
     SettingRefusedError,
+    WriteGrant,
     shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
+from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
 from brain.ops.credentials import connector_key_slot
 from brain.ops.limits import connector_ceiling
@@ -83,6 +88,14 @@ A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS: Final = (
     "since nothing is read against a ceiling nobody measured. A connector that declares a form "
     "and cannot be read is listed as not connectable yet, so nobody is shown a connection that "
     "saves its key and reads nothing."
+)
+
+#: Why being read is not enough either.
+A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM: Final = (
+    "A source read into the index and never asked about is a key kept for nothing. So the screen "
+    "offers a source only when Ask can answer from it as well: its records are classified for the "
+    "answer lane (brain.knowledge.connector_rows), or what it holds is read as passages for the "
+    "question's model step. HubSpot was read and answerable by nothing until 2026-09-30."
 )
 
 #: What the screen says of a source whose form is declared and which this install cannot read.
@@ -128,6 +141,8 @@ class Connectable:
     guide: tuple[GuideStep, ...] = ()
     #: How the credential is asked for and kept (M11.7.7).
     credential_shape: CredentialShape = CredentialShape.KEY
+    #: The writes it can be allowed to make, each with a key of its own (M11.7.3).
+    writes: tuple[WriteGrant, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -164,6 +179,15 @@ def reads(declaration: ConnectorDeclaration) -> bool:
     return has_a_way and connector_ceiling(declaration.name) is not None
 
 
+def answers(declaration: ConnectorDeclaration) -> bool:
+    """Whether Ask can answer from the source: classified for the answer lane, or read as passages.
+
+    See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`.
+    """
+    name = declaration.name
+    return name in CONNECTOR_ROW_ENTITIES or name in ANSWERED_BY_PASSAGES
+
+
 def offered(
     declarations: Mapping[str, ConnectorDeclaration],
 ) -> tuple[dict[str, Connectable], dict[str, NotConnectable]]:
@@ -174,7 +198,11 @@ def offered(
     offered.
     """
     forms = declared_forms(declarations)
-    offers = {name: form for name, form in forms.items() if reads(declarations[name])}
+    offers = {
+        name: form
+        for name, form in forms.items()
+        if reads(declarations[name]) and answers(declarations[name])
+    }
     listed: dict[str, NotConnectable] = {}
     for name, one in declarations.items():
         if one.console is None:
@@ -201,6 +229,7 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
             build=one.console.build,
             guide=one.guide,
             credential_shape=one.console.credential_shape,
+            writes=one.writes,
         )
         for name, one in declarations.items()
         if one.console is not None

@@ -8,9 +8,11 @@
  * it drops a card that does not say which approval it is or what will happen, and a second
  * card for an approval already read, and carries every other card in the order it arrived.
  *
- * **Five fields a card, and the card has no sixth.** They are `Card`'s own: which suspension,
- * the artefact exactly as it was rendered, whose reach it runs under, when it was raised and
- * when it lapses. A body carrying a tool call, a count or a state beside a card reaches nothing
+ * **Six fields a card, and the card has no seventh.** They are `Card`'s own: which suspension,
+ * the artefact exactly as it was rendered, whose reach it runs under, when it was raised, when it
+ * lapses, and why approving it would send nothing, which is empty for nearly every card and says
+ * "this install has not allowed DNS changes" for a Cloudflare change whose write key was never
+ * given (M11.7.3). A body carrying a tool call, a count or a state beside a card reaches nothing
  * here, because the reader never takes it. See
  * `AN_APPROVAL_CARD_DRAWS_WHAT_WILL_HAPPEN_AND_COUNTS_NOTHING`.
  *
@@ -25,7 +27,7 @@
  * offers, so a click with nothing chosen sends nothing. See
  * `A_DECISION_IS_SENT_AS_THE_ROUTE_TAKES_IT_OR_NOT_AT_ALL`.
  *
- * Task ids: M35.3.1.2, M35.3.1.1
+ * Task ids: M35.3.1.2, M35.3.1.1, M11.7.3
  */
 
 /** Written down because an approvals screen is tempted by a count above it and a call below it. */
@@ -44,13 +46,15 @@ export function approvalApiPath(suspensionId: string): string {
   return `${APPROVALS_API_PATH}/${encodeURIComponent(suspensionId)}`;
 }
 
-/** One approval as this console holds it. `Card`'s five fields, under this console's names. */
+/** One approval as this console holds it. `Card`'s six fields, under this console's names. */
 export interface ApprovalCardView {
   readonly suspensionId: string;
   readonly artefact: string;
   readonly runsAs: string;
   readonly raisedAt: string;
   readonly expiresAt: string;
+  /** Why approving this sends nothing, in the API's words, or empty when approving sends it. */
+  readonly unsentBecause: string;
 }
 
 /** The queue as this console holds it. Two fields, and neither is a count. */
@@ -97,7 +101,7 @@ export function readApprovalCard(payload: unknown): ApprovalCardView | null {
   ) {
     return null;
   }
-  return { suspensionId, artefact, runsAs, raisedAt, expiresAt };
+  return { suspensionId, artefact, runsAs, raisedAt, expiresAt, unsentBecause: said(fields?.["unsent_because"]) ?? "" };
 }
 
 /**

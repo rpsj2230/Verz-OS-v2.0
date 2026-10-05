@@ -25,6 +25,7 @@ from brain.connectors.contract import AccessMode
 from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.write_verification import builds_a_manifest
+from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connectable import (
     CONNECTABLE,
     DECLARED_FORMS,
@@ -55,8 +56,10 @@ IDENTIFIERS: Final = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "cloudflare": "0123456789abcdef0123456789abcdef",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
     "laravel": "portal",
     "domains": "example.com, example.org",
 }
@@ -64,9 +67,11 @@ IDENTIFIERS: Final = {
 #: The settings after the first, for a source whose form asks for more than one.
 FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "freshdesk": {"department": "support"},
+    "cloudflare": {"department": "operations"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
     "domains": {"department": "operations"},
     "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -80,6 +85,7 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
 #: account's, shared one folder as a viewer; a Laravel user holds SELECT on views, never on tables.
 KEY_KIND_WITHOUT_SCOPES: Final = {
     "freshdesk": ("agent", "admin"),
+    "cloudflare": ("dns read", "dns write"),
     "google_drive": ("viewer", "delegation"),
     "laravel": ("select", "tables"),
 }
@@ -203,11 +209,21 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
     Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
     declared = shipped()
-    assert set(CONNECTABLE) == {"domains", "freshdesk", "google_analytics", "hubspot", "xero"}
+    assert set(CONNECTABLE) == {
+        "cloudflare",
+        "domains",
+        "freshdesk",
+        "google_analytics",
+        "hubspot",
+        "search_console",
+        "xero",
+    }
     for name in CONNECTABLE:
         one = declared[name]
         assert one.reading is not None or one.live is not None, name
         assert connector_ceiling(name) is not None, name
+        # `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`: and Ask answers from it.
+        assert name in CONNECTOR_ROW_ENTITIES or name in ANSWERED_BY_PASSAGES, name
 
 
 def test_a_form_with_no_way_to_be_read_is_listed_and_not_offered() -> None:
@@ -229,6 +245,27 @@ def test_a_form_with_no_way_to_be_read_is_listed_and_not_offered() -> None:
     unmeasured = dataclasses.replace(real, name="nowhere")
     offers, listed = offered({"nowhere": unmeasured})
     assert offers == {} and listed["nowhere"].why == THIS_INSTALL_CANNOT_READ_IT_YET
+
+
+def test_a_source_read_and_answerable_by_nothing_is_not_offered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`, from both sides and both ways of
+    answering. Xero's declaration under Lark Base's name has a reading and a ceiling and nothing
+    Ask answers from, and is not offered; the same with the name among the passage readers is
+    offered, as Xero itself is through its classifications. Delete this and the screen can offer
+    a source that is read into the index and never answers a question, which HubSpot was."""
+    import brain.ops.connectable as connectable
+    from brain.connectors import xero
+
+    read_only = dataclasses.replace(xero.CONNECTOR, name="lark_base")
+    offers, listed = offered({"lark_base": read_only})
+    assert offers == {} and listed["lark_base"].why == THIS_INSTALL_CANNOT_READ_IT_YET
+
+    monkeypatch.setattr(connectable, "ANSWERED_BY_PASSAGES", frozenset({"lark_base"}))
+    offers, _ = offered({"lark_base": read_only})
+    assert set(offers) == {"lark_base"}
+    assert set(offered({"xero": xero.CONNECTOR})[0]) == {"xero"}
 
 
 # ------------------------------------------------------------------------- the refusals

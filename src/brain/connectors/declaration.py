@@ -56,6 +56,16 @@ that holds its form, asking for exactly the form's settings and its key, so the 
 form cannot drift apart; a source connected at the server ends with the hand-over and asks for
 nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
 
+**A write a connector can make is a grant of its own (M11.7.3).** `writes` declares each, with the
+key it asks for and what an approver is told without it; the key is kept in a slot of its own and
+the grant is off until it is given. See `A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+
+**A reading may list one entity under each record of another (M11.7.3).** Cloudflare lists a DNS
+record only under its zone, so its reading says so with `ListedUnder`, the worker reads the entity
+once per parent it kept earlier in the same run, and the index names each record by both ids. The
+capability is optional and asked with `isinstance` (`ReadsListedUnder`), so no other reading
+changes. See `A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH`.
+
 **A source whose values are figures, not records, says how its figures are read (M11.7.1).**
 Google Analytics keeps an index of one property and answers a question with that property's
 traffic for a named date range, which is not the property read again: it is a report, asked for
@@ -75,7 +85,8 @@ from the key file for one read (`brain.connectors.google_token`), and a reading 
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4, M11.7.1
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4
+Task ids: M11.7.3, M11.7.1
 """
 
 from __future__ import annotations
@@ -90,7 +101,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.contract import ConnectorContractError
@@ -105,6 +116,9 @@ from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.ops.connect_steps import GuideStep
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
+
+if TYPE_CHECKING:
+    from brain.gate.leash import Action
 
 # ------------------------------------------------------------------ written-down reasons
 #: The owner's rule, stated on 18 and 21 September and restated in every connector brief since.
@@ -466,6 +480,107 @@ class ChecksLiveFacts(Protocol):
         ...
 
 
+# ---------------------------------------------------------- a record listed under another
+#: Why an entity may be read under each record of another, and is named by both ids.
+A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH: Final = (
+    "Some sources list a record only under another: Cloudflare lists a DNS record under its zone, "
+    "and neither its list nor its one-record call can be reached without the zone's id. So the "
+    "worker reads such an entity once under each record of its parent kept earlier in the same "
+    "run, with the parent's id laid into the path, and the index names the record by both ids, "
+    "the parent's first. A question then reads the record live from its index row alone, and the "
+    "record read live is named the same way, so the one is matched to the other."
+)
+
+#: What joins a parent's id to the record's own in the id the index keeps. A dot, because the
+#: joined id is still a record id the redactor cites by (`brain.core.redaction`'s id grammar is
+#: letters, digits and `_.@-`), and a record it cannot cite is dropped whole. A slash was the first
+#: choice and the Cloudflare install check found every live record dropped as unidentified.
+LISTED_UNDER_SEPARATOR: Final = "."
+
+
+@dataclass(frozen=True)
+class ListedUnder:
+    """Where one entity's records are listed: under each record of `parent`, by `parameter`.
+
+    See `A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH`. The id both halves agree on is built and
+    taken apart here and nowhere else, so the worker's walk and the live read cannot come to name
+    one record two ways.
+    """
+
+    parent: str
+    #: The path parameter the parent's id is laid into, and the field it is carried in on a row.
+    parameter: str
+
+    def __post_init__(self) -> None:
+        for one in (self.parent, self.parameter):
+            if not _NAME_RE.match(one):
+                msg = f"{one!r} is not a name, and a record listed under another is named by it"
+                raise DeclarationError(msg)
+
+    def source_id(self, parent_id: str, own_id: str) -> str:
+        """The id the index keeps for a record of this entity read under `parent_id`."""
+        for one in (parent_id, own_id):
+            if not one.strip() or LISTED_UNDER_SEPARATOR in one:
+                msg = (
+                    "an id holding nothing or the separator cannot be joined, because the joined "
+                    "id would be taken apart differently. "
+                    f"{A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
+                )
+                raise ConnectorContractError(msg)
+        return f"{parent_id}{LISTED_UNDER_SEPARATOR}{own_id}"
+
+    def split(self, source_id: str) -> tuple[str, str]:
+        """The parent's id and the record's own, from the id the index keeps."""
+        parent_id, joined, own_id = source_id.partition(LISTED_UNDER_SEPARATOR)
+        if not (joined and parent_id.strip() and own_id.strip()) or (
+            LISTED_UNDER_SEPARATOR in own_id
+        ):
+            msg = (
+                f"an id of a {self.parent}'s record names its {self.parent} and itself, and this "
+                "one does not"
+            )
+            raise ConnectorContractError(msg)
+        return parent_id, own_id
+
+    def named(self, rows: TypedResult[SourceRecord], parent_id: str) -> TypedResult[SourceRecord]:
+        """Rows read under `parent_id`, each named by both ids and carrying the parent's id."""
+        return TypedResult[SourceRecord](
+            records=tuple(
+                SourceRecord.model_validate(
+                    {
+                        **one.model_dump(),
+                        "id": self.source_id(parent_id, one.id),
+                        self.parameter: parent_id,
+                    }
+                )
+                for one in rows.records
+            ),
+            source=rows.source,
+            fetched_at=rows.fetched_at,
+            truncated=rows.truncated,
+        )
+
+
+@runtime_checkable
+class ReadsListedUnder(Protocol):
+    """A reading one of whose entities is listed under each record of another.
+
+    Optional, and asked with `isinstance`, so a reading whose every entity is listed on its own
+    says nothing and needs no change.
+    """
+
+    def listed_under(self, entity: str) -> ListedUnder | None:
+        """Where `entity` is listed, or None for an entity listed on its own."""
+        ...
+
+
+def listed_under(reading: object, entity: str) -> ListedUnder | None:
+    """How this reading lists `entity`: under a parent, or on its own (None)."""
+    if isinstance(reading, ReadsListedUnder):
+        return reading.listed_under(entity)
+    return None
+
+
 @runtime_checkable
 class ScopedReading(Protocol):
     """A reading whose key is exchanged for a token, and the read-only scopes that token carries.
@@ -534,6 +649,18 @@ class LiveLookup(Protocol):
         ...
 
 
+# ------------------------------------------------------------------ a write, granted apart
+#: Why a connector's write is a grant of its own, with a key of its own.
+A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN: Final = (
+    "A connection reads with a key that can only read, and the guide, the form and the vault slot "
+    "say so. A write the connector can make is a separate, deliberate grant: its own step on the "
+    "source's page, its own key in its own slot, off until that key is given, and used only to "
+    "send a change a person approved, which is then read back with the read key before it is "
+    "reported done. One key for both would make every read a call made with the power to change "
+    "the source, and the approval would be the only thing standing between a question and a write."
+)
+
+
 # ---------------------------------------------------------- reading one record's figures live
 #: Why a report may be several calls, and what one of them failing means.
 A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER: Final = (
@@ -543,6 +670,73 @@ A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER: Final = (
     "answered: it is never shown with some of its figures missing, which would read as figures "
     "that are nought."
 )
+
+
+@dataclass(frozen=True)
+class WriteCall:
+    """One approved change as the call that sends it and the record it is read back by.
+
+    `operation` is the source's own write, built from its specification like every read, so its
+    address is prepared and checked by the same rule; `source_id` is the index id the change is
+    read back by, through the connector's live lookup, with the read key.
+    """
+
+    operation: RestOperation
+    arguments: Mapping[str, str]
+    body: Mapping[str, Any]
+    entity: str
+    source_id: str
+
+
+class PreparesWrite(Protocol):
+    """How a connector turns an approved action into its call, and judges the record read back."""
+
+    def call_for(self, action: Action) -> WriteCall:
+        """The call that sends this approved action. Raises for an action it cannot send.
+
+        Builds the call and sends nothing, which is why it is not named `call`: `brain.ops.effects`
+        presumes a method of that name issues, and this one only reads the action.
+        """
+        ...
+
+    def differs(self, action: Action, found: Mapping[str, Any]) -> tuple[str, ...]:
+        """The names of the fields the record read back holds other than the action set them."""
+        ...
+
+
+@dataclass(frozen=True)
+class WriteGrant:
+    """A write a connector can be allowed to make, off until its own key is given (M11.7.3).
+
+    `tools` are the prepared actions the grant sends; `not_allowed` is what an approver is told
+    about one of them on an install that has not given the key. See
+    `A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+    """
+
+    name: str
+    label: str
+    tools: tuple[str, ...]
+    credential_label: str
+    credential_hint: str
+    not_allowed: str
+    #: How an approved action becomes its call and how the record read back is judged.
+    prepares: PreparesWrite
+    credential_shape: CredentialShape = CredentialShape.KEY
+
+    def __post_init__(self) -> None:
+        if not _NAME_RE.match(self.name):
+            msg = f"write grant {self.name!r} is not a name, and its key slot is named by it"
+            raise DeclarationError(msg)
+        if not self.tools:
+            msg = f"write grant {self.name!r} sends no tool, so the key it asks for sends nothing"
+            raise DeclarationError(msg)
+        for one in (self.label, self.credential_label, self.credential_hint, self.not_allowed):
+            if not one.strip():
+                msg = (
+                    f"write grant {self.name!r} must say what it allows, which key it asks for "
+                    "and what an approver is told without it"
+                )
+                raise DeclarationError(msg)
 
 
 @dataclass(frozen=True)
@@ -640,6 +834,8 @@ class ConnectorDeclaration:
     report: LiveReport | None = None
     #: The screens the console's connect flow shows for it. See the module docstring.
     guide: tuple[GuideStep, ...] = ()
+    #: The writes it can be allowed to make, each off until its own key is given. See `WriteGrant`.
+    writes: tuple[WriteGrant, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -679,6 +875,27 @@ class ConnectorDeclaration:
                 "live is read through the reading's operation and interpretation"
             )
             raise DeclarationError(msg)
+        if self.writes and self.console is None:
+            msg = (
+                f"connector {self.name!r} declares a write and no console form; a write is granted "
+                f"to a connection. {A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN}"
+            )
+            raise DeclarationError(msg)
+        granted = [one.name for one in self.writes]
+        if len(granted) != len(set(granted)):
+            msg = f"connector {self.name!r} declares one write grant twice"
+            raise DeclarationError(msg)
+        if self.reading is not None:
+            read = self.reading.entities()
+            for index, entity in enumerate(read):
+                under = listed_under(self.reading, entity)
+                if under is not None and under.parent not in read[:index]:
+                    msg = (
+                        f"connector {self.name!r} lists {entity!r} under {under.parent!r}, which "
+                        "it does not read first, so the walk would have no parent to list it "
+                        f"under. {A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
+                    )
+                    raise DeclarationError(msg)
         if self.report is not None and self.reading is None:
             msg = (
                 f"connector {self.name!r} declares a report and no reading; a report is read with "
@@ -731,6 +948,15 @@ def discover(package: ModuleType) -> Mapping[str, ConnectorDeclaration]:
 def shipped() -> Mapping[str, ConnectorDeclaration]:
     """Every connector this release ships. Found once per process, at start-up."""
     return discover(brain.connectors)
+
+
+def write_grant_for(tool: str) -> tuple[str, WriteGrant] | None:
+    """The shipped connector and the write grant that sends `tool`, or None for any other tool."""
+    for name, declared in shipped().items():
+        for grant in declared.writes:
+            if tool in grant.tools:
+                return name, grant
+    return None
 
 
 def read_backs() -> Mapping[str, ReadBack]:

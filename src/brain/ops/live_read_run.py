@@ -27,9 +27,15 @@ a connector declares waits for a person before the worker reads it on a schedule
 (`connector_sync.plan_for`), and a question does not get round that by asking: a digest that
 disagrees is a read refused, with a constant sentence in the operator's log.
 
-**A record's figures are read by the report its source declares (M11.7.1).** Google Analytics'
-traffic for a property is not the property read again: `declaration.LiveReport` names the calls a
-report is, the address rule checks each, and they are sent at once on pinned connections,
+**A record listed under another is named by both ids when it is read back (M11.7.3).** A
+Cloudflare DNS record's index id is its zone's and its own, and the lookup lays both into the path
+from it; the record read back is named the same way, so `brain.ops.live_records` matches it to its
+index row.
+
+**A record's figures are read by the report its source declares (M11.7.1, M11.7.2).** Google
+Analytics' traffic for a property is not the property read again: `declaration.LiveReport` names the
+calls a report is (one POST for Analytics; several for Search Console, POSTs and a GET), the
+address rule checks each, and they are sent at once on pinned connections,
 `SourcePoster` for a call with a body. When every call answered, the connector's own
 interpretation turns the bodies into one record carrying the record's id, which the lane lays over
 the index row as it lays a live record. A read may carry one range beside the id (`RANGE_FILTER`),
@@ -47,7 +53,7 @@ Scope: every part that touches the world is handed in (the keys, the caller, the
 clock), so the tests drive it over recorded replies, and `live_records_for` is the one place the
 real ones are chosen.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5, M11.7.1, M11.6.3, M11.6.4
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
 """
 
 from __future__ import annotations
@@ -73,6 +79,7 @@ from brain.connectors.declaration import (
     PageReply,
     ReportCall,
     RoutedReading,
+    listed_under,
     shipped,
 )
 from brain.connectors.google_token import TokenNotIssuedError
@@ -264,6 +271,10 @@ class ConnectedSources:
                         outcome=CallOutcome.OK, rows=self._with_facts(live, entity, said_so)
                     )
             try:
+                # A record listed under another is named by both ids, and what is read back is
+                # named the same way. See `brain.connectors.declaration.A_RECORD_LISTED_UNDER_...`.
+                under = listed_under(reading, request.entity)
+                parent_id = None if under is None else under.split(ids[0])[0]
                 # The lookup's own one-record call where it names one, otherwise the reading's
                 # page narrowed to the record. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
                 own = live.operation(entity, settings=connection.settings, resolver=self._resolver)
@@ -284,14 +295,14 @@ class ConnectedSources:
             answer = self._caller.get(
                 checked.url, address=checked.address, headers=headers, max_bytes=MAX_RESPONSE_BYTES
             )
-            replied = self._answered(
-                connection,
-                declared,
-                answer,
-                lambda status, body, at: reading.interpret(
-                    operation, status=status, body=body, fetched_at=at
-                ),
-            )
+
+            def interpreted(status: int, body: Any, at: str) -> PageReply:
+                reply = reading.interpret(operation, status=status, body=body, fetched_at=at)
+                if reply.rows is None or under is None or parent_id is None:
+                    return reply
+                return replace(reply, rows=under.named(reply.rows, parent_id))
+
+            replied = self._answered(connection, declared, answer, interpreted)
             if replied.rows is None:
                 return replied
             return replace(replied, rows=self._with_facts(live, entity, replied.rows))

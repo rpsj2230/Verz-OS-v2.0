@@ -35,6 +35,7 @@ ARCHITECTURE = Path(__file__).resolve().parents[2] / "docs" / "architecture.html
 #: It stopped at ten, and the eleventh open question turned the comparison into a `KeyError`
 #: rather than a readable failure. A table that runs out is a check that stops working at a
 #: number nobody chose, and the failure it produces names the table rather than the drift.
+#: It stopped at twenty too, and the twenty-first open question did the same on 2026-10-05.
 WORDS = {
     0: "none",
     1: "one",
@@ -57,6 +58,16 @@ WORDS = {
     18: "eighteen",
     19: "nineteen",
     20: "twenty",
+    21: "twenty-one",
+    22: "twenty-two",
+    23: "twenty-three",
+    24: "twenty-four",
+    25: "twenty-five",
+    26: "twenty-six",
+    27: "twenty-seven",
+    28: "twenty-eight",
+    29: "twenty-nine",
+    30: "thirty",
 }
 
 
@@ -70,16 +81,6 @@ WORDS = {
 #: a check that stops working at a number nobody chose.
 WORDS_LARGE = {
     **WORDS,
-    21: "twenty-one",
-    22: "twenty-two",
-    23: "twenty-three",
-    24: "twenty-four",
-    25: "twenty-five",
-    26: "twenty-six",
-    27: "twenty-seven",
-    28: "twenty-eight",
-    29: "twenty-nine",
-    30: "thirty",
     31: "thirty-one",
     32: "thirty-two",
     33: "thirty-three",

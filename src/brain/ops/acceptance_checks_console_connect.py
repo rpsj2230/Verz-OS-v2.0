@@ -58,8 +58,10 @@ EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
     "xero": ("tenant_id", lambda: "22222222-3333-4444-5555-" + secrets.token_hex(6)),
     "hubspot": ("portal_id", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
     "freshdesk": ("domain", lambda: f"acceptance-{secrets.token_hex(4)}.freshdesk.com"),
+    "cloudflare": ("account_id", lambda: secrets.token_hex(16)),
     "google_drive": ("folder", lambda: f"acceptance{secrets.token_hex(8)}"),
     "google_analytics": ("property", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
+    "search_console": ("site", lambda: f"sc-domain:acceptance-{secrets.token_hex(4)}.example"),
     "laravel": ("client_rule", lambda: "status in active, pending"),
     "domains": ("domains", lambda: f"acceptance-{secrets.token_hex(4)}.example"),
 }
