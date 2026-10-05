@@ -23,7 +23,11 @@ from brain.core.lane import Lane
 from brain.db import normalise_database_url
 from brain.gate.runtime import RunRecord
 from brain.gate.stop import StopReason
-from brain.ops.agent_run_store import StoredAgentRuns, run_values
+from brain.ops.agent_run_store import (
+    AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD,
+    StoredAgentRuns,
+    run_values,
+)
 from brain.tables.agent_run import TRACE_ID_CHARS, VOCABULARY_CHARS, AgentRunRow
 from tests.unit.test_tables import MIGRATION_AGENT_RUN, migration_module
 
@@ -150,9 +154,14 @@ def test_a_row_naming_somebody_else_is_refused_by_the_database() -> None:
 
 
 def test_a_run_that_cannot_be_recorded_does_not_raise() -> None:
-    """A store that cannot be reached is logged and swallowed, because the record is about a run
-    whose person has already been answered. Delete this and an outage of one table fails every
-    agent answer."""
+    """**AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD.** A store that cannot be reached is
+    logged and swallowed, because the record is about a run whose person has already been
+    answered, and the constant says the table is therefore not an audit trail. Delete this and an
+    outage of one table fails every agent answer, or the table drifts into being read as proof."""
+    assert (
+        "never the record of what an agent did"
+        in AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD
+    )
 
     def broken() -> Any:
         msg = "no database"

@@ -1617,8 +1617,11 @@ class Answering:
     now: datetime
     #: How strongly the asker was known when the request was admitted, or None where the channel
     #: did not say. A run's reach is admitted again at it before each tool call, or at the weakest
-    #: when it is None. See `A_PERSON_IS_RESOLVED_AGAIN_AND_AN_ACCOUNT_IS_NOT`.
+    #: when it is None. See `EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL`.
     assurance: Assurance | None = None
+    #: The caller the web route authenticated, so a run resolves them again exactly as the route
+    #: did, service accounts included. None on a chat channel, which carries a person.
+    caller: Caller | None = None
 
     @classmethod
     def of(cls, asked: Asking) -> Answering:
@@ -1629,6 +1632,7 @@ class Answering:
             channel=asked.channel,
             now=asked.now,
             assurance=asked.caller.assurance,
+            caller=asked.caller,
         )
 
 
@@ -1659,13 +1663,22 @@ AN_AGENT_WITH_A_TOOL_BEYOND_THE_PASSAGE_SEARCH_RUNS_THE_LOOP: Final = (
     "model is asked and hands the model no tools, so nothing about it changes."
 )
 
-#: Why the reach a run is judged at again is resolved for a person and kept for anybody else.
-A_PERSON_IS_RESOLVED_AGAIN_AND_AN_ACCOUNT_IS_NOT: Final = (
-    "Before each tool call a person's own grants are resolved again through the route's resolver "
-    "and admitted again for the channel, at the strength the request was made at or, where that is "
-    "not known, the weakest, so the reach can only narrow. A service account's reach is its "
-    "owner's narrowed by the account, which only the route that authenticated it can compute, so "
-    "an account's run keeps the reach it was admitted at, judged once per request."
+#: How the reach a run is judged at again is resolved, for every kind of caller.
+EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL: Final = (
+    "Before each tool call the caller's reach is resolved again exactly as the route resolved it: "
+    "a caller the route authenticated through reach_of, so a service account is its owner's "
+    "grants narrowed by the account and a revoked grant or an owner gone bites at once, then "
+    "admitted for the channel at the same strength; a person answered on a chat channel through "
+    "the resolver and admitted at the strength chat is held to, or the weakest where that is not "
+    "known. Only a caller the run has no way to resolve keeps the reach it was admitted at, and "
+    "no route builds one."
+)
+
+#: The one caller a run cannot resolve again, said where a reader of the rule will look.
+A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH: Final = (
+    "An Answering naming no authenticated caller and a principal that is not a person cannot be "
+    "resolved again by principal id, because that would drop whatever narrowed it. Its run keeps "
+    "the reach it was admitted at. Neither the web route nor any chat channel builds one."
 )
 
 
@@ -1720,11 +1733,25 @@ def policy_of(registry: ToolRegistry) -> Callable[[ToolDefinition], FieldPolicy]
 def reach_again(
     request: Request, asking: Answering
 ) -> Callable[[datetime], Awaitable[EntitlementSet]]:
-    """How a run's reach is resolved again before each tool call. See the reason constant."""
+    """How a run's reach is resolved again before each tool call.
+
+    See `EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL`, and
+    `A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH` for the one that is not. An
+    authenticated caller refused by `reach_of` now (an account whose owner has gone) reaches
+    nothing for the rest of the run.
+    """
     wiring = wiring_of(request)
 
     async def again(now: datetime) -> EntitlementSet:
-        if wiring is None or asking.principal.kind is not PrincipalKind.HUMAN:
+        if wiring is None:
+            return asking.reach
+        if asking.caller is not None:
+            try:
+                held = await reach_of(asking.caller, wiring, now)
+            except TokenRefusedError:
+                return EntitlementSet(principal_id=asking.reach.principal_id, grants=())
+            return admit(held, asking.channel, asking.caller.assurance)
+        if asking.principal.kind is not PrincipalKind.HUMAN:
             return asking.reach
         own = await resolve(
             asking.principal.id,

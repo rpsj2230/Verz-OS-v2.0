@@ -9,6 +9,7 @@ Task ids: M13.7.1, M13.8.2
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
@@ -22,9 +23,11 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.gate.runtime import AgentRuntime, RunHaltedError
 from brain.gate.screening import NOTHING_MATCHED
+from brain.identity.oidc import TokenRefusal, TokenRefusedError
 from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, SEARCH_DOCUMENTS
 from brain.knowledge.visibility import Visibility
 from brain.tools.registry import ToolRegistry
@@ -130,18 +133,78 @@ def test_an_agent_offering_another_read_tool_runs_the_loop() -> None:
     assert found.asker is question.reach
 
 
-def test_an_account_s_run_keeps_the_reach_it_was_admitted_at() -> None:
-    """**A_PERSON_IS_RESOLVED_AGAIN_AND_AN_ACCOUNT_IS_NOT.** A service account's reach is not
-    re-resolved by principal id, which would ignore the account's own narrowing and widen it.
-    Delete this and an account's run can read at its principal's whole reach."""
+def test_a_caller_nothing_can_resolve_keeps_its_admitted_reach() -> None:
+    """**A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH.** A principal that is not a person
+    with no authenticated caller is not re-resolved by id, which would drop whatever narrowed it.
+    Delete this and such a run reads at its principal's whole reach."""
     question = asking(PrincipalKind.SERVICE)
 
+    assert _again(question, wired=True) is question.reach
+
+
+def _wired() -> Any:
+    wiring = api_routes.GateWiring(
+        authority=cast(Any, None),
+        versions=cast(Any, None),
+        store=cast(Any, None),
+        cache=cast(Any, None),
+    )
+    return cast(Any, SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(gate=wiring))))
+
+
+def _again(question: api_routes.Answering, *, wired: bool) -> EntitlementSet:
+    request = _wired() if wired else REQUEST
+
     async def resolved() -> EntitlementSet:
-        return await api_routes.reach_again(REQUEST, question)(NOW)
+        return await api_routes.reach_again(request, question)(NOW)
 
-    again = asyncio.run(resolved())
+    return asyncio.run(resolved())
 
-    assert again is question.reach
+
+def test_an_authenticated_caller_is_resolved_again_as_the_route_resolved_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL.** A caller the route authenticated,
+    a service account included, is resolved again through `reach_of`, so a grant revoked since the
+    run started is gone at the next call. Delete this and an account's revoked grant keeps
+    working until the run's wall clock ends."""
+    narrowed = EntitlementSet(
+        principal_id="u_asker",
+        grants=(Grant(capability=Capability(value="read:knowledge"), scope=Scope.unrestricted()),),
+    )
+
+    async def now_holds(caller: object, wiring: object, now: datetime) -> EntitlementSet:
+        return narrowed
+
+    monkeypatch.setattr(api_routes, "reach_of", now_holds)
+    question = replace(
+        asking(PrincipalKind.SERVICE),
+        caller=cast(Any, SimpleNamespace(assurance=Assurance.AUTHENTICATED)),
+    )
+
+    again = _again(question, wired=True)
+
+    assert again.holds(Capability(value="read:knowledge"), NOW)
+    assert not again.holds(Capability(value="read:note.title"), NOW)
+
+
+def test_an_account_whose_owner_has_gone_reaches_nothing_for_the_rest_of_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`reach_of` refuses an account whose owner is no longer active; mid-run that is a reach of
+    nothing rather than a fault. Delete this and the run either fails a person who was being
+    answered or keeps reading for an owner who is gone."""
+
+    async def gone(caller: object, wiring: object, now: datetime) -> EntitlementSet:
+        raise TokenRefusedError(TokenRefusal.OWNER_INACTIVE, "acct")
+
+    monkeypatch.setattr(api_routes, "reach_of", gone)
+    question = replace(
+        asking(PrincipalKind.SERVICE),
+        caller=cast(Any, SimpleNamespace(assurance=Assurance.AUTHENTICATED)),
+    )
+
+    assert _again(question, wired=True).grants == ()
 
 
 @pytest.mark.usefixtures("transport")

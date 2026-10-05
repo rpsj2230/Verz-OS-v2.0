@@ -29,7 +29,7 @@ The downgrade drops the four columns.
 Task ids: M13.7.4, M13.7.2
 
 Revision ID: 0189
-Revises: 0187
+Revises: 0188
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from alembic import op
 revision = "0189"
 # This branch's head when this was written. The coordinator re-points it at 0188 on merge; nothing
 # here depends on 0188, and the migration's test steps down to whatever this names.
-down_revision = "0187"
+down_revision = "0188"
 branch_labels = None
 depends_on = None
 

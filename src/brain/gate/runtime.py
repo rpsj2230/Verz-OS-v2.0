@@ -167,6 +167,13 @@ MAX_SECONDS_BY_LANE: Final[Mapping[Lane, float]] = {Lane.ANSWER: 90.0, Lane.TASK
 MAX_RESULT_CHARS: Final = 12_000
 
 
+#: Why an agent's stored bound can only narrow the product's.
+AN_AGENT_MAY_LOWER_A_BOUND_AND_NEVER_RAISE_IT: Final = (
+    "An agent's max_turns and max_tool_calls are read as the smaller of what it sets and the "
+    "product's default. A larger stored value buys nothing, so the setting is a way to make a run "
+    "stop sooner and never a way to make one run longer than the product allows."
+)
+
 #: The stop reasons that are a bound reached. See `A_RUN_STOPS_AT_ITS_BOUND_AND_SAYS_WHICH`.
 BOUNDS_REACHED: Final = frozenset(
     {
@@ -194,13 +201,15 @@ class RunBounds:
 
     @classmethod
     def of(cls, record: AgentRecord, lane: Lane) -> RunBounds:
-        """The product defaults, each lowered by what the agent sets and never raised."""
-        turns = getattr(record, "max_turns", None)
-        calls = getattr(record, "max_tool_calls", None)
+        """The product defaults, each lowered by what the agent sets and never raised.
+
+        See `AN_AGENT_MAY_LOWER_A_BOUND_AND_NEVER_RAISE_IT`.
+        """
+        turns, calls = record.max_turns, record.max_tool_calls
         return cls(
-            max_turns=DEFAULT_MAX_TURNS if turns is None else min(int(turns), DEFAULT_MAX_TURNS),
+            max_turns=DEFAULT_MAX_TURNS if turns is None else min(turns, DEFAULT_MAX_TURNS),
             max_tool_calls=(
-                DEFAULT_MAX_TOOL_CALLS if calls is None else min(int(calls), DEFAULT_MAX_TOOL_CALLS)
+                DEFAULT_MAX_TOOL_CALLS if calls is None else min(calls, DEFAULT_MAX_TOOL_CALLS)
             ),
             max_seconds=MAX_SECONDS_BY_LANE.get(lane, MAX_SECONDS_BY_LANE[Lane.TASK]),
         )

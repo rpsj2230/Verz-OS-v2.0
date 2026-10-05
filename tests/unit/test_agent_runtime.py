@@ -111,8 +111,10 @@ def holding(*capabilities: str, principal: str = "u_asker") -> EntitlementSet:
     )
 
 
-def agent(*capabilities: str, max_turns: int | None = None) -> AgentRecord:
-    record = AgentRecord(
+def agent(
+    *capabilities: str, max_turns: int | None = None, max_tool_calls: int | None = None
+) -> AgentRecord:
+    return AgentRecord(
         agent_id="pricing_desk",
         display_name="Pricing desk",
         persona="Answers about prices.",
@@ -124,11 +126,9 @@ def agent(*capabilities: str, max_turns: int | None = None) -> AgentRecord:
             max_side_effect=SideEffect.WRITE,
         ),
         created_by="u_steward",
+        max_turns=max_turns,
+        max_tool_calls=max_tool_calls,
     )
-    if max_turns is not None:
-        # Set as the stored column will set it once the agent row carries its bounds.
-        object.__setattr__(record, "max_turns", max_turns)
-    return record
 
 
 @dataclass
@@ -360,7 +360,7 @@ def test_a_malformed_reply_is_a_turn_and_the_turn_bound_stops_the_run() -> None:
 def test_an_agent_can_lower_its_turn_bound_and_never_raise_it() -> None:
     """The product's default is a ceiling: an agent asking for more turns gets the default. Delete
     this and an agent's setting becomes a way to run without a bound."""
-    made = setup(["no"] * 20, record=agent(PRICE, NAME, max_turns=999))
+    made = setup(["no"] * 20, record=agent(PRICE, NAME, max_turns=50))
 
     run(made)
 
@@ -370,8 +370,7 @@ def test_an_agent_can_lower_its_turn_bound_and_never_raise_it() -> None:
 def test_the_tool_call_bound_stops_a_run_that_only_calls_tools() -> None:
     """A model asking for a tool on every turn stops at the tool-call bound before the turn bound
     is reached, named as the bound it reached. Delete this and the tool-call bound is decoration."""
-    made = setup([CALL] * 20, record=agent(PRICE, NAME, max_turns=8))
-    object.__setattr__(made.runtime.record, "max_tool_calls", 2)
+    made = setup([CALL] * 20, record=agent(PRICE, NAME, max_turns=8, max_tool_calls=2))
 
     run(made)
 

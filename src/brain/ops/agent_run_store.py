@@ -18,6 +18,8 @@ Task ids: M13.7.2
 
 from __future__ import annotations
 
+from typing import Final
+
 import structlog
 from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -26,6 +28,15 @@ from brain.gate.runtime import RunRecord
 from brain.tables.agent_run import AgentRunRow
 
 log = structlog.get_logger(__name__)
+
+#: Why a run that cannot be recorded is logged and not raised, and what that makes the table.
+AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD: Final = (
+    "ops.agent_run holds counts and names for operating the runtime: how runs ended and what they "
+    "spent. A write that fails is logged by its class and the answer stands, so a row can be "
+    "missing, and the table is never the record of what an agent did. That record is the "
+    "ledger's, written by triggers on the rows an action changes, and the trace's, behind its own "
+    "role. Nothing may treat a missing row here as proof a run did not happen."
+)
 
 
 def run_values(run: RunRecord) -> dict[str, object]:
@@ -52,7 +63,10 @@ class StoredAgentRuns:
         self.sessions = sessions
 
     async def record(self, run: RunRecord) -> None:
-        """Write one finished run, or log why not, and never raise."""
+        """Write one finished run, or log why not, and never raise.
+
+        See `AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD`.
+        """
         try:
             async with self.sessions() as session, session.begin():
                 await session.execute(
