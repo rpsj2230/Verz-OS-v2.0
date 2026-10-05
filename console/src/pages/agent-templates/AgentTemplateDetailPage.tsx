@@ -45,6 +45,8 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { TEMPLATES_API_PATH } from "../agentTemplatesQuery";
 import { agentAddress } from "../agents/AgentsPage";
+import { readChannelChoices } from "../agents/agentDraftsQuery";
+import { ChannelChoices, ticked } from "../agents/ChannelChoices";
 import { ACT_LABELS, originWords, rungWords, UNAVAILABLE } from "./templateActions";
 import { TEMPLATES_HEADING } from "./AgentTemplatesPage";
 
@@ -106,6 +108,7 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
   const version = useResource<TemplateVersion>(versionApiPath(entry.template_id, entry.version));
   const [name, setName] = useState(entry.display_name);
   const [forDepartment, setForDepartment] = useState(false);
+  const [channels, setChannels] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -135,6 +138,8 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
     );
   }
 
+  const choices = readChannelChoices(found.channels);
+
   function send(digest: string): void {
     setBusy(true);
     void (async () => {
@@ -142,6 +147,7 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
       const body = {
         expected_digest: digest,
         for_department: forDepartment,
+        channels: ticked(choices, channels),
         ...(trimmed === "" || trimmed === entry.display_name ? {} : { display_name: trimmed }),
       };
       const result = await request<unknown>(installApiPath(entry.template_id, entry.version), { method: "POST", body });
@@ -205,6 +211,7 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
             </p>
           </div>
         </div>
+        <ChannelChoices choices={choices} note={found.channels_note} chosen={channels} onChange={setChannels} />
         {failure === null ? null : <FailureState failure={failure} title={NOT_INSTALLED} />}
         <div>
           <Button type="submit" disabled={busy} className="min-h-11 sm:min-h-9">

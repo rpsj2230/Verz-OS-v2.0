@@ -60,10 +60,14 @@ def _agent(url: str, agent_id: str, connectors: tuple[str, ...]) -> None:
         ),
         created_by="u_one",
     )
+    row = agent_values(record)
+    # The database is at 0186 here, before 0189 added these three.
+    for later in ("channels", "max_turns", "max_tool_calls"):
+        del row[later]
     engine = create_engine(url.replace("postgresql://", "postgresql+psycopg://", 1))
     try:
         with engine.begin() as conn:
-            conn.execute(insert(AgentRow).values(**agent_values(record)))
+            conn.execute(insert(AgentRow).values(**row))
     finally:
         engine.dispose()
 

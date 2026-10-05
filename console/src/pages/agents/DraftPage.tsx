@@ -56,6 +56,7 @@ import { Label } from "../../components/ui/label";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
+import { ChannelChoices, ticked } from "./ChannelChoices";
 import {
   ACT_WORDS,
   APPROVE_CONSEQUENCE,
@@ -187,14 +188,24 @@ function questionFor(pending: Pending, draft: Draft): { question: string; conseq
   }
 }
 
-function bodyFor(pending: Pending, draft: Draft, forDepartment: boolean): Record<string, unknown> {
+function bodyFor(
+  pending: Pending,
+  draft: Draft,
+  forDepartment: boolean,
+  channels: ReadonlySet<string>,
+): Record<string, unknown> {
   switch (pending.verb) {
     case "revisions":
       return { document: withSection(draft.document, pending.data), base: draft.revision };
     case "procedure":
       return { drawing: pending.drawing, name: pending.name.trim(), description: pending.description.trim() };
     case "publish":
-      return { revision: draft.revision, for_department: forDepartment };
+      return {
+        revision: draft.revision,
+        for_department: forDepartment,
+        // An edit keeps the agent's own channels, so only a new agent sends the boxes.
+        ...(draft.kind === "new" ? { channels: ticked(draft.channels, channels) } : {}),
+      };
     default:
       return { revision: draft.revision };
   }
@@ -386,6 +397,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
   const [skillWhen, setSkillWhen] = useState("");
   const [tried, setTried] = useState(false);
   const [forDepartment, setForDepartment] = useState(false);
+  const [channels, setChannels] = useState<ReadonlySet<string>>(new Set());
   const nameId = useId();
   const whenId = useId();
   const audienceId = useId();
@@ -405,7 +417,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
       const verb: DraftVerb = chosen.verb;
       const result = await request<unknown>(draftActApiPath(draftId, verb), {
         method: "POST",
-        body: bodyFor(chosen, draft, forDepartment),
+        body: bodyFor(chosen, draft, forDepartment, channels),
       });
       setSending(false);
       setPending(null);
@@ -675,6 +687,14 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
                     {MY_DEPARTMENT}
                   </label>
                 </fieldset>
+              )}
+              {draft.kind !== "new" ? null : (
+                <ChannelChoices
+                  choices={draft.channels}
+                  note={draft.channelsNote}
+                  chosen={channels}
+                  onChange={setChannels}
+                />
               )}
               <Button
                 className="min-h-11 w-fit sm:min-h-9"

@@ -51,13 +51,13 @@ from brain.agent_builder_routes import (
     UNAVAILABLE,
     WAITS_FOR_A_SECOND_PERSON,
 )
-from brain.agent_lifecycle_routes import NO_SIGNING_KEY_HERE, FoundAgent
+from brain.agent_lifecycle_routes import NO_CHANNEL_ANSWERS_NOWHERE, NO_SIGNING_KEY_HERE, FoundAgent
 from brain.agent_routes import TEMPLATE_SCREEN, record_of
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.creation import AGENT_INSTALL_CAPABILITY
 from brain.agents.install import Installation
 from brain.agents.lifecycle import ARCHIVE_IS_TERMINAL
-from brain.agents.model import AgentAudience, AgentState
+from brain.agents.model import ASKING_CHANNELS, AgentAudience, AgentState
 from brain.agents.template import SignedManifest, TemplateManifest
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
@@ -591,6 +591,67 @@ def test_a_new_agent_that_reaches_anything_waits_for_a_second_person_who_is_not_
         (DraftAct.PUBLISHED, "u_prefix"),
     ]
     assert console.get("u_prefix", DRAFTS_PATH).json()["waiting_for_you"] == []
+
+
+def test_a_new_agent_answers_on_the_channels_its_author_ticked_and_on_none_by_default(
+    console: Console,
+) -> None:
+    """**M13.7.4.** The ticked channels are stored on the new agent, sorted, and a publish ticking
+    none makes an agent that answers nowhere. The draft offers every channel with the sentence
+    saying so. Delete this and the builder's boxes can be dropped on the way to the row, so every
+    agent built in the console is mute whatever its author chose."""
+    first, revision = ready(console, reaching_nothing())
+    opened = console.get("u_admin", at(DRAFT_PATH, draft_id=first)).json()
+    assert [one["name"] for one in opened["channels"]] == list(ASKING_CHANNELS)
+    assert opened["channels_note"] == NO_CHANNEL_ANSWERS_NOWHERE
+
+    ticked = console.post(
+        "u_admin",
+        at(PUBLISH_PATH, draft_id=first),
+        {"revision": revision, "channels": ["lark", "console"]},
+    )
+    second, again = ready(console, reaching_nothing())
+    none = console.post("u_admin", at(PUBLISH_PATH, draft_id=second), {"revision": again})
+
+    assert (ticked.status_code, none.status_code) == (201, 201)
+    made = console.memory.agents
+    assert made[ticked.json()["agent_id"]].record.channels == ("console", "lark")
+    assert made[none.json()["agent_id"]].record.channels == ()
+
+
+def test_a_channel_nothing_is_asked_on_is_refused_and_nothing_is_published(
+    console: Console,
+) -> None:
+    """A channel outside the list is a 422 before any route code runs, and no agent is made. Delete
+    this and a box that switches nothing on can be stored as ticked."""
+    draft_id, revision = ready(console, reaching_nothing())
+    before = dict(console.memory.agents)
+    refused = console.post(
+        "u_admin",
+        at(PUBLISH_PATH, draft_id=draft_id),
+        {"revision": revision, "channels": ["scheduler"]},
+    )
+    assert refused.status_code == 422
+    assert console.memory.agents == before
+
+
+def test_a_waiting_publish_is_approved_with_the_channels_its_author_ticked(
+    console: Console,
+) -> None:
+    """The second person's approval publishes what the author asked for, channels included, since
+    the approver is not asked again. Delete this and an agent that needed a second person is always
+    published mute, whatever its author ticked."""
+    draft_id, revision = ready(console, a_document())
+    asked = console.post(
+        "u_admin",
+        at(PUBLISH_PATH, draft_id=draft_id),
+        {"revision": revision, "channels": ["slack"]},
+    )
+    assert asked.status_code == 202
+    approved = console.post("u_prefix", at(APPROVE_PATH, draft_id=draft_id), {"revision": revision})
+
+    assert approved.status_code == 201
+    assert console.memory.agents[approved.json()["agent_id"]].record.channels == ("slack",)
 
 
 def test_a_publish_sent_back_publishes_nothing_and_returns_to_its_author(console: Console) -> None:
