@@ -78,6 +78,7 @@ from brain.ops.automation_run import (
     run_event,
     run_id,
 )
+from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.outbox_store import record_event, subscribers
 from brain.ops.question_gap_store import gaps_between
 from brain.session import make_app_engine, make_session_factory
@@ -284,6 +285,15 @@ def _stand_in(principal_id: str, display_name: str | None = None) -> Principal:
     )
 
 
+#: Why a halted automation is held rather than refused.
+HELD_BY_A_HALT_IS_NOT_A_FAILED_RUN: Final = (
+    "A halt stops new work and loses none. An automation a halt covers is not run and nothing is "
+    "recorded, so it is still due when the halt is lifted and runs then. Recording it as refused "
+    "would count towards the failures that pause it, and an administrator's stop would quietly "
+    "become a pause somebody has to notice and undo, automation by automation."
+)
+
+
 async def run_one(
     sessions: async_sessionmaker[AsyncSession],
     automation_id: str,
@@ -296,7 +306,14 @@ async def run_one(
 
     None when another worker holds it, a console change made it not due, or its row no longer
     constructs, which is logged and left for the next tick rather than paused on a guess.
+
+    None too when a halt stops the person it runs as, or their department, or everything, or the
+    halts cannot be read: nothing is written and it stays due, so it runs on the first tick after
+    the halt is lifted rather than counting as a failure that pauses it. The state is read before
+    the claim, through `brain.ops.halt_store`, so no second transaction opens inside this one.
+    See `HELD_BY_A_HALT_IS_NOT_A_FAILED_RUN`.
     """
+    halts = await read_state(sessions)
     async with sessions() as session, session.begin():
         await session.execute(_set_config(PRINCIPAL_SETTING, RUNNER_ACTOR))
         row = (await session.execute(claim(automation_id, now))).scalar_one_or_none()
@@ -306,6 +323,16 @@ async def run_one(
         now_is = await _folded(session, row, None if template is None else template.cadence)
         owner_id = now_is.owner_id
         owner = await principals.live_principal(owner_id)
+        held = refusal_in(
+            halts,
+            Work(
+                person=owner_id,
+                department="" if owner is None else owner.primary_department or "",
+            ),
+        )
+        if held:
+            log.info("automation held by a halt", automation=automation_id)
+            return None
         try:
             automation = Automation(
                 automation_id=row.automation_id,

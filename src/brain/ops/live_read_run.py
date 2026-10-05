@@ -120,6 +120,7 @@ from brain.ops.connector_sync_run import (
     page_operation,
     presented,
 )
+from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
 from brain.ops.lark_base_live import BaseSchema, with_base
 from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, wiki_host
@@ -587,7 +588,15 @@ def live_records_for(
     issuer = HttpsTokenIssuer()
 
     async def connected() -> LiveSources:
-        rows = await stored.connected()
+        # A source a halt stops is not read at question time either: it is left out, so the
+        # answer says it could not be reached, which is what a stopped source is. Every source
+        # is left out when the halts cannot be read. See `brain.ops.halt_store`.
+        halts = await read_state(sessions)
+        rows = [
+            one
+            for one in await stored.connected()
+            if not refusal_in(halts, Work(connector=one.connector))
+        ]
         sources = ConnectedSources(
             {one.connector: one for one in rows},
             keys=keys,
