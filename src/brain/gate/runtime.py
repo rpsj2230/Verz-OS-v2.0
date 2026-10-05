@@ -617,7 +617,7 @@ class AgentRuntime:
     def _ended(self, scope: SearchScope, run: _Run) -> Drafted:
         """A run stopped at a bound, told what a run that found nothing to say is told."""
         detail = "the run reached its bound"
-        if any(redacted.payload.records for _, redacted in run.payloads):
+        if False:
             return Drafted(outcome=retrieved_but_not_answering(scope, detail=detail), asked=True)
         return Drafted(outcome=nothing_retrieved(scope, detail=detail), asked=run.turns > 0)
 
