@@ -186,7 +186,9 @@ services:
         fi
         /opt/keycloak/bin/kc.sh build
         printf '%s' "$$built_for" > "$$marker"
-        echo "keycloak-build: built"
+        # The most this container held, from its own cgroup, so the limit below is checked
+        # against a measurement on every build rather than once.
+        echo "keycloak-build: built, peak $$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown) bytes"
     environment:
       # Build-time options. Every one is also on `keycloak`, with the same value.
       KC_DB: postgres

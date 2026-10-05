@@ -414,7 +414,7 @@ services:
     - /bin/bash
     - -c
     command:
-    - "set -eu\nmarker=/opt/keycloak/lib/quarkus/brain-build.txt\nbuilt_for=\"$$(ls /opt/keycloak/lib/lib/main | sha256sum | cut -d' ' -f1) KC_DB=$$KC_DB KC_HEALTH_ENABLED=$$KC_HEALTH_ENABLED KC_VAULT=$$KC_VAULT\"\nif [ -f \"$$marker\" ] && [ \"$$(cat \"$$marker\")\" = \"$$built_for\" ]; then\n  echo \"keycloak-build: already built for this distribution and these options\"\n  exit 0\nfi\n/opt/keycloak/bin/kc.sh build\nprintf '%s' \"$$built_for\" > \"$$marker\"\necho \"keycloak-build: built\"\n"
+    - "set -eu\nmarker=/opt/keycloak/lib/quarkus/brain-build.txt\nbuilt_for=\"$$(ls /opt/keycloak/lib/lib/main | sha256sum | cut -d' ' -f1) KC_DB=$$KC_DB KC_HEALTH_ENABLED=$$KC_HEALTH_ENABLED KC_VAULT=$$KC_VAULT\"\nif [ -f \"$$marker\" ] && [ \"$$(cat \"$$marker\")\" = \"$$built_for\" ]; then\n  echo \"keycloak-build: already built for this distribution and these options\"\n  exit 0\nfi\n/opt/keycloak/bin/kc.sh build\nprintf '%s' \"$$built_for\" > \"$$marker\"\n# The most this container held, from its own cgroup, so the limit below is checked\n# against a measurement on every build rather than once.\necho \"keycloak-build: built, peak $$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown) bytes\"\n"
     environment:
       KC_DB: postgres
       KC_HEALTH_ENABLED: 'true'
