@@ -121,7 +121,7 @@ NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
 SCHEMA = "portal"
 
-REF = SecretRef(path="connectors/creds/laravel_readonly", role=VaultRole.APPLICATION)
+REF = SecretRef(path="connectors/creds/laravel", role=VaultRole.APPLICATION)
 
 MONEY_CANARY = CANARIES["client.contract_value"]
 

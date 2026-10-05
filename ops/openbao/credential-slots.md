@@ -18,7 +18,7 @@ later" is a scope nobody removes.
 | `connectors/creds/lark_wiki` | Lark Wiki | `wiki:wiki:readonly` | Anything under `docs:document` that would allow editing |
 | `connectors/creds/freshdesk` | Freshdesk | Agent key, read scope | An admin key. An admin key can change SLAs and delete tickets |
 | `connectors/creds/hubspot` | HubSpot | `crm.objects.contacts.read`, `crm.objects.deals.read` | `crm.objects.*.write`, and anything touching `settings` |
-| `connectors/creds/laravel_readonly` | Laravel MySQL | A database user with SELECT on the allowlisted views only | SELECT on tables. The views are the contract; tables change shape without warning |
+| `connectors/creds/laravel` | Laravel MySQL | A database user with SELECT on the allowlisted views only | SELECT on tables. The views are the contract; tables change shape without warning |
 | `connectors/creds/google_drive` | Drive or M365 | A service account with Viewer on the one folder shared with it | Domain-wide delegation. It reads everything, for everyone, for ever |
 | `browser/creds/*` | Browser runner | One credential per site, per task | Anything reusable across sites |
 

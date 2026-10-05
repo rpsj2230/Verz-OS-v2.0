@@ -84,9 +84,6 @@ KEY_KIND_WITHOUT_SCOPES: Final = {
     "laravel": ("select", "tables"),
 }
 
-#: The row a source's slot has in the leased-path table, where it is not the source's own name.
-SLOT_ROWS: Final = {"laravel": "laravel_readonly"}
-
 
 def in_scope(identifier: str, selectors: tuple[str, ...]) -> bool:
     """Whether the scope names the identifier typed: as a selector, or as what each is inside, as
@@ -152,7 +149,7 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
     row = next(
         line
         for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
-        if line.startswith(f"| `connectors/creds/{SLOT_ROWS.get(name, name)}`")
+        if line.startswith(f"| `connectors/creds/{name}`")
     )
     requested, refused = row.split("|")[3], row.split("|")[4]
     scopes = re.findall(r"`([a-z.]+)`", requested)

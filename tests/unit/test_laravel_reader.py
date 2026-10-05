@@ -654,7 +654,9 @@ def test_on_a_real_server_the_session_the_executor_opens_is_read_only() -> None:
         cursor = session.cursor()
         cursor.execute(READ_ONLY)
         cursor.execute("SELECT @@session.transaction_read_only AS read_only")
-        assert cursor.fetchall() == ({"read_only": 1},)
+        # PyMySQL's dictionary cursor hands back a list, which its stubs call a tuple; the rows
+        # are compared as a list so the assertion is about the value and not the container.
+        assert list(cursor.fetchall()) == [{"read_only": 1}]
     finally:
         session.close()
 

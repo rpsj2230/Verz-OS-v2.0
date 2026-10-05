@@ -81,8 +81,12 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
     },
     "laravel": {
         "schema": "portal",
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
         "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
+        "user_rule": "department = operations",
         "max_rows": "500",
         "timeout_seconds": "10",
     },

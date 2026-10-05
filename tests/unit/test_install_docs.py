@@ -241,7 +241,7 @@ def manifests() -> tuple[ConnectorManifest, ...]:
                 private_network=False,
                 tls=DatabaseTls(TlsMode.VERIFIED),
             ),
-            ref=ref("connectors/creds/laravel_readonly"),
+            ref=ref("connectors/creds/laravel"),
             visibility={"laravel_client": VISIBILITY, "laravel_user": VISIBILITY},
         ),
         lark_base_for("maintenance"),
