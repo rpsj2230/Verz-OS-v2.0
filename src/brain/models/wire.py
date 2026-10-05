@@ -73,7 +73,7 @@ exceptions, which is the leak `NOTHING_FROM_THE_REQUEST_IN_AN_EXCEPTION` names. 
 client.* `ModelDriver` is synchronous on purpose and the executor runs a call in a worker thread,
 so a synchronous client is the one that matches the seam.
 
-Task ids: M5.1.1, M5.1.2, M5.7.1, M5.7.2, M5.6.1, M6.4.4
+Task ids: M5.1.1, M5.1.2, M5.7.1, M5.7.2, M5.6.1, M6.4.4, M32.2.2.1
 """
 
 from __future__ import annotations
@@ -98,6 +98,7 @@ from brain.models.adapter import (
     TransportTimeoutError,
 )
 from brain.models.driver import DriverRequest, Role
+from brain.ops.egress import Detector, third_party_call
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
 from brain.settings import process_environment
 
@@ -491,18 +492,28 @@ def http_transport(
     *,
     client: httpx.Client,
     key: KeyLookup | None = None,
+    detector: Detector | None = None,
 ) -> Transport:
     """One provider's `Transport`: build the body, post it once, read the answer.
 
     `key` defaults to the slot's environment variable; a test hands a lookup of its own, and a
-    wire with no slot is sent with no key whatever it is handed. Every exception `httpx` raises
-    is translated and raised `from None`, for the reason `adapter.SdkDriver.complete` gives:
-    chaining keeps the client's own exception, which names the URL and may carry more, in
-    `__cause__` where every traceback formatter renders it.
+    wire with no slot is sent with no key whatever it is handed. A request to any provider but
+    the install's own server goes out through `brain.ops.egress.third_party_call`, scrubbed by
+    the rules and by `detector` where one is given, and its answer is put back for the reader
+    (M32.2.2.1). Every exception `httpx` raises is translated and raised `from None`, for the
+    reason `adapter.SdkDriver.complete` gives: chaining keeps the client's own exception, which
+    names the URL and may carry more, in `__cause__` where every traceback formatter renders it.
     """
     lookup = key if key is not None else (environment_key(wire.slot) if wire.slot else None)
 
     def send(request: DriverRequest) -> Completion:
+        # Every request to a third party leaves scrubbed and its answer comes back put back;
+        # the install's own server is inside its network. See `brain.ops.egress`.
+        if wire.provider == LOCAL_PROVIDER:
+            return post(request)
+        return third_party_call(request, post, provider=wire.provider, detector=detector)
+
+    def post(request: DriverRequest) -> Completion:
         held: str | None = None
         if wire.slot is not None:
             held = lookup() if lookup is not None else None
