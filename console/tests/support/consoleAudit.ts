@@ -708,7 +708,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "The audit trail: who changed what, and when": {
-    screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
+    screens: [
+      "/audit",
+      "/audit/verify",
+      "/audit/trace",
+      "/audit/trace/:traceId",
+      "/audit/subject/:kind/:id",
+      "/audit/subject/:kind/:id/:view",
+      "/requirement-checks",
+    ],
     routes: ["/api/v1/audit*", "/api/v1/requirements/checks", "/api/v1/traces*"],
     tables: [
       "obs.audit_entry",
@@ -719,12 +727,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "obs.trace_read",
     ],
     installation: [],
-    gaps: [
-      {
-        what: "A run's trace graph is stored masked and read only under the payload role, and no screen reads it: the read route serves one to a holder of that role, and no page calls it for TraceGraph to draw.",
-        leaf: "M20.2.1",
-      },
-    ],
+    gaps: [],
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs"],

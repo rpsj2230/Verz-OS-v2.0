@@ -70,7 +70,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qs, urlsplit
 
 from brain.connectors.contract import FetchRequest, HealthState, identity_mode_default
-from brain.connectors.declaration import ViewReading, shipped
+from brain.connectors.declaration import CodeReading, ToolReading, ViewReading, shipped
 from brain.connectors.federation import CONNECTOR_TIMEOUT_MS, FEDERATION_TIMEOUT_MS, FailureReason
 from brain.connectors.live_read import (
     LIVE_READ_BUDGET_MS,
@@ -677,7 +677,7 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 
     rig = _rig(h)
     reading = READINGS[SOURCE]
-    if isinstance(reading, ViewReading):
+    if isinstance(reading, ViewReading | ToolReading | CodeReading):
         raise CheckFailedError("the source this check reads is not read over HTTP")
     for entity in reading.entities():
         try:
