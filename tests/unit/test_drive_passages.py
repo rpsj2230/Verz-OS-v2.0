@@ -229,16 +229,40 @@ def test_a_reader_without_the_folder_s_grant_is_told_what_nothing_tells_them(
     assert "read:file" in A_FILE_S_WORDS_ARE_TOLD_ONLY_TO_A_READER_OF_ITS_ROW
 
 
-def test_a_locked_file_is_looked_at_and_never_read() -> None:
-    """A file whose inherited permissions are off is listed and matched, its metadata read live,
-    and its words never asked for; its sibling the Doc beside it is read. Delete this and a file
-    somebody kept to fewer people than the folder reaches is told to the whole department."""
+def test_a_file_locked_since_it_was_listed_is_looked_at_and_never_read() -> None:
+    """A file listed when its inherited permissions were on and switched off since is matched in the
+    index, its metadata read live, and its words never asked for; its sibling the Doc beside it is
+    read. (A file locked when it is listed is not kept at all.) Delete this and a file somebody
+    kept to fewer people than the folder reaches since the last pass is told to the department."""
+    listed_open = {**LOCKED, "inheritedPermissionsDisabled": False}
     google = RecordedDrive(files={"docLocked00001": LOCKED, "docQuarterly01": DOC}, words=WORDS)
-    told = ask(passages_over(google, index_of(DOC, LOCKED)), "Show the roster", reader())
+    told = ask(passages_over(google, index_of(DOC, listed_open)), "Show the roster", reader())
 
     assert [one.title for one in told] == ["Quarterly roster"]
     assert sorted(google.metadata_read) == ["docLocked00001", "docQuarterly01"]
     assert google.words_read == ["docQuarterly01"]
+
+
+def test_a_file_in_a_subfolder_the_walk_found_is_read_and_one_in_a_locked_one_is_not() -> None:
+    """A Doc whose parent is a subfolder the walk kept is read like one in the pin; a Doc whose
+    parent is a folder the walk did not keep (it was locked narrower than its parent) is passed
+    over after its metadata says so. Delete this and either nothing below the top level is read,
+    or a file in a locked subfolder is."""
+    sub = a_file("fldLevel00001", "Level", mimeType="application/vnd.google-apps.folder")
+    nested = a_file("docNested0001", "Nested roster", parents=["fldLevel00001"])
+    hidden = a_file("docHidden0001", "Hidden roster", parents=["fldLocked0001"])
+    files = {"docNested0001": nested, "docHidden0001": hidden}
+    words = {"docNested0001": "Nested words.", "docHidden0001": "Hidden words."}
+    google = RecordedDrive(files=files, words=words)
+    rows = (
+        *index_of(sub, {**nested, "parents": [FOLDER]}),
+        *index_of({**hidden, "parents": [FOLDER]}),
+    )
+
+    told = ask(passages_over(google, rows), "Show the roster", reader())
+
+    assert [one.document for one in told] == ["Nested words."]
+    assert google.words_read == ["docNested0001"]
 
 
 def test_a_file_shown_as_shared_outside_is_never_read_listed_or_live() -> None:

@@ -199,11 +199,16 @@ Viewer can read that field, so the live read refuses such a file before it asks 
 and the department the folder was connected for is never told what the folder's own audience in
 Drive was not. See `A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`.
 
-**Only the folder's direct children are read.** Drive's query language reaches a folder's
-children and not its descendants, so a walk of the tree is one listing per subfolder, and a run's
-page loop carries one listing. A folder with subfolders is therefore read one level deep, which
-narrows "the folders it was given" and is said here rather than decided silently; a subfolder can
-be connected as a folder of its own meanwhile.
+**Everything under the pin is read, at every level, under the same rules.** Drive's query
+language reaches a folder's children and not its descendants, so the reading walks the tree one
+listing per folder (`DriveReading.next_page`), carrying the folders still to list in the run's own
+page arguments, which never reach Drive. A subfolder locked narrower than its parent is not walked,
+so it and everything in it are left out; a shortcut is never followed, so nothing outside the tree
+is reached through one; and a folder is listed once however it is reached, so no loop of folders is
+walked twice. See `THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT`. A pass is bounded
+by the worker's pages and the documented ceiling, and one cut short says so and starts again from
+the pin on the next pass: carrying on from where it stopped needs a place to keep that point, which
+the worker's records do not have yet.
 
 **Its ceiling is Google's documented quota at the dearest call a read makes.** See
 `THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL` and `brain.ops.limits`.
@@ -226,8 +231,8 @@ from __future__ import annotations
 
 import enum
 import re
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, final
@@ -412,6 +417,15 @@ WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT = (
     "file Drive does show as shared by link or outside the company is never read. The owner "
     "decided this, keeping the account a Viewer rather than giving it a role that shows every "
     "file's sharing (needs-rupash 135, decided: A)."
+)
+
+#: Why the reading walks the tree, and what it never walks into.
+THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT = (
+    "The folder an administrator connected is everything under it, at every level. So the reading "
+    "lists the pin and then each subfolder it finds, under the same rules: a subfolder whose "
+    "inherited permissions are off, or shown as shared by link, is not walked, so it and "
+    "everything in it are left out; a shortcut is never followed, so nothing outside the tree is "
+    "reached through one; and each folder is listed once, so a loop of folders ends."
 )
 
 #: Why a file whose inherited permissions are off is never read.
@@ -2396,19 +2410,62 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
 
 
 # ---------------------------------------------------------- the worker's reading (M11.6.7)
+#: The run's own page arguments that carry the walk: the folder this page lists, the folders still
+#: to list, and every folder already queued. Read by `FolderListing.url_for` and never sent.
+WALK_FOLDER: Final = "walk.folder"
+WALK_PENDING: Final = "walk.pending"
+WALK_SEEN: Final = "walk.seen"
+
+#: The most folders one pass walks, the pin's subfolders and theirs together. The worker's page
+#: bound and the ceiling bound a pass as well; this one bounds what a pass carries.
+MAX_FOLDERS_WALKED: Final = 200
+
+
+def subfolders_to_walk(body: Any) -> tuple[str, ...]:
+    """The subfolders a listed page names that the walk goes into, in the order listed.
+
+    A folder only: a shortcut, even to a folder, is never followed. Not one locked narrower than
+    its parent, and not one shown as shared by link, so it and everything in it are left out. See
+    `THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT`.
+    """
+    listed = body.get("files") if isinstance(body, Mapping) else None
+    found: list[str] = []
+    for raw in listed if isinstance(listed, list) else []:
+        if not isinstance(raw, Mapping) or raw.get("mimeType") != FOLDER_MIME:
+            continue
+        folder_id = raw.get("id")
+        if not isinstance(folder_id, str) or not _FILE_ID_RE.match(folder_id):
+            continue
+        if raw.get("inheritedPermissionsDisabled") is True:
+            continue
+        granted = raw.get("permissions")
+        if isinstance(granted, list) and any(
+            isinstance(one, Mapping) and one.get("type") == PermissionKind.ANYONE.value
+            for one in granted
+        ):
+            continue
+        found.append(folder_id)
+    return tuple(found)
+
+
 @dataclass(frozen=True)
 class FolderListing(RestOperation):
-    """The pinned folder's listing, laying the pin and each file's sharing verdict on its rows.
+    """The tree under the pin, one folder a page, each row laid with the pin and a verdict.
 
-    The query, the field selector and the all-drives flags are the connection's own
-    (`first_page`), so a page is asked for by its cursor alone and a run cannot send a listing of
-    anything but the pin. Each row is checked against the pin as it arrives
-    (`assert_row_is_in_the_folder`, which refuses the page), carries the pin it was reached
-    through, and carries the verdict `sharing_of` reduced its permissions to; the permissions go
-    no further than this method.
+    The query, the field selector and the all-drives flags are the connection's own, so a page is
+    asked for by its cursor and the folder of the walk it lists, and a run cannot send a listing of
+    a folder the walk did not reach from the pin. Each row is checked against the folder listed as
+    it arrives (`assert_row_is_in_the_folder`, which refuses the page), carries the pin it was
+    reached through, and carries the verdict `sharing_of` reduced its permissions to; the
+    permissions go no further than this method.
+
+    `_listing` holds the folder the last address was built for, so the page that answers it is
+    checked against that folder; the worker builds a page's address and reads its answer before it
+    builds the next.
     """
 
     connection: DriveConnection | None = None
+    _listing: list[str] = field(default_factory=list, repr=False, compare=False)
 
     def _pinned(self) -> DriveConnection:
         if self.connection is None:
@@ -2416,27 +2473,44 @@ class FolderListing(RestOperation):
             raise DriveError(msg)
         return self.connection
 
+    def _listed(self) -> DriveConnection:
+        """The folder the current page lists, as a connection to it: the pin's, at first."""
+        pinned = self._pinned()
+        folder = self._listing[-1] if self._listing else pinned.folder_id
+        return pinned if folder == pinned.folder_id else replace(pinned, folder_id=folder)
+
     def url_for(self, arguments: Mapping[str, str]) -> str:
-        unasked = sorted(set(arguments) - {PAGE_CURSOR_PARAMETER})
+        walk = {WALK_FOLDER, WALK_PENDING, WALK_SEEN}
+        unasked = sorted(set(arguments) - {PAGE_CURSOR_PARAMETER, *walk})
         if unasked:
             msg = (
-                f"a folder listing is asked for by its cursor alone and was given {unasked}; "
-                f"the query is the connection's. {SCOPE_AT_CONNECT_IS_THE_WHOLE_POINT}"
+                f"a folder listing is asked for by its cursor and its walk alone and was given "
+                f"{unasked}; the query is the connection's. {SCOPE_AT_CONNECT_IS_THE_WHOLE_POINT}"
             )
             raise DriveError(msg)
-        request = replace(
-            first_page(self._pinned()), cursor=arguments.get(PAGE_CURSOR_PARAMETER, "")
+        pinned = self._pinned()
+        folder = arguments.get(WALK_FOLDER) or pinned.folder_id
+        if not _FILE_ID_RE.match(folder):
+            msg = "a folder of the walk is listed only when it is a Drive identifier"
+            raise DriveError(msg)
+        self._listing[:] = [folder]
+        request = ListingRequest(
+            connection=self._listed(),
+            cursor=arguments.get(PAGE_CURSOR_PARAMETER, ""),
+            page_size=MAX_PAGE_SIZE,
+            all_drives=True,
         )
         return super().url_for(request.as_arguments())
 
     def project(self, body: Any) -> tuple[Mapping[str, Any], ...]:
         pinned = self._pinned()
+        listed_in = self._listed()
         rows = super().project(body)
         listed = body.get("files") if isinstance(body, Mapping) else None
         given = listed if isinstance(listed, list) else []
         kept: list[Mapping[str, Any]] = []
         for raw, row in zip(given, rows, strict=True):
-            assert_row_is_in_the_folder(pinned, row)
+            assert_row_is_in_the_folder(listed_in, row)
             permissions = raw.get("permissions") if isinstance(raw, Mapping) else None
             sharing = sharing_of(permissions, domain=pinned.domain)
             kept.append({**row, "folder_id": pinned.folder_id, "sharing_state": sharing.value})
@@ -2497,9 +2571,30 @@ class DriveReading:
     def next_page(
         self, entity: str, asked: Mapping[str, str], body: Any, returned: int
     ) -> Mapping[str, str] | None:
-        del entity, asked, returned
+        """The rest of this folder, or the next folder of the walk, or None when the tree is done.
+
+        The walk is carried in the page arguments (`WALK_FOLDER`, `WALK_PENDING`, `WALK_SEEN`),
+        so the reading holds nothing between pages. Each subfolder a page names is queued once
+        (`subfolders_to_walk`); a folder already queued is not queued again, which is what ends a
+        loop, and no more than `MAX_FOLDERS_WALKED` are queued in one pass.
+        """
+        del entity, returned
+        folder = asked.get(WALK_FOLDER, "")
+        pending = asked.get(WALK_PENDING, "").split()
+        seen = set(asked.get(WALK_SEEN, "").split())
+        for one in subfolders_to_walk(body):
+            if one not in seen and len(seen) < MAX_FOLDERS_WALKED:
+                seen.add(one)
+                pending.append(one)
+        walk = {WALK_PENDING: " ".join(pending), WALK_SEEN: " ".join(sorted(seen))}
         cursor = next_cursor(Reply(status=200, body=body))
-        return MappingProxyType({PAGE_CURSOR_PARAMETER: cursor}) if cursor else None
+        if cursor:
+            return MappingProxyType({PAGE_CURSOR_PARAMETER: cursor, WALK_FOLDER: folder, **walk})
+        if not pending:
+            return None
+        following = pending.pop(0)
+        walk[WALK_PENDING] = " ".join(pending)
+        return MappingProxyType({WALK_FOLDER: following, **walk})
 
     def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
         # Built for its refusal of settings that are not a folder; Google needs no header here.
@@ -2529,7 +2624,12 @@ class DriveReading:
     def projected(
         self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
     ) -> ProjectedRecord | None:
-        """One listed file's index entry, or None for a folder, a shortcut or a row with no pin."""
+        """One listed file's or walked folder's index entry, or None for what is not kept.
+
+        A shortcut is never kept, and nothing locked narrower than its parent is: a folder's row is
+        how the live read knows a file's parent is inside the tree, so a locked folder kept here
+        would let a file inside it be read.
+        """
         _assert_file(entity)
         try:
             sharing = SharingState(str(row.get("sharing_state", "")))
@@ -2537,7 +2637,11 @@ class DriveReading:
             return None
         file = file_from_row(row, sharing=sharing)
         pin = row.get("folder_id")
-        if file is None or file.is_folder or file.is_shortcut or not isinstance(pin, str):
+        if file is None or file.is_shortcut or not isinstance(pin, str):
+            return None
+        if row.get("locked") is True:
+            return None
+        if file.is_folder and sharing is SharingState.LINK:
             return None
         return ProjectedRecord(
             source=GOOGLE_DRIVE,
@@ -2603,21 +2707,25 @@ def metadata_url_for(file_id: str) -> str:
 
 
 def withheld_from_a_read(
-    connection: DriveConnection, row: Mapping[str, Any], sharing: SharingState
+    connection: DriveConnection,
+    row: Mapping[str, Any],
+    sharing: SharingState,
+    inside: Collection[str] = (),
 ) -> Withheld | None:
     """Why this file, read live a moment ago, may not have its words read, or None when it may.
 
     Asked of what Drive says now, not of the index, which is an hour old at most: a file moved out
     of the folder, binned, locked or shared outside the company since it was listed is refused
-    here. `row` is the file's metadata as `GET_FILE`'s mapping projects it, and `sharing` is
-    `sharing_of` over its permissions. The order is the rule: where it is, whether it is in the
-    bin, whether it is locked narrower than its folder
+    here. `row` is the file's metadata as `GET_FILE`'s mapping projects it, `sharing` is
+    `sharing_of` over its permissions, and `inside` is the folders the walk found under the pin,
+    so a file in one of them is inside the tree as a file in the pin is. The order is the rule:
+    where it is, whether it is in the bin, whether it is locked narrower than its folder
     (`A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`), how it is shared
     (`sharing_admits_a_read`), and last whether it has words to read.
     """
     parents = row.get("parents")
     listed = tuple(str(one) for one in parents) if isinstance(parents, list) else ()
-    if not any(connection.admits(one) for one in listed):
+    if not any(connection.admits(one) or one in inside for one in listed):
         return Withheld.OUTSIDE
     if row.get("trashed") is not False:
         return Withheld.TRASHED
@@ -2826,8 +2934,8 @@ GUIDE: Final = keyed(
                 "Paste the folder's link from Google Drive, type your company's email domain, the "
                 "short name of the department the folder belongs to and the id of the person "
                 "answerable for what it adds, choose the key file, then press Connect Google "
-                "Drive. Files are told to that department. Only the folder's own files are read, "
-                "not those in its subfolders."
+                "Drive. Files are told to that department, and so are the files of its "
+                "subfolders at every level."
             ),
             sketch=Sketch(
                 place="Company Brain",

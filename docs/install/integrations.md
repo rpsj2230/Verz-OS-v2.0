@@ -152,14 +152,16 @@ the form. Do not grant domain-wide delegation: it reads everything, for everyone
 scope declared here would narrow it. The key file is exchanged for a `drive.readonly` token for
 each read and is never sent.
 
-**What it keeps and what it reads.** The worker lists the folder's own files every hour into the
-index: each file's name, type, dates and sharing verdict, never a word of it. A question reads the
-words of the few files whose names hold its words, live, only for a reader granted the folder's
-files in its department: a Google Doc exported as plain text and a plain-text file as it is. Files
-in subfolders are not read.
+**What it keeps and what it reads.** The worker walks the folder and every subfolder under it
+every hour into the index: each file's and folder's name, type, dates and sharing verdict, never a
+word of a file. A question reads the words of the few files whose names hold its words, live, only
+for a reader granted the folder's files in its department: a Google Doc exported as plain text and
+a plain-text file as it is. A shortcut is never followed. A pass that reaches its bound before the
+tree's end is marked degraded and starts from the folder again on the next pass.
 
 **What is never read.** A file Google shows as shared by link or outside your domain, a file in
-the bin, and a file whose access was limited below the folder's. A viewer is not shown how each
+the bin, and a file or subfolder whose access was limited below its folder's, with everything in
+it. A viewer is not shown how each
 file is shared, so a file whose sharing Google does not show is read as the folder's (decided by
 the owner, needs-rupash 135).
 

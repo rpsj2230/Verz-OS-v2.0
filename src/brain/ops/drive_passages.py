@@ -59,6 +59,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.connectors import google_drive
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.google_drive import (
+    FOLDER_MIME,
     GOOGLE_DRIVE,
     MAX_TEXT_BYTES,
     DriveConnection,
@@ -169,6 +170,22 @@ def candidates(
     return tuple(found[:MAX_FILES_READ])
 
 
+def folders_inside(
+    rows: Iterable[tuple[str, Mapping[str, Any]]], drive: DriveConnection
+) -> frozenset[str]:
+    """The folders the walk found under this connection's pin, from the index.
+
+    The live read takes a file whose parent is one of these as inside the tree, as one whose parent
+    is the pin. The reading keeps no folder locked narrower than its parent or shown as shared by
+    link, so a file inside one is not inside the tree.
+    """
+    return frozenset(
+        file_id
+        for file_id, fields in rows
+        if fields.get("folder_id") == drive.folder_id and fields.get("mime_type") == FOLDER_MIME
+    )
+
+
 @dataclass(frozen=True)
 class DriveText:
     """One file's words, read for one question and kept nowhere."""
@@ -226,10 +243,13 @@ class DrivePassages:
         row = {"folder_id": drive.folder_id, "department": drive.department}
         if scope is None or not scope.matches(row):
             return _empty(now)
-        found = candidates(await self._indexed(), drive, words)
+        rows = await self._indexed()
+        found = candidates(rows, drive, words)
         if not found:
             return _empty(now)
-        read = await asyncio.to_thread(self.read, connection, drive, found)
+        read = await asyncio.to_thread(
+            self.read, connection, drive, found, folders_inside(rows, drive)
+        )
         told = tuple(
             KnowledgePassage(
                 entity=KNOWLEDGE_ENTITY,
@@ -249,7 +269,11 @@ class DrivePassages:
         )
 
     def read(
-        self, connection: Connection, drive: DriveConnection, found: Sequence[Candidate]
+        self,
+        connection: Connection,
+        drive: DriveConnection,
+        found: Sequence[Candidate],
+        inside: frozenset[str] = frozenset(),
     ) -> tuple[DriveText, ...]:
         """Each candidate checked live and its words read, under one token for the question.
 
@@ -286,7 +310,7 @@ class DrivePassages:
                 if checked is None:
                     continue
                 row, sharing = checked
-                withheld = withheld_from_a_read(drive, row, sharing)
+                withheld = withheld_from_a_read(drive, row, sharing, inside)
                 if withheld is not None:
                     log.info("google_drive.withheld", reason=withheld.value)
                     continue

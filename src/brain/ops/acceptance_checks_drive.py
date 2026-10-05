@@ -22,9 +22,11 @@ the install's index audit finds it in no table.
 reader holding it in the other department, are each handed exactly what a question about a file
 that is not there hands them, and Drive is asked nothing for either.
 
-**A file locked narrower than its folder is never read.** The folder holds a second file whose
-inherited permissions are off; it is listed into the index, a question naming it has its metadata
-read, and its words are never asked for
+**The tree is walked, and a file locked narrower than its folder is never read.** The Doc sits in
+a subfolder, so the worker lists the pin and then the subfolder, and the Doc is read through the
+subfolder the walk kept. A second file is listed with its folder's sharing and has its inherited
+permissions switched off since: a question naming it has its metadata read, and its words are
+never asked for
 (`brain.connectors.google_drive.A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`).
 
 **The check steps aside where the install has Google Drive connected.** Connecting a source that
@@ -74,7 +76,8 @@ DRIVE_IS_CONNECTED_HERE_ALREADY: Final = (
 
 __all__ = ["A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN", "DRIVE_IS_CONNECTED_HERE_ALREADY"]
 
-#: The types the recorded folder's two files are.
+#: The types the recorded folder's files are.
+FOLDER_MIME: Final = "application/vnd.google-apps.folder"
 DOC_MIME: Final = "application/vnd.google-apps.document"
 TEXT_MIME: Final = "text/plain"
 
@@ -87,10 +90,12 @@ class _DriveFile:
     file_id: str
     name: str
     mime_type: str
-    words: str = field(repr=False)
-    locked: bool = False
+    parent: str
+    words: str = field(default="", repr=False)
+    #: Listed with its folder's sharing, and locked narrower than its folder since.
+    locked_since_listed: bool = False
 
-    def listed(self, folder_id: str) -> dict[str, Any]:
+    def listed(self, *, now: bool = False) -> dict[str, Any]:
         return {
             "id": self.file_id,
             "name": self.name,
@@ -98,8 +103,8 @@ class _DriveFile:
             "modifiedTime": "2019-03-02T10:00:00.000Z",
             "headRevisionId": f"rev-{self.file_id}",
             "trashed": False,
-            "parents": [folder_id],
-            "inheritedPermissionsDisabled": self.locked,
+            "parents": [self.parent],
+            "inheritedPermissionsDisabled": now and self.locked_since_listed,
         }
 
 
@@ -134,9 +139,20 @@ class _Drive:
         asked = parse_qs(parts.query)
         if parts.path == "/drive/v3/files":
             self.listings += 1
-            if asked.get("q") != [f"'{self.folder_id}' in parents and trashed = false"]:
+            folders = {self.folder_id} | {
+                one.file_id for one in self.files if one.mime_type == FOLDER_MIME
+            }
+            folder = next(
+                (
+                    one
+                    for one in folders
+                    if asked.get("q") == [f"'{one}' in parents and trashed = false"]
+                ),
+                None,
+            )
+            if folder is None:
                 return SourceAnswer(status=400, headers={}, body=b"{}")
-            listed = {"files": [one.listed(self.folder_id) for one in self.files]}
+            listed = {"files": [one.listed() for one in self.files if one.parent == folder]}
             return SourceAnswer(status=200, headers={}, body=json.dumps(listed).encode())
         for one in self.files:
             if parts.path == f"/drive/v3/files/{one.file_id}/export":
@@ -147,7 +163,7 @@ class _Drive:
                     self.words_read.append(one.file_id)
                     return SourceAnswer(status=200, headers={}, body=one.words.encode())
                 self.metadata_read.append(one.file_id)
-                body = json.dumps(one.listed(self.folder_id)).encode()
+                body = json.dumps(one.listed(now=True)).encode()
                 return SourceAnswer(status=200, headers={}, body=body)
         return SourceAnswer(status=404, headers={}, body=b"{}")
 
@@ -175,10 +191,10 @@ class _Drive:
 @check(
     leaves=("M11.6.7",),
     sentence=(
-        "A Google Drive folder made up for the check is connected and listed into the index by "
-        "the worker with a token its key file bought. A reader granted its files in its "
-        "department is told a Google Doc's words read when asked; readers without are told what "
-        "a missing file tells them; a locked file is never read; no word is in any table."
+        "A Google Drive folder and its subfolder, made up for the check, are connected and walked "
+        "into the index by the worker with a token its key file bought. A reader granted its files "
+        "in its department is told a nested Doc's words read when asked; readers without are told "
+        "what a missing file tells them; a locked file is never read; no word is in any table."
     ),
 )
 async def a_drive_folder_s_words_are_read_live_and_kept_nowhere(h: Harness) -> None:
@@ -199,20 +215,28 @@ async def a_drive_folder_s_words_are_read_live_and_kept_nowhere(h: Harness) -> N
     folder_id = f"acceptance{secrets.token_hex(8)}"
     canary = h.word()
     kept_back = h.word()
+    sub = _DriveFile(
+        file_id=f"fld{secrets.token_hex(8)}",
+        name=h.word(),
+        mime_type=FOLDER_MIME,
+        parent=folder_id,
+    )
     doc = _DriveFile(
         file_id=f"doc{secrets.token_hex(8)}",
         name=h.word(),
         mime_type=DOC_MIME,
+        parent=sub.file_id,
         words=f"The words of the document are {canary}.",
     )
     locked = _DriveFile(
         file_id=f"txt{secrets.token_hex(8)}",
         name=f"{h.word()}.txt",
         mime_type=TEXT_MIME,
+        parent=folder_id,
         words=f"The words kept back are {kept_back}.",
-        locked=True,
+        locked_since_listed=True,
     )
-    drive = _Drive(folder_id=folder_id, files=(doc, locked))
+    drive = _Drive(folder_id=folder_id, files=(sub, doc, locked))
     keys = _KeyFiles(a_key_file())
     connection = _connection(
         h,
@@ -252,6 +276,8 @@ async def a_drive_folder_s_words_are_read_live_and_kept_nowhere(h: Harness) -> N
     )
     if done.outcome is not SyncOutcome.SYNCED or done.records != len(drive.files):
         raise CheckFailedError("the worker did not keep the folder's files in the index")
+    if drive.listings != 2:
+        raise CheckFailedError("the worker did not walk the folder and its subfolder once each")
     if len(drive.tokens) != 1 or not _no_subject(drive.tokens[0]) or drive.calls():
         raise CheckFailedError("the worker's listing was not one token for the account")
     if any("PRIVATE KEY" in json.dumps(one) for one in drive.headers):
