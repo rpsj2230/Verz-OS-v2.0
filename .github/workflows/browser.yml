@@ -135,6 +135,14 @@ jobs:
             docker compose logs --tail 80
             exit 1
           }
+          # Ready once is not ready: a container the kernel kills for its memory comes back by
+          # its restart policy and answers again a minute later, and a browser arriving in that
+          # minute waits on nothing. So the start is judged on no container having restarted.
+          sleep 30
+          ready https://localhost:8443/realms/brain/.well-known/openid-configuration
+          restarted=$(docker inspect -f '{{.Name}} {{.RestartCount}} {{.State.OOMKilled}}' $(docker compose ps -aq) | awk '$2 != "0" || $3 != "false"')
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}'
+          [ -z "$restarted" ] || { echo "::error::restarted or killed for memory: $restarted"; exit 1; }
 
       - uses: actions/setup-node@v4
         with:
@@ -158,6 +166,7 @@ jobs:
         if: failure()
         run: |
           docker compose ps -a
+          docker inspect -f '{{.Name}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} exit={{.State.ExitCode}}' $(docker compose ps -aq)
           docker compose logs --tail 200 app keycloak keycloak-realm
 
       - name: Keep the report
