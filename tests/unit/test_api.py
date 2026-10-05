@@ -277,9 +277,10 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     `brain.agent_builder_routes` answers every write on a draft with the same body, for the same
     reason: a draft saved since, a publish that is not checked, an agent that moved.
 
-    **A decision on the Resolution review screen is the last, for its 409.**
-    `brain.resolution_routes` answers a pair somebody else decided first with the same
-    `NotChangedView`, so the confirmation can say why nothing was changed.
+    **A decision on the Resolution review screen and promoting its weights are the last, for
+    their 409s.** `brain.resolution_routes` answers a pair somebody else decided first, and a fit
+    that is no longer the one waiting, with the same `NotChangedView`, so the confirmation can
+    say why nothing was changed.
 
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
     from brain.agent_builder_routes import (
@@ -302,7 +303,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         TRANSFER_PATH,
     )
     from brain.credential_routes import CREDENTIALS_PATH
-    from brain.resolution_routes import DECISION_PATH
+    from brain.resolution_routes import DECISION_PATH, PROMOTE_PATH
     from brain.sign_in_routes import SIGN_INS_PATH
 
     app: FastAPI = create_app(Settings(env="development"))
@@ -356,6 +357,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
             for act in ("pause", "resume", "reschedule", "remove", "adopt")
         },
         (f"{API_PREFIX}{DECISION_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{PROMOTE_PATH}", "409"): "#/components/schemas/NotChangedView",
     }
 
     checked = 0

@@ -94,6 +94,14 @@ A_FEATURE_NOTHING_AGREES_ON_IS_CARRIED_AND_NOT_FITTED: Final = (
     "and are named as carried, so nobody reads a carried weight as a measured one."
 )
 
+#: Why the reviewers' decisions can stop a fit being kept.
+A_FIT_THE_REVIEWERS_DISAGREE_WITH_IS_NOT_KEPT: Final = (
+    "The pairs people merged and kept apart are this install's labelled sample. A fit that ranks "
+    "the pairs people kept apart above the ones they merged has learnt the opposite of what the "
+    "people who know these clients decided, however well it converged, so it is not kept and the "
+    "weights in force stay."
+)
+
 #: Every fit, one row each, keyed by its version.
 FITS_NAMESPACE: Final = "resolution_fits"
 #: The version the online scorer loads. Absent means the declared weights.
@@ -287,6 +295,54 @@ async def promote_fit(
     return table
 
 
+async def labelled(
+    sessions: async_sessionmaker[AsyncSession],
+) -> tuple[tuple[frozenset[Feature], bool], ...]:
+    """The pairs reviewers decided, each as the features that agreed and whether it was merged.
+
+    The agreements are read off the item's own evidence, where a positive weight is a feature
+    that agreed, so the labelled sample is the evidence the reviewer was shown.
+    """
+    from sqlalchemy import select
+
+    from brain.tables.resolution_review import ReviewItemRow, ReviewState
+
+    async with sessions() as session:
+        rows = (
+            await session.execute(
+                select(ReviewItemRow.state, ReviewItemRow.evidence).where(
+                    ReviewItemRow.state != ReviewState.OPEN.value
+                )
+            )
+        ).all()
+    return tuple(
+        (
+            frozenset(Feature(one["field"]) for one in evidence if float(one["weight"]) > 0),
+            state == ReviewState.MERGED.value,
+        )
+        for state, evidence in rows
+    )
+
+
+def agrees_with_reviewers(
+    fit: WeightExport, sample: Sequence[tuple[frozenset[Feature], bool]]
+) -> bool | None:
+    """Whether the fit ranks the pairs people merged above the pairs they kept apart (M14.8.3).
+
+    Every merged pair against every rejected one: the fit agrees when more of those comparisons
+    score the merged pair higher than lower. None when people have not yet decided both ways,
+    because a sample with one label cannot say anything about ranking. See
+    `A_FIT_THE_REVIEWERS_DISAGREE_WITH_IS_NOT_KEPT`.
+    """
+    merged = [sum(fit.weights[one] for one in pattern) for pattern, was in sample if was]
+    apart = [sum(fit.weights[one] for one in pattern) for pattern, was in sample if not was]
+    if not merged or not apart:
+        return None
+    above = sum(1 for one in merged for other in apart if one > other)
+    below = sum(1 for one in merged for other in apart if one < other)
+    return above >= below
+
+
 @dataclass(frozen=True)
 class Calibrated:
     """What one weekly run did, in words. Never a figure about a pair."""
@@ -310,6 +366,8 @@ async def calibrate(sessions: async_sessionmaker[AsyncSession], *, now: datetime
         fit = fitted(await extract(sessions), now=now, previous=await weights_in_force(sessions))
     except ResolutionError as refused:
         return Calibrated(f"no fit was kept: {refused}")
+    if agrees_with_reviewers(fit, await labelled(sessions)) is False:
+        return Calibrated(f"no fit was kept: {A_FIT_THE_REVIEWERS_DISAGREE_WITH_IS_NOT_KEPT}")
     await keep(sessions, fit)
     return Calibrated(KEPT)
 
