@@ -78,6 +78,18 @@ answer that comes back is confidently incomplete. Refusing costs one fresh plann
 which is the same asymmetry `brain.gate.fast_lane` accepts when two rules match one question.
 Nothing about the refusal names the tool, or counts what was dropped.
 
+**Nothing caches a plan yet, and what it waits for is M13.7.1.** The plan store and `replay` are
+built and reached by no request, because no request has a model choose tools: the answer lane
+composes from what the lane read and hands the model no catalogue. A plan cache with no planner
+would be a store nobody writes, so M6.2.2 stays unclaimed until the one agent runtime M13.7.1
+asks for exists, and is wired there, through `replay`, in the same change.
+
+**Where the other three are read** (2026-10-06). The retrieval cache and the embedding cache are
+read by the document plane's search, `brain.knowledge.document_tools.searcher` and
+`QuestionEmbedder.vector`, through the store `brain.app.lifespan` builds when a cache is
+configured. The freshness reading is built on the per-source counter `proj.source_epoch` once
+that lands, because the counter moves on a deletion and `last_seen_at` does not.
+
 **Nothing here computes a similarity, and M6.2.6 is a shape rather than a rule.** Semantic
 answer caching means answering a new question from a similar old one, which under a permission
 model means answering person B out of an entry computed for person A because the questions
