@@ -531,6 +531,9 @@ CONSOLE: Final = ConsoleForm(
 
 APPS_URL: Final = "https://api.slack.com/apps"
 
+#: Where Slack documents its Web API tiers, which `brain.ops.limits` records the ceiling from.
+RATE_LIMITS_URL: Final = "https://docs.slack.dev/apis/web-api/rate-limits"
+
 GUIDE: Final = keyed(
     (
         GuideStep(

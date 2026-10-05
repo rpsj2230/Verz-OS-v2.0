@@ -43,12 +43,20 @@ document to `brain.knowledge.chunk_store.ingest_document`, which is a bulk sync 
 owner's rule and was removed with the leg that fed it. See
 `brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
 
+**A Google source's key file is exchanged for a token here, for the one attempt (M11.7.1).**
+`KeyScheme.GOOGLE_SERVICE_ACCOUNT` is presented as a bearer token that `mint_token` obtains from
+Google's own token endpoint with the key the lease holds, through `SourcePoster`, the same pinned
+connection a call to the source goes through. The token lives in the attempt's frame and goes when
+the attempt does; `authorization` refuses to build such a source's header from anything but the
+token, so the key file itself is never sent. See `brain.connectors.google_token`, which argues the
+exchange once for both Google sources.
+
 Rejected: reading through `brain.tools.fetch.Fetcher`, which the connectors' own `connector_fetch`
 closures take. It carries no headers and no status, so a key cannot be sent through it and a 429
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.7.1
 """
 
 from __future__ import annotations
@@ -66,7 +74,16 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.connectors.declaration import KeyScheme
+from brain.connectors.contract import ConnectorContractError
+from brain.connectors.declaration import KeyScheme, ScopedReading
+from brain.connectors.google_token import (
+    A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER,
+    MAX_TOKEN_ANSWER_BYTES,
+    AccessToken,
+    TokenNotIssuedError,
+    exchange,
+    token_from,
+)
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
@@ -82,6 +99,7 @@ from brain.ops.connector_sync import (
     MAX_PAGES_PER_ENTITY,
     MAX_SECONDS_WAITING_IN_A_RUN,
     NO_KEY,
+    NO_KEY_FILE_EXCHANGE,
     NO_VAULT,
     OWN_SHARE_SPENT,
     READ_BUT_CUT_SHORT,
@@ -122,7 +140,7 @@ from brain.ops.openbao import (
 )
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.ops.webhook_delivery import HTTPS_PORT, SystemResolver, _PinnedHTTPSConnection
-from brain.tools.fetch import Resolver, UnsafeAddressError
+from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -149,33 +167,131 @@ class ConnectorKeyAbsentError(SecretsUnavailableError):
     """The vault answered and holds no key at this source's slot."""
 
 
-def authorization(scheme: KeyScheme, key: str) -> str:
+def authorization(scheme: KeyScheme, key: str | AccessToken) -> str:
     """The one header value a source's key is sent in, in the shape its reading names.
 
     Here and not on the reading, for `brain.connectors.declaration.
     A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`: this module already holds the key for
     one request, and a reading never does. A `match` over a closed enumeration, so a scheme added
     without a shape here fails mypy's exhaustiveness check rather than falling back to a bearer.
+
+    A Google source's header is built from an `AccessToken` and from nothing else, so a caller
+    that skipped `presented` sends nothing rather than the key file. See
+    `brain.connectors.google_token.A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER`.
     """
     match scheme:
         case KeyScheme.BEARER:
-            return f"Bearer {key}"
+            return f"Bearer {_plain(key)}"
         case KeyScheme.BASIC_KEY_AS_USER:
-            pair = base64.b64encode(f"{key}:X".encode()).decode("ascii")
+            pair = base64.b64encode(f"{_plain(key)}:X".encode()).decode("ascii")
             return f"Basic {pair}"
+        case KeyScheme.GOOGLE_SERVICE_ACCOUNT:
+            if not isinstance(key, AccessToken):
+                raise ConnectorContractError(A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER)
+            return f"Bearer {key.value}"
 
 
-def call_headers(reading: SourceReading, settings: Mapping[str, str], key: str) -> dict[str, str]:
+def _plain(key: str | AccessToken) -> str:
+    return key.value if isinstance(key, AccessToken) else key
+
+
+def call_headers(
+    reading: SourceReading, settings: Mapping[str, str], key: str | AccessToken
+) -> dict[str, str]:
     """Every header one call to a source carries: the connection's own, JSON, and the key.
 
     One function for a scheduled read and a test (`brain.ops.connector_probe_run`), so the two
-    calls a source sees from this install cannot come to differ in what they send.
+    calls a source sees from this install cannot come to differ in what they send. `key` is what
+    `presented` gave for this reading: the key itself, or the token a key file was exchanged for.
     """
     return {
         **reading.call_headers(settings),
         "Accept": "application/json",
         "Authorization": authorization(reading.key_scheme(), key),
     }
+
+
+# ------------------------------------------------------------------ the token a key file buys
+
+
+class SourcePoster(Protocol):
+    """One POST to an address the rule checked, with these headers and this body, never following.
+
+    Beside `SourceCaller` rather than inside it, because only a source whose key is exchanged for a
+    token, or whose figures are asked for with a body, ever posts, and every other source's caller
+    owes nothing here.
+    """
+
+    def post(
+        self,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        max_bytes: int,
+    ) -> SourceAnswer:
+        """The answer, or a timeout or a failed connection. Never raises for the network."""
+        ...
+
+
+def mint_token(
+    key_file: str,
+    scopes: tuple[str, ...],
+    *,
+    poster: SourcePoster,
+    resolver: Resolver,
+    now: datetime,
+) -> AccessToken:
+    """A token for one read, from Google's token endpoint, with the key file the lease holds.
+
+    The address is Google's own constant, checked by the address rule like any source's, and the
+    answer is read by `brain.connectors.google_token.token_from`, which raises
+    `TokenNotIssuedError` with the kind of failure and nothing from the reply.
+    """
+    asked = exchange(key_file, scopes, now=int(now.timestamp()))
+    checked = assert_fetchable(asked.url, resolver)
+    answer = poster.post(
+        checked.url,
+        address=checked.address,
+        headers=dict(asked.headers),
+        body=asked.body,
+        max_bytes=MAX_TOKEN_ANSWER_BYTES,
+    )
+    return token_from(
+        status=answer.status,
+        body=answer.body,
+        timed_out=answer.timed_out,
+        connection_failed=answer.connection_failed,
+    )
+
+
+def presented(
+    reading: SourceReading,
+    key: str,
+    *,
+    poster: SourcePoster | None,
+    resolver: Resolver,
+    now: datetime,
+) -> str | AccessToken:
+    """What this reading's calls present: the key as it is, or the token its key file buys.
+
+    Raises `TokenNotIssuedError` when a token was needed and not issued, and when this process was
+    given no way to post for one; `UnsafeAddressError` when Google's address resolved inside this
+    network. A reading naming the Google scheme and no scope is refused before anything is sent.
+    See `brain.connectors.declaration.A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR`.
+    """
+    match reading.key_scheme():
+        case KeyScheme.BEARER | KeyScheme.BASIC_KEY_AS_USER:
+            return key
+        case KeyScheme.GOOGLE_SERVICE_ACCOUNT:
+            if not isinstance(reading, ScopedReading):
+                raise TokenNotIssuedError(CallOutcome.REJECTED)
+            if poster is None:
+                raise TokenNotIssuedError(CallOutcome.UNAVAILABLE)
+            return mint_token(
+                key, reading.token_scopes(), poster=poster, resolver=resolver, now=now
+            )
 
 
 # ------------------------------------------------------------------------ the key
@@ -416,6 +532,31 @@ class HttpsSourceCaller:
     def get(
         self, url: str, *, address: str, headers: Mapping[str, str], max_bytes: int
     ) -> SourceAnswer:
+        return self._send("GET", url, address=address, headers=headers, max_bytes=max_bytes)
+
+    def post(
+        self,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        max_bytes: int,
+    ) -> SourceAnswer:
+        return self._send(
+            "POST", url, address=address, headers=headers, max_bytes=max_bytes, body=body
+        )
+
+    def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        max_bytes: int,
+        body: bytes | None = None,
+    ) -> SourceAnswer:
         parts = urlsplit(url)
         host = parts.hostname
         if parts.scheme != "https" or not host:
@@ -429,17 +570,19 @@ class HttpsSourceCaller:
             context=self._context,
         )
         try:
-            connection.request("GET", path, headers={**headers, "User-Agent": USER_AGENT})
+            connection.request(
+                method, path, body=body, headers={**headers, "User-Agent": USER_AGENT}
+            )
             answer = connection.getresponse()
-            body = answer.read(max_bytes + 1)
-            if len(body) > max_bytes:
+            read = answer.read(max_bytes + 1)
+            if len(read) > max_bytes:
                 # A body past the bound is not parsed as a truncated one, which would read as a
                 # shorter list; it is a source that did not answer in a shape this reads.
                 return SourceAnswer(status=answer.status, headers={}, body=b"")
             return SourceAnswer(
                 status=answer.status,
                 headers={key.lower(): value for key, value in answer.getheaders()},
-                body=body,
+                body=read,
             )
         except TimeoutError:
             return SourceAnswer(timed_out=True)
@@ -536,11 +679,14 @@ async def attempt(
     resolver: Resolver,
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
+    poster: SourcePoster | None = None,
 ) -> Attempt:
     """Read one connection under a lease taken for this attempt, and give it back at the end.
 
     The lease is closed in a `finally`, so an attempt that raised, or was cancelled, still gives its
-    run token back, and the row records how that went. See `brain.ops.connector_lease`.
+    run token back, and the row records how that went. See `brain.ops.connector_lease`. `poster` is
+    how a Google source's key file is exchanged for a token (`presented`); a source whose key is
+    sent as it is never uses it.
     """
     manifest = plan.manifest
     assert manifest is not None  # SyncPlan holds this for a runnable plan
@@ -556,6 +702,7 @@ async def attempt(
             resolver=resolver,
             clock=clock,
             sleep=sleep,
+            poster=poster,
         )
     finally:
         ended = lease.close(clock())
@@ -573,6 +720,7 @@ async def _read_under(
     resolver: Resolver,
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
+    poster: SourcePoster | None,
 ) -> Attempt:
     """Read one connection to the end, or as far as it can be read, and say what that came to."""
     manifest, reading = plan.manifest, plan.reading
@@ -600,7 +748,18 @@ async def _read_under(
         key = lease.key()
     except SecretsUnavailableError as unavailable:
         return finish(SyncOutcome.FAILED, key_detail(unavailable))
-    headers = call_headers(reading, live.connection.settings, key)
+    try:
+        shown = presented(reading, key, poster=poster, resolver=resolver, now=clock())
+    except UnsafeAddressError:
+        return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+    except TokenNotIssuedError as refused:
+        detail = (
+            NO_KEY_FILE_EXCHANGE
+            if poster is None
+            else failure_detail(refused.call, timed_out=refused.timed_out)
+        )
+        return finish(SyncOutcome.FAILED, detail, call=refused.call)
+    headers = call_headers(reading, live.connection.settings, shown)
     limiter = LimiterState()
 
     for entity in reading.entities():
@@ -708,6 +867,7 @@ async def sync_on(
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
     readings: Mapping[str, SourceReading] = READINGS,
+    poster: SourcePoster | None = None,
 ) -> SyncRun:
     """Every live connection that may be read and is due, read once, and each attempt recorded."""
     async with sessions() as session, session.begin():
@@ -733,6 +893,7 @@ async def sync_on(
             resolver=resolver,
             clock=clock,
             sleep=sleep,
+            poster=poster,
         )
         async with sessions() as session, session.begin():
             await session.execute(attempt_row(one.id, done))
@@ -780,6 +941,7 @@ def run_connector_sync_now(
                 caller=caller,
                 resolver=resolver,
                 clock=_utc_now,
+                poster=caller,
             )
             # The switched-on Lark Base's minimal index, on the same schedule and under the same
             # keys; it has no connection row, for `brain.ops.lark_base_index`'s reason.

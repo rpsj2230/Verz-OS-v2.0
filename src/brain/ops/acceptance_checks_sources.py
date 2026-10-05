@@ -67,6 +67,7 @@ CHECK_ORDER: Final = 300
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
+
 #: What the check says where the install has either source connected already.
 A_SOURCE_IS_CONNECTED_HERE_ALREADY: Final = (
     "this install has Xero or Freshdesk connected already, so the check does not connect it "

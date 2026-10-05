@@ -97,6 +97,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
+from brain.gate.abstain import EXPIRY_EVERY as ESCALATION_EXPIRY_EVERY
 from brain.identity.staff_sync import SYNC_INTERVAL
 from brain.knowledge.verification import DEFAULT_CADENCE
 from brain.models.health import PROBE_INTERVAL_SECONDS
@@ -605,6 +606,29 @@ CONTROLS: Final[tuple[Control, ...]] = (
         # Started by the worker's schedule since 2026-09-15. It records a nag as an outbox
         # event, which `outbox_dispatch` sends to subscribing systems since 2026-09-17, and no
         # person is told: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET` is that sentence.
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="escalation_expiry",
+        # Since 2026-09-30 (`0168`, M8.3.4). The worker's schedule starts `run_expiry_now`, which
+        # runs `expire_overdue` as the worker's login; the install acceptance check calls
+        # `expire_overdue` itself, inside its rolled-back transaction, rather than waiting a day.
+        symbols=(
+            "brain.ops.escalation_store:run_expiry_now",
+            "brain.ops.escalation_store:expire_overdue",
+        ),
+        guards=(
+            "that a question handed to a person does not stay open for ever once nobody picked "
+            "it up, and that the person who asked is told so"
+        ),
+        lost_silently=(
+            "The asker was told a person would look and goes on waiting. Nobody picked it up, and "
+            "nothing turns that into an event: the question silently stops existing, which is "
+            "the failure an expiry exists to make visible."
+        ),
+        every=ESCALATION_EXPIRY_EVERY,
+        cadence_from="brain.gate.abstain:EXPIRY_EVERY",
+        severity=Severity.NOTICED,
         invoked_by=Invocation.IN_PROCESS,
     ),
     Control(

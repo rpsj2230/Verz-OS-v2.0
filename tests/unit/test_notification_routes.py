@@ -225,7 +225,11 @@ def test_the_screen_lists_every_notice_on_and_an_unconfigured_relay_with_no_pass
     assert [one["kind"] for one in body["notices"]] == [one.kind.value for one in NOTICES]
     assert all(one["on"] is True and one["changed_by"] is None for one in body["notices"])
     sent = {one["kind"] for one in body["notices"] if one["sent"]}
-    assert sent == {NoticeKind.REVERIFICATION_REQUEST.value, NoticeKind.DENIAL_PATTERN.value}
+    assert sent == {
+        NoticeKind.REVERIFICATION_REQUEST.value,
+        NoticeKind.DENIAL_PATTERN.value,
+        NoticeKind.HANDED_TO_A_PERSON.value,
+    }
     assert body["email"]["configured"] is False and body["email"]["host"] is None
     assert body["email"]["password"] == {
         "held": False,

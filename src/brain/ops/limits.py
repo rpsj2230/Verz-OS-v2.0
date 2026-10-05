@@ -447,6 +447,19 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
         ),
     ),
     ConnectorLimit(
+        name="google_analytics",
+        per_minute=20,
+        per_day=20_000,
+        note=(
+            "Google counts the Data API in tokens rather than calls: a standard property allows "
+            "14,000 tokens an hour to one Cloud project and 200,000 a day, and a simple report "
+            "costs about ten (https://developers.google.com/analytics/devguides/reporting/data/v1/"
+            "quotas). At ten a report that is 23 calls a minute and 20,000 calls a day, recorded "
+            "at 20 a minute. An Analytics 360 property allows ten times as much, which is the "
+            "property owner's plan to buy, so the ceiling can be raised."
+        ),
+    ),
+    ConnectorLimit(
         name="hubspot",
         per_minute=100,
         per_day=250_000,

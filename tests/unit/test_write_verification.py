@@ -28,6 +28,7 @@ import pytest
 
 from brain.connectors import (
     freshdesk,
+    google_analytics,
     google_drive,
     hubspot,
     laravel,
@@ -65,6 +66,7 @@ from brain.ops.idempotency import (
 )
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
+from tests.fixtures.cassettes.google_analytics import PROPERTY
 
 #: Every shipped connector's read-back, as the declarations state it.
 READ_BACKS = read_backs()
@@ -104,9 +106,15 @@ def xero_answer(
 
 
 def hubspot_answer(
-    status: int | None, body: Any = None, *, entity: str = hubspot.ENTITY_CLIENT, **overrides: Any
+    status: int | None,
+    body: Any = None,
+    *,
+    entity: str = hubspot.ENTITY_CLIENT,
+    one_record: bool = False,
+    **overrides: Any,
 ) -> Verification:
-    operation = hubspot.operation_for(entity, resolver=Resolver())
+    build = hubspot.one_record_operation if one_record else hubspot.operation_for
+    operation = build(entity, resolver=Resolver())
     reply = hubspot.interpret(
         operation, status=status, body=body, fetched_at=FETCHED_AT, **overrides
     )
@@ -224,6 +232,8 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("hubspot", "HUBSPOT-200-companies-page"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-contacts"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-deals"): Verification.FOUND,
+    # One deal read by its id, through its own operation: it is there.
+    ("hubspot", "HUBSPOT-200-deal"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-associations"): Verification.FOUND,
     ("hubspot", "HUBSPOT-429"): Verification.INCONCLUSIVE,
     ("hubspot", "HUBSPOT-401"): Verification.INCONCLUSIVE,
@@ -262,6 +272,17 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("slack_messages", "SLACK-429"): Verification.INCONCLUSIVE,
     ("slack_messages", "SLACK-503"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-200-property"): Verification.FOUND,
+    # A report, a token and every refusal hold no property, and a property read never proves one
+    # is gone: see `google_analytics.A_PROPERTY_READ_CANNOT_PROVE_ABSENCE`.
+    ("google_analytics", "GA-200-report"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-200-range-report"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-200-token"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-400-token"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-401"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-403-property"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-429-report"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-500-report"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
@@ -291,7 +312,14 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             entity = xero.ENTITY_CONTACT if "/Contacts" in recorded.request else xero.ENTITY_INVOICE
             return xero_answer(recorded.status, recorded.body, entity=entity)
         case "hubspot":
-            return hubspot_answer(recorded.status, recorded.body, entity=hubspot_entity(recorded))
+            from tests.fixtures.cassettes.hubspot import ONE_RECORD
+
+            return hubspot_answer(
+                recorded.status,
+                recorded.body,
+                entity=hubspot_entity(recorded),
+                one_record=bool(ONE_RECORD.search(recorded.request)),
+            )
         case "laravel":
             if recorded.protocol is Protocol.HTTP:
                 return laravel_answer(laravel.ViewReply(app_status=recorded.status))
@@ -310,6 +338,12 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             )
             operation = google_drive.operation_for(endpoint)
             return verdict(reading("google_drive")(operation, reply))
+        case "google_analytics":
+            answered = google_analytics.Reply(
+                status=recorded.status, headers=recorded.headers, body=recorded.body
+            )
+            property_read = google_analytics.operation_for(PROPERTY)
+            return verdict(reading("google_analytics")(property_read, answered))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
         case "lark_base":

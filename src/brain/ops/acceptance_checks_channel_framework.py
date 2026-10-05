@@ -741,8 +741,8 @@ async def an_api_key_is_answered_until_it_is_revoked(h: Harness) -> None:
 
 
 # ------------------------------------------------------------------------ 7. WhatsApp
-def whatsapp_message(sender: str, said: str) -> dict[str, Any]:
-    """One text message as the WhatsApp Cloud API posts it to a webhook.
+def whatsapp_message(sender: str, said: str, *, phone_number_id: str = "0") -> dict[str, Any]:
+    """One text message as the WhatsApp Cloud API posts it to a webhook, about `phone_number_id`.
 
     Written from Meta's documented shape for a received text message (the `messages` field of a
     `whatsapp_business_account` change), not from `brain.channels.whatsapp`, so a wire that read
@@ -758,7 +758,10 @@ def whatsapp_message(sender: str, said: str) -> dict[str, Any]:
                     {
                         "value": {
                             "messaging_product": "whatsapp",
-                            "metadata": {"display_phone_number": "0", "phone_number_id": "0"},
+                            "metadata": {
+                                "display_phone_number": "0",
+                                "phone_number_id": phone_number_id,
+                            },
                             "contacts": [{"profile": {"name": "Acceptance"}, "wa_id": sender}],
                             "messages": [
                                 {
@@ -786,16 +789,25 @@ def a_number() -> str:
 @check(
     leaves=("M10.6.2",),
     sentence=(
-        "Recorded WhatsApp message bytes posted to the install's events address are accepted and "
-        "claimed once when signed with the app secret in the slot the channel's record names, and "
-        "refused before they are read when unsigned, signed with another secret, altered by one "
-        "byte, or signed over the same JSON written again; nothing is sent back."
+        "WhatsApp message bytes posted to the events address are accepted and claimed once when "
+        "signed with the app secret the record's slot holds, and refused unread when unsigned, "
+        "signed with another secret, altered by one byte, or signed over the same JSON written "
+        "again; the sender is answered once from the record's number, kept rather than sent."
     ),
 )
 async def a_whatsapp_webhook_is_accepted_only_under_its_app_secret(h: Harness) -> None:
     from brain.channels.adapter import channel_wires
     from brain.channels.inbound import receive
-    from brain.channels.whatsapp import SIGNATURE_HEADER, signature_for
+    from brain.channels.whatsapp import (
+        ACCESS_TOKEN,
+        APP_SECRET,
+        GRAPH_API_URL,
+        GRAPH_API_VERSION,
+        PHONE_NUMBER_ID,
+        SIGNATURE_HEADER,
+        VERIFY_TOKEN,
+        signature_for,
+    )
     from brain.gate.context import Channel
     from brain.ops.channel_store import (
         StoredChannels,
@@ -803,21 +815,23 @@ async def a_whatsapp_webhook_is_accepted_only_under_its_app_secret(h: Harness) -
         StoredDeliveries,
         channel_secret_ref,
     )
-    from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
+    from brain.tables.channel import RefusedBecause
 
     app_secret, vendor = secrets.token_hex(32), _Vendor()
-    slot = _Slot(channel_secret_ref(Channel.WHATSAPP), app_secret)
+    kept = {APP_SECRET: app_secret, ACCESS_TOKEN: secrets.token_hex(24), VERIFY_TOKEN: "v"}
+    slot = _Slot(channel_secret_ref(Channel.WHATSAPP), json.dumps(kept))
     app = await channel_app(h, channel_secrets=slot, channel_transport=vendor)
+    number = f"10{secrets.randbelow(10**10):010d}"
     record = await StoredChannels(h.sessions).save(
         Channel.WHATSAPP,
         enabled=True,
-        tenant={},
+        tenant={PHONE_NUMBER_ID: number},
         actor=h.actor,
         ent_hash="0" * 32,
         trace_id=h.trace_id,
     )
     said = h.word()
-    message = whatsapp_message(a_number(), said)
+    message = whatsapp_message(a_number(), said, phone_number_id=number)
     raw = json.dumps(message).encode()
     wamid = message["entry"][0]["changes"][0]["value"]["messages"][0]["id"]
     # One byte of the question changed, so the altered bytes are a message the wire would read.
@@ -872,8 +886,6 @@ async def a_whatsapp_webhook_is_accepted_only_under_its_app_secret(h: Harness) -
         await claimed() != 1
     ):
         raise CheckFailedError("a signed WhatsApp message and its redelivery were not claimed once")
-    recent = await StoredDeliveries(h.sessions).recent(Channel.WHATSAPP)
-    reply = next((one.entry for one in recent if one.entry.direction is Direction.OUTBOUND), None)
-    replied = None if reply is None else (reply.outcome, reply.reason)
-    if vendor.sent or replied != (DeliveryOutcome.REFUSED, RefusedBecause.INCOMPLETE):
-        raise CheckFailedError("a reply was sent on WhatsApp, where nothing is sent yet")
+    answered = f"{GRAPH_API_URL}/{GRAPH_API_VERSION}/{number}/messages"
+    if [one.url for one in vendor.sent] != [answered]:
+        raise CheckFailedError("the sender was not answered once, from the record's number")
