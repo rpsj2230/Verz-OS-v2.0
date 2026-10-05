@@ -281,15 +281,14 @@ A_PHONETIC_MATCH_IS_EVIDENCE_ABOUT_SPELLING_AND_NOT_ABOUT_IDENTITY = (
 )
 
 #: The gap this module does not close, kept as a constant so it has to be deleted.
-NOTHING_HERE_IS_CALLED_BY_THE_RUNNING_SYSTEM = (
-    "brain.resolution has no functional caller. Nothing in brain.gate, brain.tools or "
-    "brain.channels imports this package, no route reaches it, no worker runs it, and there "
-    "is no resolver service that would call cascade() over a candidate set. The columns "
-    "sql_score_expression names do not exist in any migration here, the weight table is not "
-    "read from anywhere, and no link row has ever been written by this code. Everything here "
-    "is callable and nothing calls it, which is the same sentence normalise's "
-    "NOTHING_HERE_IS_INSTALLED_IN_POSTGRES says about its own half, and it is said in a "
-    "constant so that a later claim to the contrary requires deleting it."
+WHAT_CALLS_THE_CASCADE = (
+    "The worker's entity_resolution control, since 2026-10-06: the registry reads the records "
+    "connectors declare, and brain.resolution.matching_store compares each with its candidates "
+    "through entities.resolve_pair, which is this module's cascade() with a type's narrowing "
+    "applied. Nothing on the request path calls it: brain.gate, brain.tools and brain.channels "
+    "import nothing from this package, and an answer does not yet resolve a named client to an "
+    "entity. This sentence replaces NOTHING_HERE_IS_CALLED_BY_THE_RUNNING_SYSTEM, which said "
+    "nothing called it and asked to be deleted the day something did."
 )
 
 

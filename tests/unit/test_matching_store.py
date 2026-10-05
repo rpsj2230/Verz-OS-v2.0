@@ -426,8 +426,8 @@ def test_a_merge_refused_for_any_reason_but_the_switch_is_not_swallowed() -> Non
 
     matching._sessions = lambda: Session()  # type: ignore[assignment]
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(store, "_families", families)
-        patch.setattr(store, "_survivor_first", survivor)
+        patch.setattr(store, "families_of", families)
+        patch.setattr(store, "survivor_first", survivor)
         patch.setattr(store, "_identifiers", identifiers)
         with pytest.raises(MergeRefusedError, match="moved underneath"):
             asyncio.run(matching._merge_or_hold(one, now=AT))

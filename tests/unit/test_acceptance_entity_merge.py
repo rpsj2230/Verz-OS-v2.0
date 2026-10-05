@@ -8,7 +8,7 @@ row, what it held before. Then each property is broken, one at a time, where the
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M14.5.1, M14.5.2, M14.5.3, M14.5.4, M14.5.5
+Task ids: M14.5.1, M14.5.2, M14.5.3, M14.5.4, M14.5.5, M14.1.5
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ MODULE: Final = "brain.ops.acceptance_checks_entity_merge"
 
 PRE_IMAGE: Final = "a_merge_keeps_every_affected_row_as_it_stood_before_the_change"
 POINTER: Final = "a_merge_moves_one_pointer_and_changes_no_record_or_child_row"
-UNMERGE: Final = "an_unmerge_restores_the_pre_image_and_an_old_id_still_resolves"
+UNMERGE: Final = "an_unmerge_puts_back_the_pre_image_and_an_old_id_still_resolves"
 AUDIT: Final = "the_audit_names_who_when_and_on_what_evidence_of_both_acts"
 INVALIDATION: Final = "a_merge_tells_every_surface_every_id_of_both_families"
 
@@ -71,7 +71,7 @@ def test_each_check_proves_the_leaf_its_property_is_and_nothing_else() -> None:
     assert {name: one.leaves for name, one in mine().items()} == {
         PRE_IMAGE: ("M14.5.1",),
         POINTER: ("M14.5.2",),
-        UNMERGE: ("M14.5.3",),
+        UNMERGE: ("M14.5.3", "M14.1.5"),
         AUDIT: ("M14.5.4",),
         INVALIDATION: ("M14.5.5",),
     }
