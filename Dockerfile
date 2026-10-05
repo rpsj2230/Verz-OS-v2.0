@@ -119,6 +119,12 @@ COPY --chown=brain:brain ops/keycloak/accounts-client.sh /app/ops/keycloak/accou
 # release's policies arrive with the release on a server that has no checkout (needs-rupash 114).
 COPY --chown=brain:brain ops/openbao/apply-release.sh /app/ops/openbao/apply-release.sh
 COPY --chown=brain:brain ops/openbao/policies /app/ops/openbao/policies
+# The optional services step and the product's compose files it starts (brain.ops.overlays):
+# copied out of the image by the server's deploy hook and run there, so a release reaches a
+# Coolify install, whose own copy of the compose file no release can change, without anybody
+# editing that server. The compose file is copied, not bind-mounted, for the reason above.
+COPY --chown=brain:brain ops/deploy/overlays/apply.sh /app/ops/deploy/overlays/apply.sh
+COPY --chown=brain:brain docker-compose.presidio.yml /app/ops/deploy/overlays/docker-compose.presidio.yml
 # The built console, which this application serves at the root of the install's web address.
 # `brain.console_static` looks for it here and serves nothing at all when it is absent, so a
 # local `docker build` that dropped this line would produce an image whose only symptom is a
