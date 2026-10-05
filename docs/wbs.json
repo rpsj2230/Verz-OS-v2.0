@@ -193,7 +193,10 @@
     "M1.8.7",
     "M1.8.8",
     "M1.8.9",
-    "M1.9.1"
+    "M1.9.1",
+    "M1.10.1",
+    "M1.10.2",
+    "M1.10.3"
    ],
    "leaf_texts": [
     "Realm setup script and exported realm config in the repo",
@@ -254,7 +257,10 @@
     "Appointing one person as both Super Admin and Connector Admin shows a separation-of-duties warning that must be acknowledged with a reason, and the acknowledgement is recorded in the audit trail",
     "Every permissions requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
     "When the staff sync marks a person as a leaver, every agent they own is stopped and listed for transfer on the console until a new owner accepts it, which starts it again at no wider reach than before and records the change of owner in the audit ledger (owner decision 2026-09-21: stop rather than keep running)",
-    "A record's access view, showing who can see that record, opens only for someone who can already see it"
+    "A record's access view, showing who can see that record, opens only for someone who can already see it",
+    "Every active person on the staff list is a Brain person the console lists, places and grants before their first sign-in, made by the staff sync without the sign-in service and found by their work address's digest, so a later sign-in binds to that person and never makes a second one",
+    "Sync now on Staff sources runs the staff sync at once for somebody who may connect a source, one run at a time and recorded like a scheduled run, and the page says when the last and next scheduled runs are and what the run did",
+    "Proved on the install: after a staff sync, every active person on the staff list is on People, and Sync now fills People without waiting for the scheduled run"
    ],
    "leaf_waves": {
     "M1.1.8": 3,
@@ -310,6 +316,16 @@
      "status": "OPEN",
      "why": "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install",
      "updated": "2026-09-29"
+    },
+    "M1.10.1": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3",
+     "updated": "2026-09-30"
+    },
+    "M1.10.2": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
+     "updated": "2026-09-30"
     }
    }
   },
@@ -1326,6 +1342,11 @@
      "why": "Teams is connectable (M10/channel-teams): Bot Framework tokens verified against Microsoft's published keys, the bot's App ID and the pinned tenant, answers in the chat on a token exchanged at the tenant's login, Connect Teams from an Azure Bot, and an install check; the owner's tenant proves the vendor's half",
      "updated": "2026-09-30"
     },
+    "M10.5.3": {
+     "status": "READY FOR TESTING",
+     "why": "WhatsApp is connectable (M10/channel-whatsapp): Meta's signature checked over the exact bytes, its GET check of the address answered for the verify token, a notification of several messages answered message by message, answers on a system user's access token, and an install check; the owner's number proves the vendor's half",
+     "updated": "2026-09-30"
+    },
     "M10.5.4": {
      "status": "READY FOR TESTING",
      "why": "Telegram is connectable (M10/channel-telegram): saving the bot's username and token registers this install's events address with Telegram, updates carry a header made from the token, answers go out with sendMessage, and an install check; the owner's bot proves the vendor's half",
@@ -1337,8 +1358,8 @@
      "updated": "2026-09-30"
     },
     "M10.6.1": {
-     "status": "IN PROGRESS",
-     "why": "the webhook, Lark, email, Slack, Teams and Telegram wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams; M10/channel-telegram); WhatsApp comes with its own package",
+     "status": "READY FOR TESTING",
+     "why": "all seven wires are live: webhook, Lark, email (a mailbox or Cloudflare), Slack, Teams, Telegram and WhatsApp (PR #105; L1, merged d426e3d3; #285; #296; #288; M10/channel-teams; M10/channel-telegram; M10/channel-whatsapp), each with its Connect steps and an install check",
      "updated": "2026-09-30"
     },
     "M10.6.3": {

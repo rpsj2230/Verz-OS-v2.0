@@ -3,7 +3,7 @@
 - **Screens:** `/people`, `/people/:personId`, `/people/:personId/:view`, `/roles`, `/capabilities`, `/scopes`, `/packs`, `/access_review`, `/access_review/:kind/:rowId`, `/elevation`, `/elevation/:requestId`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`, `/service-accounts/:clientId`
 - **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.access_request_handled`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`, `INSTALL_ACCOUNT_EMPLOYMENT_TYPES`
-- **Measured here:** 67 routes, 1 called by no screen; 39 write routes, 38 with all three proofs; 6 gaps.
+- **Measured here:** 69 routes, 1 called by no screen; 40 write routes, 38 with all three proofs; 6 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -32,6 +32,7 @@
 | `GET /api/v1/govern/staff_sources/credential` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/guides` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/runs` | `/connectors`, `/staff_sources` |
+| `GET /api/v1/govern/staff_sources/sync` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/transfers` | `/people/:personId`, `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
 | `GET /api/v1/me` | `/` |
@@ -69,6 +70,7 @@
 | `POST /api/v1/govern/staff_sources/connect` | `/staff_sources` |
 | `POST /api/v1/govern/staff_sources/first-sync` | `/staff_sources` |
 | `POST /api/v1/govern/staff_sources/first-sync/apply` | `/staff_sources` |
+| `POST /api/v1/govern/staff_sources/sync` | `/staff_sources` |
 | `POST /api/v1/govern/staff_sources/test` | `/staff_sources` |
 | `POST /api/v1/govern/staff_sources/transfers/{agent_id}` | `/people`, `/people/:personId`, `/people/:personId/:view`, `/staff_sources` |
 | `POST /api/v1/govern/staff_sources/trial` | `/staff_sources` |
@@ -120,6 +122,7 @@
 | `POST /api/v1/govern/staff_sources/connect` | `/staff_sources` | `test_connecting_keeps_the_credential_in_its_slot_saves_two_settings_and_echoes_nothing` in `tests/unit/test_staff_connect.py` | `test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds` in `tests/unit/test_credential_writes.py` (database, in CI) | `test_a_source_saved_on_the_screen_is_the_source_the_worker_reads_with_no_server_edit` in `tests/unit/test_staff_sync_run.py` |
 | `POST /api/v1/govern/staff_sources/first-sync` | `/staff_sources` | Not applicable: The first sync's dry run reads the directory and the roster and writes nothing. | Not applicable: A dry run is not a change to the system, so there is nothing to record. | `test_the_first_sync_shows_who_it_would_add_and_writes_nothing_until_apply_is_pressed` in `tests/unit/test_staff_connect.py` |
 | `POST /api/v1/govern/staff_sources/first-sync/apply` | `/staff_sources` | `test_the_first_sync_shows_who_it_would_add_and_writes_nothing_until_apply_is_pressed` in `tests/unit/test_staff_connect.py` | Not applicable: Applying the first sync is the nightly run started now, and a run is recorded on its own row in auth.staff_sync_run, which the screen lists; no ledger member records a roster run. | `test_the_night_that_marks_a_leaver_stops_their_agents_and_nobody_elses` in `tests/unit/test_staff_sync_store.py` (database, in CI) |
+| `POST /api/v1/govern/staff_sources/sync` | `/staff_sources` | `test_a_press_is_written_attributed_as_the_scheduled_run_and_the_page_is_told_it_waits` in `tests/unit/test_staff_sync_now.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_scheduled_run_reads_lark_with_the_kept_credential_and_applies_the_plan` in `tests/unit/test_staff_sync_run.py` |
 | `POST /api/v1/govern/staff_sources/test` | `/staff_sources` | Not applicable: A connection test keeps nothing: no setting, no credential and no member is written. | Not applicable: A connection test is not a change to the system, so there is nothing to record. | `test_the_test_route_keeps_nothing_and_never_sends_the_secret_back` in `tests/unit/test_staff_connect.py` |
 | `POST /api/v1/govern/staff_sources/transfers/{agent_id}` | `/people`, `/people/:personId`, `/people/:personId/:view`, `/staff_sources` | `test_taking_a_leavers_agent_moves_the_owner_starts_it_again_and_never_widens_its_reach` in `tests/unit/test_staff_sync_routes.py` | `test_the_owner_change_trigger_writes_the_details_the_recorder_writes` in `tests/unit/test_staff_connect.py` | `test_taking_a_leavers_agent_moves_the_owner_starts_it_again_and_never_widens_its_reach` in `tests/unit/test_staff_sync_routes.py` |
 | `POST /api/v1/govern/staff_sources/trial` | `/staff_sources` | `test_a_press_is_one_row_whose_second_press_moves_the_instant_and_a_run_answers_it` in `tests/unit/test_staff_trial.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_trial_reads_as_the_run_would_and_writes_no_member_and_stops_nobody` in `tests/unit/test_staff_sync_run.py` |

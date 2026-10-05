@@ -129,7 +129,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.agent_routes import record_of
 from brain.agents.model import AgentError, AgentRecord
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
 from brain.attribution import attribute
 from brain.connectors.google_service_account import MAX_KEY_FILE_CHARS
 from brain.connectors.staff_directories import Fetch
@@ -178,7 +178,10 @@ from brain.ops.credentials import (
     VaultState,
     connector_key_slot,
 )
+from brain.ops.features import SCHEDULE_CONTROL, is_on
 from brain.ops.install_settings import load, save
+from brain.ops.schedule_control import ScheduleControlError, request_run, run_requests
+from brain.ops.schedule_store import last_attempts
 from brain.ops.staff_connect import (
     ConnectionTest,
     ConnectRefusedError,
@@ -1483,4 +1486,144 @@ async def apply_first_staff_sync(
         refusals=[] if applied else [ran.detail],
         safe_to_apply=applied,
     )
+    return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
+
+
+# ======================================================================= Sync now (M1.10.2)
+# Added on 2026-09-30, when the owner asked for a manual run beside the scheduled one. The screen
+# had a trial read, which applies nothing, and the connect drawer's first sync, which runs in this
+# process with a credential somebody has just typed; neither applies the list with the credential
+# the scheduled run keeps.
+
+#: Why Sync now asks the worker for the scheduled run rather than running anything here.
+SYNC_NOW_IS_THE_SCHEDULED_RUN_ASKED_FOR_EARLY: Final = (
+    "Only the worker reads the staff source's credential, and the scheduled staff sync is one "
+    "control the worker runs under one lock. So Sync now writes the same run request the "
+    "Scheduled jobs screen's Run now writes for that control, and the worker runs "
+    "run_staff_sync_now on its next tick: the same run, recorded the same way, one at a time, and "
+    "pressing twice asks for one run. A run in this process would be a second way to apply the "
+    "list, with a second copy of its checks."
+)
+
+#: The scheduled control Sync now asks for. Held to the registry's runner by a test.
+SYNC_CONTROL: Final = "directory_sync"
+
+SYNC_PATH: Final = f"{SCREEN_PATH}/sync"
+
+#: What the screen says while the run asked for has not started.
+SYNC_WAITING: Final = (
+    "Asked. The worker runs the staff sync on its next tick, usually within a minute. What it did "
+    "appears under Recent sync runs."
+)
+
+#: What a press is refused with when the console may not ask for runs on this install.
+SYNC_SWITCHED_OFF: Final = (
+    "Running jobs from the console is switched off on this install. An administrator switches it "
+    "on under Install, Features."
+)
+
+
+class StaffSyncNowView(BaseModel):
+    """When the staff sync last ran and next runs, and whether a run asked for is waiting."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: Whether this reader may press Sync now. False answers nothing else.
+    may_sync: bool
+    #: When the scheduled staff sync last started, or null when it never has.
+    last_run_at: datetime | None
+    #: When it is next due: the last start plus the interval, or null when it is due at once.
+    next_run_at: datetime | None
+    requested_at: datetime | None
+    waiting: bool
+    told: str
+
+
+def _may_sync(asked: Asking) -> bool:
+    """Whether this reader may press Sync now: they read this page, and may connect a source.
+
+    Both, because the button is on this page and applies the list, which is what Apply the first
+    sync does and asks `may_connect` for. Neither alone: the page's read is a configuration read
+    and applies nothing, and the two authorities without the page are a caller who never sees
+    what the run did.
+    """
+    return selection(asked.reach, asked.now) is not None and may_connect(asked.reach, asked.now)
+
+
+def _nothing_to_sync() -> StaffSyncNowView:
+    return StaffSyncNowView(
+        may_sync=False,
+        last_run_at=None,
+        next_run_at=None,
+        requested_at=None,
+        waiting=False,
+        told="",
+    )
+
+
+async def _sync_now_view(
+    session: AsyncSession, *, now: datetime, asked_at: datetime | None = None
+) -> StaffSyncNowView:
+    last = (await last_attempts(session)).get(SYNC_CONTROL)
+    requested = asked_at or (await run_requests(session)).get(SYNC_CONTROL)
+    started = await read_last_started(session) if requested is not None else None
+    waiting = asked_at is not None or trial_waiting(requested, started, now=now)
+    return StaffSyncNowView(
+        may_sync=True,
+        last_run_at=last,
+        next_run_at=None if last is None else last + SYNC_INTERVAL,
+        requested_at=requested if waiting else None,
+        waiting=waiting,
+        told=SYNC_WAITING if waiting else "",
+    )
+
+
+@router.get(SYNC_PATH, response_model=StaffSyncNowView, responses=COMMON_RESPONSES)
+async def staff_sync_now(request: Request, asked: Asked) -> StaffSyncNowView:
+    """When the staff sync last ran and next runs, and whether Sync now is waiting.
+
+    A reader who may not press it is answered one shape, asked before the database: this page's
+    own read, and `may_connect`, the authority Apply the first sync asks, because both apply the
+    list. See `_may_sync`. A source the worker does not read, a spreadsheet uploaded by hand, is
+    answered the same, because there is no scheduled run of it to tell anybody about.
+    """
+    factory = sessions_of(request)
+    chosen = selection(asked.reach, asked.now)
+    if not _may_sync(asked) or factory is None or chosen is None or chosen.name not in READERS:
+        return _nothing_to_sync()
+    async with factory() as session, session.begin():
+        return await _sync_now_view(session, now=asked.now)
+
+
+@router.post(SYNC_PATH, response_model=StaffSyncNowView, responses=COMMON_RESPONSES)
+async def ask_staff_sync_now(request: Request, asked: Asked) -> JSONResponse:
+    """Ask the worker for the scheduled staff sync now. See
+    `SYNC_NOW_IS_THE_SCHEDULED_RUN_ASKED_FOR_EARLY`.
+
+    Refused before anything is written for a reader who may not connect a source, and in words for
+    a source the worker cannot read or an install where the console may not ask for runs. The
+    request is written attributed, so `0059`'s trigger puts who pressed it on the ledger.
+    """
+    chosen = selection(asked.reach, asked.now)
+    if not _may_sync(asked) or chosen is None:
+        raise _not_yours()
+    if not chosen.reads_a_list:
+        return _refused(NOTHING_TO_TRY)
+    if not chosen.ready:
+        return _refused(chosen.refusal)
+    if chosen.name not in READERS:
+        return _refused(NOT_READ_BY_THE_WORKER)
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    async with factory() as session, session.begin():
+        if not await is_on(session, SCHEDULE_CONTROL):
+            return _refused(SYNC_SWITCHED_OFF)
+        await attribute(session, asked)
+        try:
+            await request_run(session, SYNC_CONTROL, at=asked.now, by=asked.caller.principal.id)
+        except ScheduleControlError as refused:
+            return _refused(str(refused))
+        view = await _sync_now_view(session, now=asked.now, asked_at=asked.now)
+    log.info("staff sync asked", source=chosen.name, principal=asked.caller.principal.id)
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))

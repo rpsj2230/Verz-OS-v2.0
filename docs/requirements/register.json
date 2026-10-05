@@ -18554,6 +18554,32 @@
     "M1.6.15"
    ],
    "decision": null
+  },
+  {
+   "id": "OWN5-1",
+   "source": "owner, 2026-09-30 (chat): the People page lists only him although the staff sync ran",
+   "area": "Identity",
+   "requirement": "Every active person on the staff list appears on People, and can be placed and granted, before their first sign-in, whether or not the sign-in service's accounts are set up; their sign-in later binds to that same person and never makes a second one.",
+   "leaves": [
+    "M1.10.1"
+   ],
+   "proof": [
+    "M1.10.3"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN5-2",
+   "source": "owner, 2026-09-30 (chat): a manual Sync now beside the scheduled daily sync",
+   "area": "Identity",
+   "requirement": "Staff sources has a Sync now button beside the scheduled sync that runs the same staff sync at once, one run at a time, recorded like a scheduled run, and says when the last and next scheduled runs are and what the run did.",
+   "leaves": [
+    "M1.10.2"
+   ],
+   "proof": [
+    "M1.10.3"
+   ],
+   "decision": null
   }
  ]
 }
