@@ -115,9 +115,11 @@ from brain.knowledge.row_store import SessionRowSource
 from brain.mailbox_read import keep_reading_the_mailbox
 from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
+from brain.ops.admission import WorkloadClass
 from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.builtin_templates import sign_built_ins
+from brain.ops.class_pools import keep_following
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
@@ -370,6 +372,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # changed on the Settings screen reaches every process and not only the one that saved it.
     # See `brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
     holding: asyncio.Task[None] | None = None
+    # The request path's sessions, moved onto the interactive class's pool while this release's
+    # class pooler runs and left on their own engine otherwise. See `brain.ops.class_pools`.
+    following: asyncio.Task[None] | None = None
     # The email channel's mailbox, read every minute where the answer is made; it reads nothing
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
@@ -434,6 +439,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             log.exception("installation settings could not be loaded")
         holding = asyncio.create_task(keep_holding(app.state.db_sessions))
+        following = asyncio.create_task(
+            keep_following(
+                app.state.db_sessions,
+                url=settings.database_url,
+                workload=WorkloadClass.INTERACTIVE,
+                commit=settings.resolved_commit(),
+            )
+        )
         reading = asyncio.create_task(keep_reading_the_mailbox(app))
         # An asker whose handed-on question expired is told in their own chat, by this process
         # because the worker holds no channel's token. See `brain.escalation_told`.
@@ -762,6 +775,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             holding.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await holding
+        if following is not None:
+            following.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await following
         if reading is not None:
             reading.cancel()
             with contextlib.suppress(asyncio.CancelledError):

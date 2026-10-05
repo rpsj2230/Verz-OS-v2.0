@@ -65,6 +65,7 @@ upload still works there.
 
 Task ids: M7.1.5, M22.2.4
 Task ids: M22.1.4, M22.2.3
+Task ids: M22.2.2
 """
 
 from __future__ import annotations
@@ -75,7 +76,7 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import TextClause
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -115,6 +116,9 @@ from brain.ops.queue import MIB_PER_SLOT, Job, Redrive
 from brain.ops.storage import StorageBackend
 from brain.ops.tuning import configured_budgets
 from brain.tables.audit import attributed_to
+
+if TYPE_CHECKING:
+    from brain.ops.class_pools import Routing
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the request stops at the door and the worker does the reading.
@@ -592,6 +596,7 @@ def register_ingest_tasks(
     env: Mapping[str, str] | None = None,
     make_store: StoreMaker | None = None,
     make_ledger_for: LedgerMaker | None = None,
+    routing: Routing | None = None,
 ) -> None:
     """Put the ingestion task on the queue driver, on the queue its class derives.
 
@@ -599,7 +604,11 @@ def register_ingest_tasks(
     tasks, the web process enqueueing among them, knows these names. The store is built on the
     first job and kept, as the embedding client is, so a worker whose store is not connected
     still starts and each job it is handed fails naming why.
+
+    Each job connects with the batch class's URL while the worker's `routing` says the class
+    pooler runs (`brain.ops.class_pools`), and with `database_url` otherwise.
     """
+    from brain.ops.class_pools import queued_class, routed_url
     from brain.ops.queue import enqueue_job, register_task
     from brain.session import make_app_engine, make_application_sessions
 
@@ -624,7 +633,10 @@ def register_ingest_tasks(
         ledger = ledgers[0]
         now = datetime.now(tz=UTC)
         reading = await asyncio.to_thread(start_reading, ledger, ticket, now=now)
-        engine = make_app_engine(database_url)
+        running = routing is not None and routing.running
+        engine = make_app_engine(
+            routed_url(database_url, queued_class(INGEST_TRAFFIC_CLASS), running=running)
+        )
         try:
             outcome = await run_ingest_job(
                 ticket,
