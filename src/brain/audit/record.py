@@ -391,15 +391,19 @@ class ErasureChange(enum.StrEnum):
 
 
 class MemoryChange(enum.StrEnum):
-    """What a correction did to a memory. The two values `0061`'s trigger writes.
+    """What happened to a memory: a correction marked it, or the person confirmed it.
 
-    The words of `brain.memory.correction.Correction`, restated rather than imported for the reason
-    the `TYPE_CHECKING` block above gives about keeping this package underneath the layers that
-    record into it, and held equal to that enum by a test.
+    The first two are the words of `brain.memory.correction.Correction`, which `0061`'s trigger
+    writes, restated rather than imported for the reason the `TYPE_CHECKING` block above gives
+    about keeping this package underneath the layers that record into it, and held equal to that
+    enum by a test. The third is `0163`'s trigger's, when a person says an inference again
+    (M16.7.2); it corrects nothing, so it is not a `Correction`.
     """
 
     SUPERSEDED = "superseded"
     DEMOTED = "demoted"
+    #: The person said a standing inference again, and its decay starts again from then.
+    CONFIRMED = "confirmed"
 
 
 class OrganisationChange(enum.StrEnum):
@@ -1266,10 +1270,12 @@ class AuditRecorder:
         )
 
     def memory(self, *, memory_id: str, change: MemoryChange) -> AuditEntry:
-        """Record that a correction marked a memory: superseded it, or demoted it.
+        """Record that a correction marked a memory, superseded or demoted, or that the person
+        confirmed it by saying it again.
 
         Written in a deployed database by `0061`'s trigger on `mem.correction`, on the insert, and
-        held to this method's details by a test. **Never what the memory says, and never the memory
+        by `0163`'s on `mem.adaptive`, when `last_confirmed_at` moves, each held to this method's
+        details by a test. **Never what the memory says, and never the memory
         that replaced it**: the statement is `brain.memory.correction`'s refusal to keep a
         transcript in a correction log, and the replacement is on the correction's own row. There is
         no parameter through which either could arrive.
