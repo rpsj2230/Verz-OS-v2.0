@@ -15,6 +15,8 @@ import {
 } from "../../../src/pages/automationGalleryQuery";
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
+import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/agents/agentMemoryQuery";
+import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
@@ -63,6 +65,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
   ],
+  "src/pages/agents/AgentMemory.tsx memoryDeletionApiPath(agentId, one.item.memoryId)": [
+    at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion", "memoryDeletionApiPath", memoryDeletionApiPath("quote-helper", "m1")),
+  ],
+  "src/pages/agents/AgentMemory.tsx memoryEditApiPath(agentId, one.item.memoryId)": [
+    at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit", "memoryEditApiPath", memoryEditApiPath("quote-helper", "m1")),
+  ],
+  "src/pages/agents/AgentMemory.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
   "src/pages/agents/AgentSpend.tsx agentBudgetApiPath(agentId)": [
     at("PUT /api/v1/agents/{agent_id}/budget", "agentBudgetApiPath", agentBudgetApiPath("quote-helper")),
   ],
@@ -113,7 +122,24 @@ const BUDGET_PRESSED = t(
   true,
 );
 
+/** The steward's correction and the person's delete, pressed over HTTP against PostgreSQL. */
+const MEMORY_CHANGED = t(
+  "test_agent_memory_routes",
+  "test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion": {
+    row: MEMORY_CHANGED,
+    audit: MEMORY_CHANGED,
+    behaviour: t("test_agent_memory_routes", "test_a_memory_the_reader_is_not_shown_cannot_be_deleted_and_is_answered_as_missing"),
+  },
+  "POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit": {
+    row: MEMORY_CHANGED,
+    audit: MEMORY_CHANGED,
+    behaviour: t("test_agent_memory_routes", "test_a_colleague_shown_a_memory_they_may_not_change_is_told_who_may", true),
+  },
   "POST /api/v1/agents/{agent_id}/preview": {
     row: { notApplicable: "A preview writes no row: it asks the gate what one person's run would be handed and keeps nothing." },
     audit: { notApplicable: "A preview changes nothing, so there is nothing for the ledger to record." },

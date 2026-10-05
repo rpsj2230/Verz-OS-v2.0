@@ -55,6 +55,7 @@ from brain.agent_capability_routes import router as agent_capability_router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
+from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
 from brain.agent_model_routes import router as agent_model_router
