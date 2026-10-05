@@ -158,6 +158,11 @@ from brain.console_stats_routes import router as console_stats_router
 # repeated. See `brain.credential_routes`.
 from brain.credential_routes import router as credential_router
 
+# A connector for a new API, submitted with its specification and mapping and reviewed by a second
+# person who may connect it; approved, it joins the Connectors screen with no release (M11.7.8).
+# See `brain.custom_connector_routes`.
+from brain.custom_connector_routes import router as custom_connector_router
+
 # The data steward: who every read of the company's data begins with, and naming one on an
 # install whose setup named nobody, behind `admin:data_steward` over everything. See
 # `brain.data_steward_routes` and `brain.identity.data_steward`.

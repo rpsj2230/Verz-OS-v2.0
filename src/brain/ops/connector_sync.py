@@ -59,7 +59,7 @@ every run. It would quarantine a connection in memory that the next run rebuilds
 so the quarantine would last one run, and it would add a second in-memory opinion about whether a
 source is connected beside the table that already says so.
 
-Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8
+Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8, M11.7.8
 """
 
 from __future__ import annotations
@@ -68,20 +68,19 @@ import enum
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from types import MappingProxyType
 from typing import Final
 
 from brain.connectors.contract import ConnectorContractError, HealthState
 from brain.connectors.declaration import PageReply as PageReply
 from brain.connectors.declaration import SourceReading as SourceReading
 from brain.connectors.declaration import ViewReading as ViewReading
-from brain.connectors.declaration import shipped
 from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.connectors.minimal_index import MinimalIndexError, StoredRow, assert_minimal_index
 from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, ProjectedRecord
 from brain.connectors.throttle import CallOutcome, UnmeasuredSourceError, limits_for, retry_delay
 from brain.core.scope import Op, Scope
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_catalogue import Derived
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection
 from brain.ops.limits import Limit
@@ -444,8 +443,10 @@ def kept_fields(record: ProjectedRecord, manifest: ConnectorManifest) -> dict[st
 #: Every source this release reads on a schedule, by connector name, read off each connector's
 #: `CONNECTOR` declaration at start-up. `PageReply`, `SourceReading` and `ViewReading` are
 #: `brain.connectors.declaration`'s, named here for the modules that read them from this one.
-READINGS: Final[Mapping[str, SourceReading | ViewReading]] = MappingProxyType(
-    {name: one.reading for name, one in shipped().items() if one.reading is not None}
+#: Since M11.7.8 they are `brain.ops.connector_catalogue.declarations`', so a connector reviewed on
+#: this install is read from the first cycle after it is approved and not after it changes.
+READINGS: Final[Mapping[str, SourceReading | ViewReading]] = Derived(
+    lambda found: {name: one.reading for name, one in found.items() if one.reading is not None}
 )
 
 

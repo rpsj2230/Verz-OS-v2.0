@@ -7,9 +7,10 @@ Both were right that a list invented in a rendering layer would disagree with th
 first time one was added. **Since 2026-09-28 the list is not written here at all: each connector
 declares its own console form, or the sentence saying why it has none, as `CONNECTOR` in its own
 module, and `CONNECTABLE` and `NOT_FROM_THE_CONSOLE` are read off
-`brain.connectors.declaration.shipped` when this module is imported, which is at start-up.** So
-the two lists are total over the shipped connectors by construction, and a connector joins the
-Connectors screen by declaring itself, with no edit here.
+`brain.ops.connector_catalogue.declarations`: the shipped connectors, and since M11.7.8 the ones a
+second person reviewed on this install, recomputed whenever that reviewed set changes.** So the two
+lists are total over the declarations by construction, and a connector joins the Connectors screen
+by declaring itself, or by being approved, with no edit here.
 
 **A source is connectable from the console when its manifest is built from settings a person can
 type and a credential in the shape its vendor issues it**, and this install can read it (below).
@@ -54,14 +55,13 @@ Rejected: a `ConnectorRegistry` built from these at start. The registry is a run
 somebody installed; this is the product's list of what could be, and a registry holding every
 connectable source would read on the screen as every source connected.
 
-Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7
+Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7, M11.7.8
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
@@ -72,11 +72,11 @@ from brain.connectors.declaration import (
     Setting,
     SettingRefusedError,
     WriteGrant,
-    shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
+from brain.ops.connector_catalogue import Derived
 from brain.ops.credentials import connector_key_slot
 from brain.ops.limits import connector_ceiling
 from brain.ops.secrets import SecretRef, VaultRole
@@ -238,16 +238,15 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
     }
 
 
-_OFFERED, _LISTED = offered(shipped())
+#: Every console form this install declares, offered or not. See `declared_forms`.
+DECLARED_FORMS: Final[Mapping[str, Connectable]] = Derived(declared_forms)
 
-#: Every console form this build declares, offered or not. See `declared_forms`.
-DECLARED_FORMS: Final[Mapping[str, Connectable]] = MappingProxyType(declared_forms(shipped()))
+#: Every source the console can connect, by name, read off `brain.ops.connector_catalogue`'s
+#: declarations: the shipped ones, and the ones reviewed on this install (M11.7.8).
+CONNECTABLE: Final[Mapping[str, Connectable]] = Derived(lambda found: offered(found)[0])
 
-#: Every source the console can connect, by name, read off the shipped declarations at start-up.
-CONNECTABLE: Final[Mapping[str, Connectable]] = MappingProxyType(_OFFERED)
-
-#: Every source this build has a connector for and the console cannot connect, and why.
-NOT_FROM_THE_CONSOLE: Final[Mapping[str, NotConnectable]] = MappingProxyType(_LISTED)
+#: Every source this install has a connector for and the console cannot connect, and why.
+NOT_FROM_THE_CONSOLE: Final[Mapping[str, NotConnectable]] = Derived(lambda found: offered(found)[1])
 
 
 # ------------------------------------------------------------------------ the decisions

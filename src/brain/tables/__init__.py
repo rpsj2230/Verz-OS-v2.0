@@ -70,6 +70,7 @@ from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.credential import CredentialWriteRow
+from brain.tables.custom_connector import CustomConnectorRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
@@ -423,6 +424,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # grant are values, so each record outlives what it names.
     "ops.connector_steward",
     "gate.self_grant",
+    # 0181_custom_connector. Points at nothing: the submitter and the reviewer are values.
+    "ops.custom_connector",
 )
 
 __all__ = [
@@ -464,6 +467,7 @@ __all__ = [
     "ConversationRow",
     "CorrectionRow",
     "CredentialWriteRow",
+    "CustomConnectorRow",
     "DataExportRow",
     "DepartmentLeadRow",
     "DepartmentRow",

@@ -107,7 +107,7 @@ source's page shows whoever that is.
 
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
 Task ids: M7.7.2
-Task ids: M11.7.3
+Task ids: M11.7.3, M11.7.8
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute, Page
 from brain.api_routes import Asked, Asking
 from brain.audit.record import ConnectorChange
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.declaration import CredentialShape, WriteGrant, shipped
+from brain.connectors.declaration import CredentialShape, WriteGrant
 from brain.connectors.manifest import ConnectorManifest, digest_input, manifest_digest
 from brain.connectors.registry import may_install
 from brain.console.connector_detail import (
@@ -222,6 +222,7 @@ from brain.ops.connector_admin import (
     may_connect_source,
     people_problems,
 )
+from brain.ops.connector_catalogue import declarations
 from brain.ops.connector_probe import TESTING_A_SOURCE, ProbeStatus, untestable
 from brain.ops.connector_recordings import recorded_in_words
 from brain.ops.connector_store import (
@@ -1670,7 +1671,7 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
     not be told is connected is answered as one nobody connected, with no history and no users.
     """
     _permitted(asked.reach, asked.now)
-    declared = shipped().get(connector)
+    declared = declarations().get(connector)
     if declared is None:
         raise _not_answerable("connector source")
     one = await _one_source(request, connector, asked)
@@ -1711,7 +1712,7 @@ async def export_connector(request: Request, connector: str, asked: Asked) -> Co
     manifest, neither of which has anywhere to hold one, and says so in `credential`.
     """
     _permitted(asked.reach, asked.now)
-    declared = shipped().get(connector)
+    declared = declarations().get(connector)
     if declared is None:
         raise _not_answerable("connector export")
     one = await _one_source(request, connector, asked)
@@ -1940,7 +1941,7 @@ async def declaration_drift(request: Request, connector: str, asked: Asked) -> D
     alike. See `brain.console.declaration_drift`.
     """
     _permitted(asked.reach, asked.now)
-    if shipped().get(connector) is None:
+    if declarations().get(connector) is None:
         raise _not_answerable("declaration drift")
     one = await _one_source(request, connector, asked)
     unchanged = DeclarationDriftView(

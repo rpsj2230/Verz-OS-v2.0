@@ -70,6 +70,7 @@ cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
 Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.6.1, M11.7.3, M11.7.1
+Task ids: M11.7.8
 """
 
 from __future__ import annotations
@@ -151,6 +152,7 @@ from brain.ops.connector_sync_store import (
     record_upsert,
 )
 from brain.ops.credentials import KEY_FIELD, USER_FIELD
+from brain.ops.custom_connector_store import refresh
 from brain.ops.lark_base_index import HttpsTokenIssuer, index_if_due
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import LimiterState, check
@@ -1155,7 +1157,13 @@ async def sync_on(
     readings: Mapping[str, SourceReading | ViewReading] = READINGS,
     poster: SourcePoster | None = None,
 ) -> SyncRun:
-    """Every live connection that may be read and is due, read once, and each attempt recorded."""
+    """Every live connection that may be read and is due, read once, and each attempt recorded.
+
+    The connectors reviewed on this install are read first, so a definition approved since the last
+    cycle is read in this one and one changed since is not (M11.7.8). See
+    `brain.ops.connector_catalogue.A_REVIEWED_CONNECTOR_IS_READ_AT_EVERY_REQUEST_AND_EVERY_CYCLE`.
+    """
+    await refresh(sessions)
     async with sessions() as session, session.begin():
         live = await read_live(session)
         states = await read_states(session)
