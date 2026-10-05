@@ -58,6 +58,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/access-requests/AccessRequestsPage.tsx ACCESS_REQUESTS_API_PATH":
     "Sending a request for access ends and replaces nothing: it is addressed to whoever can decide " +
     "it, and the decision is a grant written on the Roles screen, which is where anything changes.",
+  "src/pages/audit/TracePage.tsx traceReadPath(id)":
+    "Reading a trace writes one row saying who read it and why, before the trace is answered, which " +
+    "tests/unit/test_trace_routes.py holds; it changes no trace and removes nothing, so there is " +
+    "nothing for a press to destroy.",
   "src/pages/audit/VerifyPage.tsx VERIFICATION_API_PATH":
     "Walking the ledger reads every entry and writes nothing: brain.audit_routes.verify_ledger stores no " +
     "report, which tests/unit/test_chain_check.py holds, so there is nothing for a press to destroy.",
