@@ -50,9 +50,11 @@ from brain.ops.connector_sync import (
     UNHEALTHY_AFTER_FAILURES,
     VISIBILITY_NOT_STORABLE,
     ConnectorSyncError,
+    SourceReading,
     SyncOutcome,
     SyncPlan,
     SyncState,
+    ViewReading,
     after_attempt,
     failure_detail,
     plan_for,
@@ -104,6 +106,8 @@ def _settings(name: str) -> dict[str, str]:
         "xero": {"tenant_id": TENANT},
         "hubspot": {"portal_id": PORTAL},
         "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
+        "cloudflare": {"account_id": "0" * 32, "department": "operations"},
+        "domains": {"domains": "example.com, example.org", "department": "operations"},
         "google_analytics": {"property": "123456789", "department": "marketing"},
         "google_drive": {
             "folder": "1AbCdEfGhIjKlMnOpQrStUv",
@@ -111,6 +115,7 @@ def _settings(name: str) -> dict[str, str]:
             "department": "operations",
             "steward": "u_steward",
         },
+        "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
     }[name]
 
 
@@ -538,10 +543,17 @@ def test_the_control_runs_at_a_third_of_the_shortest_interval_any_reading_promis
     assert shortest == hubspot.CURSOR_POLL_INTERVAL
 
 
+def rest_reading(name: str) -> SourceReading:
+    """A shipped source's REST reading, which every source but a database's views has."""
+    reading = READINGS[name]
+    assert not isinstance(reading, ViewReading), name
+    return reading
+
+
 def test_xeros_reading_asks_for_the_next_page_only_after_a_full_one() -> None:
     """Delete this and a ledger of a hundred and one invoices is read as a hundred, or a reading
     asks for pages after the last for ever."""
-    reading = READINGS["xero"]
+    reading = rest_reading("xero")
     first = reading.first_page(xero.ENTITY_INVOICE)
 
     assert dict(first) == {"page": "1"}
@@ -558,7 +570,7 @@ def test_hubspots_reading_follows_the_cursor_it_is_given_and_reads_the_recorded_
 
     Delete this and a reading that ignored the cursor reads the first hundred contacts on every run,
     or one that read an empty CRM as a failure marks a healthy source down."""
-    reading = READINGS["hubspot"]
+    reading = rest_reading("hubspot")
     first = reading.first_page(hubspot.ENTITY_CLIENT)
     empty = recorded("HUBSPOT-200-empty")
     operation = reading.operation(
@@ -581,7 +593,10 @@ def test_hubspots_reading_follows_the_cursor_it_is_given_and_reads_the_recorded_
 
 def test_no_reading_ever_contributes_the_authorisation_header() -> None:
     """The key is added by the worker's run for one request and never by a reading, which a later
-    reading could keep. Delete this and a reading could carry a credential header of its own."""
+    reading could keep. A database's views send no header at all, so they are not asked. Delete
+    this and a reading could carry a credential header of its own."""
     for name, reading in READINGS.items():
+        if isinstance(reading, ViewReading):
+            continue
         headers = reading.call_headers(_settings(name))
         assert not {key.lower() for key in headers} & {"authorization", "cookie"}

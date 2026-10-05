@@ -7,7 +7,9 @@ rather than a record read again. So this check connects a property made up for t
 check's transaction through the store the Connectors screen's routes call, lets the worker's own
 `brain.ops.connector_sync_run.attempt` read its name with a token the key file bought, and asks
 about it through the answer lane with everything the answer route hands it built by the route's
-own functions, over a live reader over the same connection.
+own functions, over a live reader over the same connection. The Search Console check,
+`brain.ops.acceptance_checks_search_console`, imports each of those steps from here rather than
+a copy of them, and is a module of its own so the Install page lists it after this one.
 
 **No socket is opened and no real key is held.** Google's token endpoint, Admin API and Data API
 are one recorded caller that answers in each API's documented envelope and notes what it was sent.
@@ -36,6 +38,7 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -53,7 +56,7 @@ from brain.ops.acceptance_checks_sources import _connection
 from brain.ops.acceptance_run import SET_UP_REACH, Harness
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Mapping
     from datetime import datetime
 
     from brain.core.entitlement import EntitlementSet
@@ -61,6 +64,8 @@ if TYPE_CHECKING:
     from brain.gate.answer import Answered
     from brain.knowledge.rows import RowRecord
     from brain.ops.connector_lease import LeaseOutcome
+    from brain.ops.connector_store import Connection
+    from brain.ops.connector_sync import Attempt
     from brain.ops.connector_sync_run import SourceAnswer
     from brain.ops.secrets import SecretRef
 
@@ -83,9 +88,15 @@ __all__ = ["ANALYTICS_IS_CONNECTED_HERE_ALREADY", "A_CONNECTED_SOURCE_IS_NOT_CON
 #: The range and figure the check asks for, as a question names them.
 ASKED_FIGURE: Final = "sessions_last_28_days"
 
-#: The figure the check asks its figure tool for, over the period it names.
+#: The figure the check asks the figure tool for, over the period it names.
 RANGE_FIGURE: Final = "sessions"
 TOOL_PERIOD: Final = "last month"
+
+#: What a figure tool is, as the registry hands its handler out.
+Tool = Callable[..., Awaitable["TypedResult[RowRecord]"]]
+
+#: What asking a person a question comes to: who, the words, and what they were told.
+Ask = Callable[[str, str], Awaitable["Answered"]]
 
 
 # ------------------------------------------------------------------------ the helpers
@@ -97,6 +108,13 @@ class _KeyFileLease:
 
     def key(self) -> str:
         return self.given
+
+    def user(self) -> str:
+        from brain.ops.connector_sync import NO_KEY
+        from brain.ops.connector_sync_run import ConnectorKeyAbsentError
+
+        # A key file is one key, so its slot keeps no user beside it (M11.6.1).
+        raise ConnectorKeyAbsentError(NO_KEY)
 
     def close(self, now: datetime) -> LeaseOutcome:
         from brain.ops.connector_lease import LeaseOutcome
@@ -230,12 +248,40 @@ class _Google:
         }
 
 
-def google_analytics_tool() -> str:
-    """The figure tool's name, as `brain.knowledge.connector_figures` registers it."""
-    from brain.connectors.google_analytics import GOOGLE_ANALYTICS
-    from brain.knowledge.connector_figures import FIGURE_TOOL_NAMES
+def _figure_tool(
+    h: Harness, connection: Connection, keys: _KeyFiles, caller: Any, name: str
+) -> Tool:
+    """A source's figure tool as the application registers it, over live reads of the one
+    connection answered by the recorded caller."""
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.ops.live_read_run import ConnectedSources
+    from brain.ops.live_records import SourceRecords
+    from brain.tools.startup import build_registry
 
-    return FIGURE_TOOL_NAMES[GOOGLE_ANALYTICS]
+    async def connected() -> Any:
+        return ConnectedSources(
+            {connection.connector: connection},
+            keys=keys,
+            caller=caller,
+            resolver=_Resolver(),
+            clock=lambda: h.now,
+            poster=caller,
+        )
+
+    tools = build_registry(
+        source=h.settings.tool_source,
+        records=SessionRowSource(h.sessions),
+        figures=SourceRecords(connected=connected, clock=lambda: h.now),
+    )
+    # A cast at the registry's boundary, for `brain.api_routes.passage_search_for`'s reason: the
+    # registry holds handlers of more than one shape, and the name selects the one this is.
+    return cast(Tool, tools.get(name).handler)
+
+
+async def _reach(h: Harness, principal_id: str) -> EntitlementSet:
+    from brain.ops.acceptance_checks_tables import _console
+
+    return await _console(h, principal_id, second_factor=False)
 
 
 def _prose(answered: Answered) -> str:
@@ -257,6 +303,125 @@ def _no_subject(form: bytes) -> bool:
     return isinstance(decoded, dict) and "sub" not in decoded and "scope" in decoded
 
 
+async def _connect_and_read(
+    h: Harness, connection: Connection, keys: _KeyFiles, caller: Any
+) -> Attempt:
+    """Connect a Google source as the Connectors screen's route does, and read it as the worker
+    does, with the check's key file and its recorded Google."""
+    from brain.ops.connector_store import StoredConnections
+    from brain.ops.connector_sync import plan_for
+    from brain.ops.connector_sync_run import attempt
+    from brain.ops.connector_sync_store import LiveConnection
+
+    await StoredConnections(h.sessions).connect(
+        connector=connection.connector,
+        settings=connection.settings,
+        digest=connection.digest,
+        actor=h.actor,
+        trace_id=h.trace_id,
+        ent_hash=SET_UP_REACH,
+        keep_key=_nothing_kept,
+    )
+    plan = plan_for(connection, last=None, now=h.now)
+    if plan.refused or not plan.due:
+        raise CheckFailedError("the worker's plan would not read a source connected as declared")
+    return await attempt(
+        LiveConnection(id=uuid.uuid4(), connection=connection),
+        plan,
+        previous=None,
+        sessions=h.sessions,
+        keys=keys,
+        caller=caller,
+        resolver=_Resolver(),
+        clock=lambda: h.now,
+        sleep=_no_wait,
+        poster=caller,
+    )
+
+
+async def _route_asker(
+    h: Harness, connection: Connection, entity: str, keys: _KeyFiles, caller: Any
+) -> Ask:
+    """What the answer route builds, by its own functions, over the check's transaction: the
+    connected source's questions, the application's registry and readers, and a live reader over
+    the one connection, answered by the recorded caller."""
+    from brain.api_routes import (
+        connected_questions_of,
+        covered_at,
+        field_policies,
+        row_readers,
+        source_field_policies,
+    )
+    from brain.gate.answer import answer_lane
+    from brain.gate.context import Channel
+    from brain.gate.finish import Origin
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.ops.acceptance_checks_tables import _console
+    from brain.ops.live_read_run import ConnectedSources
+    from brain.ops.live_records import SourceRecords
+    from brain.ops.trace_sink import CountingTraceSink
+    from brain.tools.startup import build_registry
+
+    source = connection.connector
+    state = SimpleNamespace(db_sessions=h.sessions)
+    rules = [one for one in await connected_questions_of(state) if one.source == source]
+    if not rules:
+        raise CheckFailedError("the connected source contributed no question shapes to Ask")
+    registry = build_registry(source=h.settings.tool_source, records=SessionRowSource(h.sessions))
+    readers = row_readers(registry)
+    if (source, entity) not in readers:
+        raise CheckFailedError("the application registered no reader for the connected source")
+
+    async def connected() -> Any:
+        return ConnectedSources(
+            {source: connection},
+            keys=keys,
+            caller=caller,
+            resolver=_Resolver(),
+            clock=lambda: h.now,
+            poster=caller,
+        )
+
+    live_records = SourceRecords(connected=connected, clock=lambda: h.now)
+
+    async def ask(principal_id: str, question: str) -> Answered:
+        person = await StoredPrincipals(h.sessions).live_principal(principal_id)
+        if person is None:
+            raise CheckFailedError("a reserved person was not live in the directory")
+        reach: EntitlementSet = await _console(h, principal_id, second_factor=False)
+        return await answer_lane(
+            question,
+            origin=Origin(trace_id=h.trace_id, principal=person, channel=Channel.CONSOLE),
+            recorders=(),
+            rules=rules,
+            readers=readers,
+            entitlement=reach,
+            policies=field_policies(registry),
+            reachable_sources=covered_at(registry, reach, h.now),
+            sink=CountingTraceSink(),
+            now=h.now,
+            clock=lambda: h.now,
+            live=live_records,
+            source_policies=source_field_policies(registry),
+        )
+
+    return ask
+
+
+async def _three_readers(h: Harness, entity: str, *, named_by: str, figure: str) -> tuple[str, ...]:
+    """A reader granted the figure in A, one in A with nothing, and one granted it in B."""
+    reads = (f"read:{entity}", f"read:{entity}.{named_by}", f"read:{entity}.{figure}")
+    granted, without = h.principal(A, "analyst"), h.principal(A, "sales")
+    elsewhere = h.principal(B, "analyst")
+    await h.person(granted, department=A, grants=tuple((one, Scope.department(A)) for one in reads))
+    await h.person(without, department=A)
+    await h.person(
+        elsewhere, department=B, grants=tuple((one, Scope.department(B)) for one in reads)
+    )
+    return granted, without, elsewhere
+
+
 # ------------------------------------------------ 1. a connected property answers its figures
 @check(
     leaves=("M11.7.1",),
@@ -270,29 +435,10 @@ def _no_subject(form: bytes) -> bool:
 async def an_analytics_property_answers_its_figures_live_and_keeps_none(
     h: Harness,
 ) -> None:
-    from brain.api_routes import (
-        connected_questions_of,
-        covered_at,
-        field_policies,
-        row_readers,
-        source_field_policies,
-    )
     from brain.connectors import google_analytics
-    from brain.gate.answer import answer_lane
-    from brain.gate.context import Channel
-    from brain.gate.finish import Origin
-    from brain.identity.principal_store import StoredPrincipals
     from brain.knowledge.classified_rows import QUESTION_SHAPES, label_of
-    from brain.knowledge.row_store import SessionRowSource
-    from brain.ops.acceptance_checks_tables import _console
-    from brain.ops.connector_store import StoredConnections, live
-    from brain.ops.connector_sync import SyncOutcome, plan_for
-    from brain.ops.connector_sync_run import attempt
-    from brain.ops.connector_sync_store import LiveConnection
-    from brain.ops.live_read_run import ConnectedSources
-    from brain.ops.live_records import SourceRecords
-    from brain.ops.trace_sink import CountingTraceSink
-    from brain.tools.startup import build_registry
+    from brain.ops.connector_store import live
+    from brain.ops.connector_sync import SyncOutcome
 
     source, entity = google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY
     if (await h.execute(live(source))).scalar_one_or_none() is not None:
@@ -320,30 +466,7 @@ async def an_analytics_property_answers_its_figures_live_and_keeps_none(
     )
 
     # Connected as the Connectors screen's route connects it, and read as the worker reads it.
-    await StoredConnections(h.sessions).connect(
-        connector=connection.connector,
-        settings=connection.settings,
-        digest=connection.digest,
-        actor=h.actor,
-        trace_id=h.trace_id,
-        ent_hash=SET_UP_REACH,
-        keep_key=_nothing_kept,
-    )
-    plan = plan_for(connection, last=None, now=h.now)
-    if plan.refused or not plan.due:
-        raise CheckFailedError("the worker's plan would not read a property connected as declared")
-    done = await attempt(
-        LiveConnection(id=uuid.uuid4(), connection=connection),
-        plan,
-        previous=None,
-        sessions=h.sessions,
-        keys=keys,
-        caller=google,
-        resolver=_Resolver(),
-        clock=lambda: h.now,
-        sleep=_no_wait,
-        poster=google,
-    )
+    done = await _connect_and_read(h, connection, keys, google)
     if done.outcome is not SyncOutcome.SYNCED or done.records != 1:
         raise CheckFailedError("the worker did not keep the connected property from its answers")
     if len(google.tokens) != 1 or not _no_subject(google.tokens[0]) or google.reports_asked():
@@ -351,59 +474,13 @@ async def an_analytics_property_answers_its_figures_live_and_keeps_none(
     if any("PRIVATE KEY" in json.dumps(one) for one in google.headers):
         raise CheckFailedError("a header carried the key file")
 
-    # What the answer route builds, by its own functions, over the check's transaction.
-    state = SimpleNamespace(db_sessions=h.sessions)
-    rules = [one for one in await connected_questions_of(state) if one.source == source]
-    if not rules:
-        raise CheckFailedError("the connected property contributed no question shapes to Ask")
-    registry = build_registry(source=h.settings.tool_source, records=SessionRowSource(h.sessions))
-    readers = row_readers(registry)
-    if (source, entity) not in readers:
-        raise CheckFailedError("the application registered no reader for the connected property")
-
-    async def connected() -> Any:
-        return ConnectedSources(
-            {source: connection},
-            keys=keys,
-            caller=google,
-            resolver=_Resolver(),
-            clock=lambda: h.now,
-            poster=google,
-        )
-
-    live_records = SourceRecords(connected=connected, clock=lambda: h.now)
-
-    async def ask(principal_id: str, question: str) -> Answered:
-        person = await StoredPrincipals(h.sessions).live_principal(principal_id)
-        if person is None:
-            raise CheckFailedError("a reserved person was not live in the directory")
-        reach: EntitlementSet = await _console(h, principal_id, second_factor=False)
-        return await answer_lane(
-            question,
-            origin=Origin(trace_id=h.trace_id, principal=person, channel=Channel.CONSOLE),
-            recorders=(),
-            rules=rules,
-            readers=readers,
-            entitlement=reach,
-            policies=field_policies(registry),
-            reachable_sources=covered_at(registry, reach, h.now),
-            sink=CountingTraceSink(),
-            now=h.now,
-            clock=lambda: h.now,
-            live=live_records,
-            source_policies=source_field_policies(registry),
-        )
+    ask = await _route_asker(h, connection, entity, keys, google)
 
     def asking(named: str) -> str:
         return QUESTION_SHAPES[0].format(label=label_of(ASKED_FIGURE), slot=named)
 
-    reads = (f"read:{entity}", f"read:{entity}.display_name", f"read:{entity}.{ASKED_FIGURE}")
-    granted, without = h.principal(A, "analyst"), h.principal(A, "sales")
-    elsewhere = h.principal(B, "analyst")
-    await h.person(granted, department=A, grants=tuple((one, Scope.department(A)) for one in reads))
-    await h.person(without, department=A)
-    await h.person(
-        elsewhere, department=B, grants=tuple((one, Scope.department(B)) for one in reads)
+    granted, without, elsewhere = await _three_readers(
+        h, entity, named_by=google_analytics.LABEL_FIELD, figure=ASKED_FIGURE
     )
 
     # Readers without the property are told what a property that is not there is told.
@@ -424,23 +501,18 @@ async def an_analytics_property_answers_its_figures_live_and_keeps_none(
 
     # The figure tool, as a workflow's step calls it: last month, read live, at the caller's reach.
     from brain.connectors.date_range import RangeRequest, window_of
+    from brain.knowledge.connector_figures import FIGURE_TOOL_NAMES
 
-    tools = build_registry(
-        source=h.settings.tool_source, records=SessionRowSource(h.sessions), figures=live_records
-    )
-    # A cast at the registry's boundary, for `brain.api_routes.passage_search_for`'s reason: the
-    # registry holds handlers of more than one shape, and the name selects the one this is.
-    tool = cast(
-        "Callable[..., Awaitable[TypedResult[RowRecord]]]",
-        tools.get(google_analytics_tool()).handler,
-    )
+    tool = _figure_tool(h, connection, keys, google, FIGURE_TOOL_NAMES[source])
     for reader in (without, elsewhere):
-        reach = await _console(h, reader, second_factor=False)
-        found = await tool(RangeRequest(period=TOOL_PERIOD), entitlement=reach, now=h.now)
+        found = await tool(
+            RangeRequest(period=TOOL_PERIOD), entitlement=await _reach(h, reader), now=h.now
+        )
         if found.records:
             raise CheckFailedError("the figure tool read a property for a reader not granted it")
-    reach = await _console(h, granted, second_factor=False)
-    found = await tool(RangeRequest(period=TOOL_PERIOD), entitlement=reach, now=h.now)
+    found = await tool(
+        RangeRequest(period=TOOL_PERIOD), entitlement=await _reach(h, granted), now=h.now
+    )
     period = window_of(TOOL_PERIOD, today=h.now.date())
     if google.ranges != [(period.start.isoformat(), period.end.isoformat())]:
         raise CheckFailedError("the figure tool did not ask Google for the range it was given")

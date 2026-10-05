@@ -423,6 +423,11 @@ class ConnectorLimit:
     note: str = ""
 
 
+#: Cloudflare's documented global ceiling, in its own unit: 1,200 calls per five minutes per user
+#: (https://developers.cloudflare.com/fundamentals/api/reference/limits/). The row below records it
+#: per minute, as every row does, at a fifth, which a sliding minute can never exceed over five.
+CLOUDFLARE_CALLS_PER_FIVE_MINUTES = 1_200
+
 SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
     ConnectorLimit(
         name="xero",
@@ -487,6 +492,18 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
         ),
     ),
     ConnectorLimit(
+        name="search_console",
+        per_minute=200,
+        raisable=False,
+        note=(
+            "Google limits the Search Console API per user and per site rather than by plan: "
+            "search analytics to 1,200 queries a minute for a site, and the site list and "
+            "sitemaps to 200 a minute and 20 a second for a user "
+            "(https://developers.google.com/webmaster-tools/limits). Recorded at 200 a minute, the "
+            "lowest that governs a report's calls. There is no plan to buy that raises them."
+        ),
+    ),
+    ConnectorLimit(
         name="lark_base",
         per_minute=100,
         raisable=False,
@@ -494,6 +511,44 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
             "100 requests a minute, fixed. Their documentation states it cannot be raised, "
             "so it is 1.67 calls a second for the whole tenant permanently. Sizing against "
             "a higher number is sizing against a number that does not exist."
+        ),
+    ),
+    ConnectorLimit(
+        name="laravel",
+        per_minute=30,
+        raisable=False,
+        note=(
+            "Ours, not a vendor's: nobody publishes a rate for a company's own database. Thirty "
+            "bounded reads a minute across the worker and every question together, one every two "
+            "seconds on average, each stopped at its own row cap and time bound: a load a database "
+            "serving an application does not notice, and a burst of questions is held to it rather "
+            "than read as fast as it is asked. Not raisable by buying anything; a release changes "
+            "it."
+        ),
+    ),
+    ConnectorLimit(
+        name="cloudflare",
+        per_minute=CLOUDFLARE_CALLS_PER_FIVE_MINUTES // 5,
+        raisable=False,
+        note=(
+            "1,200 requests per five minutes per user, across every token and the dashboard "
+            "(developers.cloudflare.com/fundamentals/api/reference/limits), recorded as 240 a "
+            "minute, so no five minutes can hold more than 1,200. Past it Cloudflare refuses "
+            "every call for five minutes with a 429. The ceiling is on the client's own user "
+            "rather than on our subscription, so no plan we can buy moves it. Separately, the "
+            "GraphQL Analytics API allows 300 queries per five minutes."
+        ),
+    ),
+    ConnectorLimit(
+        name="domains",
+        per_minute=30,
+        raisable=False,
+        note=(
+            "RDAP servers state no common figure: RFC 7480 section 5.5 lets each registry limit "
+            "as it chooses and answer 429 when it does, and one domains connection's calls go "
+            "to many registries. Thirty a minute is this product's own pace, one lookup every "
+            "two seconds, which reads a book of two hundred domains in under seven minutes and "
+            "is below every limit a registry publishes. Not a vendor's figure, and said so."
         ),
     ),
 )

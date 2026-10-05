@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Two of the twenty-one mechanisms are started by nothing
+## Two of the twenty-two mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -312,7 +312,9 @@ became true on 2026-09-28, when the denial digest was given the module that read
 refusals from the audit ledger and keeps the alerts it raises, and the worker's schedule starts
 it every hour. Two became true on 2026-09-30, when the worker's schedule began re-driving jobs a
 dead worker or a transient failure left behind, and reading back side effects a dead worker left
-unconfirmed, and listing for a person each one its connector cannot answer for.
+unconfirmed, and listing for a person each one its connector cannot answer for. The twenty-second,
+the evening digest, arrived on 2026-09-30 already started by the schedule, once a day at the
+install's own hour.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -328,6 +330,7 @@ unconfirmed, and listing for a person each one its connector cannot answer for.
 | `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |
 | `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `in_process` |
 | `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `in_process` |
+| `evening_digest` | that whoever the install chose hears each evening what the build closed, reopened and left overdue, in the one conversation they chose | `in_process` |
 | `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
 | `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `in_process` |
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |

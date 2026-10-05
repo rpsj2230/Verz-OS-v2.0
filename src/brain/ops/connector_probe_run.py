@@ -23,7 +23,11 @@ control schedule. It reads the requests in the worker's own loop, which is two s
 only when a test is owed does it start a thread with its own loop and engine, the shape
 `brain.ops.connector_sync_run.run_connector_sync_now` takes, because the call blocks.
 
-Task ids: M27.15.8, M11.7.1
+**A database's views are tested by one read of one row (M11.6.1).** A connector whose reading is a
+`brain.connectors.declaration.ViewReading` makes no call to test: its test is the first view read
+with a row cap of one, as the user its slot keeps, and the row is dropped like any answer.
+
+Task ids: M27.15.8, M11.6.1, M11.7.1
 """
 
 from __future__ import annotations
@@ -37,6 +41,8 @@ from typing import Final
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.connectors.contract import FetchRequest
+from brain.connectors.declaration import DatabaseLogin
 from brain.connectors.google_token import TokenNotIssuedError
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
@@ -63,7 +69,9 @@ from brain.ops.connector_sync import (
     SourceReading,
     SyncPlan,
     SyncState,
+    ViewReading,
     after_probe,
+    database_failure_detail,
     failure_detail,
     plan_for,
     verdict_of,
@@ -74,8 +82,11 @@ from brain.ops.connector_sync_run import (
     KeyLease,
     SourceCaller,
     SourcePoster,
+    borrowed,
     call_headers,
+    first_arguments,
     key_detail,
+    page_operation,
     presented,
     worker_connector_keys,
 )
@@ -87,6 +98,7 @@ from brain.ops.connector_sync_store import (
     read_probe_targets,
     read_states,
 )
+from brain.ops.leases import SealedSecret
 from brain.ops.limits import check
 from brain.ops.schedule_store import take_the_lock
 from brain.ops.secrets import SecretsUnavailableError
@@ -126,7 +138,7 @@ class ProbeRun:
 # ------------------------------------------------------------------------- one test
 def _call_under(
     live: LiveConnection,
-    reading: SourceReading,
+    reading: SourceReading | ViewReading,
     lease: KeyLease,
     *,
     finish: Callable[..., Attempt],
@@ -145,6 +157,8 @@ def _call_under(
     except SecretsUnavailableError as unavailable:
         return finish(key_detail(unavailable))
     settings = live.connection.settings
+    if isinstance(reading, ViewReading):
+        return _read_under(live, reading, lease, key, finish=finish, resolver=resolver, clock=clock)
     try:
         shown = presented(reading, key, poster=poster, resolver=resolver, now=clock())
     except UnsafeAddressError:
@@ -158,8 +172,12 @@ def _call_under(
         return finish(detail, call=refused.call)
     try:
         entity = reading.entities()[0]
-        operation = reading.operation(entity, settings=settings, resolver=resolver)
-        checked = operation.prepare(reading.first_page(entity), resolver=resolver)
+        first = first_arguments(reading, entity, settings=settings)
+        if first is None:
+            # A routed reading whose list holds nothing a server publishes has no call to test.
+            return finish(SHAPE_DISAGREED)
+        operation = page_operation(reading, entity, first, settings=settings, resolver=resolver)
+        checked = operation.prepare(first, resolver=resolver)
     except UnsafeAddressError:
         return finish(ADDRESS_REFUSED)
     except Exception:
@@ -191,6 +209,45 @@ def _call_under(
         # Broad and typeless for `brain.ops.connector_sync_run`'s reason: a refusal raised while
         # reading an answer can quote it.
         return finish(SHAPE_DISAGREED)
+    return finish(PROBE_ANSWERED)
+
+
+def _read_under(
+    live: LiveConnection,
+    reading: ViewReading,
+    lease: KeyLease,
+    key: str,
+    *,
+    finish: Callable[..., Attempt],
+    resolver: Resolver,
+    clock: Callable[[], datetime],
+) -> Attempt:
+    """One read of one row of the first view, as the user the slot keeps (M11.6.1).
+
+    The database's twin of the one call: the same address rule, the same credential and the same
+    classification a scheduled read gets, with a row cap of one, and the row read and dropped. See
+    `A_TEST_KEEPS_NOTHING_THE_SOURCE_SENT`.
+    """
+    try:
+        login = DatabaseLogin(lease.user(), SealedSecret(key))
+    except SecretsUnavailableError as unavailable:
+        return finish(key_detail(unavailable))
+    try:
+        page = reading.read(
+            FetchRequest(entity=reading.entities()[0], limit=1),
+            settings=live.connection.settings,
+            login=login,
+            resolver=resolver,
+            fetched_at=clock().isoformat(),
+        )
+    except UnsafeAddressError:
+        return finish(ADDRESS_REFUSED)
+    except Exception:
+        return finish(SHAPE_DISAGREED)
+    if page.call in (CallOutcome.REJECTED, CallOutcome.UNAVAILABLE):
+        return finish(database_failure_detail(page.call), call=page.call)
+    if page.call is CallOutcome.QUOTA:
+        return finish(PROBE_REFUSED_FOR_NOW)
     return finish(PROBE_ANSWERED)
 
 
@@ -235,7 +292,7 @@ def probe_one(
     limits = probe_limits(manifest)
     if not check(now=started, limits=limits, state=windows_after(recent, limits)).allowed:
         return finish(PROBE_NOT_SENT_SHARE_SPENT)
-    lease = keys.lease(manifest.credential.ref, now=clock())
+    lease = borrowed(keys, reading, manifest.credential.ref, now=clock())
     try:
         done = _call_under(
             live,
@@ -261,7 +318,7 @@ async def probe_on(
     caller: SourceCaller,
     resolver: Resolver,
     clock: Callable[[], datetime],
-    readings: Mapping[str, SourceReading] = READINGS,
+    readings: Mapping[str, SourceReading | ViewReading] = READINGS,
     poster: SourcePoster | None = None,
 ) -> ProbeRun:
     """Every test owed at `now`, made once and recorded, under the scheduled read's lock.

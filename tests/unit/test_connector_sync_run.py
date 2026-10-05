@@ -180,6 +180,10 @@ class Leased:
         assert self.given is not None
         return self.given
 
+    def user(self) -> str:
+        # A key-shaped slot keeps no user; the database branch is tested in its own file.
+        raise AssertionError("a REST source's lease was asked for a user")
+
     def close(self, now: datetime) -> LeaseOutcome:
         self.closed.append(now)
         return self.ending
@@ -1128,9 +1132,9 @@ def test_hubspots_reading_would_follow_every_page_it_is_told_of_once_its_ceiling
         {"results": [], "paging": {"next": {"after": "c3"}}},
         {"results": []},
     ]
-    asked = [dict(reading.first_page("client"))]
+    asked = [dict(reading.first_page(hubspot.ENTITY_CLIENT))]
     for page in pages:
-        following = reading.next_page("client", asked[-1], page, 0)
+        following = reading.next_page(hubspot.ENTITY_CLIENT, asked[-1], page, 0)
         if following is None:
             break
         asked.append(dict(following))
