@@ -672,6 +672,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # The model pin's check plans its stand-ins only on a hosted install, and this one keeps text
+    # at home; `tests/unit/test_acceptance_skill_pins.py` runs it with the hosted profile.
+    assert (
+        outcomes.pop("an_agent_s_pinned_model_is_tried_first_with_its_level_behind")[0] == NOT_RUN
+    )
     # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
     assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
     assert (
