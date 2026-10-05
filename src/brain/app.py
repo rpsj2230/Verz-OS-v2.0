@@ -133,6 +133,7 @@ from brain.ops.model_service import (
 )
 from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.openbao import OpenBaoVault
+from brain.ops.pii import analyzer_address
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
@@ -580,7 +581,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # per call from the ladder, the provider switches and the keys this process holds, so a
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
-    app.state.models = model_service_at_start(app.state.db_sessions)
+    # Every request to a third-party model is scrubbed of personal data on its way out, by the
+    # rules and by the install's analyser where its profile deploys one (`brain.ops.egress`).
+    app.state.models = model_service_at_start(
+        app.state.db_sessions,
+        analyser_address=analyzer_address(settings.profile, settings.presidio_url),
+    )
     # The matrix gate a Routing screen change is run through before it takes traffic (M5.6.2).
     # Reads the state above at each change, so it asks the rules and registry of that moment.
     app.state.matrix_gate = InstallMatrixGate(app.state)
