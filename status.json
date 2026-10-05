@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T12:29:37.580705+00:00",
-  "commit": "2a5bdc41",
-  "commit_subject": "A person made by hand can be given their work email on their page, which joins the staff list's person for it, and a listed contractor's end date keeps moving (#331)",
+  "generated_at": "2026-10-05T12:45:01.181042+00:00",
+  "commit": "9ac44d8a",
+  "commit_subject": "The evening digest is sent: once a day at the install's hour, to the conversation it chose, with the key borrowed for the send (#308)",
   "total": 1589,
   "done": 472,
   "percent": 29.7,
