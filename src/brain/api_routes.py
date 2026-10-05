@@ -222,6 +222,7 @@ from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.drive_passages import WithDrive, drive_passages_for
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
@@ -1146,6 +1147,10 @@ def model_lane_of(state: Any) -> ModelLane | None:
     )
     if wiki is not None:
         search = WithWiki(search, wiki)
+    # And a connected Google Drive folder, its files' words read live (M11.6.7).
+    drive = drive_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if drive is not None:
+        search = WithDrive(search, drive)
     # And a connected Slack workspace, the asker's own channels read live (M11.7.5).
     slack = slack_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
     if slack is not None:
@@ -1156,30 +1161,6 @@ def model_lane_of(state: Any) -> ModelLane | None:
 #: The agent `/answer` answers as when nobody is addressed and nothing else selects: the person
 #: asking, through every tool the process registered, with no side effect. See `default_agents`.
 DEFAULT_AGENT: Final = "brain"
-
-
-#: Why a question narrowed to kinds of knowledge reads the library alone.
-A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE: Final = (
-    "A question narrowed to kinds of knowledge (M7.6.1) is answered from those kinds in the "
-    "company's own library and nothing else: the Lark Wiki and Slack read live beside the library "
-    "hold no kind, so they are left out of a narrowed question rather than asked and shown. Until "
-    "2026-09-30 a live source wrapped around the library hid it from the narrowing, and a question "
-    "narrowed to FAQs was shown every kind."
-)
-
-
-def narrowed_to(search: Any, kinds: tuple[KnowledgeKind, ...]) -> Any:
-    """The library's own search narrowed to `kinds`, unwrapped from any live source beside it.
-
-    See `A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`. A search that is not the library's, and
-    wraps none, is handed back as it is.
-    """
-    inner = search
-    while not isinstance(inner, DocumentSearchTool) and hasattr(inner, "library"):
-        inner = inner.library
-    if isinstance(inner, DocumentSearchTool):
-        return replace(inner, kinds=kinds)
-    return search
 
 
 def model_lane_for(
@@ -1200,6 +1181,8 @@ def model_lane_for(
     if lane is None:
         return None
     if kinds:
+        # A question narrowed to kinds reads the library alone: a live source beside it holds no
+        # kind (`A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`).
         lane = replace(lane, search=narrowed_to(lane.search, kinds))
     if follow_up is not None:
         lane = replace(lane, follow_up=follow_up)
@@ -1250,6 +1233,28 @@ A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH: Final = (
     "follow-up served from the cache would be the answer to the words asked fresh, and one kept "
     "there would answer the next person asking those words with another thread's context."
 )
+
+
+#: Why a question narrowed to kinds of knowledge reads the library alone.
+A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE: Final = (
+    "A question narrowed to kinds of knowledge (M7.6.1) is answered from those kinds in the "
+    "company's own library and nothing else: the Lark Wiki, a Google Drive folder and Slack read "
+    "live beside the library hold no kind, so they are left out of a narrowed question rather "
+    "than asked and shown. Each live source's wrapper names the search it was put beside as "
+    "`library`, and a narrowed question unwraps to it."
+)
+
+
+def narrowed_to(search: Any, kinds: tuple[KnowledgeKind, ...]) -> Any:
+    """The library's own search narrowed to `kinds`, unwrapped from every live source beside it.
+
+    See `A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`. A search that is not the library's and wraps
+    none is handed back as it is.
+    """
+    inner = search
+    while not isinstance(inner, DocumentSearchTool) and hasattr(inner, "library"):
+        inner = inner.library
+    return replace(inner, kinds=kinds) if isinstance(inner, DocumentSearchTool) else search
 
 
 #: Why a question narrowed to kinds of knowledge skips the answer cache both ways.

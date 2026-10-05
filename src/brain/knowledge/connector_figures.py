@@ -5,7 +5,8 @@ A question on Ask names its range in its words, from the few a question shape ca
 first and a last day. So each Google source that declares a report has a figure tool beside its row
 tool, `google_analytics.read_traffic`, which takes a `brain.connectors.date_range.RangeRequest`,
 finds the connected property through the row plane at the caller's reach, and reads its figures
-for that one range from Google, through the same live read executor a question's refresh uses.
+for that one range from Google (`search_console.read_performance` does the same for a site, with
+its top ten queries and pages), through the same live read executor a question's refresh uses.
 Nothing it reads is stored: the figures are laid over the index row and handed back.
 
 **Reach is the row plane's, and nothing here decides it.** The tool reads the index through
@@ -33,7 +34,7 @@ Scope: the tool and its handler. The live reads are `LiveFigures`, handed in by 
 registry (`brain.ops.live_records.SourceRecords` in the application); nothing here opens a
 connection.
 
-Task ids: M11.7.1
+Task ids: M11.7.1, M11.7.2
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final, Protocol
 
-from brain.connectors import google_analytics
+from brain.connectors import google_analytics, search_console
 from brain.connectors.date_range import DateWindow, RangeRequest
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition, TypedResult
@@ -164,7 +165,10 @@ class FigureTool:
 
 #: The figure tools, by the source whose report they read. One today, and the tool name is the
 #: one its manifest declares.
-FIGURE_TOOL_NAMES: Final = {google_analytics.GOOGLE_ANALYTICS: "google_analytics.read_traffic"}
+FIGURE_TOOL_NAMES: Final = {
+    google_analytics.GOOGLE_ANALYTICS: "google_analytics.read_traffic",
+    search_console.SEARCH_CONSOLE: "search_console.read_performance",
+}
 
 #: What each figure tool says to a model. Distinct from the row tool's, which the registry holds
 #: to by refusing two tools with one description.
@@ -173,6 +177,11 @@ FIGURE_TOOL_DESCRIPTIONS: Final = {
         "Read the connected Google Analytics property's sessions, users and conversions for a "
         "range you name: a first and last day, or yesterday, today, last N days, this month, "
         "last month or since a date, within the last sixteen months. Read live and never stored."
+    ),
+    search_console.SEARCH_CONSOLE: (
+        "Read the connected Search Console site's clicks, impressions, ten most clicked queries "
+        "and ten most clicked pages for a range you name, as for Google Analytics, and its "
+        "sitemaps' errors and warnings. Read live and never stored."
     ),
 }
 

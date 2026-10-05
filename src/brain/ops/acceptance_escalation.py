@@ -21,6 +21,12 @@ agent whose skill escalates: the answer abstains, and what the member reads is w
 a question about a word nothing holds reads; the handoff sent carries the member's question and
 never the document's value or title. See `A_HANDOFF_CARRIES_ONLY_WHAT_THE_ASKER_COULD_SEE`.
 
+**The asker is told in their own chat, once.** After the expiry the member is bound on a Slack
+channel the check holds, with their address kept as their own message would keep it, and
+`brain.escalation_told.tell_expired_askers` is run over the check's own handoffs, read back through
+`0177`'s function: one message each to the member's own conversation with the app, naming the
+queue, and nothing more on a second pass. See `brain.tell_later`.
+
 **The timeout is the skill's own, and the worker's control expires it.** The skill says one hour.
 The check reads the row's deadline, then runs `brain.ops.escalation_store.expire_overdue` as the
 worker's login at a moment past it, in a savepoint of its transaction, as the knowledge review
@@ -73,6 +79,12 @@ THE_EXPIRY_RUNS_AS_THE_WORKER_S_LOGIN_OR_IS_NOT_RUN: Final = (
     "as its own login, so the timeout was not checked here; the worker's own run does it"
 )
 
+#: Why telling the asker was not checked on this install.
+THE_EXPIRY_NOTICE_IS_SWITCHED_OFF: Final = (
+    "an administrator has switched the notice of a handed-on question nobody picked up off on "
+    "this install, so the asker is not told in their chat, and that telling was not checked"
+)
+
 #: Why the send was not checked on this install.
 THE_NOTICE_IS_SWITCHED_OFF: Final = (
     "an administrator has switched the notice of a question handed to a person off on this "
@@ -90,7 +102,9 @@ class _Kept:
         from brain.channels.adapter import VendorAnswer
 
         self.sent.append(request)
-        return VendorAnswer(status=200)
+        # Accepted as every vendor this check sends through says so: a webhook by its status, and
+        # Slack by `ok` in a 200's body, which it answers even for a refusal.
+        return VendorAnswer(status=200, body=b'{"ok": true}')
 
     def read(self, request: Any) -> Any:
         from brain.channels.adapter import VendorAnswer
@@ -179,13 +193,81 @@ async def _expired(h: Harness, at: Any) -> int:
         return await expire_overdue(session, now=at)
 
 
+async def _told_on_slack(h: Harness, app: Any, asker: str, handoffs: Any, kept: _Kept) -> None:
+    """The asker bound on a Slack channel the check holds, their address kept as their message
+    would keep it, and told about their expired handoffs once through `tell_expired_askers`."""
+    import json
+    from functools import partial
+    from types import SimpleNamespace
+
+    from brain.channels.adapter import BOT_ID
+    from brain.channels.binding import settle
+    from brain.channels.slack import BOT_TOKEN, SIGNING_SECRET
+    from brain.escalation_told import expired_between, expired_text, tell_expired_askers
+    from brain.gate.context import Channel
+    from brain.gate.entitlement_store import StoredEntitlements
+    from brain.gate.ingress import Binding, identity_hash
+    from brain.mailbox_read import request_for
+    from brain.ops.acceptance_checks import _Secret
+    from brain.ops.binding_store import StoredAddresses, StoredBindings
+    from brain.ops.channel_store import StoredChannels
+
+    await StoredChannels(h.sessions).save(
+        Channel.SLACK,
+        enabled=True,
+        tenant={BOT_ID: "UACCEPT0BOT"},
+        actor=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+    slack_id = f"UACC{h.run.upper()}"
+    fresh = Binding(
+        channel=Channel.SLACK,
+        identity_hash=identity_hash(Channel.SLACK, slack_id),
+        principal_id=asker,
+        bound_at=h.now,
+    )
+    await StoredBindings(h.sessions).bind(fresh, decide=partial(settle, fresh), trace_id=h.trace_id)
+    if not await StoredAddresses(h.sessions).remember(Channel.SLACK, slack_id):
+        raise CheckFailedError("a Slack binding did not keep its person's own address")
+    app.state.channel_secrets = _Secret(
+        json.dumps({SIGNING_SECRET: f"acceptance-{h.run}", BOT_TOKEN: f"xoxb-acceptance-{h.run}"})
+    )
+    if getattr(app.state, "gate", None) is None:
+        # The reach a later message is held to at send time, from the install's own grants, as a
+        # process with its gate wired reads it. The asking app answers without one.
+        app.state.gate = SimpleNamespace(store=StoredEntitlements(h.sessions))
+    ids = {one.escalation_id for one in handoffs}
+    latest = max(one.expires_at for one in handoffs)
+    found = await expired_between(h.sessions, after=latest - timedelta(hours=1), until=latest)
+    mine = [one for one in found if one.escalation_id in ids]
+    if {one.escalation_id for one in mine} != ids or {one.asker_id for one in mine} != {asker}:
+        raise CheckFailedError("the expired handoffs were not read back for their asker")
+    before = len(kept.sent)
+    request = request_for(app)
+    sent = await tell_expired_askers(request, h.sessions, now=h.now, expired=mine)
+    again = await tell_expired_askers(request, h.sessions, now=h.now, expired=mine)
+    if sent == 0 and again == 0 and len(kept.sent) == before:
+        raise CheckNotRunError(THE_EXPIRY_NOTICE_IS_SWITCHED_OFF)
+    told = kept.sent[before:]
+    if sent != len(ids) or again != 0 or len(told) != len(ids):
+        raise CheckFailedError("the asker was not told once about each handoff that expired")
+    for one in told:
+        body = json.loads(bytes(one.body).decode("utf-8"))
+        if body.get("channel") != slack_id or slack_id in one.url:
+            raise CheckFailedError("the asker was told somewhere other than their own Slack chat")
+        if body.get("text") != expired_text(QUEUE):
+            raise CheckFailedError("the asker was told something other than the queue's sentence")
+
+
 @check(
     leaves=("M8.3.1", "M8.3.2", "M8.3.4", "M8.4.1"),
     sentence=(
-        "A member of acceptance_a asks an agent whose approved skill escalates about a word only "
-        "a document in acceptance_b holds: they read what a word nothing holds reads, plus one "
-        "sentence naming the queue; the named person's channel is sent who asked, the question, "
-        "what was tried and what is needed, and nothing of the document; it expires on time."
+        "A member asks an agent whose skill escalates about a word only a document in "
+        "acceptance_b holds: they read what a word nothing holds reads, plus the queue's "
+        "sentence; the named person is sent who asked, the question, what was tried and what is "
+        "needed, and nothing of the document; it expires on time, and the member is told so "
+        "once, in their own Slack chat."
     ),
 )
 async def an_escalated_question_reaches_its_person_and_times_out(h: Harness) -> None:
@@ -281,6 +363,10 @@ async def an_escalated_question_reaches_its_person_and_times_out(h: Harness) -> 
     await _expired(h, max(one.expires_at for one in handoffs))
     if await still_open() != 0:
         raise CheckFailedError("the member's own list did not say nobody picked their question up")
+
+    # The asker is told, once, in their own Slack chat, by the web process's sender: read past the
+    # policy through `0177`, judged over the check's own handoffs only.
+    await _told_on_slack(h, s.app, s.reader, handoffs, kept)
 
 
 @check(

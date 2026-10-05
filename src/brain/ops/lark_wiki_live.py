@@ -368,7 +368,7 @@ class WithWiki:
 
     @property
     def library(self) -> Any:
-        """The knowledge library's search, which a narrowed question reads alone."""
+        """The search the Wiki was put beside, which a question narrowed to kinds reads alone."""
         return self._library
 
     async def passages(

@@ -1177,10 +1177,12 @@
     "M10.2.4",
     "M10.2.5",
     "M10.2.6",
+    "M10.2.7",
     "M10.3.1",
     "M10.3.2",
     "M10.3.3",
     "M10.3.4",
+    "M10.3.5",
     "M10.4.1",
     "M10.4.2",
     "M10.4.3",
@@ -1214,10 +1216,12 @@
     "Card patching within the rate limit, with a text fallback",
     "Ephemeral messages for per-viewer bodies",
     "Group and direct-message handling",
+    "An approval card is sent to each person who may decide it and is bound in Lark with an address kept, in their own chat with the bot, the moment the approval is raised, and nothing is sent for a binding with no address",
     "Outward-only binding: nonce minted in an authenticated web session",
     "Binding expiry and single use",
     "Unbound identity behaviour",
     "Unbinding and rebinding on device change",
+    "A linked person's Lark address is kept on their binding beside its fingerprint as personal data: kept when they bind or next write to the bot, cleared when the binding is retired and by an erasure, and never shown on a screen, logged or put in a URL",
     "Room envelope computed at the floor of everyone present",
     "Per-viewer body via the channel's ephemeral mechanism",
     "Degradation ladder ending at a web link where the gate re-runs",
@@ -1456,7 +1460,8 @@
     "M11.9.11",
     "M11.9.12",
     "M11.9.13",
-    "M11.9.14"
+    "M11.9.14",
+    "M11.9.15"
    ],
    "leaf_texts": [
     "Connector interface: capabilities, tools, health, credential binding",
@@ -1532,7 +1537,8 @@
     "Cloudflare, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
     "Google Workspace, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
     "Google Analytics, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
-    "Search Console, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it"
+    "Search Console, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "A connector pass cut short at its page or folder bound records where it stopped in the source's sync state, and the next pass starts from there rather than from the top, so a Drive tree or any source larger than one pass is read whole over several passes"
    ],
    "leaf_waves": {
     "M11.8.8": 3,

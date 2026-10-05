@@ -2,7 +2,9 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**19 items are open: 141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**27 items are open: 152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+which of your systems holds client projects and their tickets, **136,** whether memory
+disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +13,148 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 152. Lark Base and Lark Wiki are connected through Connect Lark, not this list
+
+**In plain terms:** these two are not on the Connectors list's Connect buttons, because their records
+and pages are read live and never synced. In the console open **Knowledge and data**,
+**Connectors**, and press **Connect Lark**, which creates the Lark app, tests it, and switches on
+knowledge from one Base and from the shared wiki spaces. If Connect Lark is already done on your
+install, nothing more is needed here. Tell me "connected Lark" if you run it now and I prove it on
+your install.
+
+## 146. Connect Domains and hosting (ready now)
+
+**In plain terms:** the Brain can now say when each client domain expires, who its registrar is and
+whether its site answers. It needs no key: a domain's registry publishes that to anyone. Only the
+domains you list are ever looked up. In the console open **Knowledge and data**, **Connectors**,
+**Domains and hosting**, **Connect**:
+
+1. **Gather the domains.** List every client domain you look after, up to two hundred.
+2. **Choose the department.** Pick the one department whose people may be told about them.
+3. **Connect it.** Type the domains, separated by commas or new lines, and that department's short
+   name, and press **Connect Domains and hosting**. No key is asked for.
+4. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:domain` and the facts they may be told (expiry, registrar, whether the site answers),
+   scoped to that department, with a reason.
+
+A domain whose registry publishes nothing (some country domains) is answered as that rather than
+guessed. Tell me "connected Domains" afterwards and I prove it on your install.
+
+## 145. Connect Cloudflare (ready now)
+
+**In plain terms:** the Brain can now answer about your Cloudflare zones and DNS records, and read a
+record's content and a zone's security events live. It reads with a token that can only read. A DNS
+change is only ever prepared for a person to approve; sending an approved change needs a second
+token, and that part is optional. In the console open **Knowledge and data**, **Connectors**,
+**Cloudflare**, **Connect**:
+
+1. **Make a read-only token.** In the Cloudflare dashboard open **My Profile**, **API Tokens**,
+   **Create Token**, **Create Custom Token**. Give it exactly three permissions: **Zone Read**, **DNS
+   Read** and **Analytics Read**. Nothing marked Edit or Write, and never the Global API Key.
+2. **Limit it to one account and copy it.** Under **Zone Resources** choose **Include**, **All zones
+   from an account**, and your account. **Continue to summary**, **Create Token**, and copy the token:
+   Cloudflare shows it once.
+3. **Copy the account's id.** On the account's **Overview** page, copy **Account ID** (32
+   characters).
+4. **Connect it.** On the console's last step type the account id, the short name of the department
+   whose people may be told its zones and records, paste the token and press **Connect Cloudflare**.
+5. **Optional, approved DNS changes.** Only if you want an approved change sent by the Brain rather
+   than made by hand: make a second custom token with one permission, **DNS Edit**, over the same
+   account's zones, and on the Cloudflare connector's page use **Allow approved DNS changes** to paste
+   it. It sits in its own vault slot and is used only for a change a person in that department
+   approved.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:zone` and `read:dns_record` (and the record fields they may see, such as its content),
+   scoped to that department, with a reason.
+
+Tell me "connected Cloudflare" afterwards and I prove it on your install.
+
+## 144. Connect Search Console (ready now)
+
+**In plain terms:** the Brain can now answer about one verified site's clicks, impressions, top
+queries and pages and sitemap problems, for any range in the last sixteen months. It reads as a
+service account with restricted permission on that one site, keeps only the site's name, and reads
+every figure from Google when asked. The service account made for item 143 can be reused. In the
+console open **Knowledge and data**, **Connectors**, **Search Console**, **Connect**:
+
+1. **Use or make a service account.** In Google Cloud console, **IAM & Admin**, **Service Accounts**:
+   use the one from item 143, or **Create service account** with **no role** and no domain-wide
+   delegation.
+2. **Switch on the API.** **APIs & Services**, **Library**, search for **Google Search Console API**,
+   **Enable**.
+3. **Make its key file** (skip if you reuse item 143's and still have its file): the account,
+   **Keys**, **Add key**, **Create new key**, **JSON**, **Create**.
+4. **Add it to the one site.** In Search Console choose the verified property, **Settings**, **Users
+   and permissions**, **Add user**: paste the service account's email address and choose
+   **Restricted**. No other property.
+5. **Connect it.** On the console's last step type the property exactly as Search Console's property
+   list shows it (a domain property starts with sc-domain:), the short name of the department whose
+   people may be told its figures, choose the key file and press **Connect Search Console**.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:search_site` and the figures they may see, scoped to that department, with a reason.
+
+Tell me "connected Search Console" afterwards and I prove it on your install.
+
+## 143. Connect Google Analytics (ready now)
+
+**In plain terms:** the Brain can now answer "how many sessions did the site have last month" from
+one Google Analytics property. It reads as a Google service account that can only view that one
+property, keeps only the property's name, and reads every figure from Google when somebody asks. In
+the console open **Knowledge and data**, **Connectors**, **Google Analytics**, **Connect**, which
+shows each step:
+
+1. **Make a service account.** In Google Cloud console open **IAM & Admin**, **Service Accounts**,
+   **Create service account** (the console's step links to it). Name it after the Brain and give it
+   **no role**. Never tick domain-wide delegation.
+2. **Switch on two APIs.** In the same project open **APIs & Services**, **Library**: search for
+   **Google Analytics Data API** and press **Enable**, then search for **Google Analytics Admin API**
+   and press **Enable**.
+3. **Make its key file.** Back in **Service Accounts**, open the account, **Keys**, **Add key**,
+   **Create new key**, **JSON**, **Create**. A key file downloads; keep it only until step 6.
+4. **Let it view the one property.** In Google Analytics open **Admin**, choose the property,
+   **Property access management**, the plus, **Add users**: paste the service account's email
+   address (it is on the account's page in Google Cloud) and give it **Viewer**. Nothing else.
+5. **Copy the property's id.** Still in **Admin**, **Property details**: copy the **Property ID**,
+   which is a number.
+6. **Connect it.** Back on the console's last step type the **Property ID** from step 5, the short
+   name of the one department whose people may be told its figures (as **People and access**,
+   **Departments** shows it), choose the key file from step 3 and press **Connect Google
+   Analytics**. The key file goes to the vault and is never shown again.
+7. **Give people the read.** In **People and access**, **People**, open each person who should be
+   told the figures and press **Grant a capability**: choose `read:analytics_property` and the figures
+   they may see (each is its own grant, such as the last 28 days' sessions), the scope of that
+   department, write a reason and save.
+
+Tell me "connected Google Analytics" afterwards and I prove it on your install.
+
+## 142. Connect WhatsApp (ready now)
+
+**In plain terms:** people can now ask the Brain on WhatsApp, the last of the channels in item 126's
+order. Only do this if your company uses WhatsApp Business. It needs a phone number used only for the
+Brain, and Meta lets the Brain answer freely only within 24 hours of the person's last message. In the
+console open **Channels**, **WhatsApp**, **Connect**, which shows each step:
+
+1. **Make the Meta app and add the number.** On Meta for Developers choose **Create app**, the
+   **Business** type, and add the **WhatsApp** product. Under **WhatsApp**, **API Setup**, add and
+   verify the number the Brain will answer from, and copy its **Phone number ID**.
+2. **Make a token that does not expire.** In Meta **Business settings**, **System users**, add one with
+   the **Admin** role, **Assign assets** (the app, full control), then **Generate new token** for the
+   app with expiry **Never**, ticking whatsapp_business_messaging and whatsapp_business_management.
+   Copy it. (Not the temporary token on the API Setup page: it expires within a day.)
+3. **Copy the app secret.** In the app's **App settings**, **Basic**, press **Show** beside **App
+   secret** and copy it.
+4. **Save it in the console.** Type the Phone number ID, paste the app secret and the token, and make
+   up a verify word (a long random word you type here and again in step 5). Tick **Switched on** and
+   press **Save set-up**. All three go to the vault and are never shown again.
+5. **Point Meta at the Brain.** In Meta open **WhatsApp**, **Configuration**, **Webhook**, **Edit**:
+   paste the events address the console's step shows as the **Callback URL**, the word from step 4 as
+   the **Verify token**, and press **Verify and save**. Under **Webhook fields** subscribe to
+   **messages**.
+6. **Try it.** Write to the number from your own WhatsApp: the first answer asks you to link your
+   number to your Brain account.
+
+Tell me "connected WhatsApp" afterwards and I prove it on your install.
 
 ## 141. Connect Telegram (ready now)
 
@@ -103,6 +247,76 @@ little more about each record.
 day a real record needs two.
 
 **What I need from you:** reply "138: A" or "138: B".
+
+## 137. Which of your systems holds client projects and their tickets?
+
+**In plain terms:** one memory task (M16.6.2) asks that a question about a client project is
+answered with that project's current picture: the project, its client, its open tickets and its
+recent decisions, read from your systems at the asker's own reach on every question and never kept
+as a memory. For that the Brain has to know which of your systems is the record of a project. I will
+not guess: the Laravel connection reads clients and staff today and nothing else, so nothing the
+Brain reads yet is a project.
+
+**Open tickets come from Freshdesk in every option,** once item 128 connects it, because that is
+where your tickets are. Recent decisions are read from the same place as the project (its notes or
+its status history), so the one choice is where a project lives.
+
+**Option A: a Lark Base.** If your team keeps active projects in a Base, one row per project with
+its client and its status, the Brain reads that table through the Lark Base connector that already
+exists. You choose the Base and the table when you connect it, and nothing changes in Laravel.
+
+**Option B: Laravel, through a new project view.** If projects live in the Laravel application (its
+websites and their maintenance plans, each tied to a client), whoever looks after that database adds
+one read-only view for projects beside the two it has today, and the Brain reads it the way it reads
+clients. I write the view for them; it is one change on their side, and the Brain reads nothing
+beyond what the view shows.
+
+**Option C: Freshdesk alone.** If a project for your team is really the run of support tickets for
+one client, Freshdesk is enough: the Brain reads a client's open tickets live from Freshdesk, and
+there is no project record to connect.
+
+**My recommendation: B, with Freshdesk for the tickets.** The Laravel application is where each
+website and its maintenance plan already sit against the client the Brain reads, so a project view
+joins to that client without matching names across two systems, and Freshdesk holds the tickets.
+Choose A instead if day-to-day project work is tracked in a Base rather than in Laravel, because the
+Brain should read the record your team actually keeps up to date. C is the smallest and answers only
+"what is open for this client", not "where is this project".
+
+**What I need from you:** reply "137: A", "137: B" or "137: C". For A, also tell me the name of the
+Base. For B, tell me who looks after the Laravel database, and I send them the view. After you
+choose, I build it, and it is proved when you ask about a project, change its status in that system,
+and ask again: the second answer shows the change (check 9 in item 91).
+
+## 136. When a memory and a connected system disagree: settled by how memory is built?
+
+**In plain terms:** one memory task (M16.4.3) asks that when something the Brain remembers disagrees
+with one of your connected systems, the system wins at once and the memory is demoted and flagged. I
+recommend we mark it met by how memory is built, rather than build a comparison, and I need your yes
+because that is narrower than what the task literally asks.
+
+**Why the two can never disagree.** The Brain only remembers what a person says about themselves,
+such as "I prefer short answers" or "I work from home on Fridays". It never keeps a value it read
+from a connected system: an invoice total, a ticket's status or a client's renewal date is read from
+that system each time a question needs it and is never written to memory (task M16.7.5, which a test
+value proves on your install). A memory also never answers a question: it shapes how the question is
+looked up and phrased, and the answer always comes from the system. So there is no remembered copy
+of a system's value that could go out of date, and nothing a comparison could find.
+
+**What building it anyway would mean.** A job that reads every memory, works out which record in
+which system it is about, and compares the two. It would have to guess which record a sentence like
+"I look after the retail accounts" is about, and a wrong guess demotes a true memory with nothing to
+show why. I recommend against it.
+
+**The one case to know about.** A person can say something about themselves that a system also
+records, for example "I manage the retail accounts" while your CRM names someone else. The Brain
+keeps it as that person's own note and still answers every question about those accounts from the
+CRM, at that person's reach, so the CRM wins on every answer. When the note stops being true they
+edit or forget it on **My workspace**.
+
+**My recommendation: yes, mark M16.4.3 met by construction.**
+
+**What I need from you:** reply "136: yes", or "136: build the comparison" if you want the job above
+anyway, and I build it.
 
 ## 134. Connect the Slack channel (ready now)
 
@@ -302,6 +516,12 @@ picture of each step. Paste keys only into the console, never into chat.
 3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
    `.freshdesk.com`), the short name of the one department whose people may be granted its
    tickets, paste the key, and press **Connect Freshdesk**.
+
+**Two memory tasks are proved by connecting Freshdesk:** M16.2.6 (a ticket reopened soon after it
+was resolved is counted as a sign the answer did not help) and the second half of M16.3.2 (a link
+between a person and a client is learned automatically only when a fixed identifier, such as the
+email address on that client's tickets, backs it). Both read what changed in Freshdesk since the
+last look, and I check both on your install once you tell me "connected Freshdesk".
 
 **After each one,** press **Test** on its card, then tell me "connected Xero" (or whichever). I
 prove it on your install and close its tasks. The next services (Google Drive, then Laravel, then
@@ -588,7 +808,7 @@ ordinary files.
 **What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
 in MB). Nothing on your server changes for either answer.
 
-## 91. Checks only you can do on your install (about 45 minutes, one sitting)
+## 91. Checks only you can do on your install (about 75 minutes, one sitting)
 
 **In plain terms:** some requirements are about how the Brain behaves for real people, so the proof
 is you trying each one and recording what you saw on **Install > Requirement checks** (open the
@@ -634,6 +854,58 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 8. **Health of the vault and the worker (M32.7.2).** On **Overview**, read the health strip, then
    open **Govern > Staff sources**: the secrets vault and the worker both show healthy and the last
    Lark sync shows when it ran. Record what you see.
+
+**Memory and learning (checks 9 to 12, about 30 minutes more).** These are built in pieces over
+Wave 3. Each check says which of its parts wait; I tell you when each is on your install, as for
+check 2, and the rest can be done now. Use the two test people from "Before you start".
+
+9. **Memory (M16.7.7).** Record what you saw against the Memory area on **Requirement checks**.
+
+- Step 1. As the first person, on **Ask**, send "Remember that I prefer answers as short bullet
+  points". Then ask a question the document from check 2 answers: the answer comes as bullet
+  points.
+- Step 2. As the other person, ask the same question: the answer is not in bullet points. A
+  preference belongs to the person who said it.
+- Step 3. As the first person, open **My workspace**: the preference is listed in their own words.
+- Step 4. As yourself, on **People > Roles and permissions > Roles**, take away the first person's
+  department role. As them, open **My workspace** again: the preference is no longer listed. Give
+  the role back: it is listed again.
+- Step 5. On **My workspace**, press **Edit** on the preference, change it to "numbered steps" and
+  save. Ask again: the answer is numbered. Press **Forget** and ask again: the answer is ordinary
+  prose. The preference is gone from **My workspace**, and, as yourself, from **Knowledge >
+  Learning and memory > Memory** for that person.
+- Waits, and I tell you when each is live: a conversation's working memory ending when its thread
+  does (start a new conversation and the earlier one's details are not carried over); a project's
+  picture reflecting a change in its system on the next question (item 137 decides which system);
+  a memory disagreeing with a connected system (item 136 decides whether this is settled by
+  construction); and the trace of an answer naming which kinds of context it used and which it
+  left out.
+
+10. **The learning loop (M16.7.8).** Record what you saw against the Learning area on **Requirement
+checks**.
+
+- Step 1. Under an answer on **Ask**, press **Not helpful**. Ask the same question again: the answer
+  is the same. On **Knowledge > Learning and memory > Learning**, "How answers were marked" has
+  counted it, and nothing under "Applied automatically" or "In shadow" has changed. A mark is
+  counted and changes nothing by itself.
+- Step 2. Ask something no document or connected system answers. It appears on **Reports >
+  Questions and gaps** as a knowledge gap.
+- Waits, and I tell you when each is live: a correction that gives the right answer being held as a
+  protected learning for review; the same correction from two conversations becoming one learning
+  with both as evidence; a reviewer approving it on **Learning** and it being applied once; the
+  weekly digest listing it with an undo; and a failed workflow step and an evaluation each opening
+  a learning for review.
+
+11. **Every learning requirement (M16.7.9).** On **Requirement checks**, open the Learning area.
+For each row still "Not checked yet", read what it needs, try it, and press **Record a check** with
+what you did and saw. Rows that need a part still waiting in check 10 stay "Not checked yet" until I
+tell you it is live.
+
+12. **Every memory requirement (M16.7.11).** The same on the Memory area. Check 9 covers most rows:
+record it against each row it demonstrates rather than repeating it. For "a memory a person stated
+is recalled however old it is", send as the first person "Remember that I like a one-line summary
+at the top of every answer", and a week or more later ask them anything: the answer still starts
+with a one-line summary. Record that against the row.
 
 The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
@@ -776,6 +1048,9 @@ What is being built:
 2. **The card is sent to the approver the moment the approval is raised**, in their own Lark chat.
    Whether pressing it decides the approval is item 117's setting.
 3. The same stored address is what signing in with Lark (item 115, option A) will use later.
+
+The decision is applied to every channel that carries a person's own address (Lark, Slack and
+email), because items 125 and 126 made delivery channel-agnostic.
 
 **What you do:** nothing.
 

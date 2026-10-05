@@ -18,6 +18,13 @@ field capability, in the pattern `brain.demo.row_classifications` uses. Rejected
 `brain.connectors.declaration`, which is on the scheduled sync's path and imports nothing from
 `brain.knowledge` (`tests/invariants/test_minimal_index.py`). The dependency runs the other way.
 
+**The Laravel database's clients and staff records are classified by `laravel.LARAVEL_FIELD_RULES`,
+and their department is read by whoever reaches the row (M11.6.1).** Its visibility rule is written
+per connection over a field its views keep, and the field a reader's grant is tested against is the
+department both views keep, so that column is the scope column here and is classified under the
+row's own capability rather than the field capability the connector names for it. The contract
+value stays behind `read:client.contract_value`, RESTRICTED, and is read live and never kept.
+
 **A connected source's questions are asked in the words an uploaded table's are.**
 `brain.knowledge.classified_rows.questions_over` builds both, keyed on the field a person names a
 record by: an invoice's number, a contact's name, a ticket's subject. They are built per question
@@ -25,14 +32,15 @@ from the connections live at that moment, so a source connected on the Connector
 from the next question and one disconnected does not, with nothing restarted, and a source nobody
 connected contributes no question shape that could tell a person it exists.
 
-**A connected property's figures are classified beside its index fields, and never kept (M11.7.1).**
-Google Analytics keeps the property's name and dates; its sessions, users and conversions for each
-named range are read from Google when a question asks (`google_analytics.AnalyticsReport`). They
-are classified here all the same, each behind its own field capability, because the redactor
-withholds a field nothing classifies from everybody, and a figure read live is a field of the
-property's record by the time the redactor sees it. So "what is the sessions last 28 days of
-<property>" is asked in the words every other question is, and answered only to a reader granted
-that figure in the property's department.
+**A connected property's or site's figures are classified beside its index fields, and never
+kept (M11.7.1, M11.7.2).** Google Analytics keeps the property's name and dates, and Search Console
+the site's name and permission; their traffic and search figures for each named range are read
+from Google when a question asks (`google_analytics.AnalyticsReport`,
+`search_console.SearchConsoleReport`). They are classified here all the same, each behind its own
+field capability, because the redactor withholds a field nothing classifies from everybody, and a
+figure read live is a field of the record by the time the redactor sees it. So "what is the
+sessions last 28 days of <property>" is asked in the words every other question is, and answered
+only to a reader granted that figure in the source's department.
 
 **What each answer reads, and what it never keeps.** The fast lane finds the record in the index
 at the asker's reach, `brain.ops.live_records.SourceRecords` reads that record from its source
@@ -40,13 +48,17 @@ while the asker waits (Xero today; Freshdesk declares no live lookup yet), the r
 every field the asker may not read, and the answer is dated by the oldest row it stands on
 (`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
 
+**Cloudflare's zones and DNS records are asked by name (M11.7.3).** A record's content is read from
+Cloudflare while the asker waits, through the connector's own one-record call, and is classified
+here beside the fields the index keeps.
+
 **HubSpot answers the same way since 2026-09-30.** Its companies, contacts and deals are compiled
 from `hubspot.HUBSPOT_FIELD_RULES`, a company and a deal are asked about by name, and every value
 is read from HubSpot's one-record read while the asker waits. Until then HubSpot was offered on the
 Connectors screen and read into its index, and no question on Ask could reach it, which is why
 `brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.1
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4, M11.7.3, M11.7.1, M11.7.2, M11.6.1, M11.6.7
 """
 
 from __future__ import annotations
@@ -55,7 +67,16 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
-from brain.connectors import freshdesk, google_analytics, hubspot, xero
+from brain.connectors import (
+    cloudflare,
+    domains,
+    freshdesk,
+    google_analytics,
+    hubspot,
+    laravel,
+    search_console,
+    xero,
+)
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
@@ -86,8 +107,12 @@ SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
     {
         xero.CONNECTOR_NAME: "tenant_id",
         freshdesk.FRESHDESK: "department",
+        laravel.CONNECTOR_NAME: "department",
+        cloudflare.CLOUDFLARE: cloudflare.DEPARTMENT_SETTING,
+        domains.CONNECTOR_NAME: "department",
         google_analytics.GOOGLE_ANALYTICS: "department",
         hubspot.CONNECTOR_NAME: "portal_id",
+        search_console.SEARCH_CONSOLE: "department",
     }
 )
 
@@ -109,7 +134,13 @@ def _scope_column(source: str, entity: str) -> ColumnRule:
 
 
 def _from_rules(source: str, entity: str, rules: Iterable[FieldRule]) -> TableClassification:
-    """One entity's classification out of a connector's field rules for it, and its scope column."""
+    """One entity's classification out of a connector's field rules for it, and its scope column.
+
+    A rule the connector wrote for the scope column itself gives way to `_scope_column`, which is
+    the whole of `THE_COLUMN_A_SCOPE_TESTS_IS_READ_BY_WHOEVER_REACHES_THE_ROW`: Laravel names a
+    field capability for its department, and a reader holding the row and not that field would be
+    dropped whole by the redactor.
+    """
     return TableClassification(
         entity=entity,
         rules=(
@@ -121,7 +152,7 @@ def _from_rules(source: str, entity: str, rules: Iterable[FieldRule]) -> TableCl
                     derived_from=frozenset(rule.derived_from),
                 )
                 for rule in rules
-                if rule.entity == entity
+                if rule.entity == entity and rule.field != SCOPED_BY[source]
             ),
             _scope_column(source, entity),
         ),
@@ -134,6 +165,15 @@ def xero_classifications() -> tuple[TableClassification, ...]:
     return (
         _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_INVOICE, rules),
         _from_rules(xero.CONNECTOR_NAME, xero.ENTITY_CONTACT, rules),
+    )
+
+
+def laravel_classifications() -> tuple[TableClassification, ...]:
+    """The Laravel database's clients and staff records, from `laravel.LARAVEL_FIELD_RULES`."""
+    rules = laravel.LARAVEL_FIELD_RULES
+    return (
+        _from_rules(laravel.CONNECTOR_NAME, laravel.ENTITY_CLIENT, rules),
+        _from_rules(laravel.CONNECTOR_NAME, laravel.ENTITY_USER, rules),
     )
 
 
@@ -177,6 +217,66 @@ def freshdesk_classifications() -> tuple[TableClassification, ...]:
     )
 
 
+def _kept_and_read_live(
+    source: str, entity: str, kept: tuple[str, ...], figures: tuple[str, ...]
+) -> TableClassification:
+    """A connected source's one entity: the fields its index keeps and the figures read live."""
+    return TableClassification(
+        entity=entity,
+        rules=(
+            *(
+                ColumnRule(
+                    column=name,
+                    required_capability=Capability(value=f"read:{entity}.{name}"),
+                    classification=Classification.INTERNAL,
+                )
+                for name in (*kept, *figures)
+            ),
+            _scope_column(source, entity),
+        ),
+    )
+
+
+def cloudflare_classifications() -> tuple[TableClassification, ...]:
+    """Cloudflare's zones and DNS records, over the fields the index keeps and the values read live.
+
+    Each behind its own capability, as Freshdesk's are. A record's content, time to live and
+    proxying (`cloudflare.LIVE_DNS_FIELDS`) are read from Cloudflare when a question asks and never
+    kept, and are classified here like any field, so being told a record's content is a grant of
+    its own (M11.7.3).
+    """
+    source = cloudflare.CLOUDFLARE
+    return (
+        _kept_and_read_live(
+            source, cloudflare.ZONE, tuple(one.name for one in cloudflare.ZONE_FIELDS), ()
+        ),
+        _kept_and_read_live(
+            source,
+            cloudflare.DNS_RECORD,
+            tuple(one.name for one in cloudflare.DNS_RECORD_FIELDS),
+            tuple(cloudflare.LIVE_DNS_FIELDS),
+        ),
+    )
+
+
+def domains_classifications() -> tuple[TableClassification, ...]:
+    """A domain's kept fields and the three read live, each behind its own capability (M11.7.4).
+
+    `read:domain.expiry`, `read:domain.registrar` and so on, INTERNAL, in Freshdesk's pattern: a
+    domain is reached with `read:domain` in the department the connection names, and each fact a
+    person is told is a further grant. The live facts are classified here because a value read
+    live and classified by nobody is withheld from everybody.
+    """
+    return (
+        _kept_and_read_live(
+            domains.CONNECTOR_NAME,
+            domains.DOMAIN,
+            tuple(one.name for one in domains.FIELDS),
+            tuple(domains.LIVE_ONLY),
+        ),
+    )
+
+
 def google_analytics_classifications() -> tuple[TableClassification, ...]:
     """The connected property: the fields its index keeps and the figures read live, each INTERNAL.
 
@@ -184,25 +284,25 @@ def google_analytics_classifications() -> tuple[TableClassification, ...]:
     in Freshdesk's pattern, so a reader may be told the property's name and not its traffic, or one
     range and not another. See the module docstring.
     """
-    entity = google_analytics.ENTITY_PROPERTY
-    kept = tuple(one.name for one in google_analytics.PROPERTY_FIELDS)
     return (
-        TableClassification(
-            entity=entity,
-            rules=(
-                *(
-                    ColumnRule(
-                        column=name,
-                        required_capability=Capability(value=f"read:{entity}.{name}"),
-                        classification=Classification.INTERNAL,
-                    )
-                    for name in (
-                        *kept,
-                        *google_analytics.FIGURE_FIELDS,
-                        *google_analytics.RANGE_FIGURE_FIELDS,
-                    )
-                ),
-                _scope_column(google_analytics.GOOGLE_ANALYTICS, entity),
+        _kept_and_read_live(
+            google_analytics.GOOGLE_ANALYTICS,
+            google_analytics.ENTITY_PROPERTY,
+            tuple(one.name for one in google_analytics.PROPERTY_FIELDS),
+            (*google_analytics.FIGURE_FIELDS, *google_analytics.RANGE_FIGURE_FIELDS),
+        ),
+    )
+
+
+def search_console_classifications() -> tuple[TableClassification, ...]:
+    """The connected site, as the property is: its index fields and its figures, each INTERNAL."""
+    return (
+        _kept_and_read_live(
+            search_console.SEARCH_CONSOLE,
+            search_console.ENTITY_SITE,
+            tuple(one.name for one in search_console.SITE_FIELDS),
+            tuple(
+                dict.fromkeys((*search_console.FIGURE_FIELDS, *search_console.RANGE_FIGURE_FIELDS))
             ),
         ),
     )
@@ -213,16 +313,23 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
     {
         xero.CONNECTOR_NAME: xero_classifications(),
         freshdesk.FRESHDESK: freshdesk_classifications(),
+        laravel.CONNECTOR_NAME: laravel_classifications(),
+        cloudflare.CLOUDFLARE: cloudflare_classifications(),
+        domains.CONNECTOR_NAME: domains_classifications(),
         google_analytics.GOOGLE_ANALYTICS: google_analytics_classifications(),
         hubspot.CONNECTOR_NAME: hubspot_classifications(),
+        search_console.SEARCH_CONSOLE: search_console_classifications(),
     }
 )
 
 #: The sources Ask answers through a passage reader rather than a classification: what they hold
 #: is read live as passages for the question's model step, as the Lark Wiki's pages are. Each such
-#: source adds its own name here with its reader. See `brain.ops.connectable.answers`.
-#: Slack's messages are read by `brain.ops.slack_messages_live.SlackPassages`.
-ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset({"lark_wiki", "slack_messages"})
+#: source adds its own name here with its reader. See `brain.ops.connectable.answers`. Google
+#: Drive's folder is read by `brain.ops.drive_passages` (M11.6.7), and Slack's messages by
+#: `brain.ops.slack_messages_live.SlackPassages` (M11.7.5).
+ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset(
+    {"google_drive", "lark_wiki", "slack_messages"}
+)
 
 #: The field a person names a record by, per source and entity: the question's slot.
 NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
@@ -230,6 +337,11 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE): "invoice_number",
         (xero.CONNECTOR_NAME, xero.ENTITY_CONTACT): "name",
         (freshdesk.FRESHDESK, freshdesk.TICKET): "subject",
+        (laravel.CONNECTOR_NAME, laravel.ENTITY_CLIENT): "name",
+        (laravel.CONNECTOR_NAME, laravel.ENTITY_USER): "display_name",
+        (cloudflare.CLOUDFLARE, cloudflare.ZONE): "name",
+        (cloudflare.CLOUDFLARE, cloudflare.DNS_RECORD): "name",
+        (domains.CONNECTOR_NAME, domains.DOMAIN): "name",
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): (
             google_analytics.LABEL_FIELD
         ),
@@ -237,6 +349,7 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
         # asks about a company or a deal by name and reaches its contacts through it.
         (hubspot.CONNECTOR_NAME, hubspot.ENTITY_CLIENT): "name",
         (hubspot.CONNECTOR_NAME, hubspot.ENTITY_DEAL): "deal_name",
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): search_console.LABEL_FIELD,
     }
 )
 
@@ -254,6 +367,29 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
             freshdesk.TICKET: (
                 "Look up Freshdesk tickets by subject: status, priority, due date and when it "
                 "last changed"
+            ),
+        },
+        laravel.CONNECTOR_NAME: {
+            laravel.ENTITY_CLIENT: (
+                "Look up clients in the company's own database by name: status, department and "
+                "account manager, and the contract value read live for a reader allowed it"
+            ),
+            laravel.ENTITY_USER: (
+                "Look up staff records in the company's own database by name: department, status "
+                "and when the record last changed"
+            ),
+        },
+        cloudflare.CLOUDFLARE: {
+            cloudflare.ZONE: "Look up Cloudflare zones by domain name: status and account",
+            cloudflare.DNS_RECORD: (
+                "Look up DNS records by name: type and zone, and the content read live from "
+                "Cloudflare for a reader allowed it"
+            ),
+        },
+        domains.CONNECTOR_NAME: {
+            domains.DOMAIN: (
+                "Look up the agency's domains by name: when each expires and its registration "
+                "status, and its registrar and whether its site answers, read live"
             ),
         },
         google_analytics.GOOGLE_ANALYTICS: {
@@ -276,6 +412,13 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
                 "read live from HubSpot for a reader allowed it"
             ),
         },
+        search_console.SEARCH_CONSOLE: {
+            search_console.ENTITY_SITE: (
+                "Look up the connected Search Console site by name: its clicks and impressions "
+                "for the last 7, 28 or 90 days, its top query and page and its sitemaps' errors, "
+                "read live from Google for a reader allowed them"
+            ),
+        },
     }
 )
 
@@ -290,6 +433,10 @@ LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
             *google_analytics.FIGURE_FIELDS,
             *google_analytics.RANGE_FIGURE_FIELDS,
         ),
+        search_console.ENTITY_SITE: (
+            *search_console.FIGURE_FIELDS,
+            *search_console.RANGE_FIGURE_FIELDS,
+        ),
     }
 )
 
@@ -299,6 +446,9 @@ UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = MappingProxyType(
     {
         (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): frozenset(
             google_analytics.RANGE_FIGURE_FIELDS
+        ),
+        (search_console.SEARCH_CONSOLE, search_console.ENTITY_SITE): frozenset(
+            set(search_console.RANGE_FIGURE_FIELDS) - set(search_console.FIGURE_FIELDS)
         ),
     }
 )

@@ -699,6 +699,11 @@ class EmailWire:
     def channel(self) -> Channel:
         return Channel.EMAIL
 
+    def person_address(self, identity: str) -> str:
+        """A person's own mailbox: the address alone, which `split_reply_address` reads as a
+        message that answers nothing (needs-rupash 118)."""
+        return identity
+
     @property
     def tenant_fields(self) -> tuple[str, ...]:
         return (ADDRESS, IMAP_HOST, IMAP_PORT, IMAP_USER, RECEIVER, DOMAINS)

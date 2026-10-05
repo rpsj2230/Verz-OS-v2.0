@@ -52,6 +52,7 @@ ISSUING: frozenset[str] = frozenset(
         "brain.channels.adapter:ChannelAdapter.send",
         "brain.channels.adapter:ChannelTransport.send",
         "brain.ops.automation_piece:ToolCaller.call",
+        "brain.ops.connector_write_run:SourceSender.send",
         "brain.ops.digest_delivery:DigestSender.send",
         "brain.ops.mail:MailTransport.send",
         "brain.ops.outbox_store:Sender.send",
@@ -80,6 +81,8 @@ DELIVERS_THROUGH_THE_DOOR: frozenset[str] = frozenset(
         "brain.gate.leash",
         # Not a delivery: a click or a keystroke on somebody else's page, inside a runner.
         "brain.browsing.runner",
+        # Not a delivery: a connector's approved change, sent from the execution the leash runs.
+        "brain.ops.connector_write_run",
     }
 )
 

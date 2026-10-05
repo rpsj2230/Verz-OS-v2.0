@@ -91,6 +91,18 @@ fi
 
 # Every connected source's slot: its scopes, and no key.
 slot_ok() { test "$(bao_ read -field=custom_metadata "connector_keys/metadata/$1" 2>/dev/null)" = "$2"; }
+if ! slot_ok cloudflare 'map[not_requested:DNS Write; any Edit permission; the Global API Key scopes:Zone Read; DNS Read; Analytics Read]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=Zone Read; DNS Read; Analytics Read' -custom-metadata='not_requested=DNS Write; any Edit permission; the Global API Key' cloudflare >/dev/null || fail "the vault would not define the credential slot for cloudflare"
+  fi
+  slot_ok cloudflare 'map[not_requested:DNS Write; any Edit permission; the Global API Key scopes:Zone Read; DNS Read; Analytics Read]' || missing "the credential slot for cloudflare"
+fi
+if ! slot_ok cloudflare_dns_changes 'map[not_requested:Zone Edit; any Account permission; the Global API Key scopes:DNS Edit]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=DNS Edit' -custom-metadata='not_requested=Zone Edit; any Account permission; the Global API Key' cloudflare_dns_changes >/dev/null || fail "the vault would not define the credential slot for cloudflare_dns_changes"
+  fi
+  slot_ok cloudflare_dns_changes 'map[not_requested:Zone Edit; any Account permission; the Global API Key scopes:DNS Edit]' || missing "the credential slot for cloudflare_dns_changes"
+fi
 if ! slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs and delete tickets scopes:an agent API key with read access]'; then
   if test "$CHECK_ONLY" = no; then
     bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=an agent API key with read access' -custom-metadata='not_requested=an admin key, which can change SLAs and delete tickets' freshdesk >/dev/null || fail "the vault would not define the credential slot for freshdesk"
@@ -133,6 +145,12 @@ if ! slot_ok lark_wiki 'map[not_requested:docs:document edit scopes scopes:wiki:
   fi
   slot_ok lark_wiki 'map[not_requested:docs:document edit scopes scopes:wiki:wiki:readonly]' || missing "the credential slot for lark_wiki"
 fi
+if ! slot_ok search_console 'map[not_requested:webmasters; domain-wide delegation scopes:webmasters.readonly; restricted permission on the one property]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=webmasters.readonly; restricted permission on the one property' -custom-metadata='not_requested=webmasters; domain-wide delegation' search_console >/dev/null || fail "the vault would not define the credential slot for search_console"
+  fi
+  slot_ok search_console 'map[not_requested:webmasters; domain-wide delegation scopes:webmasters.readonly; restricted permission on the one property]' || missing "the credential slot for search_console"
+fi
 if ! slot_ok slack_messages 'map[not_requested:chat:write or any other write scope; a user token scopes:channels:read; groups:read; channels:history; groups:history; users:read; users:read.email]'; then
   if test "$CHECK_ONLY" = no; then
     bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=channels:read; groups:read; channels:history; groups:history; users:read; users:read.email' -custom-metadata='not_requested=chat:write or any other write scope; a user token' slack_messages >/dev/null || fail "the vault would not define the credential slot for slack_messages"
@@ -159,4 +177,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 10 credential slots"
+say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 13 credential slots"

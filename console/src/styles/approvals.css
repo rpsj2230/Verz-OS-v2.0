@@ -67,6 +67,12 @@
   overflow-wrap: anywhere;
 }
 
+/* Why approving this card would send nothing, above the buttons, so it is read before deciding. */
+.approval-card__unsent {
+  margin: 0 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
 /* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
 .approval-card__link {
   display: inline-flex;

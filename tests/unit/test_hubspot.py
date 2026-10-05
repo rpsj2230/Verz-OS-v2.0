@@ -1480,10 +1480,10 @@ def test_a_deal_s_amount_is_read_by_the_one_record_call_that_holds_it() -> None:
 # ------------------------------------------------------------- the scopes the private app is given
 def _types_called() -> set[str]:
     """The object types every call this connector makes names in its path, read off the calls."""
-    from brain.connectors.hubspot import CONNECTOR
+    from brain.connectors.hubspot import CONNECTOR, HubSpotReading
 
     reading, live = CONNECTOR.reading, CONNECTOR.live
-    assert reading is not None and live is not None
+    assert isinstance(reading, HubSpotReading) and live is not None
     settings = {"portal_id": "12345678"}
     paths = {
         reading.operation(entity, settings=settings, resolver=Resolver()).operation.path
