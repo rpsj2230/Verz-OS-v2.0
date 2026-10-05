@@ -39,8 +39,13 @@ against what it takes, queued behind it or refused by it, and its keys are regis
 `h.removes`. Its budget is the install's document-job row with a limit of its own, for
 `CHECK_BUDGET`'s reason.
 
+**The first check also asks every global budget whether it binds (M22.1.1).** Each of the seven
+resources architecture section 25 names, and each source the console connects, is asked of the
+budgets the reload reads: a person's request is admitted inside its share and refused past it. See
+`EVERY_RESOURCE_IS_BUDGETED_AND_BINDS`.
+
 Task ids: M22.1.2, M22.4.1, M22.3.1, M22.3.2, M22.3.4
-Task ids: M22.1.3, M22.1.4, M22.1.5, M22.2.1, M22.2.3
+Task ids: M22.1.3, M22.1.4, M22.1.5, M22.2.1, M22.2.3, M22.1.1
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Sequence
 from datetime import datetime
 from functools import partial
 from typing import Any, Final, cast
@@ -71,6 +77,15 @@ A_CHECK_NEVER_CHANGES_WHAT_THE_PROCESS_HOLDS: Final = (
     "running it answer real requests at the check's figures until its next reload. So the check "
     "reads its uncommitted rows back through the reload's own reader and passes them to the "
     "functions that decide, and the process's held values are the same after the check as before."
+)
+
+#: Why every resource and every connectable source is asked of the install's own budgets.
+EVERY_RESOURCE_IS_BUDGETED_AND_BINDS: Final = (
+    "Architecture section 25 names seven things that get a global budget, and source calls are "
+    "budgeted per connector. A resource with no row is shed by admission rather than admitted, so "
+    "a missing row is a refusal on every request, and a row that does not bind is no budget. The "
+    "check asks each resource, and each source the console connects, of the budgets the reload "
+    "reads: a person is admitted inside the row's share and refused past it."
 )
 
 #: Said when the process running the check has no cache to ask.
@@ -122,12 +137,13 @@ async def _setting_entries(h: Harness, key: str) -> list[tuple[str, dict[str, An
 
 # ------------------------------------------------ 1. saved within bounds, audited, deciding
 @check(
-    leaves=("M22.1.2", "M22.4.1"),
+    leaves=("M22.1.2", "M22.4.1", "M22.1.1"),
     sentence=(
         "A person holding the Settings authority saves a request window and a document budget as "
-        "the Rate limits screen's route does: values outside the product's bounds are refused, "
-        "each save is in the audit ledger under their name, the reload every process runs reads "
-        "both back, and the queued upload's admission is decided by the saved budget."
+        "the Rate limits screen's route does: out-of-bounds values are refused, each save is "
+        "audited under their name, every process's reload reads both back, the queued upload is "
+        "admitted by the saved budget, and each of the seven global budgets and every connected "
+        "source's calls refuse past their row."
     ),
 )
 async def budgets_and_windows_are_rows_saved_within_bounds_and_audited(h: Harness) -> None:
@@ -240,8 +256,51 @@ async def budgets_and_windows_are_rows_saved_within_bounds_and_audited(h: Harnes
     ):
         raise CheckFailedError("the queued upload was admitted the same under both budgets")
 
+    # M22.1.1: every global budget, and every source the console connects, binds at its row.
+    _every_global_budget_binds(h, configured_budgets(saved))
+
     if dict(held()) != before:
         raise CheckFailedError("the check changed what the process running it holds")
+
+
+def _every_global_budget_binds(h: Harness, budgets: Sequence[Any]) -> None:
+    """Each of the seven resources has its global row, and a person's request is admitted up to
+    its share of that row and refused past it, as are a connected source's calls by its own row or
+    the connector-wide default. See `EVERY_RESOURCE_IS_BUDGETED_AND_BINDS`."""
+    from brain.core.lane import Lane
+    from brain.gate.context import TrafficClass
+    from brain.ops.admission import (
+        PER_CONNECTOR,
+        AdmissionRequest,
+        CapacityState,
+        Resource,
+        Verdict,
+        budget_for,
+        decide,
+    )
+    from brain.ops.connectable import CONNECTABLE
+
+    keys = [(one, "") for one in Resource if one not in PER_CONNECTOR] + [
+        (one, name) for one in sorted(PER_CONNECTOR) for name in sorted(CONNECTABLE)
+    ]
+    for resource, key in keys:
+        row = budget_for(budgets, (resource, key))
+        if row is None:
+            raise CheckFailedError("a resource the product names has no global budget")
+        asking = AdmissionRequest(
+            trace_id=h.trace_id,
+            lane=Lane.ANSWER,
+            traffic_class=TrafficClass.HUMAN_INTERACTIVE,
+            resource=resource,
+            key=key,
+        )
+        ceiling = row.ceiling_for(asking.workload_class)
+        under = CapacityState(used={asking.budget_key: ceiling - 1})
+        full = CapacityState(used={asking.budget_key: ceiling})
+        if decide(asking, budgets, under, now=h.now).verdict is not Verdict.ADMITTED:
+            raise CheckFailedError("a request inside its global budget was not admitted")
+        if decide(asking, budgets, full, now=h.now).verdict is not Verdict.SHED:
+            raise CheckFailedError("a request past its global budget was not refused")
 
 
 # ------------------------------------------------------ 2. the screen lists what refuses now
