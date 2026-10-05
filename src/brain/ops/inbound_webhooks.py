@@ -147,8 +147,9 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         verification=Verification.WRITTEN,
         check="brain.channels.telegram:verified_update",
         how=(
-            "Telegram repeats a secret token chosen when the webhook is set; the check compares it "
-            "in constant time and refuses a configured token shorter than 32 characters."
+            "Telegram repeats a secret the install made from the bot token and named when it "
+            "registered its address; the check compares it in constant time. It is received at "
+            "its channel's events address while its record is switched on."
         ),
     ),
     InboundChannel(
