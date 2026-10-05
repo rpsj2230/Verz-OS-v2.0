@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4
 """
 
 from __future__ import annotations
@@ -221,11 +221,13 @@ from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
+from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
+from brain.ops.learning_signal_store import StoredMarks
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -1374,15 +1376,34 @@ def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:15], 16)
 
 
+#: Why the answer key carries the epoch of every source its reader reaches.
+AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES: Final = (
+    "The cache is looked up before the question is answered, so which sources the answer will "
+    "read is not known yet; what is known is every source the reader reaches, and the answer can "
+    "read no other. So the key carries each of those sources' epochs, a source with none as zero. "
+    "A change "
+    "to any source the reader reaches makes the next lookup a miss, which is at worst a question "
+    "answered again when an unrelated source moved, and never an answer served after a source it "
+    "read moved."
+)
+
+
 def caching_of(
-    state: Any, policies: Mapping[str, FieldPolicy], sources: Sequence[str]
+    state: Any,
+    policies: Mapping[str, FieldPolicy],
+    sources: Sequence[str],
+    epochs: Mapping[str, int],
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
     `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
-    uncacheable rather than a cached answer stale.
+    uncacheable rather than a cached answer stale, and each carries its epoch from `epochs`
+    (M11.8.4): see `AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES`. `epochs` also carries
+    the uploaded tables' versions
+    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`), so a new upload
+    moves the key as a connector's change does.
     """
     store: AnswerStore | None = getattr(state, "answer_store", None)
     if store is None:
@@ -1390,10 +1411,28 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        # No source records an epoch yet, so the key holds none and the TTL bounds staleness.
-        source_epochs={},
+        source_epochs={**dict.fromkeys(sorted(set(sources)), 0), **epochs},
         sources=frozenset(sources),
     )
+
+
+async def source_epochs_of(state: Any) -> Mapping[str, int]:
+    """Every source's epoch, for the answer cache's key, or none where nothing is cached.
+
+    Read only on a process with an answer store, because the epochs have no other reader on this
+    path, and from the database the worker advances them in
+    (`brain.tables.projection.SourceEpochRow`). A process with a store and no database has no
+    source that changes, so it keys on none.
+    """
+    if getattr(state, "answer_store", None) is None:
+        return {}
+    epochs: SourceEpochs | None = getattr(state, "source_epochs", None)
+    if epochs is None:
+        sessions = getattr(state, "db_sessions", None)
+        if sessions is None:
+            return {}
+        epochs = StoredSourceEpochs(sessions)
+    return await epochs.epochs()
 
 
 def sensitive_referrals_of(request: Request) -> SensitiveReferrals | None:
@@ -1682,7 +1721,12 @@ async def answered_for(
     caching = (
         None
         if referral is not None or ask.kinds or follow_up is not None
-        else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
+        else caching_of(
+            request.app.state,
+            policies,
+            sources_at(registry, asking.reach, asking.now),
+            {**(await source_epochs_of(request.app.state)), **tables.epochs},
+        )
     )
 
     try:
@@ -1829,6 +1873,74 @@ async def answered_for(
     )
 
     return answered
+
+
+# ------------------------------------------------------------------- a mark (M16.6.4)
+#: What a person is told once their mark is counted. The same sentence either way.
+MARK_COUNTED: Final = (
+    "Thank you. Your mark is counted against this answer; on its own it changes nothing the "
+    "system answers, and a correction you give is what a person reviews."
+)
+
+#: Why a mark changes nothing by itself.
+A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF: Final = (
+    "A helpful or unhelpful mark is one bit from one person about one answer, and acting on it "
+    "would let one click reorder what everybody is told. So it is stored against the answer's "
+    "trace and counted, and no retrieval, memory, rule, knowledge item or agent setting reads "
+    "it; what changes behaviour is a correction a person reviews."
+)
+
+
+class MarkAsked(BaseModel):
+    """One mark on one answer: the trace it ran under and whether it helped. Nothing else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trace_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    helpful: bool
+
+
+class MarkedView(BaseModel):
+    """What a mark came to: counted, and the one sentence a person is told."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    counted: bool
+    told: str
+
+
+def marks_of(state: Any) -> StoredMarks | None:
+    """Where marks are written: `app.state.answer_marks`, or the database's, or None."""
+    found = getattr(state, "answer_marks", None)
+    if isinstance(found, StoredMarks):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredMarks(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+@router.post("/answer/mark", response_model=MarkedView, responses=COMMON_RESPONSES)
+async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> MarkedView:
+    """Mark one answer the caller was given helpful or unhelpful, with one action (M16.6.4).
+
+    Written against the trace and counted, and read by nothing that decides an answer, which is
+    `A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF`. An answer given to somebody else, one that
+    never ran and one past `brain.ops.learning_signal_store.MARKABLE_FOR` are the one 404, which
+    is `A_MARK_IS_ON_AN_ANSWER_THE_MARKER_WAS_GIVEN`.
+    """
+    marks = marks_of(request.app.state)
+    if marks is None:
+        raise Failed("no database on this process")
+    counted = await marks.mark(
+        principal_id=asked.caller.principal.id,
+        trace_id=body.trace_id,
+        helpful=body.helpful,
+        now=asked.now,
+    )
+    if not counted:
+        log.info("mark not answerable", principal=asked.caller.principal.id)
+        raise Absent("that answer cannot be marked by this caller")
+    log.info("answer marked", principal=asked.caller.principal.id, helpful=body.helpful)
+    return MarkedView(counted=True, told=MARK_COUNTED)
 
 
 async def remembered(

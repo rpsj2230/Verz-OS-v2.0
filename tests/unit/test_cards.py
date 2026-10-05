@@ -309,7 +309,7 @@ def test_a_card_that_expires_before_it_was_raised_is_refused() -> None:
 def test_the_card_budget_is_the_verified_lark_ceiling_and_not_a_hoped_for_one() -> None:
     """M10.2.4. 100 a minute, fixed, and the vendor says it cannot be raised.
 
-    Read from `ops.limits.SOURCE_CEILINGS` rather than restated here, so raising the entry
+    Read from `ops.limits.source_ceilings()` rather than restated here, so raising the entry
     raises this and a second number cannot drift away from the first. The split sums to the
     ceiling exactly: a split that overcommitted would be a budget that admits more calls
     than the vendor accepts, which presents as 429s rather than as a configuration error.

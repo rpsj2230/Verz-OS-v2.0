@@ -1,15 +1,16 @@
 """The install acceptance checks for Cloudflare: read live, and a DNS change held, allowed and sent.
 
-Two checks, because the leaf has two halves an install must show apart. The first connects a
-Cloudflare account made up for the run inside the check's transaction, through the store the
-Connectors screen's routes call; reads its zones and each zone's DNS records with the worker's own
-`brain.ops.connector_sync_run.attempt` from answers in Cloudflare's documented envelope; asks for a
-record's content through the answer lane, with everything the answer route hands it built by the
-route's own functions; and then follows a DNS change an agent prepares under an Autonomous leash
-through the gate, the approval queue and the decision route's own `take_decision` on an install
-that has not allowed DNS changes: the card says so, and approved, nothing is sent. The second does
-the same on an install that has given the grant's key, and the approved change is sent once with
-that key, read back with the read key, and not sent again when resumed a second time.
+Three checks. The first two are the halves of the Cloudflare leaf an install must show apart. The
+first connects a Cloudflare account made up for the run inside the check's transaction, through the
+store the Connectors screen's routes call; reads its zones and each zone's DNS records with the
+worker's own `brain.ops.connector_sync_run.attempt` from answers in Cloudflare's documented
+envelope; asks for a record's content through the answer lane, with everything the answer route
+hands it built by the route's own functions; and then follows a DNS change an agent prepares under
+an Autonomous leash through the gate, the approval queue and the decision route's own
+`take_decision` on an install that has not allowed DNS changes: the card says so, and approved,
+nothing is sent. The second does the same on an install that has given the grant's key, and the
+approved change is sent once with that key, read back with the read key, and not sent again when
+resumed a second time.
 
 **No socket is opened and no real token is held.** Every call is answered by the check's own
 `_Account`, which reads with `get`, takes a change with `send` and applies it to the record it
@@ -31,7 +32,14 @@ registered and an approved change sending nothing without the grant's key; the s
 change sent with that key and never the read key. A connector that wrote with the key it reads
 with, or wrote on an install that never gave the grant, fails one of them.
 
-Task ids: M11.7.3, M11.2.4
+**And the third is the install's proof that a connector's writes are declared and off until turned
+on (M11.8.5).** Every write grant a shipped connector declares names tools its own module declares
+with a side effect, a connection given its read key alone holds no key for the grant, and giving
+the grant's key through the Connectors route's own keeper is recorded on the ledger under the
+grant's slot by the person who gave it. The second check is the rest of that leaf: a write that is
+on runs only as an approved prepared action, at the requester's reach, read back before done.
+
+Task ids: M11.7.3, M11.2.4, M11.8.5
 """
 
 from __future__ import annotations
@@ -51,7 +59,9 @@ from brain.ops.acceptance_checks_sources import _connect_and_read, _connection, 
 from brain.ops.acceptance_run import Harness
 
 if TYPE_CHECKING:
+    from brain.connectors.declaration import WriteGrant
     from brain.core.entitlement import EntitlementSet
+    from brain.core.envelope import ToolDefinition
     from brain.core.field_policy import FieldPolicy
     from brain.gate.answer import Answered
     from brain.gate.leash import Leash, SuspendedAction
@@ -529,7 +539,7 @@ async def cloudflare_is_read_live_and_a_dns_change_waits_for_a_person(h: Harness
 
 # ------------------------------------------------ 2. allowed: sent once, read back as approved
 @check(
-    leaves=("M11.7.3", "M11.2.4"),
+    leaves=("M11.7.3", "M11.2.4", "M11.8.5"),
     sentence=(
         "On an install that has given Cloudflare's DNS change key, a separate grant from the read "
         "key, a change an agent prepares is approved by a person in its department, sent once with "
@@ -568,3 +578,83 @@ async def an_allowed_dns_change_is_sent_once_and_read_back(h: Harness) -> None:
     again = _send(h, source, leases, done, ledger)
     if again.outcome is not WriteOutcome.ALREADY_SENT or len(account.sent) != 1:
         raise CheckFailedError("an approved DNS change was sent twice")
+
+
+# ------------------------------------------- 3. every write is a declared tool, off until given
+def _write_tools(connector: str, grant: WriteGrant) -> tuple[ToolDefinition, ...]:
+    """The tools a write grant names, as its connector's module declares them."""
+    import importlib
+
+    from brain.core.envelope import ToolDefinition as Declared
+
+    module = importlib.import_module(f"brain.connectors.{connector}")
+    declared = {one.name: one for one in vars(module).values() if isinstance(one, Declared)}
+    return tuple(declared[name] for name in grant.tools if name in declared)
+
+
+@check(
+    leaves=("M11.8.5",),
+    sentence=(
+        "Every write a shipped connector can make is declared as a tool that changes something, "
+        "named by its own grant; a connection given only its read key holds no key for the grant, "
+        "so the write is off; and giving the grant its key through the Connectors route's own "
+        "keeper turns it on with a ledger entry under the grant's slot, by the person who gave "
+        "it, holding no part of the key."
+    ),
+)
+async def a_connector_write_is_a_declared_tool_off_until_its_key_is_given(h: Harness) -> None:
+    from sqlalchemy import text
+
+    from brain.audit.record import credential_subject_id
+    from brain.connector_routes import keep_credential
+    from brain.connectors import cloudflare
+    from brain.connectors.declaration import shipped
+    from brain.core.envelope import SideEffect
+    from brain.ops.acceptance_checks_connector_framework import _Vault
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.credential_write_store import StoredCredentialWrites
+    from brain.ops.credentials import Credentials, connector_write_slot
+
+    grants = [(name, grant) for name, kind in shipped().items() for grant in kind.writes]
+    # The anchor: Cloudflare's DNS changes, so a discovery that found no write cannot pass.
+    if (cloudflare.CLOUDFLARE, cloudflare.DNS_CHANGES) not in grants:
+        raise CheckFailedError("a connector's write grant was not found among the shipped ones")
+    for name, grant in grants:
+        tools = _write_tools(name, grant)
+        if len(tools) != len(grant.tools) or any(
+            one.side_effect is SideEffect.NONE or not one.name.startswith(f"{name}.")
+            for one in tools
+        ):
+            raise CheckFailedError("a connector's write is not declared as a tool that changes")
+
+    await _connected(h, f"v={h.word().lower()}")
+    grant = cloudflare.DNS_CHANGES
+    slot = connector_write_slot(cloudflare.CLOUDFLARE, grant.name)
+    vault = _Vault()
+    credentials = Credentials(vault, writes=StoredCredentialWrites(h.sessions))
+    if credentials.held(slot).held:
+        raise CheckFailedError("a connection given its read key alone holds a key for a write")
+
+    key = secrets.token_hex(24)
+    subject = f"credential:{credential_subject_id(slot.path)}"
+    ledger = text(
+        "SELECT actor_id, details::text FROM obs.audit_entry"
+        " WHERE action = 'credential' AND subject = :subject"
+    ).bindparams(subject=subject)
+    before = len((await h.execute(ledger)).all())
+    await keep_credential(
+        credentials,
+        slot,
+        grant.credential_shape,
+        key,
+        actor=h.actor,
+        trace_id=h.trace_id,
+        ent_hash=SET_UP_REACH,
+    )
+    if not credentials.held(slot).held:
+        raise CheckFailedError("a write's key given through the Connectors route was not kept")
+    entries = (await h.execute(ledger)).all()
+    if len(entries) != before + 1 or entries[-1][0] != h.actor:
+        raise CheckFailedError("turning a connector's write on left no ledger entry by its giver")
+    if any(key in str(details) for _, details in entries) or await _search(h, key):
+        raise CheckFailedError("a write's key was found in the ledger or a table")

@@ -209,6 +209,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)":
     "A test message is one product sentence to one destination, sent once per channel record and " +
     "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
+  "src/pages/MyWorkspace.tsx EDIT_API_PATH":
+    "Editing a memory about yourself writes the new words beside the old and marks the old as " +
+    "replaced; nothing is deleted, the old words stay in its history, and Forget on the new one " +
+    "puts the old one back, which tests/unit/test_memory_store.py follows through PostgreSQL.",
+  "src/pages/Ask.tsx MARK_API_PATH":
+    "A mark is one bit against an answer the person was given, counted and read by nothing that " +
+    "decides an answer, and a second mark replaces the first in the count, which " +
+    "tests/unit/test_learning_signal.py holds; it ends and replaces nothing.",
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
     "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
     "until they send it from their own chat. It ends only an older code of theirs for that channel " +

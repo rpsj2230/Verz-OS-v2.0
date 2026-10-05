@@ -117,6 +117,7 @@ from brain.core.envelope import IdentityMode, TypedResult
 from brain.core.projection import MAX_LABEL_CHARS
 from brain.core.scope import Scope
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
+from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -943,7 +944,24 @@ CONSOLE: Final = ConsoleForm(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="search_console",
+    per_minute=200,
+    raisable=False,
+    note=(
+        "Google limits the Search Console API per user and per site rather than by plan: "
+        "search analytics to 1,200 queries a minute for a site, and the site list and "
+        "sitemaps to 200 a minute and 20 a second for a user "
+        "(https://developers.google.com/webmaster-tools/limits). Recorded at 200 a minute, the "
+        "lowest that governs a report's calls. There is no plan to buy that raises them."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=SEARCH_CONSOLE,
     label="Search Console",
     guide=GUIDE,

@@ -77,7 +77,6 @@ from brain.ops.limits import (
     LIMITS_ARE_CHECKED_BEFORE_CAPACITY,
     MINUTE_SECONDS,
     REFUSED_REQUESTS_DO_NOT_EXTEND_THE_WINDOW,
-    SOURCE_CEILINGS,
     THE_HINT_IS_MEASURED_NOT_GUESSED,
     DenialAssessment,
     LimiterState,
@@ -90,6 +89,7 @@ from brain.ops.limits import (
     check,
     principal_share_of,
     search_completeness,
+    source_ceilings,
     source_limits,
 )
 
@@ -280,7 +280,7 @@ def test_a_connector_stays_usable_by_several_people_and_not_merely_by_one_more()
     Three rather than a proportion, because it must hold for the smallest verified ceiling
     too, and a proportion would silently become "one" there and stop testing anything.
     """
-    for source in SOURCE_CEILINGS:
+    for source in source_ceilings():
         hog = source_limits(source.name, principal_id="p_hog")
         share = next(limit for limit in hog if limit.scope is LimitScope.PRINCIPAL_CONNECTOR)
         connector = next(limit for limit in hog if limit.scope is LimitScope.CONNECTOR)
@@ -326,7 +326,7 @@ def test_one_principal_cannot_exhaust_a_connector_for_everybody() -> None:
     below the connector's own ceiling. Raise the share to the whole ceiling and one backfill
     takes the connector for the rest of the minute while nothing looks misconfigured.
     """
-    for source in SOURCE_CEILINGS:
+    for source in source_ceilings():
         hog = source_limits(source.name, principal_id="p_hog")
         share = next(limit for limit in hog if limit.scope is LimitScope.PRINCIPAL_CONNECTOR)
         state = LimiterState()
@@ -347,7 +347,7 @@ def test_the_connector_ceiling_binds_even_when_every_caller_is_within_their_shar
     """The second half. Enough individually reasonable callers add up to a ceiling nobody
     individually crossed, and only the connector-wide window sees it. Remove that window and
     the first sign is a 429 from the vendor."""
-    for source in SOURCE_CEILINGS:
+    for source in source_ceilings():
         connector = next(
             limit
             for limit in source_limits(source.name, principal_id="p0")
@@ -499,7 +499,7 @@ def test_the_verified_source_limits_are_not_rounded() -> None:
     """Constraints, not guidance. Xero's 5,000 a day is the ceiling a backfill reaches first.
     Lark Base's 100 a minute is stated by the vendor as unraisable, so sizing against a
     higher number is sizing against a number that does not exist."""
-    by_name = {c.name: c for c in SOURCE_CEILINGS}
+    by_name = {c.name: c for c in source_ceilings()}
     assert by_name["xero"].per_day == 5_000
     assert by_name["xero"].per_minute == 60
     assert by_name["lark_base"].per_minute == 100

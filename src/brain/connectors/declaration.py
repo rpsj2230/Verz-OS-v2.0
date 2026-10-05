@@ -106,7 +106,7 @@ Scope: domain logic. Nothing here opens a connection or reads a table; `shipped`
 of one package, and that is all it does.
 
 Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4, M11.6.1
-Task ids: M11.7.3, M11.7.1
+Task ids: M11.7.3, M11.7.1, M11.4.6, M11.9.15
 """
 
 from __future__ import annotations
@@ -125,6 +125,7 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.ask import AskRows
+from brain.connectors.change_signal import ChangeSubscription
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
@@ -136,6 +137,7 @@ from brain.connectors.write_verification import ReadBack, builds_a_manifest
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.ops.connect_steps import GuideStep
 from brain.ops.leases import SealedSecret
+from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -681,6 +683,53 @@ class ScopedReading(Protocol):
         ...
 
 
+# ------------------------------------------------------------- reading only what changed
+@runtime_checkable
+class ChangedSince(Protocol):
+    """A reading whose source can be asked for only what changed since an instant (M11.4.6).
+
+    Its own protocol beside `SourceReading` rather than two more methods on it, because most
+    sources this release reads cannot be asked that through the arguments of a page: Xero's is a
+    header, `If-Modified-Since`, and a reading passes arguments and never headers per call. A
+    reading that cannot is read to the end every time, which is a read of everything and the one
+    kind that may retire what it did not return
+    (`brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`).
+
+    The subscription travels with it because a cursor cannot see a deletion
+    (`brain.connectors.change_signal.A_CURSOR_CANNOT_SEE_A_DELETION`): a source asked only for
+    changes is still read whole once its subscription's reconciliation falls due, and that read
+    is where a removal is noticed.
+    """
+
+    def changed_since(self, entity: str, since: datetime) -> Mapping[str, str]:
+        """The arguments of the first page of what changed in one entity kind since `since`."""
+        ...
+
+    def subscription(self, entity: str) -> ChangeSubscription:
+        """How this source tells us one entity kind moved, with the reconciliation it owes."""
+        ...
+
+
+@runtime_checkable
+class BoundedWalk(Protocol):
+    """A reading whose walk may leave part of its source out at a bound of its own (M11.9.15).
+
+    Google Drive queues no more than its folder bound in one pass, so a tree with more folders
+    than that is walked to an end that is not the tree's. The worker asks a reading that is one of
+    these after each page, and a pass that left something out is reported cut short and retires
+    nothing (`brain.ops.connector_sync.
+    WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`): a file in a folder the walk
+    did not reach was not asked for, and is not therefore gone.
+    Optional, and asked with `isinstance`, so a reading whose walk has no bound of its own owes
+    nothing here.
+    """
+
+    def left_out(self, entity: str, asked: Mapping[str, str], body: Any) -> bool:
+        """Whether the walk, up to and including the page `asked` answered with `body`, has left
+        part of the source out."""
+        ...
+
+
 # ------------------------------------------------------------------ reading one record live
 #: Why a live lookup may name an operation of its own.
 A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
@@ -997,10 +1046,19 @@ class ConnectorDeclaration:
     ask: AskRows | None = None
     #: What its key must be allowed to do and never be given, which its vault slot is defined with.
     scopes: KeyScopes | None = None
+    #: Its verified rate ceiling, or None when nobody has measured one. Named for this source, so
+    #: `brain.ops.limits.connector_ceiling` finds it. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+    ceiling: ConnectorLimit | None = None
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
             msg = f"connector {self.name!r} is not a name"
+            raise DeclarationError(msg)
+        if self.ceiling is not None and self.ceiling.name != self.name:
+            msg = (
+                f"connector {self.name!r} declares the ceiling of {self.ceiling.name!r}; a source "
+                "is admitted by its own vendor's figure, found under its own name"
+            )
             raise DeclarationError(msg)
         if not self.label.strip():
             msg = f"connector {self.name!r} has no label, and the screen shows the label"
