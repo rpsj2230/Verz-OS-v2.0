@@ -181,3 +181,41 @@ def test_running_it_again_writes_no_second_copy(migrated: tuple[str, str]) -> No
     assert _grants(url) == grants
     assert sql(url, "SELECT name, capabilities FROM gate.capability_pack ORDER BY name") == packs
     assert sql(url, "SELECT id, capabilities FROM agent.agent ORDER BY id") == agents
+
+
+def test_the_downgrade_takes_back_exactly_what_the_upgrade_gave(migrated: tuple[str, str]) -> None:
+    """Stepped back to `0186`, the grants, packs and agents are what they were before `0187`: the
+    copied wiki reads are revoked, and a wiki read 0187 did not write stays. Delete this and the
+    downgrade can go back to undoing nothing, or undo too much and revoke a read somebody was
+    given by hand."""
+    from tests.fixtures.scratch_postgres import migrate, sql
+
+    database, url = migrated
+    scope = json.loads(WEB)
+    sql(
+        url,
+        "INSERT INTO gate.capability_grant (principal_id, capability, scope, granted_by, reason)"
+        " VALUES ('u_two', 'read:wiki_page', %s::jsonb, 'u_admin', 'given by hand')",
+        WEB,
+    )
+    migrate(database, "downgrade", "0186")
+    try:
+        assert _grants(url) == [
+            ("u_one", "read:knowledge", scope, "needed"),
+            ("u_two", "read:knowledge.title", scope, "needed"),
+            ("u_two", "read:wiki_page", scope, "given by hand"),
+        ]
+        assert sql(url, "SELECT name, capabilities FROM gate.capability_pack ORDER BY name") == [
+            ("clients", ["read:client.name"]),
+            ("readers", ["read:knowledge", "read:knowledge.title"]),
+        ]
+        assert sql(url, "SELECT id, capabilities FROM agent.agent ORDER BY id") == [
+            ("library_helper", ["read:knowledge"]),
+            ("wiki_helper", ["read:knowledge"]),
+        ]
+    finally:
+        sql(
+            url,
+            "UPDATE gate.capability_grant SET deleted_at = now() WHERE reason = 'given by hand'",
+        )
+        migrate(database, "upgrade", "0187")

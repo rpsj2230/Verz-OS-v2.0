@@ -20,8 +20,15 @@ it like every other source's entity. See `brain.agents.binding.A_WIKI_PAGE_HAS_A
   `read:wiki_page`, because that agent was bound to the wiki and read it before. An agent naming
   no Lark Wiki gains nothing: it reaches no wiki page from this release, which is the binding.
 
-A copy that already exists is not written again. The downgrade removes nothing: on the release
-before this one `read:wiki_page` is a capability nothing checks, so it reaches nothing there.
+A copy that already exists is not written again.
+
+**The downgrade takes the copies back, by the rule that made them.** A live `read:wiki_page` grant
+with a live `read:knowledge` twin (same principal or team, same scope) is revoked, which here as
+everywhere is setting `deleted_at`; the wiki read leaves every pack that also confers the library
+read, and every agent that holds the library read and names Lark Wiki. A wiki read with no library
+twin is left alone: 0187 did not write it, and on the release before this one it reaches nothing.
+A twin an administrator made by hand after the upgrade is indistinguishable from a copy and goes
+with them, which costs nothing on that release for the same reason.
 
 Task ids: M13.7.8, M13.8.1
 
@@ -85,5 +92,42 @@ def upgrade() -> None:
     op.execute(COPY_INTO_AGENTS)
 
 
+#: The inverse of `COPY_GRANTS`: the wiki reads that have the library read they were copied from.
+REVOKE_COPIED_GRANTS = f"""
+UPDATE gate.capability_grant AS w
+   SET deleted_at = now()
+ WHERE w.deleted_at IS NULL
+   AND w.capability = '{WIKI_READ}'
+   AND EXISTS (
+        SELECT 1 FROM gate.capability_grant AS g
+         WHERE g.deleted_at IS NULL
+           AND g.principal_id IS NOT DISTINCT FROM w.principal_id
+           AND g.team_path IS NOT DISTINCT FROM w.team_path
+           AND g.capability = '{LIBRARY_READ}'
+           AND g.scope = w.scope
+       )
+"""
+
+#: The inverse of `COPY_INTO_PACKS`.
+REMOVE_FROM_PACKS = f"""
+UPDATE gate.capability_pack
+   SET capabilities = array_remove(capabilities, '{WIKI_READ}'::varchar(200)), updated_at = now()
+ WHERE deleted_at IS NULL
+   AND '{LIBRARY_READ}' = ANY (capabilities)
+   AND '{WIKI_READ}' = ANY (capabilities)
+"""
+
+#: The inverse of `COPY_INTO_AGENTS`.
+REMOVE_FROM_AGENTS = f"""
+UPDATE agent.agent
+   SET capabilities = array_remove(capabilities, '{WIKI_READ}'::varchar(200))
+ WHERE '{LIBRARY_READ}' = ANY (capabilities)
+   AND '{WIKI_CONNECTOR}' = ANY (connectors)
+   AND '{WIKI_READ}' = ANY (capabilities)
+"""
+
+
 def downgrade() -> None:
-    """Nothing to undo: the copies reach nothing on the release before this one."""
+    op.execute(REVOKE_COPIED_GRANTS)
+    op.execute(REMOVE_FROM_PACKS)
+    op.execute(REMOVE_FROM_AGENTS)
