@@ -22,9 +22,16 @@ enables, disables, archives and transfers; `brain.agents.creation.AGENT_INSTALL_
 and duplicates. Both are `admin:` verbs, which `brain.gate.admission` admits only at strong
 assurance, so the second factor is required without a line here asking for it, and both are in
 `brain.identity.first_administrator.ADMINISTRATION`, so the first administrator's reconciliation
-grants them at the next start. Publication is not served: it takes a second person, which is
-`brain.agents.lifecycle.A_GATE_ONE_PERSON_PASSES_ALONE_IS_NOT_A_GATE`, and its route is the
-approval surface's.
+grants them at the next start.
+
+**Publishing an agent to the whole company is served since 2026-10-06 (M33.1.2.1), and it is a
+second person's act by construction.** `brain.agents.lifecycle.publish` refuses the agent's own
+steward and anybody without `AGENT_PUBLICATION_CAPABILITY`, which is
+`A_GATE_ONE_PERSON_PASSES_ALONE_IS_NOT_A_GATE`: the steward asks, and somebody else holding the
+visibility authority publishes. The capability is asked with no scope, as
+`brain.console.global_surfaces.may_publish` argues, because an audience is not a row. The write is a
+compare-and-set on the audience columns, and `0137`'s trigger records it as `published`. Retiring
+a published agent is the archive route, unchanged.
 
 **A stale page cannot act, and each move names what it was shown.** Enable, disable and archive
 send the state the page drew; transfer sends the steward it drew; a duplicate sends the install's
@@ -107,6 +114,7 @@ from brain.agents.lifecycle import (
     archive,
     disable,
     enable,
+    publish,
     transfer_ownership,
 )
 from brain.agents.model import DISPLAY_NAME_CHARS, AgentAudience, AgentError, AgentRecord
@@ -122,6 +130,7 @@ from brain.automation_schedule_routes import NotChangedView
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.manifest import ManifestError, manifest_digest
 from brain.connectors.registry import ConnectorRegistry, ConnectorState, RegisteredConnector
+from brain.console.global_surfaces import may_publish, publishable
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -177,6 +186,7 @@ LIFECYCLE_PATH: Final = "/agents/{agent_id}/lifecycle"
 ENABLE_PATH: Final = "/agents/{agent_id}/enable"
 DISABLE_PATH: Final = "/agents/{agent_id}/disable"
 ARCHIVE_PATH: Final = "/agents/{agent_id}/archive"
+PUBLICATION_PATH: Final = "/agents/{agent_id}/publish"
 TRANSFER_PATH: Final = "/agents/{agent_id}/transfer"
 DUPLICATE_PATH: Final = "/agents/{agent_id}/duplicate"
 LEARNING_PATH: Final = "/agents/{agent_id}/learning"
@@ -265,6 +275,11 @@ class LifecycleView(BaseModel):
     may_duplicate: bool
     #: Why a reader holding the install authority over this row may still not duplicate it.
     duplicate_unavailable: str | None = None
+    #: Who may find the agent: personal, department or company. What a publication names.
+    level: str = ""
+    #: Holds the visibility authority, is not the steward, and the agent is neither archived nor
+    #: already company-wide. Presentation only: `publish_agent` asks every question again.
+    may_publish: bool = False
 
 
 class LeashRungView(BaseModel):
@@ -309,6 +324,15 @@ class LifecycleStateAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     expected_state: Literal["enabled", "disabled", "archived"]
+
+
+class PublicationAsked(BaseModel):
+    """The audience the page drew, so a stale page cannot publish. See
+    `WHAT_YOU_SAW_IS_NOT_WHAT_IS_THERE`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    expected_level: Literal["personal", "department", "company"]
 
 
 class LearningSwitchAsked(BaseModel):
@@ -380,6 +404,16 @@ class AgentLifecycles(Protocol):
     async def live_principal(self, principal_id: str) -> Principal | None: ...
 
     async def change(
+        self,
+        before: AgentRecord,
+        after: AgentRecord,
+        *,
+        actor_id: str,
+        ent_hash: str,
+        trace_id: str,
+    ) -> bool: ...
+
+    async def widen(
         self,
         before: AgentRecord,
         after: AgentRecord,
@@ -482,6 +516,44 @@ class StoredAgentLifecycles:
                         disabled_at=after.disabled_at,
                         archived_at=after.archived_at,
                         owner_id=after.audience.owner_id,
+                    )
+                    .returning(AgentRow.id)
+                )
+            ).scalar_one_or_none()
+        return written is not None
+
+    async def widen(
+        self,
+        before: AgentRecord,
+        after: AgentRecord,
+        *,
+        actor_id: str,
+        ent_hash: str,
+        trace_id: str,
+    ) -> bool:
+        """Write the audience if it, and the agent's archive, still hold what `before` read.
+
+        `change`'s compare-and-set, over the two audience columns a publication moves: a row
+        whose audience moved, or that was archived, between the read and this statement matches
+        nothing, and the route answers that it moved.
+        """
+        async with self._sessions() as session, session.begin():
+            for statement in attributed_to(actor_id=actor_id, ent_hash=ent_hash, trace_id=trace_id):
+                await session.execute(statement)
+            written = (
+                await session.execute(
+                    update(AgentRow)
+                    .where(
+                        AgentRow.id == before.agent_id,
+                        AgentRow.visibility == before.audience.level.value,
+                        AgentRow.department.is_not_distinct_from(
+                            before.audience.department or None
+                        ),
+                        AgentRow.archived_at.is_(None),
+                    )
+                    .values(
+                        visibility=after.audience.level.value,
+                        department=after.audience.department or None,
                     )
                     .returning(AgentRow.id)
                 )
@@ -644,6 +716,8 @@ def lifecycle_view(found: FoundAgent, asked: Asking, key: str | None) -> Lifecyc
         may_change=holds(AGENT_LIFECYCLE_CAPABILITY, record, asked),
         may_duplicate=installs and unavailable is None,
         duplicate_unavailable=unavailable,
+        level=record.audience.level.value,
+        may_publish=bool(publishable((record,), asked.reach, asked.now)),
     )
 
 
@@ -753,6 +827,43 @@ async def archive_agent(
 ) -> JSONResponse:
     """Retire an agent for good. Nothing undoes it: `brain.agents.lifecycle.ARCHIVE_IS_TERMINAL`."""
     return await _move(request, agent_id, body, asked, "archive")
+
+
+@router.post(PUBLICATION_PATH, response_model=LifecycleView, responses=_TOLD)
+async def publish_agent(
+    request: Request, agent_id: str, body: PublicationAsked, asked: Asked
+) -> JSONResponse:
+    """Show an agent to the whole company, as somebody other than its steward (M33.1.2.1).
+
+    The capability from the reach alone, then the agent's audience, as every move here asks; a
+    caller without either is the one 404. `lifecycle.publish` refuses the steward and an archived
+    agent in its own words, and publishing a company agent again changes nothing.
+    """
+    if not may_publish(asked.reach, asked.now):
+        raise _no_agent_here(asked, "capability")
+    store = lifecycles_of(request)
+    found = await store.agent(agent_id)
+    if found is None or not visible(found.record, asked):
+        raise _no_agent_here(asked, "agent")
+    before = found.record
+    if before.audience.level.value != body.expected_level:
+        return _not_changed(MOVED, IT_MOVED)
+    try:
+        after = publish(before, publisher=asked.reach, now=asked.now)
+    except AgentError as refused:
+        return _not_changed(REFUSED, str(refused))
+    if after != before and not await store.widen(
+        before,
+        after,
+        actor_id=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    ):
+        return _not_changed(MOVED, IT_MOVED)
+    log.info("agent published", agent=agent_id, principal=asked.caller.principal.id)
+    moved = FoundAgent(record=after, install=found.install, effective_hash=found.effective_hash)
+    view = lifecycle_view(moved, asked, template_key_of(request))
+    return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
 
 
 @router.post(TRANSFER_PATH, response_model=LifecycleView, responses=_TOLD)

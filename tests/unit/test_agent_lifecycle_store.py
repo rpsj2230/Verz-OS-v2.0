@@ -515,3 +515,51 @@ def test_an_operators_statement_bringing_an_archived_agent_back_is_recorded_as_i
         ),
     ]
     assert AuditChain(chain).verify() is None
+
+
+def test_a_publication_pressed_reaches_its_row_and_one_published_entry_naming_the_person() -> None:
+    """A department agent installed by `u_admin`, published over HTTP by `u_prefix`, who holds the
+    visibility authority and is not its steward (M33.1.2.1). The row is company-wide with no
+    department, and `0137`'s trigger writes one `published` entry naming `u_prefix`; a second
+    press changes nothing and writes nothing. Delete this and the publication route can stop
+    reaching the table, or the ledger, while the route tests over memory stay green. **Skips
+    without a server.**"""
+    from brain.agent_lifecycle_routes import PUBLICATION_PATH
+
+    with through_0137("brain_agent_lifecycle_publication") as url:
+        digest = a_published_version(url)
+
+        async def install_then_publish(client: httpx.AsyncClient) -> tuple[str, int, int]:
+            made = await post(
+                client,
+                INSTALL_PATH.format(template_id=TEMPLATE_ID, version=VERSION),
+                {"expected_digest": digest, "for_department": True},
+            )
+            agent_id = str(made.json()["agent"]["agent_id"])
+            first = await client.post(
+                f"{API_PREFIX}{PUBLICATION_PATH.format(agent_id=agent_id)}",
+                json={"expected_level": "department"},
+                headers=headers("u_prefix"),
+            )
+            again = await client.post(
+                f"{API_PREFIX}{PUBLICATION_PATH.format(agent_id=agent_id)}",
+                json={"expected_level": "company"},
+                headers=headers("u_prefix"),
+            )
+            return agent_id, first.status_code, again.status_code
+
+        agent_id, first, again = pressed(url, install_then_publish)
+        [(visibility, department)] = sql(
+            url, "SELECT visibility, department FROM agent.agent WHERE id = %s", agent_id
+        )
+        published = [
+            one
+            for one in agent_entries(url)
+            if one.subject == f"agent:{agent_id}" and one.actor_id == "u_prefix"
+        ]
+
+    assert (first, again) == (200, 200)
+    assert (visibility, department) == (PUBLICATION_LEVEL.value, None)
+    assert [dict(one.details) for one in published] == [
+        dict(recorder().agent(agent_id=agent_id, change=AgentChange.PUBLISHED).details)
+    ]
