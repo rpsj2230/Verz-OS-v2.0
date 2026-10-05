@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T23:13:00.310959+00:00",
-  "commit": "45d99015",
-  "commit_subject": "A connected source is read only for what changed, a read cut short carries on, a changed read moves the answer cache's key, and a deleted record is retired and comes back as a new row (#251)",
+  "generated_at": "2026-10-05T23:21:18.106106+00:00",
+  "commit": "a3474bb9",
+  "commit_subject": "A fresh install's Keycloak starts: the realm one-shot can write into its new volume (#400)",
   "total": 1592,
   "done": 603,
   "percent": 37.9,
