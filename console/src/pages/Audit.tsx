@@ -1,9 +1,10 @@
 /**
  * The Audit log's pages, at the names the route file and the tests import. The pages themselves are
  * in `audit/`, built on the shared page kit: `AuditPage.tsx` for the ledger, `AuditSubjectPage.tsx`
- * for one subject and `VerifyPage.tsx` for the check of the chain.
+ * for one subject, `VerifyPage.tsx` for the check of the chain and `TracePage.tsx` for one run's
+ * trace.
  *
- * Task ids: M27.7.13, M27.16.1
+ * Task ids: M27.7.13, M27.16.1, M32.5.2.3
  */
 
 import { useParams } from "react-router-dom";
