@@ -17,6 +17,7 @@ import asyncio
 import json
 import re
 import sys
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -351,3 +352,30 @@ def test_the_trace_check_fails_when_a_trace_is_stored_unmasked(
         assert run_checks(url, (check,)) == {
             check.name: (FAILED, "a run's trace graph was not stored under its trace")
         }
+
+
+def test_the_scrub_is_timed_on_a_clock_that_does_not_count_waiting() -> None:
+    """`A_COST_BUDGET_IS_TIMED_ON_THE_THREAD_S_OWN_CLOCK`: the check's clock advances with the
+    thread's own processor time and stands still while the thread waits, which is the whole
+    difference between a scrubber's cost and a busy host. Asserted on the clock's behaviour rather
+    than its name: a quarter of a second asleep moves it by less than a twentieth, where a wall
+    clock moves by the full quarter. Delete this and the check can go back to the wall, and the
+    install's deploy runs fail it again whenever the host is busy."""
+    clock = deployment.SCRUB_CLOCK
+    before = clock()
+    time.sleep(0.25)
+    assert clock() - before < 0.05
+
+
+def test_the_scrub_s_log_line_carries_the_wall_time_beside_the_processor_rate(
+    monkeypatch: pytest.MonkeyPatch, in_a_worker: dict[str, str]
+) -> None:
+    """The waiting the processor clock leaves out is still recorded: the line names the clock and
+    the wall time of the whole run. Delete this and the evidence that a slow run was a busy host,
+    and not a slow scrubber, could be dropped from the only place an operator reads it."""
+    monkeypatch.setattr(deployment, "SCRUB_CLOCK", ticking(1.0))
+    with capture_logs() as logged:
+        assert ran(SCRUB) == (PASSED, "")
+    [line] = [one for one in logged if one["event"] == "acceptance.scrub_measured"]
+    assert line["clock"] == "thread_time"
+    assert line["wall_ms_all_samples"] > 0
