@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
 CHECK_ORDER: Final = 360
 
-A, _ = RESERVED_DEPARTMENTS
+A, B = RESERVED_DEPARTMENTS
 
 #: What the check says where the install has Slack connected already.
 SLACK_IS_CONNECTED_HERE_ALREADY: Final = (
@@ -146,11 +146,11 @@ class _RecordedSlack:
 @check(
     leaves=("M11.7.5",),
     sentence=(
-        "A Slack workspace made up for the check is connected and read by the worker into an "
-        "index of channel names and email digests, and asked on Ask: a person is read the "
-        "channels Slack says they are in, a private channel they are not in is never read however "
-        "well it matches, a person with no Slack account or no grant is told what an absent "
-        "subject is told, and no message or address is in a table."
+        "A made-up Slack workspace is connected and indexed as channel names and email digests, "
+        "and asked on Ask: a person is read the channels Slack says they are in, a private "
+        "channel they are not in is never read, a person with no Slack account, no grant or a "
+        "grant over another department is told what an absent subject is told, and no message "
+        "or address is in a table."
     ),
 )
 async def a_slack_message_is_read_only_for_a_member_of_its_channel(h: Harness) -> None:
@@ -170,7 +170,10 @@ async def a_slack_message_is_read_only_for_a_member_of_its_channel(h: Harness) -
     word = h.word()
     public, private = _slack_id("C"), _slack_id("G")
     inside_id, outside_id, granted_only_id = _slack_id("U"), _slack_id("U"), _slack_id("U")
-    address = {one: f"{h.word().lower()}@acceptance.invalid" for one in ("in", "out", "no", "ng")}
+    elsewhere_id = _slack_id("U")
+    address = {
+        one: f"{h.word().lower()}@acceptance.invalid" for one in ("in", "out", "no", "ng", "else")
+    }
     open_text, closed_text = fresh_canary("ACCEPTANCE"), fresh_canary("ACCEPTANCE")
     workspace = _RecordedSlack(
         channels={public: ("general", False), private: ("leadership", True)},
@@ -178,6 +181,7 @@ async def a_slack_message_is_read_only_for_a_member_of_its_channel(h: Harness) -
             inside_id: (address["in"], (public, private)),
             outside_id: (address["out"], (public,)),
             granted_only_id: (address["ng"], (public, private)),
+            elsewhere_id: (address["else"], (public, private)),
         },
         histories={
             public: (("1600000000.000100", f"{open_text} {word}"),),
@@ -194,20 +198,24 @@ async def a_slack_message_is_read_only_for_a_member_of_its_channel(h: Harness) -
     if await _search(h, address["in"]):
         raise CheckFailedError("a Slack member's address was kept in a table")
 
-    inside, outside, stranger, ungranted = (
+    inside, outside, stranger, ungranted, elsewhere = (
         h.principal(A, "inside"),
         h.principal(A, "outside"),
         h.principal(A, "stranger"),
         h.principal(A, "ungranted"),
+        h.principal(B, "elsewhere"),
     )
     granted = ((READ_MESSAGE, Scope.department(A)),)
-    for person, email, grants in (
-        (inside, address["in"], granted),
-        (outside, address["out"], granted),
-        (stranger, address["no"], granted),
-        (ungranted, address["ng"], ()),
+    # The grant, over the department the connection does not answer to.
+    granted_there = ((READ_MESSAGE, Scope.department(B)),)
+    for person, email, grants, department in (
+        (inside, address["in"], granted, A),
+        (outside, address["out"], granted, A),
+        (stranger, address["no"], granted, A),
+        (ungranted, address["ng"], (), A),
+        (elsewhere, address["else"], granted_there, B),
     ):
-        await h.person(person, department=A, grants=grants)
+        await h.person(person, department=department, grants=grants)
         await h.execute(
             *h.attributed(),
             insert(PrincipalIdentityRow).values(
@@ -252,14 +260,17 @@ async def a_slack_message_is_read_only_for_a_member_of_its_channel(h: Harness) -
     if open_text not in theirs:
         raise CheckFailedError("a channel a person is in was not read for them")
 
-    # No Slack account, and no grant: nothing is read, no call is made, and what they are told
-    # is what a question Slack holds nothing on tells a member.
+    # No Slack account, no grant, or a grant over another department than the connection's:
+    # nothing is read, no call is made, and what they are told is what a question Slack holds
+    # nothing on tells a member.
     nothing = await ask(inside, f"What was said about {h.word()}?")
-    for person in (stranger, ungranted):
+    for person in (stranger, ungranted, elsewhere):
         since = len(workspace.asked)
         answered = await ask(person)
         if answered.records != nothing.records or answered.records:
-            raise CheckFailedError("Slack was read for a person with no account in it or no grant")
+            raise CheckFailedError(
+                "Slack was read for a person with no account in it, no grant or another department"
+            )
         if len(workspace.asked) != since:
             raise CheckFailedError("Slack was asked about a person it could tell nothing to")
 

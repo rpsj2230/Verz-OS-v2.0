@@ -107,7 +107,10 @@ def test_on_a_real_database_a_slack_message_is_read_for_its_members_and_nothing_
     ("broken", "reason"),
     [
         ("membership", "a private channel's message was read for somebody not in it"),
-        ("account", "Slack was read for a person with no account in it or no grant"),
+        (
+            "account",
+            "Slack was read for a person with no account in it, no grant or another department",
+        ),
         ("address", "a Slack member's address was kept in a table"),
     ],
 )
