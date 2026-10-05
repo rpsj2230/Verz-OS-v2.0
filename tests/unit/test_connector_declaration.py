@@ -116,6 +116,7 @@ def test_every_registry_that_used_to_be_a_list_is_read_off_the_declarations() ->
         "domains",
         "freshdesk",
         "google_analytics",
+        "google_drive",
         "hubspot",
         "laravel",
         "search_console",

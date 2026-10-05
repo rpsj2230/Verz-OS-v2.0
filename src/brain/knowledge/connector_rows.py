@@ -58,7 +58,7 @@ is read from HubSpot's one-record read while the asker waits. Until then HubSpot
 Connectors screen and read into its index, and no question on Ask could reach it, which is why
 `brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4, M11.7.3, M11.7.1, M11.7.2, M11.6.1
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4, M11.7.3, M11.7.1, M11.7.2, M11.6.1, M11.6.7
 """
 
 from __future__ import annotations
@@ -324,8 +324,9 @@ CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = M
 
 #: The sources Ask answers through a passage reader rather than a classification: what they hold
 #: is read live as passages for the question's model step, as the Lark Wiki's pages are. Each such
-#: source adds its own name here with its reader. See `brain.ops.connectable.answers`.
-ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset({"lark_wiki"})
+#: source adds its own name here with its reader. See `brain.ops.connectable.answers`. Google
+#: Drive's folder is read by `brain.ops.drive_passages` (M11.6.7).
+ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset({"google_drive", "lark_wiki"})
 
 #: The field a person names a record by, per source and entity: the question's slot.
 NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(

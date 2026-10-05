@@ -23,6 +23,7 @@ Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8, M34.3.3.2
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -962,16 +963,19 @@ def test_a_connector_row_with_too_few_cells_is_a_finding() -> None:
 
 
 def test_a_connector_with_no_verified_ceiling_says_so_rather_than_leaving_a_cell_blank() -> None:
-    """Delete this and two of the nine have an empty cell in the ceiling column, which reads
-    as a cell somebody did not fill in rather than as a statement that nothing has measured
-    one."""
-    drive = manifests()[1]
-    assert drive.ceiling == ""
+    """Delete this and a connector shipped with no ceiling has an empty cell in the ceiling column,
+    which reads as a cell somebody did not fill in rather than as a statement that nothing has
+    measured one. Every connector shipping since Google Drive's ceiling was recorded has one, so
+    the case is built from a shipped manifest with its ceiling taken away, and the shipped ones are
+    held to naming their own."""
+    unmeasured = replace(manifests()[0], ceiling="")
     # The literal rather than NO_CEILING, which the guide's own cell is compared against: a
     # test asserting the constant against itself is green for every value it could hold.
-    assert ceiling_cell(drive) == "none measured"
+    assert ceiling_cell(unmeasured) == "none measured"
     assert NO_CEILING == "none measured"
+    assert ceiling_cell(manifests()[1]) == "google_drive"
     assert ceiling_cell(manifests()[0]) == "freshdesk"
+    assert all(one.ceiling for one in manifests())
 
 
 # ================================================= the properties the guide's own claims rest on

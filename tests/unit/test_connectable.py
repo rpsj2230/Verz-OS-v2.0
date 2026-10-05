@@ -216,6 +216,7 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
         "domains",
         "freshdesk",
         "google_analytics",
+        "google_drive",
         "hubspot",
         "laravel",
         "search_console",

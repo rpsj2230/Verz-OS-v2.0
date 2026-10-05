@@ -109,6 +109,12 @@ def _settings(name: str) -> dict[str, str]:
         "cloudflare": {"account_id": "0" * 32, "department": "operations"},
         "domains": {"domains": "example.com, example.org", "department": "operations"},
         "google_analytics": {"property": "123456789", "department": "marketing"},
+        "google_drive": {
+            "folder": "1AbCdEfGhIjKlMnOpQrStUv",
+            "domain": "example.com",
+            "department": "operations",
+            "steward": "u_steward",
+        },
         "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
     }[name]
 
