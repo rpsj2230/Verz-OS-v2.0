@@ -17,6 +17,7 @@ from brain.ops.browser_harness import (
     WITH_A_SECOND_FACTOR,
     WITHOUT_A_SECOND_FACTOR,
     HarnessError,
+    credentials_for,
     fixture_problems,
     main,
     realm_with_people,
@@ -114,6 +115,34 @@ def test_a_run_that_minted_no_credential_is_refused_rather_than_signed_in_withou
     env = {key: value for key, value in MINTED.items() if key != missing}
     with pytest.raises(HarnessError, match="minted no"):
         realm_with_people(FIXTURE, env, source=SOURCE)
+
+
+def test_a_fixture_file_with_a_credential_in_it_makes_no_realm(tmp_path: Path) -> None:
+    """The guard is applied to the file the job hands the command, not only when a test asks it.
+
+    Delete this and `realm_with_people` can skip `fixture_problems` with every other test green,
+    because they call the check directly: a password pasted into the fixture would then be
+    imported into the run's realm and the run would pass, saying nothing.
+    """
+    tampered = [{**people()[0], "credentials": [{"type": "password", "value": "x"}]}, people()[1]]
+    fixture = tmp_path / "people.json"
+    fixture.write_text(json.dumps(tampered), encoding="utf-8", newline="\n")
+    with pytest.raises(HarnessError, match="credentials is a credential"):
+        realm_with_people(fixture, MINTED, source=SOURCE)
+
+
+def test_a_person_of_no_known_kind_is_given_no_credential() -> None:
+    """`credentials_for` refuses a kind it does not know rather than giving a password alone.
+
+    The realm path refuses such a person earlier, in `fixture_problems`, so only a direct call
+    reaches this. Delete it and a caller that skips the fixture check imports an administrator
+    whose kind was misspelt as a person with no second factor, which is the account the harness
+    exists to prove does not reach administration.
+    """
+    with pytest.raises(HarnessError, match="names no credential kind"):
+        credentials_for({"username": "e2e-admin", KIND_KEY: "password and one-time cod"}, MINTED)
+    given = credentials_for(people()[0], MINTED)
+    assert [one["type"] for one in given] == ["password", "otp"]
 
 
 def test_the_command_says_how_it_is_used() -> None:
