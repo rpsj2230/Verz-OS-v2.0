@@ -8,6 +8,9 @@ application role may update that column alone, and the database's policies hold 
 and update to the actor the transaction is attributed to. `brain.ops.connector_consent` is the one
 writer.
 
+**Never deleted by the application; removed when its person is erased**, by the erasure queue as
+the database owner (`brain.ops.erasure_store.REMOVED`).
+
 **Its kind says whose consent it is, and is never changed.** A source's own or a person's own
 (`brain.connectors.oauth.ConsentKind`); the application may update `used_at` alone, so a consent
 started as a person's cannot be answered as a source's.

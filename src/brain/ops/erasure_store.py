@@ -74,6 +74,14 @@ person did but the way to reach them, so `CLEARED` names it and the executor nul
 about the person, retired rows included, before the row's own rule runs. See
 `A_RETIRED_ROW_KEEPS_NO_ADDRESS`.
 
+**A table the application may never delete from can still be one an erasure removes.** `REMOVED`
+names it with its reason: today `ops.oauth_consent`, whose rows are a person's requests to a
+vendor and which no application path deletes. The executor runs as the database owner, which may
+delete any row; what holds it to the erased person's rows is the subject column every statement
+it writes is conditioned on. So a grant to it would change nothing and a row policy would never
+apply to it, and the declaration is the one place the decision is made. See
+`A_CONSENT_ROW_IS_THE_PERSONS_AND_IS_REMOVED`.
+
 **Erasing a person removes the refresh tokens their own consents bought (M11.8.6).** A source each
 person consents to for themselves keeps that person's refresh token in the vault, not in a table,
 so no store above reaches it. `erase_own_refresh_tokens` removes the person's slot for every source
@@ -296,10 +304,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # person it is asked as; `0097` grants no way for a row to leave, so an erasure keeps these
         # and reports them kept, and a question asked as nobody is refused by the resolver.
         "ops.golden_question": "asked_as",
-        # A consent a person started at a vendor (`0180`), theirs whatever its kind. `0180` grants
-        # no way for a row to leave, so an erasure keeps these and reports them kept; a row holds
-        # a state's digest and a sealed verifier, and no token. The refresh token a person's own
-        # consent bought is in the vault and is removed: `erase_own_refresh_tokens`.
+        # A consent a person started at a vendor (`0180`), theirs whatever its kind. Removed on
+        # erasure although the application may never delete one: see `REMOVED`. The refresh
+        # token a person's own consent bought is in the vault: `erase_own_refresh_tokens`.
         "ops.oauth_consent": "principal_id",
         "ops.operation": "principal_id",
         "ops.question_asked": "principal_id",
@@ -467,6 +474,23 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     }
 )
 
+#: Why a consent row is removed by an erasure and by nothing else.
+A_CONSENT_ROW_IS_THE_PERSONS_AND_IS_REMOVED: Final = (
+    "a consent row is the record that one person asked a vendor for access, holding nothing but "
+    "who, which source, when and a sealed verifier; it is kept against every application path "
+    "because nothing but the person's own erasure should remove it, and that erasure removes it, "
+    "as the database owner, the person's rows alone"
+)
+
+#: Tables whose rows about the person an erasure removes although the application role may not
+#: DELETE them, each with the reason. The executor runs as the database owner, which may delete any
+#: row and is held to the person's own by the subject column (`PostgresEraser._whose`); a grant to
+#: it would change nothing and a policy would never apply to it, so this declaration is what
+#: decides it. Every other table's way out is still read from the application role's grants.
+REMOVED: Final[Mapping[str, str]] = MappingProxyType(
+    {"ops.oauth_consent": A_CONSENT_ROW_IS_THE_PERSONS_AND_IS_REMOVED}
+)
+
 #: Columns cleared on every row about the person, retired rows included, where the row itself is
 #: retired and kept: a value that is the person's own and must not outlive the erasure in a row the
 #: trail keeps. The Lark address a binding holds since `0166` (needs-rupash 118).
@@ -507,6 +531,7 @@ def declaration_gaps(
     about_nobody: frozenset[str] = ABOUT_NOBODY,
     retained: Mapping[str, str] = RETAINED,
     cleared: Mapping[str, tuple[str, ...]] = CLEARED,
+    removed: Mapping[str, str] = REMOVED,
 ) -> tuple[str, ...]:
     """Every table in an erasable PostgreSQL store that is declared in no way, or in two, and a
     table whose columns are cleared that names nobody.
@@ -536,6 +561,8 @@ def declaration_gaps(
             findings.append(f"{table} reaches a person through {via.parent}, which names nobody")
     for table in sorted((set(cleared) & set(tables)) - set(subjects)):
         findings.append(f"{table} has columns cleared on erasure and names nobody whose they are")
+    for table in sorted((set(removed) & set(tables)) - set(subjects)):
+        findings.append(f"{table} is removed on erasure and names nobody whose rows they are")
     return tuple(findings)
 
 
@@ -576,9 +603,11 @@ class PostgresEraser:
         about_nobody: frozenset[str] = ABOUT_NOBODY,
         retained: Mapping[str, str] = RETAINED,
         cleared: Mapping[str, tuple[str, ...]] = CLEARED,
+        removed: Mapping[str, str] = REMOVED,
         role: str = APPLICATION_ROLE,
     ) -> None:
         self.conn = conn
+        self.removed = removed
         self.subjects = subjects
         self.through = through
         self.about_nobody = about_nobody
@@ -670,7 +699,7 @@ class PostgresEraser:
             return _Rule(kept_because=A_PARTITIONED_TABLE_LEAVES_A_PARTITION_AT_A_TIME)
         if soft and self._may_retire(table):
             return _Rule(retire=True)
-        if may_delete:
+        if may_delete or declared_as(table) in self.removed:
             return _Rule(delete=True)
         return _Rule(kept_because=A_TABLE_WITH_NO_DELETE_GRANT_ARGUED_FOR_HOW_ITS_ROWS_GO)
 

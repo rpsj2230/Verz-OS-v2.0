@@ -32,8 +32,13 @@ differs, and the policies need no second rule: `principal_id` already names whos
 and every policy already holds it to the actor. Added in place rather than in a migration of its
 own, because no install had applied `0180` when the personal consent was designed.
 
-**No DELETE.** A consent used or expired stays as the record that it was started, by whom and when,
-and holds nothing a reader could use. Rows are small and one is written per press of a button.
+**No DELETE for the application, and erasure removes a person's rows.** A consent used or expired
+stays as the record that it was started, by whom and when, and holds nothing a reader could use,
+so no application path deletes one: the application role is granted no DELETE and no DELETE
+policy exists for it. Erasing the person removes their rows: the erasure queue runs as the
+database owner, which already holds DELETE and is not narrowed by these policies, and is held to
+the person's rows by `principal_id` (`brain.ops.erasure_store.REMOVED`). Granting the owner DELETE
+would change nothing and a policy for it would never apply, so neither is written here.
 
 **The downgrade** drops the table; its policies and grants go with it.
 

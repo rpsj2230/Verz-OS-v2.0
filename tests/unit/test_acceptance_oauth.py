@@ -214,15 +214,17 @@ def test_the_personal_declaration_is_one_the_platform_accepts_and_renews_no_sche
         ("other_slot", "a person's keys leased another person's slot"),
         ("withdrawn", "a withdrawn consent was not said in words"),
         ("erasure", "erasing a person did not remove their own token and only theirs"),
+        ("consent_rows", "erasing a person would not remove their consent rows"),
     ],
 )
 def test_the_personal_check_fails_where_the_path_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
-    """Four breaks, one per property: a person's consent kept in the source's own slot, a person's
-    keys that lease anybody's slot, a withdrawn consent said as the source's refusal rather than to
-    the person, and an erasure that removes nothing. Each fails the check with its own sentence.
-    Delete this and the check can pass with any of them gone."""
+    """Five breaks, one per property: a person's consent kept in the source's own slot, a
+    person's keys that lease anybody's slot, a withdrawn consent said as the source's refusal
+    rather than to the person, an erasure that removes no token, and one that keeps their
+    consent rows. Each fails the check with its own sentence. Delete this and the check can pass
+    with any of them gone."""
     import brain.connector_routes as connector_routes
     import brain.ops.connector_sync_run as connector_sync_run
     import brain.ops.erasure_store as erasure_store
@@ -253,13 +255,15 @@ def test_the_personal_check_fails_where_the_path_is_broken(
             return words(refused)
 
         monkeypatch.setattr(connector_sync_run, "personal_words", the_sources_words)
-    else:
+    elif broken == "erasure":
 
         def keeps(vault: Any, subject_id: str, connectors: Any) -> int:
             del vault, subject_id
             return len(connectors)
 
         monkeypatch.setattr(erasure_store, "erase_own_refresh_tokens", keeps)
+    else:
+        monkeypatch.setattr(erasure_store, "REMOVED", {})
     with at_head(f"brain_acceptance_own_{broken}") as url:
         before = written(url)
         outcome = run_checks(url, (mine()[OWN],))
