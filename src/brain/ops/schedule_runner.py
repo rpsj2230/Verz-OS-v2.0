@@ -88,7 +88,7 @@ from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
 from brain.ops.retention_store import run_retention_sweep
-from brain.ops.schedule import TICK, Owed, owed, schedulable
+from brain.ops.schedule import TICK, AtTime, Owed, owed, schedulable, time_of_day
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
@@ -895,6 +895,33 @@ def lock_id(name: str) -> tuple[int, int]:
     return SCHEDULER_LOCK_NAMESPACE, unsigned - (1 << 32) if unsigned >= (1 << 31) else unsigned
 
 
+def times_of_day(
+    controls: Sequence[Control] | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, AtTime]:
+    """The time and zone each control owed at a time of day is read in, from the install's
+    settings as saved, the environment, or the setting's own default, in that order.
+
+    A value that is not a time on the 24-hour clock falls back to the declared default rather
+    than stopping the control: the Settings screen refuses such a value, so one here came from an
+    environment file, and a daily message at its default hour is better than none.
+    """
+    from brain.install import BY_NAME, value_of
+    from brain.locale import time_zone
+
+    found: dict[str, AtTime] = {}
+    for one in schedulable(controls):
+        if not one.daily_at:
+            continue
+        at = time_of_day(value_of(one.daily_at, env)) or time_of_day(BY_NAME[one.daily_at].default)
+        if at is None:
+            msg = f"{one.daily_at} declares a default that is not a time of day"
+            raise RunnerError(msg)
+        found[one.name] = AtTime(at=at, zone=time_zone(env))
+    return found
+
+
 def due_now(
     *,
     now: datetime,
@@ -902,6 +929,7 @@ def due_now(
     last_success: Mapping[str, datetime],
     controls: Sequence[Control] | None = None,
     released: Sequence[str] = (),
+    at: Mapping[str, AtTime] | None = None,
 ) -> tuple[Owed, ...]:
     """What is owed at `now`, with dueness on one clock and lateness on the other.
 
@@ -911,10 +939,10 @@ def due_now(
     decides *what* is returned; the lateness answer supplies `late_by` and `first_run` for the
     ones that survived. See `TRIED_RECENTLY_AND_WORKING_ARE_DIFFERENT_CLOCKS`.
     """
-    trying = owed(now=now, last_run=last_attempt, controls=controls, released=released)
+    trying = owed(now=now, last_run=last_attempt, controls=controls, released=released, at=at)
     by_success = {
         one.name: one
-        for one in owed(now=now, last_run=last_success, controls=controls, released=released)
+        for one in owed(now=now, last_run=last_success, controls=controls, released=released, at=at)
     }
     # `report_only` is taken from this run's answer, and a mutation says the choice does not
     # matter today: `owed` computes it from the control's name and the released set, neither

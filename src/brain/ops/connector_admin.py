@@ -37,26 +37,34 @@ by the first sync. A connection whose scope is decided by what the key happens t
 the connector `brain.connectors.contract.ConnectorScope` refuses to build: narrowing later does not
 un-fetch what was already read.
 
-Task ids: M42.6.5, M27.11.9, M11.2.6
+Task ids: M42.6.5, M27.11.9, M11.2.6, M11.7.7
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
+from brain.connectors.declaration import CredentialShape
 from brain.connectors.registry import INSTALL_AUTHORITY
 from brain.core.entitlement import EntitlementSet
 from brain.ops.connectable import (
     CONNECTABLE,
     Connectable,
     SettingProblem,
+    given,
     settings_problems,
 )
-from brain.ops.credentials import CONNECTOR_NAME_PATTERN, VaultState, problems_with
+from brain.ops.credentials import (
+    CONNECTOR_NAME_PATTERN,
+    VaultState,
+    key_file_problems,
+    problems_with,
+    user_and_password,
+)
 
 # ------------------------------------------------------------ written-down reasons
 
@@ -240,6 +248,45 @@ def key_problems(value: str) -> tuple[SettingProblem, ...]:
     )
 
 
+def credential_problems(shape: CredentialShape, value: str) -> tuple[SettingProblem, ...]:
+    """What is wrong with a credential in the shape its source takes it (M11.7.7).
+
+    A key is judged as one, a key file by `key_file_problems` and a database user by
+    `user_and_password`, each told against the one `credential` field the request has. See
+    `brain.connectors.declaration.A_CREDENTIAL_IS_ASKED_FOR_IN_THE_SHAPE_THE_SOURCE_ISSUES_IT`.
+    """
+    match shape:
+        case CredentialShape.KEY:
+            return key_problems(value)
+        case CredentialShape.KEY_FILE:
+            found = key_file_problems(value)
+        case CredentialShape.DATABASE_USER:
+            _, found = user_and_password(value)
+    return tuple(
+        SettingProblem(field=KEY_FIELD, code=one.code, message=one.message) for one in found
+    )
+
+
+async def people_problems(
+    kind: Connectable,
+    settings: Mapping[str, str],
+    *,
+    is_live: Callable[[str], Awaitable[bool]],
+) -> tuple[SettingProblem, ...]:
+    """Every setting naming a person that names nobody live here, in that setting's words (M11.7.7).
+
+    A connector reads no table, so whether an id is somebody is asked here, of the caller's own
+    lookup: the routes pass the principal store, and a check its own. See
+    `brain.connectors.declaration.Setting.names_a_person`.
+    """
+    typed = given(kind, settings)
+    found: list[SettingProblem] = []
+    for one in kind.settings:
+        if one.names_a_person and not await is_live(typed[one.name]):
+            found.append(SettingProblem(field=one.name, code="refused", message=one.refused))
+    return tuple(found)
+
+
 def connection_problems(
     connector: str, settings: Mapping[str, str], credential: str
 ) -> tuple[SettingProblem, ...]:
@@ -258,4 +305,7 @@ def connection_problems(
                 message="Choose one of the sources this screen can connect.",
             ),
         )
-    return (*settings_problems(kind, settings), *key_problems(credential))
+    return (
+        *settings_problems(kind, settings),
+        *credential_problems(kind.credential_shape, credential),
+    )
