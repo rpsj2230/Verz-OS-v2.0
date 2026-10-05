@@ -173,17 +173,29 @@ A_PROJECTED_ROW_KEEPS_THE_ID_IT_WAS_RESOLVED_TO: Final = (
     "does; nothing reads local_id yet, and the row holds nothing else about an entity."
 )
 
+#: Why a retired row's copy of that id is left as well.
+A_RETIRED_ROW_KEEPS_THE_ID_IT_WAS_RETIRED_WITH: Final = (
+    "proj.record_retired.local_id is proj.record.local_id copied once, when the source stopped "
+    "returning the record (0179), and the application's role may only insert that table, so no "
+    "merge could rewrite it and none should: it says which entity the record was resolved to at "
+    "the moment it was retired, and that id resolves to the survivor through the pointer as the "
+    "live row's does."
+)
+
 # ------------------------------------------------------------------------ the figures
 #: The columns that would mean a table holds something keyed by a canonical entity id, so a
-#: merge has to reach it. Outside `er`, only `proj.record.local_id` may carry one; the test of
-#: that is what keeps the three invalidators honest.
+#: merge has to reach it. Outside `er`, only `proj.record.local_id` and its retired copy may carry
+#: one; the test of that is what keeps the three invalidators honest.
 ENTITY_KEYED_COLUMNS: Final = frozenset(
     {"entity_id", "local_id", "merged_into", "survivor_id", "merged_id", "restored_id"}
 )
 
 #: Where each column of `ENTITY_KEYED_COLUMNS` may live outside the `er` schema, and why.
 ENTITY_KEYS_OUTSIDE_RESOLUTION: Final[Mapping[str, str]] = MappingProxyType(
-    {"proj.record.local_id": A_PROJECTED_ROW_KEEPS_THE_ID_IT_WAS_RESOLVED_TO}
+    {
+        "proj.record.local_id": A_PROJECTED_ROW_KEEPS_THE_ID_IT_WAS_RESOLVED_TO,
+        "proj.record_retired.local_id": A_RETIRED_ROW_KEEPS_THE_ID_IT_WAS_RETIRED_WITH,
+    }
 )
 
 
