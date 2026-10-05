@@ -245,7 +245,7 @@ def send(
     )
 
 
-ONE_RECORD: Final = f"{cloudflare.API_BASE}/zones/{ZONE}/dns_records/{RECORD}"
+ONE_RECORD: Final = f"{cloudflare.BASE_URL}/zones/{ZONE}/dns_records/{RECORD}"
 
 
 # ------------------------------------------------------------------ with and without the grant

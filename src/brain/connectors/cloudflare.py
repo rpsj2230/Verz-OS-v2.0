@@ -204,7 +204,7 @@ VERSION: Final = "1.0.0"
 SPEC_REF: Final = "cloudflare.v4"
 
 #: Where every call goes: Cloudflare's API, the same for every account.
-API_BASE: Final = "https://api.cloudflare.com/client/v4"
+BASE_URL: Final = "https://api.cloudflare.com/client/v4"
 
 #: Where a person creates the token in the dashboard.
 API_TOKENS_URL: Final = "https://dash.cloudflare.com/profile/api-tokens"
@@ -344,7 +344,7 @@ DNS_LIVE_MAPPING: Final = (*DNS_LIST_MAPPING, *_mapping(*((one, one) for one in 
 
 def _operation(spec: OperationSpec, entity: str, fields: tuple[FieldMapping, ...]) -> RestOperation:
     return RestOperation(
-        base_url=API_BASE,
+        base_url=BASE_URL,
         operation=spec,
         transport=RestTransport(
             spec_ref=SPEC_REF, operation=spec.operation_id, entity=entity, fields=fields
@@ -827,7 +827,7 @@ def security_events_request(zone_id: str, window: str, *, now: datetime) -> Secu
         raise ConnectorContractError(msg)
     since = now - WINDOW_LENGTH[named]
     return SecurityEventsRequest(
-        url=f"{API_BASE}{GRAPHQL_PATH}",
+        url=f"{BASE_URL}{GRAPHQL_PATH}",
         body=MappingProxyType(
             {
                 "query": SECURITY_EVENTS_QUERY,

@@ -281,10 +281,10 @@ def test_the_worker_reads_the_zones_first_and_each_zones_records_under_it() -> N
     assert reading.listed_under(ZONE) is None
     assert reading.listed_under(DNS_RECORD) == ListedUnder(parent=ZONE, parameter="zone_id")
     assert zones.url_for(reading.first_page(ZONE)) == (
-        f"{cloudflare.API_BASE}/zones?page=1&per_page=50"
+        f"{cloudflare.BASE_URL}/zones?page=1&per_page=50"
     )
     assert records.url_for(first) == (
-        f"{cloudflare.API_BASE}/zones/{ZONE_ID}/dns_records?page=1&per_page=100"
+        f"{cloudflare.BASE_URL}/zones/{ZONE_ID}/dns_records?page=1&per_page=100"
     )
     assert reading.key_scheme() is KeyScheme.BEARER
     assert authorization(reading.key_scheme(), "sentinel") == "Bearer sentinel"
@@ -473,10 +473,10 @@ def test_a_record_is_read_live_by_its_own_call_under_its_zone() -> None:
     arguments = lookup.arguments_for(DNS_RECORD, INDEXED)
     assert dict(arguments) == {"zone_id": ZONE_ID, "dns_record_id": RECORD}
     assert record.url_for(arguments) == (
-        f"{cloudflare.API_BASE}/zones/{ZONE_ID}/dns_records/{RECORD}"
+        f"{cloudflare.BASE_URL}/zones/{ZONE_ID}/dns_records/{RECORD}"
     )
     assert zone.url_for(lookup.arguments_for(ZONE, ZONE_ID)) == (
-        f"{cloudflare.API_BASE}/zones/{ZONE_ID}"
+        f"{cloudflare.BASE_URL}/zones/{ZONE_ID}"
     )
     assert set(LIVE_DNS_FIELDS) <= {one.target for one in record.transport.fields}
     assert lookup.identity_mode(DNS_RECORD) is IdentityMode.SERVICE
@@ -510,7 +510,7 @@ def test_security_events_are_read_for_a_named_window_ending_at_the_question() ->
     asked = cloudflare.security_events_request(ZONE_ID, "past_24_hours", now=NOW)
     variables = asked.body["variables"]
 
-    assert asked.url == f"{cloudflare.API_BASE}/graphql"
+    assert asked.url == f"{cloudflare.BASE_URL}/graphql"
     assert variables["zoneTag"] == ZONE_ID
     assert variables["filter"] == {
         "datetime_geq": (NOW - timedelta(days=1)).isoformat(),
@@ -820,7 +820,7 @@ def test_a_change_of_each_type_whose_content_fits_is_prepared_and_patches_that_r
         )
         assert call.operation.operation.method == "patch"
         assert call.operation.url_for(call.arguments) == (
-            f"{cloudflare.API_BASE}/zones/{ZONE_ID}/dns_records/{RECORD}"
+            f"{cloudflare.BASE_URL}/zones/{ZONE_ID}/dns_records/{RECORD}"
         )
         assert dict(call.body) == {
             "name": "www.example.com",

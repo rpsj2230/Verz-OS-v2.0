@@ -99,7 +99,7 @@ class ByPath(Replay):
         return answered({"success": False, "errors": [], "messages": [], "result": None}, 404)
 
     def paths(self) -> list[str]:
-        return [one.url.split("?", 1)[0].removeprefix(cloudflare.API_BASE) for one in self.calls]
+        return [one.url.split("?", 1)[0].removeprefix(cloudflare.BASE_URL) for one in self.calls]
 
 
 def a_caller(canary: str | None = None, zones: Any = None) -> ByPath:
@@ -310,7 +310,7 @@ def test_a_record_is_read_live_from_its_index_id_by_its_own_call_and_named_the_s
     assert (row.id, values["zone_id"], values["content"]) == (INDEXED, ZONE, canary)
     assert {"ttl", "proxied"} <= set(values)
     (asked,) = caller.calls
-    assert asked.url == f"{cloudflare.API_BASE}/zones/{ZONE}/dns_records/{RECORD}"
+    assert asked.url == f"{cloudflare.BASE_URL}/zones/{ZONE}/dns_records/{RECORD}"
     assert asked.headers["Authorization"] == f"Bearer {KEY}"
     assert [lease.closed for lease in keys.leases] == [[NOW]]
 
