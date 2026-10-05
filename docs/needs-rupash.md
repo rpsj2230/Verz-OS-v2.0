@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**37 items are open: 160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**38 items are open: 161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,32 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 161. Before a skill is approved, its examples are rehearsed: what "rehearsed" means for now
+
+**In plain terms:** your plan says a skill's examples are rehearsed before anyone may approve it
+(M12.3.4). A skill will carry its examples inside its own file, each a task and the tools it should
+need, so a new version brings its own. Approving a version will be refused until its examples have
+been rehearsed against that exact version.
+
+Today a rehearsal asks no AI model anything. It checks that an agent holding the skill can reach every
+tool each example needs, for the person approving it, and records that. It does not yet judge whether
+the answer an example would get is a good one.
+
+**That is the narrowing.** Agents can now run with tools through one path (the agent runtime, being
+landed now), so the next step is a rehearsal that actually runs each example and shows the approver
+what it did, with nothing sent or changed. The record is built so that result can be added to it
+later.
+
+**Option A: build the reach check now, and add the real run once the agent runtime is live.**
+Approval is checked for what it can be today, and the screen says what was and was not checked.
+
+**Option B: hold approval-by-rehearsal until examples can be run for real.** Skills are approved as
+today until then.
+
+**My recommendation:** A. I am building it that way.
+
+**What I need from you:** nothing, or reply "161: B".
 
 ## 160. May a department's administrator stop one of that department's agents?
 
