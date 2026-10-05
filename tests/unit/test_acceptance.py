@@ -32,6 +32,7 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_recovery,
+    acceptance_operations_console,
     acceptance_run,
 )
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
@@ -709,6 +710,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # Nothing started the application against this database, so nothing furnished it;
+    # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
+    assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (
+        NOT_RUN,
+        acceptance_operations_console.NOTHING_HAS_FURNISHED_THIS_DATABASE,
+    )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)
