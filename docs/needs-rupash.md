@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**21 items are open: 141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**22 items are open: 142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -13,6 +13,34 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 142. Connect WhatsApp (ready now)
+
+**In plain terms:** people can now ask the Brain on WhatsApp, the last of the channels in item 126's
+order. Only do this if your company uses WhatsApp Business. It needs a phone number used only for the
+Brain, and Meta lets the Brain answer freely only within 24 hours of the person's last message. In the
+console open **Channels**, **WhatsApp**, **Connect**, which shows each step:
+
+1. **Make the Meta app and add the number.** On Meta for Developers choose **Create app**, the
+   **Business** type, and add the **WhatsApp** product. Under **WhatsApp**, **API Setup**, add and
+   verify the number the Brain will answer from, and copy its **Phone number ID**.
+2. **Make a token that does not expire.** In Meta **Business settings**, **System users**, add one with
+   the **Admin** role, **Assign assets** (the app, full control), then **Generate new token** for the
+   app with expiry **Never**, ticking whatsapp_business_messaging and whatsapp_business_management.
+   Copy it. (Not the temporary token on the API Setup page: it expires within a day.)
+3. **Copy the app secret.** In the app's **App settings**, **Basic**, press **Show** beside **App
+   secret** and copy it.
+4. **Save it in the console.** Type the Phone number ID, paste the app secret and the token, and make
+   up a verify word (a long random word you type here and again in step 5). Tick **Switched on** and
+   press **Save set-up**. All three go to the vault and are never shown again.
+5. **Point Meta at the Brain.** In Meta open **WhatsApp**, **Configuration**, **Webhook**, **Edit**:
+   paste the events address the console's step shows as the **Callback URL**, the word from step 4 as
+   the **Verify token**, and press **Verify and save**. Under **Webhook fields** subscribe to
+   **messages**.
+6. **Try it.** Write to the number from your own WhatsApp: the first answer asks you to link your
+   number to your Brain account.
+
+Tell me "connected WhatsApp" afterwards and I prove it on your install.
 
 ## 141. Connect Telegram (ready now)
 
