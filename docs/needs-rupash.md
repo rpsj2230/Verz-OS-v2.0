@@ -4472,6 +4472,16 @@ reintroduced by writing the natural code.
 
 ---
 
+**REOPENED 2026-10-06: the gap came back, and is being fixed again.** A check written on 2026-10-06
+found that the approval screens built since then show the approver the requester's whole request,
+values included: the console's Approvals card since 2026-09-09, and the Lark card since #258
+(2026-09-30). The guard described above was still there and still passing, but the request travelled
+in a free-form part of the card the guard did not look at, and the reach check compared a value the
+caller asserted rather than one it worked out. Nobody was shown anything: agent actions do not reach
+approvers on your install yet, and no sources are connected. The fix renders every approval at the
+approver's own reach on both screens, shows locked any field the approver cannot read, and extends
+the guard to the whole card, with a check on your install that proves it. Nothing for you to do.
+
 ## 13. Can a leash rule say "supervise everywhere except maintenance"? - DECIDED: strictest wins
 
 **The plain problem: today it cannot, and the safe choice I made is probably not the one
