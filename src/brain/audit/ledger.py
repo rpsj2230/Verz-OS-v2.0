@@ -550,6 +550,21 @@ class AuditAction(enum.StrEnum):
     recording names it by the sha256 of its transcript, which is a digest of text nobody can
     enumerate and so recordable, where the recording's key would be stored as the marker. Fifteen
     characters.
+
+    ENTITY_UNMERGE was added on 2026-10-06. M14.5.4 asks for a full audit of merges and M14.5.3
+    for unmerging, and an unmerge wrote nothing: `0104`'s trigger records a pointer going from
+    empty to set, so clearing it again, which undoes a merge and splits one entity's records back
+    into two permission surfaces, left the ledger saying the merge was still in force. **Recorded
+    by the database, from `0183`'s replacement of that trigger's function**, so a pointer cleared
+    by hand is recorded as surely as one the merge store clears.
+
+    ENTITY_MERGE with the change in the details, as SIGN_IN does it, was the alternative, and it
+    was rejected for the question each answers. "Which merges are in force" is the one an auditor
+    of entity resolution asks, and with one member it needs every entry's details read and paired
+    to answer; with two it is the merges less the unmerges, by action. A merge and its reversal are
+    also decided by different people on different evidence, which is DENY and REVOKE's argument
+    for two members. Each entry names the merge, and the unmerge, by the 32-hex ids `er.merge` and
+    `er.unmerge` hold, which the redaction keeps as digests. Fourteen characters.
     """
 
     GRANT = "grant"
@@ -696,6 +711,10 @@ class AuditAction(enum.StrEnum):
     #: of the recording's transcript when an ended session kept one. Written by `0150`'s trigger
     #: on `agent.browser_session` under the run's own subject, `session:<run id>` (M24.3.4).
     BROWSER_SESSION = "browser_session"
+    #: A merge was reversed: an entity's forwarding pointer cleared. One entry per side, the
+    #: survivor first, written by `0183`'s trigger function on `er.canonical`, naming the merge and
+    #: the unmerge by id in the details when `brain.resolution.merge_store` wrote them (M14.5.4).
+    ENTITY_UNMERGE = "entity_unmerge"
 
 
 # --------------------------------------------------------------------- redaction

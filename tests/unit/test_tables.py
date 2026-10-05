@@ -149,6 +149,7 @@ MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_s
 MIGRATION_ESCALATION = VERSIONS / "0168_escalation.py"
 MIGRATION_STEWARDS = VERSIONS / "0167_stewards_and_self_grants.py"
 MIGRATION_REGISTRY_OBSERVATIONS = VERSIONS / "0182_entity_registry_observations.py"
+MIGRATION_ENTITY_MERGES = VERSIONS / "0183_entity_merges.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -426,6 +427,8 @@ REGISTRY_OBSERVATION_TABLES: tuple[str, ...] = (
     "er.observation",
     "er.blocked_value",
 )
+#: And the two 0183 adds: a merge with its evidence and pre-image, and the unmerge reversing one.
+ENTITY_MERGE_TABLES: tuple[str, ...] = ("er.merge", "er.unmerge")
 
 ALL_TABLES = (
     CORE_TABLES
@@ -500,6 +503,7 @@ ALL_TABLES = (
     + ESCALATION_TABLES
     + STEWARDS_TABLES
     + REGISTRY_OBSERVATION_TABLES
+    + ENTITY_MERGE_TABLES
 )
 
 
@@ -1332,6 +1336,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert stewards.TABLES == STEWARDS_TABLES
     registry_observations = migration_module(MIGRATION_REGISTRY_OBSERVATIONS)
     assert registry_observations.TABLES == REGISTRY_OBSERVATION_TABLES
+    entity_merges = migration_module(MIGRATION_ENTITY_MERGES)
+    assert entity_merges.TABLES == ENTITY_MERGE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1428,6 +1434,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(escalation.TABLES)
         + tuple(stewards.TABLES)
         + tuple(registry_observations.TABLES)
+        + tuple(entity_merges.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1505,6 +1512,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(escalation.TABLES),
         set(stewards.TABLES),
         set(registry_observations.TABLES),
+        set(entity_merges.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

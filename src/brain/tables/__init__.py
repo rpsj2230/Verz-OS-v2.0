@@ -73,6 +73,7 @@ from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
+from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.escalation import EscalationRow
 from brain.tables.fast_lane import FastPathRuleRow
@@ -428,6 +429,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # digest by value, so each outlives what it names.
     "er.observation",
     "er.blocked_value",
+    # 0183_entity_merges. A merge points at the two canonical entities it joined, and an unmerge at
+    # the merge it reverses, by the merge's own three columns so the pair cannot differ.
+    "er.merge",
+    "er.unmerge",
 )
 
 __all__ = [
@@ -479,6 +484,8 @@ __all__ = [
     "EntityAliasRow",
     "EntityIdentifierRow",
     "EntityLinkRow",
+    "EntityMergeRow",
+    "EntityUnmergeRow",
     "ErasureOutcome",
     "ErasureRequestRow",
     "EscalationRow",

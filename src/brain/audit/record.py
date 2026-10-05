@@ -183,6 +183,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "channel_binding": AuditAction.CHANNEL_BINDING,
         "pack": AuditAction.PACK,
         "browser_session": AuditAction.BROWSER_SESSION,
+        "entity_unmerge": AuditAction.ENTITY_UNMERGE,
     }
 )
 
@@ -850,6 +851,7 @@ class AuditRecorder:
         kept_entity_id: str,
         merged_entity_id: str,
         changed: Sequence[str] = (),
+        merge_id: str = "",
     ) -> tuple[AuditEntry, AuditEntry]:
         """Record that two entities were merged, as two entries: one per side.
 
@@ -863,12 +865,43 @@ class AuditRecorder:
 
         Both entries share the recorder's trace id, so the pair is one event again to anybody
         querying by trace.
+
+        `merge_id` names the `er.merge` row holding who decided, on what evidence, and the
+        pre-image, as `0183`'s trigger writes it. A 32-hex id, which the redaction keeps as a
+        digest; empty for a merge no store recorded, which writes no key rather than an empty one.
         """
         details: dict[str, object] = {}
         _with_names(details, "changed", changed)
+        if merge_id:
+            details["merge_id"] = merge_id
         kept = self._write(AuditAction.ENTITY_MERGE, subject("entity", kept_entity_id), details)
         merged = self._write(AuditAction.ENTITY_MERGE, subject("entity", merged_entity_id), details)
         return kept, merged
+
+    def entity_unmerge(
+        self,
+        *,
+        kept_entity_id: str,
+        restored_entity_id: str,
+        merge_id: str = "",
+        unmerge_id: str = "",
+    ) -> tuple[AuditEntry, AuditEntry]:
+        """Record that a merge was reversed, as two entries: one per side, the survivor first.
+
+        Two entries for `entity_merge`'s reason: the id that came back has to be findable by its
+        own subject. Written in a deployed database by `0183`'s trigger function on
+        `er.canonical`, which this is held to by `tests/unit/test_merge_store.py`. The two ids are
+        the `er.merge` and `er.unmerge` rows, both 32-hex, and both are written or neither.
+        """
+        details: dict[str, object] = {}
+        if merge_id and unmerge_id:
+            details["merge_id"] = merge_id
+            details["unmerge_id"] = unmerge_id
+        kept = self._write(AuditAction.ENTITY_UNMERGE, subject("entity", kept_entity_id), details)
+        restored = self._write(
+            AuditAction.ENTITY_UNMERGE, subject("entity", restored_entity_id), details
+        )
+        return kept, restored
 
     def publish(self, *, artifact_id: str, fields: Sequence[str] = ()) -> AuditEntry:
         """Record that an artefact was published.
