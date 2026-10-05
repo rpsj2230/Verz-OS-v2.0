@@ -56,16 +56,20 @@ IDENTIFIERS: Final = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "cloudflare": "0123456789abcdef0123456789abcdef",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
     "laravel": "portal",
 }
 
 #: The settings after the first, for a source whose form asks for more than one.
 FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "freshdesk": {"department": "support"},
+    "cloudflare": {"department": "operations"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
     "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -79,6 +83,7 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
 #: account's, shared one folder as a viewer; a Laravel user holds SELECT on views, never on tables.
 KEY_KIND_WITHOUT_SCOPES: Final = {
     "freshdesk": ("agent", "admin"),
+    "cloudflare": ("dns read", "dns write"),
     "google_drive": ("viewer", "delegation"),
     "laravel": ("select", "tables"),
 }
@@ -192,7 +197,14 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
     Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
     declared = shipped()
-    assert set(CONNECTABLE) == {"freshdesk", "google_analytics", "hubspot", "xero"}
+    assert set(CONNECTABLE) == {
+        "cloudflare",
+        "freshdesk",
+        "google_analytics",
+        "hubspot",
+        "search_console",
+        "xero",
+    }
     for name in CONNECTABLE:
         one = declared[name]
         assert one.reading is not None or one.live is not None, name

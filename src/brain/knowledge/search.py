@@ -1314,6 +1314,79 @@ def vector_query(
     )
 
 
+#: Why a short vector leg is asked again by exact distance over the caller's reach.
+A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH: Final = (
+    "pgvector's HNSW walk loses passages while the index holds dead entries or a vacuum is "
+    "working on it: measured on 0.8.6 on 2026-10-05, with rows committed, read in a separate "
+    "transaction and retired as re-ingestion does, 16 of 300 narrow reads missed a passage the "
+    "reader may see, one still missing ten seconds later. No setting removed it (ef_search 200 "
+    "and strict_order both still missed). The filter is inside the walk, so the walk returns "
+    "fewer than asked rather than wrong rows; a leg that came back short is therefore asked "
+    "again as an exact distance sort over the same reach, which cannot miss. The re-ask scans the "
+    "reach, so it runs only when the reach holds at most EXACT_RESCAN_CEILING embedded passages; "
+    "above that the leg stays as the walk returned it and the lexical leg carries the answer."
+)
+
+
+#: The most embedded passages a reach may hold for a short vector leg to be asked again exactly.
+#: Measured on 2026-10-05 on the development Mac (PostgreSQL 18, pgvector 0.8.6, 1024 dimensions,
+#: one reach, the exact sort over the whole of it, best of three): 10,000 passages 0.02 s,
+#: 100,000 passages 0.19 s, 500,000 passages 1.8 s. Fifty thousand keeps the re-ask near a
+#: tenth of a second, inside an answer's budget, and a reach that large walks the index past
+#: fifty matches far more often than a narrow one, so the re-ask is rarely wanted there.
+EXACT_RESCAN_CEILING: Final = 50_000
+
+
+def exact_vector_query(
+    embedding: Sequence[float],
+    *,
+    reach: Reach,
+    model: str,
+    depth: int = CANDIDATE_DEPTH,
+) -> Select[Any]:
+    """The vector leg by exact distance, which no HNSW walk can serve (M15.2.3).
+
+    The same conjuncts as `vector_query`, ordered by the distance plus nothing, which the index
+    cannot provide, so the planner reads the reach and sorts it. Asked only after the walk came
+    back short and only over a reach no larger than `EXACT_RESCAN_CEILING`: see
+    `A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    target = sa.cast(
+        sa.bindparam(EMBEDDING_PARAM, to_vector_literal(embedding), type_=sa.Text),
+        Vector(EMBEDDING_DIMENSIONS),
+    )
+    distance = CHUNK.c.embedding.op("<=>", return_type=sa.Float)(target)
+    return (
+        sa.select(CHUNK.c.chunk_id, distance.label("distance"))
+        .where(
+            sa.and_(
+                reach_predicate(reach),
+                CHUNK.c.embedding.is_not(None),
+                CHUNK.c[EMBEDDING_MODEL_FIELD] == sa.bindparam(MODEL_PARAM, model),
+            )
+        )
+        # `+ 0` is what makes this a sort rather than a walk: the operator class serves
+        # `embedding <=> :q` and nothing built on it.
+        .order_by((distance + 0).asc(), CHUNK.c.chunk_id.asc())
+        .limit(_depth(depth))
+    )
+
+
+def embedded_in_reach(*, reach: Reach, model: str) -> Select[Any]:
+    """The embedded passages of one model a reach holds, as chunk ids, for counting.
+
+    Unlimited here: the caller bounds it, so the count costs at most the bound's rows whatever
+    the reach's size. See `A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    return sa.select(CHUNK.c.chunk_id).where(
+        sa.and_(
+            reach_predicate(reach),
+            CHUNK.c.embedding.is_not(None),
+            CHUNK.c[EMBEDDING_MODEL_FIELD] == sa.bindparam(MODEL_PARAM, model),
+        )
+    )
+
+
 # ------------------------------------------------------- the session's two walls
 
 

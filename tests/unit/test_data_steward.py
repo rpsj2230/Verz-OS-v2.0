@@ -73,6 +73,7 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
     "xero": {"tenant_id": "11111111-2222-3333-4444-555555555555"},
     "hubspot": {"portal_id": "12345678"},
     "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
+    "cloudflare": {"account_id": "0123456789abcdef0123456789abcdef", "department": "operations"},
     "google_drive": {
         "folder": "1AbCdEfGhIjKlMnOpQrStUv",
         "domain": "example.com",
@@ -80,6 +81,7 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
         "steward": "u_steward",
     },
     "google_analytics": {"property": "123456789", "department": "marketing"},
+    "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
     "laravel": {
         "schema": "portal",
         "client_rule": "department = sales",

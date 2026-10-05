@@ -113,6 +113,7 @@ from types import MappingProxyType
 from typing import Any, Final
 
 import sqlalchemy as sa
+import structlog
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import TextClause
 from sqlalchemy.sql import Select
@@ -132,11 +133,14 @@ from brain.knowledge.rows import RowQuery, RowSource
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
     CHUNK,
+    EXACT_RESCAN_CEILING,
     KNOWLEDGE_READ,
     RETRIEVABLE_STATE_VALUES,
     Reach,
     SearchError,
     cjk_lexical_query,
+    embedded_in_reach,
+    exact_vector_query,
     hybrid,
     iterative_scan_statements,
     lexical_legs,
@@ -148,6 +152,8 @@ from brain.knowledge.search import (
 )
 from brain.tables.gate import DepartmentRow
 from brain.tables.knowledge import KnowledgeItemRow
+
+log = structlog.get_logger(__name__)
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -459,6 +465,74 @@ def vector_search_query(
     )
 
 
+def exact_vector_search_query(
+    vector: EmbeddedVector, *, reach: Reach, kinds: Sequence[KnowledgeKind] = ()
+) -> RowQuery:
+    """The vector leg by exact distance over the reach, for a walk that came back short.
+
+    The caller's settings and none of the scan's: nothing here walks the index. See
+    `brain.knowledge.search.A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    statement = narrowed(
+        exact_vector_query(
+            vector.values, reach=reach, model=vector.model.identity, depth=CANDIDATE_DEPTH
+        ),
+        kinds,
+    )
+    return _query(
+        KNOWLEDGE_ENTITY,
+        ("chunk_id", "distance"),
+        statement,
+        empty=False,
+        settings=session_settings(reach),
+    )
+
+
+def reach_held_query(
+    vector: EmbeddedVector, *, reach: Reach, kinds: Sequence[KnowledgeKind] = ()
+) -> RowQuery:
+    """How many embedded passages the reach holds, counted to one past `EXACT_RESCAN_CEILING`."""
+    held = (
+        narrowed(embedded_in_reach(reach=reach, model=vector.model.identity), kinds)
+        .limit(EXACT_RESCAN_CEILING + 1)
+        .subquery()
+    )
+    statement = sa.select(sa.func.count().label("held")).select_from(held)
+    return _query(
+        KNOWLEDGE_ENTITY, ("held",), statement, empty=False, settings=session_settings(reach)
+    )
+
+
+async def nearest_passages(
+    records: RowSource,
+    vector: EmbeddedVector,
+    *,
+    reach: Reach,
+    kinds: Sequence[KnowledgeKind] = (),
+) -> tuple[str, ...]:
+    """The vector leg: the index walk, and an exact re-ask when the walk came back short.
+
+    Short means fewer than `CANDIDATE_DEPTH`, which is what a walk returns when it lost passages
+    to dead entries or a running vacuum, and also what a reach holding fewer passages returns;
+    the exact re-ask is the same answer for the second and the right one for the first. It runs
+    only while the reach holds at most `EXACT_RESCAN_CEILING` embedded passages, counted no
+    further than that. Above it the walk's answer stands, the lexical leg carries the rest, and
+    the shortfall is logged once for an operator with no reader, document or count of anything
+    withheld in it, so nothing reaches the reader that could tell a withheld passage from an
+    absent one. See `A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    found = await records.rows(vector_search_query(vector, reach=reach, kinds=kinds))
+    walked = tuple(dict.fromkeys(str(row["chunk_id"]) for row in found))
+    if len(walked) >= CANDIDATE_DEPTH:
+        return walked
+    [held_row] = await records.rows(reach_held_query(vector, reach=reach, kinds=kinds))
+    if int(held_row["held"]) > EXACT_RESCAN_CEILING:
+        log.warning("knowledge.vector_leg_short", ceiling=EXACT_RESCAN_CEILING)
+        return walked
+    exact = await records.rows(exact_vector_search_query(vector, reach=reach, kinds=kinds))
+    return tuple(dict.fromkeys(str(row["chunk_id"]) for row in exact))
+
+
 # ------------------------------------------------------------------ the handlers
 @dataclass(frozen=True)
 class QuestionEmbedder:
@@ -584,10 +658,7 @@ def searcher(
         lexical = tuple(dict.fromkeys(str(row["chunk_id"]) for rows in legs for row in rows))
         nearest: tuple[str, ...] = ()
         if vector is not None:
-            found = await records.rows(
-                vector_search_query(vector, reach=reach, kinds=request.kinds)
-            )
-            nearest = tuple(dict.fromkeys(str(row["chunk_id"]) for row in found))
+            nearest = await nearest_passages(records, vector, reach=reach, kinds=request.kinds)
         page = [one.ref for one in hybrid(lexical=lexical, vector=nearest, limit=request.limit)]
         bodies = passages_query(page, reach=reach)
         rows = () if bodies.certainly_empty else await records.rows(bodies)

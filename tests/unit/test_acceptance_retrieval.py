@@ -143,14 +143,19 @@ def _failed(url: str, name: str) -> str:
 
 
 @pytest.mark.needs_db
-def test_iterative_scan_left_off_fails_the_narrow_reader_check(
+def test_a_walk_not_told_to_keep_walking_fails_the_narrow_reader_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The index walk stopping at its default window, as it does without iterative scan: the
-    crowd fills it and the reader's own passages are never reached. Delete this and M15.2.3 and
-    M15.2.4 close on a check that would pass with the setting gone."""
+    """**A plan assertion now, not a recall one.** Since 2026-10-05 a vector leg the walk left
+    short is asked again exactly over the reader's reach, so a reader is given their passages
+    with iterative scan off as well, and only at the cost of the re-ask. So the check reads the
+    leg's own statement: the walk it plans must carry iterative scan. Delete this and M15.2.3 can
+    close on a leg that walks the default window and leans on the re-ask for every narrow
+    reader."""
     monkeypatch.setattr(document_tools, "iterative_scan_statements", lambda: ())
-    assert "walking the index" in _failed(install, NARROW)
+    assert _failed(install, NARROW) == (
+        "the vector leg's walk is not told to keep walking past the crowd"
+    )
 
 
 @pytest.mark.needs_db
@@ -170,8 +175,9 @@ def test_a_reach_applied_after_the_query_fails_the_narrow_reader_check(
         return original(question, reach=wide, kinds=kinds)
 
     monkeypatch.setattr(document_tools, "search_queries", widened)
-    monkeypatch.setattr(document_tools, "iterative_scan_statements", lambda: ())
-    assert _failed(install, NARROW)
+    assert (
+        _failed(install, NARROW) == "a narrow reader's text search lost their passages to the crowd"
+    )
 
 
 @pytest.mark.needs_db

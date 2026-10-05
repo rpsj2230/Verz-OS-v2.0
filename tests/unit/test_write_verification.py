@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 from brain.connectors import (
+    cloudflare,
     freshdesk,
     google_analytics,
     google_drive,
@@ -34,6 +35,7 @@ from brain.connectors import (
     laravel,
     lark_base,
     lark_wiki,
+    search_console,
     throttle,
     write_verification,
     xero,
@@ -66,6 +68,7 @@ from brain.ops.idempotency import (
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
 from tests.fixtures.cassettes.google_analytics import PROPERTY
+from tests.fixtures.cassettes.search_console import SITE
 
 #: Every shipped connector's read-back, as the declarations state it.
 READ_BACKS = read_backs()
@@ -134,6 +137,16 @@ def freshdesk_answer(reply: freshdesk.Reply) -> Verification:
         freshdesk.Endpoint.SEARCH_TICKETS, domain="helpdesk.example.invalid"
     )
     return verdict(reading("freshdesk")(operation, reply))
+
+
+def cloudflare_answer(recorded: Cassette) -> Verification:
+    """A Cloudflare reply read as the listing its request was made against."""
+    operation = (
+        cloudflare.dns_records_operation()
+        if "/dns_records" in recorded.request
+        else cloudflare.zones_operation()
+    )
+    return verdict(reading("cloudflare")(operation, status=recorded.status, body=recorded.body))
 
 
 def lark_table() -> LarkBaseTable:
@@ -274,6 +287,17 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_analytics", "GA-403-property"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-429-report"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-500-report"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sites"): Verification.FOUND,
+    # A report's calls and every refusal hold no site list, and a list without the connected site
+    # never proves it gone: see `search_console.A_SITE_LIST_CANNOT_PROVE_ABSENCE`.
+    ("search_console", "SC-200-days"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-totals"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-queries"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-pages"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sitemaps"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-403-site"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-429-query"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-503-query"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
@@ -281,6 +305,18 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("laravel", "LARAVEL-1146"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-3024"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-2006"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-zones"): Verification.FOUND,
+    ("cloudflare", "CF-200-zones-full-page"): Verification.FOUND,
+    ("cloudflare", "CF-200-dns-records"): Verification.FOUND,
+    # An answered last page with no records is the one complete empty reading.
+    ("cloudflare", "CF-200-dns-records-empty"): Verification.ABSENT,
+    # One zone, one record and a GraphQL answer are not listings, so they prove nothing absent.
+    ("cloudflare", "CF-200-zone"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-dns-record"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-security-events"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-graphql-errors"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-429"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-403"): Verification.INCONCLUSIVE,
 }
 
 
@@ -335,8 +371,16 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             )
             property_read = google_analytics.operation_for(PROPERTY)
             return verdict(reading("google_analytics")(property_read, answered))
+        case "search_console":
+            listed = search_console.Reply(
+                status=recorded.status, headers=recorded.headers, body=recorded.body
+            )
+            site_list = search_console.listing_for(SITE)
+            return verdict(reading("search_console")(site_list, listed))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
+        case "cloudflare":
+            return cloudflare_answer(recorded)
         case "lark_base":
             return lark_base_answer(lark_reply(recorded.cid))
         case "lark_wiki":
