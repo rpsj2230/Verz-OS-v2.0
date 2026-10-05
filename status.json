@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T12:55:23.765582+00:00",
-  "commit": "213ab570",
-  "commit_subject": "Search Console is connected from the console, keeps its one site's name, and reads its clicks, impressions, ten top queries and pages and sitemap problems live for any range within sixteen months (M11.7.2) (#303)",
+  "generated_at": "2026-10-05T13:22:28.297854+00:00",
+  "commit": "dab9e51d",
+  "commit_subject": "Merge pull request #298 from rpsj2230/M11/w2-cloudflare",
   "total": 1591,
   "done": 472,
   "percent": 29.7,
