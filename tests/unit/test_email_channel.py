@@ -675,7 +675,7 @@ def test_the_list_shows_email_s_steps_and_the_address_its_worker_posts_to(
     (worker,) = [one for one in before["email"]["steps"] if one["copy_text"]]
     assert (worker["copy_text"], worker["asks"]) == (WORKER_SCRIPT, ["events_address"])
     assert before["webhook"]["steps"] == []
-    assert (before["teams"]["events_path"], before["teams"]["events_address"]) == ("", "")
+    assert (before["telegram"]["events_path"], before["telegram"]["events_address"]) == ("", "")
 
     monkeypatch.setattr(
         channel_routes, "value_of", lambda name: "https://brain.example.test/auth/callback"
