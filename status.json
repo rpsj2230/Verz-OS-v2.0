@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-10-05T12:45:01.181042+00:00",
-  "commit": "9ac44d8a",
-  "commit_subject": "The evening digest is sent: once a day at the install's hour, to the conversation it chose, with the key borrowed for the send (#308)",
-  "total": 1589,
+  "generated_at": "2026-10-05T12:49:34.475624+00:00",
+  "commit": "82a3d232",
+  "commit_subject": "An approval card reaches the approver in Lark the moment it is raised, sent to the Lark address their binding now keeps (#268)",
+  "total": 1591,
   "done": 472,
   "percent": 29.7,
   "acts": 47,
@@ -38,13 +38,13 @@
     {
       "wave": 2,
       "name": "Data, channels, retrieval",
-      "total": 265,
+      "total": 267,
       "done": 120,
-      "percent": 45.3,
+      "percent": 44.9,
       "in_progress": 12,
       "ready_for_testing": 12,
       "blocked": 17,
-      "open": 104,
+      "open": 106,
       "acts": 0,
       "decided": 20
     },
@@ -196,7 +196,7 @@
       "module": "M10",
       "name": "Channels",
       "wave": 2,
-      "total": 34,
+      "total": 36,
       "done": 14,
       "acts": 0,
       "decided": 1
