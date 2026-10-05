@@ -190,7 +190,7 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Se
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Final, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from brain.db import SCHEMAS, libpq_conninfo
 from brain.gate.context import TrafficClass
@@ -461,6 +461,62 @@ def pooler_url_findings(url: str) -> tuple[str, ...]:
                 "transaction pooler. A queue does not work around one; it does not use one."
             )
     return tuple(findings)
+
+
+#: Why every opener outside the worker derives the queue's URL, and none uses `database_url`.
+A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S: Final = (
+    "The application's database_url is the transaction pooler on every install, and "
+    "queue_url_refusals refuses a pooler URL before a connection is opened, rightly. Until "
+    "2026-09-30 the upload route, the lifecycle routes and the install check counting the queue "
+    "each built the driver from database_url, so each was refused on every install and nowhere "
+    "else: the tests stood the driver's count in, and the install check failed on all 27 of its "
+    "runs. The worker had its own QUEUE_URL. So every opener asks queue_url_of, which derives "
+    "the worker's URL from the owner's login the process already has: the same login and "
+    "database through the session pooler every profile with a worker composes. No new variable, "
+    "because a hosting panel's stored copy of the compose file keeps the environment it was "
+    "saved with, and a variable a release adds would reach no running install."
+)
+
+#: The session pooler every profile with a worker composes, beside the transaction pooler the
+#: application is given. `tests/unit/test_queue_url.py` holds both names to the compose files.
+SESSION_POOLER_HOST: Final = "pgbouncer-session"
+SESSION_POOLER_PORT: Final = 5432
+
+
+def queue_url_for(owner_url: str) -> str:
+    """The queue's URL for this owner login: through the session pooler where it came through a
+    transaction pooler, unchanged where it goes straight to the database. Empty for empty.
+
+    The markers only a transaction pooler needs are dropped from the query, since
+    `pooler_url_findings` would read them as the pooler's; everything else is kept. See
+    `A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S`.
+    """
+    url = owner_url.strip()
+    # An empty URL names no host, so it is returned as it came, empty.
+    split = urlsplit(url)
+    if (split.hostname or "").lower() not in POOLER_HOSTNAMES:
+        return url
+    kept = "&".join(
+        one
+        for one in split.query.split("&")
+        if one and not any(marker in one.lower() for marker in _POOLER_MARKERS)
+    )
+    credentials = split.netloc.rpartition("@")[0]
+    netloc = f"{credentials}@" if credentials else ""
+    netloc += f"{SESSION_POOLER_HOST}:{SESSION_POOLER_PORT}"
+    return urlunsplit((split.scheme, netloc, split.path, kept, split.fragment))
+
+
+def queue_url_of(settings: object) -> str:
+    """This process's queue connection, derived from its owner login, or empty with none.
+
+    Takes whatever carries the settings, so a route's `app.state.settings` and a check's harness
+    settings are read alike; `Settings.owner_database_url` is the owner's login, which is the one
+    the worker's own `QUEUE_URL` names.
+    """
+    owner = getattr(settings, "owner_database_url", None)
+    url = owner() if callable(owner) else str(getattr(settings, "database_url", "") or "")
+    return queue_url_for(str(url or ""))
 
 
 def queue_url_refusals(queue_url: str, *, app_url: str = "") -> tuple[str, ...]:

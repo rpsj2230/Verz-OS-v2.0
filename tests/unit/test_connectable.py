@@ -11,6 +11,7 @@ Task ids: M42.6.5, M11.1.6
 
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import pkgutil
 import re
@@ -21,22 +22,28 @@ import pytest
 
 import brain.connectors
 from brain.connectors.contract import AccessMode
+from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.write_verification import builds_a_manifest
+from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connectable import (
     CONNECTABLE,
+    DECLARED_FORMS,
     MAX_SETTING_CHARS,
     NOT_FROM_THE_CONSOLE,
     READING_ROLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
     NotConnectableError,
     blank_sentence,
     connectable,
     given,
     key_reference,
     manifest_for,
+    offered,
     settings_problems,
 )
 from brain.ops.credentials import CONNECTOR_NAME_PATTERN
+from brain.ops.limits import connector_ceiling
 from brain.ops.openbao import CONNECTOR_KEY_PREFIX
 from brain.ops.secrets import VaultRole
 
@@ -49,14 +56,57 @@ IDENTIFIERS: Final = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "cloudflare": "0123456789abcdef0123456789abcdef",
+    "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
+    "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
+    "laravel": "portal",
+    "domains": "example.com, example.org",
+    "slack_messages": "T0123ABCD",
 }
 
 #: The settings after the first, for a source whose form asks for more than one.
-FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {"freshdesk": {"department": "support"}}
+FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
+    "freshdesk": {"department": "support"},
+    "cloudflare": {"department": "operations"},
+    "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "domains": {"department": "operations"},
+    "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
+    "laravel": {
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
+        "client_rule": "department = sales",
+        "user_rule": "department = operations",
+        "max_rows": "500",
+        "timeout_seconds": "10",
+    },
+    "slack_messages": {"department": "operations"},
+}
 
 #: A source's key that carries no scopes, and the kind of key its slot row asks for and refuses.
-#: A Freshdesk key is an agent's and can do whatever that agent can.
-KEY_KIND_WITHOUT_SCOPES: Final = {"freshdesk": ("agent", "admin")}
+#: A Freshdesk key is an agent's and can do whatever that agent can; a Drive key file is a service
+#: account's, shared one folder as a viewer; a Laravel user holds SELECT on views, never on tables.
+KEY_KIND_WITHOUT_SCOPES: Final = {
+    "freshdesk": ("agent", "admin"),
+    "cloudflare": ("dns read", "dns write"),
+    "google_drive": ("viewer", "delegation"),
+    "laravel": ("select", "tables"),
+}
+
+
+def in_scope(identifier: str, selectors: tuple[str, ...]) -> bool:
+    """Whether the scope names the identifier typed: as a selector, as what each is inside, as
+    a database holds the views a Laravel connection names (`portal.v_client`), or as the list the
+    selectors are, as a domains connection's are."""
+    listed = tuple(one.strip() for one in identifier.split(","))
+    return (
+        identifier in selectors
+        or all(one.startswith(f"{identifier}.") for one in selectors)
+        or listed == selectors
+    )
 
 
 def settings_for(name: str, value: str | None = None) -> dict[str, str]:
@@ -105,7 +155,7 @@ def test_a_connectable_source_builds_a_manifest_under_its_own_name_bound_to_its_
     assert manifest.credential.ref.path == f"{CONNECTOR_KEY_PREFIX}{name}"
     assert manifest.credential.ref.role is VaultRole.WORKER is READING_ROLE
     assert manifest.credential.mode is AccessMode.READ_ONLY
-    assert IDENTIFIERS[name] in manifest.scope.selectors
+    assert in_scope(IDENTIFIERS[name], manifest.scope.selectors)
     assert key_reference(name) == manifest.credential.ref
 
 
@@ -114,13 +164,18 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
     """The scopes an administrator is told to request are the ones `credential-slots.md` argued for
     that connector. Delete this and the form's hint drifts from the document, and the scope asked
     for on install day is whichever one somebody last typed."""
+    if CONNECTABLE[name].credential_shape is CredentialShape.NONE:
+        # A source that takes no key has no slot and no scope; its hint says nothing is kept.
+        assert "nothing is kept" in CONNECTABLE[name].credential_hint
+        return
     row = next(
         line
         for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
         if line.startswith(f"| `connectors/creds/{name}`")
     )
     requested, refused = row.split("|")[3], row.split("|")[4]
-    scopes = re.findall(r"`([a-z.]+)`", requested)
+    # A colon too, as Slack names its scopes (`channels:read`).
+    scopes = re.findall(r"`([a-z.:]+)`", requested)
     hint = CONNECTABLE[name].credential_hint
 
     if name in KEY_KIND_WITHOUT_SCOPES:
@@ -139,12 +194,86 @@ def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
     saying what connecting it would need."""
     for one in NOT_FROM_THE_CONSOLE.values():
         assert one.name and one.label
-        # Lark's two are connected by Connect Lark on the same screen; the rest at the server.
-        where = "Connect Lark" if one.name.startswith("lark_") else "connected at the server"
-        assert where in one.why
+        # Lark's two are connected by Connect Lark on the same screen, and since 2026-09-30
+        # (M11.7.7) nothing else is connected at the server: the rest are declared forms this
+        # install cannot read yet, and say so.
+        if one.name.startswith("lark_"):
+            assert "Connect Lark" in one.why
+        else:
+            assert one.name in DECLARED_FORMS
+            assert (one.why, one.guide) == (THIS_INSTALL_CANNOT_READ_IT_YET, ())
     with pytest.raises(NotConnectableError):
-        connectable("laravel")
+        connectable("lark_base")
     assert connectable("xero") is CONNECTABLE["xero"]
+
+
+def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
+    """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every source offered today:
+    each has a reading or a live lookup, and a recorded ceiling. Delete this and the screen can
+    offer a connection that keeps its key and reads nothing, which is what Google Drive and
+    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling. Laravel is
+    offered since M11.6.1 because it reads, and by this rule alone."""
+    declared = shipped()
+    assert set(CONNECTABLE) == {
+        "cloudflare",
+        "domains",
+        "freshdesk",
+        "google_analytics",
+        "google_drive",
+        "hubspot",
+        "laravel",
+        "search_console",
+        "slack_messages",
+        "xero",
+    }
+    for name in CONNECTABLE:
+        one = declared[name]
+        assert one.reading is not None or one.live is not None, name
+        assert connector_ceiling(name) is not None, name
+        # `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`: and Ask answers from it.
+        assert name in CONNECTOR_ROW_ENTITIES or name in ANSWERED_BY_PASSAGES, name
+
+
+def test_a_form_with_no_way_to_be_read_is_listed_and_not_offered() -> None:
+    """The rule driven from both sides on one real declaration. Xero as it ships is offered; Xero
+    with neither its reading nor its live lookup, and Xero under a name no ceiling is recorded for,
+    are each listed as not readable yet and offered nowhere. Delete this and the rule can be
+    satisfied by a function that offers everything, or by one that offers nothing."""
+    from brain.connectors import xero
+
+    real = xero.CONNECTOR
+    offers, listed = offered({"xero": real})
+    assert set(offers) == {"xero"} and listed == {}
+
+    unread = dataclasses.replace(real, reading=None, live=None)
+    offers, listed = offered({"xero": unread})
+    assert offers == {}
+    assert (listed["xero"].why, listed["xero"].guide) == (THIS_INSTALL_CANNOT_READ_IT_YET, ())
+
+    unmeasured = dataclasses.replace(real, name="nowhere")
+    offers, listed = offered({"nowhere": unmeasured})
+    assert offers == {} and listed["nowhere"].why == THIS_INSTALL_CANNOT_READ_IT_YET
+
+
+def test_a_source_read_and_answerable_by_nothing_is_not_offered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`, from both sides and both ways of
+    answering. Xero's declaration under Lark Base's name has a reading and a ceiling and nothing
+    Ask answers from, and is not offered; the same with the name among the passage readers is
+    offered, as Xero itself is through its classifications. Delete this and the screen can offer
+    a source that is read into the index and never answers a question, which HubSpot was."""
+    import brain.ops.connectable as connectable
+    from brain.connectors import xero
+
+    read_only = dataclasses.replace(xero.CONNECTOR, name="lark_base")
+    offers, listed = offered({"lark_base": read_only})
+    assert offers == {} and listed["lark_base"].why == THIS_INSTALL_CANNOT_READ_IT_YET
+
+    monkeypatch.setattr(connectable, "ANSWERED_BY_PASSAGES", frozenset({"lark_base"}))
+    offers, _ = offered({"lark_base": read_only})
+    assert set(offers) == {"lark_base"}
+    assert set(offered({"xero": xero.CONNECTOR})[0]) == {"xero"}
 
 
 # ------------------------------------------------------------------------- the refusals

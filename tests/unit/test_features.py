@@ -104,6 +104,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.prompt_routes",
         "brain.jobs_routes",
         "brain.install_routes",
+        "brain.staff_source_routes",
     }
 
 

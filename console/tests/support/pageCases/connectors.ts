@@ -153,6 +153,8 @@ const CONNECTORS_SCREEN = {
       settings: [{ name: "tenant_id", label: UNBROKEN, hint: UNBROKEN, max_chars: 200, blank: `Give the ${UNBROKEN}.` }],
       credential_label: UNBROKEN,
       credential_hint: UNBROKEN,
+      credential_shape: "key",
+      credential_max_chars: 1000,
       may_connect: true,
       steps: [],
     },

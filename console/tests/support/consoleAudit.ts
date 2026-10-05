@@ -142,6 +142,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
       "/api/v1/access-requests*",
+      "/api/v1/escalations",
       "/api/v1/govern/roles/holders",
       "/api/v1/govern/roles/appointment",
       "/api/v1/govern/roles/deputy",
@@ -228,10 +229,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/install/limits",
       "/api/v1/install/tuning*",
       "/api/v1/install/capacity",
+      "/api/v1/digest/destination",
       "/setup/*",
     ],
     tables: ["ops.setting", "ops.budget_version"],
-    installation: ["INSTALL_LOCALES", "INSTALL_CURRENCY", "INSTALL_TIME_ZONE"],
+    installation: [
+      "INSTALL_LOCALES",
+      "INSTALL_CURRENCY",
+      "INSTALL_TIME_ZONE",
+      "INSTALL_DIGEST_DESTINATION",
+      "INSTALL_DIGEST_TIME",
+    ],
     gaps: [
       {
         what: "Spending budgets are read and never changed.",
@@ -738,6 +746,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/erasures",
       "/api/v1/govern/compliance*",
       "/api/v1/me/referrals*",
+      "/api/v1/govern/escalation-routes*",
     ],
     tables: [
       "ops.retention_release",
@@ -746,6 +755,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.erasure_request",
       "ops.breach_case",
       "ops.sensitive_referral",
+      "gate.escalation",
     ],
     installation: [],
     gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],
@@ -775,6 +785,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
   "POST /api/v1/widget/sessions":
     "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
+  "POST /api/v1/widget/questions":
+    "Where a website visitor's question is answered from knowledge marked public, which writes nothing; what is public is decided on each document's page, by the marking route.",
   "POST /api/v1/automation/tool-call":
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
   "chat.conversation":

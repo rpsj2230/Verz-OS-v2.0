@@ -51,15 +51,18 @@ def test_every_field_xero_classifies_is_classified_by_the_capability_xero_names(
         assert compiled == declared
 
 
-def test_every_field_freshdesk_keeps_is_classified_behind_its_own_capability() -> None:
-    """Held against the fields the Freshdesk index keeps. Delete this and a field the index keeps
-    can go unclassified, withheld from everybody with nothing saying why, or a new one can be
-    answered under the row's capability alone."""
+def test_every_field_freshdesk_keeps_or_reads_live_is_classified_behind_its_own_capability() -> (
+    None
+):
+    """Held against the fields the Freshdesk index keeps and the body its live read returns. Delete
+    this and a field can go unclassified, withheld from everybody with nothing saying why, or the
+    ticket's body can be answered under the row's capability alone."""
     [ticket] = freshdesk_classifications()
     kept = set(freshdesk.projected_field_names())
     columns = {rule.column: rule.required_capability.value for rule in ticket.rules}
-    assert set(columns) == kept | {SCOPED_BY[freshdesk.FRESHDESK]}
-    for name in kept:
+    read = kept | {freshdesk.LIVE_BODY_FIELD}
+    assert set(columns) == read | {SCOPED_BY[freshdesk.FRESHDESK]}
+    for name in read:
         assert columns[name] == f"read:ticket.{name}"
 
 
@@ -92,7 +95,7 @@ def test_only_a_connected_source_contributes_questions_and_each_is_keyed_on_its_
     source nobody connected answers "nothing found" to a question about it, which says the product
     knows the source exists, or a connected one contributes nothing."""
     assert connected_questions(()) == ()
-    assert connected_questions(["hubspot"]) == ()
+    assert connected_questions(["lark_base"]) == ()
     xero_only = connected_questions([xero.CONNECTOR_NAME])
     assert {rule.source for rule in xero_only} == {xero.CONNECTOR_NAME}
     for rule in xero_only:
@@ -159,3 +162,26 @@ def test_an_agent_install_reads_a_connected_source_as_serving_and_a_changed_one_
     assert registry.serving() == (xero.CONNECTOR_NAME,)
     monkeypatch.setattr(lifecycle, "sessions_of", lambda request: None)
     assert len(asyncio.run(lifecycle.connectors_of(request))) == 0  # type: ignore[arg-type]
+
+
+def test_hubspot_is_asked_by_a_company_or_deal_name_and_its_amount_is_confidential() -> None:
+    """HubSpot on Ask since 2026-09-30: its companies and deals are asked about by the name a
+    person knows them by, its contacts by no name at all (a contact is kept without one), and the
+    deal's amount is CONFIDENTIAL behind `read:hubspot_deal.amount`, as HubSpot's own rules say.
+    Delete this and HubSpot can fall back to being read and asked about by nothing, or a deal's
+    amount can be told under an INTERNAL grant."""
+    from brain.connectors import hubspot
+    from brain.core.field_policy import Classification
+
+    rules = connected_questions([hubspot.CONNECTOR_NAME])
+    assert {rule.entity for rule in rules} == {hubspot.ENTITY_CLIENT, hubspot.ENTITY_DEAL}
+    for rule in rules:
+        assert rule.match_field == NAMED_BY[(rule.source, rule.entity)]
+    [deal] = [one for one in CONNECTOR_ROW_ENTITIES["hubspot"] if one.entity == hubspot.ENTITY_DEAL]
+    amount = deal.rule_for("amount")
+    assert amount is not None
+    assert (amount.required_capability.value, amount.classification) == (
+        "read:hubspot_deal.amount",
+        Classification.CONFIDENTIAL,
+    )
+    assert deal.rule_for("portal_id") is not None

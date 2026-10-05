@@ -91,6 +91,7 @@ from brain.core.envelope import Entity, TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.gate.injection import RiskAssessment
 from brain.gate.leash import Action, ApprovalState, Leash, Resumption, SuspendedAction, resume
+from brain.gate.takeover_store import TakeoverStandings
 from brain.knowledge.promotion import THE_DOCUMENT_MOVED
 from brain.ops.idempotency import OperationLedger
 from brain.tables.audit import AuditEntryRow, attributed_to
@@ -500,6 +501,7 @@ async def resume_stored[T: Entity](
     now: datetime,
     execute: Callable[[Action], TypedResult[T]],
     ledger: OperationLedger,
+    standings: TakeoverStandings | None = None,
 ) -> Resumption[T] | None:
     """Resume a stored suspension through `brain.gate.leash.resume`, at the reach as it is now.
 
@@ -512,11 +514,21 @@ async def resume_stored[T: Entity](
     `ledger` is the operation ledger the run is keyed in, so a resume retried after the action
     ran is handed what the first run left rather than running it again. See
     `brain.gate.leash.AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN`.
+
+    `standings`, when given, is where the agent's standing on the action's target is read at
+    `now`, so a rung people have taken over since the approval was granted still bites at the
+    resume, as a leash lowered by hand does. See
+    `brain.gate.leash.A_TAKEN_OVER_AGENT_STANDS_ONE_RUNG_LOWER`.
     """
     reach = reach_now(principal_id)
     found = await store.reading_as(reach, now).suspension(suspension_id)
     if found is None:
         return None
+    standing = (
+        None
+        if standings is None
+        else await standings.standing(found.action.agent_id, found.action.target, now)
+    )
     return resume(
         found,
         caller=reach,
@@ -528,4 +540,5 @@ async def resume_stored[T: Entity](
         now=now,
         execute=execute,
         ledger=ledger,
+        standing=standing,
     )

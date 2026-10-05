@@ -844,6 +844,18 @@ MAX_CARD_BYTES: Final = 30 * 1024
 #: How many people one page of a chat's members holds. Lark's documented maximum.
 MEMBERS_PAGE: Final = 100
 
+#: How many groups one page of the bot's groups holds. Lark's documented maximum.
+CHATS_PAGE: Final = 100
+
+#: Lark's code for a token without the scope a call needs.
+MISSING_SCOPE_CODE: Final = 99991672
+
+#: Said when Lark refuses the group list for the scope: what to add, in Lark's own words.
+CANNOT_LIST_GROUPS: Final = (
+    "The Lark app may not list the groups its bot is in. Add the im:chat:read scope under "
+    "Permissions & Scopes and release a new version of the app."
+)
+
 #: The three address kinds a reply is sent to, in the `to` string the ledger keys on, and the
 #: fourth, a card already sent, which a reply to replaces rather than follows.
 ROOM_ADDRESS: Final = "chat"
@@ -1314,6 +1326,11 @@ class LarkWire:
         """Where a reply goes to replace the card in this message."""
         return _address(EDIT_ADDRESS, message_id)
 
+    def person_address(self, identity: str) -> str:
+        """A person's own chat with the bot: `user:`, which `card_request` posts to by open id in
+        the body and names only as `receive_id_type` in the URL."""
+        return _address(SENDER_ADDRESS, identity)
+
     def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:
         """Lark's callback answer: a toast, and the card replaced when `closed` says with what."""
         answer: dict[str, Any] = {
@@ -1392,6 +1409,59 @@ class LarkWire:
         more = data.get("has_more") is True
         token = data.get("page_token")
         return frozenset(found), (token if more and isinstance(token, str) else "")
+
+    def conversations_request(
+        self, *, page: str, secret: str, tenant: Mapping[str, str]
+    ) -> VendorRequest:
+        """One page of the groups the bot has been added to (M38.3.3.1).
+
+        What a person chooses a destination from, so a group is picked and never typed. Needs
+        `brain.ops.lark_connect.CHAT_LIST_SCOPE`; an app without it is refused inside a 200, and
+        `conversations_page` says so.
+        """
+        kept = LarkSecret.parse(secret)
+        host = _host(tenant)
+        query = {"page_size": str(CHATS_PAGE)}
+        if page:
+            query["page_token"] = page
+        return VendorRequest(
+            url=f"{host}/open-apis/im/v1/chats?{urlencode(query)}",
+            headers={},
+            body=b"",
+            method="GET",
+            exchange=_exchange(host, tenant, kept),
+        )
+
+    def room_of(self, conversation: str) -> str:
+        """The address a message to one of the listed groups is sent to (M38.3.3.4)."""
+        return _address(ROOM_ADDRESS, conversation)
+
+    def conversations_page(self, answer: VendorAnswer) -> tuple[tuple[tuple[str, str], ...], str]:
+        """The groups on one page as (id, name), and the next page's token or empty.
+
+        `ValueError` for anything that is not a page, naming the scope when that is the refusal:
+        a list read from a failed answer would offer nothing and say nothing about why.
+        """
+        if _code(answer.body) == MISSING_SCOPE_CODE:
+            raise ValueError(CANNOT_LIST_GROUPS)
+        if self.judge(answer) is not CallOutcome.OK:
+            raise ValueError("Lark did not answer with the groups the bot is in")
+        data = _json_object(answer.body).get("data")
+        if not isinstance(data, Mapping):
+            raise ValueError("Lark's page of groups has no data")
+        items = data.get("items") or []
+        if not isinstance(items, list):
+            raise ValueError("Lark's page of groups is not a list")
+        found: list[tuple[str, str]] = []
+        for item in items:
+            chat_id = item.get("chat_id") if isinstance(item, Mapping) else None
+            if not isinstance(chat_id, str) or not chat_id:
+                raise ValueError("a group on Lark's page has no id")
+            name = item.get("name") if isinstance(item, Mapping) else None
+            found.append((chat_id, name if isinstance(name, str) and name.strip() else chat_id))
+        more = data.get("has_more") is True
+        token = data.get("page_token")
+        return tuple(found), (token if more and isinstance(token, str) else "")
 
 
 def _code(body: bytes) -> int | None:
