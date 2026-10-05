@@ -360,6 +360,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.model_lane:PassageSearch.passages": Repeat.READS,
         "brain.gate.model_lane:AskerHints.hints": Repeat.READS,
         "brain.gate.model_lane:AnswerModel.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.gate.model_lane:ToolLoop.drafted": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.gate.runtime:ToolCaller.call": Repeat.ISSUES,
+        "brain.gate.runtime:RunLog.record": Repeat.DERIVED_STATE,
         # The items behind cited documents, read for their badges at the reader's reach.
         "brain.gate.model_lane:ItemLookup.items": Repeat.READS,
         "brain.gate.provenance:Cited.describe": Repeat.READS,

@@ -51,6 +51,7 @@ ISSUING: frozenset[str] = frozenset(
         "brain.browsing.runner:Browser.act",
         "brain.channels.adapter:ChannelAdapter.send",
         "brain.channels.adapter:ChannelTransport.send",
+        "brain.gate.runtime:ToolCaller.call",
         "brain.ops.automation_piece:ToolCaller.call",
         "brain.ops.connector_write_run:SourceSender.send",
         "brain.ops.digest_delivery:DigestSender.send",
@@ -115,8 +116,8 @@ def test_the_doors_that_issue_are_the_ones_this_file_names() -> None:
 
 def test_the_scan_finds_the_deliveries_and_admits_each_by_the_door_or_the_guard() -> None:
     """The non-vacuous half. Every delivering module has at least one call through the door, the
-    automation path's tool call is admitted by the guard, and nothing is admitted by being
-    missed.
+    automation path's and the runtime's tool calls are admitted by the guard, and nothing is
+    admitted by being missed.
 
     Delete this and a scan that parsed nothing, or resolved every receiver away, would pass the
     check above over an empty set."""
@@ -130,7 +131,11 @@ def test_the_scan_finds_the_deliveries_and_admits_each_by_the_door_or_the_guard(
     assert ("brain.gate.leash", "run_real", Admitted.THROUGH_THE_DOOR) in {
         (one.module, one.function, one.admitted) for one in calls
     }
-    assert guarded == {("brain.ops.automation_piece", "run_step")}
+    # The automation step and the agent runtime's tool call, each behind `assert_no_side_effect`.
+    assert guarded == {
+        ("brain.ops.automation_piece", "run_step"),
+        ("brain.gate.runtime", "_called"),
+    }
     assert len([one for one in calls if one.admitted is Admitted.THROUGH_THE_DOOR]) >= len(
         DELIVERS_THROUGH_THE_DOOR
     )
