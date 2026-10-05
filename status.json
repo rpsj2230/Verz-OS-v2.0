@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T16:34:08.663550+00:00",
-  "commit": "e477bbdf",
-  "commit_subject": "The website check is registered on every install, over an HTTPS prober that goes to the checked address and reads the certificate's expiry (#346)",
+  "generated_at": "2026-10-05T17:15:26.278688+00:00",
+  "commit": "ac5a6809",
+  "commit_subject": "The trace ledger and its file store start as an optional service by the release, with their secrets minted on the server and their limits reported back (#349)",
   "total": 1592,
   "done": 551,
   "percent": 34.6,
