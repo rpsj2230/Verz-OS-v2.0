@@ -589,6 +589,10 @@ WRITTEN_BY_CHECKS = (
     "gate.capability_pack_assignment",
     "gate.role_grant",
     "ops.data_export",
+    "ops.question_asked",
+    "gate.elevation_request",
+    "gate.review_decision",
+    "gate.break_glass_notice",
 )
 
 

@@ -22,7 +22,7 @@
  * answers the decision and then answers the queue again without the decided card. The body sent
  * is compared with the route's own document, and the reasons with the Python enum.
  *
- * Task ids: M35.3.1.2, M35.3.1.1
+ * Task ids: M35.3.1.2, M35.3.1.1, M27.3.7, M27.9.3
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
