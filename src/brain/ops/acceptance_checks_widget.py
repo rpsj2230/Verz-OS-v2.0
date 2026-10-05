@@ -12,7 +12,7 @@ windows or their live sessions: the store is the check's and is dropped when the
 widget's own guards: the allowlist before any window, the minute's allowance, and a session
 carrying no entitlement set. It does not prove that the install's own `widget_origins` names the
 right sites, which is a setting its owner chooses, nor anything an anonymous visitor may read,
-which is M10.7.2 and needs the public marking that is not built yet.
+which is M10.7.2 and `brain.ops.acceptance_checks_public`'s.
 
 Nothing is written to the database and nothing leaves the process.
 
