@@ -516,20 +516,25 @@ def test_a_vendor_host_is_derived_from_the_connectors_rather_than_listed() -> No
 
 def test_a_published_list_of_servers_declared_at_the_top_is_the_vendors(tmp_path: Path) -> None:
     """IANA's RDAP list names the registry for every top-level domain, the same for every
-    install, so a module-level mapping named for servers contributes its hosts as a vendor's;
-    the same address inside a function body is still refused. Delete this and the domains
-    connector's registries read as twelve hundred client hosts, or a list declared anywhere in a
-    function passes."""
+    install, so a module-level mapping whose name declares it a vendor's (`_VENDOR_SERVERS`)
+    contributes its hosts as the vendor's. The same address inside a function body, and a
+    client-shaped host in an ordinary module-level tuple or a list merely called `SERVERS`, are
+    still refused. Delete this and the domains connector's registries read as twelve hundred
+    client hosts, or any module-level tuple can carry a client's hostname past the sweep."""
     connectors = tmp_path / "src" / "brain" / "connectors"
     connectors.mkdir(parents=True)
     (connectors / "listed.py").write_text(
-        'SERVERS = {"com": "https://rdap.registry.example-vendor.net/rdap"}\n'
+        'RDAP_VENDOR_SERVERS = {"com": "https://rdap.registry.example-vendor.net/rdap"}\n'
+        'HOSTS = ("https://portal.client-company.net",)\n'
+        'SERVERS = {"x": "https://intranet.client-company.net"}\n'
         "def later():\n"
         '    return {"x": "https://rdap.elsewhere.example-other.net"}\n',
         encoding="utf-8",
     )
     found = vendor_hosts(tmp_path)
     assert "rdap.registry.example-vendor.net" in found
+    assert "portal.client-company.net" not in found
+    assert "intranet.client-company.net" not in found
     assert "rdap.elsewhere.example-other.net" not in found
     assert "rdap.nic.aaa" in vendor_hosts(REPO)
 

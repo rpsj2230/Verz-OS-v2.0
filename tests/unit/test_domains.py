@@ -25,7 +25,7 @@ from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.declaration import CredentialShape, KeyScheme, SettingRefusedError
 from brain.connectors.live_read import RECORD_ID_FILTER
 from brain.connectors.manifest import manifest_digest
-from brain.connectors.rdap_servers import SERVERS, from_bootstrap, server_for
+from brain.connectors.rdap_servers import RDAP_VENDOR_SERVERS, from_bootstrap, server_for
 from brain.connectors.throttle import CallOutcome
 from brain.ops.acceptance_checks_connectors import STAND_IN_ADDRESS
 from brain.ops.connectable import CONNECTABLE, key_reference, manifest_for, settings_problems
@@ -242,8 +242,8 @@ def test_the_rdap_snapshot_is_iana_s_list_reduced_to_https() -> None:
         "com": "https://rdap.one.example",
         "net": "https://rdap.one.example",
     }
-    assert all(base.startswith("https://") for base in SERVERS.values())
-    assert len(SERVERS) > 1000
+    assert all(base.startswith("https://") for base in RDAP_VENDOR_SERVERS.values())
+    assert len(RDAP_VENDOR_SERVERS) > 1000
 
 
 # ------------------------------------------------------------------------ the site

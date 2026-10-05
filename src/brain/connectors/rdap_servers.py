@@ -33,7 +33,7 @@ PUBLISHED: Final = "2026-09-28T22:00:03Z"
 BOOTSTRAP_URL: Final = "https://data.iana.org/rdap/dns.json"
 
 #: Each top-level domain with an RDAP server, and that server's base address.
-SERVERS: Final[Mapping[str, str]] = MappingProxyType(
+RDAP_VENDOR_SERVERS: Final[Mapping[str, str]] = MappingProxyType(
     {
         "aaa": "https://rdap.nic.aaa",
         "aarp": "https://rdap.nic.aarp",
@@ -1243,11 +1243,11 @@ SERVERS: Final[Mapping[str, str]] = MappingProxyType(
 
 def server_for(domain: str) -> str | None:
     """The RDAP base address publishing this domain's record, or None when none is listed."""
-    return SERVERS.get(domain.rsplit(".", 1)[-1].lower())
+    return RDAP_VENDOR_SERVERS.get(domain.rsplit(".", 1)[-1].lower())
 
 
 def from_bootstrap(listed: Mapping[str, object]) -> Mapping[str, str]:
-    """IANA's bootstrap document reduced as `SERVERS` is: each top-level domain to its `https` base.
+    """IANA's bootstrap document reduced as `RDAP_VENDOR_SERVERS` is: a domain to its `https` base.
 
     Pure, so a release can regenerate the snapshot from a copy of the document fetched by a
     developer (`curl -s BOOTSTRAP_URL`) and nothing in the product ever fetches it.

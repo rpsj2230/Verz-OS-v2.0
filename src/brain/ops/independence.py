@@ -427,9 +427,11 @@ DECLARING_AREAS: Final[tuple[str, ...]] = ("connectors", "channels", "deployment
 #: sweep is satisfied by declaring where the vendor is, at the top of the file, once. A URL
 #: buried in a function body is still refused, which is the half worth keeping.
 VENDOR_CONSTANT_SUFFIXES: Final[tuple[str, ...]] = (
-    # A published list of a vendor's servers, as the RDAP registries are IANA's
-    # (`brain.connectors.rdap_servers.SERVERS`): every host in it is the same for every install.
-    "SERVERS",
+    # A published list of a vendor's servers, named as one: `_VENDOR_SERVERS`, as the RDAP
+    # registries are IANA's (`brain.connectors.rdap_servers.RDAP_VENDOR_SERVERS`). Every host in
+    # it is the same for every install. Only that name: an ordinary list of hosts, or one called
+    # `SERVERS`, is still read for client values.
+    "_VENDOR_SERVERS",
     "BASE_URL",
     "_HOST",
     "HOST",
