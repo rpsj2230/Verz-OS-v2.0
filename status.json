@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T18:56:25.009236+00:00",
-  "commit": "42088d9a",
-  "commit_subject": "A run's trace is read and drawn on a page under the Audit log, so the trace graph is no longer a component nothing renders (#359)",
+  "generated_at": "2026-10-05T19:41:45.770048+00:00",
+  "commit": "c542d0c9",
+  "commit_subject": "The Knowledge area's requirement checks name the knowledge task they prove, as Connectors' and Tools' do (#362)",
   "total": 1592,
   "done": 552,
   "percent": 34.7,
