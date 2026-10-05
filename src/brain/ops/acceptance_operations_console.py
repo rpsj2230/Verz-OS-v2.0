@@ -22,7 +22,7 @@ stand-in that records the address it was asked and answers a list naming one rel
 switch is proved to reach the look without this install asking anything outside its network. See
 `THE_RELEASE_LIST_IS_A_STAND_IN`.
 
-Task ids: M27.1.6, M27.6.1, M27.8.10, M27.15.51, M27.12.7, M27.7.27, M27.9.5
+Task ids: M27.1.6, M27.6.1, M27.15.51, M27.12.7, M27.7.27, M27.9.5
 """
 
 from __future__ import annotations
@@ -88,6 +88,12 @@ NO_TEMPLATE_IS_ON_FILE: Final = (
     "kept in its vault yet does not sign; the application signs them on its next start after it"
 )
 
+#: Said when the process running the check has no cache to read the live windows from.
+NO_CACHE_TO_ASK: Final = (
+    "the process running this check was not given the cache address the application uses, so "
+    "there are no live windows to read; the run inside the application's container can"
+)
+
 #: Said when nothing has furnished the database, which the application does on every start.
 NOTHING_HAS_FURNISHED_THIS_DATABASE: Final = (
     "this database has no record of being furnished, which the application writes the first "
@@ -109,6 +115,11 @@ SAVED_SETTING: Final = "INSTALL_ACCENT_COLOUR"
 
 #: The two values the check saves in turn, so one of them differs from what is in force.
 ACCENTS: Final = ("#2457a6", "#a62457")
+
+#: The kinds of ledger subject a furnishing may write: the setting recording it, the company-wide
+#: scope and the starter pack. A person, a grant, a department or anything else would be a row
+#: one company's data could live in, which `brain.ops.starter_store` says it never writes.
+FURNISHING_WRITES_ONLY: Final = frozenset({"setting", "scope", "pack"})
 
 #: The authority a Features screen reader holds. Restated rather than imported, so a change to
 #: the route's authority fails this check instead of moving with it.
@@ -367,9 +378,9 @@ async def this_install_says_what_is_running_and_at_what_level(h: Harness) -> Non
         raise CheckFailedError("This install named none of the settings the install runs with")
 
 
-# --------------------------------------- 3. a feature switched from the console (M27.8.10)
+# ------------------------------------ 3. the release check switched from the console (M27.15.51)
 @check(
-    leaves=("M27.8.10", "M27.15.51"),
+    leaves=("M27.15.51",),
     sentence=(
         "An administrator switches the release check on from the Features screen's route with the "
         "environment's switch off: the switch is audited under their name, Version and updates "
@@ -528,20 +539,27 @@ async def a_setting_is_saved_from_the_console_and_says_when_it_applies(h: Harnes
     leaves=("M27.7.27",),
     sentence=(
         "A reserved reader of Rate limits and of Connections is answered by the routes those "
-        "pages call: the ceilings and windows in force with what is throttled now or why it "
-        "cannot be read, and the memory, connections and pools against what the install size "
-        "declares; a person without either screen is refused both."
+        "pages call: the ceilings and windows in force with what is throttled now, read from the "
+        "install's own cache, and the memory, connections and pools against what the install "
+        "size and its database declare; a person without either screen is refused both."
     ),
 )
 async def rate_limits_and_capacity_answer_their_readers(h: Harness) -> None:
+    from brain.cache import make_client
     from brain.install_routes import capacity, limits
+    from brain.ops.limit_store import make_store
 
     await h.found_departments()
     reader, other = h.principal(A, "limits"), h.principal(A, "other")
     both = dict.fromkeys((*screen_grants("limits"), *screen_grants("connections")))
     await h.person(reader, department=A, grants=tuple(both))
     await h.person(other, department=A)
+    if not h.settings.valkey_url:
+        raise CheckNotRunError(NO_CACHE_TO_ASK)
     console = console_for(h)
+    # The windows the request path counts in, read from the install's own cache as the
+    # application reads them; reading them changes none. See `brain.install_routes.limits`.
+    console.app.state.throttle_source = make_store(make_client(h.settings.valkey_url)).live
     stranger = await asking_as(h, other)
     if not await refused(limits(console.request(), stranger)):
         raise CheckFailedError("a person who may not open Rate limits was shown it")
@@ -551,8 +569,8 @@ async def rate_limits_and_capacity_answer_their_readers(h: Harness) -> None:
     shown = await limits(console.request(), await asking_as(h, reader))
     if not shown.windows:
         raise CheckFailedError("Rate limits did not show the request windows in force")
-    if shown.throttled is None and not shown.unread:
-        raise CheckFailedError("Rate limits neither listed what is throttled nor said why not")
+    if shown.throttled is None:
+        raise CheckFailedError("Rate limits did not read what is throttled now from the cache")
     sized = await capacity(console.request(), await asking_as(h, reader))
     if sized.memory.profile != h.settings.profile:
         raise CheckFailedError("Connections did not size memory for the install's own size")
@@ -564,10 +582,10 @@ async def rate_limits_and_capacity_answer_their_readers(h: Harness) -> None:
 @check(
     leaves=("M27.9.5",),
     sentence=(
-        "The install was furnished once, by the product and recorded in the ledger: every "
-        "capability the product declares is registered, furnishing again writes nothing, and "
-        "every built-in template is on file signed under the product's name with its shipped "
-        "content."
+        "The install was furnished once, by the product and recorded in the ledger, writing only "
+        "its setting, scope and pack and no person or demo row: every capability the product "
+        "declares is registered, furnishing again writes nothing, and every built-in template "
+        "is on file signed under the product's name with its shipped content."
     ),
 )
 async def the_install_was_furnished_once_by_the_product(h: Harness) -> None:
@@ -593,6 +611,21 @@ async def the_install_was_furnished_once_by_the_product(h: Harness) -> None:
     )
     if any(one.capability.value not in registered for one in vocabulary()):
         raise CheckFailedError("a capability the product declares is not registered")
+    traced_by = (
+        (
+            await h.execute(
+                text(
+                    "SELECT DISTINCT split_part(subject, ':', 1) FROM obs.audit_entry"
+                    " WHERE trace_id = (SELECT trace_id FROM obs.audit_entry"
+                    " WHERE subject = :subject ORDER BY seq LIMIT 1)"
+                ).bindparams(subject=f"setting:{FURNISHED_KEY}")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if set(traced_by) - FURNISHING_WRITES_ONLY:
+        raise CheckFailedError("the furnishing wrote something that is not the product's own")
     again = await furnish(h.sessions, actor=h.actor, trace_id=f"{h.trace_id}-furnish")
     if not again.wrote_nothing:
         raise CheckFailedError("furnishing an install furnished already wrote something")
