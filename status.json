@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-10-05T12:03:52.264045+00:00",
-  "commit": "4e57c96d",
-  "commit_subject": "WhatsApp is a channel an install can connect: Meta's signature checked over the exact bytes, its check of the address answered for the verify token, and every message in a notification answered to its own sender (#329)",
-  "total": 1587,
+  "generated_at": "2026-10-05T12:29:37.580705+00:00",
+  "commit": "2a5bdc41",
+  "commit_subject": "A person made by hand can be given their work email on their page, which joins the staff list's person for it, and a listed contractor's end date keeps moving (#331)",
+  "total": 1589,
   "done": 472,
   "percent": 29.7,
   "acts": 47,
@@ -25,13 +25,13 @@
     {
       "wave": 1,
       "name": "The gate",
-      "total": 164,
+      "total": 166,
       "done": 155,
-      "percent": 94.5,
+      "percent": 93.4,
       "in_progress": 0,
-      "ready_for_testing": 6,
+      "ready_for_testing": 7,
       "blocked": 0,
-      "open": 3,
+      "open": 4,
       "acts": 1,
       "decided": 7
     },
@@ -115,7 +115,7 @@
       "module": "M1",
       "name": "Identity, users, roles, permissions",
       "wave": 1,
-      "total": 61,
+      "total": 63,
       "done": 48,
       "acts": 0,
       "decided": 1
@@ -1011,6 +1011,11 @@
     "M1.10.2": {
       "status": "READY FOR TESTING",
       "why": "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
+      "updated": "2026-09-30"
+    },
+    "M1.10.4": {
+      "status": "READY FOR TESTING",
+      "why": "built (M1/add-work-email): Add work email on a hand-made person's page binds their address and joins the staff list's person for it; proved on the install with M1.10.5",
       "updated": "2026-09-30"
     },
     "M2.3.1": {
