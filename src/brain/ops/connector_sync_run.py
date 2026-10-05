@@ -151,6 +151,7 @@ from brain.ops.connector_sync import (
     NO_VAULT,
     OWN_SHARE_SPENT,
     READ_BUT_CUT_SHORT,
+    READ_BUT_PART_LEFT_OUT,
     READ_TO_THE_END,
     READINGS,
     SHAPE_DISAGREED,
@@ -840,6 +841,9 @@ class _Reading:
     before: ReadState | None = None
     records: int = 0
     cut_short: bool = False
+    #: Whether the walk left part of the source out at a bound of its own. See
+    #: `brain.connectors.declaration.BoundedWalk`.
+    left_out: bool = False
     waited: float = 0.0
 
 
@@ -1252,6 +1256,7 @@ async def _read_under(
                     # The walk reached a bound of its own and left part of the source out. See
                     # `brain.connectors.declaration.BoundedWalk`.
                     one.cut_short = True
+                    one.left_out = True
                     one.read = replace(one.read, partial=True)
                 pages += 1
                 arguments = following
@@ -1263,6 +1268,10 @@ async def _read_under(
     if one.read.retires(entities):
         await _retire(sessions, plan.connector, entities, one.read.started_at)
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
+    if one.left_out and one.read.complete(entities):
+        # A walk that ended having left part of the source out is not carried on by the next
+        # run, so it says what was left out rather than that the next run carries on.
+        detail = READ_BUT_PART_LEFT_OUT
     return finish(SyncOutcome.SYNCED, detail)
 
 

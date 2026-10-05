@@ -329,6 +329,16 @@ READ_BUT_CUT_SHORT: Final = (
     "Read as far as one run reads, which was not the end; the next run carries on from where this "
     "one stopped."
 )
+
+#: A pass read to its end that met a bound its reading will not cross. Google Drive's is a folder
+#: nested deeper than `brain.connectors.google_drive.MAX_FOLDER_DEPTH`, Google's own limit.
+READ_BUT_PART_LEFT_OUT: Final = (
+    "Read to the end of what its reading goes into, which is not all of the source: part of it "
+    "lies past a bound the reading does not cross, so that part was not read and nothing was "
+    "retired. "
+    "In Google Drive that is a folder nested more than 100 levels below the one connected; move it "
+    "nearer the connected folder and the next run reads it."
+)
 SOURCE_ALLOWANCE_REFUSED: Final = (
     "The source's call allowance refused the read. It is tried again once the source said it would "
     "have room."
