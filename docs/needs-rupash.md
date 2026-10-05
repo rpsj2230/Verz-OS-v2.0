@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**33 items are open: 156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**35 items are open: 158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,70 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 158. May an automation's canvas have a step where an agent thinks? (optional)
+
+**In plain terms:** every agent now runs through one path, with tools it may call while it answers
+(M13.7.1). The plan says an automation "enters the same agent runtime". The automation canvas you
+have today is deliberately step by step: every step does one fixed thing, and no step asks a model
+anything, so a flow does the same thing every time it runs. That was decided when the canvas was
+built (item 30 and item 124).
+
+So an automation reaches an agent this way instead: **a schedule or a trigger starts an agent**, at
+the reach of the person the automation runs for, and the agent's answer is what the flow produces.
+Nothing changes on the canvas.
+
+**Option A, as built: the canvas stays fixed steps, and an agent is started by a schedule or a
+trigger.** A flow is predictable, and its steps can be read and checked.
+
+**Option B: add an "ask an agent" step inside a canvas.** A flow can then decide things midway, which
+also means it can do something different each time it runs, and its runs are harder to check.
+
+**My recommendation:** A. Nothing waits on this; I am building A.
+
+**Two things I decided for you while building, as you asked me to decide routine items** (tell me if
+either is wrong):
+
+- **Which channels an agent answers on.** An agent now answers only on the channels an administrator
+  switched on for it (M13.7.4). Agents that already exist keep every channel they reach today, so
+  nobody loses anything. A new agent starts with none, and the agent builder asks which channels to
+  switch on, so a new agent is never silent without anybody noticing. Asking for an agent on a channel
+  it is not on gets exactly the same reply as asking for an agent that does not exist.
+- **Where the client-matching weights are kept.** Your decision (f) put them in the exports volume. On
+  an install whose compose file Coolify stores, a release cannot add that volume to the application,
+  so the weights would never be written. They are kept in the Brain's own settings instead, readable
+  only by the worker and by whoever may confirm a merge. The offline matcher still writes its export to
+  the volume where the full install has one.
+
+**What I need from you:** nothing, or reply "158: B" if you want the canvas step.
+
+## 157. One line for your install's database pooler
+
+**In plain terms:** the Brain reaches your database through a pooler that lends out a fixed number of
+connections. The pooler counted its limit per login, and the application uses two logins, so on a busy
+day it could open twice the 20 connections the Brain plans for. The product now caps it at 20 across
+logins (#378). **Your install does not have that cap yet, because a release never edits the copy of
+the compose file Coolify keeps.** Nothing is broken today; this keeps it that way under load.
+
+**Option A: I do it.** Over SSH, through the tunnel to Coolify, I add the one line below to the
+`pgbouncer` service's `environment` in Coolify's copy, beside `DEFAULT_POOL_SIZE`, and redeploy once.
+Requests wait at the pooler for a moment while it restarts.
+
+```yaml
+      MAX_DB_CONNECTIONS: "20"
+```
+
+**Option B: you do it.**
+
+1. Open Coolify and choose the Brain application.
+2. Open the compose file editor.
+3. Find the `pgbouncer` service, then the line `DEFAULT_POOL_SIZE: "20"` under `environment`.
+4. Below it, add the line above with the same indentation.
+5. Press Save, then Redeploy.
+
+**My recommendation:** A.
+
+**What I need from you:** reply "157: A" or "157: B, done".
 
 ## 156. What is your "maintenance portal"?
 
