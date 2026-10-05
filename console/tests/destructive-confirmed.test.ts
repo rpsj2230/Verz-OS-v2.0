@@ -39,6 +39,17 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
+    "Adding a work email binds an address to a person who has none. It retires the staff list's " +
+    "person for that address only when they have never signed in and hold nothing but what the sync " +
+    "wrote, which the sync writes again; anything else is written only from the page's confirmation, " +
+    "which tests/people-access-pages.test.tsx and tests/unit/test_work_email.py hold.",
+  "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)":
+    "Previewing a run through an agent for the person on the page writes nothing: it is the agent " +
+    "Profile's own preview route, which asks the gate and keeps no row.",
+  "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)":
+    "Previewing a person's run of an agent writes nothing: brain.agent_capability_routes asks the gate " +
+    "what that run would be handed and keeps no row, so there is nothing for a press to end or replace.",
   "src/pages/approvals/ApprovalCard.tsx approvalDecisionApiPath(suspensionId)":
     "Deciding an approval is the answer to a question the card has already asked. The artefact and " +
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +

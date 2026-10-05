@@ -10,9 +10,9 @@
  * every session ended (`/govern/sessions/end`, `/end-several`), has a sign-in linked or unlinked,
  * has an agent they steward handed on (`/agents/{agent_id}/transfer`, the Agents pages' own act) or a
  * leaver's agent taken on by the reader (`/govern/staff_sources/transfers/{agent_id}`); an install
- * with no staff source adds a person by hand (`POST /govern/directory`). No route previews what a
- * run through an agent reaches for somebody else, so that is drawn inert with the sentence below
- * (`kit/UnavailableAction`).
+ * with no staff source adds a person by hand (`POST /govern/directory`). A run through an agent is
+ * previewed for this person by `POST /agents/{agent_id}/preview` since 2026-09-29
+ * (`PersonPreview.tsx`), which retired the one inert act this table held.
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
  * `tests/people-access-pages.test.tsx` reads every `retiredBy` against the API document, so this
@@ -21,12 +21,7 @@
  * Task ids: M27.11.2, M27.11.3, M27.16.1
  */
 
-export const UNAVAILABLE = Object.freeze({
-  preview: {
-    reason: "Coming soon: choosing an agent and seeing what a run through it would reach for this person, worked out by the gate itself.",
-    retiredBy: /^\/api\/v1\/(agents\/\{[^}]+\}\/preview|govern\/directory\/\{[^}]+\}\/(preview|reach))\b/,
-  },
-});
+export const UNAVAILABLE: Readonly<Record<string, { readonly reason: string; readonly retiredBy: RegExp }>> = Object.freeze({});
 
 export type UnavailableAct = keyof typeof UNAVAILABLE;
 

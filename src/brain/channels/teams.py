@@ -104,31 +104,58 @@ the other side of `sent`, for the reason `channels.whatsapp` gives about itself:
 worth testing are the permission ones, and a module that owned an HTTP client could only be
 tested for them against a live tenant.
 
-Task ids: M10.5.2
+**`TeamsWire` is how an install receives and answers, and the keys are the route's to fetch.**
+It is a `brain.channels.adapter.KeyedWire`: `brain.channel_routes` reads the Bot Framework's
+OpenID metadata and the key set it names, only on the same host, caches them an hour, and hands
+them in on `Arrived.keys`, where `verify` runs `verified_activity` against the record's App ID
+and tenant. A reply is posted to the reply host the token signed, and only ever to one of
+Microsoft's (`ONLY_MICROSOFT_S_HOSTS_ARE_POSTED_A_REPLY`), on a token the client secret is
+exchanged for at the tenant's own login. A group chat or a channel has no per-viewer message and
+no members read here, so `brain.chat_answer` answers it as a floor of nothing, which is the Ask
+link: the generic form of `ROOM_DEFLECTION`, carrying nothing either.
+
+**Connect Teams registers a single-tenant Azure Bot**, which is the only kind a new bot can be,
+points it at the events address, and ends with the Teams app that carries it, made in the
+Developer Portal. See `GUIDE`.
+
+Task ids: M10.5.2, M10.6.1
 """
 
 from __future__ import annotations
 
 import enum
+import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, assert_never
+from urllib.parse import quote, urlencode, urlsplit
 
 from brain.channels.adapter import (
+    BOT_ID,
+    EVENTS_ADDRESS_ASK,
+    SECRET_ASK,
+    Arrived,
     ChannelCapabilities,
+    Conversation,
     Feature,
+    Received,
+    TokenExchange,
+    VendorAnswer,
+    VendorRequest,
     assert_can_send,
     send_operation,
 )
 from brain.channels.cards import assert_label_survives, render_body
-from brain.connectors.throttle import CallOutcome
+from brain.channels.webhook import WebhookRefusedError
+from brain.connectors.throttle import CallOutcome, classify
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.identity.keycloak_tokens import VERIFIED_ALGORITHMS, signing_key_from_jwk, verify_rs256
 from brain.identity.oidc import (
     ALG_NONE,
     ALLOWED_ALGORITHMS,
@@ -139,6 +166,7 @@ from brain.identity.oidc import (
     TokenRefusedError,
     parse_unverified,
 )
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
@@ -1195,3 +1223,434 @@ def deliver(
 
     operation = send_operation(intent, channel=Channel.TEAMS, to=to_conversation_id)
     return issue_once(ledger, operation, send)
+
+
+# ------------------------------------------------------------ the wire (M10.5.2, M10.6.1)
+
+#: Why the Bot Framework's keys are fetched by the route and what is taken from the document.
+THE_KEYS_ARE_MICROSOFT_S_AND_THE_ALGORITHM_IS_ITS_DOCUMENT_S: Final = (
+    "The Bot Framework signs with keys it publishes behind its OpenID metadata document, and "
+    "its key set names no algorithm on each key; the document names the one it signs with. So "
+    "a key is read as that algorithm only when the document says so, the document's issuer "
+    "must be the Bot Framework's, and a key set from any other host is never read."
+)
+
+#: Why a reply may only be posted to Microsoft's own hosts.
+ONLY_MICROSOFT_S_HOSTS_ARE_POSTED_A_REPLY: Final = (
+    "A reply is posted with a token that can speak as the bot, to the address the activity's "
+    "signed token named. That address is only ever one of Microsoft's own hosts, so a reply to "
+    "any other, whether from a test message typed by hand or a token nobody signed, is refused "
+    "before the token is minted."
+)
+
+#: The Bot Framework's OpenID metadata document: the static address Microsoft documents.
+BOT_FRAMEWORK_METADATA_URL: Final = (
+    "https://login.botframework.com/v1/.well-known/openidconfiguration"
+)
+
+#: Where a single-tenant bot exchanges its secret for a token, and what the token is for.
+MICROSOFT_LOGIN_URL: Final = "https://login.microsoftonline.com"
+BOT_FRAMEWORK_SCOPE: Final = "https://api.botframework.com/.default"
+
+#: The record's second field: the directory tenant the install serves. The first is `BOT_ID`,
+#: which for Teams is the bot's Microsoft App ID, the audience its tokens are minted for.
+TENANT_ID: Final = "tenant_id"
+
+#: The Bot Connector's reply host for Teams, the one an activity's `serviceUrl` names.
+TEAMS_REPLY_HOST: Final = "smba.trafficmanager.net"
+
+#: The hosts a reply may be posted to. See `ONLY_MICROSOFT_S_HOSTS_ARE_POSTED_A_REPLY`.
+SERVICE_HOSTS: Final = frozenset({TEAMS_REPLY_HOST})
+SERVICE_HOST_SUFFIXES: Final = (".botframework.com", ".teams.microsoft.com", ".teams.microsoft.us")
+
+#: What a mention of the bot is, before its app id, in an activity's entities.
+BOT_ID_PREFIX: Final = "28:"
+
+_GUID: Final = re.compile(r"^[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$")
+_LEADING_AT: Final = re.compile(r"^(?:\s*<at>[^<]{0,200}</at>)+\s*")
+
+
+def _refused() -> WebhookRefusedError:
+    return WebhookRefusedError(NOT_ACCEPTED)
+
+
+def service_address(service_url: str, conversation: str) -> str:
+    """Where a reply goes: the signed reply host and the conversation, one space between."""
+    return f"{service_url} {conversation}"
+
+
+def _service_host_allowed(host: str) -> bool:
+    return host in SERVICE_HOSTS or host.endswith(SERVICE_HOST_SUFFIXES)
+
+
+def question_of(text: str) -> str:
+    """The words asked, with the `<at>` mentions that open the message left out."""
+    return _LEADING_AT.sub("", text, count=1).strip()
+
+
+def _addressed(body: Mapping[str, Any]) -> frozenset[str]:
+    """The digests of everybody the activity mentions, the bot by its app id."""
+    found: set[str] = set()
+    entities = body.get("entities")
+    for entity in entities if isinstance(entities, list) else ():
+        if not isinstance(entity, Mapping) or entity.get("type") != "mention":
+            continue
+        mentioned = entity.get("mentioned")
+        ident = mentioned.get("id") if isinstance(mentioned, Mapping) else None
+        if isinstance(ident, str) and ident:
+            found.add(identity_hash(Channel.TEAMS, ident.removeprefix(BOT_ID_PREFIX)))
+    return frozenset(found)
+
+
+@dataclass(frozen=True)
+class TeamsWire:
+    """`brain.channels.adapter.ChannelWire` and `KeyedWire` for Teams. Holds no secret.
+
+    Verifies the Bot Framework's token against the keys the route fetched, the bot's App ID
+    and the pinned tenant (`verified_activity`), reads the activity (`normalise_activity`), and
+    replies to the signed reply host with a token the client secret is exchanged for.
+    `signature` is the RSA check, a field so a test can stand in for Microsoft's keys.
+    """
+
+    signature: SignatureVerifier = field(default=verify_rs256)
+
+    @property
+    def channel(self) -> Channel:
+        return Channel.TEAMS
+
+    @property
+    def tenant_fields(self) -> tuple[str, ...]:
+        return (BOT_ID, TENANT_ID)
+
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """One client secret, so no parts."""
+        return ()
+
+    @property
+    def keys_address(self) -> str:
+        return BOT_FRAMEWORK_METADATA_URL
+
+    def key_set_of(self, metadata: bytes, keys: bytes, now: datetime) -> KeySet:
+        """The Bot Framework's keys, each read as the algorithm its document names.
+
+        See `THE_KEYS_ARE_MICROSOFT_S_AND_THE_ALGORITHM_IS_ITS_DOCUMENT_S`. `ValueError` for a
+        document that is not the Bot Framework's or a key set with no key this can verify with.
+        """
+        try:
+            document = json.loads(metadata)
+            published = json.loads(keys)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("the Bot Framework's documents are JSON") from exc
+        if not isinstance(document, Mapping) or document.get("issuer") != BOT_FRAMEWORK_ISSUER:
+            raise ValueError("this is not the Bot Framework's metadata document")
+        algorithms = document.get("id_token_signing_alg_values_supported")
+        listed = algorithms if isinstance(algorithms, list) else []
+        usable = [one for one in listed if isinstance(one, str) and one in VERIFIED_ALGORITHMS]
+        entries = published.get("keys") if isinstance(published, Mapping) else None
+        if not usable or not isinstance(entries, list):
+            raise ValueError("the Bot Framework published no key this install can verify with")
+        found = []
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            key = signing_key_from_jwk({**entry, "alg": entry.get("alg") or usable[0]})
+            if key is not None:
+                found.append(key)
+        if not found:
+            raise ValueError("the Bot Framework published no key this install can verify with")
+        return KeySet(issuer=BOT_FRAMEWORK_ISSUER, keys=tuple(found), fetched_at=now)
+
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
+        """The token, then the activity it vouches for; the body is parsed only once the token
+        has verified, for `verified_activity`'s reason."""
+        del secret  # The inbound check is Microsoft's key; the secret signs nothing here.
+        if arrived.keys is None:
+            raise _refused()
+        app_id = arrived.tenant.get(BOT_ID, "")
+        tenant_id = arrived.tenant.get(TENANT_ID, "")
+        authorization = arrived.headers.get("authorization", "")
+        try:
+            assert_configured(app_id=app_id, tenant_id=tenant_id, keys=arrived.keys)
+            token = parse_unverified(bearer_token(authorization))
+            validate_activity_token(
+                token, keys=arrived.keys, verify=self.signature, app_id=app_id, now=now
+            )
+            body = json.loads(arrived.body)
+            verified_activity(
+                body,
+                authorization=authorization,
+                keys=arrived.keys,
+                verify=self.signature,
+                app_id=app_id,
+                tenant_id=tenant_id,
+                now=now,
+            )
+        except (TeamsRefusedError, TokenRefusedError, ValueError) as exc:
+            # A body that is not JSON is a ValueError too, refused as an unsigned one would be.
+            raise _refused() from exc
+        return arrived
+
+    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
+        """The Bot Framework does not check the address before it posts, so never."""
+        del arrived
+        return None
+
+    def read(self, arrived: Arrived) -> Received:
+        """A person's message as the gate's event, and where a reply to it goes.
+
+        A personal chat is answered in it; a group chat or a channel is shared, has no
+        per-viewer message and no reader of who is in it, so `brain.chat_answer` answers it as
+        a floor of nothing, and a sender there has no conversation of their own to be told in.
+        """
+        body = json.loads(arrived.body)
+        try:
+            message = normalise_activity(
+                VerifiedActivity(
+                    body=body, service_url=str(body.get(SERVICE_URL_KEY, "")), token=_VERIFIED_TOKEN
+                )
+            )
+        except TeamsRefusedError as exc:
+            raise ValueError(str(exc)) from exc
+        text = question_of(message.event.text)
+        if not text:
+            raise ValueError("this message names somebody and asks nothing")
+        room = service_address(message.service_url, message.conversation)
+        shared = not audience_is_one_person(message.conversation_type)
+        return Received(
+            event=replace(message.event, text=text),
+            reply_to=room,
+            conversation=Conversation(
+                room_to=room,
+                sender_to="" if shared else room,
+                conversation_id=message.conversation,
+                shared=shared,
+                addressed=_addressed(body),
+            ),
+        )
+
+    def request_for(
+        self, *, to: str, text: str, secret: str, tenant: Mapping[str, str], now: datetime
+    ) -> VendorRequest:
+        """One message into one conversation, on a token the client secret is exchanged for.
+
+        `ValueError` for an address that is not a Microsoft reply host and a conversation, and
+        for a record whose tenant is not a directory id. See
+        `ONLY_MICROSOFT_S_HOSTS_ARE_POSTED_A_REPLY`.
+        """
+        del now
+        service, _, conversation = to.partition(" ")
+        parts = urlsplit(service)
+        if (
+            parts.scheme != "https"
+            or not _service_host_allowed(parts.hostname or "")
+            or not conversation
+            or " " in conversation
+        ):
+            msg = f"{to!r} is not a Teams conversation this channel replies to"
+            raise ValueError(msg)
+        app_id, tenant_id = tenant.get(BOT_ID, ""), tenant.get(TENANT_ID, "")
+        if not _GUID.fullmatch(app_id) or not _GUID.fullmatch(tenant_id):
+            msg = f"this channel's record names no {BOT_ID} and {TENANT_ID} as directory ids"
+            raise ValueError(msg)
+        form = urlencode(
+            {
+                "grant_type": "client_credentials",
+                "client_id": app_id,
+                "client_secret": secret,
+                "scope": BOT_FRAMEWORK_SCOPE,
+            }
+        )
+        return VendorRequest(
+            url=f"{service.rstrip('/')}/v3/conversations/{quote(conversation, safe='')}/activities",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            body=json.dumps(
+                {"type": "message", "text": text, "textFormat": "plain"}, separators=(",", ":")
+            ).encode("utf-8"),
+            exchange=TokenExchange(
+                url=f"{MICROSOFT_LOGIN_URL}/{tenant_id}/oauth2/v2.0/token",
+                body=form.encode("utf-8"),
+                content_type="application/x-www-form-urlencoded",
+            ),
+        )
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome:
+        """The Bot Connector's status decides: a 2xx is delivered and nothing else is.
+
+        A redirect is refused rather than followed, since the token would follow it; an
+        answer with no status and no failure is not known to have arrived.
+        """
+        if answer.unsafe_address:
+            return CallOutcome.REJECTED
+        outcome = classify(
+            status=answer.status,
+            timed_out=answer.timed_out,
+            connection_failed=answer.connection_failed,
+        )
+        if outcome is not CallOutcome.OK:
+            return outcome
+        if answer.status is None:
+            return CallOutcome.UNAVAILABLE
+        return CallOutcome.OK if 200 <= answer.status < 300 else CallOutcome.REJECTED
+
+
+#: This channel's wire, found by `brain.channels.adapter.channel_wires`.
+WIRE: Final = TeamsWire()
+
+
+# ------------------------------------------------------------ the connect steps (M10.5.2)
+
+#: Where the steps send a person: the Azure portal, where the bot is registered, and Teams'
+#: Developer Portal, where the app that carries it into Teams is made.
+AZURE_PORTAL_URL: Final = "https://portal.azure.com/"
+TEAMS_DEVELOPER_PORTAL_URL: Final = "https://dev.teams.microsoft.com/apps"
+
+_BOT_MENU: Final = ("Overview", "Configuration", "Channels")
+
+
+def _bot_page(
+    heading: str, *, menu_mark: str, lines: tuple[SketchLine, ...] = (), button: str = ""
+) -> Sketch:
+    return Sketch(
+        place="Microsoft Azure",
+        heading=heading,
+        menu=_BOT_MENU,
+        menu_mark=menu_mark,
+        lines=lines,
+        button=button,
+    )
+
+
+#: The steps that connect Teams, found by `brain.channels.adapter.channel_guides`.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="bot",
+            title="Create an Azure Bot for your tenant",
+            text=(
+                "In the Azure portal click Create a resource, search for Azure Bot and click "
+                "Create. Give it a handle such as company-brain, pick your subscription and a "
+                "resource group, set Type of App to Single Tenant and Creation type to Create "
+                "new Microsoft App ID, then Review + create and Create."
+            ),
+            sketch=Sketch(
+                place="Microsoft Azure",
+                heading="Create an Azure Bot",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Bot handle", "company-brain"),
+                    SketchLine(LineKind.FIELD, "Type of App", "Single Tenant", mark=True),
+                    SketchLine(LineKind.FIELD, "Creation type", "Create new Microsoft App ID"),
+                ),
+                button="Review + create",
+            ),
+            link=AZURE_PORTAL_URL,
+            link_label="Open the Azure portal",
+        ),
+        GuideStep(
+            key="endpoint",
+            title="Point the bot at this install and copy its two ids",
+            text=(
+                "Open the new bot and then Configuration. Paste this install's events address, "
+                "shown below, into Messaging endpoint and click Apply. On the same page copy the "
+                "Microsoft App ID and the App Tenant ID: the last step asks for both."
+            ),
+            sketch=_bot_page(
+                "Configuration",
+                menu_mark="Configuration",
+                lines=(
+                    SketchLine(
+                        LineKind.FIELD, "Messaging endpoint", "Your events address", mark=True
+                    ),
+                    SketchLine(LineKind.FIELD, "Microsoft App ID", "00000000-0000-...", mark=True),
+                    SketchLine(LineKind.FIELD, "App Tenant ID", "00000000-0000-...", mark=True),
+                ),
+                button="Apply",
+            ),
+            link=AZURE_PORTAL_URL,
+            link_label="Open the Azure portal",
+            asks=(EVENTS_ADDRESS_ASK,),
+        ),
+        GuideStep(
+            key="secret",
+            title="Make a client secret",
+            text=(
+                "Still on Configuration, click Manage Password beside the Microsoft App ID. "
+                "Under Certificates & secrets click New client secret, give it a description "
+                "and an expiry, and click Add. Copy its Value straight away, not its Secret ID: "
+                "Azure shows the value only once."
+            ),
+            sketch=Sketch(
+                place="Microsoft Azure",
+                heading="Certificates & secrets",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Value", "********", mark=True),
+                    SketchLine(LineKind.FIELD, "Secret ID", "00000000-0000-..."),
+                ),
+                button="New client secret",
+            ),
+            link=AZURE_PORTAL_URL,
+            link_label="Open the Azure portal",
+        ),
+        GuideStep(
+            key="channel",
+            title="Turn on the Microsoft Teams channel",
+            text=(
+                "Open the bot's Channels page, click Microsoft Teams, accept the terms and click "
+                "Apply. The bot can now be reached from Teams."
+            ),
+            sketch=_bot_page(
+                "Channels",
+                menu_mark="Channels",
+                lines=(SketchLine(LineKind.ITEM, "Microsoft Teams", mark=True),),
+                button="Apply",
+            ),
+            link=AZURE_PORTAL_URL,
+            link_label="Open the Azure portal",
+        ),
+        GuideStep(
+            key="save",
+            title="Save the two ids and the secret here",
+            text=(
+                "Paste the Microsoft App ID into bot_id, the App Tenant ID into tenant_id and the "
+                "client secret's value into the secret field, tick Switched on and press Save "
+                "set-up. The secret is kept in the vault and never shown again."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Microsoft Teams",
+                lines=(
+                    SketchLine(LineKind.FIELD, BOT_ID, "00000000-0000-...", mark=True),
+                    SketchLine(LineKind.FIELD, TENANT_ID, "00000000-0000-...", mark=True),
+                    SketchLine(LineKind.FIELD, "Secret (write only)", "********", mark=True),
+                    SketchLine(LineKind.TOGGLE, "Switched on", mark=True),
+                ),
+                button="Save set-up",
+            ),
+            asks=(BOT_ID, TENANT_ID, SECRET_ASK),
+        ),
+        GuideStep(
+            key="app",
+            title="Make the Teams app that carries the bot",
+            text=(
+                "Open Teams' Developer Portal, click New app and name it. Under App features "
+                "choose Bot, choose Enter a bot ID and paste the Microsoft App ID, tick the "
+                "Personal scope and save. Then Publish to your org, and approve it in the Teams "
+                "admin centre if your company requires it. Now open the app in Teams and write "
+                "to it: the first answer asks you to link your Teams account to your Brain "
+                "account. The Brain answers in a one-to-one chat; in a group it offers a link."
+            ),
+            sketch=Sketch(
+                place="Teams Developer Portal",
+                heading="App features",
+                lines=(
+                    SketchLine(LineKind.ITEM, "Bot", mark=True),
+                    SketchLine(LineKind.FIELD, "Bot ID", "00000000-0000-...", mark=True),
+                    SketchLine(LineKind.ITEM, "Personal", mark=True),
+                ),
+                button="Publish to org",
+            ),
+            link=TEAMS_DEVELOPER_PORTAL_URL,
+            link_label="Open the Developer Portal",
+        ),
+    )
+)

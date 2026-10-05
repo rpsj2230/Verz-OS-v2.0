@@ -869,6 +869,8 @@ def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it
         "created_at": "2019-03-01T09:00:00Z",
         "state": None,
         "leash_up_to": None,
+        "department": None,
+        "template_name": "Pricing desk",
     }
 
 
@@ -1099,6 +1101,8 @@ def test_an_install_that_does_not_construct_is_an_agent_with_no_lineage_and_no_c
         "created_at": None,
         "state": "enabled",
         "leash_up_to": None,
+        "department": None,
+        "template_name": None,
     }
     assert spoiled.json()["composition"] == []
     # And every block the install supplies goes with it, rather than half a workspace drawn

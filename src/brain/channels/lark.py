@@ -1432,6 +1432,10 @@ class LarkWire:
             exchange=_exchange(host, tenant, kept),
         )
 
+    def room_of(self, conversation: str) -> str:
+        """The address a message to one of the listed groups is sent to (M38.3.3.4)."""
+        return _address(ROOM_ADDRESS, conversation)
+
     def conversations_page(self, answer: VendorAnswer) -> tuple[tuple[tuple[str, str], ...], str]:
         """The groups on one page as (id, name), and the next page's token or empty.
 

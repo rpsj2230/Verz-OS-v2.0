@@ -387,6 +387,7 @@ describe("where the page is reachable", () => {
       "agent_id",
       "created_at",
       "created_by",
+      "department",
       "display_name",
       "leash_up_to",
       "owner_id",
@@ -394,6 +395,7 @@ describe("where the page is reachable", () => {
       "state",
       "summary",
       "template_id",
+      "template_name",
       "template_version",
     ]);
     const rows = declaredPropertyNames(declaredProperty(workspace, "composition"));
@@ -427,12 +429,17 @@ describe("the header", () => {
   test("a state, a rung or a steward sent as null, empty or the wrong type is the header with none", async () => {
     // What breaks if this is deleted: a pill reading "null" or an empty steward chip, which says a
     // value exists and was withheld. The sibling is the header with all three.
-    const bare = readHeaderFacts({ agent: without(agentWire(), "owner_name", "state", "leash_up_to", "created_at") });
+    const bare = readHeaderFacts({ agent: without(agentWire(), "owner_name", "state", "leash_up_to", "created_at", "summary") });
     for (const noise of [null, "", "  ", 7, ["enabled"]]) {
-      expect(readHeaderFacts({ agent: { ...agentWire(), owner_name: noise, state: noise, leash_up_to: noise, created_at: noise } })).toEqual(bare);
+      expect(
+        readHeaderFacts({
+          agent: { ...agentWire(), owner_name: noise, state: noise, leash_up_to: noise, created_at: noise, summary: noise, department: noise, template_name: noise },
+        }),
+      ).toEqual(bare);
     }
     expect(bare).toEqual({});
     expect(readHeaderFacts({ agent: agentWire() })).toEqual({
+      summary: "Drafts a first answer to a pricing question.",
       ownerName: "Steward One",
       createdAt: "2019-03-01T09:00:00Z",
       state: "disabled",
@@ -460,15 +467,16 @@ describe("the Dashboard", () => {
     // What breaks if this is deleted: figures made up in the browser while the stats package is not
     // there yet, or a strip of zeros for a route that answered 404.
     const answered = await consoleAt("/agents/quote-helper", agentAnswers("quote-helper", body()));
+    const headline = () => answered.container.querySelector('[data-slot="kpi-strip"][aria-label="Spend, runs and messages"]');
     const strip = answered.container.querySelector('[data-slot="kpi-strip"][aria-label="This agent\'s figures"]');
-    expect(strip?.textContent).toContain("391");
-    expect(strip?.textContent).toContain("SGD 182.40");
+    expect(headline()?.textContent).toContain("391");
+    expect(headline()?.textContent).toContain("SGD 182.40");
     expect(strip?.textContent).toContain("1.8 s");
     expect(strip?.textContent).toContain("your runs");
 
     // The other period is the route's own second set, chosen from the switch.
     fireEvent.click([...answered.container.querySelectorAll("button")].find((one) => one.textContent === "7 days") as Element);
-    expect(answered.container.querySelector('[data-slot="kpi-strip"][aria-label="This agent\'s figures"]')?.textContent).toContain("97");
+    expect(headline()?.textContent).toContain("97");
 
     const failed = await consoleAt(
       "/agents/quote-helper",
@@ -492,8 +500,8 @@ describe("the Dashboard", () => {
         [`/api/v1${agentStatsApiPath("quote-helper")}`]: { body: statsWire(null, [{ figure: "model_cost", why }]) },
       }),
     );
-    const cards = [...mounted.container.querySelectorAll('[aria-label="This agent\'s figures"] [data-slot="stat-card"]')];
-    const cost = cards.find((one) => one.querySelector("dt")?.textContent === "Cost") as Element;
+    const cards = [...mounted.container.querySelectorAll('[aria-label="Spend, runs and messages"] [data-slot="stat-card"]')];
+    const cost = cards.find((one) => one.querySelector("dt")?.textContent === "Spend") as Element;
     expect(cost.textContent).toContain(NOT_RECORDED);
     expect(cost.textContent).not.toMatch(/0\.00/);
     const trigger = cost.querySelector("[aria-describedby]") as Element;
@@ -510,9 +518,9 @@ describe("the Profile", () => {
     // `agentActions.ts`, and pressing any of them leaves the address and the requests as they were.
     const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
     const inert = [...mounted.container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)];
-    // Five since 2026-09-29: adding a source and changing permissions start a draft of the agent
-    // now, so they are live buttons and not among these.
-    expect(inert.length).toBeGreaterThanOrEqual(5);
+    // Four since 2026-09-29: adding a source and changing permissions start a draft of the agent
+    // now, and a preview as a person is asked of its own route, so none of the three is among these.
+    expect(inert.length).toBeGreaterThanOrEqual(4);
     const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
       (one) => one.textContent === "Change permissions",
     );

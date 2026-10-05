@@ -10,7 +10,9 @@ which runs the lifespan with each configured.
 
 from __future__ import annotations
 
+import gc
 import re
+import weakref
 from collections.abc import Iterator, MutableMapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -148,6 +150,47 @@ def test_liveness_stays_ok_while_readiness_fails(app: FastAPI) -> None:
         app.state.ready = {"database": False}
         assert c.get("/health/live").status_code == 200
         assert c.get("/health/ready").status_code == 503
+
+
+def _served_and_let_go() -> weakref.ref[FastAPI]:
+    """An application built, asked both health questions, shut down, and referenced weakly."""
+    app = create_app(Settings(env="development", commit_sha="abc1234", database_url=""))
+    with TestClient(app) as c:
+        assert c.get("/health/live").status_code == 200
+        assert c.get("/health/ready").status_code == 200
+    return weakref.ref(app)
+
+
+def test_an_application_nothing_uses_any_more_is_freed() -> None:
+    """`AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION`, held on the object rather than the text:
+    an application built, served and shut down is gone after one collection. Measured on
+    2026-09-30 before `ready` read its application from the request, five route test files left
+    122 applications and 5.2 million objects alive, against one application and 0.5 million
+    after, and in a full run that growth made one request take 504 seconds against a deadline of
+    30, so route tests failed with a 503 that pass on their own.
+
+    Delete this and an endpoint in `create_app` can close over `app` again, and the full suite
+    goes back to failing whichever route tests happen to run late."""
+    freed = _served_and_let_go()
+    gc.collect()
+
+    assert freed() is None
+
+
+def test_two_applications_in_one_process_each_answer_readiness_from_their_own_state() -> None:
+    """The sibling of the test above: readiness reads the application it was asked through, so
+    reading it from the request did not make it read another one's.
+
+    Delete this and `ready` could read any application's state, the module's own for one, and
+    report an instance ready that cannot reach its database."""
+    up = create_app(Settings(env="development", commit_sha="abc1234", database_url=""))
+    down = create_app(Settings(env="development", commit_sha="abc1234", database_url=""))
+    with TestClient(up) as served_up, TestClient(down) as served_down:
+        up.state.ready = {"database": True}
+        down.state.ready = {"database": False}
+
+        assert served_up.get("/health/ready").status_code == 200
+        assert served_down.get("/health/ready").status_code == 503
 
 
 def test_the_pool_is_released_at_shutdown_and_not_while_requests_are_still_served(

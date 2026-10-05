@@ -260,6 +260,11 @@ VAULT_REFUSED: Final = (
     "be loaded: ops/openbao/credential-slots.md has the steps."
 )
 VAULT_UNREACHABLE: Final = "The vault did not answer, so the source's key could not be read."
+#: A source whose key file is exchanged for a token, read by a process given no way to post for one.
+NO_KEY_FILE_EXCHANGE: Final = (
+    "This process was given no way to exchange the source's key file for a token, so the source "
+    "was not asked."
+)
 NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
 
 #: The screen's words for an attempt's outcome, by what follows it.

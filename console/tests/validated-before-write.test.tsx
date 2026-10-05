@@ -78,7 +78,14 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
-  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // The preview as a person is in the Permissions card, above the model card, so the pin's is second.
+  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 1, writes: true }],
+  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // A person's Access view: the preview through an agent, under the grants, roles and placements.
+  "src/pages/people/PersonPreview.tsx": [{ pattern: "/people/:personId/:view", index: 0, writes: true }],
+  // The Dashboard opens first, and its one form is the monthly budget, drawn for a reader of
+  // everybody's spend.
+  "src/pages/agents/AgentSpend.tsx": [{ pattern: "/agents/:agentId", index: 0, writes: true }],
   // A model's price opens on its row in the prices card, under the providers and the matrix, which
   // draw no form of their own (M27.12.5).
   "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
@@ -125,6 +132,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The export form is inside the drawer opened from the Access review header, outside the main " +
     "landmark these cases read. tests/review-pages.test.tsx submits it blank and holds that no " +
     "confirmation opens, nothing is sent and the reason and the reference are each said to be needed.",
+  "src/pages/people/WorkEmail.tsx":
+    "The work email form is inside the Add work email drawer opened from a person's Overview, outside " +
+    "the main landmark these cases read. tests/people-access-pages.test.tsx submits it blank and holds " +
+    "that nothing is sent and what to type is said beside the field.",
   "src/pages/access-requests/AccessRequestsPage.tsx":
     "The ask form is inside the Ask for access drawer opened from the page header, outside the main " +
     "landmark these cases read. tests/access-requests-page.test.tsx submits it blank and holds that " +

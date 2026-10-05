@@ -65,13 +65,20 @@ from typing import Annotated, Any, Final, Literal, Self
 
 import structlog
 from fastapi import APIRouter, Depends, Path, Request
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import Insert, Select, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
 from brain.attribution import attribute
 from brain.console.global_surfaces import GOVERNANCE_CONTROL
 from brain.console.govern import may_name_capabilities, may_show_sign_in
@@ -85,7 +92,7 @@ from brain.console.organisation import (
 )
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
-from brain.console.scoped_authority import REACH_AUTHORITY
+from brain.console.scoped_authority import REACH_AUTHORITY, within_reach
 from brain.console.screens import screen
 from brain.core.department import SLUG_PATTERN, ScopeRecord
 from brain.core.errors import Absent, Failed
@@ -97,6 +104,7 @@ from brain.gate.context import Channel
 from brain.identity.organisation_store import one_department
 from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
 from brain.identity.staff_accounts import YOUR_ACCOUNT_IS_READY, allowed_types
+from brain.identity.staff_roster import digest_of
 from brain.identity.staff_source import (
     SELECTABLE,
     STAFF_SOURCE_SETTING,
@@ -105,6 +113,21 @@ from brain.identity.staff_source import (
 )
 from brain.identity.standing import WHY_KEPT_OUT, kept_out_because
 from brain.identity.standing import Standing as ListStanding
+from brain.identity.work_email import (
+    TOLD,
+    Holder,
+    Joining,
+    WorkEmailError,
+    binding,
+    decide,
+    disabling,
+    email_of,
+    holder_facts,
+    holder_of,
+    retiring,
+    unbinding,
+    work_address,
+)
 from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.replica_store import ConsoleReads
@@ -342,6 +365,10 @@ class PersonDetail(BaseModel):
     #: Why the staff list keeps them from signing in or asking, or null when it does not
     #: (`brain.identity.standing.WHY_KEPT_OUT`, M1.6.14).
     kept_out: str | None = None
+    #: Whether this reader may add their work email: a staff list is read, it names nobody by
+    #: this person's address, and the reader holds the granting authority over their row
+    #: (M1.10.4). The route asks all of it again.
+    may_add_work_email: bool = False
 
 
 #: A person's name as a person reads it, trimmed, as `auth.principal.display_name_present` requires.
@@ -1070,6 +1097,117 @@ async def person_page(
         may_organise=reach.scope_for(ORGANISING_AUTHORITY, now) is not None,
         staleness=served.banner,
         kept_out=kept_out_sentence(found.person.standing),
+        may_add_work_email=source is not None
+        and found.person.standing is None
+        and not found.person.member.disabled
+        and _may_join(asked, found.person.member),
+    )
+
+
+# ------------------------------------------------------------------ a work email (M1.10.4)
+
+WORK_EMAIL_PATH: Final = "/govern/directory/{principal_id}/work-email"
+
+
+class WorkEmailAdding(BaseModel):
+    """The work email typed on a person's page, and whether the page's question was confirmed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    address: str = Field(min_length=3, max_length=254)
+    #: True only when the page asked first and the reader confirmed. See `Joining.ASK`.
+    confirm: bool = False
+
+    @field_validator("address")
+    @classmethod
+    def _a_mailbox(cls, value: str) -> str:
+        try:
+            return work_address(value)
+        except WorkEmailError as refused:
+            raise ValueError(str(refused)) from refused
+
+
+class WorkEmailAdded(BaseModel):
+    """What adding the work email came to, and whether anything was written."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    principal_id: str
+    outcome: Literal["bound", "joined", "ask", "signs_in_elsewhere", "already"]
+    written: bool
+    told: str
+
+
+def _may_join(asked: Asking, member: Member) -> bool:
+    """The granting authority over where this person sits, as granting them anything asks."""
+    return within_reach(asked.reach, REACH_AUTHORITY, _row_scope(member), asked.now)
+
+
+def _row_scope(member: Member) -> Scope:
+    """Where a person sits, as a scope: their department, or everything for nobody's."""
+    return (
+        Scope.unrestricted() if member.department is None else Scope.department(member.department)
+    )
+
+
+@router.post(WORK_EMAIL_PATH, response_model=WorkEmailAdded, responses=COMMON_RESPONSES)
+async def add_work_email(
+    request: Request, principal_id: PrincipalIdPath, body: WorkEmailAdding, asked: Asked
+) -> WorkEmailAdded:
+    """Bind a work email to a person who has none, and join the staff list's person for it.
+
+    The People screen's read and the granting authority are asked before the database; then, in
+    one transaction, that this reader may name the person and holds the authority over where they
+    sit, and the same about the person the address is bound to now, if anybody, whose refusal is
+    this route's one refusal so it tells nothing about them. What happens is
+    `brain.identity.work_email.decide`'s; a join disables and retires the list's person and moves
+    the binding, each recorded by its own trigger, attributed to the caller.
+    """
+    reach, now = asked.reach, asked.now
+    if not permitted(screen(PEOPLE_SCREEN).read, reach, now):
+        raise _no_person_here()
+    if reach.scope_for(REACH_AUTHORITY, now) is None:
+        raise _no_person_here()
+    digest = digest_of(body.address)
+    async with _sessions(request)() as session:
+        row = (await session.execute(one_person(principal_id))).one_or_none()
+        target = None if row is None else member_of(row)
+        if target is None or not nameable([target], reach, now) or not _may_join(asked, target):
+            await session.rollback()
+            raise _no_person_here()
+        has_email = (await session.execute(email_of(principal_id))).first() is not None
+        held_by = (await session.execute(holder_of(digest))).scalar_one_or_none()
+        holder: Holder | None = None
+        if held_by is not None and not has_email:
+            other = (await session.execute(one_person(str(held_by)))).one_or_none()
+            other_member = None if other is None else member_of(other)
+            if other_member is None or not _may_join(asked, other_member):
+                await session.rollback()
+                raise _no_person_here()
+            signs_in, signed_in, holds_own = (
+                await session.execute(holder_facts(str(held_by)))
+            ).one()
+            holder = Holder(
+                principal_id=str(held_by),
+                signs_in=bool(signs_in),
+                signed_in=bool(signed_in),
+                holds_own=bool(holds_own),
+            )
+        outcome = decide(has_email=has_email, holder=holder, confirmed=body.confirm)
+        written = outcome in (Joining.BOUND, Joining.JOINED)
+        if written:
+            await attribute(session, asked)
+            if outcome is Joining.JOINED and holder is not None:
+                await session.execute(unbinding(digest))
+                await session.execute(disabling(holder.principal_id))
+                await session.execute(retiring(holder.principal_id))
+            await session.execute(binding(principal_id, digest))
+            await session.commit()
+        else:
+            await session.rollback()
+    log.info("work email", outcome=outcome.value, principal=asked.caller.principal.id)
+    return WorkEmailAdded(
+        principal_id=principal_id, outcome=outcome.value, written=written, told=TOLD[outcome]
     )
 
 
