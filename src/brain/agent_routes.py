@@ -258,7 +258,7 @@ from brain.console.workspace_capabilities import (
 from brain.core.entitlement import Capability
 from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.errors import Absent, Failed
-from brain.core.field_policy import FieldPolicy
+from brain.core.field_policy import FieldPolicy, FieldRule
 from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
@@ -1226,12 +1226,23 @@ def product_field_policy() -> FieldPolicy:
     has to fail in: the policy decides the most sensitive thing a run could return, which
     decides which surfaces may carry it, so a policy missing a rule offers a channel that
     should not have been offered. `brain.tools.startup.every_row_classification` is the one
-    list of what this product classifies, and one classification per entity is pinned by that
-    module's own test, so the rules cannot collide here.
+    list of what this product classifies.
+
+    **Two sources may classify one field, and the stricter classification is kept.** Since
+    2026-09-30 the connected sources' entities are classified beside the demo's, and the demo's
+    `invoice.amount_due` is confidential where Xero's is restricted. Each source is still redacted
+    by its own rules (`brain.api_routes.source_field_policies`); this policy only decides which
+    surfaces a run could be carried on, so where two sources disagree the more sensitive reading
+    is the one that must decide, and keeping the first would offer a channel a restricted value
+    must not reach.
     """
-    return FieldPolicy(
-        rules=tuple(rule for one in every_row_classification() for rule in one.policy().rules)
-    )
+    strictest: dict[tuple[str, str], FieldRule] = {}
+    for one in every_row_classification():
+        for rule in one.policy().rules:
+            held = strictest.get(rule.key)
+            if held is None or rule.classification.rank > held.classification.rank:
+                strictest[rule.key] = rule
+    return FieldPolicy(rules=tuple(strictest.values()))
 
 
 def offered_surfaces(record: AgentRecord, asked: Asking) -> tuple[ChannelCapabilities, ...]:
