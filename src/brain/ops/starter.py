@@ -379,6 +379,7 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
     from brain.browsing.sessions import ACT_ON_SURFACE_CAPABILITY, BROWSE_SURFACE
     from brain.core.redaction import OPAQUE_CAPABILITY
     from brain.gate.model_lane import PASSAGE_POLICY
+    from brain.identity.stewardship import INVOKE_AGENT
     from brain.knowledge.verification import VERIFIER_CAPABILITY
     from brain.knowledge.visibility import PROMOTION_CAPABILITY
     from brain.ops.drive_passages import READ_FILE
@@ -401,6 +402,7 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
         (BROWSE_SURFACE, "Reads a declared browser surface."),
         (ACT_ON_SURFACE_CAPABILITY, "Acts on a declared browser surface."),
         (WEBSITE_CHECK_CAPABILITY, "Checks whether a website within reach is working, over HTTP."),
+        (INVOKE_AGENT, "Uses an agent: asks it questions and starts its runs."),
         (DEAD_LETTER_CAPABILITY, "Reads somebody else's dead-lettered jobs."),
         (VERIFIER_CAPABILITY, "Shows who verified a knowledge item on its badge."),
         (OPAQUE_CAPABILITY, "Reads what an opaque tool returns, which no field policy classifies."),

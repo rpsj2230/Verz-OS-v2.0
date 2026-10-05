@@ -103,7 +103,7 @@ class SelfGrantRow(Base):
         CheckConstraint(f"principal_id ~ '{IDENTIFIER}'", name="principal_id_shape"),
         CheckConstraint("jsonb_typeof(scope) = 'object'", name="scope_is_an_object"),
         CheckConstraint("(kind = 'pack') = (pack IS NOT NULL)", name="a_pack_is_named"),
-        UniqueConstraint("kind", "grant_id", name="one_row_per_grant"),
+        UniqueConstraint("kind", "grant_id"),
         Index("ix_self_grant_at", "at"),
         {"schema": "gate"},
     )

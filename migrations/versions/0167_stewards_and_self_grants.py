@@ -30,7 +30,9 @@ removed afterwards. Recognised by the database rather than declared by the write
 `brain.console.reads.THE_GRANT_THAT_MUST_NOT_BE_MISSED_IS_THE_ONE_NOBODY_DECLARES`: every path that
 writes a grant, present or future, is covered without being edited. A team grant has no principal
 and is not recorded; granting one's own team is a different act, and it is left out rather than
-guessed at.
+guessed at. The two triggers add their row with `MERGE ... WHEN NOT MATCHED THEN INSERT`, the
+ledger append's own form, which keeps one row per grant without a conflict clause and keeps every
+statement this migration runs a definition rather than a change to rows already there.
 
 Which objects a self-grant reaches, and so which stewards are told, is decided in
 `brain.identity.stewardship` rather than here: it needs `Capability.covers` and the scope rule,
@@ -182,9 +184,12 @@ BEGIN
     ) THEN
         RETURN NULL;
     END IF;
-    INSERT INTO gate.self_grant (kind, grant_id, principal_id, capabilities, scope, pack)
-    VALUES ('capability', NEW.id, NEW.principal_id, ARRAY[NEW.capability], NEW.scope, NULL)
-    ON CONFLICT DO NOTHING;
+    MERGE INTO gate.self_grant AS t
+    USING (SELECT 'capability' AS kind, NEW.id AS grant_id) AS s
+       ON t.kind = s.kind AND t.grant_id = s.grant_id
+    WHEN NOT MATCHED THEN
+        INSERT (kind, grant_id, principal_id, capabilities, scope, pack)
+        VALUES ('capability', NEW.id, NEW.principal_id, ARRAY[NEW.capability], NEW.scope, NULL);
     RETURN NULL;
 END;
 $$
@@ -214,10 +219,13 @@ BEGIN
     END IF;
     SELECT k.capabilities, k.name INTO v_capabilities, v_pack
       FROM gate.capability_pack k WHERE k.id = NEW.pack_id;
-    INSERT INTO gate.self_grant (kind, grant_id, principal_id, capabilities, scope, pack)
-    VALUES ('pack', NEW.id, NEW.principal_id, COALESCE(v_capabilities, ARRAY[]::text[]),
-            NEW.scope, COALESCE(v_pack, 'unknown'))
-    ON CONFLICT DO NOTHING;
+    MERGE INTO gate.self_grant AS t
+    USING (SELECT 'pack' AS kind, NEW.id AS grant_id) AS s
+       ON t.kind = s.kind AND t.grant_id = s.grant_id
+    WHEN NOT MATCHED THEN
+        INSERT (kind, grant_id, principal_id, capabilities, scope, pack)
+        VALUES ('pack', NEW.id, NEW.principal_id, COALESCE(v_capabilities, ARRAY[]::text[]),
+                NEW.scope, COALESCE(v_pack, 'unknown'));
     RETURN NULL;
 END;
 $$
@@ -281,7 +289,7 @@ def upgrade() -> None:
         sa.CheckConstraint(f"principal_id ~ '{IDENTIFIER}'", name="principal_id_shape"),
         sa.CheckConstraint("jsonb_typeof(scope) = 'object'", name="scope_is_an_object"),
         sa.CheckConstraint("(kind = 'pack') = (pack IS NOT NULL)", name="a_pack_is_named"),
-        sa.UniqueConstraint("kind", "grant_id", name="one_row_per_grant"),
+        sa.UniqueConstraint("kind", "grant_id"),
         schema="gate",
     )
     op.create_index("ix_self_grant_at", "self_grant", ["at"], schema="gate")
