@@ -311,6 +311,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/archive",
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
+      "/api/v1/agents/{agent_id}/learning",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agents/{agent_id}/budget",
       "/api/v1/agents/{agent_id}/capabilities",
@@ -323,6 +324,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
       "/api/v1/agents/{agent_id}/drafts",
+      "/api/v1/agents/{agent_id}/publications",
       "/api/v1/agent-drafts*",
       "/api/v1/builder/form",
     ],
@@ -336,6 +338,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.manifest_draft",
       "agent.manifest_revision",
       "agent.manifest_act",
+      "agent.learning_pause",
     ],
     installation: [],
     gaps: [
@@ -469,6 +472,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.connector_connection",
       "ops.connector_sync",
       "proj.record",
+      "proj.record_retired",
+      "proj.source_epoch",
       "er.alias",
       "er.canonical",
       "er.identifier",
@@ -541,7 +546,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/knowledge/verifications",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
+      "/api/v1/govern/learning/settings*",
       "/api/v1/govern/memory",
+      "/api/v1/me/memory*",
       "/api/v1/records/{entity}",
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",
@@ -702,7 +709,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "The audit trail: who changed what, and when": {
-    screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
+    screens: [
+      "/audit",
+      "/audit/verify",
+      "/audit/trace",
+      "/audit/trace/:traceId",
+      "/audit/subject/:kind/:id",
+      "/audit/subject/:kind/:id/:view",
+      "/requirement-checks",
+    ],
     routes: ["/api/v1/audit*", "/api/v1/requirements/checks", "/api/v1/traces*"],
     tables: [
       "obs.audit_entry",
@@ -713,12 +728,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "obs.trace_read",
     ],
     installation: [],
-    gaps: [
-      {
-        what: "A run's trace graph is stored masked and read only under the payload role, and no screen reads it: the read route serves one to a holder of that role, and no page calls it for TraceGraph to draw.",
-        leaf: "M20.2.1",
-      },
-    ],
+    gaps: [],
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs"],
@@ -788,6 +798,10 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "/signed-out": "The page a person lands on after signing out, which asks nothing and manages nothing.",
   "/*": "The page drawn for an address the console does not have, which manages nothing.",
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
+  "POST /api/v1/answer/mark":
+    "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
+  "mem.mark":
+    "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
   "POST /api/v1/widget/sessions":
     "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
   "POST /api/v1/widget/questions":

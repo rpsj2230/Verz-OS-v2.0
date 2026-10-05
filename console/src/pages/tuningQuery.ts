@@ -11,19 +11,48 @@
  * not digits is judged here before anything is sent, with the knob's own bounds in the sentence; a
  * figure the API still refuses comes back in its own words.
  *
- * Task ids: M22.4.1, M22.1.2
+ * The Learning screen's two figures (M16.6.8) are read and set through the same shape, under
+ * `LEARNING_SETTINGS_API_PATH`, with the words in `learningQuery.ts`.
+ *
+ * Task ids: M22.4.1, M22.1.2, M16.6.8
  */
 
 export const TUNING_API_PATH = "/install/tuning";
 
-/** Where one knob is set. */
+/** Where one knob is set, under the screen's own path. */
+export function knobPath(root: string, name: string): string {
+  return `${root}/${encodeURIComponent(name)}`;
+}
+
+/** Where one of the Rate limits screen's knobs is set. */
 export function tunePath(name: string): string {
-  return `${TUNING_API_PATH}/${encodeURIComponent(name)}`;
+  return knobPath(TUNING_API_PATH, name);
 }
 
 export const TUNING_HEADING = "Limits you can change";
 export const TUNING_LEDE =
   "Each figure is between bounds the product fixes. A change is recorded in the audit trail under your name.";
+
+/**
+ * One screen's set of knobs: where they are read and set, and the words the card uses. The Rate
+ * limits screen's and the Learning screen's are two of these over the same card, because the API
+ * answers both in one shape and judges both the same way (`brain.tuning_routes`).
+ */
+export interface KnobScreen {
+  readonly path: string;
+  readonly heading: string;
+  readonly lede: string;
+  readonly column: string;
+  readonly exportName: string;
+}
+
+export const LIMITS_SCREEN: KnobScreen = {
+  path: TUNING_API_PATH,
+  heading: TUNING_HEADING,
+  lede: TUNING_LEDE,
+  column: "Limit",
+  exportName: "changeable-limits",
+};
 export const CHANGE_LIMIT = "Change";
 export const SAVE_LIMIT = "Save the new figure";
 export const KEEP_LIMIT = "Keep the current figure";

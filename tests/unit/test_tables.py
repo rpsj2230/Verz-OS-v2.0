@@ -141,12 +141,14 @@ MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
 MIGRATION_SKILL_LIFECYCLE = VERSIONS / "0139_skill_retirement_and_detachment.py"
 MIGRATION_AUTOMATION_CHANGE = VERSIONS / "0145_automation_change.py"
 MIGRATION_MANIFEST_DRAFT = VERSIONS / "0149_agent_manifest_draft.py"
+MIGRATION_LEARNING_SIGNAL = VERSIONS / "0154_answer_marks_and_learning_pause.py"
 MIGRATION_ACCESS_REQUEST_HANDLED = (
     VERSIONS / "0146_access_request_handled_and_certification_export.py"
 )
 MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
 MIGRATION_ESCALATION = VERSIONS / "0168_escalation.py"
 MIGRATION_STEWARDS = VERSIONS / "0167_stewards_and_self_grants.py"
+MIGRATION_RECORD_LIVES = VERSIONS / "0179_record_lives_and_source_epochs.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -391,6 +393,8 @@ MANIFEST_DRAFT_TABLES: tuple[str, ...] = (
 )
 #: And the one 0146 adds: an access request its owner has marked handled.
 ACCESS_REQUEST_HANDLED_TABLES: tuple[str, ...] = ("gate.access_request_handled",)
+#: And the two 0154 adds: a mark on an answer, and a pause on what an agent's runs teach.
+LEARNING_SIGNAL_TABLES: tuple[str, ...] = ("mem.mark", "agent.learning_pause")
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -417,6 +421,8 @@ TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
 ESCALATION_TABLES: tuple[str, ...] = ("gate.escalation",)
 #: And the two 0167 adds: who stewards each connected source, and every grant made to oneself.
 STEWARDS_TABLES: tuple[str, ...] = ("ops.connector_steward", "gate.self_grant")
+#: And the two 0179 adds: the records a read retired, and how often each source's rows changed.
+RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.record_retired", "proj.source_epoch")
 
 ALL_TABLES = (
     CORE_TABLES
@@ -487,8 +493,10 @@ ALL_TABLES = (
     + MANIFEST_DRAFT_TABLES
     + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
+    + LEARNING_SIGNAL_TABLES
     + ESCALATION_TABLES
     + STEWARDS_TABLES
+    + RECORD_LIVES_TABLES
 )
 
 
@@ -1313,10 +1321,14 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert access_request_handled.TABLES == ACCESS_REQUEST_HANDLED_TABLES
     trace_and_browser_session = migration_module(MIGRATION_TRACE_AND_BROWSER_SESSION)
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
+    learning_signal = migration_module(MIGRATION_LEARNING_SIGNAL)
+    assert learning_signal.TABLES == LEARNING_SIGNAL_TABLES
     escalation = migration_module(MIGRATION_ESCALATION)
     assert escalation.TABLES == ESCALATION_TABLES
     stewards = migration_module(MIGRATION_STEWARDS)
     assert stewards.TABLES == STEWARDS_TABLES
+    record_lives = migration_module(MIGRATION_RECORD_LIVES)
+    assert record_lives.TABLES == RECORD_LIVES_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1409,8 +1421,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(manifest_draft.TABLES)
         + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
+        + tuple(learning_signal.TABLES)
         + tuple(escalation.TABLES)
         + tuple(stewards.TABLES)
+        + tuple(record_lives.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1484,8 +1498,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(manifest_draft.TABLES),
         set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
+        set(learning_signal.TABLES),
         set(escalation.TABLES),
         set(stewards.TABLES),
+        set(record_lives.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
