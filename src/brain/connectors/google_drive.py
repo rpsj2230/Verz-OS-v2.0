@@ -206,9 +206,13 @@ page arguments, which never reach Drive. A subfolder locked narrower than its pa
 so it and everything in it are left out; a shortcut is never followed, so nothing outside the tree
 is reached through one; and a folder is listed once however it is reached, so no loop of folders is
 walked twice. See `THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT`. A pass is bounded
-by the worker's pages and the documented ceiling, and one cut short says so and starts again from
-the pin on the next pass: carrying on from where it stopped needs a place to keep that point, which
-the worker's records do not have yet.
+by the worker's pages and the documented ceiling, and one cut short says so and is carried on from
+where it stopped by the next: the page it would have asked, these arguments with the folders still
+to list in them, is what the worker keeps as the walk's place (M11.9.15,
+`brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`), so a tree larger
+than one pass is read whole over several. A pass that reaches `MAX_FOLDERS_WALKED` leaves the
+folders past it out, says so through `DriveReading.left_out`, and is reported cut short and retires
+nothing, because a file in a folder it did not reach was not asked for.
 
 **Its ceiling is Google's documented quota at the dearest call a read makes.** See
 `THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL` and `brain.ops.limits`.
@@ -224,7 +228,7 @@ answerable person is typed as an id rather than chosen from the directory; the c
 routes refuse an id that names nobody live here (`Setting.names_a_person`), and a picker is the
 console's to add.
 
-Task ids: M11.6.7, M11.7.7
+Task ids: M11.6.7, M11.7.7, M11.9.15
 """
 
 from __future__ import annotations
@@ -2415,10 +2419,12 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
 
 # ---------------------------------------------------------- the worker's reading (M11.6.7)
 #: The run's own page arguments that carry the walk: the folder this page lists, the folders still
-#: to list, and every folder already queued. Read by `FolderListing.url_for` and never sent.
+#: to list, every folder already queued, and whether a folder was left out at the bound. Read by
+#: `FolderListing.url_for` and never sent.
 WALK_FOLDER: Final = "walk.folder"
 WALK_PENDING: Final = "walk.pending"
 WALK_SEEN: Final = "walk.seen"
+WALK_LEFT_OUT: Final = "walk.left_out"
 
 #: The most folders one pass walks, the pin's subfolders and theirs together. The worker's page
 #: bound and the ceiling bound a pass as well; this one bounds what a pass carries.
@@ -2484,7 +2490,7 @@ class FolderListing(RestOperation):
         return pinned if folder == pinned.folder_id else replace(pinned, folder_id=folder)
 
     def url_for(self, arguments: Mapping[str, str]) -> str:
-        walk = {WALK_FOLDER, WALK_PENDING, WALK_SEEN}
+        walk = {WALK_FOLDER, WALK_PENDING, WALK_SEEN, WALK_LEFT_OUT}
         unasked = sorted(set(arguments) - {PAGE_CURSOR_PARAMETER, *walk})
         if unasked:
             msg = (
@@ -2538,6 +2544,26 @@ def _assert_file(entity: str) -> None:
         raise DriveError(msg)
 
 
+def _queued(asked: Mapping[str, str], body: Any) -> tuple[list[str], set[str], bool]:
+    """The folders still to list after this page, every folder queued, and whether one was left out.
+
+    Each subfolder the page names is queued once; one already queued is not queued again, which is
+    what ends a loop, and none past `MAX_FOLDERS_WALKED`, which is left out and said to be.
+    """
+    pending = asked.get(WALK_PENDING, "").split()
+    seen = set(asked.get(WALK_SEEN, "").split())
+    left_out = asked.get(WALK_LEFT_OUT, "") == "1"
+    for one in subfolders_to_walk(body):
+        if one in seen:
+            continue
+        if len(seen) >= MAX_FOLDERS_WALKED:
+            left_out = True
+            continue
+        seen.add(one)
+        pending.append(one)
+    return pending, seen, left_out
+
+
 class DriveReading:
     """The pinned folder, listed every hour into the minimal index and nothing else (M11.6.7).
 
@@ -2578,19 +2604,17 @@ class DriveReading:
         """The rest of this folder, or the next folder of the walk, or None when the tree is done.
 
         The walk is carried in the page arguments (`WALK_FOLDER`, `WALK_PENDING`, `WALK_SEEN`),
-        so the reading holds nothing between pages. Each subfolder a page names is queued once
-        (`subfolders_to_walk`); a folder already queued is not queued again, which is what ends a
-        loop, and no more than `MAX_FOLDERS_WALKED` are queued in one pass.
+        so the reading holds nothing between pages, and a pass the worker stopped is carried on from
+        them. Each subfolder a page names is queued once (`subfolders_to_walk`); a folder already
+        queued is not queued again, which is what ends a loop, and no more than
+        `MAX_FOLDERS_WALKED` are queued in one pass, the rest left out and marked `WALK_LEFT_OUT`.
         """
         del entity, returned
         folder = asked.get(WALK_FOLDER, "")
-        pending = asked.get(WALK_PENDING, "").split()
-        seen = set(asked.get(WALK_SEEN, "").split())
-        for one in subfolders_to_walk(body):
-            if one not in seen and len(seen) < MAX_FOLDERS_WALKED:
-                seen.add(one)
-                pending.append(one)
+        pending, seen, left_out = _queued(asked, body)
         walk = {WALK_PENDING: " ".join(pending), WALK_SEEN: " ".join(sorted(seen))}
+        if left_out:
+            walk[WALK_LEFT_OUT] = "1"
         cursor = next_cursor(Reply(status=200, body=body))
         if cursor:
             return MappingProxyType({PAGE_CURSOR_PARAMETER: cursor, WALK_FOLDER: folder, **walk})
@@ -2599,6 +2623,14 @@ class DriveReading:
         following = pending.pop(0)
         walk[WALK_PENDING] = " ".join(pending)
         return MappingProxyType({WALK_FOLDER: following, **walk})
+
+    def left_out(self, entity: str, asked: Mapping[str, str], body: Any) -> bool:
+        """Whether this pass has left a folder out at `MAX_FOLDERS_WALKED`, on this page or before.
+
+        A `declaration.BoundedWalk`: the worker reports such a pass cut short and retires nothing.
+        """
+        _assert_file(entity)
+        return _queued(asked, body)[2]
 
     def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
         # Built for its refusal of settings that are not a folder; Google needs no header here.

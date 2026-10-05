@@ -64,6 +64,7 @@ would fill the table with rows for runs that never happened, and "this control h
 of attempts and no successes" would then mean two different things.
 
 Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5, M1.6.12, M5.4.7
+Task ids: M22.2.2
 """
 
 from __future__ import annotations
@@ -78,6 +79,7 @@ import psycopg
 
 from brain.db import libpq_conninfo
 from brain.knowledge.item_store import run_reverification_now
+from brain.ops.admission import WorkloadClass
 from brain.ops.automation_run_store import run_automations_now
 from brain.ops.canary_run import run_canaries_now
 from brain.ops.connector_sync_run import run_connector_sync_now
@@ -191,6 +193,18 @@ SCHEDULER_LOCK_NAMESPACE: Final = 0x5C4E
 STALLED_AFTER: Final = timedelta(minutes=10)
 
 
+#: Why every control that runs says which class it is in, and how the classes were chosen.
+A_CONTROL_IS_CLASSED_BY_WHAT_IT_IS: Final = (
+    "A control has no traffic class or lane, because nobody asked for it, so admission's "
+    "workload_class_for has nothing to read. It is classed by what it does: a connector or "
+    "directory sync, an ingestion of logs, a re-verification of knowledge, a sweep or a report "
+    "is batch; tasks, agents, automations, deliveries, probes and the checks are background. "
+    "Nothing a control does is interactive, so a control can never hold a connection the "
+    "request path's pool keeps. A control that runs and names no class is refused, because a "
+    "default would put the next sweep somebody writes on whichever pool the default named."
+)
+
+
 class RunnerError(Exception):
     """Raised when a schedule is asked to run something it cannot describe."""
 
@@ -214,6 +228,9 @@ class Runner:
     needs: str = ""
     #: The call, when there is one.
     run: Callable[[datetime, bool, str], str] | None = None
+    #: Which class's connections the run is given, required exactly when there is a call. See
+    #: `A_CONTROL_IS_CLASSED_BY_WHAT_IT_IS`.
+    workload: WorkloadClass | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -230,6 +247,12 @@ class Runner:
             msg = (
                 f"{self.name!r} can be run and also says what it still needs, which reads as "
                 "a control that is wired and is not"
+            )
+            raise RunnerError(msg)
+        if self.run is not None and self.workload is None:
+            msg = (
+                f"{self.name!r} can be run and names no workload class, so nothing says which "
+                f"connections it may hold. {A_CONTROL_IS_CLASSED_BY_WHAT_IT_IS}"
             )
             raise RunnerError(msg)
 
@@ -757,11 +780,11 @@ A_JOBS_NEEDS_IS_WRITTEN_FOR_AN_ADMINISTRATOR: Final = (
 #: code name or option letter in it (`A_JOBS_NEEDS_IS_WRITTEN_FOR_AN_ADMINISTRATOR`), and the
 #: piece of work behind it, read from the entry point's own signature, is the comment above it.
 RUNNERS: Final[tuple[Runner, ...]] = (
-    Runner(name="retention_sweep", run=retention_sweep),
+    Runner(name="retention_sweep", run=retention_sweep, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17. The askers are every live reach through the one resolver and one
     # the directory does not hold, and what they are compared over is the answer lane itself:
     # `brain.ops.canary_run` says why the store scan is the fixture suite's and not this run's.
-    Runner(name="canary_run", run=canary_run),
+    Runner(name="canary_run", run=canary_run, workload=WorkloadClass.BACKGROUND),
     # For whoever builds it: `drill_due` takes the last verification and `verification_of` reads
     # one, and no backup or verification is written by anything yet; needs-rupash item 44.
     Runner(
@@ -782,18 +805,20 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     ),
     # Wired on 2026-09-28: `brain.ops.denial_digest_run` reads the hour's refusals from the
     # ledger, resolves every live person's reach, and keeps what `digest` raises in the cache.
-    Runner(name="denial_digest", run=denial_digest),
+    Runner(name="denial_digest", run=denial_digest, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-21 with `auth.staff_member`, `auth.staff_sync_run` and the staff source's
     # slot among the connector keys. See `brain.ops.staff_sync_run`.
-    Runner(name="directory_sync", run=directory_sync),
+    Runner(name="directory_sync", run=directory_sync, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-15. `know.item` holds the items, the outbox is the log, and the rule
     # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
     # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
-    Runner(name="knowledge_reverification", run=knowledge_reverification),
+    Runner(
+        name="knowledge_reverification", run=knowledge_reverification, workload=WorkloadClass.BATCH
+    ),
     # Wired on 2026-09-30 with `gate.escalation` (`0168`). See `brain.ops.escalation_store`.
-    Runner(name="escalation_expiry", run=escalation_expiry),
+    Runner(name="escalation_expiry", run=escalation_expiry, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-10-06 with `er.observation` (`0182`). See `brain.resolution.registry_store`.
-    Runner(name="entity_resolution", run=entity_resolution),
+    Runner(name="entity_resolution", run=entity_resolution, workload=WorkloadClass.BATCH),
     # For whoever builds it: the feature observations `drift` measures over, which are
     # resolution decisions nobody records for this purpose yet. The fit is weekly.
     Runner(
@@ -805,13 +830,13 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     ),
     # Wired on 2026-09-30: `brain.ops.recovery_run.sweep_queue` re-drives an orphaned or failed
     # job its task declares safe and sets aside the rest, over the worker's own queue connection.
-    Runner(name="queue_redrive", run=queue_redrive),
+    Runner(name="queue_redrive", run=queue_redrive, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-30: `brain.ops.recovery_run.resume_side_effects` reads back an interrupted
     # operation where its connector declares a read-back and lists the rest for a person.
-    Runner(name="side_effect_resume", run=side_effect_resume),
+    Runner(name="side_effect_resume", run=side_effect_resume, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-22 with `ops.provider_health` and the worker's read of the model provider
     # slots. See `brain.ops.model_probe_run`.
-    Runner(name="model_health_probes", run=model_health_probes),
+    Runner(name="model_health_probes", run=model_health_probes, workload=WorkloadClass.BACKGROUND),
     # For whoever builds it: the closest to wireable. `correct` already has a caller in
     # `brain.console.spend_view`; the estimate and actual figures for the period are assembled
     # when somebody opens the usage screen and by nothing on a schedule.
@@ -824,25 +849,25 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     ),
     # Wired on 2026-09-17, with the sender, the worker's reader of signing secrets and the
     # resolver `brain.ops.webhook_delivery` implements.
-    Runner(name="outbox_dispatch", run=outbox_dispatch),
-    Runner(name="spend_report_refresh", run=spend_report_refresh),
+    Runner(name="outbox_dispatch", run=outbox_dispatch, workload=WorkloadClass.BACKGROUND),
+    Runner(name="spend_report_refresh", run=spend_report_refresh, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17 with `ops.erasure_request`. See `brain.ops.erasure_store`.
-    Runner(name="erasure_queue", run=erasure_queue),
+    Runner(name="erasure_queue", run=erasure_queue, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17 with the installer's vault, the day it was registered.
-    Runner(name="vault_token_renewal", run=vault_token_renewal),
+    Runner(name="vault_token_renewal", run=vault_token_renewal, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-17 with `agent.automation_run`. See `brain.ops.automation_run_store`.
-    Runner(name="automation_run", run=automation_run),
+    Runner(name="automation_run", run=automation_run, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-17 with `ops.connector_sync`, the worker's reader of connector keys and the
     # readings `brain.ops.connector_sync` declares. See `brain.ops.connector_sync_run`.
-    Runner(name="connector_sync", run=connector_sync),
+    Runner(name="connector_sync", run=connector_sync, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17 with `ops.vault_access` and the worker overlay's read-only mount of the
     # vault's log. See `brain.ops.vault_audit_ship`.
-    Runner(name="vault_audit_ship", run=vault_audit_ship),
+    Runner(name="vault_audit_ship", run=vault_audit_ship, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-28 with `ops.acceptance_result`. See `brain.ops.acceptance_run`.
-    Runner(name="acceptance_run", run=acceptance_run),
+    Runner(name="acceptance_run", run=acceptance_run, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
     # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
-    Runner(name="evening_digest", run=evening_digest),
+    Runner(name="evening_digest", run=evening_digest, workload=WorkloadClass.BATCH),
 )
 
 

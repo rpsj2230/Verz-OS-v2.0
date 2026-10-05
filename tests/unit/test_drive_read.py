@@ -409,6 +409,34 @@ def test_a_pass_walks_no_more_folders_than_its_bound() -> None:
     assert len(listed) == 1 + MAX_FOLDERS_WALKED
 
 
+def test_a_pass_that_left_a_folder_out_at_its_bound_says_so_on_every_page_after() -> None:
+    """`DriveReading.left_out`, the `BoundedWalk` the worker asks: the page that queued past the
+    bound says a folder was left out, and so does every page the walk asks after it, because the
+    mark travels in the walk's own arguments. A tree inside the bound says nothing was. Delete
+    this and a pass that never listed some folders reads as the whole tree, and the worker retires
+    every file in the folders it did not reach."""
+    from brain.connectors.declaration import BoundedWalk
+
+    reading = DriveReading()
+    assert isinstance(reading, BoundedWalk)
+    many = {
+        "files": [
+            a_child(f"fldMany{n:05d}", FOLDER_ID, mimeType=FOLDER_MIME)
+            for n in range(MAX_FOLDERS_WALKED + 1)
+        ]
+    }
+    first = reading.first_page(FILE)
+    assert reading.left_out(FILE, first, many)
+    following = reading.next_page(FILE, first, many, len(many["files"]))
+    assert following is not None and reading.left_out(FILE, following, {"files": []})
+    folder_listing(a_connection()).url_for(following)
+
+    few = {"files": [a_child("fldFew00001", FOLDER_ID, mimeType=FOLDER_MIME)]}
+    assert not reading.left_out(FILE, first, few)
+    after = reading.next_page(FILE, first, few, 1)
+    assert after is not None and not reading.left_out(FILE, after, {"files": []})
+
+
 def test_a_listing_names_the_folder_it_walked_to_and_its_rows_are_checked_against_it() -> None:
     """A page of a subfolder is checked against that subfolder: a row whose parent is the pin, on a
     page that listed a subfolder, means the query is not the one sent, and the page is refused.
@@ -446,10 +474,11 @@ def test_the_folder_s_rows_carry_the_department_a_grant_is_scoped_by() -> None:
 # ------------------------------------------------------------ a pass cut short
 class EndlessTree:
     """Google as recorded answers over a tree with no bottom: every folder holds one file and one
-    subfolder. The token endpoint answers; every listing is noted."""
+    subfolder. The token endpoint answers; every listing is noted, with the folder it named."""
 
     def __init__(self) -> None:
         self.listings = 0
+        self.folders: list[str] = []
 
     def get(self, url: str, *, address: str, headers: Any, max_bytes: int) -> Any:
         import json
@@ -459,6 +488,7 @@ class EndlessTree:
         del address, headers, max_bytes
         folder = parse_qs(urlsplit(url).query)["q"][0].split("'")[1]
         self.listings += 1
+        self.folders.append(folder)
         body = {
             "files": [
                 a_file(f"file{self.listings:07d}", parents=[folder]),
@@ -478,12 +508,13 @@ class EndlessTree:
 
 
 @pytest.mark.needs_db
-def test_a_pass_cut_short_by_its_bound_is_degraded_and_never_reported_complete() -> None:
+def test_a_pass_cut_short_by_its_bound_is_degraded_and_the_next_carries_on() -> None:
     """A tree deeper than one pass may walk is read to the worker's page bound and the attempt is
-    recorded DEGRADED, read but cut short, rather than as a source read to the end. Its sibling is
-    the install check, whose tree is read to the end and is OK. Carrying on from where it stopped
-    needs a cursor the worker does not keep yet, so the next pass starts at the pin again. Delete
-    this and a folder too large for one pass reads as completely indexed."""
+    recorded DEGRADED, read but cut short, rather than as a source read to the end; and the next
+    pass starts at the folder the first did not reach, with the folders the first queued, rather
+    than at the pin (M11.9.15). Its sibling is the install check, whose tree is read to the end and
+    is OK. Delete this and a folder too large for one pass reads as completely indexed, or is read
+    from the pin on every pass and never past its first fifty folders."""
     from datetime import timedelta
 
     from brain.connectors.contract import HealthState
@@ -537,6 +568,26 @@ def test_a_pass_cut_short_by_its_bound_is_degraded_and_never_reported_complete()
             ),
         )
         ((health, detail),) = sql(url, "SELECT health, detail FROM ops.connector_sync")
+        first = list(tree.folders)
+        later = at + timedelta(days=1)
+        through(
+            url,
+            lambda sessions: sync_on(
+                sessions=sessions,
+                now=later,
+                keys=_KeyFiles(a_key_file()),
+                caller=tree,
+                resolver=Resolver(),
+                clock=lambda: next(clock),
+                sleep=no_sleep,
+                poster=tree,
+            ),
+        )
+        second = tree.folders[len(first) :]
 
-    assert tree.listings == MAX_PAGES_PER_ENTITY
+    assert len(first) == MAX_PAGES_PER_ENTITY
     assert (health, detail) == (HealthState.DEGRADED.value, READ_BUT_CUT_SHORT)
+    # Each listing names the next folder down, so the first the second pass lists is the one the
+    # first pass queued last and never reached.
+    assert first[0] == FOLDER_ID and second[0] == f"fld{MAX_PAGES_PER_ENTITY:08d}"
+    assert len(second) == MAX_PAGES_PER_ENTITY and not set(first) & set(second)

@@ -118,7 +118,7 @@ from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
-from brain.tables.projection import ProjectedRecordRow
+from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
 from brain.tables.question_gap import QuestionGapRow
 from brain.tables.requirement_check import RequirementCheckRow
 from brain.tables.resolution import (
@@ -426,6 +426,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # grant are values, so each record outlives what it names.
     "ops.connector_steward",
     "gate.self_grant",
+    # 0179_record_lives_and_source_epochs. Points at nothing: a source is a value, and the epoch
+    # outlives any one connection of it, as `proj.record`'s rows do; a retirement names its record
+    # by value, because the live row it copied can serve again.
+    "proj.record_retired",
+    "proj.source_epoch",
     # 0182_entity_registry_observations. None points at anything: each names a source record or a
     # digest by value, so each outlives what it names.
     "er.observation",
@@ -531,6 +536,7 @@ __all__ = [
     "ResidencyConstraintRow",
     "RetentionReleaseRow",
     "RetentionReportRow",
+    "RetiredRecordRow",
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",
@@ -552,6 +558,7 @@ __all__ = [
     "SkillReviewRow",
     "SkillRow",
     "SolutionRow",
+    "SourceEpochRow",
     "SpendActualRow",
     "StaffMemberRow",
     "StaffSyncRunRow",
