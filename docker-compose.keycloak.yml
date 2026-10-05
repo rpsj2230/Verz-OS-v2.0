@@ -13,7 +13,7 @@
 #
 # | service        | cgroup | process-side          | why the gap |
 # |----------------|--------|-----------------------|-------------|
-# | keycloak       | 768M   | MaxRAMPercentage 70   | metaspace, code cache, GC structures, threads |
+# | keycloak       | 768M   | MaxRAMPercentage 50   | metaspace, code cache, GC structures, threads |
 # | keycloak-db    | 256M   | shared_buffers 64MB   | work_mem per sort, WAL buffers, the backends |
 #
 # A cgroup limit is enforced by the kernel killing the process, so it protects the
@@ -23,10 +23,23 @@
 # while collecting. `MaxRAMPercentage` reads the cgroup limit rather than the host, which is
 # why it is a percentage here and a fixed number in the Node services.
 #
-# 70 rather than 100 because the heap is not the process. Metaspace, the code cache, thread
-# stacks and the GC's own structures live outside it, and on a small Keycloak they are
-# comfortably 150 MiB. A heap sized at the whole cgroup is a container that dies under load
-# with a perfectly healthy heap.
+# 50 rather than 100 because the heap is not the process. Metaspace, the code cache, thread
+# stacks and the GC's own structures live outside it. A heap sized at the whole cgroup is a
+# container that dies under load with a perfectly healthy heap.
+#
+# **It was 70 until 2026-10-06, and 70 killed every fresh install's first start.** The figure
+# assumed what lives outside the heap was about 150 MiB, which is true of a Keycloak that is
+# already running. The first start is not that: it rebuilds the server for this configuration,
+# runs 148 database changesets and imports the realm in one process. On the browser harness's
+# empty runners it restarted during its first start on three runs of four, and the kernel's log
+# on the run that printed it says why: `Memory cgroup out of memory: Killed process ... (java)`
+# at 763692 kB resident in this 768M cgroup. Docker still reports OOMKilled=false, so it looks
+# like a silent restart. The restart policy brought it back
+# already built and migrated, so it recovered, and an install that had once started never
+# showed it again. 50 leaves 384 MiB outside a 384 MiB heap. Rejected: raising the cgroup to
+# 1024M, which takes 256 MiB from the host's measured spare for a peak that lasts one start.
+# The proper removal of the peak is a pre-built image started with `start --optimized`, so no
+# install ever rebuilds the server at all.
 #
 # ---------------------------------------------------------------------------------------
 # Its own database, and that is deliberate rather than lazy.
@@ -225,8 +238,8 @@ services:
       KC_HOSTNAME_STRICT: "true"
       KC_HEALTH_ENABLED: "true"
       # The process-side cap. Reads the cgroup limit rather than the host; see the header
-      # for why it is 70 and not 100.
-      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40"
+      # for why it is 50, and why it is no longer 70.
+      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40"
     volumes:
       # The stripped copy, written by `keycloak-realm` above, never the reviewed file.
       # Read-only: a container that could write here would let a change made by clicking

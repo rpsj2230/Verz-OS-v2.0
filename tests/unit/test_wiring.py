@@ -940,3 +940,36 @@ def test_the_trace_stack_and_the_trace_ledger_differ_by_exactly_the_object_store
     assert set(TRACE_STACK_ROLES.values()) - TRACE_LEDGER == {"seaweedfs"}
     assert TRACE_LEDGER - set(TRACE_STACK_ROLES.values()) == set()
     assert "seaweedfs" in AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT
+
+
+#: Measured on 2026-10-06 by the browser harness on an empty runner: Keycloak 26.0.8's first
+#: start (server rebuild, 148 changesets, realm import in one process) was killed by the kernel
+#: at this resident size in its 768 MiB cgroup while its heap was capped at this percentage.
+KEYCLOAK_FIRST_START_KILLED_AT_KIB = 763_692
+KEYCLOAK_FIRST_START_KILLED_AT_PERCENT = 70
+
+
+def test_keycloak_s_heap_leaves_room_for_the_first_start_that_killed_it() -> None:
+    """The heap cap is below the one the kernel killed, and the measured overhead still fits.
+
+    What lived outside the heap when the kernel killed the first start is at least the resident
+    size less the heap's cap then, about 208 MiB, which is past the 150 MiB the compose file once
+    assumed. The cap now has to leave that much under the limit `brain.ops.wiring` budgets, and
+    has to be below the percentage that was killed. Delete this and the percentage can drift back
+    to 70 with every unit test green, and every fresh install's identity provider is killed once
+    on its first start and comes back by its restart policy, which nobody sees.
+    """
+    compose = yaml.safe_load((REPO / "docker-compose.keycloak.yml").read_text(encoding="utf-8"))
+    service = compose["services"]["keycloak"]
+    limit_mib = component("keycloak").memory_mib
+    assert service["deploy"]["resources"]["limits"]["memory"] == f"{limit_mib}M"
+    found = re.search(r"-XX:MaxRAMPercentage=(\d+)\b", service["environment"]["JAVA_OPTS_APPEND"])
+    assert found is not None
+    percent = int(found.group(1))
+    outside_heap_mib = (
+        KEYCLOAK_FIRST_START_KILLED_AT_KIB / 1024
+        - limit_mib * KEYCLOAK_FIRST_START_KILLED_AT_PERCENT / 100
+    )
+    assert outside_heap_mib > 150
+    assert percent < KEYCLOAK_FIRST_START_KILLED_AT_PERCENT
+    assert limit_mib * percent / 100 + outside_heap_mib <= limit_mib * 0.9

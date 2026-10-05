@@ -435,7 +435,7 @@ services:
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:?set KEYCLOAK_HOSTNAME}
       KC_HOSTNAME_STRICT: 'true'
       KC_HEALTH_ENABLED: 'true'
-      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40
+      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40
     volumes:
     - realm-import:/opt/keycloak/data/import:ro
     - keycloak-vault:/opt/keycloak/vault:ro
