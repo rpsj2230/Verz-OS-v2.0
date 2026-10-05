@@ -35,6 +35,7 @@ ARCHITECTURE = Path(__file__).resolve().parents[2] / "docs" / "architecture.html
 #: It stopped at ten, and the eleventh open question turned the comparison into a `KeyError`
 #: rather than a readable failure. A table that runs out is a check that stops working at a
 #: number nobody chose, and the failure it produces names the table rather than the drift.
+#: It stopped at twenty too, and the twenty-first open question did the same on 2026-10-05.
 WORDS = {
     0: "none",
     1: "one",
@@ -57,6 +58,16 @@ WORDS = {
     18: "eighteen",
     19: "nineteen",
     20: "twenty",
+    21: "twenty-one",
+    22: "twenty-two",
+    23: "twenty-three",
+    24: "twenty-four",
+    25: "twenty-five",
+    26: "twenty-six",
+    27: "twenty-seven",
+    28: "twenty-eight",
+    29: "twenty-nine",
+    30: "thirty",
 }
 
 
@@ -70,16 +81,6 @@ WORDS = {
 #: a check that stops working at a number nobody chose.
 WORDS_LARGE = {
     **WORDS,
-    21: "twenty-one",
-    22: "twenty-two",
-    23: "twenty-three",
-    24: "twenty-four",
-    25: "twenty-five",
-    26: "twenty-six",
-    27: "twenty-seven",
-    28: "twenty-eight",
-    29: "twenty-nine",
-    30: "thirty",
     31: "thirty-one",
     32: "thirty-two",
     33: "thirty-three",
@@ -344,18 +345,29 @@ def test_the_architecture_agrees_with_the_register_about_how_much_is_unwired() -
 
 
 def test_the_architecture_agrees_with_the_registry_about_how_many_tools_exist() -> None:
-    """The second number, and the one that will move first. Thirty-four console screens each
-    name the tool that answers them, and the registry holds what it holds. Read through
-    the same private helper `sweep_tool_registry` uses, in the way this file already reads
-    `docs_routes._needs_count`, so the document and the sweep cannot disagree.
+    """The second number, and the one that moves first. The console's screens each name the tool
+    that answers them, and the registry holds what it holds. Read through the same private helper
+    `sweep_tool_registry` uses, in the way this file already reads `docs_routes._needs_count`, so
+    the document and the sweep cannot disagree.
 
-    Compared against the registry rather than a number here, so the second tool moves this
-    sentence.
+    **Stated as a comparison rather than typed as a number since 2026-10-05.** Every connector adds
+    row tools, so a typed count was a line every connector change edited, and two connector changes
+    open at once conflicted in it. The sentence's claim is that the registry holds fewer tools than
+    the console has screens, and that claim is what is asserted, against `SCREEN_COUNT` and the
+    registry: the day the registry catches up, this fails and the sentence has to change.
 
-    Delete this and the document keeps saying one after the console is answering."""
+    Delete this and the document keeps saying the registry lags the console after it has caught up,
+    or names a figure nothing checks."""
+    from brain.console.screens import SCREEN_COUNT
     from brain.ops.sweeps import _registered_tool_names
 
+    registered = _registered_tool_names()
+    assert registered, "the registry was not read, so this compared nothing"
     assert (
-        _stated("data-registered-tools", "how many tools are registered")
-        == WORDS[len(_registered_tool_names())]
+        _stated("data-registered-tools", "how the registry compares with the screens")
+        == "fewer tools than there are screens"
+    )
+    assert len(registered) < SCREEN_COUNT, (
+        f"the registry holds {len(registered)} tools and the console {SCREEN_COUNT} screens, so "
+        "the architecture's sentence saying it holds fewer is no longer true"
     )

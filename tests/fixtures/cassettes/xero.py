@@ -8,10 +8,14 @@ Task ids: M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.connectors import xero
 from brain.connectors.manifest import ConnectorManifest
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import READ_AT, PublicResolver, answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -200,8 +204,34 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Xero's read-back reading, as the operation its request line names."""
+    entity = xero.ENTITY_CONTACT if "/Contacts" in recorded.request else xero.ENTITY_INVOICE
+    operation = xero.operation_for(entity, resolver=PublicResolver())
+    reply = xero.interpret(
+        operation, status=recorded.status, body=recorded.body, fetched_at=READ_AT
+    )
+    return answered(SOURCE, reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "XERO-200-invoices": Verification.FOUND,
+        "XERO-429": Verification.INCONCLUSIVE,
+        "XERO-401-expired": Verification.INCONCLUSIVE,
+        "XERO-200-contacts": Verification.FOUND,
+        "XERO-200-invoices-full-page": Verification.FOUND,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

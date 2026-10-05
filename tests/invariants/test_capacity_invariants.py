@@ -291,10 +291,11 @@ def test_a_connector_stays_usable_by_several_people_and_not_merely_by_one_more()
             continue
 
         state = LimiterState()
+        step = _step(share.limit)
         for offset in range(share.limit):
-            state = state.record(NOW + timedelta(seconds=offset * 0.5), hog)
+            state = state.record(NOW + timedelta(seconds=offset * step), hog)
 
-        at = NOW + timedelta(seconds=share.limit * 0.5)
+        at = NOW + timedelta(seconds=share.limit * step)
         served = 0
         for i in range(3):
             other = source_limits(source.name, principal_id=f"p_other_{i}")
@@ -304,6 +305,17 @@ def test_a_connector_stays_usable_by_several_people_and_not_merely_by_one_more()
         assert served == 3, (
             f"{source.name}: one caller's share left room for only {served} other people"
         )
+
+
+def _step(share: int) -> float:
+    """Seconds between a hog's calls, so its whole share lands inside one minute's window.
+
+    Half a second while a share fits in a minute at that pace, and closer together for a share
+    above 120: Google Drive's 1,625 a minute gives a share of hundreds, and spread half a second
+    apart its first calls would leave the window before its last were made, so the hog would never
+    be refused and the property would be asserted about a caller who never spent their share.
+    """
+    return min(0.5, 30 / share)
 
 
 def test_one_principal_cannot_exhaust_a_connector_for_everybody() -> None:
@@ -318,10 +330,11 @@ def test_one_principal_cannot_exhaust_a_connector_for_everybody() -> None:
         hog = source_limits(source.name, principal_id="p_hog")
         share = next(limit for limit in hog if limit.scope is LimitScope.PRINCIPAL_CONNECTOR)
         state = LimiterState()
+        step = _step(share.limit)
         for offset in range(share.limit):
-            state = state.record(NOW + timedelta(seconds=offset * 0.5), hog)
+            state = state.record(NOW + timedelta(seconds=offset * step), hog)
 
-        at = NOW + timedelta(seconds=share.limit * 0.5)
+        at = NOW + timedelta(seconds=share.limit * step)
         assert not check(now=at, limits=hog, state=state).allowed, source.name
 
         other = source_limits(source.name, principal_id="p_other")

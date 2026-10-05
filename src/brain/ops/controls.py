@@ -325,6 +325,10 @@ class Control:
     route: str = ""
     #: The file carrying the schedule, for a control whose recurrence is not in Python.
     schedule_file: str = ""
+    #: The install setting holding the time of day this control is owed at, `HH:MM` in the
+    #: install's zone, or empty for a control owed on its interval. See
+    #: `brain.ops.schedule.A_DAILY_MESSAGE_IS_OWED_AT_ITS_HOUR_AND_NOT_A_DAY_AFTER_THE_LAST`.
+    daily_at: str = ""
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -901,6 +905,8 @@ CONTROLS: Final[tuple[Control, ...]] = (
             "brain.ops.connector_sync_run:run_connector_sync_now",
             "brain.ops.connector_sync:plan_for",
             "brain.ops.connector_sync:after_attempt",
+            # The switched-on Lark Base's minimal index, read on the same schedule (M11.6.3).
+            "brain.ops.lark_base_index:index_if_due",
         ),
         guards=(
             "that every source an administrator connected is read on its own interval under its "
@@ -974,6 +980,30 @@ CONTROLS: Final[tuple[Control, ...]] = (
         cadence_from="brain.ops.acceptance_run:RUN_EVERY",
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="evening_digest",
+        # Added on 2026-09-30 with the owner's decision on where it goes (needs-rupash 125), and
+        # started by the worker's schedule from the day it was registered, once a day at the
+        # install's own hour rather than a day after the last run.
+        symbols=(
+            "brain.ops.digest:daily_digest",
+            "brain.ops.digest_delivery:deliver_digest",
+        ),
+        guards=(
+            "that whoever the install chose hears each evening what the build closed, reopened "
+            "and left overdue, and whether the wave still lands on its date, in the one "
+            "conversation they chose on any connected channel"
+        ),
+        lost_silently=(
+            "No digest arrives, and a quiet evening and a stopped digest look the same to the "
+            "person waiting for it. The Settings row says why when the channel is the cause; "
+            "a schedule that stopped says nothing anywhere else."
+        ),
+        every=_DAILY,
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+        daily_at="INSTALL_DIGEST_TIME",
     ),
 )
 

@@ -14,6 +14,7 @@ Task ids: none
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from brain.console.agent_profile import (
     EVERY_ROW_ITS_CALLER_MAY_SEE,
     MAY,
     NO_TOOLS,
+    NOT_TAKEN_OVER,
     RUN_SPEND_IS_RECORDED,
     LeashEntryWords,
     ProfileError,
@@ -42,6 +44,7 @@ from brain.console.agent_profile import (
     rungs_for,
     scope_sentence,
     spend_writers,
+    taken_over,
     tool_rows,
     tools_sentence,
 )
@@ -52,6 +55,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.catalogue import AgentCeiling, project
 from brain.gate.injection import AutonomyTier
 from brain.gate.leash import Leash, LeashEntry
+from brain.gate.takeover_store import standing_from
 from brain.knowledge.visibility import Visibility
 
 SRC = Path(__file__).resolve().parents[2] / "src"
@@ -418,6 +422,32 @@ def test_the_leash_rows_are_every_configured_target_and_every_action_nothing_nam
         LeashEntryWords(rung=ASSISTED, where="Only rows where department is web."),
     )
     assert rows[2].entries == (LeashEntryWords(rung=AUTONOMOUS, where=None),)
+
+
+def test_a_row_taken_over_three_times_in_the_week_is_drawn_a_step_lower_with_when() -> None:
+    """M8.3.5 on the page, in the page's own terms: the third takeover lowers the drawn rung and
+    the second does not, both say when, no standing draws nothing, and a standing for another
+    target is refused rather than drawn on the wrong action. Delete this and the Profile can show a
+    rung the agent is no longer held to, or a lowered rung beside an action that is fine."""
+    now = datetime(2999, 6, 1, 9, 0, tzinfo=UTC)
+    leash = Leash(
+        entries=(
+            LeashEntry(
+                agent_id="quote_helper", target="ledger.draft_invoice", scope=Scope(), rung=ASSISTED
+            ),
+        )
+    )
+    [row] = leash_rows(leash, "quote_helper", ("ledger.draft_invoice",))
+    three = tuple(now - timedelta(days=days) for days in (3, 2, 1))
+
+    def standing(*at: datetime) -> object:
+        return taken_over(row, standing_from("quote_helper", row.target, at), now)
+
+    assert standing(*three) == type(NOT_TAKEN_OVER)(lowered_to=SHADOW, at=three)
+    assert standing(*three[1:]) == type(NOT_TAKEN_OVER)(lowered_to=None, at=three[1:])
+    assert taken_over(row, None, now) is NOT_TAKEN_OVER
+    with pytest.raises(ValueError, match="was given for the row"):
+        taken_over(row, standing_from("quote_helper", "ledger.post_invoice", three), now)
 
 
 def test_the_highest_rung_is_over_the_actions_and_absent_for_an_agent_that_only_reads() -> None:

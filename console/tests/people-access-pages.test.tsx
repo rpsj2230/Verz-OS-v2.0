@@ -29,6 +29,8 @@ import { UNAVAILABLE } from "../src/pages/people/peopleActions";
 import { PEOPLE_FILTERS, readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
+import { AGENT_FORMAT } from "../src/pages/people/PersonPreview";
+import { ADD_WORK_EMAIL, JOIN, WORK_EMAIL_BLANK } from "../src/pages/people/WorkEmail";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 
@@ -400,6 +402,56 @@ describe("one person's page", () => {
     expect(fine.container.textContent).not.toContain("cannot sign in or ask");
   });
 
+  test("Add work email is offered only where the API says, sends only a shaped address, and joins after asking", async () => {
+    // What breaks if this is deleted: the owner's way to remove his own duplicate (M1.10.4), a blank
+    // or misspelt address sent, or a join that retires somebody's grants without a question.
+    const around = { [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
+    const asking = "The staff list's person for this email has signed in or holds something somebody gave them.";
+    const joined = "The work email is added, and the person the staff list had made for it is joined into this one.";
+    const sent: unknown[] = [];
+    const mounted = await consoleAt("/people/p_ada", {
+      [PERSON_API]: { body: detail({ may_add_work_email: true }) },
+      [`POST ${PERSON_API}/work-email`]: (body) => {
+        sent.push(body);
+        const confirmed = (body as { confirm?: boolean }).confirm === true;
+        return {
+          body: confirmed
+            ? { principal_id: "p_ada", outcome: "joined", written: true, told: joined }
+            : { principal_id: "p_ada", outcome: "ask", written: false, told: asking },
+        };
+      },
+      ...around,
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    const drawer = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    expect(writes(mounted.idp)).toEqual([]);
+    expect(drawer.textContent).toContain(WORK_EMAIL_BLANK);
+    fireEvent.change(drawer.querySelector("input[name=address]") as HTMLInputElement, { target: { value: " ada@example.test " } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: ADD_WORK_EMAIL }));
+    });
+    const question = await screen.findByRole("alertdialog");
+    expect(question.textContent).toContain(asking);
+    await act(async () => {
+      fireEvent.click(within(question).getByRole("button", { name: JOIN }));
+    });
+    await waitFor(() => {
+      expect(mounted.container.textContent).toContain(joined);
+    });
+    expect(sent).toEqual([
+      { address: "ada@example.test", confirm: false },
+      { address: "ada@example.test", confirm: true },
+    ]);
+
+    const plain = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
+    expect(within(plain.container).queryByRole("button", { name: ADD_WORK_EMAIL })).toBeNull();
+  });
+
   test("a person the API refuses is its sentence and reference and nothing else, whatever the reason", async () => {
     // What breaks if this is deleted: a page that words a hidden person differently from a missing one,
     // which is the oracle a per-person address must not be.
@@ -501,9 +553,10 @@ describe("one person's page", () => {
     await waitFor(() => expect(writes(mounted.idp)).toEqual([{ to: `POST ${API}/govern/people/disable`, body: { principal_id: "p_ada" } }]));
   });
 
-  test("the Access view groups holdings by origin, names roles apart from grants, and draws the preview inert with its reason", async () => {
+  test("the Access view groups holdings by origin, names roles apart from grants, and offers a preview the gate computes", async () => {
     // What breaks if this is deleted: the three questions of Part 4.4 merged into one list, a role drawn
-    // beside a capability as though it implied one, or a preview computed in the browser.
+    // beside a capability as though it implied one, or a preview computed in the browser. Since
+    // 2026-09-29 the preview is `POST /agents/{agent_id}/preview`, asked for an agent the reader chooses.
     const { container } = await consoleAt("/people/p_ada/access", {
       [PERSON_API]: { body: detail() },
       [`${API}/govern/roles/holders`]: {
@@ -520,9 +573,10 @@ describe("one person's page", () => {
     expect(groups).toEqual(expect.arrayContaining(["Given by a person", "From a pack", "From an approved elevation"]));
     expect(textOf(container)).toContain("Approver");
     expect(textOf(container)).not.toContain("Auditor");
-    const inert = container.querySelector(`[${UNAVAILABLE_MARK}]`);
-    expect(inert?.textContent).toBe("Preview a run");
-    expect(textOf(container)).toContain(UNAVAILABLE.preview.reason);
+    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)).toBeNull();
+    const preview = container.querySelector('[data-slot="person-preview"]');
+    expect(preview?.querySelector("select")).not.toBeNull();
+    expect(preview?.textContent).toContain(AGENT_FORMAT);
   });
 
   test("the Sign-ins view asks the sessions and sign-in routes about this person and ends every session in one confirmed act", async () => {
@@ -912,7 +966,8 @@ describe("what the pages hold against the API", () => {
     for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
-    expect(UNAVAILABLE.preview.retiredBy.test("/api/v1/govern/directory/{principal_id}/preview")).toBe(true);
+    // The preview this table held retired with its route, which the page now calls.
+    expect(paths).toContain("/api/v1/agents/{agent_id}/preview");
   });
 
   test("each write body the new pages send carries only keys its route declares", () => {

@@ -2,15 +2,450 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**15 items are open: 134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**30 items are open: 154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+which of your systems holds client projects and their tickets, **136,** whether memory
+disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
-vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
-it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
+vault open itself), **121 to 124,** whose conversations an agent's page lists, where uploaded documents are stored, a task
 that names a table library, and the automation canvas, each with my recommendation, **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 154. One server change for the sealed sandbox: a restart of every container, about two minutes
+
+**In plain terms:** three things you asked for run code the Brain did not write: scripts inside
+imported skills, the code sandbox, and connectors written as custom code. They must run sealed off,
+with no internet, no access to the Brain's data and hard time and memory limits. The standard way
+to seal them is gVisor, a small program Docker uses to run a container inside its own protective
+layer. Your server does not have it yet (checked read-only on 2026-10-06: Ubuntu 24.04, Docker with
+its standard runtime only).
+
+Installing it is one change no release can make on its own: gVisor is installed on the server, added
+to Docker's settings file, and Docker is restarted. **Restarting Docker restarts every container on
+the server for a minute or two**, the Brain's and your other project's (Activepieces) alike. Nothing
+is lost; they all come back by themselves.
+
+**Option A: yes, at a quiet time.** I install gVisor and restart Docker myself, at a time you name
+(for example a weekday night, Singapore time), then confirm everything is back and run the
+sandbox's own check: a script that tries to reach the internet and is stopped, and one that runs
+past its time and memory limits and is stopped.
+
+**Option B: not now.** The sandbox stays off. Skills with scripts are refused with a sentence saying
+this install runs no sandbox, and custom-code connectors are not offered. Everything else works.
+
+**Memory:** the sandbox is sized at 256 MB a script, so it fits beside the personal-data detector
+and Langfuse (item 120) with about 180 MB to spare. A larger limit per script would need more room.
+
+**My recommendation: A,** at a quiet time you choose.
+
+**What I need from you:** reply "154: A, after 11pm on a weekday" (or whichever time suits), or
+"154: B". Then, on your one visit to **Install, Settings**, **Optional services this server runs**
+becomes `presidio,langfuse,sandbox` instead of `presidio,langfuse`; I tell you when that is ready.
+
+## 153. Questions written in Chinese: how much is hidden before they go to an outside model?
+
+**In plain terms:** your requirement GAP-23 is now built (#344): before a question or passage goes
+to an outside model provider, names, ID numbers, phone numbers and email addresses are replaced
+with placeholders, and put back in the answer for the person who asked. Names written in Chinese
+characters are hard to tell from other Chinese words, so the built-in rules treat any run of two to
+four Chinese characters as a possible name. A question in English with a Chinese name in it works
+well: the name is hidden and the rest is sent. But a question written entirely in Chinese reaches
+the model as nothing but placeholders, and the model cannot answer it.
+
+**Option A: keep it as it is.** Nothing that could be a name leaves your install. Questions written
+in Chinese cannot be answered by an outside model.
+
+**Option B: hide a Chinese run only where it stands alone inside non-Chinese text,** as a name does
+in an English sentence. Questions written in Chinese then go through and are answered, but a
+Chinese name inside Chinese text is sent to the provider as written. Once the personal-data detector
+(item 120, row 1) runs with a Chinese model, it finds those names too and hides them again.
+
+**Option C: answer questions written in Chinese only with a model running on your own server.**
+Nothing leaves, and Chinese questions are answered, but only once such a model runs (it needs the
+model server from item 120, row 2, which does not fit on this server today).
+
+**My recommendation: B,** with the detector's Chinese model added once it is installed. It answers
+the questions your people actually ask, and hides every name written in an English sentence today.
+Until you reply, A holds, because it is the safe side: it only ever hides more.
+
+**What I need from you:** reply "153: A", "153: B" or "153: C". It is worth knowing first whether
+your staff ever ask the Brain in Chinese; if they never do, A costs nothing.
+
+## 150. Connect Google Drive (ready now)
+
+**In plain terms:** the Brain can now answer from the documents in one Google Drive folder and every
+folder under it, reading each Google Doc's words when somebody asks and keeping only names. It reads
+as a service account that can only view that folder. A subfolder shared more narrowly than its
+parent, or shared by link, is left out with everything in it. In the console open **Knowledge and
+data**, **Connectors**, **Google Drive**, **Connect**:
+
+1. **Make a service account** in Google Cloud console, **IAM & Admin**, **Service Accounts**, with
+   **no role** and never domain-wide delegation (item 143's can be reused).
+2. **Switch on the Google Drive API**: **APIs & Services**, **Library**, **Google Drive API**,
+   **Enable**.
+3. **Share the one folder with it as a viewer.** In Google Drive right-click the folder, **Share**,
+   paste the service account's email address, choose **Viewer**. Share nothing else with it.
+4. **Make its key file** (skip if you reuse one you still have): the account, **Keys**, **Add key**,
+   **Create new key**, **JSON**, **Create**.
+5. **Connect it.** Paste the folder's link from Drive (or only the id after /folders/), your
+   company's email domain (the part after @), the department the folder belongs to, the id of the
+   person who answers for its contents (as **People** shows it), choose the key file and press
+   **Connect Google Drive**.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:drive_file`, scoped to that department, with a reason.
+
+Tell me "connected Google Drive" afterwards and I prove it on your install.
+
+## 149. Your developer's part for the Laravel database
+
+**In plain terms:** four things in the database and its hosting, done once, before item 148.
+Send this to your developer:
+
+1. **Two views, holding only what the Brain may see.** In the application's database create
+   `v_client` with the columns name, status, department, manager_id, updated_at, and `v_user` with
+   display_name, department, status, updated_at. A view is the statement of what may be read and
+   changes only when you change it; a new column in a table is not read until a view names it.
+2. **A read-only user.** Create a database user with SELECT on those two views only: not on any
+   table, and no write. Give its name and password to the owner for item 148.
+3. **Let the Brain's server reach the database, on its port only.** Either allow the Brain server's
+   own address (from its hosting provider) in the database's firewall or security group, or, where
+   the database is on a private network, run an SSH tunnel from the Brain's server to a machine that
+   reaches it and keep it running: the Brain does not start one.
+4. **The certificate.** If the database's certificate is from a public authority, nothing is needed
+   (the owner types verify). If it is from your own certificate authority, give the owner that
+   authority's certificate to paste. Only a tunnel may go without encryption.
+
+## 148. Connect the Laravel database (ready now)
+
+**In plain terms:** the Brain can now answer about clients and staff from your Laravel application's
+own database, through two views your developer writes and a user that can read only those views.
+Every read stops at a row limit and a time limit you set. Your developer does item 149 first; then,
+in the console open **Knowledge and data**, **Connectors**, **Laravel database views**, **Connect**,
+and type what they give you:
+
+1. **Database holding the views**: the database name your developer gives you.
+2. **Database server's address** and **port**: as your developer or hosting provider gives them (the
+   port is usually 3306). With a tunnel, the tunnel's local end.
+3. **Private network**: yes only if the database is reached directly on a private network or
+   through a tunnel; otherwise no.
+4. **Encryption**: verify, or paste your own certificate authority's certificate if your developer
+   says the database uses one. none only with private network yes and a tunnel.
+5. **Who may be told a client** and **a staff record**: the rule each view is kept under, as your
+   developer writes it, for example department = sales.
+6. **Most rows** (up to 5000) and **longest read in seconds** (up to 30).
+7. **The read-only user's name and password**, from your developer. Press **Connect Laravel database
+   views**; the login goes to the vault and is never shown again.
+8. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:laravel_client` and `read:laravel_user` and the fields they may see, scoped to the
+   department each view's rule names, with a reason.
+
+Tell me "connected Laravel" afterwards and I prove it on your install.
+
+## 152. Lark Base and Lark Wiki are connected through Connect Lark, not this list
+
+**In plain terms:** these two are not on the Connectors list's Connect buttons, because their records
+and pages are read live and never synced. In the console open **Knowledge and data**,
+**Connectors**, and press **Connect Lark**, which creates the Lark app, tests it, and switches on
+knowledge from one Base and from the shared wiki spaces. If Connect Lark is already done on your
+install, nothing more is needed here. Tell me "connected Lark" if you run it now and I prove it on
+your install.
+
+## 146. Connect Domains and hosting (ready now)
+
+**In plain terms:** the Brain can now say when each client domain expires, who its registrar is and
+whether its site answers. It needs no key: a domain's registry publishes that to anyone. Only the
+domains you list are ever looked up. In the console open **Knowledge and data**, **Connectors**,
+**Domains and hosting**, **Connect**:
+
+1. **Gather the domains.** List every client domain you look after, up to two hundred.
+2. **Choose the department.** Pick the one department whose people may be told about them.
+3. **Connect it.** Type the domains, separated by commas or new lines, and that department's short
+   name, and press **Connect Domains and hosting**. No key is asked for.
+4. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:domain` and the facts they may be told (expiry, registrar, whether the site answers),
+   scoped to that department, with a reason.
+
+A domain whose registry publishes nothing (some country domains) is answered as that rather than
+guessed. Tell me "connected Domains" afterwards and I prove it on your install.
+
+## 145. Connect Cloudflare (ready now)
+
+**In plain terms:** the Brain can now answer about your Cloudflare zones and DNS records, and read a
+record's content and a zone's security events live. It reads with a token that can only read. A DNS
+change is only ever prepared for a person to approve; sending an approved change needs a second
+token, and that part is optional. In the console open **Knowledge and data**, **Connectors**,
+**Cloudflare**, **Connect**:
+
+1. **Make a read-only token.** In the Cloudflare dashboard open **My Profile**, **API Tokens**,
+   **Create Token**, **Create Custom Token**. Give it exactly three permissions: **Zone Read**, **DNS
+   Read** and **Analytics Read**. Nothing marked Edit or Write, and never the Global API Key.
+2. **Limit it to one account and copy it.** Under **Zone Resources** choose **Include**, **All zones
+   from an account**, and your account. **Continue to summary**, **Create Token**, and copy the token:
+   Cloudflare shows it once.
+3. **Copy the account's id.** On the account's **Overview** page, copy **Account ID** (32
+   characters).
+4. **Connect it.** On the console's last step type the account id, the short name of the department
+   whose people may be told its zones and records, paste the token and press **Connect Cloudflare**.
+5. **Optional, approved DNS changes.** Only if you want an approved change sent by the Brain rather
+   than made by hand: make a second custom token with one permission, **DNS Edit**, over the same
+   account's zones, and on the Cloudflare connector's page use **Allow approved DNS changes** to paste
+   it. It sits in its own vault slot and is used only for a change a person in that department
+   approved.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:zone` and `read:dns_record` (and the record fields they may see, such as its content),
+   scoped to that department, with a reason.
+
+Tell me "connected Cloudflare" afterwards and I prove it on your install.
+
+## 144. Connect Search Console (ready now)
+
+**In plain terms:** the Brain can now answer about one verified site's clicks, impressions, top
+queries and pages and sitemap problems, for any range in the last sixteen months. It reads as a
+service account with restricted permission on that one site, keeps only the site's name, and reads
+every figure from Google when asked. The service account made for item 143 can be reused. In the
+console open **Knowledge and data**, **Connectors**, **Search Console**, **Connect**:
+
+1. **Use or make a service account.** In Google Cloud console, **IAM & Admin**, **Service Accounts**:
+   use the one from item 143, or **Create service account** with **no role** and no domain-wide
+   delegation.
+2. **Switch on the API.** **APIs & Services**, **Library**, search for **Google Search Console API**,
+   **Enable**.
+3. **Make its key file** (skip if you reuse item 143's and still have its file): the account,
+   **Keys**, **Add key**, **Create new key**, **JSON**, **Create**.
+4. **Add it to the one site.** In Search Console choose the verified property, **Settings**, **Users
+   and permissions**, **Add user**: paste the service account's email address and choose
+   **Restricted**. No other property.
+5. **Connect it.** On the console's last step type the property exactly as Search Console's property
+   list shows it (a domain property starts with sc-domain:), the short name of the department whose
+   people may be told its figures, choose the key file and press **Connect Search Console**.
+6. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:search_site` and the figures they may see, scoped to that department, with a reason.
+
+Tell me "connected Search Console" afterwards and I prove it on your install.
+
+## 143. Connect Google Analytics (ready now)
+
+**In plain terms:** the Brain can now answer "how many sessions did the site have last month" from
+one Google Analytics property. It reads as a Google service account that can only view that one
+property, keeps only the property's name, and reads every figure from Google when somebody asks. In
+the console open **Knowledge and data**, **Connectors**, **Google Analytics**, **Connect**, which
+shows each step:
+
+1. **Make a service account.** In Google Cloud console open **IAM & Admin**, **Service Accounts**,
+   **Create service account** (the console's step links to it). Name it after the Brain and give it
+   **no role**. Never tick domain-wide delegation.
+2. **Switch on two APIs.** In the same project open **APIs & Services**, **Library**: search for
+   **Google Analytics Data API** and press **Enable**, then search for **Google Analytics Admin API**
+   and press **Enable**.
+3. **Make its key file.** Back in **Service Accounts**, open the account, **Keys**, **Add key**,
+   **Create new key**, **JSON**, **Create**. A key file downloads; keep it only until step 6.
+4. **Let it view the one property.** In Google Analytics open **Admin**, choose the property,
+   **Property access management**, the plus, **Add users**: paste the service account's email
+   address (it is on the account's page in Google Cloud) and give it **Viewer**. Nothing else.
+5. **Copy the property's id.** Still in **Admin**, **Property details**: copy the **Property ID**,
+   which is a number.
+6. **Connect it.** Back on the console's last step type the **Property ID** from step 5, the short
+   name of the one department whose people may be told its figures (as **People and access**,
+   **Departments** shows it), choose the key file from step 3 and press **Connect Google
+   Analytics**. The key file goes to the vault and is never shown again.
+7. **Give people the read.** In **People and access**, **People**, open each person who should be
+   told the figures and press **Grant a capability**: choose `read:analytics_property` and the figures
+   they may see (each is its own grant, such as the last 28 days' sessions), the scope of that
+   department, write a reason and save.
+
+Tell me "connected Google Analytics" afterwards and I prove it on your install.
+
+## 142. Connect WhatsApp (ready now)
+
+**In plain terms:** people can now ask the Brain on WhatsApp, the last of the channels in item 126's
+order. Only do this if your company uses WhatsApp Business. It needs a phone number used only for the
+Brain, and Meta lets the Brain answer freely only within 24 hours of the person's last message. In the
+console open **Channels**, **WhatsApp**, **Connect**, which shows each step:
+
+1. **Make the Meta app and add the number.** On Meta for Developers choose **Create app**, the
+   **Business** type, and add the **WhatsApp** product. Under **WhatsApp**, **API Setup**, add and
+   verify the number the Brain will answer from, and copy its **Phone number ID**.
+2. **Make a token that does not expire.** In Meta **Business settings**, **System users**, add one with
+   the **Admin** role, **Assign assets** (the app, full control), then **Generate new token** for the
+   app with expiry **Never**, ticking whatsapp_business_messaging and whatsapp_business_management.
+   Copy it. (Not the temporary token on the API Setup page: it expires within a day.)
+3. **Copy the app secret.** In the app's **App settings**, **Basic**, press **Show** beside **App
+   secret** and copy it.
+4. **Save it in the console.** Type the Phone number ID, paste the app secret and the token, and make
+   up a verify word (a long random word you type here and again in step 5). Tick **Switched on** and
+   press **Save set-up**. All three go to the vault and are never shown again.
+5. **Point Meta at the Brain.** In Meta open **WhatsApp**, **Configuration**, **Webhook**, **Edit**:
+   paste the events address the console's step shows as the **Callback URL**, the word from step 4 as
+   the **Verify token**, and press **Verify and save**. Under **Webhook fields** subscribe to
+   **messages**.
+6. **Try it.** Write to the number from your own WhatsApp: the first answer asks you to link your
+   number to your Brain account.
+
+Tell me "connected WhatsApp" afterwards and I prove it on your install.
+
+## 141. Connect Telegram (ready now)
+
+**In plain terms:** people can now ask the Brain in Telegram, the next channel in item 126's order.
+Only do this if your company uses Telegram. In a group the bot only answers a message that names it,
+and then with a link to Ask, so nothing private lands where others read. In the console open
+**Channels**, **Telegram**, **Connect**, which shows each step:
+
+1. **Make the bot.** In Telegram open **BotFather** (the console's step links to it), send /newbot,
+   give it a display name (for example Company Brain) and a username ending in bot (for example
+   company_brain_bot). BotFather replies with the bot's token: keep it private.
+2. **Optional: keep it out of groups.** Send BotFather /setjoingroups, pick the bot and choose
+   **Disable**.
+3. **Save it in the console.** Type the bot's username without the @ into **bot_id**, paste the
+   token into the secret field, tick **Switched on** and press **Save set-up**. The Brain tells
+   Telegram where to send messages by itself; if Telegram refuses, nothing is saved and the console
+   says why. The token goes to the vault and is never shown again.
+4. **Try it.** Open the bot in Telegram, press **Start** and write to it: the first answer asks you to
+   link your Telegram account to your Brain account.
+
+Tell me "connected Telegram" afterwards and I prove it on your install.
+
+## 140. Connect Microsoft Teams (ready now)
+
+**In plain terms:** people can now ask the Brain in Microsoft Teams, item 126's next channel. Only do
+this if your company uses Teams. The Brain answers in a one-to-one chat; in a group or channel that
+names it, it posts a link to Ask instead of the answer, so nothing private lands where others read.
+In the console open **Channels**, **Microsoft Teams**, **Connect**, which shows each step:
+
+1. **Create the bot in Azure.** In the Azure portal choose **Create a resource**, **Azure Bot**. Give
+   it a handle (for example company-brain), pick your subscription and resource group, set **Type of
+   App** to **Single Tenant** and **Creation type** to **Create new Microsoft App ID**, then **Review +
+   create** and **Create**.
+2. **Point it at the Brain.** Open the bot, then **Configuration**. Paste the events address the
+   console's step shows into **Messaging endpoint** and press **Apply**. Copy the **Microsoft App ID**
+   and the **App Tenant ID**.
+3. **Make its password.** Still on **Configuration**, press **Manage Password** beside the App ID,
+   then **Certificates & secrets**, **New client secret**, **Add**. Copy its **Value** (not the Secret
+   ID); Azure shows it only once.
+4. **Switch on Teams for the bot.** On the bot's **Channels** page choose **Microsoft Teams**, accept
+   the terms and press **Apply**.
+5. **Save it in the console.** Paste the App ID into **bot_id**, the tenant ID into **tenant_id** and
+   the secret's value into the secret field, tick **Switched on** and press **Save set-up**. The
+   secret goes to the vault and is never shown again.
+6. **Give people the app.** In the Teams Developer Portal choose **New app**, then **App features**,
+   **Bot**, **Enter a bot ID** (the App ID), tick **Personal** scope and save; then **Publish to your
+   org**, and approve it in the Teams admin centre if your organisation asks. Open the app in Teams and
+   write to it: the first answer asks you to link your Teams account to your Brain account.
+
+Tell me "connected Teams" afterwards and I prove it on your install.
+
+## 139. Website widget: should visitors get answers written by the model, or the published passages themselves?
+
+**In plain terms:** the website widget (M10.7.2, #315) lets visitors to your website ask questions,
+and it only ever reads documents an administrator has marked public. Today it answers with the
+matching passages from those documents, word for word. Having the model write a short answer from
+them reads better, but every visitor question then costs a model call, paid by you, asked by people
+who are not your staff and have no budget of their own.
+
+**Option A: passages only, for now.** No model cost, and nothing is ever said that is not already
+in a public document.
+
+**Option B: the model writes the answer** from the public passages only, under a daily spending cap
+for the widget that you set in the console, and the widget falls back to passages once the cap is
+reached.
+
+**My recommendation: A now, B later.** Start with passages, watch what visitors ask for a few weeks,
+and switch on B with a cap if the answers need to read better.
+
+**What I need from you:** reply "139: A" or "139: B".
+
+## 138. Laravel: may each client record be visible to one department, or to several?
+
+**In plain terms:** when you connect your Laravel application's database (its steps come to this page
+when it can read), you write a rule for each view saying who may see its records, for example
+"department = sales": a sales person sees the clients whose department is sales. The Brain keeps one
+such value per record in its small index. A rule naming several departments for one record ("visible
+to sales and operations") cannot be kept that way, so it would have saved and then shown nobody
+anything. It is now refused when you connect, with a sentence saying why.
+
+**Option A: one department per record, for now.** Every client record belongs to one department, and
+people in that department see it (administrators and anyone granted wider reach see more, as
+everywhere else).
+
+**Option B: several departments per record.** The index learns to keep a short list per record, so
+a client shared by sales and operations is seen by both. More work, and it makes the index hold a
+little more about each record.
+
+**My recommendation: A now.** Most client records have one owning department, and B can be added the
+day a real record needs two.
+
+**What I need from you:** reply "138: A" or "138: B".
+
+## 137. Which of your systems holds client projects and their tickets?
+
+**In plain terms:** one memory task (M16.6.2) asks that a question about a client project is
+answered with that project's current picture: the project, its client, its open tickets and its
+recent decisions, read from your systems at the asker's own reach on every question and never kept
+as a memory. For that the Brain has to know which of your systems is the record of a project. I will
+not guess: the Laravel connection reads clients and staff today and nothing else, so nothing the
+Brain reads yet is a project.
+
+**Open tickets come from Freshdesk in every option,** once item 128 connects it, because that is
+where your tickets are. Recent decisions are read from the same place as the project (its notes or
+its status history), so the one choice is where a project lives.
+
+**Option A: a Lark Base.** If your team keeps active projects in a Base, one row per project with
+its client and its status, the Brain reads that table through the Lark Base connector that already
+exists. You choose the Base and the table when you connect it, and nothing changes in Laravel.
+
+**Option B: Laravel, through a new project view.** If projects live in the Laravel application (its
+websites and their maintenance plans, each tied to a client), whoever looks after that database adds
+one read-only view for projects beside the two it has today, and the Brain reads it the way it reads
+clients. I write the view for them; it is one change on their side, and the Brain reads nothing
+beyond what the view shows.
+
+**Option C: Freshdesk alone.** If a project for your team is really the run of support tickets for
+one client, Freshdesk is enough: the Brain reads a client's open tickets live from Freshdesk, and
+there is no project record to connect.
+
+**My recommendation: B, with Freshdesk for the tickets.** The Laravel application is where each
+website and its maintenance plan already sit against the client the Brain reads, so a project view
+joins to that client without matching names across two systems, and Freshdesk holds the tickets.
+Choose A instead if day-to-day project work is tracked in a Base rather than in Laravel, because the
+Brain should read the record your team actually keeps up to date. C is the smallest and answers only
+"what is open for this client", not "where is this project".
+
+**What I need from you:** reply "137: A", "137: B" or "137: C". For A, also tell me the name of the
+Base. For B, tell me who looks after the Laravel database, and I send them the view. After you
+choose, I build it, and it is proved when you ask about a project, change its status in that system,
+and ask again: the second answer shows the change (check 9 in item 91).
+
+## 136. When a memory and a connected system disagree: settled by how memory is built?
+
+**In plain terms:** one memory task (M16.4.3) asks that when something the Brain remembers disagrees
+with one of your connected systems, the system wins at once and the memory is demoted and flagged. I
+recommend we mark it met by how memory is built, rather than build a comparison, and I need your yes
+because that is narrower than what the task literally asks.
+
+**Why the two can never disagree.** The Brain only remembers what a person says about themselves,
+such as "I prefer short answers" or "I work from home on Fridays". It never keeps a value it read
+from a connected system: an invoice total, a ticket's status or a client's renewal date is read from
+that system each time a question needs it and is never written to memory (task M16.7.5, which a test
+value proves on your install). A memory also never answers a question: it shapes how the question is
+looked up and phrased, and the answer always comes from the system. So there is no remembered copy
+of a system's value that could go out of date, and nothing a comparison could find.
+
+**What building it anyway would mean.** A job that reads every memory, works out which record in
+which system it is about, and compares the two. It would have to guess which record a sentence like
+"I look after the retail accounts" is about, and a wrong guess demotes a true memory with nothing to
+show why. I recommend against it.
+
+**The one case to know about.** A person can say something about themselves that a system also
+records, for example "I manage the retail accounts" while your CRM names someone else. The Brain
+keeps it as that person's own note and still answers every question about those accounts from the
+CRM, at that person's reach, so the CRM wins on every answer. When the note stops being true they
+edit or forget it on **My workspace**.
+
+**My recommendation: yes, mark M16.4.3 met by construction.**
+
+**What I need from you:** reply "136: yes", or "136: build the comparison" if you want the job above
+anyway, and I build it.
 
 ## 134. Connect the Slack channel (ready now)
 
@@ -129,17 +564,15 @@ only adds accounts.
 a Brain account with no email sent, and gets in by pressing **Forgot password** on the sign-in page.
 Two things on your install have to be in place first, one of them only you can do.
 
-**Part 1, yours: the sign-in service's email settings.** Forgot password sends its link by email,
-so the sign-in service (Keycloak) needs an email account to send from. Without it nobody can set a
-password. You need the details of a mailbox that may send mail: its server address (SMTP host),
-port, and a username and password; your email provider's help pages list them.
-
-1. Open the Keycloak admin console (the same place you added users for item 91) and sign in.
-2. Choose your realm, then **Realm settings**, then the **Email** tab.
-3. Fill in **From** (for example no-reply at your domain), **Host**, **Port**, **Encryption**
-   (usually StartTLS on port 587), turn on **Authentication** and fill in the **Username** and
-   **Password**.
-4. Press **Test connection**; Keycloak sends a test mail to your own address. Then **Save**.
+**Part 1, yours: one mail relay, typed once.** Forgot password sends its link by email through the
+same mail relay the Brain uses for everything else. Open **Notifications**, fill in **Email relay**
+(host, port, sender address, user name and password; your email provider's help pages list them)
+and press **Send a test message**. These are the same details item 132 asks for, so do it once for
+both. Nothing needs typing into Keycloak: once #311 is deployed and the deploy script in Part 2 is
+installed, every release gives the sign-in service the relay itself, and a relay you change later is
+picked up by the next release. If you already typed mail settings into Keycloak, the next release
+replaces them with the relay's. To confirm: on the **Install** page, the check *Forgot password is
+sent through the relay on Notifications* passes.
 
 **Part 2, mine with your go-ahead: three server steps.**
 
@@ -150,7 +583,7 @@ port, and a username and password; your email provider's help pages list them.
 - Add one setting the worker needs (the sign-in address, `INSTALL_OIDC_ISSUER`) to the worker in the
   hosting panel's stored configuration.
 
-**What you do:** fill in Part 1 whenever suits you, and reply "131: do the server steps" for Part 2.
+**What you do:** fill in the relay whenever suits you, and reply "131: do the server steps" for Part 2.
 I tell you when both are done and the next staff sync has made the accounts; then you can tell
 people: "Your account is ready. Go to the sign-in page, press Forgot password and enter your work
 email."
@@ -212,6 +645,12 @@ picture of each step. Paste keys only into the console, never into chat.
 3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
    `.freshdesk.com`), the short name of the one department whose people may be granted its
    tickets, paste the key, and press **Connect Freshdesk**.
+
+**Two memory tasks are proved by connecting Freshdesk:** M16.2.6 (a ticket reopened soon after it
+was resolved is counted as a sign the answer did not help) and the second half of M16.3.2 (a link
+between a person and a client is learned automatically only when a fixed identifier, such as the
+email address on that client's tickets, backs it). Both read what changed in Freshdesk since the
+last look, and I check both on your install once you tell me "connected Freshdesk".
 
 **After each one,** press **Test** on its card, then tell me "connected Xero" (or whichever). I
 prove it on your install and close its tasks. The next services (Google Drive, then Laravel, then
@@ -327,7 +766,115 @@ nobody sees through the Brain what they could not see themselves.
 **What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
 safe either way: B only ever adds to it.
 
-## 120. Memory on your server: what is waiting for it, and in what order
+## 91. Checks only you can do on your install (about 75 minutes, one sitting)
+
+**In plain terms:** some requirements are about how the Brain behaves for real people, so the proof
+is you trying each one and recording what you saw on **Install > Requirement checks** (open the
+area, choose the requirement, press **Record a check**, write what you did and saw, press **Record
+the check**). **Recommendation: do this after item 98 and after
+connecting Lark,** because the department checks need your real departments and checks 5 and 6
+need a model to answer. Tell me "checks done" and I close the tasks from your records.
+
+**Before you start (once):**
+
+1. Connect Lark as your staff source: **Govern > Staff sources**, choose **Lark**, and follow the
+   steps on that screen from creating the Lark app onwards. When the first sync finishes, your
+   departments appear on **Govern > Departments and teams**. This also proves M1.6.5, and Wave 0's
+   M31.3.2.3 and M31.3.2.4: the first sync borrows its key from the vault for that run only and
+   hands it back at the end, which is the last thing Wave 0 needs from you.
+2. Pick two colleagues in two different Lark departments (or create two test accounts in Lark, one
+   in each). In Keycloak, open your realm, **Users > Add user**, and create each with the same work
+   email as in Lark. On **Credentials**, set a password with **Temporary** off.
+
+**The checks:**
+
+1. **Sign-in (M1.8.5, web part).** Sign out and in again through Keycloak: you land in the console.
+   As a test person with a password only, open **Govern > Roles**: you are refused. Leave a session
+   idle past its limit and see it end. Use "Forgot password" on the sign-in page and see the email.
+2. **Department isolation (M2.3.1, web part).** As yourself, on **Knowledge**, add a small document
+   at the first department's reach. As the person in that department, ask about it on **Ask**: the
+   answer uses it. As the person in the other department, ask the same: you are told there is
+   nothing, exactly as if it did not exist. (Adding a document from **Knowledge** is built early in
+   Wave 2 and waits on item 105; I will tell you when it is live, so leave checks 2, 4 and 5 until
+   then.)
+3. **Department admin limits (M2.3.1).** On **Govern > Roles**, make the first person department
+   admin for their department. As them, try to grant something in the other department: refused.
+   Try to publish an agent company-wide: it waits for your approval on **Approvals**.
+4. **Audit (M24.3.4).** On **Govern > Audit**, find the grant from check 3 and the document from
+   check 2. Press **Verify the ledger**: it verifies.
+5. **A real answer (M38.2.2.2).** As the first person, ask a question the document answers. The
+   answer cites it; the other person gets nothing for the same question.
+6. **Models (M5.6.5).** On **Models and health**, press **Check** on each provider with a key: each
+   says it answered. Download the provider register and see each provider's region and terms.
+7. **The remaining rows (M1.8.8, M2.3.2, M24.3.6).** On **Requirement checks**, open the
+   Permissions, Departments and Observability areas. Each row still "Not checked yet" says what it
+   needs; try it and record it.
+8. **Health of the vault and the worker (M32.7.2).** On **Overview**, read the health strip, then
+   open **Govern > Staff sources**: the secrets vault and the worker both show healthy and the last
+   Lark sync shows when it ran. Record what you see.
+
+**Memory and learning (checks 9 to 12, about 30 minutes more).** These are built in pieces over
+Wave 3. Each check says which of its parts wait; I tell you when each is on your install, as for
+check 2, and the rest can be done now. Use the two test people from "Before you start".
+
+9. **Memory (M16.7.7).** Record what you saw against the Memory area on **Requirement checks**.
+
+- Step 1. As the first person, on **Ask**, send "Remember that I prefer answers as short bullet
+  points". Then ask a question the document from check 2 answers: the answer comes as bullet
+  points.
+- Step 2. As the other person, ask the same question: the answer is not in bullet points. A
+  preference belongs to the person who said it.
+- Step 3. As the first person, open **My workspace**: the preference is listed in their own words.
+- Step 4. As yourself, on **People > Roles and permissions > Roles**, take away the first person's
+  department role. As them, open **My workspace** again: the preference is no longer listed. Give
+  the role back: it is listed again.
+- Step 5. On **My workspace**, press **Edit** on the preference, change it to "numbered steps" and
+  save. Ask again: the answer is numbered. Press **Forget** and ask again: the answer is ordinary
+  prose. The preference is gone from **My workspace**, and, as yourself, from **Knowledge >
+  Learning and memory > Memory** for that person.
+- Waits, and I tell you when each is live: a conversation's working memory ending when its thread
+  does (start a new conversation and the earlier one's details are not carried over); a project's
+  picture reflecting a change in its system on the next question (item 137 decides which system);
+  a memory disagreeing with a connected system (item 136 decides whether this is settled by
+  construction); and the trace of an answer naming which kinds of context it used and which it
+  left out.
+
+10. **The learning loop (M16.7.8).** Record what you saw against the Learning area on **Requirement
+checks**.
+
+- Step 1. Under an answer on **Ask**, press **Not helpful**. Ask the same question again: the answer
+  is the same. On **Knowledge > Learning and memory > Learning**, "How answers were marked" has
+  counted it, and nothing under "Applied automatically" or "In shadow" has changed. A mark is
+  counted and changes nothing by itself.
+- Step 2. Ask something no document or connected system answers. It appears on **Reports >
+  Questions and gaps** as a knowledge gap.
+- Waits, and I tell you when each is live: a correction that gives the right answer being held as a
+  protected learning for review; the same correction from two conversations becoming one learning
+  with both as evidence; a reviewer approving it on **Learning** and it being applied once; the
+  weekly digest listing it with an undo; and a failed workflow step and an evaluation each opening
+  a learning for review.
+
+11. **Every learning requirement (M16.7.9).** On **Requirement checks**, open the Learning area.
+For each row still "Not checked yet", read what it needs, try it, and press **Record a check** with
+what you did and saw. Rows that need a part still waiting in check 10 stay "Not checked yet" until I
+tell you it is live.
+
+12. **Every memory requirement (M16.7.11).** The same on the Memory area. Check 9 covers most rows:
+record it against each row it demonstrates rather than repeating it. For "a memory a person stated
+is recalled however old it is", send as the first person "Remember that I like a one-line summary
+at the top of every answer", and a week or more later ask them anything: the answer still starts
+with a one-line summary. Record that against the row.
+
+The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
+cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
+
+# Answered
+
+## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
+
+**Your answer, 2026-10-05:** "Option A: take down Dify, the old Langfuse and the old v1 worker."
+
+**What happens now:** I take the three down on the server myself (their data stays on disk and one command brings each back), measure the memory again, and give the freed room to row 1 (the personal-data detector) and row 3 (Langfuse with the file store). Row 2, the model server, waits: it does not fit beside row 1 on this server.
 
 **In plain terms:** four things the Brain needs are waiting for memory on your server. Together
 they need **7,424 MB**, and up to 2,048 MB more if you choose option B in item 119. Your server has
@@ -423,7 +970,9 @@ For B:
 4. Confirm. The server restarts, and the Brain is offline for those few minutes.
 5. Tell me "120: B done". I measure the server again, as for A.
 
-## 119. How large a file may people upload?
+## 119. How large a file may people upload - DECIDED 2026-10-05: C now, then A once row 2 of item 120 runs
+
+**Your answer, 2026-10-05:** "My recommendation: C now, then A once row 2 of item 120 runs."
 
 **In plain terms:** the door to Knowledge accepts PDFs up to 50 MB, Word files up to 25 MB, and plain
 text and Markdown up to 5 MB. The console cannot read files anywhere near that size today, because it
@@ -498,57 +1047,37 @@ ordinary files.
 **What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
 in MB). Nothing on your server changes for either answer.
 
-## 91. Checks only you can do on your install (about 45 minutes, one sitting)
+## 135. Google Drive: Viewer or Editor on the folder - DECIDED 2026-09-30: A, Viewer
 
-**In plain terms:** some requirements are about how the Brain behaves for real people, so the proof
-is you trying each one and recording what you saw on **Install > Requirement checks** (open the
-area, choose the requirement, press **Record a check**, write what you did and saw, press **Record
-the check**). **Recommendation: do this after item 98 and after
-connecting Lark,** because the department checks need your real departments and checks 5 and 6
-need a model to answer. Tell me "checks done" and I close the tasks from your records.
+**In plain terms:** when you connect Google Drive (item 126's list; its steps come to this page when
+it can read), you share one folder with an account made just for the Brain. The Brain promises that
+a file shared outside your company is never read. The catch: Google only tells an account who a file
+is shared with if that account is allowed to share the file itself, and a Viewer is not. So with
+Viewer access the Brain cannot see, for most files, whether they have been shared outside.
 
-**Before you start (once):**
+**Option A: Viewer on the folder.** If the Brain's key file ever leaked, whoever held it could read
+that one folder and change nothing.
+- A file whose sharing Google does not show is treated as the folder's, because you chose to share
+  the folder.
+- A file Google does show as shared by link or shared outside is never read.
+- A file with its own, narrower permissions is never read (a Viewer can see that much).
+- So the promise becomes "a file shared outside your company is left out wherever Google shows its
+  sharing".
 
-1. Connect Lark as your staff source: **Govern > Staff sources**, choose **Lark**, and follow the
-   steps on that screen from creating the Lark app onwards. When the first sync finishes, your
-   departments appear on **Govern > Departments and teams**. This also proves M1.6.5, and Wave 0's
-   M31.3.2.3 and M31.3.2.4: the first sync borrows its key from the vault for that run only and
-   hands it back at the end, which is the last thing Wave 0 needs from you.
-2. Pick two colleagues in two different Lark departments (or create two test accounts in Lark, one
-   in each). In Keycloak, open your realm, **Users > Add user**, and create each with the same work
-   email as in Lark. On **Credentials**, set a password with **Temporary** off.
+**Option B: Editor on the folder.** Every file's sharing is visible, so "a file shared outside is
+never read" holds for every file. The Brain still only ever asks Google to read, so it cannot change
+anything itself, but a leaked key file could be used to change or delete files in that folder.
 
-**The checks:**
+**My recommendation: A.** The folder is already your decision about what the Brain may read, and a
+key that can only read is the safer thing to keep on a server. A is what is being built; switching
+to B later is one small change and one step in the guide.
 
-1. **Sign-in (M1.8.5, web part).** Sign out and in again through Keycloak: you land in the console.
-   As a test person with a password only, open **Govern > Roles**: you are refused. Leave a session
-   idle past its limit and see it end. Use "Forgot password" on the sign-in page and see the email.
-2. **Department isolation (M2.3.1, web part).** As yourself, on **Knowledge**, add a small document
-   at the first department's reach. As the person in that department, ask about it on **Ask**: the
-   answer uses it. As the person in the other department, ask the same: you are told there is
-   nothing, exactly as if it did not exist. (Adding a document from **Knowledge** is built early in
-   Wave 2 and waits on item 105; I will tell you when it is live, so leave checks 2, 4 and 5 until
-   then.)
-3. **Department admin limits (M2.3.1).** On **Govern > Roles**, make the first person department
-   admin for their department. As them, try to grant something in the other department: refused.
-   Try to publish an agent company-wide: it waits for your approval on **Approvals**.
-4. **Audit (M24.3.4).** On **Govern > Audit**, find the grant from check 3 and the document from
-   check 2. Press **Verify the ledger**: it verifies.
-5. **A real answer (M38.2.2.2).** As the first person, ask a question the document answers. The
-   answer cites it; the other person gets nothing for the same question.
-6. **Models (M5.6.5).** On **Models and health**, press **Check** on each provider with a key: each
-   says it answered. Download the provider register and see each provider's region and terms.
-7. **The remaining rows (M1.8.8, M2.3.2, M24.3.6).** On **Requirement checks**, open the
-   Permissions, Departments and Observability areas. Each row still "Not checked yet" says what it
-   needs; try it and record it.
-8. **Health of the vault and the worker (M32.7.2).** On **Overview**, read the health strip, then
-   open **Govern > Staff sources**: the secrets vault and the worker both show healthy and the last
-   Lark sync shows when it ran. Record what you see.
+**Your answer, 2026-09-30:** "135: A".
 
-The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
-cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
-
-# Answered
+**What that means:** the Brain's Google account is a Viewer on the one folder. Files Google shows
+as shared by link or outside your company, and files with their own narrower permissions, are never
+read; a file whose sharing Google does not show is read as the folder's. Drive's connect steps come
+to this page when it can read.
 
 ## 125. Where the evening build digest is sent - DECIDED 2026-09-30: a group with just you, on any channel
 
@@ -654,6 +1183,9 @@ What is being built:
 2. **The card is sent to the approver the moment the approval is raised**, in their own Lark chat.
    Whether pressing it decides the approval is item 117's setting.
 3. The same stored address is what signing in with Lark (item 115, option A) will use later.
+
+The decision is applied to every channel that carries a person's own address (Lark, Slack and
+email), because items 125 and 126 made delivery channel-agnostic.
 
 **What you do:** nothing.
 

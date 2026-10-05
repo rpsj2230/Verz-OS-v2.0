@@ -19,6 +19,11 @@ the page and for every page above it, because a page left open under a locked pa
 the parent's narrower membership. See `THE_LISTING_IS_NOT_WHERE_A_PAGES_PERMISSIONS_ARE` and
 `A_LOCKED_PAGE_NARROWS_EVERY_PAGE_UNDER_IT`.
 
+**Reading a page's lock is consistent with the owner's decision that who may see is the Brain's own
+grants (needs-rupash 116), because the lock only ever narrows.** A page restricted in Lark is not
+read at all; a page that follows its space is then told only to a reader the space's declared reach
+and the reader's grants admit. Lark's settings can take a page away and never add one.
+
 **A wiki page has its own permissions and they are the source's, not ours.** A page somebody
 cannot open in Lark must not become an answer they can read here. `brain.knowledge.visibility`
 already holds the model: three levels, one store, and a predicate recomputed from the level
@@ -163,6 +168,7 @@ from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
+from brain.connectors.ask import AskRows
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     AccessMode,
@@ -176,7 +182,7 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
-from brain.connectors.declaration import ConnectorDeclaration, Recorded
+from brain.connectors.declaration import ConnectorDeclaration, KeyScopes, Recorded
 from brain.connectors.lark_base import MinuteBudget
 from brain.connectors.manifest import ChangeSignal, ConnectorManifest, ToolDeclaration
 from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestOperation
@@ -2185,6 +2191,9 @@ CONNECTOR: Final = ConnectorDeclaration(
         ),
         findings=(LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY,),
     ),
+    # Its pages are read live as passages for the question's model step, not classified.
+    ask=AskRows(by_passages=True),
+    scopes=KeyScopes(request=("wiki:wiki:readonly",), refuse=("docs:document edit scopes",)),
     recorded=Recorded(
         tested=True,
         finding=(

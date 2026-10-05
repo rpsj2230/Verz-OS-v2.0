@@ -494,7 +494,39 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="clamav:3310",
     ),
+    # --- optional services beside the profile (brain.ops.overlays)
+    Setting(
+        name="INSTALL_SERVICES",
+        belongs=Belongs.STORAGE,
+        meaning=(
+            "Comma-separated optional services this server runs beside its profile, started by "
+            "the next release only where the server's measured memory has room for them: "
+            "presidio for the personal data detector. `none` runs none of them. Changed on "
+            "Install, Settings."
+        ),
+        default="none",
+    ),
     # --- the skill import acceptance check, M38.5.1 (brain.ops.acceptance_checks_skills)
+    # --- the evening digest, M38.3.3 (brain.ops.digest_destination)
+    Setting(
+        name="INSTALL_DIGEST_DESTINATION",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Where the evening build digest is sent, as channel:conversation, chosen on Install, "
+            "Settings from the conversations each connected channel offers and never typed. "
+            "`unset` sends nothing."
+        ),
+        default="unset",
+    ),
+    Setting(
+        name="INSTALL_DIGEST_TIME",
+        belongs=Belongs.LOCALE,
+        meaning=(
+            "The time of day the evening digest is sent, as HH:MM on the 24-hour clock in the "
+            "install's time zone. Changed on Install, Settings."
+        ),
+        default="18:00",
+    ),
     Setting(
         name="INSTALL_ACCEPTANCE_SKILL_SOURCE",
         belongs=Belongs.CONNECTORS,

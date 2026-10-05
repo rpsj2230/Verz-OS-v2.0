@@ -25,13 +25,13 @@ and neither is ever deleted: a memory that falls below the floor is still there,
 confirmation would change nothing it is read by, and a column that means nothing is a column
 somebody eventually reads as meaning something.
 
-Revises `0168`, the escalation migration of the branch this is stacked on (#299, itself on the
-marks branch's `0154`), in the order the migration queue lands.
+Revises `0154`, the marks and learning pause migration (#246), in the order the migration queue
+lands.
 
 Task ids: M16.7.2
 
 Revision ID: 0163
-Revises: 0168
+Revises: 0154
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0163"
-down_revision = "0168"
+down_revision = "0154"
 branch_labels = None
 depends_on = None
 

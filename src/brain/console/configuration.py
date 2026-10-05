@@ -175,7 +175,9 @@ class Section(enum.StrEnum):
     STAFF = "staff"
     FILES = "files"
     LARK = "lark"
+    MESSAGES = "messages"
     CHECKS = "checks"
+    SERVICES = "services"
 
 
 #: The sections in the order the screen draws them: what an owner changes first, first.
@@ -192,7 +194,9 @@ SECTION_TITLES: Final[Mapping[Section, str]] = MappingProxyType(
         Section.STAFF: "Staff list",
         Section.FILES: "Files and storage",
         Section.LARK: "Lark",
+        Section.MESSAGES: "Messages this install sends",
         Section.CHECKS: "Install checks",
+        Section.SERVICES: "Services on this server",
     }
 )
 
@@ -231,6 +235,9 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_KNOWLEDGE_SCANNER": Section.FILES,
         "INSTALL_CLAMAV_ADDRESS": Section.FILES,
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": Section.CHECKS,
+        "INSTALL_DIGEST_DESTINATION": Section.MESSAGES,
+        "INSTALL_DIGEST_TIME": Section.MESSAGES,
+        "INSTALL_SERVICES": Section.SERVICES,
     }
 )
 
@@ -269,6 +276,9 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_KNOWLEDGE_SCANNER": "What checks a file before it is read",
         "INSTALL_CLAMAV_ADDRESS": "Antivirus address",
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": "Public skills the install check imports",
+        "INSTALL_DIGEST_DESTINATION": "Send the evening digest to",
+        "INSTALL_DIGEST_TIME": "Time the evening digest is sent",
+        "INSTALL_SERVICES": "Optional services this server runs",
     }
 )
 
@@ -286,6 +296,8 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_MODEL_PROFILE",
         "INSTALL_LARK_CARD_APPROVALS",
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
+        "INSTALL_DIGEST_TIME",
+        "INSTALL_SERVICES",
     }
 )
 
@@ -359,6 +371,10 @@ READ_ONLY_BECAUSE: Final[Mapping[str, str]] = MappingProxyType(
             f"{_ENVIRONMENT_FILE}it names code this server fetches from GitHub after every "
             "deploy, so it is chosen with whoever decides what the server may reach."
         ),
+        "INSTALL_DIGEST_DESTINATION": (
+            "Chosen from the list under Send the evening digest to, which offers the "
+            "conversations each connected channel can post to, so an id is never typed."
+        ),
     }
 )
 
@@ -406,6 +422,9 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_KNOWLEDGE_SCANNER": ("brain.knowledge.scanners",),
     "INSTALL_CLAMAV_ADDRESS": ("brain.knowledge.scanners",),
     "INSTALL_ACCEPTANCE_SKILL_SOURCE": ("brain.ops.acceptance_checks_skills",),
+    "INSTALL_DIGEST_DESTINATION": ("brain.ops.digest_destination",),
+    "INSTALL_DIGEST_TIME": ("brain.ops.digest_destination",),
+    "INSTALL_SERVICES": ("brain.ops.overlays",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.
@@ -662,6 +681,12 @@ def setting_problem(name: str, value: str) -> str:
         return _zone_problem(written)
     if name == "INSTALL_ACCOUNT_EMPLOYMENT_TYPES":
         return _employment_types_problem(written)
+    if name == "INSTALL_DIGEST_TIME":
+        return _time_of_day_problem(written)
+    if name == "INSTALL_SERVICES":
+        from brain.ops.overlays import services_problem
+
+        return services_problem(written)
     if name == "INSTALL_MODEL_PROFILE" and written not in MODEL_PROFILES:
         return (
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "
@@ -688,6 +713,15 @@ def normalised(name: str, value: str) -> str:
     """The value as it is saved: trimmed, and a currency code in capitals, as ISO 4217 writes it."""
     written = value.strip()
     return written.upper() if name == "INSTALL_CURRENCY" else written
+
+
+def _time_of_day_problem(value: str) -> str:
+    """A time on the 24-hour clock, as `brain.ops.schedule.time_of_day` reads it."""
+    from brain.ops.schedule import time_of_day
+
+    if time_of_day(value) is None:
+        return "Write the time as HH:MM on the 24-hour clock, like 18:00."
+    return ""
 
 
 def _locales_problem(value: str) -> str:

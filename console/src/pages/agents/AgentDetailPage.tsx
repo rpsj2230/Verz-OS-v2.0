@@ -26,11 +26,26 @@
  * and again under Settings; the "Agent" heading above the agent's own name; and a strip of tab
  * purpose sentences that described the page's own structure to the person using it.
  *
- * Task ids: M39.1.2.1, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
+ * **The header's role line (M39.1.2.1)** says what the agent is for, in its own summary, then its
+ * department, its steward and the template it came from by name and version, each only when sent.
+ *
+ * **The sections (M39.1.2.2)** are the API's strip, in its order, each at its own address and listed
+ * under Sections beside the view switch: Conversations, Automations, People, Knowledge, Memory,
+ * Artifacts and Settings, whichever this reader may open and has something in it. Settings is the
+ * Profile, so it is not listed twice; a section with no view on this page yet is not listed at all.
+ *
+ * **Moving between views keeps what a view was showing (M39.1.2.3).** This component stays mounted
+ * across one agent's views and holds the Dashboard's period, so a trip to the Profile and back finds
+ * the period where it was left and asks nothing again.
+ *
+ * **The Memory section** (`AgentMemory.tsx`) is at `/agents/{id}/memory` for a reader whose strip
+ * holds it, which the API sends for every agent to a reader of the Memory tab.
+ *
+ * Task ids: M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, MessageSquarePlus, Settings } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import { AutomationGallery } from "../../components/AutomationGallery";
@@ -65,8 +80,10 @@ import { AUTOMATIONS_TAB, automationGalleryApiPath } from "../automationGalleryQ
 import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
-import { AgentDashboard } from "./AgentDashboard";
-import { daysSince, readHeaderFacts, readProfile, spendIsRecorded } from "./agentDetailQuery";
+import { AgentMemory } from "./AgentMemory";
+import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabilitiesQuery";
+import { AgentDashboard, usePeriod } from "./AgentDashboard";
+import { daysSince, readHeaderFacts, readProfile, spendIsRecorded, type HeaderFacts } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { useDraftStart } from "./DraftStart";
@@ -94,10 +111,47 @@ export const SKILLS_LABEL = "Skills";
 export const DAYS_LABEL = "Days since created";
 export const SPEND_NOT_RECORDED = "spend is not recorded, so the figure is left out rather than drawn as nought.";
 export const AUTOMATIONS_SECTION = "Automations";
+
+/** The Memory section's key, as the API's strip spells it. */
+export const MEMORY_TAB = "memory";
+export const MEMORY_SECTION = "Memory and learning";
+
+/** A section's name as the Sections menu lists it, for the sections this page draws a view of. */
+export const SECTION_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  [AUTOMATIONS_TAB]: AUTOMATIONS_SECTION,
+  [MEMORY_TAB]: MEMORY_SECTION,
+});
 export const EDIT_AS_DRAFT = "Edit as a draft";
 
 /** The settings tab's key, whose content is the Profile. */
 const SETTINGS_TAB = "settings";
+
+/**
+ * The line under the agent's name: what it is for, then where it sits and where it came from.
+ * Absent when nothing was sent for any part of it, never a line of separators.
+ */
+export function roleLine(facts: HeaderFacts, version: number | undefined): ReactNode | undefined {
+  const where = [
+    facts.department ?? null,
+    facts.ownerName === undefined ? null : `steward ${facts.ownerName}`,
+    version === undefined
+      ? null
+      : facts.templateName === undefined
+        ? `from a template, version ${String(version)}`
+        : `from ${facts.templateName}, version ${String(version)}`,
+  ]
+    .filter((one): one is string => one !== null)
+    .join(" · ");
+  if (facts.summary === undefined && where === "") {
+    return undefined;
+  }
+  return (
+    <span data-slot="role-line" className="flex flex-col gap-0.5">
+      {facts.summary === undefined ? null : <span className="font-sans text-[13px] text-body">{facts.summary}</span>}
+      {where === "" ? null : <span>{where}</span>}
+    </span>
+  );
+}
 
 /** Where a view of an agent is. The Dashboard is the bare address. */
 export function viewAddress(agentId: string, view: AgentView | string): string {
@@ -105,7 +159,7 @@ export function viewAddress(agentId: string, view: AgentView | string): string {
 }
 
 /** Which view an address opens, given the sections this reader may open. */
-export function viewFor(tab: string | undefined, sections: readonly string[]): AgentView | typeof AUTOMATIONS_TAB {
+export function viewFor(tab: string | undefined, sections: readonly string[]): AgentView | typeof AUTOMATIONS_TAB | typeof MEMORY_TAB {
   if (tab === "profile" || tab === "about") {
     return tab;
   }
@@ -114,6 +168,9 @@ export function viewFor(tab: string | undefined, sections: readonly string[]): A
   }
   if (tab === AUTOMATIONS_TAB && sections.includes(AUTOMATIONS_TAB)) {
     return AUTOMATIONS_TAB;
+  }
+  if (tab === MEMORY_TAB && sections.includes(MEMORY_TAB)) {
+    return MEMORY_TAB;
   }
   return "dashboard";
 }
@@ -208,6 +265,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
   }, []);
   const lifecycle = useLifecycleActs(onMoved, agentAddress);
   const drafting = useDraftStart();
+  const [period, setPeriod] = usePeriod();
   const answer = useResource<unknown>(agentWorkspaceApiPath(agentId), agentVersion);
   const workspace = useMemo(() => readAgentWorkspace(answer.data), [answer.data]);
   const facts = useMemo(() => readHeaderFacts(answer.data), [answer.data]);
@@ -229,6 +287,14 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
   const automations = useResource<unknown>(wantsAutomations ? agentAutomationsApiPath(agentId) : null, version);
   const onShown = useCallback(() => {
     setGalleryShown(true);
+  }, []);
+  // The Profile's capability detail: asked when the Profile is shown, and again under a new
+  // version after a skill is attached or taken off there.
+  const [detailVersion, setDetailVersion] = useState(0);
+  const detailAnswer = useResource<unknown>(view === "profile" ? agentCapabilitiesApiPath(agentId) : null, detailVersion);
+  const details = useMemo(() => (detailAnswer.data === null ? null : readAgentCapabilities(detailAnswer.data)), [detailAnswer.data]);
+  const onDetailsChanged = useCallback(() => {
+    setDetailVersion((count) => count + 1);
   }, []);
   const onChanged = useCallback(() => {
     setVersion((count) => count + 1);
@@ -254,14 +320,9 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     return { key: one, label: VIEW_LABELS[one], to: viewAddress(agentId, one), icon: <Icon aria-hidden /> };
   });
   const menuSections = workspace.tabs
-    .filter((one) => one.tab === AUTOMATIONS_TAB)
-    .map((one) => ({ tab: one.tab, label: AUTOMATIONS_SECTION }));
-  const subline = [
-    facts.ownerName === undefined ? null : `steward ${facts.ownerName}`,
-    agent.lineage === undefined ? null : `from a template, version ${String(agent.lineage.version)}`,
-  ]
-    .filter((one): one is string => one !== null)
-    .join(" · ");
+    .filter((one) => SECTION_LABELS[one.tab] !== undefined)
+    .map((one) => ({ tab: one.tab, label: SECTION_LABELS[one.tab] ?? one.label }));
+  const subline = roleLine(facts, agent.lineage?.version);
 
   const header = (
     <DetailHeader
@@ -273,7 +334,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           {facts.leashUpTo === undefined ? null : <LeashPill rung={facts.leashUpTo} upTo />}
         </>
       }
-      subline={subline === "" ? undefined : subline}
+      subline={subline}
       actions={
         <>
           {profile === null ? null : (
@@ -325,7 +386,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     <DetailPage
       crumbs={[{ label: ROSTER_HEADING, to: ROSTER_ADDRESS }, { label: agent.displayName }]}
       header={header}
-      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB ? undefined : view} />}
+      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB || view === MEMORY_TAB ? undefined : view} />}
       beside={<SectionsMenu agentId={agentId} sections={menuSections} />}
     >
       {lifecycle.notice}
@@ -335,6 +396,8 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
       {view === "dashboard" ? (
         <AgentDashboard
           agentId={agentId}
+          period={period}
+          onPeriod={setPeriod}
           automationsAddress={readsAutomations ? viewAddress(agentId, AUTOMATIONS_TAB) : undefined}
           automations={readsAutomations ? automations : undefined}
           onAutomationsChanged={onChanged}
@@ -351,6 +414,8 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           channels={workspace.channels}
           composition={workspace.composition}
           divergent={workspace.divergent}
+          details={details}
+          onDetailsChanged={onDetailsChanged}
           onTransfer={() => {
             lifecycle.choose(agentId, "transfer");
           }}
@@ -358,6 +423,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
         />
       ) : null}
       {view === "about" ? <AgentAbout agentId={agentId} profileAddress={viewAddress(agentId, "profile")} /> : null}
+      {view === MEMORY_TAB ? <AgentMemory agentId={agentId} /> : null}
       {view === AUTOMATIONS_TAB ? (
         <SectionCard title={AUTOMATIONS_SECTION} lede="What this agent runs on a schedule, and what can be installed for it.">
           <div className="flex min-w-0 flex-col gap-4">

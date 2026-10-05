@@ -65,7 +65,7 @@ list of what is missing. `app.state.connector_registry` still wins when a test p
 is changing under another package; these are writes, and a write and the read it changes are
 already separate modules for the Prompts screen and the Skills screen.
 
-Task ids: M27.11.6, M27.11.7
+Task ids: M27.11.6, M27.11.7, M11.9.4
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ from brain.agents.model import DISPLAY_NAME_CHARS, AgentAudience, AgentError, Ag
 from brain.agents.model import visible_agent_ids as _visible_agent_ids
 from brain.agents.template import SignedManifest, TemplateError, TemplateInstance
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked, Asking
+from brain.api_routes import Asked, Asking, base_schema_of
 from brain.audit.ledger import DIGEST
 
 # The automations' own 409 body, reused rather than copied: two classes of one name are one schema
@@ -132,6 +132,7 @@ from brain.gate.leash import Leash
 from brain.identity.principal_store import StoredPrincipals
 from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection, StoredConnections
+from brain.ops.lark_base_index import switched_on
 from brain.ops.learning_signal_store import StoredLearningPauses
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed, signed_of
 from brain.routing_routes import sessions_of
@@ -548,8 +549,29 @@ async def connectors_of(request: Request) -> ConnectorRegistry:
     except SQLAlchemyError as exc:
         log.warning("connections unread for an agent's connectors", error=type(exc).__name__)
         return ConnectorRegistry()
-    return ConnectorRegistry.of_connected(
-        one for one in (_registered(connection) for connection in connected) if one is not None
+    entries = [one for one in (_registered(c) for c in connected) if one is not None]
+    base = await _switched_on_base(request)
+    return ConnectorRegistry.of_connected((*entries, *(() if base is None else (base,))))
+
+
+async def _switched_on_base(request: Request) -> RegisteredConnector | None:
+    """A Lark Base switched on in Connect Lark, serving, or None where none is or it cannot be read.
+
+    Connect Lark registers no connection row for a Base (`brain.ops.lark_base_index`), so without
+    this an agent needing `lark_base` read it as not installed whatever Connect Lark said. It is
+    serving when its schema can be read, under the manifest this release builds for its first
+    table: the Base has no agreed digest to disagree with, because it was never connected on the
+    Connectors screen.
+    """
+    use = switched_on()
+    if use is None:
+        return None
+    known = await base_schema_of(request.app.state).tables(use)
+    if not known:
+        return None
+    manifest = use.manifest(known[0].table)
+    return RegisteredConnector(
+        manifest=manifest, digest=manifest_digest(manifest), state=ConnectorState.ENABLED
     )
 
 

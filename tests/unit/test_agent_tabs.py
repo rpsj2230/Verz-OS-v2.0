@@ -23,6 +23,7 @@ import inspect
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -123,6 +124,8 @@ POLICY: FieldPolicy = policy_from_rows(
         ("client", "contract_value", "read:client.contract_value", Classification.RESTRICTED),
     ]
 )
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def holding(*capabilities: str, principal: str = READER) -> EntitlementSet:
@@ -528,7 +531,7 @@ def test_an_unapproved_skill_routes_to_the_queue_only_where_the_queue_opens() ->
     may_not = holding("read:console.configuration")
 
     assert offer_for(imported(), may_open).control is Control.REVIEW
-    assert offer_for(imported(), may_open).route == "/skills/review/hosting-expiry"
+    assert offer_for(imported(), may_open).route == "/skills/hosting-expiry"
     assert offer_for(imported(), may_not).control is Control.NOTHING
     assert offer_for(imported(), may_not).route == ""
 
@@ -542,8 +545,11 @@ def test_the_review_route_is_the_screens_own_key_and_the_capability_is_the_scree
     assert SKILL_SCREEN == "skills"
     assert screen("skills").read.requires == SKILL_CAPABILITY
     assert SKILL_CAPABILITY.value == "read:skill"
-    assert REVIEW_ROUTE_PREFIX == "/skills/review/"
-    assert review_route("domain-audit") == "/skills/review/domain-audit"
+    assert REVIEW_ROUTE_PREFIX == "/skills/"
+    assert review_route("domain-audit") == "/skills/domain-audit"
+    # The console draws one skill's page, where its review is decided, at exactly this address.
+    routes = (ROOT / "console" / "src" / "pages" / "Skills.route.tsx").read_text(encoding="utf-8")
+    assert '{ path: "skills/:name", element: <Skill /> }' in routes
 
     with pytest.raises(AgentTabError, match="no skill"):
         review_route("  ")
@@ -558,7 +564,7 @@ def test_an_offer_cannot_carry_a_route_and_an_attach_at_once() -> None:
     chip = chips_for([approved()])[0]
 
     with pytest.raises(AgentTabError, match="review control"):
-        SkillOffer(chip=chip, control=Control.ATTACH, route="/skills/review/hosting-expiry")
+        SkillOffer(chip=chip, control=Control.ATTACH, route="/skills/hosting-expiry")
     with pytest.raises(AgentTabError, match="review control"):
         SkillOffer(chip=chip, control=Control.REVIEW, route="")
 
