@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T13:43:17.244660+00:00",
-  "commit": "92314c7b",
-  "commit_subject": "An approver can take an agent's action over, and the third takeover in a week lowers that agent a step on it (#313)",
+  "generated_at": "2026-10-05T13:49:24.062020+00:00",
+  "commit": "81f0f217",
+  "commit_subject": "Merge pull request #324 from rpsj2230/M11/w2-domains",
   "total": 1591,
   "done": 472,
   "percent": 29.7,
