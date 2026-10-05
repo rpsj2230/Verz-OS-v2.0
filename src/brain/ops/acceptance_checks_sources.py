@@ -24,11 +24,17 @@ question asks (M11.9.2), so no connected answer stands on an old index row; the 
 price list is the pair every install answers from its index, and a row of it read days before is
 what surfaces the staleness (M11.4.9). See `A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD`.
 
+**A second source projecting a kind the first projects never silences the first (M15.4.2).** No
+two shipped connectors project one kind today, so the check stands one beside Xero for a question:
+a source of invoices whose own classification leaves the amount unclassified, offered to the lane
+as the entity's policy and under its own name. Xero's amount still answers by Xero's rules. See
+`A_SECOND_SOURCE_OF_ONE_KIND_NEVER_SILENCES_THE_FIRST`.
+
 **What it does not prove, said once.** A question over many records (M11.8.3's headers clause) has
 no question shape yet, and the request recorders are not handed to the lane, so the canary search
 covers what the lane and the sources wrote and not the request row.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2, M15.4.2
 """
 
 from __future__ import annotations
@@ -55,7 +61,10 @@ from brain.ops.acceptance_checks_connectors import (
 from brain.ops.acceptance_run import SET_UP_REACH, Harness
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from brain.core.entitlement import EntitlementSet
+    from brain.core.field_policy import FieldPolicy
     from brain.gate.answer import Answered
     from brain.ops.connector_store import Connection
     from brain.ops.connector_sync_run import SourceAnswer
@@ -89,9 +98,19 @@ A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD: Final = (
     "horizon, so the answer must say it may be out of date and date its citation by that read."
 )
 
+#: Why a second source of invoices is stood beside Xero for one question.
+A_SECOND_SOURCE_OF_ONE_KIND_NEVER_SILENCES_THE_FIRST: Final = (
+    "Two sources may project one kind of record, and each is classified by its own rules. No two "
+    "shipped connectors do yet, so the check offers the lane a second source of invoices whose "
+    "rules leave the amount unclassified, as the entity's policy and under its own name, and "
+    "Xero's amount must still answer by Xero's rules. A lane keying a policy by kind alone would "
+    "withhold it, which is connecting a second source stopping the first."
+)
+
 __all__ = [
     "A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN",
     "A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD",
+    "A_SECOND_SOURCE_OF_ONE_KIND_NEVER_SILENCES_THE_FIRST",
     "A_TICKET_READ_LIVE_IS_NOT_OLD",
 ]
 
@@ -102,6 +121,10 @@ READ_BEFORE_THE_QUESTION: Final = timedelta(days=3)
 #: The helpdesk address the check connects. Reserved for documentation, and never reached: the
 #: recorded caller answers it.
 HELPDESK: Final = "acceptance-check.freshdesk.com"
+
+#: The invoice field read live, and the made-up second source of invoices that withholds it.
+AMOUNT_FIELD: Final = "amount_due"
+SECOND_INVOICE_SOURCE: Final = "acceptance_second_ledger"
 
 #: Freshdesk's code for an open ticket, as its list answers it.
 OPEN: Final = 2
@@ -201,13 +224,13 @@ def _prose(answered: Answered) -> str:
 
 # ------------------------------------------------ 1. a connected source answers on Ask
 @check(
-    leaves=("M11.6.5", "M11.6.2", "M11.4.9"),
+    leaves=("M11.6.5", "M11.6.2", "M11.4.9", "M15.4.2"),
     sentence=(
         "A Xero organisation and a Freshdesk helpdesk made up for the check are connected, read by "
-        "the worker from recorded answers and asked about through the answer route's own parts: "
-        "an invoice's amount and a ticket's body are read live for a reader granted them and "
-        "withheld as if absent from one who is not, a price read days ago is said to be possibly "
-        "out of date, and nothing read live is in a table."
+        "the worker and asked about through the answer route's own parts: an invoice's amount and "
+        "a ticket's body are read live for a reader granted them and withheld as if absent from "
+        "one who is not, also with a second invoice source beside Xero; an old price is said to "
+        "be so; nothing read live is kept."
     ),
 )
 async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Harness) -> None:
@@ -313,7 +336,14 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
 
     live_records = SourceRecords(connected=connected, clock=lambda: h.now)
 
-    async def ask(principal_id: str, question: str, *, also: Any = ()) -> Answered:
+    async def ask(
+        principal_id: str,
+        question: str,
+        *,
+        also: Any = (),
+        policies: Mapping[str, FieldPolicy] | None = None,
+        source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
+    ) -> Answered:
         person = await StoredPrincipals(h.sessions).live_principal(principal_id)
         if person is None:
             raise CheckFailedError("a reserved person was not live in the directory")
@@ -325,13 +355,15 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
             rules=(*rules, *also),
             readers=readers,
             entitlement=reach,
-            policies=field_policies(registry),
+            policies=field_policies(registry) if policies is None else policies,
             reachable_sources=covered_at(registry, reach, h.now),
             sink=CountingTraceSink(),
             now=h.now,
             clock=lambda: h.now,
             live=live_records,
-            source_policies=source_field_policies(registry),
+            source_policies=(
+                source_field_policies(registry) if source_policies is None else source_policies
+            ),
         )
 
     def asking(field_name: str, slot: str) -> str:
@@ -350,7 +382,7 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
     status = await ask(finance, asking("status", number))
     if status.composed is None or "AUTHORISED" not in _prose(status):
         raise CheckFailedError("a connected invoice's status was not answered on Ask")
-    amount = await ask(finance, asking("amount_due", number))
+    amount = await ask(finance, asking(AMOUNT_FIELD, number))
     if amount.composed is None or canary not in _prose(amount):
         raise CheckFailedError("an invoice's amount was not read live for a reader granted it")
     if len(ledger.asked) < 3:
@@ -361,6 +393,23 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
         raise CheckFailedError("an invoice's amount was told to a reader not granted it")
     if _prose(withheld) != _prose(nobody):
         raise CheckFailedError("a withheld amount was told apart from an invoice that is not there")
+
+    # M15.4.2: a second source projecting invoices, classified by its own rules, which withhold
+    # the amount, and Xero's invoice still answers by Xero's. See
+    # `A_SECOND_SOURCE_OF_ONE_KIND_NEVER_SILENCES_THE_FIRST`.
+    own = source_field_policies(registry)
+    xero_invoice = (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE)
+    if xero_invoice not in own:
+        raise CheckFailedError("a connected source's records are not classified by its own rules")
+    second = own[xero_invoice].without(xero.ENTITY_INVOICE, AMOUNT_FIELD)
+    beside = await ask(
+        finance,
+        asking(AMOUNT_FIELD, number),
+        policies={**field_policies(registry), xero.ENTITY_INVOICE: second},
+        source_policies={**own, (SECOND_INVOICE_SOURCE, xero.ENTITY_INVOICE): second},
+    )
+    if beside.composed is None or canary not in _prose(beside):
+        raise CheckFailedError("a second source projecting invoices stopped Xero's from answering")
 
     # M11.6.2: the ticket found by its index row and read from the helpdesk, body and all.
     support = h.principal(A, "support")
