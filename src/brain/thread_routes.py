@@ -22,7 +22,14 @@ leaves no mark where one was left out; see
 **A person may say the latest answer in their thread was wrong**, choosing a kind from a closed
 list and writing nothing, which is kept as a signal for learning (M9.2.4).
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
+**A person attaches a document to their own thread, and an agent answering them reads it
+(M12.3.6).** `POST /threads/attachments` names a document the caller may already read, which an
+upload at their own level makes, and keeps it on their thread as a reference
+(`brain.chat.thread_store.StoredThreads.attach`), opening a thread when the id named is not theirs.
+A document the caller cannot read is one 404, the same as one that does not exist.
+`chat.read_attachment` is how an agent reads it: see `brain.chat.attachments`.
+
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6
 """
 
 from __future__ import annotations
@@ -31,7 +38,7 @@ from datetime import datetime
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Path, Query, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
@@ -40,6 +47,9 @@ from brain.chat.thread_store import CONSOLE_SURFACE, StoredThreads, surfaces
 from brain.chat.threads import Thread
 from brain.chat.turns import CorrectionKind
 from brain.core.errors import Absent, Failed
+from brain.knowledge.document_tools import DocumentRead, reader
+from brain.knowledge.item import ITEM_ID_PATTERN
+from brain.knowledge.row_store import SessionRowSource
 from brain.member_activity import continue_thread, recent_threads
 
 #: Why no route here takes a person.
@@ -54,6 +64,7 @@ THREADS_PATH: Final = "/threads"
 THREAD_SEARCH_PATH: Final = "/threads/search"
 THREAD_PATH: Final = "/threads/{thread_id}"
 CORRECTIONS_PATH: Final = "/threads/{thread_id}/corrections"
+ATTACHMENTS_PATH: Final = "/threads/attachments"
 
 #: The longest search a person may type, which is a few words and not a paragraph.
 SEARCH_CHARS: Final = 200
@@ -109,6 +120,24 @@ class CorrectionView(BaseModel):
 
     kind: str
     at: datetime
+
+
+class AttachAsked(BaseModel):
+    """A document the caller may read, to keep on one of their threads, or on a new one."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    thread_id: str | None = Field(default=None, pattern=THREAD_ID_PATTERN)
+    attachment_id: str = Field(pattern=ITEM_ID_PATTERN)
+
+
+class AttachedView(BaseModel):
+    """Which thread the document is kept on, which is the one to continue with."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    thread_id: str
+    attachment_id: str
 
 
 class ThreadView(BaseModel):
@@ -222,3 +251,31 @@ async def correct_my_thread(
     if kept is None:
         raise Absent(f"thread {thread_id!r} is not answerable for this caller")
     return CorrectionView(kind=kept.kind.value, at=kept.at)
+
+
+@router.post(
+    ATTACHMENTS_PATH, status_code=201, response_model=AttachedView, responses=COMMON_RESPONSES
+)
+async def attach_to_my_thread(
+    request: Request, asked: Asked, attaching: AttachAsked
+) -> AttachedView:
+    """Keep a document the caller may read on one of their threads (M12.3.6).
+
+    Asked of the document reader at the caller's reach first, so a document they cannot read is
+    the same 404 as one that does not exist. See `brain.chat.attachments`.
+    """
+    store = _store(request)
+    readable = await reader(SessionRowSource(request.app.state.db_sessions))(
+        DocumentRead(document_id=attaching.attachment_id, limit=1),
+        entitlement=asked.reach,
+        now=asked.now,
+    )
+    if not readable.records:
+        raise Absent("that document is not one this caller may read")
+    thread_id = await store.attach(
+        asked.caller.principal.id,
+        thread_id=attaching.thread_id,
+        attachment_id=attaching.attachment_id,
+        now=asked.now,
+    )
+    return AttachedView(thread_id=thread_id, attachment_id=attaching.attachment_id)
