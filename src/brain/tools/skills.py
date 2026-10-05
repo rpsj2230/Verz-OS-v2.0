@@ -40,7 +40,16 @@ with one of `WHEN_OPENINGS`. See `A_DESCRIPTION_OPENS_BY_SAYING_WHEN_THE_SKILL_I
 rule about the file and not about the type, so a `Skill` built in code is not held to it; every
 path a file takes into the library goes through `skill_from_markdown`.
 
-Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9, M12.4.12
+**A skill may say when its question goes to a person, and only when nothing answered it (M8.3.1).**
+`escalate_to` names a queue, `escalation_needs` says in the author's words what would unblock the
+question, and `escalate_within` how many hours a person has before the asker is told nobody picked
+it up. The escalation fires on an abstention and on nothing else: the author wrote the step, the
+system's own outcome triggers it, and no model decides that a person should be involved, for
+`brain.gate.abstain.MODEL_JUDGEMENT_IS_NOT_A_TRIGGER`'s reason. A queue is a name and never a
+person, so a file from outside the company names nobody; who answers for a queue is named on the
+install (`brain.ops.escalation_store`). See `AN_ESCALATION_IS_AUTHORED_AND_FIRES_ON_AN_ABSTENTION`.
+
+Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9, M12.4.12, M8.3.1
 """
 
 from __future__ import annotations
@@ -100,7 +109,36 @@ DIGEST_SCHEMA: Final = "brain.skill.v1"
 #: ignored, and a skill whose `capabilities:` line was silently ignored looks exactly like a
 #: skill whose `capabilities:` line was honoured.
 FRONTMATTER_KEYS: Final[frozenset[str]] = frozenset(
-    {"name", "description", "version", "tools", "scripts"}
+    {
+        "name",
+        "description",
+        "version",
+        "tools",
+        "scripts",
+        "escalate_to",
+        "escalation_needs",
+        "escalate_within",
+    }
+)
+
+#: A queue a skill escalates to: one segment of an `ops.setting` key, because who answers for a
+#: queue is kept under `escalation_route.<queue>` (`brain.ops.escalation_store`). Stricter than
+#: `brain.gate.abstain.EscalationRoute`'s queue grammar, which admits names no setting key can hold.
+ESCALATION_QUEUE_RE: Final = re.compile(r"^[a-z][a-z0-9_]{0,59}$")
+
+#: The longest sentence a skill may give for what would unblock its question.
+ESCALATION_NEEDS_CHARS: Final = 300
+
+#: The most hours a skill may give a person to pick an escalation up. Three days, because an asker
+#: told a person would look is waiting, and a longer promise is one nobody keeps.
+MAX_ESCALATION_HOURS: Final = 72
+
+#: Why an escalation is declared in the file and fires on an abstention alone.
+AN_ESCALATION_IS_AUTHORED_AND_FIRES_ON_AN_ABSTENTION: Final = (
+    "A skill's author writes where its question goes when nothing answered it, and the system's "
+    "own abstention is what sends it there. No model decides a person should be involved, so an "
+    "operator can read the file and say when it fires, and a queue is a name rather than a "
+    "person, so a file from outside the company names nobody."
 )
 
 #: Keys that are refused with an explanation rather than as merely unknown. Every one of
@@ -425,6 +463,13 @@ class Skill(BaseModel):
     scripts: tuple[str, ...] = ()
     #: The instructions. Withheld until the skill is approved; see `body_of`.
     body: str = ""
+    #: The queue a question goes to when nothing answered it, or empty. See
+    #: `AN_ESCALATION_IS_AUTHORED_AND_FIRES_ON_AN_ABSTENTION`.
+    escalate_to: str = ""
+    #: What would unblock the question, in the author's words. Required with `escalate_to`.
+    escalation_needs: str = ""
+    #: Hours a person has to pick it up, or None for `brain.gate.abstain.DEFAULT_ESCALATION_TTL`.
+    escalate_within: int | None = None
 
     @field_validator("name")
     @classmethod
@@ -465,6 +510,31 @@ class Skill(BaseModel):
             safe_archive_member(path)
         return tuple(sorted(set(v)))
 
+    @model_validator(mode="after")
+    def _an_escalation_names_a_queue_and_what_it_needs(self) -> Self:
+        """A queue with no sentence is a handoff nobody can judge, and a sentence or a deadline
+        with no queue goes nowhere, so the three are declared together or not at all."""
+        if not self.escalate_to:
+            if self.escalation_needs or self.escalate_within is not None:
+                msg = "escalation_needs and escalate_within need escalate_to to name a queue"
+                raise ValueError(msg)
+            return self
+        if not ESCALATION_QUEUE_RE.match(self.escalate_to):
+            msg = f"escalate_to {self.escalate_to!r} is not a queue name: lowercase, digits and _"
+            raise ValueError(msg)
+        needs = self.escalation_needs.strip()
+        if not needs or len(needs) > ESCALATION_NEEDS_CHARS or needs != self.escalation_needs:
+            msg = (
+                f"escalation_needs says in up to {ESCALATION_NEEDS_CHARS} characters what would "
+                "unblock the question; a queue with no sentence is a handoff nobody can judge"
+            )
+            raise ValueError(msg)
+        within = self.escalate_within
+        if within is not None and not 1 <= within <= MAX_ESCALATION_HOURS:
+            msg = f"escalate_within is between 1 and {MAX_ESCALATION_HOURS} hours, not {within}"
+            raise ValueError(msg)
+        return self
+
     def digest(self) -> str:
         """A digest over everything a reviewer read.
 
@@ -482,6 +552,15 @@ class Skill(BaseModel):
             *self.tools,
             *self.scripts,
         ]
+        if self.escalate_to:
+            # Only when declared, so every skill written before escalation digests as it did and
+            # no approval is voided. Tagged with a colon, which no tool or script name can hold,
+            # so a declaration cannot be read as one more script.
+            parts += [
+                f"escalate_to:{self.escalate_to}",
+                f"escalation_needs:{self.escalation_needs}",
+                f"escalate_within:{'' if self.escalate_within is None else self.escalate_within}",
+            ]
         joined = "".join(f"{len(part)}:{part}" for part in parts)
         return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
@@ -534,6 +613,11 @@ def markdown_of(skill: Skill) -> str:
         lines.append(f"tools: [{', '.join(skill.tools)}]")
     if skill.scripts:
         lines.append(f"scripts: [{', '.join(skill.scripts)}]")
+    if skill.escalate_to:
+        lines.append(f"escalate_to: {skill.escalate_to}")
+        lines.append(f"escalation_needs: {skill.escalation_needs}")
+        if skill.escalate_within is not None:
+            lines.append(f"escalate_within: {skill.escalate_within}")
     lines.append("---")
     text = "\n".join(lines) + "\n" + skill.body + "\n"
     msg = f"skill {skill.name!r} does not read back from the SKILL.md it would be written as"
@@ -579,6 +663,10 @@ def _skill_from_text(text: str) -> Skill:
             return (value,) if value else ()
         return value
 
+    within = scalar("escalate_within")
+    if within and not within.isdigit():
+        msg = f"escalate_within in this SKILL.md is a number of hours, not {within!r}"
+        raise SkillError(msg)
     try:
         return Skill(
             name=scalar("name"),
@@ -587,6 +675,9 @@ def _skill_from_text(text: str) -> Skill:
             tools=listed("tools"),
             scripts=listed("scripts"),
             body=body,
+            escalate_to=scalar("escalate_to"),
+            escalation_needs=scalar("escalation_needs"),
+            escalate_within=int(within) if within else None,
         )
     except ValueError as exc:
         raise SkillError(str(exc)) from exc

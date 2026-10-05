@@ -84,6 +84,7 @@ from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.denial_digest_run import run_denial_digest_now
 from brain.ops.erasure_store import drain_erasure_queue
+from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
 from brain.ops.retention_store import run_retention_sweep
@@ -308,6 +309,34 @@ def outbox_dispatch(now: datetime, report_only: bool, database_url: str) -> str:
         loop_factory=_loop_factory(),
     )
     return ran.summary()
+
+
+#: Why the expiry declines in report-only mode, though it removes nothing.
+AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING: Final = (
+    "Marking an escalation expired changes what its asker is told, so a run asked to only report "
+    "marks nothing and says so, as every runner keeps the mode it was given."
+)
+
+
+def escalation_expiry(now: datetime, report_only: bool, database_url: str) -> str:
+    """Mark every escalation whose deadline has passed as expired, and say how many (M8.3.4).
+
+    `brain.ops.escalation_store.run_expiry_now` does it as the worker's login; this is the literal
+    call the registry reads. Declines in report-only mode, see
+    `AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING`, and takes the worker's event loop for the
+    reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no escalation was marked expired. "
+            f"{AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    expired = run_expiry_now(database_url, now=now, loop_factory=_loop_factory())
+    if expired == 0:
+        return "no escalation was due to expire"
+    return f"{expired} escalation(s) past their deadline marked expired; each asker is told so"
 
 
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
@@ -691,6 +720,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
     # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
     Runner(name="knowledge_reverification", run=knowledge_reverification),
+    # Wired on 2026-09-30 with `gate.escalation` (`0168`). See `brain.ops.escalation_store`.
+    Runner(name="escalation_expiry", run=escalation_expiry),
     # For whoever builds it: the feature observations `drift` measures over, which are
     # resolution decisions nobody records for this purpose yet. The fit is weekly.
     Runner(
@@ -767,6 +798,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return retention_sweep(now, report_only, database_url)
         case "knowledge_reverification":
             return knowledge_reverification(now, report_only, database_url)
+        case "escalation_expiry":
+            return escalation_expiry(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case "outbox_dispatch":

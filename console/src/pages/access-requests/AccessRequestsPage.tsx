@@ -15,7 +15,10 @@
  * whether a request was stored or not; the page adds nothing that could tell the two apart. Asking
  * is not confirmed: a request ends and replaces nothing.
  *
- * Task ids: M4.3.4, M2.2.4, M27.16.1
+ * **Below the requests, the questions nothing answered that were handed to a person**
+ * (`HandedToAPerson.tsx`, M8.3.2, M8.3.4): the other way a person is told a question is theirs.
+ *
+ * Task ids: M4.3.4, M2.2.4, M27.16.1, M8.3.2, M8.3.4
  */
 
 import { Inbox, MoreHorizontal, Plus } from "lucide-react";
@@ -61,6 +64,7 @@ import {
   type AccessRequestRow,
 } from "../accessRequestsQuery";
 import { nameOf, peopleIn, Pill, whenWords } from "../review/parts";
+import { HandedToAPersonSection } from "./HandedToAPerson";
 
 export const MARK_HANDLED = "Mark handled";
 export const LEAVE_OPEN = "Leave it open";
@@ -337,7 +341,12 @@ export function AccessRequestsPage() {
         emptyTitle={NOTHING_SENT}
         emptyDescription={NOTHING_SENT_MORE}
         emptyIcon={<Inbox aria-hidden />}
-        footer={truncated ? <Note>{MORE_REQUESTS}</Note> : undefined}
+        footer={
+          <>
+            {truncated ? <Note>{MORE_REQUESTS}</Note> : null}
+            <HandedToAPersonSection />
+          </>
+        }
       />
       <ConfirmDialog
         open={pending !== null}
