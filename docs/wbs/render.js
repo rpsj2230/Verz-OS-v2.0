@@ -587,6 +587,17 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
 </script>`;
 
 fs.writeFileSync(__dirname + "/../tracker.html", html);
+// The wave windows as dates, for the evening digest's burn-down (brain.ops.digest_run). Written
+// here because the windows are computed here and nowhere else: a second walk of the working days
+// would give two target dates that drift, with the one in the digest being the one nobody reviews.
+const WINDOWS = {};
+for (const w of waveIds) {
+  WINDOWS[String(w)] = { start: WIN[w].start.toISOString().slice(0, 10), end: WIN[w].end.toISOString().slice(0, 10) };
+}
+fs.writeFileSync(
+  __dirname + "/../wave-windows.json",
+  JSON.stringify({ generated_by: "docs/wbs/render.js", windows: WINDOWS }, null, 1) + "\n"
+);
 console.log("modules", TREE.length, "| nodes", NODES, "| LEAF TASKS", LEAVES, "| max depth", MAXD);
 console.log("acts no commit can close:", ACT_COUNT, "| decided, not needed as written:", DECIDED_COUNT, "| buildable:", BUILDABLE);
 console.log("leaves by wave:", JSON.stringify(waves));

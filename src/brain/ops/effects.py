@@ -689,6 +689,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.digest_destination:ConversationLister.conversations_request": Repeat.READS,
         "brain.ops.digest_destination:ConversationLister.conversations_page": Repeat.READS,
         "brain.ops.channel_lease:ChannelSecretLeases.lease": Repeat.EXPIRES_ON_ITS_OWN,
+        # The digest's send is made once per day and room inside `issue_once`
+        # (`brain.ops.digest_delivery`); these build the request, name the room, judge the
+        # answer and read the channel's record, and none of them sends anything.
+        "brain.ops.digest_run:DigestWire.room_of": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.request_for": Repeat.READS,
+        "brain.ops.digest_run:DigestWire.judge": Repeat.READS,
+        "brain.ops.digest_run:ChannelRecordReader.get": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.read": Repeat.READS,
+        "brain.ops.digest_run:DigestRecords.write": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
@@ -775,6 +784,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.adapter:ChannelWire.request_for": Repeat.READS,
         "brain.channels.adapter:ChannelWire.judge": Repeat.READS,
         "brain.channels.adapter:KeyedWire.key_set_of": Repeat.READS,
+        "brain.channels.adapter:BatchedWire.parts": Repeat.READS,
+        "brain.channels.adapter:SubscribedWire.subscription_answer": Repeat.READS,
         "brain.channels.adapter:RegisteredWire.registration_for": Repeat.READS,
         "brain.channels.adapter:RegisteredWire.judge": Repeat.READS,
         "brain.channels.adapter:ChannelTransport.send": Repeat.ISSUES,

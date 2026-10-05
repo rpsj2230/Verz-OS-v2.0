@@ -165,8 +165,8 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
     the vault token renewal later that day, with the installer's vault, and the automation
     runner and the connector sync after it, and the vault audit shipper last. The staff sync
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
-    2026-09-28 and the install acceptance checks the same day, and the escalation expiry and
-    the two recovery sweeps on 2026-09-30, in the registry's own order.
+    2026-09-28 and the install acceptance checks the same day, and the escalation expiry, the
+    two recovery sweeps and the evening digest on 2026-09-30, in the registry's own order.
 
     Delete this and every assertion below that names the seventeen could be satisfied by a table
     that had quietly lost one of them."""
@@ -188,6 +188,7 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
         "connector_sync",
         "vault_audit_ship",
         "acceptance_run",
+        "evening_digest",
     ]
 
 

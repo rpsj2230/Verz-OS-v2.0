@@ -72,6 +72,12 @@ install's Keycloak and sends nobody anything, and its counts go on the same run 
 only for a plan `dry_run` marks safe and never raises. See
 `ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`.
 
+**Before the accounts, each active person on the list is a Brain person (since 2026-09-30).**
+`brain.ops.staff_people_run.provide_people` makes one for every active address no person is joined
+to, without the sign-in service, so People shows the whole list on an install whose accounts client
+is not set up yet, and the accounts step and the standing step then find those people by the same
+join. It fails the way the heads' reach does. See `PEOPLE_UNDECIDED`.
+
 Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.5, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9, M26.1.2, M26.1.3
 """
 
@@ -147,6 +153,7 @@ from brain.ops.safe_error import redact
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.source_organisation import apply_organisation
 from brain.ops.staff_accounts_run import ACCOUNT_TYPES_SETTING, provide_accounts
+from brain.ops.staff_people_run import PeopleRun, provide_people
 from brain.ops.staff_sync_store import (
     RunRecord,
     read_last_applied,
@@ -591,6 +598,7 @@ async def sync_staff_on(
     # Before the roster is written and outside any transaction, because they call the sign-in
     # service; see `ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`. A trial plans, makes nothing.
     allowed = allowed_types(value_of(ACCOUNT_TYPES_SETTING, env))
+    said_people = await _people(sessions, roster, now, trial)
     where = standings(members=members, writes=application.writes, people=roster.people)
     first = await _standing(sessions, chosen.name, where, allowed, now)
     accounts = await provide_accounts(
@@ -615,7 +623,7 @@ async def sync_staff_on(
             log.warning("staff_sync.standing_unapplied", error=type(exc).__name__)
             kept = None
     said_standing = kept.sentences() if kept is not None else (STANDING_UNDECIDED,)
-    report = (*report, *accounts.sentences, *said_standing)
+    report = (*report, *said_people, *accounts.sentences, *said_standing)
     async with sessions() as session, session.begin():
         if trial:
             record = RunRecord(
@@ -667,6 +675,26 @@ def _would_change(source: str, application: Application) -> str:
 
 
 #: What a run says when it could not decide who the list keeps out.
+#: What a run says when the people step failed, which leaves the roster applied.
+PEOPLE_UNDECIDED: Final = (
+    "Nobody on the list was added to People this run; the next run tries again."
+)
+
+
+async def _people(
+    sessions: async_sessionmaker[AsyncSession], roster: Roster, now: datetime, trial: bool
+) -> tuple[str, ...]:
+    """The people step's sentences. Never raises, for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s
+    reason: a person not made tonight is made by the next run, and the roster is still applied."""
+    try:
+        made: PeopleRun = await provide_people(sessions, roster, now=now, trial=trial)
+    except Exception as exc:
+        # Broad on purpose, as the standing step's.
+        log.warning("staff_sync.people_unmade", error=type(exc).__name__)
+        return (PEOPLE_UNDECIDED,)
+    return made.sentences(trial=trial)
+
+
 STANDING_UNDECIDED: Final = (
     "Who is kept out of the Brain was not decided this run; the next run tries again."
 )
