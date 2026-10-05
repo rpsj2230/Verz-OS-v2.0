@@ -244,6 +244,13 @@ class EntityKind(enum.StrEnum):
     #: naming the model or claiming a form, because the label is what a model downstream
     #: reads in place of the value and neither of those is true about the person.
     UNPATTERNED_NAME = "person_name"
+    #: The four the analyser finds and no pattern here does: see `PRESIDIO_KINDS`. Each is
+    #: produced only while the analyser answers, as `UNPATTERNED_NAME` is only while a model
+    #: does, and the rules underneath are what a scrub keeps when it does not.
+    CREDIT_CARD = "credit_card"
+    IBAN = "iban"
+    IP_ADDRESS = "ip_address"
+    URL = "url"
 
 
 @dataclass(frozen=True)
@@ -433,6 +440,22 @@ PRESIDIO_DECLINED: Final[dict[str, str]] = {
     "NRP": "nationality and religion appear in ordinary business text and identify nobody here",
     "LOCATION": "a client's address is governed by the field policy, not by a text scrubber",
 }
+
+#: The kind each enabled built-in's spans are scrubbed as. Beside the built-ins rather than a
+#: field of `BuiltIn`, so a built-in somebody enables without one is a finding of
+#: `configuration_gaps` rather than a type error at import, and a span the analyser returns for
+#: an entity named nowhere here is refused by `brain.ops.egress.decode_analysis` rather than
+#: given a label nobody chose. `PERSON` is the one name with no fixed shape, which is the kind
+#: the entity model produces too, and `merge_detections` makes the two additive.
+PRESIDIO_KINDS: Final[Mapping[str, EntityKind]] = MappingProxyType(
+    {
+        "PERSON": EntityKind.UNPATTERNED_NAME,
+        "CREDIT_CARD": EntityKind.CREDIT_CARD,
+        "IBAN_CODE": EntityKind.IBAN,
+        "IP_ADDRESS": EntityKind.IP_ADDRESS,
+        "URL": EntityKind.URL,
+    }
+)
 
 #: The analyser's service name and port in `docker-compose.presidio.yml`. Product values, the
 #: same on every install, and held to that file by test rather than trusted.
@@ -662,7 +685,14 @@ def configuration_gaps(
 
     findings: list[str] = []
     model_kinds = {declared.kind for declared in gliner_labels}
-    have = {r.kind for r in recognisers} | _KINDS_WITHOUT_OWN_RECOGNISER | model_kinds
+    analyser_kinds = {
+        PRESIDIO_KINDS[one.presidio_name]
+        for one in built_ins
+        if one.presidio_name in PRESIDIO_KINDS
+    }
+    have = (
+        {r.kind for r in recognisers} | _KINDS_WITHOUT_OWN_RECOGNISER | model_kinds | analyser_kinds
+    )
     for kind in kinds:
         if kind not in have:
             findings.append(f"{kind.value}: declared as a kind with no recogniser and no exemption")
@@ -674,6 +704,11 @@ def configuration_gaps(
             )
         if built_in.presidio_name in PRESIDIO_DECLINED:
             findings.append(f"{built_in.presidio_name}: both enabled and declined")
+        if built_in.presidio_name not in PRESIDIO_KINDS:
+            findings.append(
+                f"{built_in.presidio_name}: enabled with no kind to scrub it as, so its spans "
+                "would be refused"
+            )
 
     seen: set[str] = set()
     pattern_kinds = {r.kind for r in recognisers}
