@@ -201,6 +201,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
+  "src/components/ConnectSource.tsx consentPath(source.name)":
+    "Connecting with the vendor ends and replaces nothing: it holds one consent for the person who " +
+    "pressed and sends them to the vendor's own page, where they agree or decline. Nothing is kept " +
+    "until the vendor answers, which tests/unit/test_connector_consent_routes.py holds.",
   "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing in Lark and keeps nothing it read, which tests/unit/test_lark_connect.py " +

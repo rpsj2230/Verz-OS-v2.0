@@ -437,9 +437,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/channels",
       "/channels/:name",
       "/channels/:name/:view",
+      // Where a vendor sends the person back after consenting to a source (M11.8.6).
+      "/connector-consent",
     ],
     routes: [
       "/api/v1/connectors",
+      "/api/v1/connectors/{connector}/consent",
+      "/api/v1/connectors/consent/callback",
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",
@@ -468,6 +472,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.channel_delivery",
       "ops.connector_connection",
       "ops.connector_sync",
+      // A consent started at a vendor, held until it is answered once (M11.8.6).
+      "ops.oauth_consent",
       "proj.record",
       "er.alias",
       "er.canonical",

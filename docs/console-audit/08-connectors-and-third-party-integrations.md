@@ -1,9 +1,9 @@
 ### Connectors and third-party integrations
 
-- **Screens:** `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/channels`, `/channels/:name`, `/channels/:name/:view`
-- **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Screens:** `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/channels`, `/channels/:name`, `/channels/:name/:view`, `/connector-consent`
+- **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `ops.oauth_consent`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`, `INSTALL_LARK_CARD_APPROVALS`
-- **Measured here:** 36 routes, 4 called by no screen; 17 write routes, 12 with all three proofs; 4 gaps.
+- **Measured here:** 38 routes, 4 called by no screen; 18 write routes, 13 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -13,6 +13,7 @@
 | `GET /api/v1/channels/{name}/events` | **no screen** |
 | `GET /api/v1/channels/{name}/health` | `/channels/:name`, `/channels/:name/:view` |
 | `GET /api/v1/connectors` | `/`, `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
+| `GET /api/v1/connectors/consent/callback` | `/connector-consent` |
 | `GET /api/v1/connectors/lark-app` | `/connectors`, `/staff_sources` |
 | `GET /api/v1/connectors/lark-app/wiki-spaces` | **no screen** |
 | `GET /api/v1/console/channels` | `/channels` |
@@ -35,6 +36,7 @@
 | `POST /api/v1/connectors/lark-app/test` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
 | `POST /api/v1/connectors/lark-app/wiki-spaces` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
 | `POST /api/v1/connectors/{connector}/accept` | `/connectors/:connector`, `/connectors/:connector/:view` |
+| `POST /api/v1/connectors/{connector}/consent` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/first-run` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
 | `POST /api/v1/connectors/{connector}/edit` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
 | `POST /api/v1/connectors/{connector}/key` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
@@ -62,6 +64,7 @@
 | `POST /api/v1/connectors/lark-app/test` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` | `test_a_test_records_when_it_ran_and_each_verdict_and_nothing_it_was_sent` in `tests/unit/test_lark_connect.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_the_test_route_reports_each_use_and_writes_nothing` in `tests/unit/test_lark_connect.py` |
 | `POST /api/v1/connectors/lark-app/wiki-spaces` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` | `test_declared_spaces_are_kept_in_the_settings_table_and_read_back` in `tests/unit/test_lark_connect.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_space_is_declared_by_its_link_or_its_id_with_the_declarer_as_steward` in `tests/unit/test_lark_connect.py` |
 | `POST /api/v1/connectors/{connector}/accept` | `/connectors/:connector`, `/connectors/:connector/:view` | `test_accepting_a_changed_declaration_keeps_its_text_and_the_ledger_names_both_digests` in `tests/unit/test_connector_store.py` (database, in CI) | `test_accepting_a_changed_declaration_keeps_its_text_and_the_ledger_names_both_digests` in `tests/unit/test_connector_store.py` (database, in CI) | `test_accepting_repins_the_declaration_and_the_source_is_read_again` in `tests/unit/test_connector_routes.py` |
+| `POST /api/v1/connectors/{connector}/consent` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/first-run` | `test_a_consent_is_taken_once_by_its_own_person_before_it_expires` in `tests/unit/test_connector_consent.py` (database, in CI) | Not applicable: Starting a consent keeps no credential and changes no connection: it holds one ops.oauth_consent row for the person who pressed, which only they can take, once. The ledger entry is the refresh token's credential write when the vendor answers, which test_connector_consent_routes holds. | `test_the_vendor_s_code_is_exchanged_and_its_refresh_token_kept_in_its_slot_once` in `tests/unit/test_connector_consent_routes.py` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
 | `POST /api/v1/connectors/{connector}/edit` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` | `test_an_edit_leaves_two_rows_one_live_two_ledger_entries_and_no_key_write` in `tests/unit/test_connector_store.py` (database, in CI) | `test_an_edit_leaves_two_rows_one_live_two_ledger_entries_and_no_key_write` in `tests/unit/test_connector_store.py` (database, in CI) | `test_an_edit_leaves_two_rows_one_live_and_the_key_where_it_was` in `tests/unit/test_connector_routes.py` |
 | `POST /api/v1/connectors/{connector}/key` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_replaced_key_is_a_credential_write_and_changes_no_connection` in `tests/unit/test_connector_routes.py` |

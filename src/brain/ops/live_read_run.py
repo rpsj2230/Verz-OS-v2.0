@@ -58,7 +58,12 @@ a `brain.connectors.declaration.ViewReading` is read here by one bounded read na
 record's id, as the user the slot keeps beside the password, and the lease is given back in the
 same `finally` as a REST source's.
 
+**A source consented to by OAuth is read live with access renewed by that read (M11.8.6)**, through
+the same `presented`; a refusal is the call's outcome, as a refused key's is, and a refresh token
+the vendor rotated is written back before the record is read.
+
 Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
+Task ids: M11.8.6
 """
 
 from __future__ import annotations
@@ -108,6 +113,7 @@ from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection, StoredConnections
 from brain.ops.connector_sync_run import (
     ConnectorKeys,
+    Consenting,
     HttpsSourceCaller,
     KeyLease,
     RunTokenVault,
@@ -261,6 +267,7 @@ class ConnectedSources:
                     poster=self._poster,
                     resolver=self._resolver,
                     now=self._clock(),
+                    consenting=Consenting(connection.connector, connection.settings, self._keys),
                 )
             except UnsafeAddressError:
                 return _refused(connection.connector, ADDRESS_OR_SHAPE)
@@ -268,6 +275,9 @@ class ConnectedSources:
                 if self._poster is None:
                     return _refused(connection.connector, NO_POSTER)
                 return LiveReply(outcome=refused.call)
+            except SecretsUnavailableError:
+                # A consented source's refresh token the vault would not lend (M11.8.6).
+                return _refused(connection.connector, NO_KEY_FOR_THE_READ)
             # A source that takes no key is sent no `Authorization` at all (M11.7.4).
             headers = call_headers(reading, connection.settings, shown)
             if report is not None and request.entity in report.entities():

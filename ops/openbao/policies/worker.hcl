@@ -1,6 +1,6 @@
 # What the background worker may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5, M5.4.7
+# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5, M5.4.7, M11.8.6
 #
 # The worker runs scheduled and queued work, so its runs are longer than a request and
 # nobody is watching them. Two differences from the application follow from that, and both
@@ -79,6 +79,13 @@ path "auth/token/create/connector-run" {
 # send token minted against the channel-send role (channel-send.hcl) and revoked when the send ends,
 # never under this policy. See brain.ops.channel_lease.A_CHANNEL_IS_READ_BY_THE_WORKER_ONLY_THROUGH_A_SEND_LEASE.
 path "auth/token/create/channel-send" {
+  capabilities = ["create", "update"]
+}
+
+# And for a refresh token a vendor rotated during a read (M11.8.6): written back only through a token
+# minted against the connector-rotate role (connector-rotate.hcl), which may patch a refresh token's
+# slot and read nothing. See brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT.
+path "auth/token/create/connector-rotate" {
   capabilities = ["create", "update"]
 }
 

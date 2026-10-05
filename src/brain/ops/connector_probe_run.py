@@ -27,7 +27,11 @@ only when a test is owed does it start a thread with its own loop and engine, th
 `brain.connectors.declaration.ViewReading` makes no call to test: its test is the first view read
 with a row cap of one, as the user its slot keeps, and the row is dropped like any answer.
 
-Task ids: M27.15.8, M11.6.1, M11.7.1
+**A source consented to by OAuth is tested with access renewed as a read renews it (M11.8.6)**,
+through the same `connector_sync_run.presented`, so a withdrawn consent fails a test with the same
+`CONSENT_WITHDRAWN` a scheduled read leaves.
+
+Task ids: M27.15.8, M11.6.1, M11.7.1, M11.8.6
 """
 
 from __future__ import annotations
@@ -57,7 +61,6 @@ from brain.ops.connector_probe import (
 )
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
-    NO_KEY_FILE_EXCHANGE,
     PROBE_ANSWERED,
     PROBE_NOT_SENT_SHARE_SPENT,
     PROBE_NOT_SENT_WHILE_WAITING,
@@ -78,6 +81,7 @@ from brain.ops.connector_sync import (
 )
 from brain.ops.connector_sync_run import (
     ConnectorKeys,
+    Consenting,
     HttpsSourceCaller,
     KeyLease,
     SourceCaller,
@@ -88,6 +92,7 @@ from brain.ops.connector_sync_run import (
     key_detail,
     page_operation,
     presented,
+    presenting_detail,
     worker_connector_keys,
 )
 from brain.ops.connector_sync_store import (
@@ -146,6 +151,7 @@ def _call_under(
     resolver: Resolver,
     clock: Callable[[], datetime],
     poster: SourcePoster | None,
+    consenting: Consenting | None = None,
 ) -> Attempt:
     """The one call, with the key the lease holds. See `A_TEST_KEEPS_NOTHING_THE_SOURCE_SENT`.
 
@@ -160,16 +166,20 @@ def _call_under(
     if isinstance(reading, ViewReading):
         return _read_under(live, reading, lease, key, finish=finish, resolver=resolver, clock=clock)
     try:
-        shown = presented(reading, key, poster=poster, resolver=resolver, now=clock())
+        shown = presented(
+            reading,
+            key,
+            poster=poster,
+            resolver=resolver,
+            now=clock(),
+            consenting=consenting,
+        )
     except UnsafeAddressError:
         return finish(ADDRESS_REFUSED)
     except TokenNotIssuedError as refused:
-        detail = (
-            NO_KEY_FILE_EXCHANGE
-            if poster is None
-            else failure_detail(refused.call, timed_out=refused.timed_out)
-        )
-        return finish(detail, call=refused.call)
+        return finish(presenting_detail(refused, poster=poster), call=refused.call)
+    except SecretsUnavailableError as unavailable:
+        return finish(key_detail(unavailable))
     try:
         entity = reading.entities()[0]
         first = first_arguments(reading, entity, settings=settings)
@@ -303,6 +313,7 @@ def probe_one(
             resolver=resolver,
             clock=clock,
             poster=poster,
+            consenting=Consenting(plan.connector, live.connection.settings, keys),
         )
     finally:
         ended = lease.close(clock())

@@ -112,6 +112,7 @@ from brain.tables.model_health import (
     ResidencyConstraintRow,
 )
 from brain.tables.model_registry import GoldenQuestionRow, ModelProviderRow, RoutingChangeRow
+from brain.tables.oauth_consent import OAuthConsentRow
 from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
@@ -418,6 +419,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # grant are values, so each record outlives what it names.
     "ops.connector_steward",
     "gate.self_grant",
+    # 0180_oauth_consent. Points at nothing: the source and the person are values.
+    "ops.oauth_consent",
 )
 
 __all__ = [
@@ -487,6 +490,7 @@ __all__ = [
     "MessageRow",
     "ModelAttemptRow",
     "ModelProviderRow",
+    "OAuthConsentRow",
     "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",

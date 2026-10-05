@@ -63,7 +63,14 @@ from brain.deployment.vault_setup import (
     vault_choice_lines,
 )
 from brain.ops.channel_lease import SEND_POLICY, SEND_ROLE_MAX_TTL_SECONDS, SEND_TOKEN_ROLE
-from brain.ops.connector_lease import RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS, RUN_TOKEN_ROLE
+from brain.ops.connector_lease import (
+    ROTATE_POLICY,
+    ROTATE_ROLE_MAX_TTL_SECONDS,
+    ROTATE_TOKEN_ROLE,
+    RUN_POLICY,
+    RUN_ROLE_MAX_TTL_SECONDS,
+    RUN_TOKEN_ROLE,
+)
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.openbao import STATIC_PREFIXES
 from brain.ops.vault_quorum import RECOVERY_SPLIT
@@ -364,6 +371,9 @@ def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the
         f"write auth/token/roles/{SEND_TOKEN_ROLE} allowed_policies={SEND_POLICY} orphan=false "
         "renewable=false token_no_default_policy=true "
         f"token_explicit_max_ttl={SEND_ROLE_MAX_TTL_SECONDS}",
+        f"write auth/token/roles/{ROTATE_TOKEN_ROLE} allowed_policies={ROTATE_POLICY} "
+        "orphan=false renewable=false token_no_default_policy=true "
+        f"token_explicit_max_ttl={ROTATE_ROLE_MAX_TTL_SECONDS}",
     ]
     defined = [one for one in as_root if one.startswith("kv metadata put")]
     assert [one.rsplit(" ", 1)[-1] for one in defined] == sorted(SLOT_SCOPES)
@@ -894,8 +904,9 @@ def test_a_release_applies_its_own_changes_reads_them_back_and_a_second_run_writ
     assert first.returncode == 0, first.stderr
     assert first.stdout.strip() == (
         f"vault: in force: {len(ENGINES)} engines, "
-        f"{len(list((REPO / 'ops/openbao/policies').glob('*.hcl')))} policies, 2 token roles "
-        f"({RUN_TOKEN_ROLE}, {SEND_TOKEN_ROLE}) and {len(SLOT_SCOPES)} credential slots"
+        f"{len(list((REPO / 'ops/openbao/policies').glob('*.hcl')))} policies, 3 token roles "
+        f"({RUN_TOKEN_ROLE}, {SEND_TOKEN_ROLE}, {ROTATE_TOKEN_ROLE}) and {len(SLOT_SCOPES)} "
+        "credential slots"
     )
     calls = lines(state / "calls")
     assert all(one.startswith((f"{DEPLOY_TOKEN}|", "|status")) for one in calls)

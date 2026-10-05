@@ -410,6 +410,8 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
     key: this process runs no connector, so a read here would be a standing copy of every source's
     key in the process that talks to a model. No delete: a disconnect leaves the key and says so.
     `brain.ops.openbao.A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT` argues it.
+    The same two for a consented source's refresh token (M11.8.6), kept by the console's consent
+    route, one segment deeper.
 
     Delete this and the rule gains `read` or `delete` in a debugging session, and nothing else reads
     the policy."""
@@ -420,6 +422,8 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
     assert keys == {
         "connector_keys/data/+": ["create", "update"],
         "connector_keys/metadata/+": ["read"],
+        "connector_keys/data/oauth_refresh/+": ["create", "update"],
+        "connector_keys/metadata/oauth_refresh/+": ["read"],
     }
 
 
@@ -435,6 +439,7 @@ def test_the_worker_reads_no_connector_key_itself_and_may_mint_only_the_run_toke
     assert minting == {
         "auth/token/create/connector-run": ["create", "update"],
         "auth/token/create/channel-send": ["create", "update"],
+        "auth/token/create/connector-rotate": ["create", "update"],
     }
     assert not [path for path in granted if path.startswith("auth/token/roles")]
     assert not [path for path in granted if path.startswith("providers/data/channel_")]
@@ -470,9 +475,13 @@ def test_the_application_may_mint_only_the_run_token_a_question_borrows_a_key_wi
     any policy this one holds, or the application's own token can gain a read of every key."""
     granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
     minting = {path: sorted(caps) for path, caps in granted.items() if "token/create" in path}
-    assert minting == {"auth/token/create/connector-run": ["create", "update"]}
+    assert minting == {
+        "auth/token/create/connector-run": ["create", "update"],
+        "auth/token/create/connector-rotate": ["create", "update"],
+    }
     assert not [path for path in granted if path.startswith("auth/token/roles")]
     assert "read" not in granted["connector_keys/data/+"]
+    assert "read" not in granted["connector_keys/data/oauth_refresh/+"]
 
 
 def test_the_run_token_policy_reads_a_source_key_and_revokes_itself_and_nothing_more() -> None:
@@ -485,6 +494,7 @@ def test_the_run_token_policy_reads_a_source_key_and_revokes_itself_and_nothing_
     granted = _granted_paths((POLICIES / f"{RUN_POLICY}.hcl").read_text(encoding="utf-8"))
     assert {path: sorted(caps) for path, caps in granted.items()} == {
         "connector_keys/data/+": ["read"],
+        "connector_keys/data/oauth_refresh/+": ["read"],
         "auth/token/revoke-self": ["update"],
     }
 
@@ -611,3 +621,62 @@ def test_no_other_role_reaches_the_template_signing_engine() -> None:
     for name in ("worker", "connector-run", "browser-runner"):
         granted = _granted_paths((POLICIES / f"{name}.hcl").read_text(encoding="utf-8"))
         assert not [path for path in granted if path.startswith("template_signing")], name
+
+
+# ------------------------------------------------ a consented source's refresh token (M11.8.6)
+def test_the_run_token_reads_a_refresh_token_and_can_write_nothing_it_reads() -> None:
+    """The read direction of `A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`: the
+    run token reads a consented source's refresh token where the code keeps it, and no rule of its
+    policy that names that slot grants anything that writes. Held against the path `OpenBaoVault`
+    calls for the longest source name, not against the policy's words.
+
+    Delete this and `update` or `patch` can join the run policy's refresh line, and a read of a
+    source could then replace its consent with whatever the source's answer said."""
+    from brain.ops.connector_lease import RUN_POLICY
+    from brain.ops.credentials import connector_oauth_slot
+
+    granted = _granted_paths((POLICIES / f"{RUN_POLICY}.hcl").read_text(encoding="utf-8"))
+    mount, _, rest = connector_oauth_slot("a" + "0" * 62).path.partition("/")
+    data = f"{mount}/data/{rest}"
+    rules = [caps for rule, caps in granted.items() if _matches(rule, data)]
+    assert rules and any("read" in caps for caps in rules)
+    writes = {"create", "update", "patch", "delete", "sudo"}
+    assert not [caps for caps in rules if writes & set(caps)]
+
+
+def test_the_rotate_token_patches_a_refresh_token_and_can_read_nothing() -> None:
+    """The write direction: the one policy a rotated refresh token is written back under may patch
+    the refresh token's slot, which kv version 2 does without a read, and revoke itself, and
+    nothing else. It cannot read the token it replaces, create a slot, or reach the slot a source's
+    key is kept at, held against the paths the code calls.
+
+    Delete this and the rotate policy can widen to `connector_keys/data/+` or gain `read` in a
+    debugging session, and a token minted to write one value back reads every source's key."""
+    from brain.ops.connector_lease import ROTATE_POLICY
+    from brain.ops.credentials import connector_key_slot, connector_oauth_slot
+
+    granted = _granted_paths((POLICIES / f"{ROTATE_POLICY}.hcl").read_text(encoding="utf-8"))
+    assert {path: sorted(caps) for path, caps in granted.items()} == {
+        "connector_keys/data/oauth_refresh/+": ["patch"],
+        "auth/token/revoke-self": ["update"],
+    }
+    mount, _, rest = connector_oauth_slot("a" + "0" * 62).path.partition("/")
+    refresh = [caps for rule, caps in granted.items() if _matches(rule, f"{mount}/data/{rest}")]
+    assert refresh == [["patch"]]
+    key_mount, _, key_rest = connector_key_slot("a" + "0" * 62).path.partition("/")
+    assert not [rule for rule in granted if _matches(rule, f"{key_mount}/data/{key_rest}")]
+
+
+def test_the_release_defines_the_rotate_role_with_its_one_policy() -> None:
+    """The role a rotation token is minted against is defined by every release's
+    `apply-release.sh`, giving `connector-rotate` and nothing else, and the committed script is the
+    one the module renders. Delete this and the role can be left out of `TOKEN_ROLES`, so every
+    install refuses the mint and every rotating vendor's consent is lost on its first renewal."""
+    from brain.deployment.vault_setup import APPLY_SCRIPT, TOKEN_ROLES, render_apply
+    from brain.ops.connector_lease import ROTATE_POLICY, ROTATE_TOKEN_ROLE
+
+    assert (ROTATE_TOKEN_ROLE, ROTATE_POLICY) in {(role, policy) for role, policy, _ in TOKEN_ROLES}
+    assert (POLICIES / f"{ROTATE_POLICY}.hcl").is_file()
+    script = (REPO / APPLY_SCRIPT).read_text(encoding="utf-8")
+    assert script == render_apply()
+    assert f"write auth/token/roles/{ROTATE_TOKEN_ROLE} allowed_policies={ROTATE_POLICY} " in script

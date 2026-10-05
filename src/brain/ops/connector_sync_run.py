@@ -64,18 +64,34 @@ the attempt does; `authorization` refuses to build such a source's header from a
 token, so the key file itself is never sent. See `brain.connectors.google_token`, which argues the
 exchange once for both Google sources.
 
+**A source consented to by OAuth renews its access here, by the read that needs it (M11.8.6).**
+`KeyScheme.OAUTH_REFRESH` is presented as a bearer token that `renewed_access` obtains from the
+vendor's token endpoint with the application's client secret (the key the lease holds), the client
+id (a setting of the connection) and the refresh token the person's consent bought, which is read
+under a lease of its own from its own slot (`brain.ops.connectable.refresh_reference`) and given
+back at once. A vendor that refuses the renewal has withdrawn the consent, and the read fails with
+`brain.connectors.oauth.CONSENT_WITHDRAWN`, down at once; a 429 or a 5xx is the endpoint's ill
+health and is retried on the backoff like any source's. A vendor that rotates its refresh tokens
+answers with a new one, and it is written back through `RotatesRefreshTokens` by a token that can
+write that slot and read nothing (`brain.ops.connector_lease.
+A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`). One function, `presented`, for
+the scheduled read, the test and the live read, and one, `presenting_detail`, for what each says
+when it failed, so the three cannot come to disagree about either.
+
 Rejected: reading through `brain.tools.fetch.Fetcher`, which the connectors' own `connector_fetch`
 closures take. It carries no headers and no status, so a key cannot be sent through it and a 429
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
 Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.6.1, M11.7.3, M11.7.1
+Task ids: M11.8.6
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import http.client
 import json
 import ssl
@@ -83,13 +99,14 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, runtime_checkable
 from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.declaration import (
+    ConsentedReading,
     DatabaseLogin,
     KeyScheme,
     ListedUnder,
@@ -106,11 +123,24 @@ from brain.connectors.google_token import (
     exchange,
     token_from,
 )
+from brain.connectors.oauth import (
+    A_CONSENTED_SOURCE_IS_SENT_ONLY_ITS_ACCESS,
+    CONSENT_WITHDRAWN,
+    ConsentNotHeldError,
+    ConsentWithdrawnError,
+    OAuthConsent,
+    RotatedTokenNotKeptError,
+    refresh_exchange,
+    tokens_from,
+)
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import MAX_RESPONSE_BYTES, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
-from brain.ops.connectable import READING_ROLE
+from brain.ops.connectable import READING_ROLE, refresh_reference
 from brain.ops.connector_lease import (
+    ROTATE_LEASE_TTL,
+    ROTATE_POLICY,
+    ROTATE_TOKEN_ROLE,
     RUN_LEASE_TTL,
     RUN_TOKEN_ROLE,
     LeaseOutcome,
@@ -123,10 +153,12 @@ from brain.ops.connector_sync import (
     NO_KEY,
     NO_KEY_FILE_EXCHANGE,
     NO_VAULT,
+    NOT_CONSENTED,
     OWN_SHARE_SPENT,
     READ_BUT_CUT_SHORT,
     READ_TO_THE_END,
     READINGS,
+    ROTATED_REFRESH_NOT_KEPT,
     SHAPE_DISAGREED,
     SOURCE_ALLOWANCE_REFUSED,
     VAULT_REFUSED,
@@ -150,7 +182,7 @@ from brain.ops.connector_sync_store import (
     read_states,
     record_upsert,
 )
-from brain.ops.credentials import KEY_FIELD, USER_FIELD
+from brain.ops.credentials import KEY_FIELD, OAUTH_REFRESH_DIRECTORY, USER_FIELD
 from brain.ops.lark_base_index import HttpsTokenIssuer, index_if_due
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import LimiterState, check
@@ -213,6 +245,10 @@ def authorization(scheme: KeyScheme, key: str | AccessToken) -> str:
         case KeyScheme.GOOGLE_SERVICE_ACCOUNT:
             if not isinstance(key, AccessToken):
                 raise ConnectorContractError(A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER)
+            return f"Bearer {key.value}"
+        case KeyScheme.OAUTH_REFRESH:
+            if not isinstance(key, AccessToken):
+                raise ConnectorContractError(A_CONSENTED_SOURCE_IS_SENT_ONLY_ITS_ACCESS)
             return f"Bearer {key.value}"
 
 
@@ -382,6 +418,100 @@ def mint_token(
     )
 
 
+@dataclass(frozen=True)
+class Consenting:
+    """What renewing a consented source's access needs besides its client secret (M11.8.6).
+
+    The source's name, which names the slot its refresh token is kept in; the connection's settings,
+    one of which is the client id; and the keys the attempt leases from, which lease the refresh
+    token and, where they can, write a rotated one back. Built by whoever holds the attempt's lease.
+    """
+
+    connector: str
+    settings: Mapping[str, str]
+    keys: ConnectorKeys
+
+
+@runtime_checkable
+class RotatesRefreshTokens(Protocol):
+    """Keys that can write a refresh token a vendor rotated back to its slot (M11.8.6).
+
+    Optional, and asked with `isinstance`, so a `ConnectorKeys` that only leases owes nothing; a
+    rotation it cannot keep fails the read with `ROTATED_REFRESH_NOT_KEPT`.
+    """
+
+    def rotate(self, ref: SecretRef, token: str, *, now: datetime) -> None:
+        """Write `token` over the refresh token at `ref`, or raise `SecretsUnavailableError`."""
+        ...
+
+
+def renewed_access(
+    consent: OAuthConsent,
+    client_secret: str,
+    *,
+    consenting: Consenting,
+    poster: SourcePoster,
+    resolver: Resolver,
+    now: datetime,
+) -> AccessToken:
+    """An access token for one read, renewed from the kept refresh token, rotation kept.
+
+    The refresh token is leased from its own slot and the lease given back before anything is
+    posted, so no run token outlives the read of one value. Raises `ConsentNotHeldError` when there
+    is no refresh token, `ConsentWithdrawnError` when the vendor refused the renewal,
+    `TokenNotIssuedError` for the endpoint's ill health, `RotatedTokenNotKeptError` when a rotated
+    token could not be written back, `SecretsUnavailableError` when the vault would not lease, and
+    `UnsafeAddressError` when the token endpoint resolved inside this network. See
+    `brain.connectors.oauth.ACCESS_IS_RENEWED_BY_THE_READ_THAT_NEEDS_IT`.
+    """
+    ref = refresh_reference(consenting.connector)
+    lease = consenting.keys.lease(ref, now=now)
+    try:
+        refresh = lease.key()
+    except ConnectorKeyAbsentError:
+        raise ConsentNotHeldError from None
+    finally:
+        lease.close(now)
+    try:
+        asked = refresh_exchange(
+            consent,
+            client_id=consenting.settings.get(consent.client_id_setting, ""),
+            client_secret=client_secret,
+            refresh_token=refresh,
+        )
+    except ConnectorContractError:
+        # A refresh token or a secret this cannot send is one no vendor would renew with.
+        raise ConsentWithdrawnError from None
+    checked = assert_fetchable(asked.url, resolver)
+    answer = poster.post(
+        checked.url,
+        address=checked.address,
+        headers=dict(asked.headers),
+        body=asked.body,
+        max_bytes=MAX_TOKEN_ANSWER_BYTES,
+    )
+    try:
+        tokens = tokens_from(
+            status=answer.status,
+            body=answer.body,
+            timed_out=answer.timed_out,
+            connection_failed=answer.connection_failed,
+        )
+    except TokenNotIssuedError as refused:
+        if refused.call is CallOutcome.REJECTED:
+            raise ConsentWithdrawnError from None
+        raise
+    if tokens.refresh is not None and tokens.refresh != refresh:
+        keys = consenting.keys
+        if not isinstance(keys, RotatesRefreshTokens):
+            raise RotatedTokenNotKeptError
+        try:
+            keys.rotate(ref, tokens.refresh, now=now)
+        except SecretsUnavailableError:
+            raise RotatedTokenNotKeptError from None
+    return tokens.access
+
+
 def presented(
     reading: SourceReading,
     key: str,
@@ -389,13 +519,17 @@ def presented(
     poster: SourcePoster | None,
     resolver: Resolver,
     now: datetime,
+    consenting: Consenting | None = None,
 ) -> str | AccessToken:
-    """What this reading's calls present: the key as it is, or the token its key file buys.
+    """What this reading's calls present: the key as it is, or the token its key file or its
+    consent buys.
 
     Raises `TokenNotIssuedError` when a token was needed and not issued, and when this process was
-    given no way to post for one; `UnsafeAddressError` when Google's address resolved inside this
-    network. A reading naming the Google scheme and no scope is refused before anything is sent.
-    See `brain.connectors.declaration.A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR`.
+    given no way to post for one; `UnsafeAddressError` when the token endpoint resolved inside this
+    network; `SecretsUnavailableError` when a consented source's refresh token could not be leased.
+    A reading naming the Google scheme and no scope, or the OAuth scheme and no consent, is refused
+    before anything is sent. See `brain.connectors.declaration.
+    A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR` and `renewed_access`.
     """
     match reading.key_scheme():
         case KeyScheme.BEARER | KeyScheme.BASIC_KEY_AS_USER | KeyScheme.NONE:
@@ -408,6 +542,37 @@ def presented(
             return mint_token(
                 key, reading.token_scopes(), poster=poster, resolver=resolver, now=now
             )
+        case KeyScheme.OAUTH_REFRESH:
+            if not isinstance(reading, ConsentedReading):
+                raise TokenNotIssuedError(CallOutcome.REJECTED)
+            if poster is None or consenting is None:
+                raise TokenNotIssuedError(CallOutcome.UNAVAILABLE)
+            return renewed_access(
+                reading.consent(),
+                key,
+                consenting=consenting,
+                poster=poster,
+                resolver=resolver,
+                now=now,
+            )
+
+
+def presenting_detail(refused: TokenNotIssuedError, *, poster: SourcePoster | None) -> str:
+    """The sentence a read whose credential could not be presented leaves, by kind only.
+
+    One function for the scheduled read and the test, so a refused consent says
+    `CONSENT_WITHDRAWN` on both. A process given no way to post says so before anything else,
+    because no answer was asked for.
+    """
+    if poster is None:
+        return NO_KEY_FILE_EXCHANGE
+    if isinstance(refused, ConsentWithdrawnError):
+        return CONSENT_WITHDRAWN
+    if isinstance(refused, ConsentNotHeldError):
+        return NOT_CONSENTED
+    if isinstance(refused, RotatedTokenNotKeptError):
+        return ROTATED_REFRESH_NOT_KEPT
+    return failure_detail(refused.call, timed_out=refused.timed_out)
 
 
 # ------------------------------------------------------------------------ the key
@@ -600,6 +765,59 @@ class WorkerConnectorKeys:
             key=SealedSecret(value),
             user=named.strip() if isinstance(named, str) else "",
         )
+
+    def rotate(self, ref: SecretRef, token: str, *, now: datetime) -> None:
+        """Write a rotated refresh token back under a token minted for that write alone (M11.8.6).
+
+        Refuses a reference outside the refresh token directory before the vault is asked, mints a
+        child against `ROTATE_TOKEN_ROLE`, refuses one the vault widened, patches the one field and
+        revokes the token whatever the patch came to. See
+        `brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`.
+        """
+        del now  # the rotation token's end is its TTL or its revocation, never this instant
+        directory = f"{CONNECTOR_KEY_PREFIX}{OAUTH_REFRESH_DIRECTORY}/"
+        if not ref.path.startswith(directory) or ref.path == directory:
+            msg = f"a rotated refresh token is written under {directory} and nowhere else"
+            raise SecretsUnavailableError(msg)
+        if self._vault is None:
+            raise SecretsUnavailableError(NO_VAULT)
+        minted = self._vault.mint_role_token(
+            ROTATE_TOKEN_ROLE,
+            ttl=ROTATE_LEASE_TTL,
+            meta={"connector": ref.path.removeprefix(directory)},
+        )
+        writer = self._vault.holding(minted)
+        try:
+            verdict = judge_minted(
+                renewable=minted.renewable,
+                policies=minted.policies,
+                lease_seconds=minted.lease_seconds,
+                asked=ROTATE_LEASE_TTL,
+                policy=ROTATE_POLICY,
+            )
+            if verdict:
+                raise VaultRefusedError(verdict, status=http.client.FORBIDDEN)
+            if not isinstance(writer, PatchesSlots):
+                msg = "this vault client cannot patch a slot, so a rotated token cannot be kept"
+                raise SecretsUnavailableError(msg)
+            writer.patch_static_kv(ref.path, {KEY_FIELD: token})
+        finally:
+            # Not confirmed taken back, it lives until its TTL of five minutes and no longer.
+            with contextlib.suppress(SecretsUnavailableError):
+                writer.revoke_self()
+
+
+@runtime_checkable
+class PatchesSlots(Protocol):
+    """A vault client presenting a rotation token: patch one slot, and revoke the token."""
+
+    def patch_static_kv(self, path: str, fields: Mapping[str, str]) -> None:
+        """Merge the fields into the slot, or raise a `SecretsUnavailableError`."""
+        ...
+
+    def revoke_self(self) -> None:
+        """Revoke the token presented, or raise a `SecretsUnavailableError`."""
+        ...
 
 
 def worker_connector_keys(address: str, token: str) -> WorkerConnectorKeys:
@@ -862,6 +1080,7 @@ async def attempt(
             clock=clock,
             sleep=sleep,
             poster=poster,
+            consenting=Consenting(plan.connector, live.connection.settings, keys),
         )
     finally:
         ended = lease.close(clock())
@@ -880,6 +1099,7 @@ async def _read_under(
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
     poster: SourcePoster | None,
+    consenting: Consenting | None = None,
 ) -> Attempt:
     """Read one connection to the end, or as far as it can be read, and say what that came to."""
     manifest, reading = plan.manifest, plan.reading
@@ -926,16 +1146,21 @@ async def _read_under(
             sleep=sleep,
         )
     try:
-        shown = presented(reading, key, poster=poster, resolver=resolver, now=clock())
+        shown = presented(
+            reading,
+            key,
+            poster=poster,
+            resolver=resolver,
+            now=clock(),
+            consenting=consenting,
+        )
     except UnsafeAddressError:
         return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
     except TokenNotIssuedError as refused:
-        detail = (
-            NO_KEY_FILE_EXCHANGE
-            if poster is None
-            else failure_detail(refused.call, timed_out=refused.timed_out)
-        )
+        detail = presenting_detail(refused, poster=poster)
         return finish(SyncOutcome.FAILED, detail, call=refused.call)
+    except SecretsUnavailableError as unavailable:
+        return finish(SyncOutcome.FAILED, key_detail(unavailable))
     headers = call_headers(reading, live.connection.settings, shown)
     limiter = LimiterState()
     # The ids kept in this run, by entity, for an entity listed under each of them (M11.7.3).

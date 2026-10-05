@@ -54,7 +54,7 @@ Rejected: a `ConnectorRegistry` built from these at start. The registry is a run
 somebody installed; this is the product's list of what could be, and a registry holding every
 connectable source would read on the screen as every source connected.
 
-Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7
+Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7, M11.8.6
 """
 
 from __future__ import annotations
@@ -75,9 +75,10 @@ from brain.connectors.declaration import (
     shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
+from brain.connectors.oauth import OAuthConsent
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
-from brain.ops.credentials import connector_key_slot
+from brain.ops.credentials import connector_key_slot, connector_oauth_slot
 from brain.ops.limits import connector_ceiling
 from brain.ops.secrets import SecretRef, VaultRole
 
@@ -145,6 +146,8 @@ class Connectable:
     credential_shape: CredentialShape = CredentialShape.KEY
     #: The writes it can be allowed to make, each with a key of its own (M11.7.3).
     writes: tuple[WriteGrant, ...] = ()
+    #: How a person consents to it at its vendor, when it authorises by OAuth (M11.8.6).
+    oauth: OAuthConsent | None = None
 
 
 @dataclass(frozen=True)
@@ -232,6 +235,7 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
             guide=one.guide,
             credential_shape=one.console.credential_shape,
             writes=one.writes,
+            oauth=one.oauth,
         )
         for name, one in declarations.items()
         if one.console is not None
@@ -265,6 +269,12 @@ def connectable(name: str) -> Connectable:
 def key_reference(name: str) -> SecretRef:
     """Where a connected source's key is kept, and the role that will read it."""
     return SecretRef(path=connector_key_slot(name).path, role=READING_ROLE)
+
+
+def refresh_reference(name: str) -> SecretRef:
+    """Where the refresh token a person's consent to a source bought is kept, read by the worker's
+    role like the source's key (M11.8.6). See `brain.ops.credentials.connector_oauth_slot`."""
+    return SecretRef(path=connector_oauth_slot(name).path, role=READING_ROLE)
 
 
 def blank_sentence(setting: Setting) -> str:

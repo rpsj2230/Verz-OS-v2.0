@@ -109,7 +109,12 @@ is a write through this same function. See `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_
 relay's holds its password under `password`, so `keep_fields` writes named fields, judging each
 one as `keep` judges a key, and `keep` is `keep_fields` with the one field start-up reads.
 
-Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50, M11.7.7, M11.7.3
+**A refresh token a person's consent bought is kept in a slot of its own (M11.8.6)**, at
+`connector_keys/oauth_refresh/<source>`, one path segment deeper than every key, so the one vault
+role that writes a rotated token back can be granted that directory and nothing a key is kept in.
+See `connector_oauth_slot` and `brain.ops.connector_lease`.
+
+Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50, M11.7.7, M11.7.3, M11.8.6
 """
 
 from __future__ import annotations
@@ -386,6 +391,28 @@ def connector_write_slot(connector: str, grant: str) -> ConnectorKeySlot:
         description=(
             f"The key {connector} issued for {grant}, sent only with a change a person approved."
         ),
+        connector=connector,
+    )
+
+
+#: The directory a consented source's refresh token is kept under, inside the connector key engine.
+OAUTH_REFRESH_DIRECTORY: Final = "oauth_refresh"
+
+
+def connector_oauth_slot(connector: str) -> ConnectorKeySlot:
+    """Where the refresh token a person's consent to a source bought is kept (M11.8.6).
+
+    `connector_keys/oauth_refresh/<source>`: beside the source's key rather than in it, and one
+    segment deeper than every key, so the policy line that lets a rotated token be written back
+    (`connector_keys/data/oauth_refresh/+`) names no key at all. Refuses a name that is not one
+    path segment, for `connector_key_slot`'s reason.
+    """
+    if not _CONNECTOR_NAME_RE.fullmatch(connector):
+        msg = f"{connector!r} is not a source name a refresh token slot can be built from"
+        raise ValueError(msg)
+    return ConnectorKeySlot(
+        path=f"{CONNECTOR_KEY_PREFIX}{OAUTH_REFRESH_DIRECTORY}/{connector}",
+        description=f"The refresh token a person's consent to {connector} bought.",
         connector=connector,
     )
 
