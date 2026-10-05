@@ -27,9 +27,15 @@ a connector declares waits for a person before the worker reads it on a schedule
 (`connector_sync.plan_for`), and a question does not get round that by asking: a digest that
 disagrees is a read refused, with a constant sentence in the operator's log.
 
-**A record's figures are read by the report its source declares (M11.7.1).** Google Analytics'
-traffic for a property is not the property read again: `declaration.LiveReport` names the calls a
-report is, the address rule checks each, and they are sent at once on pinned connections,
+**A record listed under another is named by both ids when it is read back (M11.7.3).** A
+Cloudflare DNS record's index id is its zone's and its own, and the lookup lays both into the path
+from it; the record read back is named the same way, so `brain.ops.live_records` matches it to its
+index row.
+
+**A record's figures are read by the report its source declares (M11.7.1, M11.7.2).** Google
+Analytics' traffic for a property is not the property read again: `declaration.LiveReport` names the
+calls a report is (one POST for Analytics; several for Search Console, POSTs and a GET), the
+address rule checks each, and they are sent at once on pinned connections,
 `SourcePoster` for a call with a body. When every call answered, the connector's own
 interpretation turns the bodies into one record carrying the record's id, which the lane lays over
 the index row as it lays a live record. A read may carry one range beside the id (`RANGE_FILTER`),
@@ -52,7 +58,7 @@ a `brain.connectors.declaration.ViewReading` is read here by one bounded read na
 record's id, as the user the slot keeps beside the password, and the lease is given back in the
 same `finally` as a REST source's.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.7.1, M11.6.3, M11.6.4
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
 """
 
 from __future__ import annotations
@@ -61,6 +67,7 @@ import asyncio
 import json
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any, Final
@@ -71,12 +78,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import (
+    ChecksLiveFacts,
     ConnectorDeclaration,
     DatabaseLogin,
     LiveLookup,
     PageReply,
     ReportCall,
+    RoutedReading,
     ViewReading,
+    listed_under,
     shipped,
 )
 from brain.connectors.google_token import TokenNotIssuedError
@@ -91,7 +101,8 @@ from brain.connectors.live_read import (
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
-from brain.core.envelope import IdentityMode
+from brain.connectors.transports import SourceRecord
+from brain.core.envelope import IdentityMode, TypedResult
 from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection, StoredConnections
 from brain.ops.connector_sync_run import (
@@ -103,7 +114,9 @@ from brain.ops.connector_sync_run import (
     SourceCaller,
     SourcePoster,
     WorkerConnectorKeys,
-    authorization,
+    borrowed,
+    call_headers,
+    page_operation,
     presented,
 )
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
@@ -228,7 +241,7 @@ class ConnectedSources:
             return _refused(connection.connector, NOT_CONNECTABLE)
         if manifest_digest(manifest) != connection.digest:
             return _refused(connection.connector, DECLARATION_CHANGED)
-        lease = self._keys.lease(manifest.credential.ref, now=self._clock())
+        lease = borrowed(self._keys, reading, manifest.credential.ref, now=self._clock())
         try:
             try:
                 key = lease.key()
@@ -253,30 +266,42 @@ class ConnectedSources:
                 if self._poster is None:
                     return _refused(connection.connector, NO_POSTER)
                 return LiveReply(outcome=refused.call)
-            headers = {
-                **reading.call_headers(connection.settings),
-                "Accept": "application/json",
-                "Authorization": authorization(reading.key_scheme(), shown),
-            }
+            # A source that takes no key is sent no `Authorization` at all (M11.7.4).
+            headers = call_headers(reading, connection.settings, shown)
             if report is not None and request.entity in report.entities():
                 return self._read_report(
                     connection, declared, request.entity, ids[0], headers, window
                 )
             if live is None:
                 return _refused(connection.connector, NOT_ONE_RECORD)
+            entity, fetched_at = request.entity, self._clock().isoformat()
+            if isinstance(reading, RoutedReading):
+                said_so = reading.unpublished(
+                    entity, ids[0], settings=connection.settings, fetched_at=fetched_at
+                )
+                if said_so is not None:
+                    # No server publishes it: it is told as that, with no call made.
+                    return LiveReply(
+                        outcome=CallOutcome.OK, rows=self._with_facts(live, entity, said_so)
+                    )
             try:
+                # A record listed under another is named by both ids, and what is read back is
+                # named the same way. See `brain.connectors.declaration.A_RECORD_LISTED_UNDER_...`.
+                under = listed_under(reading, request.entity)
+                parent_id = None if under is None else under.split(ids[0])[0]
                 # The lookup's own one-record call where it names one, otherwise the reading's
-                # list narrowed to the record. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
-                own = live.operation(
-                    request.entity, settings=connection.settings, resolver=self._resolver
+                # page narrowed to the record. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+                own = live.operation(entity, settings=connection.settings, resolver=self._resolver)
+                arguments = dict(live.arguments_for(entity, ids[0]))
+                if own is None and not isinstance(reading, RoutedReading):
+                    arguments = {**reading.first_page(entity), **arguments}
+                operation = own or page_operation(
+                    reading,
+                    entity,
+                    arguments,
+                    settings=connection.settings,
+                    resolver=self._resolver,
                 )
-                operation = own or reading.operation(
-                    request.entity, settings=connection.settings, resolver=self._resolver
-                )
-                arguments = {
-                    **({} if own is not None else reading.first_page(request.entity)),
-                    **live.arguments_for(request.entity, ids[0]),
-                }
                 checked = operation.prepare(arguments, resolver=self._resolver)
             except Exception:
                 # Broad, and the type is not kept: a refusal can quote the id it refused.
@@ -284,14 +309,17 @@ class ConnectedSources:
             answer = self._caller.get(
                 checked.url, address=checked.address, headers=headers, max_bytes=MAX_RESPONSE_BYTES
             )
-            return self._answered(
-                connection,
-                declared,
-                answer,
-                lambda status, body, at: reading.interpret(
-                    operation, status=status, body=body, fetched_at=at
-                ),
-            )
+
+            def interpreted(status: int, body: Any, at: str) -> PageReply:
+                reply = reading.interpret(operation, status=status, body=body, fetched_at=at)
+                if reply.rows is None or under is None or parent_id is None:
+                    return reply
+                return replace(reply, rows=under.named(reply.rows, parent_id))
+
+            replied = self._answered(connection, declared, answer, interpreted)
+            if replied.rows is None:
+                return replied
+            return replace(replied, rows=self._with_facts(live, entity, replied.rows))
         finally:
             lease.close(self._clock())
 
@@ -328,7 +356,10 @@ class ConnectedSources:
         except Exception:
             # Broad, and the type is not kept, for `read_one`'s reason.
             return _refused(connection.connector, ADDRESS_OR_SHAPE)
-        return LiveReply(outcome=page.call, rows=page.rows)
+        if page.rows is None:
+            return LiveReply(outcome=page.call)
+        # The facts a lookup reads besides the record, where it reads any, as for a REST source.
+        return LiveReply(outcome=page.call, rows=self._with_facts(live, request.entity, page.rows))
 
     def _read_report(
         self,
@@ -433,6 +464,27 @@ class ConnectedSources:
         except Exception:
             return _refused(connection.connector, ADDRESS_OR_SHAPE)
         return LiveReply(outcome=reply.call, rows=reply.rows)
+
+    def _with_facts(
+        self, live: LiveLookup, entity: str, rows: TypedResult[SourceRecord]
+    ) -> TypedResult[SourceRecord]:
+        """The rows with the facts a lookup reads besides its source's record, where it reads any.
+
+        See `brain.connectors.declaration.ChecksLiveFacts`. Each fact is a value read for this
+        question, laid over its row and kept nowhere.
+        """
+        if not isinstance(live, ChecksLiveFacts):
+            return rows
+        records = tuple(
+            SourceRecord.model_validate(
+                {
+                    **one.model_dump(),
+                    **live.facts(entity, one.id, caller=self._caller, resolver=self._resolver),
+                }
+            )
+            for one in rows.records
+        )
+        return rows.model_copy(update={"records": records})
 
 
 def _refused(connector: str, why: str) -> LiveReply:

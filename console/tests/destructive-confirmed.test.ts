@@ -39,6 +39,11 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
+    "Adding a work email binds an address to a person who has none. It retires the staff list's " +
+    "person for that address only when they have never signed in and hold nothing but what the sync " +
+    "wrote, which the sync writes again; anything else is written only from the page's confirmation, " +
+    "which tests/people-access-pages.test.tsx and tests/unit/test_work_email.py hold.",
   "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)":
     "Previewing a run through an agent for the person on the page writes nothing: it is the agent " +
     "Profile's own preview route, which asks the gate and keeps no row.",

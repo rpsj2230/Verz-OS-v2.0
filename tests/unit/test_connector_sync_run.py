@@ -1132,9 +1132,9 @@ def test_hubspots_reading_would_follow_every_page_it_is_told_of_once_its_ceiling
         {"results": [], "paging": {"next": {"after": "c3"}}},
         {"results": []},
     ]
-    asked = [dict(reading.first_page("client"))]
+    asked = [dict(reading.first_page(hubspot.ENTITY_CLIENT))]
     for page in pages:
-        following = reading.next_page("client", asked[-1], page, 0)
+        following = reading.next_page(hubspot.ENTITY_CLIENT, asked[-1], page, 0)
         if following is None:
             break
         asked.append(dict(following))

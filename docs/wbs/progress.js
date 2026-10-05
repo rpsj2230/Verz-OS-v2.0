@@ -79,6 +79,11 @@ const PROGRESS = {
     why: "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
     updated: "2026-09-30",
   },
+  "M1.10.4": {
+    status: "READY FOR TESTING",
+    why: "built (M1/add-work-email): Add work email on a hand-made person's page binds their address and joins the staff list's person for it; proved on the install with M1.10.5",
+    updated: "2026-09-30",
+  },
   "M1.8.3": {
     status: "READY FOR TESTING",
     why: "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",

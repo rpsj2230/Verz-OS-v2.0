@@ -27,6 +27,8 @@ from typing import Any
 import pytest
 
 from brain.connectors import (
+    cloudflare,
+    domains,
     freshdesk,
     google_analytics,
     google_drive,
@@ -34,6 +36,7 @@ from brain.connectors import (
     laravel,
     lark_base,
     lark_wiki,
+    search_console,
     throttle,
     write_verification,
     xero,
@@ -66,6 +69,7 @@ from brain.ops.idempotency import (
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
 from tests.fixtures.cassettes.google_analytics import PROPERTY
+from tests.fixtures.cassettes.search_console import SITE
 
 #: Every shipped connector's read-back, as the declarations state it.
 READ_BACKS = read_backs()
@@ -105,9 +109,15 @@ def xero_answer(
 
 
 def hubspot_answer(
-    status: int | None, body: Any = None, *, entity: str = hubspot.ENTITY_CLIENT, **overrides: Any
+    status: int | None,
+    body: Any = None,
+    *,
+    entity: str = hubspot.ENTITY_CLIENT,
+    one_record: bool = False,
+    **overrides: Any,
 ) -> Verification:
-    operation = hubspot.operation_for(entity, resolver=Resolver())
+    build = hubspot.one_record_operation if one_record else hubspot.operation_for
+    operation = build(entity, resolver=Resolver())
     reply = hubspot.interpret(
         operation, status=status, body=body, fetched_at=FETCHED_AT, **overrides
     )
@@ -133,6 +143,16 @@ def freshdesk_answer(reply: freshdesk.Reply) -> Verification:
         freshdesk.Endpoint.SEARCH_TICKETS, domain="helpdesk.example.invalid"
     )
     return verdict(reading("freshdesk")(operation, reply))
+
+
+def cloudflare_answer(recorded: Cassette) -> Verification:
+    """A Cloudflare reply read as the listing its request was made against."""
+    operation = (
+        cloudflare.dns_records_operation()
+        if "/dns_records" in recorded.request
+        else cloudflare.zones_operation()
+    )
+    return verdict(reading("cloudflare")(operation, status=recorded.status, body=recorded.body))
 
 
 def lark_table() -> LarkBaseTable:
@@ -230,6 +250,8 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("hubspot", "HUBSPOT-200-companies-page"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-contacts"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-deals"): Verification.FOUND,
+    # One deal read by its id, through its own operation: it is there.
+    ("hubspot", "HUBSPOT-200-deal"): Verification.FOUND,
     ("hubspot", "HUBSPOT-200-associations"): Verification.FOUND,
     ("hubspot", "HUBSPOT-429"): Verification.INCONCLUSIVE,
     ("hubspot", "HUBSPOT-401"): Verification.INCONCLUSIVE,
@@ -259,6 +281,12 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_drive", "DRIVE-403-user-rate-limit"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-429"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-401"): Verification.INCONCLUSIVE,
+    # A registry's record of one domain is complete when answered; a refusal or an outage
+    # proves nothing, and a registry's 404 is not read as an absence by the read-back.
+    ("domains", "DOMAINS-200-domain"): Verification.FOUND,
+    ("domains", "DOMAINS-404"): Verification.INCONCLUSIVE,
+    ("domains", "DOMAINS-429"): Verification.INCONCLUSIVE,
+    ("domains", "DOMAINS-503"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-200-property"): Verification.FOUND,
     # A report, a token and every refusal hold no property, and a property read never proves one
@@ -271,6 +299,17 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_analytics", "GA-403-property"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-429-report"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-500-report"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sites"): Verification.FOUND,
+    # A report's calls and every refusal hold no site list, and a list without the connected site
+    # never proves it gone: see `search_console.A_SITE_LIST_CANNOT_PROVE_ABSENCE`.
+    ("search_console", "SC-200-days"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-totals"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-queries"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-top-pages"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-200-sitemaps"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-403-site"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-429-query"): Verification.INCONCLUSIVE,
+    ("search_console", "SC-503-query"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
     ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
@@ -278,6 +317,18 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("laravel", "LARAVEL-1146"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-3024"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-2006"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-zones"): Verification.FOUND,
+    ("cloudflare", "CF-200-zones-full-page"): Verification.FOUND,
+    ("cloudflare", "CF-200-dns-records"): Verification.FOUND,
+    # An answered last page with no records is the one complete empty reading.
+    ("cloudflare", "CF-200-dns-records-empty"): Verification.ABSENT,
+    # One zone, one record and a GraphQL answer are not listings, so they prove nothing absent.
+    ("cloudflare", "CF-200-zone"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-dns-record"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-security-events"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-graphql-errors"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-429"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-403"): Verification.INCONCLUSIVE,
 }
 
 
@@ -300,7 +351,14 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             entity = xero.ENTITY_CONTACT if "/Contacts" in recorded.request else xero.ENTITY_INVOICE
             return xero_answer(recorded.status, recorded.body, entity=entity)
         case "hubspot":
-            return hubspot_answer(recorded.status, recorded.body, entity=hubspot_entity(recorded))
+            from tests.fixtures.cassettes.hubspot import ONE_RECORD
+
+            return hubspot_answer(
+                recorded.status,
+                recorded.body,
+                entity=hubspot_entity(recorded),
+                one_record=bool(ONE_RECORD.search(recorded.request)),
+            )
         case "laravel":
             if recorded.protocol is Protocol.HTTP:
                 return laravel_answer(laravel.ViewReply(app_status=recorded.status))
@@ -325,12 +383,24 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             )
             property_read = google_analytics.operation_for(PROPERTY)
             return verdict(reading("google_analytics")(property_read, answered))
+        case "search_console":
+            listed = search_console.Reply(
+                status=recorded.status, headers=recorded.headers, body=recorded.body
+            )
+            site_list = search_console.listing_for(SITE)
+            return verdict(reading("search_console")(site_list, listed))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
+        case "cloudflare":
+            return cloudflare_answer(recorded)
         case "lark_base":
             return lark_base_answer(lark_reply(recorded.cid))
         case "lark_wiki":
             return lark_wiki_answer(wiki_reply(recorded.cid))
+        case "domains":
+            said = domains.Reply(status=recorded.status, body=recorded.body)
+            operation = domains.operation_at("https://rdap.example")
+            return verdict(reading("domains")(operation, said))
     msg = f"no way to drive {connector!r} from a recording is written in this test"
     raise AssertionError(msg)
 

@@ -164,5 +164,13 @@ class SuspensionRow(TimestampMixin, Base):
             "required_capability",
             postgresql_where=text("state = 'pending'"),
         ),
+        # `0172`: what `gate.takeover_instants` reads on every leash decision that carries a
+        # standing, which is the few rows a person took over rather than every one ever raised.
+        Index(
+            "ix_suspension_taken_over",
+            "agent_id",
+            "decided_at",
+            postgresql_where=text(f"verdict = '{ApprovalVerdict.TAKEN_OVER.value}'"),
+        ),
         {"schema": "gate"},
     )

@@ -73,13 +73,16 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
     "xero": {"tenant_id": "11111111-2222-3333-4444-555555555555"},
     "hubspot": {"portal_id": "12345678"},
     "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
+    "cloudflare": {"account_id": "0123456789abcdef0123456789abcdef", "department": "operations"},
     "google_drive": {
         "folder": "1AbCdEfGhIjKlMnOpQrStUv",
         "domain": "example.com",
         "department": "operations",
         "steward": "u_steward",
     },
+    "domains": {"domains": "example.com, example.org", "department": "operations"},
     "google_analytics": {"property": "123456789", "department": "marketing"},
+    "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
     "laravel": {
         "schema": "portal",
         "host": "db.example.invalid",
@@ -367,10 +370,11 @@ A_STEWARD = NamedSteward(
 def test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrator_cannot() -> None:
     """The bootstrap Part 6.1 found missing, end to end through the People screen's real grant
     route. The wizard's appointment names a steward; HubSpot is connected; the steward, signed in
-    with the reach the resolver returns for them, grants `read:client.name` over one department to
-    a second person and is answered 201; the first administrator, with theirs, asks for the same
-    grant and is refused; the second person then resolves it over that department and nowhere
-    else; and the administrator still holds no content plane and no read of a client.
+    with the reach the resolver returns for them, grants `read:hubspot_company.name` over one
+    department to a second person and is answered 201; the first administrator, with theirs,
+    asks for the same grant and is refused; the second person then resolves it over that
+    department and nowhere else; and the administrator still holds no content plane and no read
+    of a HubSpot company.
 
     Delete this and every half can pass alone while nobody on an install can be granted a read of
     the company's data, which is where every install was until 2026-09-17. **Skips without a
@@ -398,7 +402,7 @@ def test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrato
                     f"{API_PREFIX}/govern/grants",
                     json={
                         "principal_id": SECOND,
-                        "capability": "read:client.name",
+                        "capability": "read:hubspot_company.name",
                         "scope_slug": FINANCE,
                         "reason": "reading client names for the finance close",
                     },
@@ -419,13 +423,13 @@ def test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrato
 
     assert (appointed, connected) == ("appointed", "connected")
     assert answered_to == {ADMIN: 404, STEWARD: 201}
-    granted = second.scope_for(Capability(value="read:client.name"), INSIDE)
+    granted = second.scope_for(Capability(value="read:hubspot_company.name"), INSIDE)
     assert granted is not None
     assert granted.matches({"department": FINANCE})
     assert not granted.matches({"department": "sales"})
     assert actor == STEWARD
     assert administrator.scope_for(plane_capability(Plane.CONTENT), INSIDE) is None
-    assert administrator.scope_for(entity_capability("client"), INSIDE) is None
+    assert administrator.scope_for(entity_capability("hubspot_company"), INSIDE) is None
 
 
 def test_the_administrator_is_the_steward_only_when_said_and_nobody_else_can_say_it() -> None:

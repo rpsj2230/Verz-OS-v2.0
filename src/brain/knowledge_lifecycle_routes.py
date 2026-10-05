@@ -60,7 +60,7 @@ live rows, so the update moving one to `archived` is refused under it exactly as
 before `0120` wrote `know.supersede_item`; it needs its own write past the policy, which is a
 migration, and this change has no migration number.
 
-Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M27.15.40
+Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M27.15.40, M10.2.7
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ from urllib.parse import unquote
 from uuid import uuid4
 
 import structlog
-from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy.exc import DBAPIError
@@ -82,6 +82,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, Page, RequestProblemView
 from brain.api_routes import Asked, Asking
+from brain.approval_cards import send_raised
 from brain.attribution import of_request, trace_of_request
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
@@ -1049,13 +1050,19 @@ async def hand_over(
     responses=LIFECYCLE_RESPONSES,
 )
 async def propose(
-    request: Request, asked: Asked, body: PromotionAsked, item_id: Annotated[str, _ID]
+    request: Request,
+    asked: Asked,
+    body: PromotionAsked,
+    item_id: Annotated[str, _ID],
+    background: BackgroundTasks,
 ) -> PromotionRaisedView | JSONResponse:
     """Asked for company-wide, as a card on the Approvals screen (M7.4.4).
 
     Its steward asks through `brain.member_library.request_promotion`, and an administrator of
     where it sits through the same proposal at the same tier, which is ARC-A-121's Department
-    Admin proposing. Nobody else is offered it.
+    Admin proposing. Nobody else is offered it. Once it is kept, each person who may approve it and
+    is bound in Lark with an address kept is sent its card, after the answer has gone
+    (`brain.approval_cards.send_raised`, M10.2.7).
     """
     authority = await authority_of(request, asked)
 
@@ -1116,6 +1123,7 @@ async def propose(
 
     await in_transaction(request, asked, authority, write, attributed=True)
     log.info("knowledge.promotion_asked", principal=authority.principal_id, item=item_id)
+    background.add_task(send_raised, request, suspension)
     return PromotionRaisedView(suspension_id=suspension.id, expires_at=suspension.expires_at)
 
 

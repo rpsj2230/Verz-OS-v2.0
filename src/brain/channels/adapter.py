@@ -720,6 +720,12 @@ class CardWire(Protocol):
         """The address a reply is sent to so that it replaces the card in this message."""
         ...
 
+    def person_address(self, identity: str) -> str:
+        """The address of this identity's own conversation with the bot, for a card sent to a
+        person who did not ask (needs-rupash 118). The identity goes in a request's body, never
+        in its URL."""
+        ...
+
     def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:
         """What the vendor is answered with for a press: `told` shown to the presser at once, and
         the card replaced by `closed` when it is not empty, at no cost against any ceiling."""

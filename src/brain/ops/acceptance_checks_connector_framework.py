@@ -52,6 +52,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import re
 import secrets
 import threading
 import time
@@ -180,6 +181,10 @@ FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
             "department": RESERVED_DEPARTMENTS[0],
         },
         "hubspot": lambda: {"portal_id": str(10**8 + secrets.randbelow(9 * 10**8))},
+        "cloudflare": lambda: {
+            "account_id": secrets.token_hex(16),
+            "department": RESERVED_DEPARTMENTS[0],
+        },
         SOURCE: _settings,
         "google_drive": lambda: {
             "folder": f"acceptance{secrets.token_hex(8)}",
@@ -187,8 +192,17 @@ FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
             "department": RESERVED_DEPARTMENTS[0],
             "steward": f"acceptance-steward-{secrets.token_hex(4)}",
         },
+        "domains": lambda: {
+            "domains": f"acceptance-{secrets.token_hex(4)}.example, "
+            f"acceptance-{secrets.token_hex(4)}.example",
+            "department": RESERVED_DEPARTMENTS[0],
+        },
         "google_analytics": lambda: {
             "property": str(10**8 + secrets.randbelow(9 * 10**8)),
+            "department": RESERVED_DEPARTMENTS[0],
+        },
+        "search_console": lambda: {
+            "site": f"sc-domain:acceptance-{secrets.token_hex(4)}.example",
             "department": RESERVED_DEPARTMENTS[0],
         },
         "laravel": lambda: {
@@ -382,6 +396,13 @@ def _form(name: str) -> dict[str, str]:
     return fill()
 
 
+def _typed(selector: str, value: str) -> bool:
+    """Whether a scope's selector is what was typed into one setting: the setting itself, a name
+    inside it (a database's `schema.v_client`), or one item of a list it holds (a domain)."""
+    items = [one.strip().lower().rstrip(".") for one in re.split(r"[\s,;]+", value)]
+    return selector in (value, *items) or selector.startswith(f"{value}.")
+
+
 def _credential(name: str) -> str:
     """A credential made up for the check in the shape this source takes it (M11.7.7).
 
@@ -406,6 +427,8 @@ def _credential(name: str) -> str:
             return json.dumps(
                 {"user": f"acceptance_{secrets.token_hex(4)}", "password": secrets.token_hex(16)}
             )
+        case CredentialShape.NONE:
+            return ""
 
 
 @dataclass
@@ -730,8 +753,8 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 @check(
     leaves=("M11.2.3",),
     sentence=(
-        "Each source the console connects is connected to the one organisation, account, "
-        "helpdesk, folder or database typed and admits no other, and the connect route refuses a "
+        "Each source the console connects is connected to the organisation, account, helpdesk, "
+        "folder, database or domains typed and admits no other, and the connect route refuses a "
         "selector of *, **, all or everything for it in that source's own words before any "
         "manifest is built."
     ),
@@ -751,10 +774,7 @@ async def a_source_is_connected_to_one_named_thing_and_never_to_everything(h: Ha
         named = [
             one
             for one in kind.settings
-            if all(
-                selector in (settings[one.name],) or selector.startswith(f"{settings[one.name]}.")
-                for selector in scope.selectors
-            )
+            if all(_typed(selector, settings[one.name]) for selector in scope.selectors)
         ]
         if not scope.selectors or len(named) != 1:
             raise CheckFailedError(
