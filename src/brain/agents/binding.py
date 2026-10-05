@@ -31,10 +31,12 @@ no other source provides. Rejected: filtering the sources an answer reads by the
 after the reach is computed, which would be the second place deciding connector access that
 M13.8.1 forbids. See `AN_ENTITY_NAMES_ONE_SOURCE`.
 
-**One source is not bound by this, and it is named rather than hidden.** Lark Wiki's pages are
-read under the knowledge library's own read (`brain.ops.lark_wiki_live`), not under an entity of
-their own, so an entity-level ceiling cannot tell a wiki page from a company document. See
-`LARK_WIKI_IS_READ_UNDER_THE_LIBRARY_READ`.
+**A source whose read is not one of its own entities declares what it provides.** Lark Wiki's
+pages were read under the knowledge library's read alone, so an entity-level ceiling could not
+tell a wiki page from a company document and an agent holding the library read reached the wiki
+whether or not it named it. Since 2026-10-06 a page also needs `read:wiki_page`, which Lark Wiki
+declares it provides (`ConnectorDeclaration.provides`), so it is bound like every other source.
+See `A_WIKI_PAGE_HAS_A_READ_OF_ITS_OWN`.
 
 Task ids: M13.7.8, M13.8.1
 """
@@ -67,18 +69,19 @@ AN_ENTITY_NAMES_ONE_SOURCE: Final = (
     "source providing the same name."
 )
 
-#: The one source the binding cannot narrow, said where a reader of the rule will look.
-LARK_WIKI_IS_READ_UNDER_THE_LIBRARY_READ: Final = (
-    "Lark Wiki pages are read under the knowledge library's read rather than an entity of their "
-    "own, so an agent holding the library read reaches wiki pages whether or not it names Lark "
-    "Wiki. Giving wiki pages a read of their own, held by everybody who holds the library read "
-    "today, is what binds them, and it is separate work because it adds a grant to every holder."
+#: Why a wiki page needs a read beside the library's.
+A_WIKI_PAGE_HAS_A_READ_OF_ITS_OWN: Final = (
+    "A Lark Wiki page is told to a reader holding both the knowledge library's read and "
+    "read:wiki_page, each admitting the page, and Lark Wiki provides wiki_page. The library read "
+    "alone was the same capability as the company's own documents, so no agent's connector list "
+    "could withhold the wiki. Everybody who held the library read was given read:wiki_page in "
+    "the same release, so nobody's reach shrank."
 )
 
 
 def entities_of(declaration: ConnectorDeclaration) -> frozenset[str]:
-    """Every entity this source provides: its classified rows, its readings, its live reads and
-    the tools its console form's manifest declares.
+    """Every entity this source provides: its classified rows, what it declares it provides, its
+    readings, its live reads and the tools its console form's manifest declares.
 
     The manifest's tools are read from the form built with the declaration's own example settings,
     which name nobody, because a tool such as Freshdesk's contact read is declared there and in no
@@ -89,6 +92,7 @@ def entities_of(declaration: ConnectorDeclaration) -> frozenset[str]:
     from brain.ops.connectable import key_reference
 
     found = {one.entity for one in CONNECTOR_ROW_ENTITIES.get(declaration.name, ())}
+    found.update(declaration.provides)
     for part in (declaration.reading, declaration.live):
         if part is not None:
             found.update(part.entities())

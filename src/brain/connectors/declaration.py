@@ -1005,6 +1005,10 @@ class ConnectorDeclaration:
     #: known until an install connects it, so an agent's connector list can narrow them. See
     #: `brain.agents.binding.discovered_prefixes`.
     discovers: str = ""
+    #: Entities it provides that no reading, live lookup or manifest tool names, for a source read
+    #: by a module of its own, so an agent's connector list can narrow them. See
+    #: `brain.agents.binding.entities_of`.
+    provides: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
