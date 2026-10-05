@@ -17,7 +17,7 @@
  * that day, so it is the same day wherever the browser is, and a day that is not after today is
  * said before anything is sent, because the API would refuse it for the same reason.
  *
- * Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2
+ * Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M10.7.2
  */
 
 /** Where each read and write lives, under the API's versioned base. */
@@ -47,6 +47,11 @@ export function stewardPath(id: string): string {
 
 export function promotionPath(id: string): string {
   return `${one(id)}/promotion`;
+}
+
+/** Whether the document is public for the website widget, read and changed (M10.7.2). */
+export function publicPath(id: string): string {
+  return `${one(id)}/public`;
 }
 
 /** A newer version's address: the review date as an instant, and nothing about the file. */

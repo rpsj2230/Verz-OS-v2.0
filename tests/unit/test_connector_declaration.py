@@ -12,6 +12,7 @@ Task ids: M11.1.1, M11.1.6
 from __future__ import annotations
 
 import importlib
+import pkgutil
 import textwrap
 from dataclasses import replace
 from pathlib import Path
@@ -19,6 +20,7 @@ from types import ModuleType
 
 import pytest
 
+import brain.connectors
 from brain.connectors import hubspot, xero
 from brain.connectors.declaration import (
     A_READING_NEEDS_A_CONNECTION_TO_READ,
@@ -31,7 +33,14 @@ from brain.connectors.declaration import (
     read_backs,
     shipped,
 )
-from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
+from brain.connectors.write_verification import builds_a_manifest
+from brain.ops.connectable import (
+    CONNECTABLE,
+    DECLARED_FORMS,
+    NOT_FROM_THE_CONSOLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
+    reads,
+)
 from brain.ops.connector_recordings import RECORDINGS
 from brain.ops.connector_sync import READINGS
 
@@ -53,23 +62,26 @@ def a_package(root: Path, name: str, modules: dict[str, str]) -> ModuleType:
 
 
 def test_every_connector_that_ships_declares_itself_under_its_own_module_name() -> None:
-    """The seven connectors this release ships, each found by the `CONNECTOR` its module states.
-    The count is asserted so an empty discovery cannot pass, and each name is compared with the
-    module's own constant rather than with the key it was found under.
+    """Every connector this release ships, each found by the `CONNECTOR` its module states, and
+    the modules that build a manifest read off the package independently of `shipped`, so the two
+    reads of the package have to agree. Each name is compared with the module's own constant rather
+    than with the key it was found under for the two named, and Xero, HubSpot and Lark Wiki are
+    anchors so an empty discovery cannot pass.
+
+    Read off the package rather than typed since 2026-10-05: a typed list was a line every connector
+    PR edited, and two open at once conflicted in it.
 
     Delete this and a connector that stops declaring itself leaves the screen, the worker and the
     read-back table at once, with nothing saying so."""
     found = shipped()
-
-    assert set(found) == {
-        "freshdesk",
-        "google_drive",
-        "hubspot",
-        "laravel",
-        "lark_base",
-        "lark_wiki",
-        "xero",
+    builders = {
+        info.name
+        for info in pkgutil.iter_modules(brain.connectors.__path__)
+        if builds_a_manifest(importlib.import_module(f"brain.connectors.{info.name}"))
     }
+
+    assert set(found) == builders
+    assert {"xero", "hubspot", "lark_wiki"} <= set(found)
     assert found["xero"] is xero.CONNECTOR and found["xero"].name == xero.CONNECTOR_NAME
     assert found["hubspot"] is hubspot.CONNECTOR
     assert declaration_gaps() == ()
@@ -84,22 +96,65 @@ def test_every_registry_that_used_to_be_a_list_is_read_off_the_declarations() ->
     connector added after that is missing from whichever list nobody remembered."""
     declared = shipped()
 
-    assert set(CONNECTABLE) == {name for name, one in declared.items() if one.console is not None}
-    assert set(NOT_FROM_THE_CONSOLE) == {
-        name for name, one in declared.items() if one.console is None
-    }
+    assert set(DECLARED_FORMS) == {name for name, one in declared.items() if one.console}
+    assert set(CONNECTABLE) == {name for name in DECLARED_FORMS if reads(declared[name])}
+    assert set(NOT_FROM_THE_CONSOLE) == set(declared) - set(CONNECTABLE)
     assert {name: kind.label for name, kind in CONNECTABLE.items()} == {
         name: declared[name].label for name in CONNECTABLE
     }
+    # A source with no form says why in its own declaration's words; a form not offered yet says
+    # this install cannot read it (`brain.ops.connectable.THIS_INSTALL_CANNOT_READ_IT_YET`).
     assert {name: one.why for name, one in NOT_FROM_THE_CONSOLE.items()} == {
-        name: declared[name].not_from_the_console for name in NOT_FROM_THE_CONSOLE
+        name: declared[name].not_from_the_console or THIS_INSTALL_CANNOT_READ_IT_YET
+        for name in NOT_FROM_THE_CONSOLE
     }
     assert dict(READINGS) == {
         name: one.reading for name, one in declared.items() if one.reading is not None
     }
     assert dict(RECORDINGS) == {name: one.recorded for name, one in declared.items()}
     assert dict(read_backs()) == {name: one.read_back for name, one in declared.items()}
-    assert set(READINGS) == {"freshdesk", "hubspot", "xero"}
+    # The anchor: Xero is read on a schedule, and Lark's two, connected through Connect Lark, are
+    # not, so a discovery that found nothing, or everything, fails here.
+    assert "xero" in READINGS and not {"lark_base", "lark_wiki"} & set(READINGS)
+
+
+def test_every_declared_form_carries_the_example_a_test_and_a_check_connect_it_with() -> None:
+    """`A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS_OWN_FIXTURES`. Every form's example gives exactly the
+    settings the form asks for, in its order; what an acceptance check connects it with is made up
+    afresh on every call and takes its departments from the ones the check may write in; and the
+    edit a person would make changes the value. Xero and Laravel are anchors, so a discovery that
+    found no form fails.
+
+    Delete this and a form can be added with no example, so the unit tests connect it with nothing
+    and the acceptance checks raise on the owner's install, or an example's departments can name
+    one the check may not write grants in."""
+    departments = ("check_one", "check_two")
+    forms = {name: one.console for name, one in shipped().items() if one.console is not None}
+
+    assert {"xero", "laravel"} <= set(forms)
+    for name, form in forms.items():
+        example = form.example
+        assert example is not None, name
+        asked = [one.name for one in form.settings]
+        fresh = example.fresh(departments)
+        assert list(example.settings) == asked, name
+        assert list(fresh) == asked, name
+        assert fresh != example.fresh(departments), name
+        assert fresh.get("department", departments[0]) in departments, name
+        assert example.edited() != example.settings[example.edit], name
+
+
+def test_an_example_naming_other_settings_than_its_form_is_refused() -> None:
+    """A form's example is held to the form when it is declared. Delete this and an example can
+    give settings the form no longer asks for, and every test built from it connects the source
+    with a setting the console would never send."""
+    form = xero.CONNECTOR.console
+    assert form is not None and form.example is not None
+    wrong = replace(form.example, settings={"region": "x"}, edit="region")
+
+    with pytest.raises(DeclarationError, match="its example gives"):
+        replace(form, example=wrong)
+    assert replace(form, example=form.example).example == form.example
 
 
 # ------------------------------------------------------------------ discovery
@@ -230,7 +285,7 @@ def test_a_declaration_gives_a_console_form_or_a_reason_and_never_both_or_neithe
     with pytest.raises(DeclarationError, match="both or neither"):
         replace(declared, console=None, reading=None)
     explained = replace(
-        declared, console=None, reading=None, live=None, not_from_the_console="Not yet."
+        declared, console=None, reading=None, live=None, guide=(), not_from_the_console="Not yet."
     )
     assert explained.console is None and explained.not_from_the_console == "Not yet."
 

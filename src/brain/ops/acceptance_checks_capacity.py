@@ -1,6 +1,7 @@
-"""The install acceptance checks for capacity: budgets and windows as rows, refusals now, sizing.
+"""The install acceptance checks for capacity: budgets and windows as rows, refusals now, sizing,
+and the three workload classes sharing one budget in the install's cache.
 
-Three checks, split where the install's parts split. The first is the database's: a budget and a
+Four checks, split where the install's parts split. The first is the database's: a budget and a
 request window saved the way the Rate limits screen's route saves them, refused outside the
 product's bounds, recorded in the audit ledger against who saved them, read back by the reload
 every process runs, and deciding the queued upload's admission from the saved row rather than
@@ -8,7 +9,10 @@ the product's figure. The second is the cache's: a reserved person asked past th
 in the install's own cache, and the Rate limits screen's own reading of the live windows listing
 them as refused now for a reader who may see every window and for nobody narrower. The third is
 the Capacity screen's: what its route is sent about sizing at the busiest minute and the first
-limit reached at scale, held to the arithmetic it claims.
+limit reached at scale, held to the arithmetic it claims. The fourth is the capacity ledger's:
+the queued upload's batch request, a background one and the single upload's interactive one taking
+and queueing slots of one budget in the install's own cache, refused as capacity only past the
+whole of it, the shed plan naming the classes deferred, and every slot given back.
 
 **Nothing a check saves is held by the process running it.** The route holds what it saved at
 once, which is right for a person and wrong for a check: the worker or application running the
@@ -29,7 +33,19 @@ reading the live windows reads every window the cache holds and changes none, wh
 screen does when it is opened. See
 `brain.ops.acceptance.WHAT_THE_DATABASE_CANNOT_ROLL_BACK_IS_REMOVED_BY_NAME`.
 
+**The class check takes slots under a namespace only it holds.** `brain.ops.capacity_ledger` keys
+every slot by a namespace, and the check's is named for its run, so no real upload is ever counted
+against what it takes, queued behind it or refused by it, and its keys are registered with
+`h.removes`. Its budget is the install's document-job row with a limit of its own, for
+`CHECK_BUDGET`'s reason.
+
+**The first check also asks every global budget whether it binds (M22.1.1).** Each of the seven
+resources architecture section 25 names, and each source the console connects, is asked of the
+budgets the reload reads: a person's request is admitted inside its share and refused past it. See
+`EVERY_RESOURCE_IS_BUDGETED_AND_BINDS`.
+
 Task ids: M22.1.2, M22.4.1, M22.3.1, M22.3.2, M22.3.4
+Task ids: M22.1.3, M22.1.4, M22.1.5, M22.2.1, M22.2.3, M22.1.1
 """
 
 from __future__ import annotations
@@ -37,6 +53,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Sequence
 from datetime import datetime
 from functools import partial
 from typing import Any, Final, cast
@@ -47,6 +64,10 @@ from brain.core.scope import Scope
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_run import SET_UP_REACH, Harness
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 140
+
 A, B = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
@@ -56,6 +77,15 @@ A_CHECK_NEVER_CHANGES_WHAT_THE_PROCESS_HOLDS: Final = (
     "running it answer real requests at the check's figures until its next reload. So the check "
     "reads its uncommitted rows back through the reload's own reader and passes them to the "
     "functions that decide, and the process's held values are the same after the check as before."
+)
+
+#: Why every resource and every connectable source is asked of the install's own budgets.
+EVERY_RESOURCE_IS_BUDGETED_AND_BINDS: Final = (
+    "Architecture section 25 names seven things that get a global budget, and source calls are "
+    "budgeted per connector. A resource with no row is shed by admission rather than admitted, so "
+    "a missing row is a refusal on every request, and a row that does not bind is no budget. The "
+    "check asks each resource, and each source the console connects, of the budgets the reload "
+    "reads: a person is admitted inside the row's share and refused past it."
 )
 
 #: Said when the process running the check has no cache to ask.
@@ -71,6 +101,12 @@ CHANGES_LIMITS: Final = "admin:install_setting"
 
 #: The capability the Rate limits screen reads with.
 READS_LIMITS: Final = "read:rate_limit"
+
+#: The limit the class check gives its own copy of the document-job budget. Ten, so the three
+#: shares are five, eight and ten and every step between them can be seen; the install's own
+#: figure may be as low as one, where all three shares are the same slot and there is nothing
+#: between the classes to show.
+CHECK_BUDGET: Final = 10
 
 #: The window knob and the budget knob the first check saves.
 WINDOW_KNOB: Final = "person_per_minute"
@@ -101,12 +137,13 @@ async def _setting_entries(h: Harness, key: str) -> list[tuple[str, dict[str, An
 
 # ------------------------------------------------ 1. saved within bounds, audited, deciding
 @check(
-    leaves=("M22.1.2", "M22.4.1"),
+    leaves=("M22.1.2", "M22.4.1", "M22.1.1"),
     sentence=(
         "A person holding the Settings authority saves a request window and a document budget as "
-        "the Rate limits screen's route does: values outside the product's bounds are refused, "
-        "each save is in the audit ledger under their name, the reload every process runs reads "
-        "both back, and the queued upload's admission is decided by the saved budget."
+        "the Rate limits screen's route does: out-of-bounds values are refused, each save is "
+        "audited under their name, every process's reload reads both back, the queued upload is "
+        "admitted by the saved budget, and each of the seven global budgets and every connected "
+        "source's calls refuse past their row."
     ),
 )
 async def budgets_and_windows_are_rows_saved_within_bounds_and_audited(h: Harness) -> None:
@@ -219,8 +256,51 @@ async def budgets_and_windows_are_rows_saved_within_bounds_and_audited(h: Harnes
     ):
         raise CheckFailedError("the queued upload was admitted the same under both budgets")
 
+    # M22.1.1: every global budget, and every source the console connects, binds at its row.
+    _every_global_budget_binds(h, configured_budgets(saved))
+
     if dict(held()) != before:
         raise CheckFailedError("the check changed what the process running it holds")
+
+
+def _every_global_budget_binds(h: Harness, budgets: Sequence[Any]) -> None:
+    """Each of the seven resources has its global row, and a person's request is admitted up to
+    its share of that row and refused past it, as are a connected source's calls by its own row or
+    the connector-wide default. See `EVERY_RESOURCE_IS_BUDGETED_AND_BINDS`."""
+    from brain.core.lane import Lane
+    from brain.gate.context import TrafficClass
+    from brain.ops.admission import (
+        PER_CONNECTOR,
+        AdmissionRequest,
+        CapacityState,
+        Resource,
+        Verdict,
+        budget_for,
+        decide,
+    )
+    from brain.ops.connectable import CONNECTABLE
+
+    keys = [(one, "") for one in Resource if one not in PER_CONNECTOR] + [
+        (one, name) for one in sorted(PER_CONNECTOR) for name in sorted(CONNECTABLE)
+    ]
+    for resource, key in keys:
+        row = budget_for(budgets, (resource, key))
+        if row is None:
+            raise CheckFailedError("a resource the product names has no global budget")
+        asking = AdmissionRequest(
+            trace_id=h.trace_id,
+            lane=Lane.ANSWER,
+            traffic_class=TrafficClass.HUMAN_INTERACTIVE,
+            resource=resource,
+            key=key,
+        )
+        ceiling = row.ceiling_for(asking.workload_class)
+        under = CapacityState(used={asking.budget_key: ceiling - 1})
+        full = CapacityState(used={asking.budget_key: ceiling})
+        if decide(asking, budgets, under, now=h.now).verdict is not Verdict.ADMITTED:
+            raise CheckFailedError("a request inside its global budget was not admitted")
+        if decide(asking, budgets, full, now=h.now).verdict is not Verdict.SHED:
+            raise CheckFailedError("a request past its global budget was not refused")
 
 
 # ------------------------------------------------------ 2. the screen lists what refuses now
@@ -322,3 +402,116 @@ async def capacity_is_sized_for_the_busiest_minute_and_its_first_limit(h: Harnes
         raise CheckFailedError("two sizings share a name, so the screen cannot tell them apart")
     if "10x" not in first_limit or "100x" not in first_limit:
         raise CheckFailedError("the first limit at ten and a hundred times is not named")
+
+
+# ------------------------------------ 4. three classes share one budget in the install's cache
+@check(
+    leaves=("M22.1.3", "M22.1.4", "M22.1.5", "M22.2.1", "M22.2.3"),
+    sentence=(
+        "In the install's cache, under the check's own namespace: batch work is admitted to its "
+        "share of one document budget and then queued with a position and an expected wait, "
+        "background work is admitted further, work a person waits for fills the budget and is "
+        "then refused as capacity while batch still queues, the shed plan names the classes in "
+        "the order they give way, and every slot is given back."
+    ),
+)
+async def three_classes_share_one_budget_and_give_way_in_order(h: Harness) -> None:
+    import dataclasses
+    from datetime import UTC
+
+    from brain.cache import make_client
+    from brain.core.errors import Denied
+    from brain.core.lane import Lane
+    from brain.gate.context import TrafficClass
+    from brain.knowledge.uploads import ingestion_request, reading_request
+    from brain.ops import admission
+    from brain.ops.capacity_ledger import Hold, keys_for, make_ledger
+    from brain.ops.tuning import configured_budgets
+
+    if not h.settings.valkey_url:
+        raise CheckNotRunError(NO_CACHE_TO_ASK)
+    key = (admission.Resource.DOCUMENT_JOBS, "")
+    row = next(one for one in configured_budgets() if one.budget_key == key)
+    budget = dataclasses.replace(row, limit=CHECK_BUDGET)
+    budgets = (budget,)
+    client = make_client(h.settings.valkey_url)
+    ledger = make_ledger(client, namespace=f"acceptance.{h.run}")
+    # Only this run's own keys: see WHAT_THE_DATABASE_CANNOT_ROLL_BACK_IS_REMOVED_BY_NAME.
+    h.removes(partial(cast(Any, client).delete, *keys_for(ledger.namespace, (key,))))
+
+    batch = ingestion_request(h.trace_id)
+    person = reading_request(h.trace_id)
+    background = admission.AdmissionRequest(
+        trace_id=h.trace_id,
+        lane=Lane.TASK,
+        traffic_class=TrafficClass.AUTOMATION,
+        resource=admission.Resource.DOCUMENT_JOBS,
+    )
+    classes = (batch.workload_class, background.workload_class, person.workload_class)
+    if classes != (
+        admission.WorkloadClass.BATCH,
+        admission.WorkloadClass.BACKGROUND,
+        admission.WorkloadClass.INTERACTIVE,
+    ):
+        raise CheckFailedError("the doors' requests are not classed batch and interactive")
+    now = datetime.now(tz=UTC)
+    held: list[Hold] = []
+
+    async def take(asked: Any) -> Any:
+        taken = await asyncio.to_thread(ledger.admit, asked, budgets, now=now)
+        if taken.degraded:
+            raise CheckFailedError("the cache did not answer, so no slot was counted")
+        if taken.hold is not None:
+            held.append(taken.hold)
+        return taken.decision
+
+    shares = [budget.ceiling_for(one) for one in admission.SHED_ORDER]
+    if not shares[0] < shares[1] < shares[2] == budget.limit:
+        raise CheckFailedError("the three classes do not hold three shares of the one budget")
+    for _ in range(shares[0]):
+        if not (await take(batch)).admitted:
+            raise CheckFailedError("batch work was refused or queued inside its share")
+    first, second = await take(batch), await take(batch)
+    if first.verdict is not admission.Verdict.QUEUED or first.queue is None:
+        raise CheckFailedError("batch work past its share was not queued with a position")
+    if first.queue.position != 1 or first.queue.expected_wait_seconds <= 0:
+        raise CheckFailedError("batch work past its share was not queued with a position")
+    if second.queue is None or second.queue.position != 2:
+        raise CheckFailedError("a second batch request was not given the next place in line")
+    if second.queue.expected_wait_seconds < first.queue.expected_wait_seconds:
+        raise CheckFailedError("a second batch request was not given the next place in line")
+
+    for _ in range(shares[1] - shares[0]):
+        if not (await take(background)).admitted:
+            raise CheckFailedError("background work was not admitted past the batch share")
+    if (await take(background)).verdict is not admission.Verdict.QUEUED:
+        raise CheckFailedError("background work past its own share was not queued")
+
+    for _ in range(shares[2] - shares[1]):
+        if not (await take(person)).admitted:
+            raise CheckFailedError("work a person waits for was not admitted to the whole budget")
+    refused = await take(person)
+    if refused.verdict is not admission.Verdict.SHED or not refused.retry_after_seconds:
+        raise CheckFailedError("work a person waits for past the budget was not refused")
+    error = refused.as_error()
+    if not isinstance(error, admission.CapacityRefused) or isinstance(error, Denied):
+        raise CheckFailedError("work a person waits for past the budget was not refused")
+    if refused.log_record()["refusal_kind"] != admission.RefusalKind.CAPACITY.value:
+        raise CheckFailedError("work a person waits for past the budget was not refused")
+    if (await take(batch)).verdict is not admission.Verdict.QUEUED:
+        raise CheckFailedError("batch work was not still queued while a person was refused")
+
+    state = await asyncio.to_thread(ledger.counts, budgets, now=now)
+    named = [one.workload_class for one in admission.shed_plan(budgets, state)]
+    if named != list(admission.SHED_ORDER):
+        raise CheckFailedError("the shed plan did not name the classes deferred in order")
+
+    for one in held:
+        await asyncio.to_thread(ledger.give_back, one)
+    after = await asyncio.to_thread(ledger.counts, budgets, now=now)
+    if after.used_for(key) or after.queued_for(key):
+        raise CheckFailedError("a slot or a place given back is still counted")
+    again = await take(batch)
+    if not again.admitted:
+        raise CheckFailedError("a slot or a place given back is still counted")
+    await asyncio.to_thread(ledger.give_back, held[-1])

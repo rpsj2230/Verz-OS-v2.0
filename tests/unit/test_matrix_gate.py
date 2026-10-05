@@ -219,17 +219,20 @@ def test_a_change_that_keeps_the_ladder_answering_passes_through_the_real_lane()
     ladder, the must-refuse one is refused at a reach that reads nothing, the canaries are clean,
     and the change may be applied.
 
+    The edit's thirty seconds is above the answer budget, because the one step is the last step,
+    which is given the rest of the budget when its own figure is less (`brain.models.calls`).
+
     Delete this and a gate that holds everything passes every test below."""
     transport = Scripted(completion())
     verdict, log = run(
         RungEdit(
-            rung_id="main-0", attempts=1, timeout_seconds=20.0, max_concurrency=2, enabled=True
+            rung_id="main-0", attempts=1, timeout_seconds=30.0, max_concurrency=2, enabled=True
         ),
         transport,
     )
 
     assert verdict.may_apply is True
-    assert [one.timeout_seconds for one in transport.sent] == [20.0]
+    assert [one.timeout_seconds for one in transport.sent] == [30.0]
     assert [row["categories"] for row in log.rows.values()] == [
         ("document_passages", "golden_question")
     ]

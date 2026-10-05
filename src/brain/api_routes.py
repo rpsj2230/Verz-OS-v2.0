@@ -123,8 +123,16 @@ the lane is handed; `sources_at` itself stays the connector sources the cache an
 screens key on. See
 `THE_SCOPE_STATEMENT_NAMES_EVERY_PLANE_A_READER_REACHES`.
 
+**A question may be narrowed to kinds of knowledge (M7.6.1).** `Question.kinds` reaches the passage
+search through `model_lane_for`, and a narrowed question is neither looked up in nor kept by the
+answer cache, whose key has no kind. See `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
+
 Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.5, M8.2.2
-Task ids: M11.8.4
+**An answered question is kept in its asker's thread (M9.1.1).** `remembered` writes the exchange
+through `brain.chat.remember` after the lane answers, and the response names the thread in
+`THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
+
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4
 """
 
 from __future__ import annotations
@@ -142,7 +150,8 @@ import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
@@ -171,11 +180,17 @@ from brain.gate.badge_store import item_lookup_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
-from brain.gate.fast_lane import RowReader
+from brain.gate.fast_lane import FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
 from brain.gate.live_records import LiveRecords
-from brain.gate.model_lane import PASSAGE_POLICY, AgentRun, DocumentSearchTool, ModelLane
+from brain.gate.model_lane import (
+    PASSAGE_POLICY,
+    AgentRun,
+    DocumentSearchTool,
+    FollowUp,
+    ModelLane,
+)
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.gate.roster import (
     AgentRoster,
@@ -188,19 +203,30 @@ from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
+from brain.knowledge.connector_rows import connected_questions
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
+from brain.knowledge.kinds import KnowledgeKind
+from brain.knowledge.lark_base_rows import BaseLane, lane_for_base
+from brain.knowledge.row_store import SessionRowSource
 from brain.knowledge.rows import (
     DEFAULT_ROW_LIMIT,
     MAX_ROW_LIMIT,
     RowRequest,
     entity_capability,
+    is_row_tool,
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.memory.turn import Turn, recall_place, turn_of
+from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
+from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.lark_base_index import LarkBaseUse, switched_on
+from brain.ops.lark_base_live import BaseSchema
+from brain.ops.lark_wiki_live import WithheldPages, WithWiki
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -209,10 +235,16 @@ from brain.ops.limits import (
     retry_after_header,
     retry_hint,
 )
-from brain.ops.live_read_run import live_records_for
+from brain.ops.live_read_run import (
+    base_schema_for,
+    live_records_for,
+    slack_passages_for,
+    wiki_passages_for,
+)
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
+from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
@@ -710,7 +742,7 @@ async def records(
         raise Failed("no tool registry on this process")
 
     classification = classification_for(entity)
-    matching = [d for d in registry.definitions() if d.entity == entity]
+    matching = [d for d in registry.definitions() if d.entity == entity and is_row_tool(d)]
     # `row_scope_for` and never a check written here. It is the same function `read_rows`
     # consults, so "does this caller reach rows of this kind" has one answer; the difference
     # is only that a route has to turn None into a status while a reader turns it into FALSE.
@@ -820,6 +852,13 @@ AN_ANSWER_IS_COMPUTED_FOR_ONE_REACH_AND_CACHED_BY_NOBODY: Final = (
 )
 
 
+#: The response header naming the thread an answer was kept in.
+THREAD_HEADER: Final = "x-thread-id"
+
+#: The longest thread id a question may name: a UUID's text.
+THREAD_ID_CHARS: Final = 36
+
+
 class Question(BaseModel):
     """One question, bounded the way the cache bounds one.
 
@@ -837,6 +876,15 @@ class Question(BaseModel):
     #: The agent the person picked, by id, or None. Judged by `brain.gate.select.select_agent`
     #: against the agents this person may use, like any name; see `brain.gate.addressing`.
     agent: Annotated[str, StringConstraints(max_length=AGENT_ID_CHARS)] | None = None
+    #: The kinds of knowledge the person narrowed the question to, or none for every kind
+    #: (M7.6.1). Narrows what the passage search looks at and never whose reach it runs at. A
+    #: narrowed question is not looked up in or kept by the answer cache, whose key has no kind:
+    #: see `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
+    kinds: tuple[KnowledgeKind, ...] = Field(default=(), max_length=len(KnowledgeKind))
+    #: The thread this question continues, as the page holds its id, or None for a new one
+    #: (M9.1.1, M9.1.2). An id that is not this person's starts a new thread and says nothing
+    #: about the id: see `brain.chat.thread_store.AN_ID_THAT_IS_NOT_YOURS_STARTS_A_NEW_THREAD`.
+    thread: Annotated[str, StringConstraints(max_length=THREAD_ID_CHARS)] | None = None
 
 
 def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
@@ -854,7 +902,9 @@ def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
     """
     readers: dict[tuple[str, str], RowReader] = {}
     for definition in registry.definitions():
-        if not definition.entity or not definition.source:
+        if not is_row_tool(definition):
+            # A figure tool shares its row tool's source and entity and takes a range; see
+            # `brain.knowledge.rows.is_row_tool`.
             continue
         # A cast at a boundary the registry keeps deliberately loose. It holds handlers of
         # two shapes and will go on doing so: `brain.tools.run_skill.handler` is synchronous
@@ -975,6 +1025,59 @@ def source_field_policies(registry: ToolRegistry) -> dict[tuple[str, str], Field
     return policies
 
 
+async def connected_questions_of(state: Any) -> tuple[FastPathRule, ...]:
+    """The question shapes of the sources connected on this install now (M11.6.5, M11.6.2).
+
+    Read from the connection table on each question, as `classified_lane_of` reads the uploaded
+    tables, so a source connected on the Connectors screen answers from the next question and one
+    disconnected does not. None on a process with no database; a table that cannot be read is no
+    connected source rather than a failed question. See
+    `brain.knowledge.connector_rows.A_SOURCE_NOBODY_CONNECTED_ASKS_NOTHING`.
+    """
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return ()
+    try:
+        connected = await StoredConnections(sessions).connected()
+    except SQLAlchemyError as exc:
+        log.warning("connected sources unread for questions", error=type(exc).__name__)
+        return ()
+    return connected_questions(one.connector for one in connected)
+
+
+def base_schema_of(state: Any) -> BaseSchema:
+    """This process's one reading of a switched-on Lark Base's schema, kept on the state.
+
+    One per process, so the question's lane and its live read see the same tables and the schema
+    read for one question spares the next the listings (`brain.ops.lark_base_live.BaseSchema`).
+    """
+    found = getattr(state, "lark_base_schema", None)
+    if isinstance(found, BaseSchema):
+        return found
+    built = base_schema_for(getattr(state, "vault", None))
+    state.lark_base_schema = built
+    return built
+
+
+async def base_lane_for(use: LarkBaseUse | None, schema: BaseSchema, sessions: Any) -> BaseLane:
+    """The Base's tables as Ask reads them, or an empty lane with no Base or no database."""
+    if use is None or not isinstance(sessions, async_sessionmaker):
+        return BaseLane()
+    known = await schema.tables(use)
+    return lane_for_base([(one.table, one.named()) for one in known], SessionRowSource(sessions))
+
+
+async def base_lane_of(state: Any) -> BaseLane:
+    """The switched-on Lark Base's question shapes, readers and policies (M11.6.3, M11.6.5).
+
+    Read on each question, as `classified_lane_of` reads the uploaded tables: a Base switched on
+    in Connect Lark answers from the next question and one switched off contributes nothing.
+    """
+    return await base_lane_for(
+        switched_on(), base_schema_of(state), getattr(state, "db_sessions", None)
+    )
+
+
 def live_records_of(state: Any) -> LiveRecords | None:
     """What reads a connected source's records live for this process, or None where nothing can.
 
@@ -989,7 +1092,7 @@ def live_records_of(state: Any) -> LiveRecords | None:
     sessions = getattr(state, "db_sessions", None)
     if not isinstance(sessions, async_sessionmaker):
         return None
-    built = live_records_for(sessions, getattr(state, "vault", None))
+    built = live_records_for(sessions, getattr(state, "vault", None), schema=base_schema_of(state))
     state.live_records = built
     return built
 
@@ -1012,6 +1115,16 @@ def passage_search_for(registry: ToolRegistry) -> DocumentSearchTool | None:
     return DocumentSearchTool(handler=handler)
 
 
+def wiki_withheld_of(state: Any) -> WithheldPages:
+    """This process's count of Wiki pages questions skipped, on the state for the Lark screen."""
+    found = getattr(state, "wiki_withheld", None)
+    if isinstance(found, WithheldPages):
+        return found
+    built = WithheldPages()
+    state.wiki_withheld = built
+    return built
+
+
 def model_lane_of(state: Any) -> ModelLane | None:
     """The model step this process hands the answer lane, or None where it has nothing to hand.
 
@@ -1027,6 +1140,22 @@ def model_lane_of(state: Any) -> ModelLane | None:
     search = getattr(state, "passage_search", None)
     if not isinstance(models, ModelService) or search is None:
         return None
+    # And a Lark Wiki switched on in Connect Lark, its declared spaces read live (M11.6.4).
+    wiki = wiki_passages_for(
+        getattr(state, "db_sessions", None),
+        getattr(state, "vault", None),
+        withheld=wiki_withheld_of(state),
+    )
+    if wiki is not None:
+        search = WithWiki(search, wiki)
+    # And a connected Google Drive folder, its files' words read live (M11.6.7).
+    drive = drive_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if drive is not None:
+        search = WithDrive(search, drive)
+    # And a connected Slack workspace, the asker's own channels read live (M11.7.5).
+    slack = slack_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if slack is not None:
+        search = Alongside(search, slack)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 
@@ -1036,17 +1165,106 @@ DEFAULT_AGENT: Final = "brain"
 
 
 def model_lane_for(
-    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+    state: Any,
+    agent: AgentRecord | None,
+    registry: ToolRegistry,
+    kinds: tuple[KnowledgeKind, ...] = (),
+    follow_up: FollowUp | None = None,
 ) -> ModelLane | None:
-    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8).
+    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8),
+    searching only the kinds of knowledge the person narrowed the question to (M7.6.1), and
+    bringing what a continued thread brings (M9.2.3).
 
     The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
     read on this route yet, so it runs with none. See `brain.gate.roster`.
     """
     lane = model_lane_of(state)
-    if lane is None or agent is None:
+    if lane is None:
+        return None
+    if kinds:
+        # A question narrowed to kinds reads the library alone: a live source beside it holds no
+        # kind (`A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`).
+        lane = replace(lane, search=narrowed_to(lane.search, kinds))
+    if follow_up is not None:
+        lane = replace(lane, follow_up=follow_up)
+    if agent is None:
         return lane
     return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
+
+
+async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
+    """What a question continuing one of this person's threads brings, or None (M9.2.3).
+
+    None for a question naming no thread, one naming a thread that is not theirs or holds no
+    earlier question, and on a process with no database. The passages cited are the ones
+    `brain.chat.threads.continuation_context` still admits at this reach now, and the earlier
+    questions are the person's own words. A follow-up is never looked up in or kept by the answer
+    cache, whose key knows nothing of the thread; see
+    `A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH`.
+    """
+    from brain.chat.remember import threads_of
+    from brain.chat.threads import continuation_context
+    from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, recaller
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.tables.chat import MessageRole
+
+    store = threads_of(state)
+    if not ask.thread or store is None:
+        return None
+    thread = await store.thread(asking.principal.id, ask.thread)
+    if thread is None:
+        return None
+    earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
+    if not earlier:
+        return None
+    cited = tuple(
+        one.record_id
+        for one in continuation_context(thread, asking.reach, now=asking.now)
+        if one.entity == KNOWLEDGE_ENTITY
+    )
+    sessions = getattr(state, "db_sessions", None)
+    recall = None if sessions is None else recaller(SessionRowSource(sessions))
+    return FollowUp(earlier=earlier, cited=cited, recall=recall)
+
+
+#: Why a follow-up skips the answer cache both ways.
+A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH: Final = (
+    "A follow-up is answered from the thread's earlier questions and the passages it cited as "
+    "well as its own words, and the answer cache keys a question by its words alone. So a "
+    "follow-up served from the cache would be the answer to the words asked fresh, and one kept "
+    "there would answer the next person asking those words with another thread's context."
+)
+
+
+#: Why a question narrowed to kinds of knowledge reads the library alone.
+A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE: Final = (
+    "A question narrowed to kinds of knowledge (M7.6.1) is answered from those kinds in the "
+    "company's own library and nothing else: the Lark Wiki, a Google Drive folder and Slack read "
+    "live beside the library hold no kind, so they are left out of a narrowed question rather "
+    "than asked and shown. Each live source's wrapper names the search it was put beside as "
+    "`library`, and a narrowed question unwraps to it."
+)
+
+
+def narrowed_to(search: Any, kinds: tuple[KnowledgeKind, ...]) -> Any:
+    """The library's own search narrowed to `kinds`, unwrapped from every live source beside it.
+
+    See `A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`. A search that is not the library's and wraps
+    none is handed back as it is.
+    """
+    inner = search
+    while not isinstance(inner, DocumentSearchTool) and hasattr(inner, "library"):
+        inner = inner.library
+    return replace(inner, kinds=kinds) if isinstance(inner, DocumentSearchTool) else search
+
+
+#: Why a question narrowed to kinds of knowledge skips the answer cache both ways.
+A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE: Final = (
+    "The answer cache keys a question by its words, the reach and the policies, and not by the "
+    "kinds of knowledge it was narrowed to. A question narrowed to FAQs served from the cache "
+    "entry of the same words asked of everything would be answered from documents the person "
+    "excluded, and the reverse. So a narrowed question is neither looked up nor kept."
+)
 
 
 def formations_of(state: Any) -> StoredFormations | None:
@@ -1313,6 +1531,27 @@ def limit_store_of(state: Any) -> ValkeyWindowStore | None:
     return made
 
 
+def capacity_ledger_of(state: Any) -> CapacityLedger | None:
+    """The slots and queues this process counts work in, or None on a process with no cache.
+
+    `limit_store_of`'s construction: what a test installed, or the synchronous client
+    `brain.app.lifespan` opens for the answer cache, wrapped once and kept on the state so its
+    health counters span requests. The same Valkey under its own key prefix, so no second
+    connection is opened and no key collides. None where no cache is configured, which every
+    caller answers with what it counted itself: see
+    `brain.ops.capacity_ledger.AN_UNANSWERED_LEDGER_DECIDES_ON_WHAT_THE_CALLER_COUNTED`.
+    """
+    found = getattr(state, "capacity_ledger", None)
+    if isinstance(found, CapacityLedger):
+        return found
+    client = getattr(state, "answer_client", None)
+    if client is None:
+        return None
+    made = make_ledger(client)
+    state.capacity_ledger = made
+    return made
+
+
 async def windows_say(
     store: ValkeyWindowStore | None,
     *,
@@ -1423,7 +1662,16 @@ async def answered_for(
     # Uploaded classified tables (Classification screen) join the fast lane beside the
     # built-in rules, each column answered only to who may read it.
     tables = await classified_lane_of(request.app.state)
-    rules = (*getattr(request.app.state, "fast_path_rules", ()), *tables.rules)
+    # And every connected source's records, asked in the same words (M11.6.5, M11.6.2).
+    sourced = await connected_questions_of(request.app.state)
+    # And a Lark Base switched on in Connect Lark, table by table (M11.6.3).
+    base = await base_lane_of(request.app.state)
+    rules = (
+        *getattr(request.app.state, "fast_path_rules", ()),
+        *tables.rules,
+        *sourced,
+        *base.rules,
+    )
     sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
     # What a finished request owes, installed by `brain.app.lifespan` through
     # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold
@@ -1458,12 +1706,17 @@ async def answered_for(
     referral = await referred(request, asking.reach, ask.question)
 
     address = from_web(ask.question, ask.agent)
-    policies = {**field_policies(registry), **tables.policies}
+    policies = {**field_policies(registry), **tables.policies, **base.policies}
     # A referred question is looked up in no store and stored in none: the step is entered and
     # misses, as it does on a process with none, so the request row reads as any other's.
+    # What a question continuing one of this person's threads brings (M9.2.3), read at their
+    # own reach before an agent narrows it, because what they may still read is theirs to judge.
+    follow_up = (
+        None if referral is not None else await follow_up_for(request.app.state, asking, ask)
+    )
     caching = (
         None
-        if referral is not None
+        if referral is not None or ask.kinds or follow_up is not None
         else caching_of(
             request.app.state,
             policies,
@@ -1514,7 +1767,11 @@ async def answered_for(
         # Only a request the front half routed to a tier may reach a model, so no model is
         # called before ROUTE and PROJECT: a fast-lane question answers or abstains. The model
         # is shown what the asker said about themselves and may still recall (M16.6.3).
-        model = model_lane_for(request.app.state, agent, registry) if front.calls_a_model else None
+        model = (
+            model_lane_for(request.app.state, agent, registry, ask.kinds, follow_up)
+            if front.calls_a_model
+            else None
+        )
         if referral is None:
             model = with_hints(
                 request.app.state,
@@ -1529,7 +1786,7 @@ async def answered_for(
             origin=origin,
             recorders=recorders,
             rules=rules,
-            readers={**row_readers(registry), **tables.readers},
+            readers={**row_readers(registry), **tables.readers, **base.readers},
             entitlement=reach,
             policies=policies,
             reachable_sources=sources,
@@ -1549,7 +1806,21 @@ async def answered_for(
             # A connected source's record is read from it while the asker waits (M11.9.2), and
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
-            source_policies=source_field_policies(registry),
+            source_policies={**source_field_policies(registry), **base.source_policies},
+        )
+        # An abstention under a skill that declares a queue is handed to the person named for it,
+        # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
+        # here because `brain.escalation_routes` sends through `brain.channel_routes`, which
+        # imports this module.
+        from brain.escalation_routes import escalated
+
+        answered = await escalated(
+            request,
+            answered,
+            agent=agent,
+            asking=asking,
+            question=address.question,
+            trace_id=recorder.trace_id,
         )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own
@@ -1600,6 +1871,40 @@ async def answered_for(
     return answered
 
 
+async def remembered(
+    request: Request, asking: Answering, ask: Question, answered: Answered
+) -> str | None:
+    """Keep this exchange in the asker's thread, and say which thread (M9.1.1).
+
+    `brain.chat.remember.remember` over this process's store, with the policies the answer was
+    redacted under, which are what a stored answer's references are re-checked against. A
+    failure to keep it is logged and the answer still goes out: the person asked a question, and
+    losing its transcript is not a reason to withhold the answer.
+    """
+    from brain.chat.remember import remember, threads_of
+
+    registry = getattr(request.app.state, "tools", None)
+    try:
+        tables = await classified_lane_of(request.app.state)
+        policies = {
+            **(field_policies(registry) if isinstance(registry, ToolRegistry) else {}),
+            **tables.policies,
+        }
+        return await remember(
+            threads_of(request.app.state),
+            principal_id=asking.principal.id,
+            thread_id=ask.thread,
+            channel=asking.channel,
+            question=ask.question,
+            answered=answered,
+            policies=policies,
+            now=asking.now,
+        )
+    except Exception as exc:
+        log.warning("thread.not_kept", error=type(exc).__name__)
+        return None
+
+
 @router.post("/answer", responses=LIMITED_RESPONSES)
 async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Question) -> Response:
     """One question, answered as a stream of events, at this caller's reach.
@@ -1628,10 +1933,14 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     outcome = await answered_for(request, recorder, Answering.of(asked), ask)
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
+    thread = await remembered(request, Answering.of(asked), ask, outcome)
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
         headers={
+            # The thread the exchange was kept in, which the page continues by (M9.1.1). Empty
+            # when nothing was kept: a referred question, or a process with no database.
+            THREAD_HEADER: thread or "",
             # A permission requirement rather than a performance note. See the constant above.
             "Cache-Control": "no-store",
             # nginx buffers a proxied response by default, which turns a stream into one

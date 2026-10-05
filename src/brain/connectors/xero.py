@@ -139,12 +139,15 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
+import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.connectors.ask import AskEntity, AskRows, of_entity
 from brain.connectors.contract import (
     AccessMode,
     ConnectorContractError,
@@ -158,9 +161,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -185,6 +190,7 @@ from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.projection import ProjectionRefusedError
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import ConnectorLimit, LimitDecision
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Fetcher, Resolver
@@ -1508,15 +1514,96 @@ class XeroLiveLookup:
             raise XeroError(msg)
         return MappingProxyType({"where": f'{field}==Guid("{source_id}")'})
 
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        """None: Xero's list is narrowed to the one record by its where filter."""
+        del entity, settings, resolver
+        return None
+
 
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
     """The manifest a connection made on the Connectors screen declares."""
     return xero_manifest(XeroConnection(tenant_id=settings["tenant_id"]), ref=ref)
 
 
+#: Xero's developer portal, where a connection for this system is created. Xero's for every install.
+DEVELOPER_PORTAL_URL: Final = "https://developer.xero.com/app/manage"
+
+#: The screens an administrator connects Xero through, the form last. Every vendor name here is
+#: Xero's own, and each step also says it in words, so a moved button is found by its name.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="create",
+            title="Create a connection in Xero",
+            text=(
+                "Sign in to Xero's developer portal with an account that administers your "
+                "organisation, open My Apps and click New app (Xero may offer it as a custom "
+                "connection). Name it after this system and give it only two scopes, "
+                "accounting.transactions.read and accounting.contacts.read, and nothing ending in "
+                ".write: this system answers questions about invoices and never raises one."
+            ),
+            sketch=Sketch(
+                place="Xero developer portal",
+                heading="My Apps",
+                lines=(
+                    SketchLine(LineKind.ITEM, "accounting.transactions.read", mark=True),
+                    SketchLine(LineKind.ITEM, "accounting.contacts.read", mark=True),
+                    SketchLine(LineKind.TEXT, "No scope ending in .write"),
+                ),
+                button="New app",
+            ),
+            link=DEVELOPER_PORTAL_URL,
+            link_label="Open Xero's developer portal",
+        ),
+        GuideStep(
+            key="authorise",
+            title="Authorise it for one organisation and copy its key",
+            text=(
+                "Authorise the connection for the one Xero organisation this system should read, "
+                "then copy that organisation's id (Xero may call it the tenant id) and the key "
+                "Xero issues for the connection. A connection reads one organisation and no other."
+            ),
+            sketch=Sketch(
+                place="Xero developer portal",
+                heading="Connection details",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Organisation (tenant) id", "...", mark=True),
+                    SketchLine(LineKind.FIELD, "Key", "********", mark=True),
+                ),
+                button="Authorise",
+            ),
+            link=DEVELOPER_PORTAL_URL,
+            link_label="Open My Apps",
+        ),
+        GuideStep(
+            key="connect",
+            title="Paste them here and connect",
+            text=(
+                "Paste the organisation id and the key below and press Connect Xero. The key "
+                "goes to the vault and is never shown again. The worker then reads invoices and "
+                "contacts on its schedule and keeps only a small index; every amount is read live."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Xero",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Organisation id", "...", mark=True),
+                    SketchLine(LineKind.FIELD, "Key", "********", mark=True),
+                ),
+                button="Connect Xero",
+            ),
+            asks=("tenant_id", "credential"),
+        ),
+    )
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=CONNECTOR_NAME,
     label="Xero",
+    guide=GUIDE,
     console=ConsoleForm(
         settings=(
             Setting(
@@ -1540,6 +1627,12 @@ CONNECTOR: Final = ConnectorDeclaration(
             "one. Paste it as one piece. It is kept in the vault and never shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={"tenant_id": "11111111-2222-3333-4444-555555555555"},
+            fresh=lambda _: {"tenant_id": str(uuid.uuid4())},
+            edit="tenant_id",
+            edited=lambda: "22222222-3333-4444-5555-" + secrets.token_hex(6),
+        ),
     ),
     read_back=ReadBack(
         reading=classified_reading,
@@ -1555,4 +1648,30 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=XeroReading(),
     live=XeroLiveLookup(),
+    # Compiled from `XERO_FIELD_RULES`, so the capability a person needs to be told an invoice's
+    # amount is the one this connector's own policy names.
+    ask=AskRows(
+        scoped_by="tenant_id",
+        entities=(
+            AskEntity(
+                entity=ENTITY_INVOICE,
+                fields=of_entity(XERO_FIELD_RULES, ENTITY_INVOICE),
+                description=(
+                    "Look up Xero invoices by number: status, due date and the contact, and the "
+                    "amount due read live from Xero for a reader allowed it"
+                ),
+                named_by="invoice_number",
+            ),
+            AskEntity(
+                entity=ENTITY_CONTACT,
+                fields=of_entity(XERO_FIELD_RULES, ENTITY_CONTACT),
+                description="Look up Xero contacts by name: status and when they last changed",
+                named_by="name",
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("accounting.transactions.read", "accounting.contacts.read"),
+        refuse=("any .write scope",),
+    ),
 )

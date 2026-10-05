@@ -21,7 +21,7 @@ import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta, timezone
 from types import MappingProxyType, SimpleNamespace
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import pytest
 
@@ -52,6 +52,7 @@ from brain.ops.connector_sync import (
     ReadPass,
     ReadState,
     ReadStateError,
+    SourceReading,
     StoredValue,
     after_the_read,
     changed,
@@ -66,7 +67,8 @@ NOW: Final = datetime(2999, 1, 1, 9, 0, tzinfo=UTC)
 HOUR: Final = timedelta(hours=1)
 
 HELPDESK: Final = FreshdeskReading()
-LEDGER: Final = READINGS["xero"]
+#: Xero's reading, which is a `SourceReading`; `READINGS` also holds a database's views.
+LEDGER: Final = cast(SourceReading, READINGS["xero"])
 
 
 def the_second_page() -> Mapping[str, str]:

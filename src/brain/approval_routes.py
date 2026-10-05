@@ -54,15 +54,22 @@ entry is appended by `gate.suspension`'s trigger, in the transaction that moves 
 carries the verdict and the reason to the store, and `Decided.entry` is what the store says it
 kept. See `brain.gate.suspension_store.THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW_KEEPS_IT`.
 
-**Two verdicts are offered, and the body refuses a mismatched reason before the store is
-asked.** Approving and rejecting are what a phone needs. Taking over needs somewhere for the
-person to do the work and amending needs a replacement raised through the gate, and neither
-exists; see `TAKING_OVER_AND_AMENDING_WAIT_FOR_WHAT_THEY_HAND_OVER_TO`. A rejection names one
-of `RejectionReason`, because `brain.audit.record.redact_details` stores prose as the marker
-and the why would be lost. `AuditRecorder.approval` still holds the rule that a rejection needs
-a reason and an approval has none. `DecisionAsked` refuses the same two shapes one frame earlier,
-so the refusal is the same for every id rather than arriving only for one the caller may see,
-and a test holds the two to agree.
+**Three verdicts are offered, and the body refuses a mismatched reason before the store is
+asked.** Approving and rejecting are what a phone needs, and since 2026-09-30 an agent's prepared
+action can also be taken over: the approver will do by hand what the card shows, the action does
+not run, and the takeover counts against that agent's rung on that target (M8.3.5, through
+`brain.gate.takeover_store`). What is handed over is the artefact the card already carries, which
+is why this no longer waits; see `TAKING_OVER_HANDS_THE_APPROVER_THE_CARD_THEY_READ`. Amending
+still needs a replacement raised through the gate, and nothing raises one; see
+`AMENDING_WAITS_FOR_A_REPLACEMENT_RAISED_THROUGH_THE_GATE`. A rejection names one of
+`RejectionReason` and a takeover one of `TakeoverReason`, because
+`brain.audit.record.redact_details` stores prose as the marker and the why would be lost.
+`AuditRecorder.approval` still holds the rule that every verdict but an approval has a reason.
+`DecisionAsked` refuses the mismatched shapes one frame earlier, so the refusal is the same for
+every id rather than arriving only for one the caller may see, and a test holds the two to agree.
+A promotion is a person's own request and is never taken over: its card says so, and a takeover
+sent for one anyway is refused in words to an approver who may decide it, and as an invented id
+to anybody else. See `brain.console.approvals.ONLY_AN_AGENT_S_WORK_IS_TAKEN_OVER`.
 
 **An approval whose own effect is refused because what it names has moved is answered in a
 sentence and closed, not faulted.** A promotion is applied by `0120`'s trigger in the statement
@@ -96,20 +103,26 @@ is `pending_for`'s question and holding the action's own capability in the actio
 its answer; a second gate would be a second answer, and the two would disagree about the same
 approver on the same day.
 
+**A card says when approving it would send nothing (M11.7.3).** A connector's write is a grant of
+its own, off until the install gives its key (`brain.connectors.declaration.WriteGrant`), and an
+action it sends is held and approved as before on an install that has not given it. So the card
+carries the grant's own sentence in `unsent_because`, asked of the vault's metadata per grant
+(`unsent_of`), and the approver knows before pressing that nothing will change at the source.
+
 **The queue pages, searches, filters and orders through `brain.listing`**, over the cards the
 reach decided, soonest to lapse first unless asked otherwise. Approvals are never decided several
 at once: see `AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD`.
 
-Task ids: M35.3.1.2, M35.3.1.1, M27.8.6, M27.9.3, M7.4.4
+Task ids: M35.3.1.2, M35.3.1.1, M27.8.6, M27.9.3, M7.4.4, M33.6.1.3, M8.3.5, M11.7.3
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
-from typing import Annotated, Final, Protocol, Self, runtime_checkable
+from typing import Annotated, Final, Protocol, Self, cast, runtime_checkable
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -119,12 +132,16 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked
 from brain.audit.ledger import AuditChain, AuditEntry
 from brain.audit.record import ApprovalVerdict, AuditRecorder
+from brain.connectors.declaration import WriteGrant
 from brain.console.approvals import ApprovalError, Card, Decided, card, decide
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
+from brain.credential_routes import credentials_of
 from brain.gate.leash import SuspendedAction
 from brain.gate.suspension_store import NoLongerAppliesError
 from brain.listing import Column, ListAsked, Listing, Plan
+from brain.ops.connector_write_run import unsent_because
+from brain.ops.credentials import CredentialsUnavailableError, connector_write_slot
 from brain.people_names import names_for
 
 log = structlog.get_logger()
@@ -180,12 +197,27 @@ A_DECISION_IS_TAKEN_ON_A_HELD_ROW_AND_WRITTEN_ONCE: Final = (
     "invented id gets."
 )
 
-#: Why only approving and rejecting are offered.
-TAKING_OVER_AND_AMENDING_WAIT_FOR_WHAT_THEY_HAND_OVER_TO: Final = (
-    "Taking over says a person is doing the work instead, and there is nowhere yet to hand "
-    "the work to. Amending closes the original against the digest of a replacement raised "
-    "through the gate, and nothing raises one from an approver's edit. A verdict recorded "
-    "with nothing behind it would be a ledger entry describing something that did not happen."
+#: Why taking over is offered, and what it hands over.
+TAKING_OVER_HANDS_THE_APPROVER_THE_CARD_THEY_READ: Final = (
+    "Taking over says a person will do by hand what an agent prepared, so the action does not run "
+    "and the work is theirs. What they need to do it is what the agent would have done, which is "
+    "the artefact on the card they are reading, so nothing else has to exist first. It is "
+    "recorded as its own verdict rather than as a rejection, and it counts against that agent's "
+    "rung on that target, because an agent whose work keeps being done by hand is set too high."
+)
+
+#: Why amending is still not offered.
+AMENDING_WAITS_FOR_A_REPLACEMENT_RAISED_THROUGH_THE_GATE: Final = (
+    "Amending closes the original against the digest of a replacement raised through the gate, "
+    "and nothing raises one from an approver's edit. A verdict recorded with nothing behind it "
+    "would be a ledger entry describing something that did not happen."
+)
+
+#: What an approver who may decide a promotion is told when a takeover is sent for it. Said only
+#: to somebody the card is shown to, so it names nothing they could not already read on it.
+A_PERSON_S_OWN_REQUEST_IS_NOT_TAKEN_OVER: Final = (
+    "This request cannot be taken over: it is a person's own request rather than an agent's work, "
+    "so approve it or reject it. Nothing was decided."
 )
 
 
@@ -207,13 +239,15 @@ AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD: Final = (
 
 
 class DecidableVerdict(enum.StrEnum):
-    """The verdicts this route offers. Two of `ApprovalVerdict`'s four, under its own values.
+    """The verdicts this route offers. Three of `ApprovalVerdict`'s four, under its own values.
 
-    See `TAKING_OVER_AND_AMENDING_WAIT_FOR_WHAT_THEY_HAND_OVER_TO`.
+    See `TAKING_OVER_HANDS_THE_APPROVER_THE_CARD_THEY_READ` and
+    `AMENDING_WAITS_FOR_A_REPLACEMENT_RAISED_THROUGH_THE_GATE`.
     """
 
     APPROVED = "approved"
     REJECTED = "rejected"
+    TAKEN_OVER = "taken_over"
 
 
 class RejectionReason(enum.StrEnum):
@@ -229,6 +263,18 @@ class RejectionReason(enum.StrEnum):
     WRONG_TARGET = "wrong_target"
     NO_LONGER_NEEDED = "no_longer_needed"
     NEEDS_MORE_DETAIL = "needs_more_detail"
+
+
+class TakeoverReason(enum.StrEnum):
+    """Why an approver took an agent's prepared action over, as a code the ledger keeps.
+
+    Closed, for `RejectionReason`'s reason, and each says what whoever sets the agent's leash
+    should look at: whether the work needs a person at all, or the agent's version of it.
+    """
+
+    NEEDS_JUDGEMENT = "needs_judgement"
+    NEEDS_CHANGES = "needs_changes"
+    QUICKER_BY_HAND = "quicker_by_hand"
 
 
 # ------------------------------------------------------------------------ the source
@@ -301,6 +347,10 @@ class ApprovalCardView(BaseModel):
     runs_as: str
     raised_at: datetime
     expires_at: datetime
+    #: Whether taking the work over is offered. See `brain.console.approvals.Card.may_take_over`.
+    may_take_over: bool = False
+    #: Why approving this sends nothing, or empty. `Card.unsent_because` (M11.7.3).
+    unsent_because: str = ""
 
 
 class ApprovalQueue(Page[ApprovalCardView]):
@@ -327,23 +377,38 @@ class ApprovalPageView(ApprovalCardView):
     people: dict[str, str] = Field(default_factory=dict)
 
 
+#: The reasons each verdict may give. An approval gives none.
+REASONS_FOR: Final[dict[DecidableVerdict, type[enum.StrEnum] | None]] = {
+    DecidableVerdict.APPROVED: None,
+    DecidableVerdict.REJECTED: RejectionReason,
+    DecidableVerdict.TAKEN_OVER: TakeoverReason,
+}
+
+
 class DecisionAsked(BaseModel):
-    """What an approver decided: a verdict, and a reason when it is a rejection."""
+    """What an approver decided: a verdict, and a reason when it is not an approval.
+
+    A rejection's reason is one of `RejectionReason` and a takeover's one of `TakeoverReason`;
+    the two lists share no code, so the reason alone says which list it came from.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     verdict: DecidableVerdict
-    reason_code: RejectionReason | None = None
+    reason_code: RejectionReason | TakeoverReason | None = None
 
     @model_validator(mode="after")
-    def _a_rejection_says_why_and_an_approval_does_not(self) -> Self:
+    def _every_verdict_but_an_approval_says_why_from_its_own_list(self) -> Self:
         # The rule is `AuditRecorder.approval`'s. It is refused here as well so the refusal
         # arrives before the store is asked, identically for every id. See the module note.
-        if self.verdict is DecidableVerdict.REJECTED and self.reason_code is None:
-            msg = "a rejection names its reason"
-            raise ValueError(msg)
-        if self.verdict is DecidableVerdict.APPROVED and self.reason_code is not None:
-            msg = "an approval carries no reason"
+        reasons = REASONS_FOR[self.verdict]
+        if reasons is None:
+            if self.reason_code is not None:
+                msg = "an approval carries no reason"
+                raise ValueError(msg)
+            return self
+        if not isinstance(self.reason_code, reasons):
+            msg = f"a {self.verdict.value.replace('_', ' ')} decision names one of its own reasons"
             raise ValueError(msg)
         return self
 
@@ -368,17 +433,27 @@ def card_view(shown: Card) -> ApprovalCardView:
         runs_as=shown.runs_as,
         raised_at=shown.raised_at,
         expires_at=shown.expires_at,
+        may_take_over=shown.may_take_over,
+        unsent_because=shown.unsent_because,
     )
 
 
-def shown_card(suspension: SuspendedAction, reach: EntitlementSet, now: datetime) -> Card | None:
+def shown_card(
+    suspension: SuspendedAction,
+    reach: EntitlementSet,
+    now: datetime,
+    *,
+    unsent: Callable[[str], str] | None = None,
+) -> Card | None:
     """The card this reach is shown for one suspension, or None, including when none can be built.
 
     A suspension whose artefact is only whitespace is refused by `Card` itself, and that
-    refusal is absence here rather than a status. See the module note.
+    refusal is absence here rather than a status. See the module note. `unsent` says, for the
+    suspended action's tool, why approving it would send nothing (`unsent_of`).
     """
+    because = "" if unsent is None else unsent(suspension.action.tool.name)
     try:
-        return card(suspension, reach, now)
+        return card(suspension, reach, now, unsent_because=because)
     except ApprovalError:
         log.warning("suspension does not make a card", suspension=suspension.id)
         return None
@@ -405,11 +480,13 @@ def queue(
     reach: EntitlementSet,
     now: datetime,
     plan: Plan[ApprovalCardView] | None = None,
+    *,
+    unsent: Callable[[str], str] | None = None,
 ) -> ApprovalQueue:
     """One page of the cards this reach may decide, soonest to lapse first, cut after filtering."""
     cards = [
         card_view(shown)
-        for shown in (shown_card(one, reach, now) for one in suspensions)
+        for shown in (shown_card(one, reach, now, unsent=unsent) for one in suspensions)
         if shown is not None
     ]
     chosen = plan or QUEUE.plan(ListAsked(limit=MAX_QUEUE_CARDS), reader=reach.principal_id)
@@ -486,8 +563,15 @@ async def _decided_once(
     now: datetime,
 ) -> Decided | None:
     found = await held.lock(suspension_id)
-    if found is None or shown_card(found, reach, now) is None:
+    shown = None if found is None else shown_card(found, reach, now)
+    if found is None or shown is None:
         return None
+    if verdict is ApprovalVerdict.TAKEN_OVER and not shown.may_take_over:
+        # Said only here, after the card is known to be this approver's to decide.
+        raise Absent(
+            "a takeover was asked of a person's own request",
+            public_message=A_PERSON_S_OWN_REQUEST_IS_NOT_TAKEN_OVER,
+        )
     drafted = decide(found, reach, recorder, verdict=verdict, now=now, reason_code=reason_code)
     kept = await held.record(drafted.suspension, drafted.entry)
     if kept is None:
@@ -561,6 +645,40 @@ A_SOURCE_THAT_ONLY_READS_CANNOT_TAKE_A_DECISION: Final = (
 )
 
 
+def unsent_of(request: Request) -> Callable[[str], str]:
+    """Why approving an action of a tool would send nothing on this install, per tool (M11.7.3).
+
+    `app.state.unsent_because` when a test put one there. Otherwise a connector write whose grant's
+    key this install has not given is told the grant's own sentence, asked of the vault's metadata
+    once per grant and never for a tool no grant sends; a process with no vault holds no key, and a
+    vault that could not answer is said nothing about. See
+    `brain.ops.connector_write_run.unsent_because`.
+    """
+    found = getattr(request.app.state, "unsent_because", None)
+    if callable(found):
+        # `app.state` is untyped, and a test's lookup is the only thing put there under this name.
+        return cast("Callable[[str], str]", found)
+    credentials = credentials_of(request)
+    asked: dict[str, bool | None] = {}
+
+    def held(connector: str, grant: WriteGrant) -> bool | None:
+        slot = connector_write_slot(connector, grant.name)
+        if slot.path not in asked:
+            if not credentials.configured:
+                asked[slot.path] = False
+            else:
+                try:
+                    asked[slot.path] = credentials.held(slot).held
+                except CredentialsUnavailableError:
+                    asked[slot.path] = None
+        return asked[slot.path]
+
+    def unsent(tool: str) -> str:
+        return unsent_because(tool, held)
+
+    return unsent
+
+
 def _no_approval_here() -> Absent:
     """The one refusal this router makes about an approval.
 
@@ -578,7 +696,9 @@ async def approvals(request: Request, asked: Asked, listed: QueueQuery) -> Appro
     """One page of the approvals this caller may decide, at their admitted reach."""
     plan = QUEUE.plan(listed, reader=asked.caller.principal.id)
     source = _require_source(request, asked.reach, asked.now)
-    answered = queue(await source.open_suspensions(), asked.reach, asked.now, plan)
+    answered = queue(
+        await source.open_suspensions(), asked.reach, asked.now, plan, unsent=unsent_of(request)
+    )
     named = await names_for(request, {one.runs_as for one in answered.items})
     return answered.model_copy(update={"people": named})
 
@@ -590,7 +710,11 @@ async def approval(request: Request, suspension_id: str, asked: Asked) -> Approv
     """One approval's card, or the answer an approval that does not exist gets."""
     source = _require_source(request, asked.reach, asked.now)
     found = await source.suspension(suspension_id)
-    shown = shown_card(found, asked.reach, asked.now) if found is not None else None
+    shown = (
+        shown_card(found, asked.reach, asked.now, unsent=unsent_of(request))
+        if found is not None
+        else None
+    )
     if shown is None:
         log.info("approval not answerable", principal=asked.caller.principal.id)
         raise _no_approval_here()
@@ -606,7 +730,7 @@ async def approval(request: Request, suspension_id: str, asked: Asked) -> Approv
 async def decide_approval(
     request: Request, suspension_id: str, asked: Asked, decision: DecisionAsked
 ) -> ApprovalDecisionView:
-    """Approve or reject one approval, once, or the answer an approval that does not exist gets."""
+    """Approve, reject or take over one approval, once, or the answer an invented id gets."""
     store = _require_store(request)
     # The id the trace middleware vouched for or minted, read from the log context for the
     # reason `brain.api_routes.answer` gives: the header is what the caller proposed.

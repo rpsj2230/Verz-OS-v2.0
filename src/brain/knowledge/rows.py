@@ -40,6 +40,27 @@ returns nothing, rather than to a refusal: a refusal would say the column exists
 predicate has no such limit, because it is the system narrowing rather than the asker asking,
 and a departmental scope necessarily tests a column most callers cannot read.
 
+**A record carries the fields its reader's scopes test, even the ones that reader may not
+read.** The WHERE clause is not the only place a scope is judged: `brain.core.redaction`
+evaluates every field grant's scope again, against the record, and `Clause.matches` reads a
+missing field as not matching, which is the fail-closed choice and the right one for the last
+line of defence. So a record built from the projection alone, for a reader whose grants are
+scoped to their department, reached the redactor without `department`, and every field was
+withheld as out of scope. The statement had already returned only that department's rows; the
+answer was empty through every door that redacts, and only for readers scoped narrower than the
+whole company, which is why nothing company-wide ever saw it. `scope_carried` names those fields
+and the statement selects them beside the projection. **What they are for is the redactor's
+evaluation, and the redactor is also what removes them:** a carried field nothing classifies is
+withheld with no lock, and a classified one the reader does not hold is withheld exactly as it
+would be on any other record. A carried field is never a filter target either, because
+`_compile_filters` checks the asker's filters against the projection and not against this.
+
+Two cheaper fixes were rejected. *Classify `department` on the price list as open*: it mends one
+table and leaves every other entity, and every connector's, broken in the same way. *Let the
+redactor pass a scope whose field is absent*: that turns the fail-closed rule into a fail-open
+one for any record a producer forgot to project, which is the direction `Clause.matches` exists
+to refuse.
+
 **An empty predicate and a missing one are opposites.** A caller holding no grant for this
 entity compiles to `FALSE`, never to a statement with no WHERE clause. This is the mistake
 worth the constant below: a scope that goes missing does not fail closed, it fails to the
@@ -72,7 +93,7 @@ Scope: nothing here opens a connection. A `RowSource` is passed in, for the reas
 `brain.ops.limits` gives about holding no client: a query builder that owns a socket cannot
 be tested on the cases that matter, and the cases that matter here are the empty ones.
 
-Task ids: M15.1.1, M15.1.2, M15.1.3, M15.1.4
+Task ids: M15.1.1, M15.1.2, M15.1.3, M15.1.4, M11.4.9
 """
 
 from __future__ import annotations
@@ -118,6 +139,15 @@ THE_COLUMN_LIST_IS_DECIDED_BEFORE_THE_QUERY = (
     "it, so today's code is safe only until somebody adds a column tomorrow."
 )
 
+#: Why a record carries fields beyond the projection, and what keeps them from being shown.
+A_RECORD_CARRIES_WHAT_ITS_READERS_SCOPES_TEST = (
+    "The redactor evaluates every field grant's scope against the record, and a scope testing a "
+    "field the record does not carry matches nothing. A record is therefore built with the "
+    "fields its reader's scopes test, and the redactor withholds any of them the reader may not "
+    "read. Without them a department-scoped reader got an empty answer from every door that "
+    "redacts, although the statement had returned only that department's rows."
+)
+
 #: Why there is no SQL-shaped argument, and why that is checked rather than asked for.
 NO_ARGUMENT_CARRIES_SQL = (
     "A model that can pass a SQL fragment can pass OR 1=1, and the scope predicate is "
@@ -146,6 +176,20 @@ ROW_LAYOUT: Final = ColumnLayout(jsonb_column="fields", promoted=frozenset({"sou
 #: record that arrives without them is dropped whole as untagged.
 ENTITY_KEY: Final = "entity"
 ID_KEY: Final = "id"
+
+#: The label the row's `last_seen_at` is selected under: when the source last confirmed the row,
+#: which is how old an answer standing on it is (M11.4.9). An `@` no classified column can carry,
+#: and never a field: records are built from the projection's columns, so it cannot reach one.
+SEEN_KEY: Final = "@seen"
+
+#: Why an answer from the index is dated by the row and not by the question.
+AN_INDEX_ROW_IS_AS_OLD_AS_ITS_LAST_READ: Final = (
+    "A row in the index is what a source said when the worker last read it, not what it says "
+    "now. Dating the answer by the moment the question was asked called every projected row "
+    "current, so an index the worker had not refreshed for a week answered without a word about "
+    "its age. The answer is dated by the oldest row it stands on, so one old row is enough to "
+    "say so and a fresh one cannot hide it."
+)
 
 #: Distinct parameter prefixes for the three predicates that make up one WHERE clause.
 #: `CompiledPredicate.and_` refuses a collision rather than binding one scope's value into
@@ -281,6 +325,10 @@ class RowQuery:
     certainly_empty: bool
     #: Run before `statement`, in its transaction, in this order. See the class docstring.
     settings: tuple[TextClause, ...] = ()
+    #: Fields selected only so the redactor can evaluate the reader's scopes, never a filter
+    #: target and never shown unless the reader holds them. Sorted, as `columns` is. See
+    #: `A_RECORD_CARRIES_WHAT_ITS_READERS_SCOPES_TEST`.
+    carried: tuple[str, ...] = ()
 
 
 # ------------------------------------------------------ the projection (M15.1.2)
@@ -356,6 +404,32 @@ def compile_projection(
             continue
         admitted.add(rule.column)
     return tuple(sorted(close_over_derivations(frozenset(admitted), classification)))
+
+
+def scope_carried(rows: Scope | None, columns: Sequence[str]) -> tuple[str, ...]:
+    """The fields a record must carry, beyond `columns`, for its reader's scopes to be judged.
+
+    The fields the row scope tests, less the projection, which is carried already, and the tag,
+    which every record carries. An `ANY` clause admits whatever the record holds, so it tests
+    no field.
+
+    **The row scope's fields are enough, and the reason is `compile_projection`.** The scopes
+    `brain.core.redaction.compute_mask` evaluates are those of the admitted columns' grants,
+    and a column is admitted only when `scope_narrows(rows, held)`, which holds only when every
+    clause of `held` other than `ANY` is entailed by a clause of `rows` on the same field
+    (`brain.core.scope_sql.clause_entails` refuses two different fields). So no admitted
+    column's scope tests a field the row scope does not. Collecting those scopes as well was
+    written and removed: it could never add a field, so nothing could test it.
+    `test_every_scope_the_redactor_judges_is_over_a_field_the_record_carries` holds the
+    property, and fails the day entailment learns to cross fields.
+
+    Nothing for a caller with no row grant: the statement compiles to `FALSE` and no record is
+    built, so there is nothing to judge. See `A_RECORD_CARRIES_WHAT_ITS_READERS_SCOPES_TEST`.
+    """
+    if rows is None:
+        return ()
+    tested = {clause.field for clause in rows.clauses if clause.op is not Op.ANY}
+    return tuple(sorted(tested - set(columns) - {ENTITY_KEY, ID_KEY}))
 
 
 # -------------------------------------------------------------- the tool (M15.1.1)
@@ -460,11 +534,24 @@ class RowTool:
         return read
 
 
+def is_row_tool(definition: ToolDefinition) -> bool:
+    """Whether a registered tool is a row tool, which is named after its source and entity.
+
+    A source may register a second tool on the same entity (a Google source's figure tool,
+    `brain.knowledge.connector_figures`), which takes a range rather than a `RowRequest`. The fast
+    lane's readers and the records route are keyed by source and entity and call their tool with a
+    `RowRequest`, so they take the row tool alone, told apart by the name `RowTool.name` gives it.
+    """
+    return bool(definition.source and definition.entity) and definition.name == (
+        f"{definition.source}.read_{definition.entity}"
+    )
+
+
 # ----------------------------------------------------- the statement (M15.1.1, M15.1.4)
 
 
-def _selected(columns: Sequence[str]) -> list[Any]:
-    """The SELECT list: the tag, the id, and exactly the admitted columns.
+def _selected(columns: Sequence[str], carried: Sequence[str] = ()) -> list[Any]:
+    """The SELECT list: the tag, the id, the admitted columns, and the scope's fields.
 
     The two key columns are always selected, and that is not a hole in the projection. The
     redactor treats them as the record's tag rather than as fields, and a record arriving
@@ -474,13 +561,24 @@ def _selected(columns: Sequence[str]) -> list[Any]:
 
     Every field column is rendered as `fields ->> :param`, so the column *name* is a bound
     parameter rather than text spliced into the statement. Only the label is an identifier,
-    and SQLAlchemy quotes that.
+    and SQLAlchemy quotes that. A carried field is read from where `ROW_LAYOUT` says the WHERE
+    clause reads it, a promoted column or the jsonb, so the value the redactor judges is the
+    value the statement filtered on.
     """
     chosen: list[Any] = [
         RECORD.c[ENTITY_KEY].label(ENTITY_KEY),
         RECORD.c.source_id.label(ID_KEY),
+        # When the source last confirmed the row, for the answer's date and never a field:
+        # see `AN_INDEX_ROW_IS_AS_OLD_AS_ITS_LAST_READ`.
+        RECORD.c.last_seen_at.label(SEEN_KEY),
     ]
     chosen.extend(RECORD.c.fields[name].astext.label(name) for name in columns)
+    chosen.extend(
+        (RECORD.c[name] if name in ROW_LAYOUT.promoted else RECORD.c.fields[name].astext).label(
+            name
+        )
+        for name in carried
+    )
     return chosen
 
 
@@ -509,6 +607,7 @@ def compile_row_query(
     """
     rows = row_scope_for(tool.entity, entitlement, now)
     columns = compile_projection(tool.classification, entitlement=entitlement, rows=rows, now=now)
+    carried = scope_carried(rows, columns)
 
     pinned = compile_where(tool.scope, ROW_LAYOUT, param_prefix=TOOL_PREFIX)
     caller = NOTHING if rows is None else compile_where(rows, ROW_LAYOUT, param_prefix=SCOPE_PREFIX)
@@ -516,7 +615,7 @@ def compile_row_query(
     predicate = pinned.and_(caller).and_(asked)
 
     statement = (
-        select(*_selected(columns))
+        select(*_selected(columns, carried))
         .where(RECORD.c.deleted_at.is_(None))
         # The whole of M15.1.4 is this line being here rather than in a wrapper around the
         # result. `text` is handed a fragment `compile_where` built out of a validated
@@ -533,6 +632,7 @@ def compile_row_query(
         columns=columns,
         statement=statement,
         certainly_empty=predicate.certainly_empty,
+        carried=carried,
     )
 
 
@@ -580,10 +680,12 @@ async def read_rows(
 ) -> TypedResult[RowRecord]:
     """Compile, fetch, and build records out of the projection rather than out of the rows.
 
-    The record is assembled from `query.columns`, so a source handing back a key the
-    projection did not ask for cannot widen the answer. That is a shape rather than a
+    The record is assembled from `query.columns` and `query.carried`, so a source handing back
+    a key the statement did not ask for cannot widen the answer. That is a shape rather than a
     promise: there is no code path here that copies a row wholesale, so there is nothing to
-    audit for whether it remembered to filter.
+    audit for whether it remembered to filter. The carried fields are here for the redactor to
+    judge the reader's scope by, and it withholds them; see
+    `A_RECORD_CARRIES_WHAT_ITS_READERS_SCOPES_TEST`.
 
     A statement that cannot return a row is not run. `is_unsatisfiable` says its own purpose
     is deciding whether to bother asking, and asking anyway would spend a round trip to be
@@ -597,7 +699,7 @@ async def read_rows(
         RowRecord(
             entity=query.entity,
             id=str(row[ID_KEY]),
-            **{name: row[name] for name in query.columns if name in row},
+            **{name: row[name] for name in (*query.columns, *query.carried) if name in row},
         )
         for row in fetched
     )
@@ -606,9 +708,22 @@ async def read_rows(
         source=tool.source,
         # No clock is read here, for the reason `brain.knowledge.visibility` gives: a module
         # that reads the clock cannot be tested at the boundary that goes wrong.
-        fetched_at=now.isoformat() if now is not None else "",
+        fetched_at=answered_as_of(fetched, now),
         truncated=len(built) == request.limit,
     )
+
+
+def answered_as_of(rows: Sequence[Mapping[str, Any]], now: datetime | None) -> str:
+    """When what these rows say was read from their source: the oldest row's last read (M11.4.9).
+
+    See `AN_INDEX_ROW_IS_AS_OLD_AS_ITS_LAST_READ`. A row carrying no read time, which is a row
+    from a source that is not the index, leaves the answer dated by the question, as before; with
+    no rows at all there is nothing to date and the question's instant is kept.
+    """
+    seen = [one for row in rows if isinstance(one := row.get(SEEN_KEY), datetime)]
+    if seen:
+        return min(seen).isoformat()
+    return now.isoformat() if now is not None else ""
 
 
 # ------------------------------------------------- no model writes SQL (M15.1.3)

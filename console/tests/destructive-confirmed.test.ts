@@ -39,6 +39,17 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
+    "Adding a work email binds an address to a person who has none. It retires the staff list's " +
+    "person for that address only when they have never signed in and hold nothing but what the sync " +
+    "wrote, which the sync writes again; anything else is written only from the page's confirmation, " +
+    "which tests/people-access-pages.test.tsx and tests/unit/test_work_email.py hold.",
+  "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)":
+    "Previewing a run through an agent for the person on the page writes nothing: it is the agent " +
+    "Profile's own preview route, which asks the gate and keeps no row.",
+  "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)":
+    "Previewing a person's run of an agent writes nothing: brain.agent_capability_routes asks the gate " +
+    "what that run would be handed and keeps no row, so there is nothing for a press to end or replace.",
   "src/pages/approvals/ApprovalCard.tsx approvalDecisionApiPath(suspensionId)":
     "Deciding an approval is the answer to a question the card has already asked. The artefact and " +
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +
@@ -88,6 +99,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
+  "src/pages/Ask.tsx correctionPath(thread)":
+    "Marking an answer wrong adds a note to the person's own conversation naming the kind; the " +
+    "answer, its records and everything else in the thread stay as they were, so nothing is ended.",
   "src/pages/classification/ClassificationPage.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)":
     "A review of a rule or of a mark is a dry run. brain.classification_routes stores nothing on " +
     "either, which tests/unit/test_classification_routes.py and tests/unit/test_classified_tables.py " +
@@ -163,6 +177,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
     "and it reaches no agent until it is approved and assigned, both of which are confirmed.",
+  "src/pages/skills/SkillForms.tsx PROCEDURE_PATH":
+    "Imports a written procedure into the library as a new draft, undecided, exactly as an added " +
+    "package is: the same words twice are refused, a revised document is a new version beside the " +
+    "old one, and it reaches no agent until it is approved and assigned, both of which are confirmed.",
   "src/pages/skills/SkillForms.tsx versionsPath(one.digest)":
     "Saves an edit as a new, undecided version beside the one it came from, which is never changed; " +
     "every agent keeps the version it runs, which tests/unit/test_skill_routes.py holds, so nothing " +
@@ -175,14 +193,19 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +
     "confirmed.",
+  "src/pages/staff-sources/StaffSourcesPage.tsx TRIAL_API_PATH":
+    "Try a read writes when a trial was asked for and nothing else: the worker then reads the source " +
+    "as the nightly run would and applies nothing, recording one tried row that names nobody, which " +
+    "tests/unit/test_staff_sync_run.py holds. A second press only moves the instant.",
   "src/pages/staff-sources/ConnectDrawer.tsx path":
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
-  "src/components/ConnectLark.tsx LARK_TEST_API_PATH":
+  "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
-    "it writes nothing here or in Lark and keeps nothing it read, which " +
-    "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
+    "it writes nothing in Lark and keeps nothing it read, which tests/unit/test_lark_connect.py " +
+    "holds over the requests a fake Lark server received. Here it records only when it ran and a " +
+    "verdict word per use, superseding the previous test's own record, with every one on the ledger.",
   "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)":
     "A test message is one product sentence to one destination, sent once per channel record and " +
     "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",

@@ -57,6 +57,7 @@ from brain.audit.record import ApprovalVerdict, AuditRecorder
 from brain.console.role_surfaces import pending_for
 from brain.core.entitlement import EntitlementSet
 from brain.gate.leash import SuspendedAction
+from brain.knowledge.promotion import is_promotion
 
 
 class ApprovalError(Exception):
@@ -90,6 +91,14 @@ A_REASON_EVERY_VERDICT_CARRIES_IS_A_FIELD_NOBODY_READS: Final = (
     "collects the same word forever, and a field that always says the same thing is one "
     "nobody reads on the row where it mattered. brain.audit.record.AuditRecorder.approval "
     "holds the rule; this module does not restate it and lets that refusal through."
+)
+
+#: Why a person's own request is approved or rejected and never taken over.
+ONLY_AN_AGENT_S_WORK_IS_TAKEN_OVER: Final = (
+    "Taking over says the approver will do by hand what an agent prepared, and it counts against "
+    "that agent's rung on that target. A promotion is a person asking for their own document to "
+    "reach further, prepared by nobody, so there is no agent whose work is taken over and no rung "
+    "to lower: it is approved or rejected, and the card says whether the third choice is offered."
 )
 
 #: The names a tool call would arrive under if somebody added it to the card later. Read from
@@ -126,6 +135,13 @@ class Card:
     runs_as: str
     raised_at: datetime
     expires_at: datetime
+    #: Whether the approver is offered taking the work over: an agent's prepared action, never a
+    #: person's own request. False unless `card` says otherwise. See
+    #: `ONLY_AN_AGENT_S_WORK_IS_TAKEN_OVER`.
+    may_take_over: bool = False
+    #: Why approving this sends nothing, in the grant's own words, or empty when it would run
+    #: (M11.7.3): a connector write this install has not allowed. Never a tool call's detail.
+    unsent_because: str = ""
 
     def __post_init__(self) -> None:
         if not self.artefact.strip():
@@ -158,7 +174,13 @@ def card_gaps(shape: type = Card) -> tuple[str, ...]:
     )
 
 
-def card(suspension: SuspendedAction, entitlement: EntitlementSet, now: datetime) -> Card | None:
+def card(
+    suspension: SuspendedAction,
+    entitlement: EntitlementSet,
+    now: datetime,
+    *,
+    unsent_because: str = "",
+) -> Card | None:
     """What this approver is shown for this suspension, or `None`.
 
     `None` for a suspension this approver is not offered, and it is the same `None` for one
@@ -168,6 +190,9 @@ def card(suspension: SuspendedAction, entitlement: EntitlementSet, now: datetime
 
     Decided through `pending_for` rather than by asking the two questions again, so a screen
     and its queue cannot disagree about what may be decided.
+
+    `may_take_over` is true for an agent's prepared action and false for a promotion; see
+    `ONLY_AN_AGENT_S_WORK_IS_TAKEN_OVER`.
     """
     if not pending_for(entitlement, [suspension], now):
         return None
@@ -177,6 +202,8 @@ def card(suspension: SuspendedAction, entitlement: EntitlementSet, now: datetime
         runs_as=suspension.principal_id,
         raised_at=suspension.raised_at,
         expires_at=suspension.expires_at,
+        may_take_over=not is_promotion(suspension),
+        unsent_because=unsent_because,
     )
 
 

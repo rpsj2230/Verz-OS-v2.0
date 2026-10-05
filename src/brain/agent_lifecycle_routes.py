@@ -53,19 +53,19 @@ one whose policy was not reloaded, with `NO_SIGNING_KEY_HERE` rather than signin
 somewhere weaker. See `INSTALLING_NEEDS_THE_KEY_THIS_INSTALL_VERIFIES_WITH`.
 
 **What an install is told about connectors, and what it is not.** `complete` reads connector
-readiness from a `brain.connectors.registry.ConnectorRegistry`, and this process holds none, so
-every declared connector reads as not installed and the agent would have been disabled for that
-alone. It is written disabled anyway
+readiness from a `brain.connectors.registry.ConnectorRegistry`, which `connectors_of` builds from
+the install's connections on each request (since 2026-09-30; until then this process held none, so
+every declared connector read as not installed whatever the Connectors screen showed). A source
+connected under this release's declaration serves; one connected under another is quarantined.
+The agent is written disabled anyway
 (`brain.agents.install_store.AN_INSTALLED_AGENT_IS_WRITTEN_DISABLED`), and the answer carries no
-list of what is missing: a connector reading missing beside a Connectors screen showing it
-connected is `brain.agent_routes.A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT` in another
-place. `app.state.connector_registry` is read when something puts one there.
+list of what is missing. `app.state.connector_registry` still wins when a test puts one there.
 
 **A new module rather than `brain.agent_routes`**, because that router is the agent page's data and
 is changing under another package; these are writes, and a write and the read it changes are
 already separate modules for the Prompts screen and the Skills screen.
 
-Task ids: M27.11.6, M27.11.7
+Task ids: M27.11.6, M27.11.7, M11.9.4
 """
 
 from __future__ import annotations
@@ -81,6 +81,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import TEMPLATE_SCREEN, _tool_registry, record_of, viewer_of
@@ -112,13 +113,15 @@ from brain.agents.model import DISPLAY_NAME_CHARS, AgentAudience, AgentError, Ag
 from brain.agents.model import visible_agent_ids as _visible_agent_ids
 from brain.agents.template import SignedManifest, TemplateError, TemplateInstance
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked, Asking
+from brain.api_routes import Asked, Asking, base_schema_of
 from brain.audit.ledger import DIGEST
 
 # The automations' own 409 body, reused rather than copied: two classes of one name are one schema
 # only while every word matches, and the first edit to either would rename both in the document.
 from brain.automation_schedule_routes import NotChangedView
-from brain.connectors.registry import ConnectorRegistry
+from brain.connectors.contract import ConnectorContractError
+from brain.connectors.manifest import ManifestError, manifest_digest
+from brain.connectors.registry import ConnectorRegistry, ConnectorState, RegisteredConnector
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -127,6 +130,9 @@ from brain.core.errors import Absent, Failed
 from brain.core.principal import Principal
 from brain.gate.leash import Leash
 from brain.identity.principal_store import StoredPrincipals
+from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_store import Connection, StoredConnections
+from brain.ops.lark_base_index import switched_on
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed, signed_of
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
@@ -503,11 +509,63 @@ def template_key_of(request: Request) -> str | None:
     return found if isinstance(found, str) and found else None
 
 
-def connectors_of(request: Request) -> ConnectorRegistry:
-    """The connector registry something put on this process, or an empty one. See the module
-    docstring for what an empty one makes an install say, and not say."""
+async def connectors_of(request: Request) -> ConnectorRegistry:
+    """What this install has connected, read from its connections on this request.
+
+    A registry a test put on the process wins; otherwise each source connected on the Connectors
+    screen, serving when its stored digest is this release's declaration and quarantined when it
+    is not. Empty on a process with no database, or one whose connection table cannot be read.
+    See `brain.connectors.registry.CONNECTED_IS_WHAT_AN_AGENT_INSTALL_READS`.
+    """
     found = getattr(request.app.state, "connector_registry", None)
-    return found if isinstance(found, ConnectorRegistry) else ConnectorRegistry()
+    if isinstance(found, ConnectorRegistry):
+        return found
+    sessions = sessions_of(request)
+    if sessions is None:
+        return ConnectorRegistry()
+    try:
+        connected = await StoredConnections(sessions).connected()
+    except SQLAlchemyError as exc:
+        log.warning("connections unread for an agent's connectors", error=type(exc).__name__)
+        return ConnectorRegistry()
+    entries = [one for one in (_registered(c) for c in connected) if one is not None]
+    base = await _switched_on_base(request)
+    return ConnectorRegistry.of_connected((*entries, *(() if base is None else (base,))))
+
+
+async def _switched_on_base(request: Request) -> RegisteredConnector | None:
+    """A Lark Base switched on in Connect Lark, serving, or None where none is or it cannot be read.
+
+    Connect Lark registers no connection row for a Base (`brain.ops.lark_base_index`), so without
+    this an agent needing `lark_base` read it as not installed whatever Connect Lark said. It is
+    serving when its schema can be read, under the manifest this release builds for its first
+    table: the Base has no agreed digest to disagree with, because it was never connected on the
+    Connectors screen.
+    """
+    use = switched_on()
+    if use is None:
+        return None
+    known = await base_schema_of(request.app.state).tables(use)
+    if not known:
+        return None
+    manifest = use.manifest(known[0].table)
+    return RegisteredConnector(
+        manifest=manifest, digest=manifest_digest(manifest), state=ConnectorState.ENABLED
+    )
+
+
+def _registered(connection: Connection) -> RegisteredConnector | None:
+    """One connection as the registry holds it, or None for a source this release cannot build."""
+    try:
+        manifest = manifest_for(connection.connector, connection.settings)
+    except (NotConnectableError, ConnectorContractError, ManifestError):
+        return None
+    state = (
+        ConnectorState.ENABLED
+        if manifest_digest(manifest) == connection.digest
+        else ConnectorState.QUARANTINED
+    )
+    return RegisteredConnector(manifest=manifest, digest=connection.digest, state=state)
 
 
 # ------------------------------------------------------------------------ the decisions
@@ -747,7 +805,7 @@ async def _create(
         row["department"] = audience.department
     if not _in_reach(asked.reach, AGENT_INSTALL_CAPABILITY, row, asked.now):
         return _not_changed(REFUSED, AUTHORITY_DOES_NOT_REACH_THAT_AUDIENCE)
-    registry = connectors_of(request)
+    registry = await connectors_of(request)
     try:
         draft = draft_for(agent_id)
         if source is not None:

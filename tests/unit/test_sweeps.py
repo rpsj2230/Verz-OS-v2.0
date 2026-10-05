@@ -50,7 +50,11 @@ def test_the_tool_sweep_reads_the_registry_the_application_actually_builds() -> 
 
     seen = sweeps._registered_tool_names()
     stand_in = sweeps._NoRows()
-    built = build_registry(source="freshdesk", records=stand_in)  # type: ignore[arg-type]
+    built = build_registry(
+        source="freshdesk",
+        records=stand_in,  # type: ignore[arg-type]
+        figures=sweeps._NoFigures(),
+    )
     expected = tuple(sorted(built.names()))
 
     assert seen, "the sweep reads no registered tool, so it is checking nothing again"

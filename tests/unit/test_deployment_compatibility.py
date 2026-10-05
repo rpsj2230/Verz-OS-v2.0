@@ -30,6 +30,7 @@ import yaml
 
 from brain.deployment.compatibility import (
     A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING,
+    A_REVOKE_ON_A_FUNCTION_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING,
     MOST_UNROLLED_ROWS,
     VERSIONS,
     WHAT_THIS_CHECK_CANNOT_SEE,
@@ -319,6 +320,52 @@ def test_a_restriction_on_a_table_this_migration_created_is_not_a_restriction() 
     assert A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING in found[0].detail
 
 
+#: A definer function as `0172` writes one, and the revoke that closes its default grant.
+_A_NEW_FUNCTION = (
+    '    op.execute("""CREATE FUNCTION gate.f(p integer) RETURNS integer LANGUAGE sql '
+    'SECURITY DEFINER SET search_path = pg_catalog, gate AS $f$ SELECT p; $f$""")\n'
+)
+_REVOKE_FROM_PUBLIC = '    op.execute("REVOKE EXECUTE ON FUNCTION gate.f(integer) FROM PUBLIC")'
+
+
+def test_a_revoke_on_a_function_this_migration_created_is_not_a_narrowing() -> None:
+    """The rule `0172` needed to close a definer function's default grant, and its counter-case.
+
+    PostgreSQL grants EXECUTE to PUBLIC on every function it creates, and until 2026-09-30 this
+    check read every REVOKE as a removal, so `0036` and `0040` left the default grant on their
+    definer functions rather than turn the gate red. Delete this and either the rule goes and
+    every definer function is left callable by any role with USAGE on its schema, or it widens
+    and a revoke on a function the previous release was calling passes as safe.
+    """
+    fresh = _migration(_A_NEW_FUNCTION + _REVOKE_FROM_PUBLIC)
+    existing = _migration(_REVOKE_FROM_PUBLIC)
+    replaced = _migration(
+        _A_NEW_FUNCTION.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")
+        + _REVOKE_FROM_PUBLIC
+    )
+
+    assert not breaking_changes(fresh)
+    kept = [
+        one
+        for one in changes_in(fresh)
+        if one.rule == "privilege taken from a function created here"
+    ]
+    assert len(kept) == 1
+    assert A_REVOKE_ON_A_FUNCTION_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING in kept[0].detail
+    assert [one.rule for one in breaking_changes(existing)] == ["statement removes something"]
+    # A function replaced in place was there for the previous release to call.
+    assert [one.rule for one in breaking_changes(replaced)] == ["statement removes something"]
+
+
+def test_a_revoke_on_another_function_than_the_one_created_is_still_a_finding() -> None:
+    """A body that creates one function and revokes on another has taken something away from a
+    function the previous release could call. Delete this and the rule can be satisfied by any
+    `CREATE FUNCTION` anywhere in the body."""
+    other = _migration(_A_NEW_FUNCTION + _REVOKE_FROM_PUBLIC.replace("gate.f(", "gate.g("))
+
+    assert [one.rule for one in breaking_changes(other)] == ["statement removes something"]
+
+
 def test_row_level_security_switched_on_over_an_existing_table_is_a_finding() -> None:
     """The same rule through raw SQL rather than through an alembic operation.
 
@@ -342,6 +389,17 @@ def test_row_level_security_switched_on_over_an_existing_table_is_a_finding() ->
 
 
 READ_ANY_CHUNK = "CREATE POLICY chunk_live ON know.chunk FOR SELECT TO brain_app USING (true)"
+FAST_LANE_READS_RECORDS = (
+    "CREATE POLICY record_fast ON proj.record FOR SELECT TO brain_fastlane USING (true)"
+)
+PERSON_UPDATES_OWN = (
+    "CREATE POLICY adaptive_mine ON mem.adaptive FOR UPDATE TO brain_app"
+    " USING (principal_id = current_user)"
+)
+NARROW_ANY_CHUNK = (
+    "CREATE POLICY chunk_mine ON know.chunk AS RESTRICTIVE FOR SELECT TO brain_app"
+    " USING (owner_id = current_user)"
+)
 
 
 def test_a_replaced_policy_is_unreadable_and_a_new_one_is_still_a_finding() -> None:
@@ -359,9 +417,10 @@ def test_a_replaced_policy_is_unreadable_and_a_new_one_is_still_a_finding() -> N
         '    op.execute("DROP POLICY chunk_live ON know.chunk")\n'
         f'    op.execute("{READ_ANY_CHUNK}")'
     )
-    added = _migration(f'    op.execute("{READ_ANY_CHUNK}")')
+    added = _migration(f'    op.execute("{NARROW_ANY_CHUNK}")')
     elsewhere = _migration(
-        f'    op.execute("DROP POLICY item_live ON know.item")\n    op.execute("{READ_ANY_CHUNK}")'
+        '    op.execute("DROP POLICY item_live ON know.item")\n'
+        f'    op.execute("{NARROW_ANY_CHUNK}")'
     )
 
     assert not breaking_changes(replaced)
@@ -370,6 +429,29 @@ def test_a_replaced_policy_is_unreadable_and_a_new_one_is_still_a_finding() -> N
         "restriction on a table that was already there"
     ]
     assert [one.rule for one in breaking_changes(elsewhere)] == [
+        "restriction on a table that was already there"
+    ]
+
+
+def test_a_permissive_policy_on_an_existing_table_widens_and_a_restrictive_one_narrows() -> None:
+    """**A permissive policy is ORed with the others, so it can only let more through.**
+
+    0162 gives the fast lane's role a read of the uploaded tables and 0163 lets a person update
+    their own memory's confirmation, each by a permissive policy on a table that was already
+    there, and both were refused as a narrowing. Delete this and the gate goes back to refusing
+    every grant of access written as a policy. The restrictive sibling is what keeps the rule from
+    becoming an escape: `AS RESTRICTIVE` is ANDed with the table's policies and takes rows away
+    from the previous release, so it is still the finding it was. See
+    `A_PERMISSIVE_POLICY_CAN_ONLY_WIDEN`.
+    """
+    widened = _migration(
+        f'    op.execute("{FAST_LANE_READS_RECORDS}")\n    op.execute("{PERSON_UPDATES_OWN}")'
+    )
+    narrowed = _migration(f'    op.execute("{NARROW_ANY_CHUNK}")')
+
+    assert not breaking_changes(widened)
+    assert _rules(changes_in(widened)) >= {"permissive policy, which only widens"}
+    assert [one.rule for one in breaking_changes(narrowed)] == [
         "restriction on a table that was already there"
     ]
 
@@ -426,6 +508,16 @@ def test_a_unique_index_on_a_materialised_view_an_earlier_migration_created_is_s
         ("CREATE UNIQUE INDEX uq_chunk ON know.chunk (digest)", Verdict.BREAKING),
         (
             "CREATE POLICY chunk_live ON know.chunk FOR ALL TO brain_app USING (true)",
+            Verdict.SAFE,
+        ),
+        (
+            "CREATE POLICY chunk_live ON know.chunk AS PERMISSIVE FOR ALL TO brain_app"
+            " USING (true)",
+            Verdict.SAFE,
+        ),
+        (
+            "CREATE POLICY chunk_live ON know.chunk AS RESTRICTIVE FOR ALL TO brain_app"
+            " USING (true)",
             Verdict.BREAKING,
         ),
         ("CREATE POLICY chunk_live ON chunk FOR ALL TO brain_app USING (true)", Verdict.UNREADABLE),

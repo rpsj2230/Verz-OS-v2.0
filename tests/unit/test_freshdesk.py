@@ -1194,3 +1194,52 @@ def test_a_connected_helpdesk_is_read_on_its_own_interval_under_the_verified_cei
 
     assert READINGS[FRESHDESK] is CONNECTOR.reading
     assert READING_INTERVAL >= CONTROL_EVERY * 3
+
+
+# ------------------------------------------------ the live read, declared (M11.6.2, M11.9.2)
+def test_the_manifest_declares_the_one_ticket_read_and_every_field_it_reads_beyond_the_index() -> (
+    None
+):
+    """Reading a ticket's body is something the connector does, and a person agreeing to the
+    connector has to see it (`brain.connectors.registry`'s argument about a changed manifest).
+    Held against the live operation itself: the path it reads and every field its mapping takes
+    beyond the index's are named by the manifest's read tool. Delete this and the live read can
+    widen, to a new address or a new field of customers' free text, with nothing a person
+    accepted changing."""
+    from brain.connectors import freshdesk
+    from brain.ops.connectable import key_reference
+
+    domain = "acceptance-check.freshdesk.com"
+    built = freshdesk.built_from_the_console(
+        {freshdesk.DOMAIN_SETTING: domain, freshdesk.DEPARTMENT_SETTING: "web"},
+        key_reference(freshdesk.FRESHDESK),
+    )
+    [read] = [one for one in built.tools if one.name == "freshdesk.read_ticket"]
+    live = freshdesk.live_ticket_operation(domain=domain)
+    assert live.operation.path in read.description
+    beyond = {one.target for one in live.transport.fields} - {
+        one.target for one in freshdesk.TICKET_MAPPING
+    }
+    assert beyond
+    assert all(name in read.description for name in beyond)
+
+
+def test_a_ticket_is_read_live_by_an_id_of_digits_and_nothing_else() -> None:
+    """The id is laid into the helpdesk's address, so anything but digits is refused rather than
+    escaped. Delete this and a crafted id can change which address the live read calls."""
+    from brain.connectors import freshdesk
+    from brain.connectors.contract import ConnectorContractError
+
+    lookup = freshdesk.FreshdeskLiveLookup()
+    assert lookup.arguments_for(freshdesk.TICKET, "900123") == {"id": "900123"}
+    for crafted in ("12/../contacts/1", "1?x=y", "", "abc"):
+        with pytest.raises(ConnectorContractError):
+            lookup.arguments_for(freshdesk.TICKET, crafted)
+    settings = {
+        freshdesk.DOMAIN_SETTING: "acceptance-check.freshdesk.com",
+        freshdesk.DEPARTMENT_SETTING: "web",
+    }
+    operation = lookup.operation(freshdesk.TICKET, settings=settings, resolver=None)  # type: ignore[arg-type]
+    assert operation is not None
+    assert operation.operation.path == freshdesk.ENDPOINTS[freshdesk.Endpoint.GET_TICKET].spec.path
+    assert lookup.identity_mode(freshdesk.TICKET) is IdentityMode.SERVICE

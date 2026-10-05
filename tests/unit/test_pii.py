@@ -6,7 +6,8 @@ mistaken for a permission check.
 Task ids: M32.2.1.1, M32.2.1.2, M32.2.1.3, M32.2.1.4, M32.2.2.1, M32.2.2.2, M32.2.2.3
 
 M32.2.2.4 is deliberately not in that line. The harness and the recorded absence are tested
-below; the leaf asks for a measurement on the client CPU and nobody here has one.
+below; the leaf asks for a measurement on the client CPU, which the install's own acceptance
+check takes, and `test_acceptance_deployment.py` is where it is claimed.
 """
 
 from __future__ import annotations

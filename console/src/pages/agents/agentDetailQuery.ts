@@ -13,7 +13,11 @@
  * see is not a hole in the numbering. This file keeps the lines in the order they came and adds no
  * sentence of its own.
  *
- * Task ids: M27.10.2
+ * **The header's role line (M39.1.2.1)** is the agent's summary, its department and its template by
+ * name and version, each read only when sent: the department travels to everybody the roster already
+ * tells it to, and the template's name only with its lineage.
+ *
+ * Task ids: M27.10.2, M39.1.2.1
  */
 
 /** Where one agent's About tab is asked for, under the API base. */
@@ -55,6 +59,12 @@ export interface HeaderFacts {
   readonly state?: string;
   /** The highest rung any action could be held to, sent where the state is. */
   readonly leashUpTo?: string;
+  /** What the agent is for, in one line: its role line. */
+  readonly summary?: string;
+  /** The department its audience names. Absent for a company agent. */
+  readonly department?: string;
+  /** The template's own name, sent with its lineage. */
+  readonly templateName?: string;
 }
 
 export function readHeaderFacts(payload: unknown): HeaderFacts {
@@ -64,7 +74,13 @@ export function readHeaderFacts(payload: unknown): HeaderFacts {
   const createdAt = created !== undefined && !Number.isNaN(Date.parse(created)) ? created : undefined;
   const state = said(agent?.["state"]);
   const leashUpTo = said(agent?.["leash_up_to"]);
+  const summary = said(agent?.["summary"]);
+  const department = said(agent?.["department"]);
+  const templateName = said(agent?.["template_name"]);
   return {
+    ...(summary === undefined ? {} : { summary }),
+    ...(department === undefined ? {} : { department }),
+    ...(templateName === undefined ? {} : { templateName }),
     ...(ownerName === undefined ? {} : { ownerName }),
     ...(createdAt === undefined ? {} : { createdAt }),
     ...(state === undefined ? {} : { state }),
@@ -91,6 +107,10 @@ export interface LeashShown {
   readonly rung: string;
   readonly configured: boolean;
   readonly acts: boolean;
+  /** The rung people taking this action over has lowered it to, when it is lower (M8.3.5). */
+  readonly loweredTo?: string;
+  /** When people took this action over inside the week, oldest first. When, and nothing else. */
+  readonly takenOverAt: readonly string[];
 }
 
 /** The ceiling in words, as `brain.console.agent_profile.CeilingWords` carries it. */
@@ -164,7 +184,18 @@ export function readProfile(payload: unknown): ProfileShown | null {
     if (fields === null || target === undefined || rung === undefined) {
       continue;
     }
-    leash.push({ target, rung, configured: fields["configured"] === true, acts: fields["acts"] === true });
+    const loweredTo = said(fields["lowered_to"]);
+    const takenOverAt = listOf(fields["taken_over_at"]).filter(
+      (at): at is string => typeof at === "string" && !Number.isNaN(Date.parse(at)),
+    );
+    leash.push({
+      target,
+      rung,
+      configured: fields["configured"] === true,
+      acts: fields["acts"] === true,
+      ...(loweredTo === undefined ? {} : { loweredTo }),
+      takenOverAt,
+    });
   }
   return {
     ...(tier === undefined ? {} : { tier }),

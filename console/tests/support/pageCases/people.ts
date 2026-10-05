@@ -116,6 +116,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         editable: true,
       },
+      // The agents a run can be previewed through, the reader's own roster, with a name that has
+      // nowhere to break.
+      "/api/v1/agents": { items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN }], truncated: false },
     },
   },
 };

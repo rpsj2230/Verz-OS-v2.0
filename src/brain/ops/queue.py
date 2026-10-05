@@ -172,10 +172,12 @@ neither lets a caller name a queue: see `A_TASK_RUNS_ON_THE_QUEUE_ITS_CLASS_DERI
 task is a control run, registered by `brain.ops.worker` and enqueued by its `--run-control` mode,
 and a test enqueues one against a real database and watches a worker run it and record it.
 
-`Job.redrive` is not handed to the driver, and that is deliberate for now: the driver's own
-retry re-runs a failed job, and a re-drive is the machine dying under a job that never reached
-a verdict, which is `queue_redrive`'s and is still not wired. Mapping one onto the other would
-be the conflation the crash recovery paragraph above refuses.
+`Job.redrive` is not handed to the driver, and that is deliberate: the driver's own retry re-runs
+a failed job, and a re-drive is the machine dying under a job that never reached a verdict, which
+is `queue_redrive`'s. Mapping one onto the other would be the conflation the crash recovery
+paragraph above refuses. So no task is registered with a retry of the driver's, and
+`brain.ops.recovery_run` is the one place a job is put back: `DriverQueue` reads the rows and
+makes the moves, and the sweep there decides them.
 
 Task ids: M32.4.1.1, M32.4.1.3, M32.4.2.1, M32.4.2.2, M32.4.2.3, M17.1.2
 """
@@ -186,9 +188,9 @@ import enum
 import re
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Final, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from brain.db import SCHEMAS, libpq_conninfo
 from brain.gate.context import TrafficClass
@@ -459,6 +461,62 @@ def pooler_url_findings(url: str) -> tuple[str, ...]:
                 "transaction pooler. A queue does not work around one; it does not use one."
             )
     return tuple(findings)
+
+
+#: Why every opener outside the worker derives the queue's URL, and none uses `database_url`.
+A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S: Final = (
+    "The application's database_url is the transaction pooler on every install, and "
+    "queue_url_refusals refuses a pooler URL before a connection is opened, rightly. Until "
+    "2026-09-30 the upload route, the lifecycle routes and the install check counting the queue "
+    "each built the driver from database_url, so each was refused on every install and nowhere "
+    "else: the tests stood the driver's count in, and the install check failed on all 27 of its "
+    "runs. The worker had its own QUEUE_URL. So every opener asks queue_url_of, which derives "
+    "the worker's URL from the owner's login the process already has: the same login and "
+    "database through the session pooler every profile with a worker composes. No new variable, "
+    "because a hosting panel's stored copy of the compose file keeps the environment it was "
+    "saved with, and a variable a release adds would reach no running install."
+)
+
+#: The session pooler every profile with a worker composes, beside the transaction pooler the
+#: application is given. `tests/unit/test_queue_url.py` holds both names to the compose files.
+SESSION_POOLER_HOST: Final = "pgbouncer-session"
+SESSION_POOLER_PORT: Final = 5432
+
+
+def queue_url_for(owner_url: str) -> str:
+    """The queue's URL for this owner login: through the session pooler where it came through a
+    transaction pooler, unchanged where it goes straight to the database. Empty for empty.
+
+    The markers only a transaction pooler needs are dropped from the query, since
+    `pooler_url_findings` would read them as the pooler's; everything else is kept. See
+    `A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_APPLICATION_S`.
+    """
+    url = owner_url.strip()
+    # An empty URL names no host, so it is returned as it came, empty.
+    split = urlsplit(url)
+    if (split.hostname or "").lower() not in POOLER_HOSTNAMES:
+        return url
+    kept = "&".join(
+        one
+        for one in split.query.split("&")
+        if one and not any(marker in one.lower() for marker in _POOLER_MARKERS)
+    )
+    credentials = split.netloc.rpartition("@")[0]
+    netloc = f"{credentials}@" if credentials else ""
+    netloc += f"{SESSION_POOLER_HOST}:{SESSION_POOLER_PORT}"
+    return urlunsplit((split.scheme, netloc, split.path, kept, split.fragment))
+
+
+def queue_url_of(settings: object) -> str:
+    """This process's queue connection, derived from its owner login, or empty with none.
+
+    Takes whatever carries the settings, so a route's `app.state.settings` and a check's harness
+    settings are read alike; `Settings.owner_database_url` is the owner's login, which is the one
+    the worker's own `QUEUE_URL` names.
+    """
+    owner = getattr(settings, "owner_database_url", None)
+    url = owner() if callable(owner) else str(getattr(settings, "database_url", "") or "")
+    return queue_url_for(str(url or ""))
 
 
 def queue_url_refusals(queue_url: str, *, app_url: str = "") -> tuple[str, ...]:
@@ -1554,6 +1612,125 @@ async def outstanding_jobs(app: App, tasks: Iterable[str]) -> tuple[int, int]:
             waiting += int(row["todo"])
             running += int(row["doing"])
     return waiting, running
+
+
+#: Every job the driver has marked running, with its worker's newest heartbeat and how many times
+#: it was put back. A job whose worker row the driver has already pruned has no heartbeat at all,
+#: which the sweep reads as the oldest there is.
+#:
+#: The count is the driver's own events for a running job returned to its queue and for a failed
+#: job retried. No task of ours is registered with a retry of the driver's (`register_task` passes
+#: none), so every such event is a re-drive, which is what `InFlight.redrives` means; the driver's
+#: `attempts` is not, because it also counts every finish.
+RUNNING_JOBS_SQL: Final = (
+    "SELECT j.id, j.task_name, j.worker_id, w.last_heartbeat, r.redrives"
+    " FROM procrastinate_jobs AS j"
+    " LEFT JOIN procrastinate_workers AS w ON w.id = j.worker_id"
+    " CROSS JOIN LATERAL ("
+    "SELECT count(*) AS redrives FROM procrastinate_events AS e"
+    " WHERE e.job_id = j.id AND e.type IN ('deferred_for_retry', 'retried')"
+    ") AS r"
+    " WHERE j.status = 'doing'"
+    " ORDER BY j.id"
+)
+
+#: Failed jobs of the named tasks still under the cap. Narrowed in the query so the read stays
+#: bounded as failed rows accumulate: a job past the cap, or of a task nobody declared safe, is
+#: never going to be re-driven and has no reason to be read every minute.
+FAILED_JOBS_SQL: Final = (
+    "SELECT j.id, j.task_name, j.worker_id, r.redrives"
+    " FROM procrastinate_jobs AS j"
+    " CROSS JOIN LATERAL ("
+    "SELECT count(*) AS redrives FROM procrastinate_events AS e"
+    " WHERE e.job_id = j.id AND e.type IN ('deferred_for_retry', 'retried')"
+    ") AS r"
+    " WHERE j.status = 'failed' AND j.task_name = ANY(%(tasks)s) AND r.redrives < %(cap)s"
+    " ORDER BY j.id"
+)
+
+#: The heartbeat a job with no live worker is read as having: before any real one.
+NO_HEARTBEAT: Final = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+class DriverQueue:
+    """`brain.ops.recovery_run.QueueRows` over the driver, the one module that may name it.
+
+    `redrive_by_task` is what each task declares about running twice, handed in so this module
+    does not import the recovery sweep that imports it. A task it does not name is unsafe.
+
+    **A failed job is read with no heartbeat whatever its worker is doing.** The driver leaves the
+    worker's id on a job it finished, and that worker may be alive and heartbeating; reading its
+    heartbeat would make `verdict_for` call a failed job running and leave it for ever.
+    """
+
+    def __init__(self, app: App, redrive_by_task: Mapping[str, Redrive]) -> None:
+        self.app = app
+        self.redrive_by_task = redrive_by_task
+
+    def _redrive_of(self, task: str) -> Redrive:
+        return self.redrive_by_task.get(task, Redrive.UNSAFE)
+
+    async def running(self) -> tuple[InFlight, ...]:
+        rows = await self.app.connector.execute_query_all_async(RUNNING_JOBS_SQL)
+        return tuple(
+            InFlight(
+                job_id=str(row["id"]),
+                task=str(row["task_name"]),
+                worker_id="" if row["worker_id"] is None else str(row["worker_id"]),
+                heartbeat_at=row["last_heartbeat"] or NO_HEARTBEAT,
+                redrives=int(row["redrives"]),
+                redrive=self._redrive_of(str(row["task_name"])),
+            )
+            for row in rows
+        )
+
+    async def failed(self) -> tuple[InFlight, ...]:
+        safe = sorted(t for t, said in self.redrive_by_task.items() if said is Redrive.SAFE)
+        rows = await self.app.connector.execute_query_all_async(
+            FAILED_JOBS_SQL, tasks=safe, cap=MAX_REDRIVES
+        )
+        return tuple(
+            InFlight(
+                job_id=str(row["id"]),
+                task=str(row["task_name"]),
+                worker_id="" if row["worker_id"] is None else str(row["worker_id"]),
+                heartbeat_at=NO_HEARTBEAT,
+                redrives=int(row["redrives"]),
+                redrive=self._redrive_of(str(row["task_name"])),
+            )
+            for row in rows
+        )
+
+    async def run_again(self, job_id: str, now: datetime) -> bool:
+        return await _moved(self.app.job_manager.retry_job_by_id_async(int(job_id), now))
+
+    async def set_aside(self, job_id: str) -> bool:
+        from procrastinate.jobs import Status
+
+        return await _moved(
+            self.app.job_manager.finish_job_by_id_async(
+                int(job_id), status=Status.FAILED, delete_job=False
+            )
+        )
+
+
+async def _moved(move: Awaitable[None]) -> bool:
+    """True when the driver made the move, False when the job had already left its state.
+
+    The driver's own functions refuse a job no longer in the state they move from by raising
+    from the database, which reaches here as the driver's connector error caused by a raise in a
+    function. That one shape is the race; any other error is a fault and is not swallowed.
+    """
+    from procrastinate.exceptions import ConnectorException
+    from psycopg.errors import RaiseException
+
+    try:
+        await move
+    except ConnectorException as exc:
+        if isinstance(exc.__cause__, RaiseException):
+            return False
+        raise
+    return True
 
 
 def _tables_in(connection: Connection[Any], schema: str) -> frozenset[str]:

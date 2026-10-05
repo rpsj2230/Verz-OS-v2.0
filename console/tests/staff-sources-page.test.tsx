@@ -10,25 +10,33 @@
  * **Reachable means through the application's own route table**, signed in through the real session
  * modules and answered by a stand-in API, so a test passes only if the address resolves.
  *
- * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1
+ * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1, M1.10.2
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { CREDENTIAL_BLANK, STAFF_SOURCES_API_PATH, TRIAL_API_PATH } from "../src/pages/staffSourcesQuery";
+import {
+  CREDENTIAL_BLANK,
+  STAFF_SOURCES_API_PATH,
+  SYNC_API_PATH,
+  TRIAL_API_PATH,
+  TRIAL_POLL_MS,
+} from "../src/pages/staffSourcesQuery";
 import { STAFF_SOURCES_HEADING } from "../src/pages/StaffSources";
 import {
+  ACCOUNTS_HEADING,
   CONNECT_A_SOURCE,
   HELD,
   HOW_TO_CONNECT,
   NO_RUNS,
   NO_SOURCE,
   NOT_HELD,
+  RUN_REPORT_LABEL,
   SOURCE_IN_USE,
   SWITCH_SOURCE,
+  TRIAL_READ,
   TRY_A_READ,
-  WOULD_ADD_LABEL,
 } from "../src/pages/staff-sources/StaffSourcesPage";
 import {
   APPLY_FIRST_SYNC,
@@ -40,6 +48,7 @@ import {
   fillInBox,
 } from "../src/pages/staff-sources/ConnectDrawer";
 import { NEW_CREDENTIAL, REPLACE_CREDENTIAL } from "../src/pages/staff-sources/SyncCredential";
+import { LAST_RUN, NEXT_RUN, SYNC_DONE, SYNC_HEADING, SYNC_NOW } from "../src/pages/staff-sources/SyncNow";
 import { NO_TRANSFERS, TAKE_ON } from "../src/pages/staff-sources/Transfers";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { operation } from "./support/openapi";
@@ -108,9 +117,52 @@ const RUNS = {
       marked_left: [],
       renamed: [],
       withheld: [],
+      report: [],
       changed_nobody: true,
     },
   ],
+};
+
+/** What the worker answers once it has read a trial: a run of its own, newest first, in counts. */
+const TRIED_RUN = {
+  source: "lark",
+  started_at: "2999-03-02T09:00:00Z",
+  finished_at: "2999-03-02T09:00:04Z",
+  outcome: "tried",
+  detail: "Trial read. Read lark. A run now would add 0, mark 0 as having left and move 0 to a new address. Nobody was changed.",
+  added: [],
+  marked_left: [],
+  renamed: [],
+  withheld: [],
+  report: [
+    "Read 14 departments, 0 with a name, and 123 people; 0 placed in a department.",
+    "Not placed: 123 in a department that came back with no name.",
+    "Lark shows a department's name only to an app granted contact:department.base:readonly: add it to the app and release a new version.",
+  ],
+  changed_nobody: true,
+};
+
+const WAITING = "Asked. The worker reads your staff source with the credential it keeps.";
+
+const SYNC_ASKED = "Asked. The worker runs the staff sync on its next tick.";
+const SYNC = {
+  may_sync: true,
+  last_run_at: "2999-03-02T02:00:00Z",
+  next_run_at: "2999-03-03T02:00:00Z",
+  requested_at: null,
+  waiting: false,
+  told: "",
+};
+
+/** The run a Sync now press produced, newest first, with the people step's sentence. */
+const SYNCED_RUN = {
+  ...RUNS.runs[0],
+  started_at: "2999-03-02T09:00:00Z",
+  finished_at: "2999-03-02T09:00:06Z",
+  outcome: "applied",
+  detail: "Read the staff list from lark and applied it.",
+  report: ["People: 122 on the list added to People."],
+  changed_nobody: false,
 };
 
 const CREDENTIAL = {
@@ -152,32 +204,10 @@ const ANSWERS: Answers = {
   [`GET ${BASE}/runs`]: { body: RUNS },
   [`GET ${BASE}/credential`]: { body: CREDENTIAL },
   [`GET ${BASE}/transfers`]: { body: TRANSFERS },
-  [`GET ${BASE}/trial`]: {
-    body: {
-      trial: {
-        source: "lark",
-        plan: {
-          source: "lark",
-          would_add: [
-            { work_address: "ada@example.test", display_name: "Ada", department: "maintenance", groups: [], active: true },
-          ],
-          absent: ["hopper@example.test"],
-          would_remove: [],
-          would_deactivate: [],
-          withheld: [],
-          role_grants_to_add: [{ principal_id: "u_ada_sentinel", role: "engineer", source_group: "engineers" }],
-          role_grants_to_remove: [],
-          refusals: [],
-          gaps: [],
-          safe_to_apply: true,
-          changes_nothing: false,
-        },
-        refusals: [],
-        safe_to_apply: true,
-      },
-      unread: "",
-    },
-  },
+  [`POST ${BASE}/trial`]: { body: { requested_at: "2999-03-02T08:59:58Z", waiting: true, told: WAITING } },
+  [`GET ${BASE}/trial`]: { body: { requested_at: null, waiting: false, told: "" } },
+  [`GET ${BASE}/sync`]: { body: SYNC },
+  [`POST ${BASE}/sync`]: { body: { ...SYNC, requested_at: "2999-03-02T08:59:58Z", waiting: true, told: SYNC_ASKED } },
   [`POST ${BASE}/test`]: { body: READ_IT },
   [`POST ${BASE}/connect`]: { body: { source: "lark", told: "Connected to Lark (or Feishu).", people: 2 } },
   [`POST ${BASE}/first-sync`]: { body: PLAN },
@@ -280,13 +310,21 @@ function outsideAdvanced(container: HTMLElement): string {
 // ------------------------------------------------------------------------------ the tests
 
 describe("what the page shows", () => {
-  test("it reads its five answers on arrival and never the trial, which waits for a press", async () => {
+  test("it reads its six answers on arrival and never the trial, which waits for a press", async () => {
     // What breaks if this is deleted: a trial fetched with the page, contacting a company's
-    // directory whenever anybody opens the screen.
+    // directory whenever anybody opens the screen. Sync now's read is the schedule's, not the
+    // directory's, so it is read with the page.
     const { idp } = await consoleAt();
     const asked = new Set(calls(idp).map((one) => one.key));
     expect([...asked].sort()).toEqual(
-      [`GET ${BASE}`, `GET ${BASE}/credential`, `GET ${BASE}/guides`, `GET ${BASE}/runs`, `GET ${BASE}/transfers`].sort(),
+      [
+        `GET ${BASE}`,
+        `GET ${BASE}/credential`,
+        `GET ${BASE}/guides`,
+        `GET ${BASE}/runs`,
+        `GET ${BASE}/sync`,
+        `GET ${BASE}/transfers`,
+      ].sort(),
     );
     expect(`/api/v1${STAFF_SOURCES_API_PATH}`).toBe(BASE);
     expect(`/api/v1${TRIAL_API_PATH}`).toBe(`${BASE}/trial`);
@@ -306,16 +344,43 @@ describe("what the page shows", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(STAFF_SOURCES_HEADING);
   });
 
+  test("it says how people first sign in, what stops them and what to fill in, and the sentence to pass on", async () => {
+    // What breaks if this is deleted: the owner's flow, nobody sent anything and a person pressing
+    // Forgot password, can leave the one page an administrator connects the list from, or the
+    // warning about the sign-in service's email settings can go, leaving an install where nobody can
+    // set a password with nothing saying why.
+    const accounts = "The staff sync gives each active person on this list a sign-in account and sends nobody anything.";
+    const email = "If the sign-in service has no email settings, nobody can set a password yet. Fill in Realm settings, then Email.";
+    const ready = "Your account is ready. Go to the sign-in page, press Forgot password and enter your work email.";
+    const { container } = await consoleAt({
+      [`GET ${BASE}`]: { body: { ...PAGE, accounts, email_settings: email, account_ready: ready } },
+    });
+    expect(screen.getByRole("heading", { name: ACCOUNTS_HEADING })).toBeTruthy();
+    expect(container.textContent).toContain(accounts);
+    expect(container.querySelector('[data-slot="note"]')?.textContent).toContain(email);
+    expect(container.querySelector("blockquote")?.textContent).toBe(ready);
+
+    const unlisted = await consoleAt({
+      [`GET ${BASE}`]: {
+        body: {
+          ...PAGE,
+          selection: { ...PAGE.selection, reads_a_list: false },
+          accounts,
+          email_settings: email,
+          account_ready: ready,
+        },
+      },
+    });
+    expect(unlisted.container.querySelector("blockquote")).toBeNull();
+    expect(unlisted.container.textContent).not.toContain(email);
+  });
+
   test("identifiers appear only inside Advanced", async () => {
     // What breaks if this is deleted: the clutter the owner removed, an agent id, a principal id, a
     // setting name or a vault slot, drawn back into the page's text.
     const { container } = await consoleAt();
-    await press(container, TRY_A_READ);
-    await waitFor(() => {
-      expect(container.textContent).toContain(WOULD_ADD_LABEL);
-    });
     const text = outsideAdvanced(container);
-    for (const id of [AGENT_ID, OWNER_ID, "u_ada_sentinel", "INSTALL_STAFF_SOURCE_LOCATION", "connector_keys"]) {
+    for (const id of [AGENT_ID, OWNER_ID, "INSTALL_STAFF_SOURCE_LOCATION", "connector_keys"]) {
       expect(text).not.toContain(id);
       expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain(id);
     }
@@ -335,14 +400,104 @@ describe("what the page shows", () => {
     expect(screen.getByRole("button", { name: CONNECT_A_SOURCE })).toBeTruthy();
   });
 
-  test("a trial press asks once and names the people rather than counting them", async () => {
-    const { container, idp } = await consoleAt();
-    await press(container, TRY_A_READ);
-    await waitFor(() => {
-      expect(container.textContent).toContain("ada@example.test");
-    });
-    expect(calls(idp).filter((one) => one.key === `GET ${BASE}/trial`)).toHaveLength(1);
-    expect(container.textContent).toContain("hopper@example.test");
+  test(
+    "a trial press asks the worker once, says it waits, and reads the runs again once the worker has read",
+    async () => {
+      // What breaks if this is deleted: the button going back to saying nothing here reads a staff
+      // list, or asking the worker and never showing what it read.
+      const { container, idp } = await consoleAt();
+      await press(container, TRY_A_READ);
+      await waitFor(() => {
+        expect(container.textContent).toContain(WAITING);
+      });
+      expect(writes(idp)).toEqual([{ key: `POST ${BASE}/trial`, body: "{}" }]);
+      await waitFor(
+        () => {
+          expect(container.textContent).toContain(TRIAL_READ);
+        },
+        { timeout: TRIAL_POLL_MS * 3 },
+      );
+      await settled(container);
+      expect(calls(idp).filter((one) => one.key === `GET ${BASE}/trial`).length).toBeGreaterThanOrEqual(1);
+      expect(calls(idp).filter((one) => one.key === `GET ${BASE}/runs`)).toHaveLength(2);
+      expect(writes(idp)).toHaveLength(1);
+    },
+    TRIAL_POLL_MS * 4,
+  );
+
+  test("a run says what it read, in counts and the scope to add, and a trial read is not the last sync", async () => {
+    // What breaks if this is deleted: a sync that placed a whole company nowhere drawn as "Applied"
+    // with nothing beside it, which is what the owner saw on 2026-09-29.
+    const { container } = await consoleAt({ [`GET ${BASE}/runs`]: { body: { runs: [TRIED_RUN, ...RUNS.runs] } } });
+    const read = screen.getByRole("list", { name: RUN_REPORT_LABEL });
+    expect(read.textContent).toContain("0 with a name");
+    expect(read.textContent).toContain("contact:department.base:readonly");
+    expect(container.textContent).toContain("Trial read");
+    const strip = container.querySelector('[data-slot="kpi-strip"]') as HTMLElement;
+    expect(strip.textContent).toContain("Credential refused");
+    expect(strip.textContent).not.toContain("Trial read");
+  });
+});
+
+describe("Sync now", () => {
+  test("it says when the scheduled sync last ran and next runs, beside the button", async () => {
+    // What breaks if this is deleted: the owner's Sync now beside the scheduled sync, or the two
+    // times that say whether pressing it is worth it.
+    const { container } = await consoleAt();
+    const card = screen.getByRole("heading", { name: SYNC_HEADING }).closest("section") ?? container;
+    expect(card.textContent).toContain(LAST_RUN);
+    expect(card.textContent).toContain(NEXT_RUN);
+    expect(within(card as HTMLElement).getByRole("button", { name: SYNC_NOW })).toBeTruthy();
+    expect(`/api/v1${SYNC_API_PATH}`).toBe(`${BASE}/sync`);
+  });
+
+  test(
+    "a press is confirmed, asks the worker once, and says what the run did once it has run",
+    async () => {
+      // What breaks if this is deleted: a press that applies the list without a confirmation, asks
+      // twice, or never shows what the run did.
+      let asked = false;
+      const { container, idp } = await consoleAt({
+        [`GET ${BASE}/runs`]: {
+          get body() {
+            return { runs: asked ? [SYNCED_RUN, ...RUNS.runs] : RUNS.runs };
+          },
+        },
+        [`POST ${BASE}/sync`]: {
+          get body() {
+            asked = true;
+            return { ...SYNC, requested_at: "2999-03-02T08:59:58Z", waiting: true, told: SYNC_ASKED };
+          },
+        },
+      });
+      await press(container, SYNC_NOW);
+      expect(writes(idp)).toEqual([]);
+      const dialog = await screen.findByRole("alertdialog");
+      await press(dialog, SYNC_NOW);
+      await waitFor(() => {
+        expect(container.textContent).toContain(SYNC_ASKED);
+      });
+      expect(writes(idp)).toEqual([{ key: `POST ${BASE}/sync`, body: "{}" }]);
+      await waitFor(
+        () => {
+          expect(container.textContent).toContain(SYNC_DONE);
+        },
+        { timeout: TRIAL_POLL_MS * 3 },
+      );
+      await waitFor(() => {
+        expect(container.textContent).toContain("People: 122 on the list added to People.");
+      });
+      expect(writes(idp)).toHaveLength(1);
+    },
+    TRIAL_POLL_MS * 4,
+  );
+
+  test("a reader who may not press it is shown neither the button nor the times", async () => {
+    // What breaks if this is deleted: a button a reader is refused on pressing, or the schedule
+    // shown to somebody the API answered nothing.
+    const { container } = await consoleAt({ [`GET ${BASE}/sync`]: { body: { ...SYNC, may_sync: false } } });
+    expect(screen.queryByRole("button", { name: SYNC_NOW })).toBeNull();
+    expect(container.textContent).not.toContain(NEXT_RUN);
   });
 });
 

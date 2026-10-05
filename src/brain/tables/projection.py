@@ -72,7 +72,7 @@ index worth having is a per-entity expression index added when there is a measur
 add it for, rather than a blanket one added on the day the table is created.
 
 **A record a complete read no longer returns is retired here and remembered in
-`proj.record_retired`, since `0152`** (M11.8.11). The retiring statement stamps the live row's
+`proj.record_retired`, since `0179`** (M11.8.11). The retiring statement stamps the live row's
 `deleted_at`, which hides it from every read at the application's role, and writes a snapshot of the
 row as it stood, with when its absence was noticed, into `proj.record_retired` in the same
 statement. A record the source returns afterwards is served again from the same row: the worker's

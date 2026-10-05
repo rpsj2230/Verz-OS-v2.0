@@ -453,9 +453,11 @@ class QueueLimits:
 class QueueDecision:
     """Whether this upload joins the queue, and what to tell whoever sent it.
 
-    There is no field for the queue depth or for a position in it, and that is the design. A
-    position is a count of other people's work, it moves backwards as often as forwards, and
-    a person watching it learns nothing they can act on. A duration is something they can.
+    Only whether there is room to wait. The position an accepted upload is given and its expected
+    wait come from the capacity half (`brain.ops.admission.QueuePlacement`, over
+    `brain.ops.capacity_ledger`), because a position is a count of all the work sharing the
+    budget, not only of this queue's. Until 2026-09-29 this docstring argued a position should
+    never be shown; the owner's requirement ARC-B-141 asks that a queued person see it.
     """
 
     admitted: bool

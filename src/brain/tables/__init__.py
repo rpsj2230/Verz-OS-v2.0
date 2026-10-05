@@ -74,6 +74,7 @@ from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
+from brain.tables.escalation import EscalationRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -409,7 +410,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
-    # 0152_record_lives_and_source_epochs. Points at nothing: a source is a value, and the epoch
+    # 0168_escalation. Points at nothing: the asker, the named person, the agent and the skill are
+    # values, so a handoff outlives all four.
+    "gate.escalation",
+    # 0179_record_lives_and_source_epochs. Points at nothing: a source is a value, and the epoch
     # outlives any one connection of it, as `proj.record`'s rows do; a retirement names its record
     # by value, because the live row it copied can serve again.
     "proj.record_retired",
@@ -465,6 +469,7 @@ __all__ = [
     "EntityLinkRow",
     "ErasureOutcome",
     "ErasureRequestRow",
+    "EscalationRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GoldenQuestionRow",

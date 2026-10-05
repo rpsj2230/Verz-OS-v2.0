@@ -2,7 +2,7 @@
 
 The Webhooks screen said "no channel receives a webhook" and one sentence for all of them, and the
 sentence was wrong in the direction that matters: it said each channel had its way of checking a
-request written and tested, and two of them have nothing. So this is the list the screen draws,
+request written and tested, and two of them had nothing. So this is the list the screen draws,
 one row per channel a platform would call in on, each saying whether the check that a request
 really came from that platform is written, which function it is, and what it needs.
 
@@ -25,7 +25,11 @@ Rejected: reading the verification state out of the adapters. `ChannelCapabiliti
 adapter can carry and nothing about inbound requests, and widening it would put a fact about a
 module's functions into a value each adapter declares by hand, which is the copy that drifts.
 
-Task ids: M27.8.12, M10.2.1
+**No row says not written since 2026-09-29.** Lark's check arrived with its channel and WhatsApp's
+last (`brain.channels.whatsapp.verify_signature`, M10.6.2); `NOT_WRITTEN` stays, for the next
+channel a platform would call in on before its check exists.
+
+Task ids: M27.8.12, M10.2.1, M10.6.2
 """
 
 from __future__ import annotations
@@ -94,12 +98,15 @@ class InboundChannel:
 INBOUND: Final[tuple[InboundChannel, ...]] = (
     InboundChannel(
         channel=Channel.EMAIL,
-        verification=Verification.NOT_A_WEBHOOK,
-        check="",
+        verification=Verification.WRITTEN,
+        check="brain.channels.webhook:verify",
         how=(
-            "Mail arrives through a mail server, which records whether the sender passed its "
-            "authentication checks; the adapter takes that verdict from the server, never from the "
-            "message, and treats mail that did not pass as from nobody."
+            "The company's mail service receives the message and turns away mail that fails the "
+            "sender's DMARC policy; a script there posts it here with that verdict, signed with "
+            "the channel's secret over the time and the exact bytes, the webhook channel's "
+            "construction. The check refuses a stale or unsigned request, and mail whose verdict "
+            "is not a pass is treated as from nobody. It is received at its channel's events "
+            "address while its record is switched on."
         ),
     ),
     InboundChannel(
@@ -121,7 +128,8 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         how=(
             "Slack signs each request with the app's signing secret over the time and the exact "
             "bytes sent; the check refuses a request more than five minutes old or signed with "
-            "anything else."
+            "anything else. It is received at its channel's events address while its record is "
+            "switched on."
         ),
     ),
     InboundChannel(
@@ -130,7 +138,8 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         check="brain.channels.teams:verified_activity",
         how=(
             "Microsoft sends a token it signed; the check verifies it against Microsoft's "
-            "published keys, the bot's app id and the one tenant the install is pinned to."
+            "published keys, the bot's app id and the one tenant the install is pinned to. It is "
+            "received at its channel's events address while its record is switched on."
         ),
     ),
     InboundChannel(
@@ -138,8 +147,9 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         verification=Verification.WRITTEN,
         check="brain.channels.telegram:verified_update",
         how=(
-            "Telegram repeats a secret token chosen when the webhook is set; the check compares it "
-            "in constant time and refuses a configured token shorter than 32 characters."
+            "Telegram repeats a secret the install made from the bot token and named when it "
+            "registered its address; the check compares it in constant time. It is received at "
+            "its channel's events address while its record is switched on."
         ),
     ),
     InboundChannel(
@@ -155,11 +165,14 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
     ),
     InboundChannel(
         channel=Channel.WHATSAPP,
-        verification=Verification.NOT_WRITTEN,
-        check="",
+        verification=Verification.WRITTEN,
+        check="brain.channels.whatsapp:verify_signature",
         how=(
-            "Meta signs each request with the app secret. Nothing here checks that signature yet, "
-            "so a request claiming to be from WhatsApp could not be told apart from a forged one."
+            "Meta signs each request with the app secret, an HMAC-SHA256 of the exact bytes sent "
+            "in X-Hub-Signature-256; the check computes it again over the bytes received and "
+            "compares the two in constant time before anything is read, and a request about "
+            "another phone number is refused too. It is received at its channel's events address "
+            "while its record is switched on."
         ),
     ),
 )

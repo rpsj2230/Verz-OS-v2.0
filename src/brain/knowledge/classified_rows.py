@@ -87,6 +87,7 @@ from brain.knowledge.rows import (
     RowSource,
     compile_projection,
     row_scope_for,
+    scope_carried,
 )
 from brain.tables.classified_table import ClassifiedRecordRow
 
@@ -240,16 +241,22 @@ def compile_table_query(
     decided without a row; the scope and the filters second, into the WHERE clause, because
     they are predicates over rows. A caller holding no grant on the table compiles to `FALSE`
     and the statement is never run.
+
+    The fields the reader's scopes test are selected beside the projection, for
+    `brain.knowledge.rows.A_RECORD_CARRIES_WHAT_ITS_READERS_SCOPES_TEST`: an upload that did not
+    mark its department column open, read by a department-scoped reader, otherwise reached the
+    redactor unable to show that the row was theirs, and every field was withheld.
     """
     rows = row_scope_for(table.entity, entitlement, now)
     columns = compile_projection(table.classification, entitlement=entitlement, rows=rows, now=now)
+    carried = scope_carried(rows, columns)
     caller = NOTHING if rows is None else compile_where(rows, ROW_LAYOUT, param_prefix=SCOPE_PREFIX)
     predicate = caller.and_(_filters(table, request, columns))
     statement = (
         select(
             ROWS.c.entity.label(ENTITY_KEY),
             cast(ROWS.c.position, String).label(ID_KEY),
-            *(ROWS.c.fields[name].astext.label(name) for name in columns),
+            *(ROWS.c.fields[name].astext.label(name) for name in (*columns, *carried)),
         )
         # The pin to this table's live upload. System narrowing about where the rows are, not
         # a permission: every value in it came from the stored table, none from the asker.
@@ -265,6 +272,7 @@ def compile_table_query(
         columns=columns,
         statement=statement,
         certainly_empty=predicate.certainly_empty,
+        carried=carried,
     )
 
 
@@ -289,7 +297,11 @@ async def read_table_rows(
         RowRecord(
             entity=query.entity,
             id=str(row[ID_KEY]),
-            **{name: row[name] for name in query.columns if name in row and row[name] is not None},
+            **{
+                name: row[name]
+                for name in (*query.columns, *query.carried)
+                if name in row and row[name] is not None
+            },
         )
         for row in fetched
     )
@@ -323,42 +335,60 @@ def label_of(column: str) -> str:
     return column.replace("_", " ")
 
 
-def _rule_id(entity: str, column: str, shape: int) -> str:
+def rule_name(entity: str, column: str, shape: int | str, *, source: str = TABLES_SOURCE) -> str:
     """A rule's name: readable at the front for a log line, and unique by the digest behind it.
 
     Truncated names alone could collide between two long entities, and the lane refuses a rule
-    set in which one id names two rules.
+    set in which one id names two rules. A source other than the uploaded tables is in the digest,
+    so a connected source's `invoice.status` and an uploaded table called `invoice` are two names;
+    the tables' own digest is unchanged, so no uploaded table's rules are renamed by it.
     """
-    digest = hashlib.sha256(f"{entity}.{column}".encode()).hexdigest()[:8]
+    named = f"{entity}.{column}" if source == TABLES_SOURCE else f"{source}.{entity}.{column}"
+    digest = hashlib.sha256(named.encode()).hexdigest()[:8]
     return f"{entity[:20]}_{column[:20]}_{digest}_{shape}"
 
 
-def questions_for(table: StoredTable) -> tuple[FastPathRule, ...]:
-    """The question shapes this table answers, one set per column other than the key.
+def questions_over(
+    classification: TableClassification,
+    *,
+    source: str,
+    key_column: str,
+    unasked: frozenset[str] = frozenset(),
+) -> tuple[FastPathRule, ...]:
+    """The question shapes one classified entity answers: a record named by its key, and a column.
 
-    A shape `FastPathRule` refuses is dropped, and only that shape: see `QUESTION_SHAPES`.
+    One set per column other than the key and the `unasked`, each in every one of
+    `QUESTION_SHAPES` that `FastPathRule` accepts: a shape it refuses is dropped, and only that
+    shape. Shared by the uploaded tables and the connected sources
+    (`brain.knowledge.connector_rows`), so a question is asked of either in the same words.
     """
     rules: list[FastPathRule] = []
-    slot = table.key_column
-    for column in table.classification.columns():
-        if column == slot:
+    for column in classification.columns():
+        if column == key_column or column in unasked:
             continue
         for shape, template in enumerate(QUESTION_SHAPES):
             try:
                 rules.append(
                     FastPathRule(
-                        rule_id=_rule_id(table.entity, column, shape),
-                        template=template.format(label=label_of(column), slot="{" + slot + "}"),
-                        slot=slot,
-                        source=TABLES_SOURCE,
-                        entity=table.entity,
-                        match_field=slot,
+                        rule_id=rule_name(classification.entity, column, shape, source=source),
+                        template=template.format(
+                            label=label_of(column), slot="{" + key_column + "}"
+                        ),
+                        slot=key_column,
+                        source=source,
+                        entity=classification.entity,
+                        match_field=key_column,
                         answer_field=column,
                     )
                 )
             except ValidationError:
                 continue
     return tuple(rules)
+
+
+def questions_for(table: StoredTable) -> tuple[FastPathRule, ...]:
+    """The question shapes this table answers, one set per column other than the key."""
+    return questions_over(table.classification, source=TABLES_SOURCE, key_column=table.key_column)
 
 
 # ----------------------------------------------------------------------- the lane

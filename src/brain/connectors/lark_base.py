@@ -145,7 +145,7 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
-from brain.connectors.declaration import ConnectorDeclaration, Recorded
+from brain.connectors.declaration import ConnectorDeclaration, KeyScopes, Recorded
 from brain.connectors.federation import FailureReason, PartialAnswer, SourceFailure
 from brain.connectors.manifest import (
     ChangeSignal,
@@ -2533,4 +2533,8 @@ CONNECTOR: Final = ConnectorDeclaration(
         findings=(LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL,),
     ),
     recorded=Recorded(tested=True),
+    scopes=KeyScopes(
+        request=("bitable:app:readonly", "base:record:read"),
+        refuse=("base:record:write", "drive:drive"),
+    ),
 )

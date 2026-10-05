@@ -6,7 +6,7 @@ and a removed newest entry is detected, that a run's trace graph and payload hol
 content readable under the separate role, and that the compliance export holds no deployment
 history. This check performs every act, inside its rolled-back transaction, and reads back what the
 ledger, the audit view, the chain verifier, the trace store and the export make of them. It is a
-module of its own, named in `brain.ops.acceptance.CHECK_MODULES`, beside the checks that reach a
+module of its own, found by `brain.ops.acceptance.check_modules`, beside the checks that reach a
 model.
 
 **Every act is the product's own write, attributed as a console request attributes it.** A grant is
@@ -32,8 +32,9 @@ pretended removed: the entry left out is the check's own.
 an operator would read it.** `brain.ops.trace_store.TraceRecorder` is handed the finished request
 beside the two recorders it already had; the record it disclosed carries a word nothing on the
 install holds, and that word has to be absent from every stored step. The application's own role
-has to hold no SELECT on the steps and the reader role has to, a read without the realm role has
-to be refused with no row written, and a read with it has to leave its row and return the graph:
+has to hold no SELECT on the steps and the reader role has to, a read whose sign-in carries every
+other realm role and not the payload one has to be refused with no row written (M32.1.2.4, see
+`ONLY_ITS_OWN_ROLE_READS_A_TRACE`), and a read with it has to leave its row and return the graph:
 the request, and the tool call hanging from it, every payload one of the four shapes `mask` leaves
 and every attribute a value `mask` would leave as it is.
 
@@ -45,7 +46,7 @@ with nothing in it proves nothing about keeping one out**, so an install whose d
 recorded ends as not run with `NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT`, after every other part has
 been seen working and a part that does not work has failed it first.
 
-Task ids: M38.5.1, M24.3.4
+Task ids: M38.5.1, M24.3.4, M32.1.2.4
 """
 
 from __future__ import annotations
@@ -68,6 +69,11 @@ from brain.ops.acceptance_run import Harness
 if TYPE_CHECKING:
     from brain.audit.ledger import AuditEntry
     from brain.core.entitlement import EntitlementSet
+    from brain.identity.oidc import VerifiedClaims
+
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 70
 
 A, B = RESERVED_DEPARTMENTS
 
@@ -111,6 +117,19 @@ BROWSED_ORIGIN: Final = "https://acceptance.invalid"
 
 #: Why the check reads a trace, as `brain.ops.tracing.PayloadRead` requires a reason.
 READ_REASON: Final = "An install acceptance check reading its own run's trace"
+
+#: Why the trace is read off two sign-ins, one carrying every other realm role and one the
+#: payload role besides.
+ONLY_ITS_OWN_ROLE_READS_A_TRACE: Final = (
+    "A run's stored trace is read under a Keycloak realm role of its own, held for an incident and "
+    "taken away after, and under no capability and no other role. The check reads the roles off "
+    "a sign-in as the trace route does: one carrying the realm's administrative and default roles "
+    "is refused and leaves no row, and the same person with the payload role besides reads it."
+)
+
+#: The realm roles a sign-in may carry that must not read a trace: Keycloak's defaults and an
+#: administrator's.
+OTHER_REALM_ROLES: Final = ("offline_access", "uma_authorization", "admin", "realm-admin")
 
 #: A deployment value shorter than this is not looked for: `unknown` and a short commit could
 #: occur in an export by chance, and every value that identifies a deploy is longer.
@@ -226,6 +245,31 @@ async def _a_browser_session(h: Harness, asker: str, agent: str) -> tuple[str, s
     return run_id, digest
 
 
+def _signed_in(h: Harness, subject: str, roles: Sequence[str]) -> VerifiedClaims:
+    """The claims a sign-in carrying these realm roles would leave, as the trace route reads them.
+
+    Built rather than verified, because what is proved is which role the route reads off a token,
+    and a signature over made-up claims would prove nothing more about that.
+    """
+    from types import MappingProxyType
+
+    from brain.identity.oidc import VerifiedClaims
+    from brain.trace_routes import REALM_ACCESS_CLAIM
+
+    return VerifiedClaims(
+        issuer="acceptance",
+        subject=subject,
+        audience=(),
+        issued_at=h.now,
+        expires_at=h.now,
+        session_id=None,
+        key_id="acceptance",
+        algorithm="RS256",
+        verified_at=h.now,
+        claims=MappingProxyType({REALM_ACCESS_CLAIM: {"roles": list(roles)}}),
+    )
+
+
 async def _the_trace_is_masked_and_held_apart(
     h: Harness, reader: str, trace_id: str, canary: str
 ) -> None:
@@ -237,6 +281,7 @@ async def _the_trace_is_masked_and_held_apart(
     )
     from brain.ops.tracing import MASKED_PAYLOADS, PAYLOAD_ROLE, Span, StepKind, mask, mask_value
     from brain.session import APPLICATION_ROLE
+    from brain.trace_routes import payload_roles_of
 
     held = (
         await h.execute(
@@ -260,10 +305,14 @@ async def _the_trace_is_masked_and_held_apart(
             ).scalar_one()
         )
 
+    # M32.1.2.4: the roles are read off a sign-in as the trace route reads them, so every other
+    # realm role is carried and only the separate one admits. See `ONLY_ITS_OWN_ROLE_READS_A_TRACE`.
+    without = payload_roles_of(_signed_in(h, reader, OTHER_REALM_ROLES))
+    holding = payload_roles_of(_signed_in(h, reader, (*OTHER_REALM_ROLES, PAYLOAD_ROLE)))
     store = StoredTraces(h.sessions)
     try:
         await store.read(
-            realm_roles=(), at=h.now, actor=reader, trace_id=trace_id, reason=READ_REASON
+            realm_roles=without, at=h.now, actor=reader, trace_id=trace_id, reason=READ_REASON
         )
     except TraceStoreError:
         pass
@@ -272,7 +321,7 @@ async def _the_trace_is_masked_and_held_apart(
     if await reads():
         raise CheckFailedError("a refused trace read left a row saying it was read")
     steps = await store.read(
-        realm_roles=(PAYLOAD_ROLE,), at=h.now, actor=reader, trace_id=trace_id, reason=READ_REASON
+        realm_roles=holding, at=h.now, actor=reader, trace_id=trace_id, reason=READ_REASON
     )
     if await reads() != 1:
         raise CheckFailedError("a trace was read without a row saying who read it")
@@ -331,7 +380,7 @@ async def _the_export_holds_no_deployment_history(
 
 
 @check(
-    leaves=("M24.3.4",),
+    leaves=("M24.3.4", "M32.1.2.4"),
     sentence=(
         "A grant, a publish, a leash change, a merge, a sensitive read and a browser session each "
         "reach the ledger with their actor and trace, and the audit view shows them and the "

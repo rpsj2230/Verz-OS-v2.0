@@ -43,6 +43,9 @@ export type Connectors = components["schemas"]["ConnectorsView"];
 /** A source the console can connect, and what its form asks for. */
 export type Connectable = components["schemas"]["ConnectableView"];
 
+/** A write a source can be allowed to make, off until its own key is given (M11.7.3). */
+export type WriteGrant = components["schemas"]["WriteGrantView"];
+
 /** A source this release has a connector for that the console cannot connect, and why. */
 export type NotConnectable = components["schemas"]["NotConnectableView"];
 

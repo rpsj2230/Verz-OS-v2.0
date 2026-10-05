@@ -18,6 +18,7 @@ from typing import Any, Final
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.throttle import CallOutcome
+from brain.ops.idempotency import Verification
 
 
 class Source(enum.StrEnum):
@@ -172,3 +173,17 @@ class CassetteFile:
     projection_not_replayable: Mapping[str, str] = field(default_factory=dict)
     #: Whether the connector names its tools after a table a deployment chooses.
     tools_named_after_the_table: bool = False
+    #: How each recording the connector's read-back names is answered, by recording id, written
+    #: beside the recordings rather than read from the connector, so the two are two accounts.
+    read_back: Mapping[str, Verification] = field(default_factory=dict)
+    #: Drives one of those recordings through the read-back reading, in the connector's own reply.
+    read_back_answer: Callable[[Cassette], Verification] | None = None
+    #: Where this vendor's own documentation states the wait on a refusal, when it is not
+    #: `Retry-After`, or that it states none. Empty for a vendor that sends `Retry-After`. Declared
+    #: rather than inferred: a recording that dropped the header to match a connector would
+    #: otherwise pass as a vendor that never sends one (`tests/invariants/test_cassettes.py`).
+    wait_not_in_retry_after: str = ""
+    #: The connection settings these recordings were made under, laid over the connector's own
+    #: example settings when a test connects it to replay them: a folder or an account a recording
+    #: names, which a connection pinned elsewhere would refuse as outside its scope.
+    recorded_under: Mapping[str, str] = field(default_factory=dict)

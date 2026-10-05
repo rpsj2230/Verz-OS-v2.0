@@ -21,6 +21,9 @@
  * this reader may add somebody here (`may_add`); a person added holds nothing, and is then linked
  * to a sign-in, placed and granted like anybody else.
  *
+ * **What to tell somebody whose account the staff sync made** is under the list when a staff list
+ * is read, with a way to copy it (`AccountReady`): nobody is sent anything (needs-rupash 115).
+ *
  * **The data steward card stays under the list**: a grant of a data read begins with the steward,
  * and an install set up before the setup wizard named one names them here.
  *
@@ -28,7 +31,7 @@
  * "principal:" vocabulary, the paragraph explaining how the page resolves an address, and the
  * duplicate grant forms under the list (they are on the person's Grants view).
  *
- * Task ids: M27.11.2, M27.15.19, M27.16.1
+ * Task ids: M27.11.2, M27.15.19, M27.16.1, M1.6.16
  */
 
 import { MoreHorizontal, UserPlus, Users } from "lucide-react";
@@ -45,8 +48,9 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { dayWords } from "../access/formParts";
+import { AccountReady } from "./AccountReady";
 import { AddPersonDrawer, SeveralDrawer } from "./GrantDrawers";
-import { SecondFactorPill, StandingPill } from "./pills";
+import { SecondFactorPill, StaffStatusPill, StandingPill } from "./pills";
 import {
   DIRECTORY_API_PATH,
   PEOPLE_FILTERS,
@@ -55,6 +59,8 @@ import {
   readDirectoryFacts,
   readPeople,
   type PersonRow,
+  EMPLOYMENT_TYPE_WORDS,
+  STAFF_STATUS_WORDS,
 } from "./peopleQuery";
 
 export const PEOPLE_HEADING = "People";
@@ -73,6 +79,8 @@ export const GRANT_SELECTED = "Grant to selected";
 export const NAME_COLUMN = "Name";
 export const DEPARTMENT_COLUMN = "Department";
 export const STANDING_COLUMN = "Standing";
+export const STAFF_STATUS_COLUMN = "On the staff list";
+export const EMPLOYMENT_TYPE_COLUMN = "Employment type";
 export const SECOND_FACTOR_COLUMN = "Second factor";
 export const PACKS_COLUMN = "Packs";
 export const LAST_SIGN_IN_COLUMN = "Last sign-in";
@@ -165,6 +173,18 @@ export function PeoplePage() {
       text: (row) => (row.standing === "disabled" ? "Disabled" : "Live"),
     },
     {
+      id: "staff_status",
+      header: STAFF_STATUS_COLUMN,
+      cell: (row) => (row.staffStatus === undefined ? null : <StaffStatusPill status={row.staffStatus} />),
+      text: (row) => (row.staffStatus === undefined ? "" : (STAFF_STATUS_WORDS[row.staffStatus] ?? row.staffStatus)),
+    },
+    {
+      id: "employment_type",
+      header: EMPLOYMENT_TYPE_COLUMN,
+      cell: (row) => (row.employmentType === undefined ? null : (EMPLOYMENT_TYPE_WORDS[row.employmentType] ?? row.employmentType)),
+      text: (row) => (row.employmentType === undefined ? "" : (EMPLOYMENT_TYPE_WORDS[row.employmentType] ?? row.employmentType)),
+    },
+    {
       id: "second_factor",
       header: SECOND_FACTOR_COLUMN,
       cell: (row) => (row.secondFactor === undefined ? null : <SecondFactorPill seen={row.secondFactor} />),
@@ -243,7 +263,12 @@ export function PeoplePage() {
         emptyTitle={NO_PEOPLE}
         emptyDescription={NO_PEOPLE_DESCRIPTION}
         emptyIcon={<Users aria-hidden />}
-        footer={<DataStewardCard />}
+        footer={
+          <>
+            {facts.accountReady === undefined ? null : <AccountReady sentence={facts.accountReady} />}
+            <DataStewardCard />
+          </>
+        }
       />
       <SeveralDrawer
         open={granting !== null}

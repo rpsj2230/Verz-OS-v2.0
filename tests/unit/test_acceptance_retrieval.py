@@ -31,7 +31,7 @@ from brain.knowledge import document_tools, search
 from brain.ops import acceptance_retrieval, acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_retrieval"
 
@@ -77,11 +77,21 @@ def test_a_vector_placed_at_a_similarity_has_that_cosine_with_the_question() -> 
     further from the question than the reader's own passages, and the check proves nothing."""
     question = acceptance_retrieval._unit(64, {0: 1.0})
     for similarity in (0.3, 0.9, 0.95, 0.99):
-        placed = acceptance_retrieval._at(similarity, 7, 64)
+        placed = acceptance_retrieval._at(similarity, 7, 64, run="r1")
         assert math.isclose(sum(a * b for a, b in zip(question, placed, strict=True)), similarity)
         assert math.isclose(sum(one * one for one in placed), 1.0)
-    # Two seeds lean two ways, so no two passages sit on one point.
-    assert acceptance_retrieval._at(0.9, 1, 64) != acceptance_retrieval._at(0.9, 2, 64)
+    # Two seeds lean two ways, so no two passages sit on one point; one run places the same
+    # point twice; and two runs place different points, so a rolled-back run's dead index entries
+    # never stack onto the next run's (`A_PLACED_VECTOR_IS_THE_RUN_S_OWN`).
+    assert acceptance_retrieval._at(0.9, 1, 64, run="r1") != acceptance_retrieval._at(
+        0.9, 2, 64, run="r1"
+    )
+    assert acceptance_retrieval._at(0.9, 1, 64, run="r1") == acceptance_retrieval._at(
+        0.9, 1, 64, run="r1"
+    )
+    assert acceptance_retrieval._at(0.9, 1, 64, run="r1") != acceptance_retrieval._at(
+        0.9, 1, 64, run="r2"
+    )
 
 
 # --------------------------------------------------------------------- on an install
@@ -133,14 +143,19 @@ def _failed(url: str, name: str) -> str:
 
 
 @pytest.mark.needs_db
-def test_iterative_scan_left_off_fails_the_narrow_reader_check(
+def test_a_walk_not_told_to_keep_walking_fails_the_narrow_reader_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The index walk stopping at its default window, as it does without iterative scan: the
-    crowd fills it and the reader's own passages are never reached. Delete this and M15.2.3 and
-    M15.2.4 close on a check that would pass with the setting gone."""
+    """**A plan assertion now, not a recall one.** Since 2026-10-05 a vector leg the walk left
+    short is asked again exactly over the reader's reach, so a reader is given their passages
+    with iterative scan off as well, and only at the cost of the re-ask. So the check reads the
+    leg's own statement: the walk it plans must carry iterative scan. Delete this and M15.2.3 can
+    close on a leg that walks the default window and leans on the re-ask for every narrow
+    reader."""
     monkeypatch.setattr(document_tools, "iterative_scan_statements", lambda: ())
-    assert "walking the index" in _failed(install, NARROW)
+    assert _failed(install, NARROW) == (
+        "the vector leg's walk is not told to keep walking past the crowd"
+    )
 
 
 @pytest.mark.needs_db
@@ -160,8 +175,9 @@ def test_a_reach_applied_after_the_query_fails_the_narrow_reader_check(
         return original(question, reach=wide, kinds=kinds)
 
     monkeypatch.setattr(document_tools, "search_queries", widened)
-    monkeypatch.setattr(document_tools, "iterative_scan_statements", lambda: ())
-    assert _failed(install, NARROW)
+    assert (
+        _failed(install, NARROW) == "a narrow reader's text search lost their passages to the crowd"
+    )
 
 
 @pytest.mark.needs_db
@@ -192,6 +208,20 @@ def test_a_projection_left_wide_fails_the_typed_tool_check(
         lambda classification, **kwargs: tuple(sorted(classification.columns())),
     )
     assert "columns" in _failed(install, TOOL) or "withheld" in _failed(install, TOOL)
+
+
+@pytest.mark.needs_db
+def test_records_built_without_the_scope_s_fields_fail_the_typed_tool_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The row plane back as it was before 2026-09-29: records built from the projection alone,
+    so a department-scoped reader's redactor has no department to judge and withholds every
+    field. Delete this and the check can go back to reading the tool's records and never the
+    redacted answer, which is how that defect passed it."""
+    from brain.knowledge import rows
+
+    monkeypatch.setattr(rows, "scope_carried", lambda scope, columns: ())
+    assert "redactor did not show" in _failed(install, TOOL)
 
 
 @pytest.mark.needs_db
@@ -245,3 +275,19 @@ def test_a_reach_widened_to_every_department_fails_the_three_readers_check(
 
     monkeypatch.setattr(document_tools, "reach_for", everywhere)
     assert "outside their scope" in _failed(install, REACH)
+
+
+def test_the_retrieval_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_retrieval") == [
+        "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
+        "a_word_in_a_title_outranks_a_word_in_passing",
+        "a_documents_passages_come_back_together_in_reading_order",
+        "a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd",
+        "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
+        "the_database_withholds_passages_the_statement_did_not_filter",
+        "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]

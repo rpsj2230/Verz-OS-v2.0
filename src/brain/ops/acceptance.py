@@ -11,8 +11,11 @@ connection, and `brain.ops.acceptance_checks` holds the checks.
 function taking the harness registers it, and the sentence is the one the Install page shows beside
 the result: what was done on the install, in the words a person closing the task would write. A
 later package adds a check by writing one more function in `brain.ops.acceptance_checks`, or a
-module of its own named in `CHECK_MODULES`, and nothing else changes. Rejected: a hand-kept tuple of
-checks beside the functions, which is a second list to forget.
+module of its own under `brain.ops.acceptance` that declares its `CHECK_ORDER`, and nothing else
+changes: the module is found by walking the package (`check_modules`). Rejected: a hand-kept tuple
+of checks beside the functions, which is a second list to forget, and, since 2026-09-30, a
+hand-kept tuple of modules, which every package appended to. See
+`A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
 
 **The shape is `brain.ops.post_deploy`'s, and so is the rule about words.** A check passes, fails or
 was not run, and the reason stored beside it is a sentence the check's source wrote, never a value
@@ -35,10 +38,12 @@ from __future__ import annotations
 
 import enum
 import importlib
+import pkgutil
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from functools import cache
 from typing import TYPE_CHECKING, Any, Final
 
 from brain.ops.post_deploy import FAILED, NOT_RUN, PASSED
@@ -56,6 +61,7 @@ __all__ = [
     "Occasion",
     "Result",
     "check",
+    "check_modules",
     "registered",
 ]
 
@@ -177,25 +183,20 @@ REASON_CHARS: Final = 240
 #: The longest sentence a check may be described by.
 SENTENCE_CHARS: Final = 400
 
-#: The modules whose `@check` functions make up the suite, imported by `registered`.
-CHECK_MODULES: Final = (
-    "brain.ops.acceptance_checks",
-    "brain.ops.acceptance_oversight",
-    "brain.ops.acceptance_checks_chat",
-    "brain.ops.acceptance_checks_skills",
-    "brain.ops.acceptance_models",
-    "brain.ops.acceptance_routing",
-    "brain.ops.acceptance_audit",
-    "brain.ops.acceptance_checks_connectors",
-    "brain.ops.acceptance_checks_tools",
-    "brain.ops.acceptance_checks_lifecycle",
-    "brain.ops.acceptance_checks_tables",
-    "brain.ops.acceptance_answers",
-    "brain.ops.acceptance_checks_connector_framework",
-    "brain.ops.acceptance_checks_capacity",
-    "brain.ops.acceptance_retrieval",
-    "brain.ops.acceptance_checks_memory",
-    "brain.ops.acceptance_checks_change_signals",
+#: Where the suite's check modules live: every module of `brain.ops` whose name starts with this.
+CHECK_MODULE_PREFIX: Final = "brain.ops.acceptance"
+
+#: The constant a check module declares to say where its checks stand on the Install page.
+ORDER_ATTRIBUTE: Final = "CHECK_ORDER"
+
+#: Why the modules are discovered rather than listed.
+A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF: Final = (
+    "The suite's modules are every brain.ops.acceptance module that registers a check, found by "
+    "walking the package, each placed on the Install page by the order key it declares itself, "
+    "ties broken by name. A hand-kept tuple was one pair of lines every package appended to, so "
+    "two packages landing a day apart conflicted on it every time. A module that registers a "
+    "check and declares no order, one that declares an order and registers nothing, and a check "
+    "registered anywhere else are each refused, so no check can drop out of the page unseen."
 )
 
 
@@ -280,13 +281,66 @@ def check(*, leaves: Sequence[str], sentence: str) -> Callable[[CheckBody], Chec
     return register
 
 
-def registered(modules: Iterable[str] = CHECK_MODULES) -> tuple[Check, ...]:
-    """Every check in the suite: module by module as `modules` names them, each in its own order.
+def is_check_module_name(name: str) -> bool:
+    """Whether a module's name is one the suite looks for checks in. Pure: nothing is imported."""
+    return name.startswith(CHECK_MODULE_PREFIX)
 
-    Ordered by the names rather than by `_REGISTERED`, which is import order: with a second check
-    module, whichever a process happened to import first would lead the Install page.
+
+def ordered_check_modules(
+    declared: Mapping[str, int | None], registering: Iterable[str]
+) -> tuple[str, ...]:
+    """The check modules in page order, from what each declares and where checks were registered.
+
+    `declared` is every module found under the prefix with its order key, None where it declares
+    none; `registering` is every module a registered check's function lives in. See
+    `A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`. Pure, so every refusal is tested without a
+    package to walk.
     """
-    named = tuple(modules)
+    registers = set(registering)
+    outside = sorted(registers - set(declared))
+    if outside:
+        msg = f"checks are registered in {outside}, which the suite does not look in"
+        raise AcceptanceError(msg)
+    unordered = sorted(one for one in registers if declared[one] is None)
+    if unordered:
+        msg = f"{unordered} register checks and declare no {ORDER_ATTRIBUTE}"
+        raise AcceptanceError(msg)
+    empty = sorted(one for one, key in declared.items() if key is not None and one not in registers)
+    if empty:
+        msg = f"{empty} declare {ORDER_ATTRIBUTE} and register no check"
+        raise AcceptanceError(msg)
+    placed = {one: key for one in registers if (key := declared[one]) is not None}
+    return tuple(sorted(placed, key=lambda one: (placed[one], one)))
+
+
+@cache
+def check_modules() -> tuple[str, ...]:
+    """Every module the suite runs, in page order, found by walking `brain.ops`.
+
+    Imports each module under `CHECK_MODULE_PREFIX`, which is what registers its checks, and reads
+    its `CHECK_ORDER`. See `A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+    """
+    import brain.ops as package
+
+    declared: dict[str, int | None] = {}
+    for info in pkgutil.iter_modules(package.__path__, prefix="brain.ops."):
+        if not is_check_module_name(info.name):
+            continue
+        module = importlib.import_module(info.name)
+        key = getattr(module, ORDER_ATTRIBUTE, None)
+        declared[info.name] = key if isinstance(key, int) and not isinstance(key, bool) else None
+    registering = {getattr(one.run, "__module__", "") for one in _REGISTERED}
+    return ordered_check_modules(declared, registering)
+
+
+def registered(modules: Iterable[str] | None = None) -> tuple[Check, ...]:
+    """Every check in the suite: module by module in page order, each in its own order.
+
+    Ordered by the modules rather than by `_REGISTERED`, which is import order: with a second check
+    module, whichever a process happened to import first would lead the Install page. `modules`
+    narrows the suite to the ones named, in the order named; by default it is `check_modules()`.
+    """
+    named = check_modules() if modules is None else tuple(modules)
     for module in named:
         importlib.import_module(module)
     return tuple(

@@ -69,8 +69,17 @@ Rejected: `backfill.next_step` as the pacing, which holds a search's result cap 
 sync walks and would stop Freshdesk's list at three hundred tickets.
 
 **What a complete read of everything did not return is retired, and a record the source returns
-again is a new live row** (M11.8.11). See
+again serves from its own row while the retirement stays on file** (M11.8.11). See
 `WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED` and `brain.tables.projection`.
+
+**A pass cut short at its page bound is carried on whatever shape its walk takes** (M11.9.15).
+What an entity's walk would ask next is kept as that page's own arguments, so a reading that carries
+its walk in them, as Google Drive carries the folders still to list, is carried on with no code of
+its own; a routed reading's next route is a page like any other; and an entity listed under
+another keeps the page of the parent it stopped under, with the parents after it read from the
+index this read has already written. A pass that skipped something to finish (a routed server that
+did not answer, a folder past the walk's bound) is marked partial and retires nothing. A
+database's views are the one shape not carried on: see `A_VIEW_READ_IS_ONE_BOUNDED_READ`.
 
 **A read that changed a source's rows advances that source's epoch** (M11.8.4), in the transaction
 that changed them, and the answer cache's key carries it. See
@@ -81,7 +90,7 @@ every run. It would quarantine a connection in memory that the next run rebuilds
 so the quarantine would last one run, and it would add a second in-memory opinion about whether a
 source is connected beside the table that already says so.
 
-Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8, M11.4.6, M11.4.8, M11.8.4, M11.8.11
+Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8, M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15
 """
 
 from __future__ import annotations
@@ -96,9 +105,10 @@ from typing import Any, Final
 
 from brain.connectors.backfill import BackfillCursor
 from brain.connectors.contract import ConnectorContractError, HealthState
-from brain.connectors.declaration import ChangedSince, shipped
+from brain.connectors.declaration import ChangedSince, RoutedReading, shipped
 from brain.connectors.declaration import PageReply as PageReply
 from brain.connectors.declaration import SourceReading as SourceReading
+from brain.connectors.declaration import ViewReading as ViewReading
 from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.connectors.minimal_index import MinimalIndexError, StoredRow, assert_minimal_index
 from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, ProjectedRecord
@@ -193,12 +203,36 @@ WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED: Final = (
     "asked only for changes, is the one view of the source that shows a record has gone: a live "
     "record it did not return is retired, stamped with when that was noticed. A read of changes "
     "cannot show it, because a deleted record is not changed, it stops being mentioned; and a read "
-    "cut short cannot, because the records past where it stopped were not asked for. Until 0152 "
+    "cut short cannot, because the records past where it stopped were not asked for. Until 0179 "
     "nothing was retired, because a retirement was final for the record, so a sweep that was "
     "wrong (a page the source skipped while another was deleted in front of it) would have kept a "
-    "record out of every answer for good. Now a record the source returns again is a new live row "
-    "beside the retired one, so a wrong retirement lasts until the next read that sees the record, "
-    "and the retired row stays as the record of when it went."
+    "record out of every answer for good. Now a record the source returns again serves from its "
+    "own row, and the copy kept in proj.record_retired stays as the record of when it went, so a "
+    "wrong retirement lasts until the next read that sees the record. A pass that skipped "
+    "something to finish, a routed server that did not answer or a folder past the walk's bound, "
+    "is partial and retires nothing, because what it skipped was not asked for either."
+)
+
+#: Why a pass is carried on in every shape a walk takes.
+A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE: Final = (
+    "A pass stopped at its page bound keeps the arguments of the page it would ask next, and the "
+    "next attempt asks exactly that page. Every walk the worker makes is a sequence of pages, so "
+    "this one rule carries on each of them: a reading that holds its walk in the page arguments, "
+    "as Google Drive holds the folders still to list, needs nothing of its own; a routed "
+    "reading's next route is a page; and an entity listed under another keeps the page under the "
+    "parent it stopped at, then reads every later parent this read kept, from the index, because "
+    "the parents were written by an earlier attempt and are not in this one's memory. Parents are "
+    "walked in the order of their ids, so the attempt that carries on knows which come after."
+)
+
+#: Why a database's views are read from the start every time.
+A_VIEW_READ_IS_ONE_BOUNDED_READ: Final = (
+    "A database's view is read by one statement bounded by the row cap its administrator set, and "
+    "the statement has no page to resume from: the reading asks no keyset and the view promises "
+    "no order. A read that reached the cap says it was cut short and the next one reads the view "
+    "again from the start, and it never retires anything, because a capped read did not see the "
+    "rows past the cap. Raising the cap is the administrator's remedy, up to the connector's own "
+    "ceiling."
 )
 
 #: When a source's epoch moves, and when it does not.
@@ -309,6 +343,14 @@ KEY_DECLINED: Final = (
     "The source declined the key this install holds for it. Replace the key from this source's "
     "Manage menu."
 )
+#: What a database's refusal leaves, which a key's refusal does not describe: the password, the
+#: grant on the views and the views themselves are the database administrator's, and any of them
+#: moving is the same refusal to this install (M11.6.1).
+DATABASE_REFUSED: Final = (
+    "The database refused the read: the user's password, its grant on the views, or a view itself "
+    "is no longer what was connected. Its administrator can say which; replace the user from this "
+    "source's Manage menu if its password changed."
+)
 SHAPE_DISAGREED: Final = (
     "The source answered in a shape its declaration does not describe, so nothing from that answer "
     "was kept."
@@ -330,6 +372,11 @@ VAULT_REFUSED: Final = (
     "be loaded: ops/openbao/credential-slots.md has the steps."
 )
 VAULT_UNREACHABLE: Final = "The vault did not answer, so the source's key could not be read."
+#: A source whose key file is exchanged for a token, read by a process given no way to post for one.
+NO_KEY_FILE_EXCHANGE: Final = (
+    "This process was given no way to exchange the source's key file for a token, so the source "
+    "was not asked."
+)
 NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
 
 #: The screen's words for an attempt's outcome, by what follows it.
@@ -434,6 +481,10 @@ class ReadPass:
     started_at: datetime
     since: datetime | None = None
     walks: Mapping[str, BackfillCursor] = field(default_factory=dict)
+    #: Whether this read skipped something to reach its end: a routed server that did not answer, a
+    #: folder past the walk's bound. A partial read retires nothing. See
+    #: `WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
+    partial: bool = False
 
     def __post_init__(self) -> None:
         if self.started_at.tzinfo is None or (self.since is not None and self.since.tzinfo is None):
@@ -461,6 +512,12 @@ class ReadPass:
             entity in self.walks and self.walks[entity].exhausted for entity in entities
         )
 
+    def retires(self, entities: Sequence[str]) -> bool:
+        """Whether this read may retire what it did not see: everything asked, nothing skipped,
+        every entity read to its end. See
+        `WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`."""
+        return self.everything and not self.partial and self.complete(entities)
+
 
 @dataclass(frozen=True)
 class ReadState:
@@ -485,6 +542,7 @@ class ReadState:
             walking = {
                 "started_at": self.walking.started_at.isoformat(),
                 "since": None if self.walking.since is None else self.walking.since.isoformat(),
+                "partial": self.walking.partial,
                 "walks": {
                     entity: {
                         "cursor": walk.cursor,
@@ -544,10 +602,14 @@ class ReadState:
                         records=records,
                         exhausted=exhausted,
                     )
+                partial = held.get("partial", False)
+                if not isinstance(partial, bool):
+                    raise ReadStateError("whether a read skipped something is true or false")
                 walking = ReadPass(
                     started_at=started,
                     since=_instant(held.get("since")),
                     walks=MappingProxyType(walks),
+                    partial=partial,
                 )
             elif held is not None:
                 raise ReadStateError("a read under way is an object")
@@ -588,18 +650,26 @@ def next_read(reading: SourceReading, state: ReadState | None, *, now: datetime)
 
 
 def page_to_ask(
-    reading: SourceReading, read: ReadPass, walk: BackfillCursor
+    reading: SourceReading,
+    read: ReadPass,
+    walk: BackfillCursor,
+    *,
+    settings: Mapping[str, str] = MappingProxyType({}),
 ) -> Mapping[str, str] | None:
     """The page a walk asks next: where it stopped, else the first, else None when it is done.
 
     A read of changes asks the first page through `ChangedSince.changed_since`; a reading that
     cannot be asked that is read from its ordinary first page, which asks for everything and so
-    for at least what was wanted.
+    for at least what was wanted. A routed reading's first page is the connection's own first
+    route, from `settings`, and None where it has none. See
+    `A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`.
     """
     if walk.exhausted:
         return None
     if walk.cursor:
         return page_of(walk.cursor)
+    if isinstance(reading, RoutedReading):
+        return reading.first_route(walk.entity, settings=settings)
     if read.since is not None and isinstance(reading, ChangedSince):
         return reading.changed_since(walk.entity, read.since)
     return reading.first_page(walk.entity)
@@ -651,7 +721,7 @@ class SyncState:
     #: When the source was last read to the end, which may be long before this attempt.
     last_synced_at: datetime | None
     #: Where reading the source stood, from the newest attempt that recorded it. None before the
-    #: first read and on every row before `0152`.
+    #: first read and on every row before `0179`.
     read_state: ReadState | None = None
 
 
@@ -755,9 +825,9 @@ def kept_fields(record: ProjectedRecord, manifest: ConnectorManifest) -> dict[st
 
 
 #: Every source this release reads on a schedule, by connector name, read off each connector's
-#: `CONNECTOR` declaration at start-up. `PageReply` and `SourceReading` are
+#: `CONNECTOR` declaration at start-up. `PageReply`, `SourceReading` and `ViewReading` are
 #: `brain.connectors.declaration`'s, named here for the modules that read them from this one.
-READINGS: Final[Mapping[str, SourceReading]] = MappingProxyType(
+READINGS: Final[Mapping[str, SourceReading | ViewReading]] = MappingProxyType(
     {name: one.reading for name, one in shipped().items() if one.reading is not None}
 )
 
@@ -776,7 +846,7 @@ class SyncPlan:
     connector: str
     refused: str = ""
     manifest: ConnectorManifest | None = None
-    reading: SourceReading | None = None
+    reading: SourceReading | ViewReading | None = None
     limits: tuple[Limit, ...] = ()
     #: Whether its next attempt is owed now. False for a refused plan.
     due: bool = False
@@ -799,7 +869,7 @@ def plan_for(
     *,
     last: SyncState | None,
     now: datetime,
-    readings: Mapping[str, SourceReading] = READINGS,
+    readings: Mapping[str, SourceReading | ViewReading] = READINGS,
 ) -> SyncPlan:
     """Whether this connection may be read now, asked in the order the module docstring gives."""
     name = connection.connector
@@ -992,6 +1062,11 @@ def failure_detail(call: CallOutcome, *, timed_out: bool = False) -> str:
     if call is CallOutcome.REJECTED:
         return KEY_DECLINED
     return SOURCE_UNREACHABLE
+
+
+def database_failure_detail(call: CallOutcome) -> str:
+    """The sentence a failed read of a database's view leaves. See `DATABASE_REFUSED`."""
+    return DATABASE_REFUSED if call is CallOutcome.REJECTED else failure_detail(call)
 
 
 def sync_in_words(plan: SyncPlan | None, state: SyncState | None) -> str:

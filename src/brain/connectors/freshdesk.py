@@ -107,12 +107,14 @@ import enum
 import inspect
 import math
 import re
+import secrets
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, Self
 
+from brain.connectors.ask import AskEntity, AskRows, each_behind_its_own
 from brain.connectors.change_signal import (
     MAX_RECONCILE_INTERVAL,
     ChangeSubscription,
@@ -128,9 +130,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -156,6 +160,7 @@ from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
 from brain.core.scope import Scope
 from brain.gate.provenance import FRESHNESS_TEXT, Freshness
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import (
     FRESHDESK_SEARCH_MAX_RECORDS,
     MAX_BACKOFF_SECONDS,
@@ -1212,6 +1217,52 @@ def operation_for(endpoint: Endpoint, *, domain: str) -> RestOperation:
     )
 
 
+#: What one ticket read live carries: the projected fields, the record id, and the ticket's body in
+#: plain text. Read while somebody waits and never kept: `FETCHED_LIVE_INSTEAD` names why the body
+#: is never projected, and `ticket_projection` does not name it, so `kept_fields` could not keep it
+#: if something tried.
+LIVE_BODY_FIELD: Final = "description_text"
+TICKET_LIVE_MAPPING: Final[tuple[FieldMapping, ...]] = (*TICKET_MAPPING, *_mapping(LIVE_BODY_FIELD))
+
+
+#: What the manifest says `freshdesk.read_ticket` does: the address it reads one ticket at and
+#: the body field it reads beyond the index's. Built from the live read's own path and field, so
+#: the declaration and the call cannot name different things, and held against the live
+#: operation's mapping by a test rather than against these constants.
+READ_TICKET_DESCRIPTION: Final = (
+    "Read one helpdesk ticket by its id, live, at the helpdesk's "
+    + ENDPOINTS[Endpoint.GET_TICKET].spec.path
+    + ", with its body in plain text ("
+    + LIVE_BODY_FIELD
+    + "). The body is read for the question that asks for it and never stored."
+)
+
+
+def live_ticket_operation(*, domain: str) -> RestOperation:
+    """One ticket by its id, with its body, for a live read (M11.6.2, M11.9.2).
+
+    The one-ticket endpoint and not the list, because the list names no ticket by id and carries
+    no body. Its mapping is the ticket's plus the body. Reading a ticket's body is something the
+    connector does, and a customer's free text is exactly what a person agreeing to the connector
+    has to see it do, so the manifest's `freshdesk.read_ticket` declares this address and this
+    field (`READ_TICKET_DESCRIPTION`), and a connection agreed before it goes through the
+    registry's upgrade, where a person accepts the change. Whether the body is kept is a separate
+    question, and it is not: see `FETCHED_LIVE_INSTEAD`. See also
+    `brain.connectors.declaration.A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+    """
+    shape = shape_for(Endpoint.GET_TICKET)
+    return RestOperation(
+        base_url=f"https://{domain}",
+        operation=shape.spec,
+        transport=RestTransport(
+            spec_ref=SPEC_REF,
+            operation=shape.spec.operation_id,
+            entity=TICKET,
+            fields=TICKET_LIVE_MAPPING,
+        ),
+    )
+
+
 # --------------------------------------------------------------------- the connection
 #: The two settings a connection is made with, named once for the form, the reading and tests.
 DOMAIN_SETTING: Final = "domain"
@@ -1350,7 +1401,7 @@ def manifest(
             ),
             ToolDeclaration(
                 name="freshdesk.read_ticket",
-                description="Read one helpdesk ticket by its id.",
+                description=READ_TICKET_DESCRIPTION,
                 entity=TICKET,
                 identity_mode=IdentityMode.SERVICE,
             ),
@@ -1518,6 +1569,43 @@ class FreshdeskReading:
             raise ConnectorContractError(msg)
 
 
+#: What a Freshdesk ticket id is: digits, as the helpdesk issues them.
+TICKET_ID: Final = re.compile(r"^[0-9]{1,20}$")
+
+
+class FreshdeskLiveLookup:
+    """One ticket, with its body, read from the helpdesk while somebody waits (M11.6.2, M11.9.2).
+
+    The service's credentials, declared: a connection holds one agent's API key, and no person's
+    own Freshdesk key is held for a read to run under.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return (TICKET,)
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        del entity
+        return IdentityMode.SERVICE
+
+    def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
+        FreshdeskReading._assert_ticket(entity)
+        if not TICKET_ID.match(source_id):
+            msg = (
+                "a ticket id laid into the helpdesk's address is digits, and this one is not; it "
+                "is refused rather than escaped"
+            )
+            raise ConnectorContractError(msg)
+        return MappingProxyType({"id": source_id})
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        del resolver  # checked when the address is prepared
+        FreshdeskReading._assert_ticket(entity)
+        connection = FreshdeskConnection.from_settings(settings)
+        return live_ticket_operation(domain=connection.domain)
+
+
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
     """The manifest a connection made on the Connectors screen declares."""
     connection = FreshdeskConnection.from_settings(settings)
@@ -1528,9 +1616,72 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     )
 
 
+#: The screens an administrator connects Freshdesk through, the form last. The helpdesk's own
+#: address is the only place the key is sent, so no step links anywhere else.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="agent",
+            title="Choose the agent this system reads as",
+            text=(
+                "In Freshdesk, choose an agent who sees the tickets this system should answer "
+                "about and no more: the key can do whatever its agent can. Never an "
+                "administrator, whose key can change service levels and delete tickets."
+            ),
+            sketch=Sketch(
+                place="Freshdesk",
+                heading="Agents",
+                lines=(
+                    SketchLine(LineKind.ITEM, "An agent with read access", mark=True),
+                    SketchLine(LineKind.ITEM, "Not an administrator"),
+                ),
+            ),
+        ),
+        GuideStep(
+            key="key",
+            title="Copy that agent's API key",
+            text=(
+                "Sign in to Freshdesk as that agent, click the profile picture at the top "
+                "right, open Profile settings and click View API key (Freshdesk may call it "
+                "Your API Key). Copy it."
+            ),
+            sketch=Sketch(
+                place="Freshdesk",
+                heading="Profile settings",
+                lines=(SketchLine(LineKind.FIELD, "Your API Key", "********", mark=True),),
+                button="View API key",
+            ),
+        ),
+        GuideStep(
+            key="connect",
+            title="Paste the address, the department and the key here",
+            text=(
+                "Type the helpdesk's address ending in .freshdesk.com, the short name of the one "
+                "department whose people may be granted its tickets, and paste the key, then press "
+                "Connect Freshdesk. The key is only ever sent to that address."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect Freshdesk",
+                lines=(
+                    SketchLine(
+                        LineKind.FIELD, "Helpdesk address", "yourcompany.freshdesk.com", mark=True
+                    ),
+                    SketchLine(LineKind.FIELD, "Department", "support", mark=True),
+                    SketchLine(LineKind.FIELD, "API key", "********", mark=True),
+                ),
+                button="Connect Freshdesk",
+            ),
+            asks=(DOMAIN_SETTING, DEPARTMENT_SETTING, "credential"),
+        ),
+    )
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=FRESHDESK,
     label="Freshdesk",
+    guide=GUIDE,
     console=ConsoleForm(
         settings=(
             Setting(
@@ -1569,6 +1720,15 @@ CONNECTOR: Final = ConnectorDeclaration(
             "Paste it as one piece. It is kept in the vault and never shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={DOMAIN_SETTING: "example.freshdesk.com", DEPARTMENT_SETTING: "support"},
+            fresh=lambda departments: {
+                DOMAIN_SETTING: f"acceptance-{secrets.token_hex(4)}.freshdesk.com",
+                DEPARTMENT_SETTING: departments[0],
+            },
+            edit=DOMAIN_SETTING,
+            edited=lambda: f"acceptance-{secrets.token_hex(4)}.freshdesk.com",
+        ),
     ),
     read_back=ReadBack(
         reading=read_back_reading,
@@ -1585,4 +1745,25 @@ CONNECTOR: Final = ConnectorDeclaration(
     ),
     recorded=Recorded(tested=True),
     reading=FreshdeskReading(),
+    live=FreshdeskLiveLookup(),
+    # Freshdesk declares no field rules, so each field the index keeps, and the body read live
+    # (`LIVE_BODY_FIELD`), is behind its own capability: being told one is a grant of its own.
+    ask=AskRows(
+        scoped_by=DEPARTMENT_SETTING,
+        entities=(
+            AskEntity(
+                entity=TICKET,
+                fields=each_behind_its_own(TICKET, (*projected_field_names(), LIVE_BODY_FIELD)),
+                description=(
+                    "Look up Freshdesk tickets by subject: status, priority, due date and when it "
+                    "last changed"
+                ),
+                named_by="subject",
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("an agent API key with read access",),
+        refuse=("an admin key, which can change SLAs and delete tickets",),
+    ),
 )

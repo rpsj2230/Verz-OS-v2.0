@@ -35,7 +35,7 @@ cannot produce, and `detail` is one of the constant sentences `brain.ops.connect
 Nothing from a response body, a setting or a key can reach this table, because nothing that builds
 a row reads one: see `brain.ops.connector_sync.A_RUN_RECORD_CARRIES_NO_VALUE_FROM_THE_SOURCE`.
 
-**Where a read stands is kept on the attempt that left it there** (`0152`). The instant the last
+**Where a read stands is kept on the attempt that left it there** (`0179`). The instant the last
 complete read began, and the page each entity would be read from next when a read stopped
 part-way, so the worker asks a source only for what changed since it last read everything to the
 end (M11.4.6) and a read cut short carries on where it stopped (M11.4.8). A page is named by the
@@ -125,7 +125,7 @@ class ConnectorSyncRow(Base):
     #: Where reading the source stood when this attempt ended: the instant the last complete read
     #: began, which the next read asks for changes since, and the page each entity would be read
     #: from next when a read stopped part-way. `brain.ops.connector_sync.ReadState` writes and
-    #: reads it. Null on a test of the connection and on every row before `0152`, and the worker
+    #: reads it. Null on a test of the connection and on every row before `0179`, and the worker
     #: reads the newest row that holds one. See the module docstring on what it may hold.
     #: `none_as_null`, so a state of None is SQL's null and not JSON's `null`, which `IS NOT NULL`
     #: admits: without it a test of the connection would be the newest state, and the next read

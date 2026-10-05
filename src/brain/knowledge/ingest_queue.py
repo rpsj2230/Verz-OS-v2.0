@@ -50,16 +50,26 @@ cause of a scan refusal or a parse failure (M7.2.5) has to be kept somewhere the
 for it, and the ticket is the one record that names both the file and its owner. The console asks
 `GET /knowledge/uploads/queued/{ticket}`, answered to the uploader alone.
 
+**While it reads, the file holds a slot of the install's document-job budget.** The door gave the
+file a place in `brain.ops.capacity_ledger` under its ticket, as BATCH; the worker turns that place
+into a slot when it starts, so the documents read in requests see this one being read, and gives it
+back when it ends. It records and does not decide again: the door decided, and the worker reads one
+file at a time, which is its own bound. A worker with no cache configured, or a cache that does not
+answer, reads the file uncounted, and a slot it could not give back lapses with its lease. See
+`A_FILE_BEING_READ_IS_COUNTED_WHERE_THE_DOOR_COUNTED_IT`.
+
 **It needs the object store, and says so when there is none.** Nothing else on an install holds a
 file between a request and a worker: a queue row may not, and the database has no table for bytes.
 An install whose store is not connected is told that queued uploads need it, and the one-at-a-time
 upload still works there.
 
 Task ids: M7.1.5, M22.2.4
+Task ids: M22.1.4, M22.2.3
 """
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import json
 from collections.abc import Awaitable, Callable, Mapping
@@ -98,8 +108,12 @@ from brain.knowledge.uploads import (
     upload_item_id,
 )
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility, VisibilityError
+from brain.ops.admission import QueuePlacement, Resource, budget_for
+from brain.ops.capacity_ledger import CapacityLedger, Hold, make_ledger
+from brain.ops.limits import wait_in_words
 from brain.ops.queue import MIB_PER_SLOT, Job, Redrive
 from brain.ops.storage import StorageBackend
+from brain.ops.tuning import configured_budgets
 from brain.tables.audit import attributed_to
 
 # ------------------------------------------------------------------ written-down reasons
@@ -137,6 +151,15 @@ THE_GRANTS_ARE_READ_WHEN_THE_JOB_RUNS: Final = (
     "apply, which is brain.ops.queue.Job's rule. So the worker resolves the uploader's grants "
     "when the job runs, asks placement_for_upload again, and a file its uploader may no longer "
     "add there is not added, with the ticket saying so."
+)
+
+#: Why the worker records the file it reads in the capacity ledger.
+A_FILE_BEING_READ_IS_COUNTED_WHERE_THE_DOOR_COUNTED_IT: Final = (
+    "The door gave the file a place in the document-job budget under its ticket. The worker turns "
+    "that place into a slot while it reads, so a person's own upload read in a request sees the "
+    "budget this one is using, and gives it back at the end. It does not decide again: the door "
+    "decided and the worker reads one file at a time. Without a cache that answers the file is "
+    "read uncounted, and a slot not given back lapses with its lease."
 )
 
 # ------------------------------------------------------------------ the figures
@@ -521,6 +544,34 @@ def _admitted_shape(ticket: Ticket) -> AdmittedUpload:
 #: How the worker builds its store: a backend and the install's prefix, or why it has none.
 StoreMaker = Callable[[], tuple[StorageBackend | None, str, str]]
 
+#: How the worker reaches the capacity ledger, or None where no cache is configured.
+LedgerMaker = Callable[[], CapacityLedger | None]
+
+
+def _ledger_from_settings(env: Mapping[str, str] | None) -> LedgerMaker:
+    def make() -> CapacityLedger | None:
+        from brain.cache import make_client
+        from brain.settings import process_environment, settings_from
+
+        url = settings_from(process_environment() if env is None else env).valkey_url
+        return make_ledger(make_client(url)) if url else None
+
+    return make
+
+
+def start_reading(ledger: CapacityLedger | None, ticket: str, *, now: datetime) -> Hold | None:
+    """The ticket's place becomes a slot for as long as the file is read, or None uncounted.
+
+    `A_FILE_BEING_READ_IS_COUNTED_WHERE_THE_DOOR_COUNTED_IT`. None where there is no ledger, no
+    document-job budget to count against, or a cache that did not take the start.
+    """
+    if ledger is None:
+        return None
+    budget = budget_for(configured_budgets(), (Resource.DOCUMENT_JOBS, ""))
+    if budget is None or not ledger.begin(budget, ticket, now=now):
+        return None
+    return Hold(budget_key=budget.budget_key, member=ticket)
+
 
 def _store_from_settings(env: Mapping[str, str] | None) -> StoreMaker:
     def make() -> tuple[StorageBackend | None, str, str]:
@@ -540,6 +591,7 @@ def register_ingest_tasks(
     database_url: str,
     env: Mapping[str, str] | None = None,
     make_store: StoreMaker | None = None,
+    make_ledger_for: LedgerMaker | None = None,
 ) -> None:
     """Put the ingestion task on the queue driver, on the queue its class derives.
 
@@ -553,6 +605,8 @@ def register_ingest_tasks(
 
     held: list[tuple[StorageBackend | None, str, str]] = []
     build = make_store or _store_from_settings(env)
+    ledgers: list[CapacityLedger | None] = []
+    count = make_ledger_for or _ledger_from_settings(env)
 
     async def run(ticket: str) -> str:
         if not held:
@@ -565,6 +619,11 @@ def register_ingest_tasks(
         async def enqueue(job: Job) -> object:
             return await enqueue_job(app, job)
 
+        if not ledgers:
+            ledgers.append(count())
+        ledger = ledgers[0]
+        now = datetime.now(tz=UTC)
+        reading = await asyncio.to_thread(start_reading, ledger, ticket, now=now)
         engine = make_app_engine(database_url)
         try:
             outcome = await run_ingest_job(
@@ -574,20 +633,32 @@ def register_ingest_tasks(
                     prefix=prefix,
                     sessions=make_application_sessions(engine),
                     enqueue=enqueue,
-                    now=datetime.now(tz=UTC),
+                    now=now,
                     env=env,
                 ),
             )
         finally:
             await engine.dispose()
+            if ledger is not None and reading is not None:
+                await asyncio.to_thread(ledger.give_back, reading)
         return outcome.state.value
 
     register_task(app, INGEST_TASK, run, traffic_class=INGEST_TRAFFIC_CLASS)
 
 
-def outcome_sentence(ticket: Ticket) -> str:
-    """What the console says about one queued file, in the uploader's own terms."""
+def outcome_sentence(ticket: Ticket, *, place: QueuePlacement | None = None) -> str:
+    """What the console says about one queued file, in the uploader's own terms.
+
+    With `place`, which only the answer to the upload itself carries, the position and expected
+    wait it was given (M22.1.4), the wait in `brain.ops.limits.wait_in_words` so a wait reads the
+    same wherever one is said.
+    """
     match ticket.state:
+        case TicketState.QUEUED if place is not None:
+            return (
+                f"{ticket.filename} is queued to be read, number {place.position} in line, and "
+                f"should start in about {wait_in_words(place.expected_wait_seconds)}."
+            )
         case TicketState.QUEUED:
             return f"{ticket.filename} is queued to be read."
         case TicketState.ADDED:

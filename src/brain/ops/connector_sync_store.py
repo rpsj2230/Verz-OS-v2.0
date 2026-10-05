@@ -230,6 +230,22 @@ def live_fields(source: str, entity: str, source_ids: Sequence[str]) -> Select[A
     )
 
 
+def seen_since(source: str, entity: str, since: datetime) -> Select[Any]:
+    """The ids of one entity's live rows a read that began at `since` has seen, in any attempt.
+
+    A row a read wrote carries a `last_seen_at` of that read, never before it began, which is the
+    same test `retire_unseen` makes from the other side. How an entity listed under another is
+    carried on into the parents an earlier attempt kept: see `brain.ops.connector_sync.
+    A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`.
+    """
+    return select(ProjectedRecordRow.source_id).where(
+        ProjectedRecordRow.source == source,
+        ProjectedRecordRow.entity == entity,
+        ProjectedRecordRow.deleted_at.is_(None),
+        ProjectedRecordRow.last_seen_at >= since,
+    )
+
+
 def retire_unseen(source: str, entity: str, before: datetime) -> Insert:
     """Retire every live row of one entity the read that began at `before` did not see, and keep
     each as it stood in `proj.record_retired`, in one statement.
