@@ -589,6 +589,7 @@ WRITTEN_BY_CHECKS = (
     "ops.question_asked",
     "ops.question_gap",
     "ops.erasure_request",
+    "ops.routing_change",
 )
 
 
