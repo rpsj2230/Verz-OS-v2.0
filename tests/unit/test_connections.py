@@ -446,6 +446,7 @@ def test_every_service_that_goes_round_the_pooler_is_declared_by_the_budget() ->
     # exactly the same empty tuple.
     assert {one.name for one in clients_of("db")} == {
         "pgbouncer",
+        "pgbouncer-classes",
         "brain-worker",
         "brain-parse-worker",
         "langfuse-web",

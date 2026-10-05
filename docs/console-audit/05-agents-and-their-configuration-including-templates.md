@@ -3,7 +3,7 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`
 - **Installation values:** none
-- **Measured here:** 38 routes, 5 called by no screen; 21 write routes, 20 with all three proofs; 3 gaps.
+- **Measured here:** 39 routes, 6 called by no screen; 21 write routes, 20 with all three proofs; 3 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -18,6 +18,7 @@
 | `GET /api/v1/agents/{agent_id}/learning` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/lifecycle` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/memory` | **no screen** |
+| `GET /api/v1/agents/{agent_id}/publications` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/approvals` | `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |
