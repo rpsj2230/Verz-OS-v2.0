@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-05T14:33:54.296361+00:00",
-  "commit": "c1a37560",
-  "commit_subject": "A website visitor reads only what an administrator marked public (0171) (#315)",
+  "generated_at": "2026-10-05T14:34:42.142833+00:00",
+  "commit": "9de9835e",
+  "commit_subject": "Items 148 and 149 open for Laravel, and items 119 and 120 are answered (#337)",
   "total": 1592,
-  "done": 472,
-  "percent": 29.6,
+  "done": 548,
+  "percent": 34.4,
   "acts": 47,
   "decided": 131,
   "current_wave": 1,
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 166,
-      "done": 155,
-      "percent": 93.4,
+      "done": 157,
+      "percent": 94.6,
       "in_progress": 0,
-      "ready_for_testing": 7,
+      "ready_for_testing": 6,
       "blocked": 0,
-      "open": 4,
+      "open": 3,
       "acts": 1,
       "decided": 7
     },
@@ -39,12 +39,12 @@
       "wave": 2,
       "name": "Data, channels, retrieval",
       "total": 268,
-      "done": 120,
-      "percent": 44.8,
-      "in_progress": 12,
-      "ready_for_testing": 12,
-      "blocked": 17,
-      "open": 107,
+      "done": 161,
+      "percent": 60.1,
+      "in_progress": 2,
+      "ready_for_testing": 8,
+      "blocked": 16,
+      "open": 81,
       "acts": 0,
       "decided": 20
     },
@@ -52,12 +52,12 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 578,
-      "done": 41,
-      "percent": 7.1,
+      "done": 74,
+      "percent": 12.8,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 536,
+      "open": 503,
       "acts": 1,
       "decided": 56
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 63,
-      "done": 48,
+      "done": 50,
       "acts": 0,
       "decided": 1
     },
@@ -125,7 +125,7 @@
       "name": "Departments and scopes",
       "wave": 1,
       "total": 7,
-      "done": 5,
+      "done": 6,
       "acts": 0,
       "decided": 4
     },
@@ -170,7 +170,7 @@
       "name": "Knowledge, assets, document parsing",
       "wave": 2,
       "total": 39,
-      "done": 18,
+      "done": 23,
       "acts": 0,
       "decided": 1
     },
@@ -179,7 +179,7 @@
       "name": "Provenance, abstention, escalation",
       "wave": 2,
       "total": 11,
-      "done": 5,
+      "done": 10,
       "acts": 0,
       "decided": 3
     },
@@ -188,7 +188,7 @@
       "name": "Chat and conversation",
       "wave": 2,
       "total": 6,
-      "done": 1,
+      "done": 6,
       "acts": 0,
       "decided": 2
     },
@@ -197,7 +197,7 @@
       "name": "Channels",
       "wave": 2,
       "total": 36,
-      "done": 14,
+      "done": 28,
       "acts": 0,
       "decided": 1
     },
@@ -206,7 +206,7 @@
       "name": "Connectors, federation, projection",
       "wave": 2,
       "total": 72,
-      "done": 25,
+      "done": 27,
       "acts": 0,
       "decided": 3
     },
@@ -215,7 +215,7 @@
       "name": "Tools, skills, capability registry",
       "wave": 2,
       "total": 36,
-      "done": 13,
+      "done": 15,
       "acts": 0,
       "decided": 4
     },
@@ -242,7 +242,7 @@
       "name": "Knowledge retrieval and RAG",
       "wave": 2,
       "total": 18,
-      "done": 13,
+      "done": 14,
       "acts": 0,
       "decided": 0
     },
@@ -251,7 +251,7 @@
       "name": "Memory and learning",
       "wave": 3,
       "total": 48,
-      "done": 0,
+      "done": 9,
       "acts": 0,
       "decided": 1
     },
@@ -305,7 +305,7 @@
       "name": "Admission control and capacity",
       "wave": 2,
       "total": 13,
-      "done": 5,
+      "done": 10,
       "acts": 0,
       "decided": 1
     },
@@ -350,7 +350,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 33,
+      "done": 34,
       "acts": 0,
       "decided": 22
     },
@@ -395,7 +395,7 @@
       "name": "Component deployment and wiring",
       "wave": 2,
       "total": 44,
-      "done": 17,
+      "done": 19,
       "acts": 0,
       "decided": 3
     },
@@ -404,7 +404,7 @@
       "name": "Role-specific surfaces",
       "wave": 3,
       "total": 39,
-      "done": 2,
+      "done": 3,
       "acts": 0,
       "decided": 4
     },
@@ -458,7 +458,7 @@
       "name": "Agent workspace, the inside-an-agent surface",
       "wave": 3,
       "total": 81,
-      "done": 0,
+      "done": 21,
       "acts": 0,
       "decided": 2
     },
@@ -562,6 +562,8 @@
     "M1.6.1",
     "M1.6.10",
     "M1.6.12",
+    "M1.6.14",
+    "M1.6.15",
     "M1.6.2",
     "M1.6.3",
     "M1.6.4",
@@ -580,19 +582,33 @@
     "M1.8.9",
     "M1.9.1",
     "M10.1.1",
+    "M10.1.2",
+    "M10.1.3",
+    "M10.1.4",
     "M10.1.5",
     "M10.2.1",
     "M10.2.2",
+    "M10.2.3",
+    "M10.2.4",
     "M10.2.5",
     "M10.2.6",
+    "M10.2.7",
+    "M10.3.1",
+    "M10.3.2",
     "M10.3.3",
+    "M10.3.4",
+    "M10.3.5",
     "M10.4.1",
     "M10.4.2",
     "M10.4.3",
     "M10.4.4",
     "M10.4.5",
     "M10.5.5",
+    "M10.5.7",
+    "M10.6.2",
     "M10.6.3",
+    "M10.7.1",
+    "M10.7.4",
     "M11.1.1",
     "M11.1.3",
     "M11.1.6",
@@ -613,16 +629,20 @@
     "M11.4.4",
     "M11.4.5",
     "M11.4.7",
+    "M11.4.9",
     "M11.5.1",
     "M11.5.4",
     "M11.5.5",
+    "M11.7.7",
     "M11.8.1",
     "M11.8.2",
     "M12.1.1",
+    "M12.1.3",
     "M12.1.4",
     "M12.1.5",
     "M12.1.6",
     "M12.2.1",
+    "M12.2.10",
     "M12.2.4",
     "M12.2.5",
     "M12.2.6",
@@ -646,13 +666,29 @@
     "M15.2.6",
     "M15.2.7",
     "M15.3.2",
+    "M15.4.1",
     "M15.4.3",
+    "M16.1.2",
+    "M16.1.3",
+    "M16.1.4",
+    "M16.1.5",
+    "M16.4.1",
+    "M16.4.4",
+    "M16.6.3",
+    "M16.7.10",
+    "M16.7.12",
     "M2.1.1",
     "M2.1.5",
     "M2.2.1",
     "M2.2.2",
     "M2.2.4",
+    "M2.3.1",
     "M22.1.2",
+    "M22.1.3",
+    "M22.1.4",
+    "M22.1.5",
+    "M22.2.1",
+    "M22.2.3",
     "M22.3.1",
     "M22.3.2",
     "M22.3.4",
@@ -703,6 +739,7 @@
     "M27.5.7",
     "M27.7.1",
     "M27.7.16",
+    "M27.7.4",
     "M27.7.6",
     "M27.8.1",
     "M27.8.14",
@@ -819,11 +856,14 @@
     "M32.5.1.2",
     "M32.5.1.3",
     "M32.5.2.4",
+    "M32.6.1.3",
     "M32.6.2.1",
+    "M32.6.2.2",
     "M32.7.1",
     "M32.7.3",
     "M33.4.1.4",
     "M33.5.1.4",
+    "M33.6.1.3",
     "M34.3.2.2",
     "M34.3.3.1",
     "M34.3.3.2",
@@ -868,6 +908,27 @@
     "M38.4.1.3",
     "M38.5.1",
     "M38.5.2",
+    "M39.1.1.2",
+    "M39.1.1.4",
+    "M39.1.1.5",
+    "M39.1.3.1",
+    "M39.1.3.2",
+    "M39.1.3.3",
+    "M39.1.3.4",
+    "M39.2.1.4",
+    "M39.2.2.1",
+    "M39.2.2.2",
+    "M39.2.2.3",
+    "M39.2.2.4",
+    "M39.2.2.5",
+    "M39.2.3.1",
+    "M39.2.3.2",
+    "M39.2.3.3",
+    "M39.2.3.4",
+    "M39.3.1.1",
+    "M39.3.1.2",
+    "M39.3.1.3",
+    "M39.3.1.4",
     "M4.1.1",
     "M4.1.2",
     "M4.1.3",
@@ -948,6 +1009,7 @@
     "M6.1.5",
     "M6.2.6",
     "M7.1.1",
+    "M7.1.2",
     "M7.2.2",
     "M7.2.5",
     "M7.3.1",
@@ -962,25 +1024,34 @@
     "M7.5.1",
     "M7.5.2",
     "M7.5.3",
+    "M7.6.1",
     "M7.6.2",
     "M7.6.3",
     "M7.7.1",
+    "M7.7.3",
+    "M7.7.4",
+    "M7.7.6",
     "M8.1.1",
     "M8.1.2",
     "M8.1.4",
     "M8.2.1",
     "M8.2.2",
-    "M9.2.1"
+    "M8.3.1",
+    "M8.3.2",
+    "M8.3.4",
+    "M8.3.5",
+    "M8.4.1",
+    "M9.1.1",
+    "M9.1.2",
+    "M9.1.3",
+    "M9.2.1",
+    "M9.2.3",
+    "M9.2.4"
   ],
   "leaf_status": {
     "M1.6.13": {
       "status": "READY FOR TESTING",
       "why": "built (M1/people-status): People shows where the staff list puts each person and their employment type, with filters; proved on the install with M1.6.15",
-      "updated": "2026-09-30"
-    },
-    "M1.6.14": {
-      "status": "READY FOR TESTING",
-      "why": "built (M1/people-status): somebody the list says is suspended, gone or never activated, or of a type not allowed, is disabled on the next sync and their page says why; the last administrator is never kept out; proved on the install with M1.6.15",
       "updated": "2026-09-30"
     },
     "M1.6.16": {
@@ -1017,11 +1088,6 @@
       "status": "READY FOR TESTING",
       "why": "built (M1/add-work-email): Add work email on a hand-made person's page binds their address and joins the staff list's person for it; proved on the install with M1.10.5",
       "updated": "2026-09-30"
-    },
-    "M2.3.1": {
-      "status": "BLOCKED",
-      "why": "moved to Wave 2 (needs-rupash 97): the web part is the owner's department checks (needs-rupash 91, checks 2 and 3); the chat part needs Wave 2's Lark chat channel",
-      "updated": "2026-09-28"
     },
     "M2.3.2": {
       "status": "OPEN",
@@ -1073,19 +1139,9 @@
       "why": "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
       "updated": "2026-09-29"
     },
-    "M7.6.1": {
-      "status": "IN PROGRESS",
-      "why": "a kind is set at upload and filters the library and the search tool (PR #106); Ask has no kind picker yet",
-      "updated": "2026-09-28"
-    },
     "M7.7.2": {
       "status": "IN PROGRESS",
       "why": "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
-      "updated": "2026-09-28"
-    },
-    "M7.7.3": {
-      "status": "IN PROGRESS",
-      "why": "price lists uploaded on Classification convert (K6, merged c0552331); no upload path yet offers a price-list document for conversion",
       "updated": "2026-09-28"
     },
     "M7.7.8": {
@@ -1111,56 +1167,6 @@
     "M8.2.4": {
       "status": "IN PROGRESS",
       "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-      "updated": "2026-09-28"
-    },
-    "M8.3.1": {
-      "status": "READY FOR TESTING",
-      "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
-      "updated": "2026-09-30"
-    },
-    "M8.3.2": {
-      "status": "READY FOR TESTING",
-      "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
-      "updated": "2026-09-30"
-    },
-    "M8.3.4": {
-      "status": "READY FOR TESTING",
-      "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
-      "updated": "2026-09-30"
-    },
-    "M8.4.1": {
-      "status": "READY FOR TESTING",
-      "why": "escalation and sensitive topics (migration 0168): proved when both install checks in brain.ops.acceptance_escalation pass after deploy, and on a real channel once a queue's person is named on the Compliance screen",
-      "updated": "2026-09-30"
-    },
-    "M10.1.2": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
-      "updated": "2026-09-28"
-    },
-    "M10.1.3": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
-      "updated": "2026-09-28"
-    },
-    "M10.1.4": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
-      "updated": "2026-09-28"
-    },
-    "M10.3.1": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
-      "updated": "2026-09-28"
-    },
-    "M10.3.2": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
-      "updated": "2026-09-28"
-    },
-    "M10.3.4": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
       "updated": "2026-09-28"
     },
     "M10.5.1": {
@@ -1192,16 +1198,6 @@
       "status": "READY FOR TESTING",
       "why": "all seven wires are live: webhook, Lark, email (a mailbox or Cloudflare), Slack, Teams, Telegram and WhatsApp (PR #105; L1, merged d426e3d3; #285; #296; #288; M10/channel-teams; M10/channel-telegram; M10/channel-whatsapp), each with its Connect steps and an install check",
       "updated": "2026-09-30"
-    },
-    "M11.4.9": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-      "updated": "2026-09-28"
-    },
-    "M12.1.3": {
-      "status": "IN PROGRESS",
-      "why": "the leash ceiling is built and shown on Tools (PR #102); its call on the agent run path comes with Wave 3's agent runtime",
-      "updated": "2026-09-28"
     },
     "M12.2.2": {
       "status": "READY FOR TESTING",
@@ -1261,15 +1257,21 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 1,
+  "closed_today": 77,
   "next_up": [
     "M1.6.13",
-    "M1.6.14",
-    "M1.6.15",
     "M1.6.16",
-    "M1.6.17"
+    "M1.6.17",
+    "M1.6.18",
+    "M1.10.1"
   ],
   "recent": [
+    {
+      "sha": "3c66a9d",
+      "at": "2026-10-05T14:29:53+00:00",
+      "subject": "Seventy-six tasks close on the install's own acceptance runs after today's deploys (#336)",
+      "closed": "M1.6.14,M1.6.15,M10.1.2,M10.1.3,M10.1.4,M10.2.3,M10.2.4,M10.2.7,M10.3.1,M10.3.2,M10.3.4,M10.3.5,M10.5.7,M10.6.2,M10.7.1,M10.7.4,M11.4.9,M11.7.7,M12.1.3,M12.2.10,M15.4.1,M16.1.2,M16.1.3,M16.1.4,M16.1.5,M16.4.1,M16.4.4,M16.6.3,M16.7.10,M16.7.12,M2.3.1,M22.1.3,M22.1.4,M22.1.5,M22.2.1,M22.2.3,M27.7.4,M32.6.1.3,M32.6.2.2,M33.6.1.3,M39.1.1.2,M39.1.1.4,M39.1.1.5,M39.1.3.1,M39.1.3.2,M39.1.3.3,M39.1.3.4,M39.2.1.4,M39.2.2.1,M39.2.2.2,M39.2.2.3,M39.2.2.4,M39.2.2.5,M39.2.3.1,M39.2.3.2,M39.2.3.3,M39.2.3.4,M39.3.1.1,M39.3.1.2,M39.3.1.3,M39.3.1.4,M7.1.2,M7.6.1,M7.7.3,M7.7.4,M7.7.6,M8.3.1,M8.3.2,M8.3.4,M8.3.5,M8.4.1,M9.1.1,M9.1.2,M9.1.3,M9.2.3,M9.2.4"
+    },
     {
       "sha": "31cad07",
       "at": "2026-10-05T10:02:44+00:00",
@@ -1383,12 +1385,6 @@
       "at": "2026-09-28T11:59:28+00:00",
       "subject": "Eight Wave 2 tasks close on their proof: four in CI, four read on the owner's install",
       "closed": "M10.1.1,M10.1.5,M3.2.2,M7.2.2,M7.3.1,M7.3.2,M7.4.1,M7.4.2"
-    },
-    {
-      "sha": "ad91bd6",
-      "at": "2026-09-28T08:28:28+00:00",
-      "subject": "Needs you records the owner's keys and moves the two chat checks to Wave 2",
-      "closed": "M5.1.2"
     }
   ]
 }
