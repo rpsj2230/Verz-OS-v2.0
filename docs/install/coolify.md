@@ -49,8 +49,9 @@ computed from the compose files by that module and compared against this page on
 
 **The optional services need no merge.** On an install that deploys with the pull timer
 (`ops/deploy/brain-deploy`), the services named on **Install, Settings** under *Optional
-services this server runs* (`INSTALL_SERVICES`: `presidio`, the personal data detector, and
-`langfuse`, the trace ledger and its file store) are started by every release beside Coolify's
+services this server runs* (`INSTALL_SERVICES`: `presidio`, the personal data detector,
+`langfuse`, the trace ledger and its file store, and `sandbox`, the script sandbox, which runs
+only under gVisor and is refused until the server's docker has it) are started by every release beside Coolify's
 copy, as a compose project of their own, after the release measures the server's memory and finds
 room for them. The trace ledger's settings files, its seven secrets and its database are put in
 place by the release too: the secrets are minted on the server into

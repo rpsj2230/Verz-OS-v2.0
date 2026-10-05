@@ -689,6 +689,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_checks_services.NO_DETECTOR_HERE,
     )
+    assert outcomes.pop("the_sandbox_finds_no_network_and_stops_scripts_at_their_limits") == (
+        NOT_RUN,
+        acceptance_checks_services.NO_SANDBOX_HERE,
+    )
     for ledger_check in (
         "the_trace_ledger_runs_as_its_five_services",
         "every_trace_ledger_service_runs_under_its_budgeted_limit",
