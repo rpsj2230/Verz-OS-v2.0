@@ -1029,6 +1029,12 @@ async def _read_under(
                         body=body,
                         fetched_at=read_at.isoformat(),
                     )
+                    if reply.call in REFUSED_INSIDE_AN_ANSWER:
+                        # A source that refuses inside an answered call, as Slack's `ok: false`
+                        # does, is read as the refusal it is and never as a page with no rows.
+                        return finish(
+                            SyncOutcome.FAILED, failure_detail(reply.call), call=reply.call
+                        )
                     found = reply.rows
                     if found is not None and under is not None and parent_id is not None:
                         # Named by its parent's id and its own. See `A_RECORD_LISTED_UNDER_...`.
@@ -1128,6 +1134,13 @@ async def _read_views(
         one.cut_short = one.cut_short or page.call is CallOutcome.TRUNCATED
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
     return finish(SyncOutcome.SYNCED, detail)
+
+
+#: What a connector's own `interpret` may read an answered call as instead of a page: the body said
+#: the key was refused, or the source was not able to answer. `TRUNCATED` is a page and is not here.
+REFUSED_INSIDE_AN_ANSWER: Final = frozenset(
+    {CallOutcome.REJECTED, CallOutcome.UNAVAILABLE, CallOutcome.QUOTA}
+)
 
 
 async def sync_on(

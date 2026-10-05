@@ -1475,3 +1475,62 @@ def test_a_deal_s_amount_is_read_by_the_one_record_call_that_holds_it() -> None:
     # The list is what the worker indexes, and it is a different call.
     listed = operation_for(ENTITY_DEAL, resolver=Resolver())
     assert listed.operation.path != operation.operation.path
+
+
+# ------------------------------------------------------------- the scopes the private app is given
+def _types_called() -> set[str]:
+    """The object types every call this connector makes names in its path, read off the calls."""
+    from brain.connectors.hubspot import CONNECTOR, HubSpotReading
+
+    reading, live = CONNECTOR.reading, CONNECTOR.live
+    assert isinstance(reading, HubSpotReading) and live is not None
+    settings = {"portal_id": "12345678"}
+    paths = {
+        reading.operation(entity, settings=settings, resolver=Resolver()).operation.path
+        for entity in reading.entities()
+    }
+    for entity in live.entities():
+        own = live.operation(entity, settings=settings, resolver=Resolver())
+        if own is not None:
+            paths.add(own.operation.path)
+    return {path.split("/")[4] for path in paths if not path.split("/")[4].startswith("{")}
+
+
+def test_the_private_app_is_asked_for_every_scope_the_readings_call() -> None:
+    """`EVERY_CALL_NAMES_ITS_OWN_SCOPE`. The scopes are worked out here from the calls the worker
+    and a question make, not from `required_scopes`, and the guide, the form and the vault slot are
+    each held to them. Delete this and a reading added later can call an object type the guide
+    never asks for, so every read of it is refused on a real account: which is what companies were
+    until 2026-10-05, listed by the worker and read live while the guide asked for contacts and
+    deals alone."""
+    from brain.connectors.hubspot import CONNECTOR, GUIDE, required_scopes
+    from brain.ops.connect_steps import LineKind
+    from brain.ops.connector_slots import SLOT_SCOPES
+
+    types = _types_called()
+    # The anchor: companies are listed and read live, so a derivation that found nothing fails.
+    assert {"companies", "contacts", "deals"} <= types
+    needed = {f"crm.objects.{one}.read" for one in types}
+    assert set(required_scopes()) == needed
+    asked = {step.key: step for step in GUIDE}["scopes"]
+    form = CONNECTOR.console
+    assert form is not None
+    for scope in needed:
+        assert scope in asked.text
+        assert scope in form.credential_hint
+    ticked = {line.label for line in asked.sketch.lines if line.kind is LineKind.ITEM}
+    assert ticked == needed
+    assert set(SLOT_SCOPES["hubspot"].request) == needed
+
+
+def test_an_association_adds_no_scope_beyond_the_types_its_ends_may_be() -> None:
+    """An association is answered only with the read scope of both ends, and an edge may only join
+    kinds the lists read. Delete this and an edge to a kind no list reads (a ticket, say) could be
+    allowed while no scope for it is asked for, and every such read would be refused."""
+    from brain.connectors.hubspot import _MAPPINGS, required_scopes
+
+    ends = {entity for entity in _MAPPINGS if entity != ENTITY_ASSOCIATION}
+    assert ends == {ENTITY_CLIENT, ENTITY_CONTACT, ENTITY_DEAL}
+    assert len(required_scopes()) == len(ends)
+    with pytest.raises(HubSpotError):
+        AssociationEdge(from_entity=ENTITY_CLIENT, from_id="1", to_entity="ticket", to_id="2")

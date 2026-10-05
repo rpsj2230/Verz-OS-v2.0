@@ -55,6 +55,8 @@ from brain.connectors.lark_wiki import manifest as lark_wiki_manifest
 from brain.connectors.manifest import ConnectorManifest, FieldShape, HotUse, PermissionSync
 from brain.connectors.search_console import SearchConsoleConnection
 from brain.connectors.search_console import manifest as search_console_manifest
+from brain.connectors.slack_messages import SlackConnection
+from brain.connectors.slack_messages import manifest as slack_manifest
 from brain.connectors.xero import XeroConnection, xero_manifest
 from brain.core.scope import Clause, Op, Scope
 from brain.deployment.installer import PLAN, render
@@ -263,6 +265,10 @@ def manifests() -> tuple[ConnectorManifest, ...]:
                 ),
             ),
             credential=CredentialBinding(ref=ref("connectors/creds/lark_wiki")),
+        ),
+        slack_manifest(
+            SlackConnection(workspace="T0123ABCD", department="one"),
+            ref=ref("connectors/creds/slack"),
         ),
         xero_manifest(
             XeroConnection(tenant_id="11111111-2222-3333-4444-555555555555"),
@@ -807,6 +813,7 @@ def test_the_nine_connectors_are_discovered_from_the_package() -> None:
         "lark_base",
         "lark_wiki",
         "search_console",
+        "slack_messages",
         "xero",
     )
 

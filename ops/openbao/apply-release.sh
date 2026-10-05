@@ -121,11 +121,11 @@ if ! slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewe
   fi
   slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewer on the one folder shared with it]' || missing "the credential slot for google_drive"
 fi
-if ! slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.contacts.read; crm.objects.deals.read]'; then
+if ! slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read]'; then
   if test "$CHECK_ONLY" = no; then
-    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=crm.objects.contacts.read; crm.objects.deals.read' -custom-metadata='not_requested=crm.objects.*.write; anything touching settings' hubspot >/dev/null || fail "the vault would not define the credential slot for hubspot"
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read' -custom-metadata='not_requested=crm.objects.*.write; anything touching settings' hubspot >/dev/null || fail "the vault would not define the credential slot for hubspot"
   fi
-  slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.contacts.read; crm.objects.deals.read]' || missing "the credential slot for hubspot"
+  slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.companies.read; crm.objects.contacts.read; crm.objects.deals.read]' || missing "the credential slot for hubspot"
 fi
 if ! slot_ok laravel 'map[not_requested:SELECT on tables; any write scopes:SELECT on the allowlisted views only]'; then
   if test "$CHECK_ONLY" = no; then
@@ -151,6 +151,12 @@ if ! slot_ok search_console 'map[not_requested:webmasters; domain-wide delegatio
   fi
   slot_ok search_console 'map[not_requested:webmasters; domain-wide delegation scopes:webmasters.readonly; restricted permission on the one property]' || missing "the credential slot for search_console"
 fi
+if ! slot_ok slack_messages 'map[not_requested:chat:write or any other write scope; a user token scopes:channels:read; groups:read; channels:history; groups:history; users:read; users:read.email]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=channels:read; groups:read; channels:history; groups:history; users:read; users:read.email' -custom-metadata='not_requested=chat:write or any other write scope; a user token' slack_messages >/dev/null || fail "the vault would not define the credential slot for slack_messages"
+  fi
+  slot_ok slack_messages 'map[not_requested:chat:write or any other write scope; a user token scopes:channels:read; groups:read; channels:history; groups:history; users:read; users:read.email]' || missing "the credential slot for slack_messages"
+fi
 if ! slot_ok staff_source 'map[not_requested:any write; for LDAP an administrator or an account that may reset passwords or groups scopes:read on the staff directory only; for LDAP a service account that may bind and search and nothing more]'; then
   if test "$CHECK_ONLY" = no; then
     bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=read on the staff directory only; for LDAP a service account that may bind and search and nothing more' -custom-metadata='not_requested=any write; for LDAP an administrator or an account that may reset passwords or groups' staff_source >/dev/null || fail "the vault would not define the credential slot for staff_source"
@@ -171,4 +177,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 12 credential slots"
+say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 13 credential slots"

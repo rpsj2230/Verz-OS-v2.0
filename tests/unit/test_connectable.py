@@ -62,6 +62,7 @@ IDENTIFIERS: Final = {
     "search_console": "sc-domain:example.com",
     "laravel": "portal",
     "domains": "example.com, example.org",
+    "slack_messages": "T0123ABCD",
 }
 
 #: The settings after the first, for a source whose form asks for more than one.
@@ -82,6 +83,7 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
         "max_rows": "500",
         "timeout_seconds": "10",
     },
+    "slack_messages": {"department": "operations"},
 }
 
 #: A source's key that carries no scopes, and the kind of key its slot row asks for and refuses.
@@ -172,7 +174,8 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
         if line.startswith(f"| `connectors/creds/{name}`")
     )
     requested, refused = row.split("|")[3], row.split("|")[4]
-    scopes = re.findall(r"`([a-z.]+)`", requested)
+    # A colon too, as Slack names its scopes (`channels:read`).
+    scopes = re.findall(r"`([a-z.:]+)`", requested)
     hint = CONNECTABLE[name].credential_hint
 
     if name in KEY_KIND_WITHOUT_SCOPES:
@@ -220,6 +223,7 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
         "hubspot",
         "laravel",
         "search_console",
+        "slack_messages",
         "xero",
     }
     for name in CONNECTABLE:

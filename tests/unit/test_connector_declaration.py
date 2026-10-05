@@ -78,6 +78,7 @@ def test_every_connector_that_ships_declares_itself_under_its_own_module_name() 
         "lark_base",
         "lark_wiki",
         "search_console",
+        "slack_messages",
         "xero",
     }
     assert found["xero"] is xero.CONNECTOR and found["xero"].name == xero.CONNECTOR_NAME
@@ -120,6 +121,7 @@ def test_every_registry_that_used_to_be_a_list_is_read_off_the_declarations() ->
         "hubspot",
         "laravel",
         "search_console",
+        "slack_messages",
         "xero",
     }
 

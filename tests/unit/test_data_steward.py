@@ -94,6 +94,7 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
         "max_rows": "500",
         "timeout_seconds": "10",
     },
+    "slack_messages": {"workspace": "T0123ABCD", "department": "operations"},
 }
 
 FINANCE = "finance"

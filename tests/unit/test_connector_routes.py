@@ -164,6 +164,7 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "search_console": "sc-domain:example.com",
     "laravel": "portal",
     "domains": "example.com, example.org",
+    "slack_messages": "T0123ABCD",
 }
 
 #: The settings after the first that a source asks for, for the sources that ask for more than one.
@@ -184,6 +185,7 @@ FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
         "max_rows": "500",
         "timeout_seconds": "10",
     },
+    "slack_messages": {"department": "operations"},
 }
 
 
@@ -809,6 +811,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "google_drive": False,
         "search_console": False,
         "laravel": False,
+        "slack_messages": False,
     }
 
 

@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
+from brain.connectors import hubspot
 from brain.connectors.declaration import CredentialShape
 from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
 from brain.ops.credentials import connector_key_slot, connector_write_slot
@@ -127,7 +128,7 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
             ),
             SlotScopes(
                 "hubspot",
-                request=("crm.objects.contacts.read", "crm.objects.deals.read"),
+                request=hubspot.required_scopes(),
                 refuse=("crm.objects.*.write", "anything touching settings"),
             ),
             SlotScopes(
@@ -149,6 +150,18 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
                 "search_console",
                 request=("webmasters.readonly", "restricted permission on the one property"),
                 refuse=("webmasters", "domain-wide delegation"),
+            ),
+            SlotScopes(
+                "slack_messages",
+                request=(
+                    "channels:read",
+                    "groups:read",
+                    "channels:history",
+                    "groups:history",
+                    "users:read",
+                    "users:read.email",
+                ),
+                refuse=("chat:write or any other write scope", "a user token"),
             ),
             SlotScopes(
                 STAFF_LIST,

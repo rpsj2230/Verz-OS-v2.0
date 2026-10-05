@@ -37,6 +37,7 @@ from brain.connectors import (
     lark_base,
     lark_wiki,
     search_console,
+    slack_messages,
     throttle,
     write_verification,
     xero,
@@ -287,6 +288,14 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("domains", "DOMAINS-404"): Verification.INCONCLUSIVE,
     ("domains", "DOMAINS-429"): Verification.INCONCLUSIVE,
     ("domains", "DOMAINS-503"): Verification.INCONCLUSIVE,
+    # Every Slack list is a listing; ok false inside a 200 is a refusal and proves nothing.
+    ("slack_messages", "SLACK-200-channels"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-members"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-membership"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-history"): Verification.FOUND,
+    ("slack_messages", "SLACK-200-not-ok"): Verification.INCONCLUSIVE,
+    ("slack_messages", "SLACK-429"): Verification.INCONCLUSIVE,
+    ("slack_messages", "SLACK-503"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-200-property"): Verification.FOUND,
     # A report, a token and every refusal hold no property, and a property read never proves one
@@ -401,6 +410,11 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             said = domains.Reply(status=recorded.status, body=recorded.body)
             operation = domains.operation_at("https://rdap.example")
             return verdict(reading("domains")(operation, said))
+        case "slack_messages":
+            from tests.fixtures.cassettes.slack_messages import operation_of
+
+            slack_said = slack_messages.Reply(status=recorded.status, body=recorded.body)
+            return verdict(reading("slack_messages")(operation_of(recorded), slack_said))
     msg = f"no way to drive {connector!r} from a recording is written in this test"
     raise AssertionError(msg)
 

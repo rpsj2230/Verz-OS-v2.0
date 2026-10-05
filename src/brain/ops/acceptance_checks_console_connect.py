@@ -64,6 +64,7 @@ EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
     "search_console": ("site", lambda: f"sc-domain:acceptance-{secrets.token_hex(4)}.example"),
     "laravel": ("client_rule", lambda: "status = active"),
     "domains": ("domains", lambda: f"acceptance-{secrets.token_hex(4)}.example"),
+    "slack_messages": ("workspace", lambda: f"T{secrets.token_hex(5).upper()}"),
 }
 
 #: A credential in the wrong shape for each kind that takes one, which the connect route must

@@ -116,6 +116,7 @@ def _settings(name: str) -> dict[str, str]:
             "steward": "u_steward",
         },
         "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
+        "slack_messages": {"workspace": "T0123ABCD", "department": "operations"},
     }[name]
 
 
