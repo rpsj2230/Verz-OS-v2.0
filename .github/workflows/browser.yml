@@ -148,6 +148,13 @@ jobs:
           done
           ready https://localhost:8443/realms/brain/.well-known/openid-configuration
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}'
+          # The most each container has held since it started, from its own cgroup: a first
+          # start's peak is the figure a memory limit has to clear, and steady use is not it.
+          for id in $(docker compose ps -q); do
+            name=$(docker inspect -f '{{.Name}}' "$id")
+            peak=$(cat "/sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' "$id").scope/memory.peak" 2>/dev/null || echo unknown)
+            echo "peak $name $peak"
+          done
           restarted=$(docker inspect -f '{{.Name}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}' $(docker compose ps -aq) | grep -v ' restarts=0 ' || true)
           if [ -n "$restarted" ]; then
             echo "::warning::a container restarted during the start: $restarted"
@@ -172,6 +179,7 @@ jobs:
           person=$(curl -skf -H "$auth" "$kc/admin/realms/brain/users?username=e2e-admin&exact=true" | jq -r '.[0].id')
           echo "example token claim names: $(curl -skf -H "$auth" "$kc/admin/realms/brain/clients/$client/evaluate-scopes/generate-example-access-token?scope=openid&userId=$person" | jq -c '{aud, azp, scope, keys: keys}')"
 
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm

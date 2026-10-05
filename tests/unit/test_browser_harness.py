@@ -217,3 +217,18 @@ def test_every_value_the_harness_stack_requires_is_minted_or_set_by_the_job() ->
     assert required <= minted | exported | set(job["env"])
     assert {"E2E_ADMIN_PASSWORD", "E2E_READER_PASSWORD", "E2E_ADMIN_CODE_SECRET"} <= minted
     assert "BRAIN_SETUP_SECRET" in minted
+
+
+def test_every_step_of_the_harness_workflow_either_runs_or_uses_and_never_both() -> None:
+    """Each step is a `run` or a `uses`, and only a `uses` step carries `with`.
+
+    Deleting this lets an edit that drops a `uses:` line leave its `with:` block attached to the
+    step above, which GitHub refuses as a workflow file issue before any job starts, so the run
+    reports nothing about the install at all. It happened once while this harness was written.
+    """
+    import yaml
+
+    steps = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]["browser"]["steps"]
+    for step in steps:
+        assert ("run" in step) != ("uses" in step), step
+        assert "with" not in step or "uses" in step, step
