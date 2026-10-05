@@ -628,6 +628,18 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_sync_run:RunKeyReader.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.connector_sync_store:LeaseCounts.tallies": Repeat.READS,
         "brain.ops.connector_sync_run:SourceCaller.get": Repeat.READS,
+        # A POST to a source is one of two things (M11.7.1): a report asked for with a body, which
+        # changes nothing, or a Google key file exchanged for a token, of which a second exists
+        # until its hour ends and is never read. The stronger of the two is what is recorded.
+        "brain.ops.connector_sync_run:SourcePoster.post": Repeat.EXPIRES_ON_ITS_OWN,
+        "brain.connectors.declaration:ScopedReading.token_scopes": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.entities": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.identity_mode": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.request_for": Repeat.READS,
+        "brain.connectors.declaration:LiveReport.interpret": Repeat.READS,
+        # A figure tool's live reads for one range (M11.7.1): the same executor a question's
+        # refresh uses, reading and keeping nothing.
+        "brain.knowledge.connector_figures:LiveFigures.figures": Repeat.READS,
         # A switched-on Lark Base and Wiki (M11.6.3, M11.6.4): every call a GET the app's token may
         # only read, and the token exchanged for one run and dropped, lapsing on Lark's own clock.
         "brain.ops.lark_base_index:LarkCaller.get": Repeat.READS,
@@ -772,6 +784,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.adapter:ChannelWire.request_for": Repeat.READS,
         "brain.channels.adapter:ChannelWire.judge": Repeat.READS,
         "brain.channels.adapter:KeyedWire.key_set_of": Repeat.READS,
+        "brain.channels.adapter:RegisteredWire.registration_for": Repeat.READS,
+        "brain.channels.adapter:RegisteredWire.judge": Repeat.READS,
         "brain.channels.adapter:ChannelTransport.send": Repeat.ISSUES,
         "brain.channels.inbound:ChannelBindings.binding_for": Repeat.READS,
         # The gate run as the bound person: a model call and reads, and the send is `deliver`'s.

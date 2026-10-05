@@ -32,7 +32,10 @@
  * and Disconnect as the Connectors screen (`connectors/LarkCard.tsx`), and Connect Lark is offered
  * only while Lark is not connected; once it is, the offer is adding the staff list to it.
  *
- * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1, M1.6.16
+ * **Sync now sits beside the scheduled sync (since 2026-09-30).** It says when the scheduled run last
+ * ran and next runs and asks the worker for that run at once; see `staff-sources/SyncNow.tsx`.
+ *
+ * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1, M1.6.16, M1.10.2
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -84,6 +87,7 @@ import { Names, Problem } from "./parts";
 import { outcomeWords, sourceTitle, when } from "./staffSourceWords";
 import { ACCOUNT_READY_HEADING, CopySentence } from "../people/AccountReady";
 import { SyncCredential } from "./SyncCredential";
+import { SyncNow } from "./SyncNow";
 import { Transfers } from "./Transfers";
 
 export const STAFF_SOURCES_HEADING = STAFF_SOURCES_LABEL;
@@ -486,6 +490,7 @@ export function StaffSourcesPage() {
           <Note kind="done">{told}</Note>
         </div>
       )}
+      <SyncNow version={version} latest={last} onRun={reread} />
       {content}
       {lark === null ? null : (
         <LarkDialog

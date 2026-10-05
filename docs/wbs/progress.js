@@ -69,6 +69,16 @@ const PROGRESS = {
     why: "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
     updated: "2026-09-30",
   },
+  "M1.10.1": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3",
+    updated: "2026-09-30",
+  },
+  "M1.10.2": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
+    updated: "2026-09-30",
+  },
   "M1.8.3": {
     status: "READY FOR TESTING",
     why: "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",
@@ -189,9 +199,14 @@ const PROGRESS = {
     why: "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (#296), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
     updated: "2026-09-30",
   },
+  "M10.5.4": {
+    status: "READY FOR TESTING",
+    why: "Telegram is connectable (M10/channel-telegram): saving the bot's username and token registers this install's events address with Telegram, updates carry a header made from the token, answers go out with sendMessage, and an install check; the owner's bot proves the vendor's half",
+    updated: "2026-09-30",
+  },
   "M10.6.1": {
     status: "IN PROGRESS",
-    why: "the webhook, Lark, email, Slack and Teams wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams); Telegram and WhatsApp each come with their own package",
+    why: "the webhook, Lark, email, Slack, Teams and Telegram wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams; M10/channel-telegram); WhatsApp comes with its own package",
     updated: "2026-09-30",
   },
   "M10.6.3": {
