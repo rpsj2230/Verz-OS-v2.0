@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-05T11:38:09.208416+00:00",
-  "commit": "d4ae0754",
-  "commit_subject": "Merge pull request #302 from rpsj2230/M11/w2-google-analytics",
-  "total": 1584,
+  "generated_at": "2026-10-05T11:53:06.202248+00:00",
+  "commit": "a22f666c",
+  "commit_subject": "Everybody active on the staff list is on People before they sign in, and Staff sources has Sync now (#322)",
+  "total": 1587,
   "done": 472,
-  "percent": 29.8,
+  "percent": 29.7,
   "acts": 47,
   "decided": 131,
   "current_wave": 1,
@@ -25,13 +25,13 @@
     {
       "wave": 1,
       "name": "The gate",
-      "total": 161,
+      "total": 164,
       "done": 155,
-      "percent": 96.3,
+      "percent": 94.5,
       "in_progress": 0,
-      "ready_for_testing": 4,
+      "ready_for_testing": 6,
       "blocked": 0,
-      "open": 2,
+      "open": 3,
       "acts": 1,
       "decided": 7
     },
@@ -115,7 +115,7 @@
       "module": "M1",
       "name": "Identity, users, roles, permissions",
       "wave": 1,
-      "total": 58,
+      "total": 61,
       "done": 48,
       "acts": 0,
       "decided": 1
@@ -1002,6 +1002,16 @@
       "status": "OPEN",
       "why": "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install",
       "updated": "2026-09-29"
+    },
+    "M1.10.1": {
+      "status": "READY FOR TESTING",
+      "why": "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3",
+      "updated": "2026-09-30"
+    },
+    "M1.10.2": {
+      "status": "READY FOR TESTING",
+      "why": "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
+      "updated": "2026-09-30"
     },
     "M2.3.1": {
       "status": "BLOCKED",
