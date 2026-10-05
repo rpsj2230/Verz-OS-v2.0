@@ -44,6 +44,18 @@ sets outranks the vault, which is `brain.ops.provider_keys.load_into_environment
 **Nothing about the install reaches the provider.** The sentence is fixed and asks for one word,
 the output is capped, and no question, passage or person is in it.
 
+**A probe waits as long as the call path would, up to the prober's own ten seconds.** A level's
+last step is given the rest of the answer budget when a question reaches it
+(`brain.models.calls.last_step_seconds`), so its own timeout is not what the call path waits for,
+and probing it at that figure counted a provider as failing for being slower than a limit no
+question holds it to. On the owner's install Moonshot's last step in Simple was probed at its four
+seconds and timed out three times in seven minutes, each a failure counted towards resting it,
+while answering the same sentence in under one second in between. So each deployment is probed at
+the longest any of its reachable steps would be given, still capped at `PROBE_TIMEOUT_SECONDS`,
+which keeps a tick of five probes inside its minute. Rejected: probing at the whole call-path
+figure, twenty-four seconds, which lets one silent provider hold the tick past the next one. See
+`A_PROBE_WAITS_AS_LONG_AS_THE_CALL_PATH_WOULD`.
+
 Task ids: M5.4.7, M5.4.3, M5.6.3
 """
 
@@ -64,10 +76,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.models.adapter import SdkDriver
 from brain.models.assembly import LadderRung, local_only
-from brain.models.calls import Ladder
+from brain.models.calls import Ladder, last_step_seconds
 from brain.models.driver import DriverMessage, DriverRequest, ProviderUnavailable, Role
 from brain.models.evidence import EVIDENCE_WINDOW, ILL_HEALTH, StoredRings, outcome_of, replayed
 from brain.models.health import PROBE_INTERVAL_SECONDS, ProviderHealth, next_probes
+from brain.models.routing import Tier
 from brain.models.wire import PROVIDER_WIRES, KeyLookup, http_transport
 from brain.ops.openbao import OpenBaoVault
 from brain.ops.provider_health_store import probe_claimed, probe_observed
@@ -85,6 +98,14 @@ A_PROBE_FAILS_ONLY_ON_THE_PROVIDERS_OWN_FAILURE: Final = (
     "answer in time, or a server error. A rate limit is the provider working and asking for less, "
     "a refused key is our configuration, and a content refusal is the model answering; recording "
     "any of them as a failure would open a breaker on a provider that is up."
+)
+
+#: Why a level's last step is probed at more than its own timeout.
+A_PROBE_WAITS_AS_LONG_AS_THE_CALL_PATH_WOULD: Final = (
+    "A probe that gives up sooner than a question would records a failure no question would "
+    "have had, and two of them rest a working provider. A level's last step is given the rest of "
+    "the answer budget when it is reached, so its probe waits for that, capped at the prober's "
+    "own ten seconds, and an earlier step's probe waits for its own timeout."
 )
 
 #: What a tick with no key held reports. A successful run, not a failure.
@@ -170,6 +191,17 @@ class ProbeRun:
         return f"probed {len(self.probed)} deployment(s), {len(self.failed)} failed{bad}"
 
 
+def reachable(
+    rungs: Iterable[LadderRung], held: frozenset[str], switched_off: frozenset[str] = frozenset()
+) -> tuple[LadderRung, ...]:
+    """The rungs a question could reach: enabled, switched on and with their key held."""
+    return tuple(
+        one
+        for one in rungs
+        if one.enabled and one.provider in held and one.provider not in switched_off
+    )
+
+
 def probed_rungs(
     rungs: Iterable[LadderRung], held: frozenset[str], switched_off: frozenset[str] = frozenset()
 ) -> dict[str, LadderRung]:
@@ -179,14 +211,32 @@ def probed_rungs(
     tick would put two outcomes of one moment into its ring.
     """
     found: dict[str, LadderRung] = {}
-    for one in rungs:
-        if (
-            one.enabled
-            and one.provider in held
-            and one.provider not in switched_off
-            and one.deployment_id not in found
-        ):
+    for one in reachable(rungs, held, switched_off):
+        if one.deployment_id not in found:
             found[one.deployment_id] = one
+    return found
+
+
+def call_path_seconds(rungs: Iterable[LadderRung]) -> dict[str, float]:
+    """The longest a question's walk would wait on each deployment, over every step naming it.
+
+    A level's last step is given the rest of the answer budget, so its figure is the most that can
+    be, reached with nothing spent; any other step's is its own timeout. `rungs` are the rungs a
+    question could reach, so a step left out (switched off, keyless, paused) does not hide the
+    last one in front of it. See `A_PROBE_WAITS_AS_LONG_AS_THE_CALL_PATH_WOULD`.
+    """
+    steps = tuple(rungs)
+    last: dict[Tier, int] = {}
+    for one in steps:
+        last[one.tier] = max(last.get(one.tier, one.position), one.position)
+    found: dict[str, float] = {}
+    for one in steps:
+        seconds = (
+            last_step_seconds(one.timeout_seconds, spent=0.0)
+            if one.position == last[one.tier]
+            else one.timeout_seconds
+        )
+        found[one.deployment_id] = max(found.get(one.deployment_id, seconds), seconds)
     return found
 
 
@@ -242,6 +292,7 @@ async def probe_on(
     rungs = probed_rungs(state.rungs, held, state.switched_off)
     if not rungs:
         return ProbeRun(skipped="no enabled rung names a provider whose key is held")
+    given = call_path_seconds(reachable(state.rungs, held, state.switched_off))
     since = now - EVIDENCE_WINDOW
     replay = replayed(state.attempts, [p for one in state.rings for p in one.probes(since)])
     rings = {one.deployment_id: one for one in state.rings}
@@ -252,7 +303,9 @@ async def probe_on(
         rung = rungs[verdict.deployment_id]
         if not await store.claim(rung.deployment_id, rung.provider, at=now):
             continue
-        ok = await asyncio.to_thread(sender.send, rung)
+        # The rung as the call path would wait for it; the sender caps it at the probe's own.
+        waited = replace(rung, timeout_seconds=given[rung.deployment_id])
+        ok = await asyncio.to_thread(sender.send, waited)
         await store.observed(rung.deployment_id, ok=ok, at=clock())
         probed.append(rung.deployment_id)
         if not ok:

@@ -84,10 +84,11 @@ from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.denial_digest_run import run_denial_digest_now
 from brain.ops.erasure_store import drain_erasure_queue
+from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
 from brain.ops.retention_store import run_retention_sweep
-from brain.ops.schedule import TICK, Owed, owed, schedulable
+from brain.ops.schedule import TICK, AtTime, Owed, owed, schedulable, time_of_day
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
@@ -308,6 +309,34 @@ def outbox_dispatch(now: datetime, report_only: bool, database_url: str) -> str:
         loop_factory=_loop_factory(),
     )
     return ran.summary()
+
+
+#: Why the expiry declines in report-only mode, though it removes nothing.
+AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING: Final = (
+    "Marking an escalation expired changes what its asker is told, so a run asked to only report "
+    "marks nothing and says so, as every runner keeps the mode it was given."
+)
+
+
+def escalation_expiry(now: datetime, report_only: bool, database_url: str) -> str:
+    """Mark every escalation whose deadline has passed as expired, and say how many (M8.3.4).
+
+    `brain.ops.escalation_store.run_expiry_now` does it as the worker's login; this is the literal
+    call the registry reads. Declines in report-only mode, see
+    `AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING`, and takes the worker's event loop for the
+    reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no escalation was marked expired. "
+            f"{AN_EXPIRY_IN_REPORT_ONLY_MODE_MARKS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    expired = run_expiry_now(database_url, now=now, loop_factory=_loop_factory())
+    if expired == 0:
+        return "no escalation was due to expire"
+    return f"{expired} escalation(s) past their deadline marked expired; each asker is told so"
 
 
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
@@ -564,6 +593,85 @@ def denial_digest(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+def queue_redrive(now: datetime, report_only: bool, database_url: str) -> str:
+    """Re-drive what a dead worker or a transient failure left behind, and say what it came to.
+
+    `brain.ops.recovery_run.run_queue_redrive_now` is the literal call the registry reads, on the
+    queue's own connection (`QUEUE_URL`, which the worker already needs to run at all) rather than
+    `database_url`, because the queue's tables are the driver's and the driver is the one client
+    that may move a row. Declines in report-only mode, see
+    `brain.ops.recovery_run.A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING`, and takes the
+    worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    from brain.ops.recovery_run import (
+        A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING,
+        run_queue_redrive_now,
+    )
+    from brain.ops.worker import QUEUE_URL_ENV, _loop_factory
+
+    if report_only:
+        return (
+            f"report only: no job was moved. {A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING}"
+        )
+    queue_url = process_environment().get(QUEUE_URL_ENV, "").strip()
+    if not queue_url:
+        return f"no job was moved: {QUEUE_URL_ENV} is not set on this worker, so it has no queue"
+    return run_queue_redrive_now(queue_url, now=now, loop_factory=_loop_factory()).summary()
+
+
+def side_effect_resume(now: datetime, report_only: bool, database_url: str) -> str:
+    """Read back every interrupted side effect a connector can answer for, and list the rest.
+
+    `brain.ops.recovery_run.run_side_effect_resume_now` is the literal call the registry reads, on
+    the worker's own connection to `ops.operation`. Declines in report-only mode for the queue
+    sweep's reason, and takes the worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    from brain.ops.recovery_run import (
+        A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING,
+        run_side_effect_resume_now,
+    )
+    from brain.ops.worker import _loop_factory
+
+    if report_only:
+        return (
+            "report only: no operation was read back. "
+            f"{A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING}"
+        )
+    return run_side_effect_resume_now(database_url, now=now, loop_factory=_loop_factory()).summary()
+
+
+#: Why the evening digest sends nothing in report-only mode.
+A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and a message removes nothing, so "
+    "brain.ops.schedule never asks for it. A runner that sent anyway when told to report would "
+    "ignore the mode it was given."
+)
+
+
+def evening_digest(now: datetime, report_only: bool, database_url: str) -> str:
+    """Send today's build digest once, to the conversation the install chose, or say why not.
+
+    `brain.ops.digest_run.run_evening_digest_now` is the literal call the registry reads, with the
+    worker's vault for the send's borrowed key (`brain.ops.channel_lease`). The schedule owes it
+    once a day at `INSTALL_DIGEST_TIME` in the install's zone (`Control.daily_at`). Declines in
+    report-only mode, see `A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING`, and takes the worker's
+    event loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return f"report only: no digest was sent. {A_DIGEST_IN_REPORT_ONLY_MODE_SENDS_NOTHING}"
+    from brain.ops.digest_run import run_evening_digest_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_evening_digest_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -644,6 +752,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
     # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
     Runner(name="knowledge_reverification", run=knowledge_reverification),
+    # Wired on 2026-09-30 with `gate.escalation` (`0168`). See `brain.ops.escalation_store`.
+    Runner(name="escalation_expiry", run=escalation_expiry),
     # For whoever builds it: the feature observations `drift` measures over, which are
     # resolution decisions nobody records for this purpose yet. The fit is weekly.
     Runner(
@@ -653,26 +763,12 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "company, which this install does not keep yet"
         ),
     ),
-    # For whoever builds it: `verdict_for` decides what to do with a stuck job and `redrive`
-    # acts on the verdict; the queue arrived with M32.4.1.1, and nothing asks either yet.
-    Runner(
-        name="queue_redrive",
-        needs=(
-            "the part that finds background work left stuck when a worker stopped and starts it "
-            "again, which is not built yet"
-        ),
-    ),
-    # For whoever builds it: a tick that reads the records `resume` decides over and a read-back
-    # to settle them. `brain.ops.idempotency.issue_once` writes every side effect into
-    # `ops.operation` since 0051; nothing lists the unsettled ones or calls a read-back yet.
-    Runner(
-        name="side_effect_resume",
-        needs=(
-            "the part that checks with the other system whether an action left part-way through, "
-            "such as a message whose delivery was never confirmed, really happened, which is "
-            "not built yet"
-        ),
-    ),
+    # Wired on 2026-09-30: `brain.ops.recovery_run.sweep_queue` re-drives an orphaned or failed
+    # job its task declares safe and sets aside the rest, over the worker's own queue connection.
+    Runner(name="queue_redrive", run=queue_redrive),
+    # Wired on 2026-09-30: `brain.ops.recovery_run.resume_side_effects` reads back an interrupted
+    # operation where its connector declares a read-back and lists the rest for a person.
+    Runner(name="side_effect_resume", run=side_effect_resume),
     # Wired on 2026-09-22 with `ops.provider_health` and the worker's read of the model provider
     # slots. See `brain.ops.model_probe_run`.
     Runner(name="model_health_probes", run=model_health_probes),
@@ -704,6 +800,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="vault_audit_ship", run=vault_audit_ship),
     # Wired on 2026-09-28 with `ops.acceptance_result`. See `brain.ops.acceptance_run`.
     Runner(name="acceptance_run", run=acceptance_run),
+    # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
+    # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
+    Runner(name="evening_digest", run=evening_digest),
 )
 
 
@@ -734,6 +833,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return retention_sweep(now, report_only, database_url)
         case "knowledge_reverification":
             return knowledge_reverification(now, report_only, database_url)
+        case "escalation_expiry":
+            return escalation_expiry(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case "outbox_dispatch":
@@ -758,6 +859,12 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return denial_digest(now, report_only, database_url)
         case "acceptance_run":
             return acceptance_run(now, report_only, database_url)
+        case "queue_redrive":
+            return queue_redrive(now, report_only, database_url)
+        case "side_effect_resume":
+            return side_effect_resume(now, report_only, database_url)
+        case "evening_digest":
+            return evening_digest(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (
@@ -825,6 +932,33 @@ def lock_id(name: str) -> tuple[int, int]:
     return SCHEDULER_LOCK_NAMESPACE, unsigned - (1 << 32) if unsigned >= (1 << 31) else unsigned
 
 
+def times_of_day(
+    controls: Sequence[Control] | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, AtTime]:
+    """The time and zone each control owed at a time of day is read in, from the install's
+    settings as saved, the environment, or the setting's own default, in that order.
+
+    A value that is not a time on the 24-hour clock falls back to the declared default rather
+    than stopping the control: the Settings screen refuses such a value, so one here came from an
+    environment file, and a daily message at its default hour is better than none.
+    """
+    from brain.install import BY_NAME, value_of
+    from brain.locale import time_zone
+
+    found: dict[str, AtTime] = {}
+    for one in schedulable(controls):
+        if not one.daily_at:
+            continue
+        at = time_of_day(value_of(one.daily_at, env)) or time_of_day(BY_NAME[one.daily_at].default)
+        if at is None:
+            msg = f"{one.daily_at} declares a default that is not a time of day"
+            raise RunnerError(msg)
+        found[one.name] = AtTime(at=at, zone=time_zone(env))
+    return found
+
+
 def due_now(
     *,
     now: datetime,
@@ -832,6 +966,7 @@ def due_now(
     last_success: Mapping[str, datetime],
     controls: Sequence[Control] | None = None,
     released: Sequence[str] = (),
+    at: Mapping[str, AtTime] | None = None,
 ) -> tuple[Owed, ...]:
     """What is owed at `now`, with dueness on one clock and lateness on the other.
 
@@ -841,10 +976,10 @@ def due_now(
     decides *what* is returned; the lateness answer supplies `late_by` and `first_run` for the
     ones that survived. See `TRIED_RECENTLY_AND_WORKING_ARE_DIFFERENT_CLOCKS`.
     """
-    trying = owed(now=now, last_run=last_attempt, controls=controls, released=released)
+    trying = owed(now=now, last_run=last_attempt, controls=controls, released=released, at=at)
     by_success = {
         one.name: one
-        for one in owed(now=now, last_run=last_success, controls=controls, released=released)
+        for one in owed(now=now, last_run=last_success, controls=controls, released=released, at=at)
     }
     # `report_only` is taken from this run's answer, and a mutation says the choice does not
     # matter today: `owed` computes it from the control's name and the released set, neither

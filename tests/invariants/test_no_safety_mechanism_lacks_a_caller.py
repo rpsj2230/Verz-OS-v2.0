@@ -67,8 +67,8 @@ KNOWN_ORPHANS = frozenset(
         # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
         "resolution_calibration",
-        "queue_redrive",
-        "side_effect_resume",
+        # `queue_redrive` and `side_effect_resume` left on 2026-09-30: the worker's schedule
+        # starts both through `brain.ops.recovery_run`. See `SCHEDULED_BY_THE_WORKER`.
         # `model_health_probes` left on 2026-09-22: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
         # `outbox_dispatch` joined on 2026-09-15, the day it was written, and left on
@@ -139,6 +139,15 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: from the ledger and keeps what `digest` raises for the Notifications screen.
 #: `acceptance_run` joined on 2026-09-28 the day it was registered, running the install acceptance
 #: checks once per newly deployed commit through `brain.ops.acceptance_run`.
+#:
+#: `queue_redrive` and `side_effect_resume` joined on 2026-09-30 from `KNOWN_ORPHANS`:
+#: `brain.ops.recovery_run` re-drives what a dead worker or a transient failure left behind, and
+#: reads back an interrupted side effect where its connector can answer, listing the rest.
+#: `escalation_expiry` joined on 2026-09-30 the day it was registered (`0168`, M8.3.4), marking
+#: every handoff past its deadline expired through `brain.ops.escalation_store.run_expiry_now`.
+#:
+#: `evening_digest` joined on 2026-09-30 the day it was registered, sent once a day at the install's
+#: own hour to the conversation it chose, through `brain.ops.digest_run`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -155,6 +164,10 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "model_health_probes",
         "denial_digest",
         "acceptance_run",
+        "queue_redrive",
+        "side_effect_resume",
+        "escalation_expiry",
+        "evening_digest",
     }
 )
 

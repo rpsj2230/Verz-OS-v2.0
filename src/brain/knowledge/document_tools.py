@@ -100,7 +100,7 @@ is. See `A_PASSAGE_CARRIES_THE_PLACE_ITS_SCOPES_TEST`.
 narrowing sees exactly the items the reach admits. It narrows what the caller asked about and
 decides nothing about what they may see. See `A_KIND_NARROWS_THE_QUESTION_AND_NEVER_THE_REACH`.
 
-Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1, M15.3.4
+Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1, M10.7.2, M15.3.4
 """
 
 from __future__ import annotations
@@ -113,6 +113,7 @@ from types import MappingProxyType
 from typing import Any, Final
 
 import sqlalchemy as sa
+import structlog
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import TextClause
 from sqlalchemy.sql import Select
@@ -133,13 +134,18 @@ from brain.knowledge.rows import RowQuery, RowSource
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
     CHUNK,
+    EXACT_RESCAN_CEILING,
     KNOWLEDGE_READ,
     LEXICAL_RETRIEVER,
+    PUBLIC,
     RETRIEVABLE_STATE_VALUES,
     VECTOR_RETRIEVER,
+    PublicReach,
     Reach,
     SearchError,
     cjk_lexical_query,
+    embedded_in_reach,
+    exact_vector_query,
     hybrid,
     iterative_scan_statements,
     lexical_legs,
@@ -151,6 +157,8 @@ from brain.knowledge.search import (
 )
 from brain.tables.gate import DepartmentRow
 from brain.tables.knowledge import KnowledgeItemRow
+
+log = structlog.get_logger(__name__)
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -380,7 +388,7 @@ def narrowed(statement: Select[Any], kinds: Sequence[KnowledgeKind]) -> Select[A
 
 
 def search_queries(
-    question: str, *, reach: Reach, kinds: Sequence[KnowledgeKind] = ()
+    question: str, *, reach: Reach | PublicReach, kinds: Sequence[KnowledgeKind] = ()
 ) -> tuple[RowQuery, ...]:
     """A ranked statement per lexical leg the question needs, in the order `lexical_legs` gives."""
     return tuple(
@@ -399,7 +407,7 @@ def _passage_select() -> Select[Any]:
     return sa.select(*(CHUNK.c[name].label(name) for name in PASSAGE_COLUMNS))
 
 
-def passages_query(chunk_ids: Sequence[str], *, reach: Reach) -> RowQuery:
+def passages_query(chunk_ids: Sequence[str], *, reach: Reach | PublicReach) -> RowQuery:
     """The bodies of the passages a ranking returned, under the reach again.
 
     The reach is applied a second time on purpose. The ranking and the bodies are two
@@ -437,7 +445,7 @@ def document_query(document_id: str, *, reach: Reach, limit: int) -> RowQuery:
 
 
 def vector_search_query(
-    vector: EmbeddedVector, *, reach: Reach, kinds: Sequence[KnowledgeKind] = ()
+    vector: EmbeddedVector, *, reach: Reach | PublicReach, kinds: Sequence[KnowledgeKind] = ()
 ) -> RowQuery:
     """The nearest-neighbour leg, under the reach, with the settings its index walk needs.
 
@@ -460,6 +468,74 @@ def vector_search_query(
         empty=False,
         settings=(*session_settings(reach), *iterative_scan_statements()),
     )
+
+
+def exact_vector_search_query(
+    vector: EmbeddedVector, *, reach: Reach | PublicReach, kinds: Sequence[KnowledgeKind] = ()
+) -> RowQuery:
+    """The vector leg by exact distance over the reach, for a walk that came back short.
+
+    The caller's settings and none of the scan's: nothing here walks the index. See
+    `brain.knowledge.search.A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    statement = narrowed(
+        exact_vector_query(
+            vector.values, reach=reach, model=vector.model.identity, depth=CANDIDATE_DEPTH
+        ),
+        kinds,
+    )
+    return _query(
+        KNOWLEDGE_ENTITY,
+        ("chunk_id", "distance"),
+        statement,
+        empty=False,
+        settings=session_settings(reach),
+    )
+
+
+def reach_held_query(
+    vector: EmbeddedVector, *, reach: Reach | PublicReach, kinds: Sequence[KnowledgeKind] = ()
+) -> RowQuery:
+    """How many embedded passages the reach holds, counted to one past `EXACT_RESCAN_CEILING`."""
+    held = (
+        narrowed(embedded_in_reach(reach=reach, model=vector.model.identity), kinds)
+        .limit(EXACT_RESCAN_CEILING + 1)
+        .subquery()
+    )
+    statement = sa.select(sa.func.count().label("held")).select_from(held)
+    return _query(
+        KNOWLEDGE_ENTITY, ("held",), statement, empty=False, settings=session_settings(reach)
+    )
+
+
+async def nearest_passages(
+    records: RowSource,
+    vector: EmbeddedVector,
+    *,
+    reach: Reach | PublicReach,
+    kinds: Sequence[KnowledgeKind] = (),
+) -> tuple[str, ...]:
+    """The vector leg: the index walk, and an exact re-ask when the walk came back short.
+
+    Short means fewer than `CANDIDATE_DEPTH`, which is what a walk returns when it lost passages
+    to dead entries or a running vacuum, and also what a reach holding fewer passages returns;
+    the exact re-ask is the same answer for the second and the right one for the first. It runs
+    only while the reach holds at most `EXACT_RESCAN_CEILING` embedded passages, counted no
+    further than that. Above it the walk's answer stands, the lexical leg carries the rest, and
+    the shortfall is logged once for an operator with no reader, document or count of anything
+    withheld in it, so nothing reaches the reader that could tell a withheld passage from an
+    absent one. See `A_SHORT_VECTOR_LEG_IS_ASKED_AGAIN_EXACTLY_OVER_THE_READERS_REACH`.
+    """
+    found = await records.rows(vector_search_query(vector, reach=reach, kinds=kinds))
+    walked = tuple(dict.fromkeys(str(row["chunk_id"]) for row in found))
+    if len(walked) >= CANDIDATE_DEPTH:
+        return walked
+    [held_row] = await records.rows(reach_held_query(vector, reach=reach, kinds=kinds))
+    if int(held_row["held"]) > EXACT_RESCAN_CEILING:
+        log.warning("knowledge.vector_leg_short", ceiling=EXACT_RESCAN_CEILING)
+        return walked
+    exact = await records.rows(exact_vector_search_query(vector, reach=reach, kinds=kinds))
+    return tuple(dict.fromkeys(str(row["chunk_id"]) for row in exact))
 
 
 # ------------------------------------------------------------------ the handlers
@@ -577,38 +653,78 @@ def searcher(
         reach = await reach_through(records, entitlement, now)
         if reach is None:
             return _result((), now, truncated=False)
-        since = started()
-        vector = None if embedder is None else await embedder.vector(request.question)
-        queries = search_queries(request.question, reach=reach, kinds=request.kinds)
-        legs = [await records.rows(query) for query in queries]
-        # One ranking from the legs in the order they arrived, each passage once: a chunk that
-        # matches in two scripts is one passage, and `Ranking` refuses it listed twice.
-        lexical = tuple(dict.fromkeys(str(row["chunk_id"]) for rows in legs for row in rows))
-        nearest: tuple[str, ...] = ()
-        if vector is not None:
-            found = await records.rows(
-                vector_search_query(vector, reach=reach, kinds=request.kinds)
+        found, truncated = await search_within(records, embedder, request, reach=reach)
+        return _result(found, now, truncated=truncated)
+
+    return search
+
+
+async def search_within(
+    records: RowSource,
+    embedder: QuestionEmbedder | None,
+    request: DocumentSearch,
+    *,
+    reach: Reach | PublicReach,
+) -> tuple[tuple[KnowledgePassage, ...], bool]:
+    """The passages a question finds within one reach, and whether the page was full.
+
+    The one search, for a person's reach and for the public one alike: the lexical legs, the
+    vector leg when the install embeds questions, fused, and the bodies fetched under the same
+    reach again. `search.PUBLIC_IS_A_PROPERTY_OF_THE_KNOWLEDGE_AND_NEVER_OF_THE_QUESTION` is why
+    the public reach is a reach and not a filter over this.
+    """
+    since = started()
+    vector = None if embedder is None else await embedder.vector(request.question)
+    queries = search_queries(request.question, reach=reach, kinds=request.kinds)
+    legs = [await records.rows(query) for query in queries]
+    # One ranking from the legs in the order they arrived, each passage once: a chunk that
+    # matches in two scripts is one passage, and `Ranking` refuses it listed twice.
+    lexical = tuple(dict.fromkeys(str(row["chunk_id"]) for rows in legs for row in rows))
+    nearest: tuple[str, ...] = ()
+    if vector is not None:
+        nearest = await nearest_passages(records, vector, reach=reach, kinds=request.kinds)
+    fused = hybrid(lexical=lexical, vector=nearest, limit=request.limit)
+    page = [one.ref for one in fused]
+    bodies = passages_query(page, reach=reach)
+    rows = () if bodies.certainly_empty else await records.rows(bodies)
+    ran = (
+        *((LEXICAL_RETRIEVER,) if queries else ()),
+        *(() if vector is None else (VECTOR_RETRIEVER,)),
+    )
+    if ran:
+        # For the learning signal, and only where a request collects it (M15.3.4). The chunk
+        # ids stay in memory for the request; see `brain.knowledge.retrieval_log`.
+        note(
+            Searched(
+                retrievers=ran,
+                corroborated=frozenset(one.ref for one in fused if one.corroborated),
+                latency_ms=elapsed_ms(since),
             )
-            nearest = tuple(dict.fromkeys(str(row["chunk_id"]) for row in found))
-        fused = hybrid(lexical=lexical, vector=nearest, limit=request.limit)
-        page = [one.ref for one in fused]
-        bodies = passages_query(page, reach=reach)
-        rows = () if bodies.certainly_empty else await records.rows(bodies)
-        ran = (
-            *((LEXICAL_RETRIEVER,) if queries else ()),
-            *(() if vector is None else (VECTOR_RETRIEVER,)),
         )
-        if ran:
-            # For the learning signal, and only where a request collects it (M15.3.4). The chunk
-            # ids stay in memory for the request; see `brain.knowledge.retrieval_log`.
-            note(
-                Searched(
-                    retrievers=ran,
-                    corroborated=frozenset(one.ref for one in fused if one.corroborated),
-                    latency_ms=elapsed_ms(since),
-                )
-            )
-        return _result(_passages(page, rows), now, truncated=len(page) == request.limit)
+    return _passages(page, rows), len(page) == request.limit
+
+
+#: How many passages one widget question is answered from. Fewer than a person's page: a stranger
+#: is shown what a chat window can hold, and every passage is a query's worth of the install.
+PUBLIC_PASSAGES: Final = 3
+
+
+def public_searcher(
+    records: RowSource, embedder: QuestionEmbedder | None = None
+) -> Callable[[str], Awaitable[tuple[KnowledgePassage, ...]]]:
+    """The search a website visitor's question runs, over knowledge marked public (M10.7.2).
+
+    `search_within` at `PUBLIC`, so every statement carries `public_predicate` and takes
+    `brain_public` for its transaction. No entitlement is taken because a visitor has none, and no
+    redactor runs because the marking is the decision that the whole passage may be read. What a
+    visitor is told when this finds nothing is the widget route's, and it is the one sentence a
+    question about anything unmarked gets.
+    """
+
+    async def search(question: str) -> tuple[KnowledgePassage, ...]:
+        request = DocumentSearch(question=question, limit=PUBLIC_PASSAGES)
+        found, _ = await search_within(records, embedder, request, reach=PUBLIC)
+        return found
 
     return search
 

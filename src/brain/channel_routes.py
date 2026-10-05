@@ -52,6 +52,15 @@ request's token exchange immediately before it, because Lark authorises with a t
 the App ID and App Secret; and has a `read` beside `send`, a GET for who is in a conversation,
 which `brain.ops.effects` classifies as a read so no send can go by it.
 
+**A press on an approval card is decided while Lark waits, and its card is closed after
+(M10.2.3, M10.2.4).** A press is claimed like a message and handed to
+`brain.approval_cards.ApprovalCards`, which decides it through the Approvals route's own
+`take_decision` as the bound approver, and the vendor is answered in the wire's words: a toast,
+and for a press that decided nothing the card replaced by a closed one in the same answer. A card
+a press did decide is replaced after the answer has gone, by the rate-limited patch, and the text
+fallback goes to the approver's own chat when the patch was not delivered. A bound sender's
+decision word in a message is answered by the same object's `offer` and decides nothing (M10.7.1).
+
 **A chat message is acknowledged before it is answered, and answered by the gate as the bound
 person.** A chat vendor posts again after a few seconds of silence, so a message that arrived with
 a conversation is answered 200 once claimed and its reply is made after the response, recorded in
@@ -61,56 +70,98 @@ sender is offered to `brain.ops.binding_store.StoredBinder` on any process with 
 binds it once against `auth.binding_code` and keeps the binding in `auth.principal_identity`
 (CH2); `bindings_of` reads the same table.
 
-Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5
+**A request for the mail relay leaves by the relay, and every other by HTTPS.** Each delivery's
+transport is `brain.channels.relay.RelayingTransport` over the one above, so the email wire's
+`RELAY_URL` goes to the relay saved on Notifications (`relay_of`): its settings read from
+`ops.setting` on this request's event loop, its password borrowed from the vault on the send's own
+thread, and both dropped with the message. A relay not set up sends nothing and is recorded as
+refused. See `brain.channels.relay.ONE_RELAY_SERVES_EVERY_MESSAGE_THIS_INSTALL_SENDS`.
+
+**A channel whose vendor needs two secrets takes them as parts, and keeps them whole.** A wire
+naming `secret_parts` is saved with every part at once, as one JSON object in its one slot, or with
+none to keep the ones held; a single `secret` is refused for it, and parts for any other. See
+`brain.channels.adapter.SEVERAL_PARTS_ARE_WRITTEN_AS_ONE`.
+
+**A channel's connect steps and the address to paste ride on its view.** `steps_of` serves the
+channel's `GUIDE` and `events_address_of` the events address in full, built on the install setting
+that already names this install's public address, as Lark's is; both are empty for a channel with
+none, so the console draws a flow only where one was declared.
+
+Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5, M10.5.6, M10.5.1
+Task ids: M10.2.3, M10.2.4, M10.7.1, M10.3.5
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from datetime import UTC, datetime
-from typing import Annotated, Final
+from typing import Annotated, Final, cast
+from urllib.parse import urlsplit
 
 import psycopg
 import structlog
 from fastapi import APIRouter, Path, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.background import BackgroundTask
+from starlette.background import BackgroundTask, BackgroundTasks
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked, wiring_of
+from brain.approval_cards import (
+    PRESS_NOT_TAKEN_TOLD,
+    ApprovalCards,
+    card_windows_of,
+    closed_after,
+)
 from brain.attribution import trace_of_request
 from brain.channels.adapter import (
+    CardWire,
     ChannelTransport,
     ChannelWire,
+    KeyedWire,
+    RegisteredWire,
+    RegistrationRefusedError,
+    SubscribedWire,
     VendorAnswer,
     VendorRequest,
     channel_adapters,
+    channel_guides,
     channel_wires,
 )
 from brain.channels.inbound import (
     MAX_BODY_BYTES,
+    ApprovalOfferer,
+    CardPresser,
     ChannelAnswerer,
     ChannelBindings,
     ChatBinder,
     NoBindingsYet,
+    Pressed,
     Receipt,
     ReceiptKind,
     receive,
     reply_for,
 )
 from brain.channels.outbound import Delivered, LedgerRunner, Outgoing, deliver
+from brain.channels.relay import RelayingTransport
 from brain.chat_answer import ChatAnswerer
+from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import credentials_of
 from brain.db import libpq_conninfo
 from brain.gate.context import Channel
 from brain.gate.resolve import EntitlementStore
+from brain.guide_views import GuideStepView, step_view
+from brain.identity.oidc import JwksCache, KeySet, TokenRefusedError
+from brain.identity.roles import IdentityError
+from brain.install import InstallError, value_of
 from brain.install_routes import settings_of
-from brain.ops.binding_store import StoredBinder, StoredBindings
+from brain.notification_routes import mail_password_of
+from brain.notification_routes import transport_of as mail_transport_of
+from brain.ops.binding_store import StoredAddresses, StoredBinder, StoredBindings
 from brain.ops.channel_store import (
     ChannelRecord,
     ChannelRecords,
@@ -125,6 +176,7 @@ from brain.ops.channel_store import (
     VaultChannelSecrets,
     channel_secret_slot,
 )
+from brain.ops.connect_steps import EVENTS_ADDRESS_MARK
 from brain.ops.connector_admin import may_connect_source
 from brain.ops.credentials import (
     MAX_CREDENTIAL_CHARS,
@@ -134,10 +186,19 @@ from brain.ops.credentials import (
     VaultState,
 )
 from brain.ops.idempotency import Intent, Issued, OperationLedger
+from brain.ops.lark_connect import install_origin
+from brain.ops.mail import (
+    MailPasswordUnavailableError,
+    MailSettings,
+    MailTransport,
+    settings_from_rows,
+    settings_rows,
+)
 from brain.ops.openbao import OpenBaoVault
 from brain.ops.operation_store import PostgresOperationLedger
 from brain.ops.outbox import SignedRequest
 from brain.ops.outbox_store import SendResult
+from brain.ops.safe_error import describe
 from brain.ops.secrets import VaultRole
 from brain.ops.webhook_delivery import HttpsSender, SystemResolver
 from brain.routing_routes import sessions_of
@@ -212,6 +273,13 @@ KEPT_ANSWER_BYTES: Final = MAX_BODY_BYTES
 #: The longest tenant value kept: an identifier or an address, never a document.
 MAX_TENANT_VALUE_CHARS: Final = 500
 
+#: The installation setting that names this install's public address, which every events
+#: address is built on. See `brain.ops.lark_connect.events_address` for why it is this one.
+PUBLIC_ADDRESS_SETTING: Final = "INSTALL_OIDC_REDIRECT_URIS"
+
+#: How long a send's thread waits for the relay's settings to be read.
+RELAY_SETTINGS_SECONDS: Final = 10.0
+
 #: The longest destination a test message is sent to.
 MAX_TO_CHARS: Final = 255
 
@@ -240,6 +308,28 @@ TEST_TOLD: Final[Mapping[DeliveryOutcome, str]] = {
     DeliveryOutcome.UNKNOWN: (
         "The vendor did not answer, so the test message may or may not have arrived. Check at "
         "the other end before sending another."
+    ),
+}
+
+#: What a person saving a set-up the vendor must be told about is told when it was not.
+NO_PUBLIC_ADDRESS: Final = (
+    "This install has no public address yet, so the vendor could not be told where to send. "
+    "Set the install's address first, then save this set-up again."
+)
+NOTHING_HELD_TO_REGISTER_WITH: Final = (
+    "No secret is held for this channel yet. Paste it into the secret field and save again."
+)
+REGISTRATION_NOT_BUILT: Final = (
+    "Not saved. This set-up is not one the vendor takes: check each field against the steps."
+)
+REGISTRATION_TOLD: Final[Mapping[CallOutcome, str]] = {
+    CallOutcome.REJECTED: (
+        "Not saved. The vendor did not accept this set-up: check the secret you pasted, and that "
+        "this install's address is reachable over HTTPS."
+    ),
+    CallOutcome.QUOTA: "Not saved. The vendor asked to be called less often. Save again shortly.",
+    CallOutcome.UNAVAILABLE: (
+        "Not saved. The vendor could not be reached just now. Save again in a minute."
     ),
 }
 
@@ -273,8 +363,15 @@ class ChannelView(BaseModel):
     receives: bool
     #: Where its vendor posts, under this install's own origin; empty when it cannot receive.
     events_path: str
+    #: The same address in full, for a person to paste into the vendor; empty when this install
+    #: names no public address yet, or the channel cannot receive.
+    events_address: str
+    #: The steps that connect it, ending in its own form; empty for a channel with none yet.
+    steps: list[GuideStepView]
     #: The tenant fields its record takes.
     tenant_fields: list[str]
+    #: The parts its secret holds, each typed on its own; empty when the secret is one value.
+    secret_parts: list[str]
     configured: bool
     enabled: bool
     tenant: dict[str, str]
@@ -301,6 +398,8 @@ class ChannelAsked(BaseModel):
     enabled: bool
     tenant: dict[str, str] = Field(default_factory=dict, max_length=8)
     secret: str | None = Field(default=None, max_length=MAX_CREDENTIAL_CHARS)
+    #: For a channel whose secret has parts, every part at once, by name; see `secret_problems`.
+    secret_parts: dict[str, str] | None = Field(default=None, max_length=8)
 
 
 class SwitchAsked(BaseModel):
@@ -399,7 +498,7 @@ class HttpsTransport:
         exchange = request.exchange
         if exchange is None:
             return headers
-        signed = self._signed(exchange.url, {}, exchange.body)
+        signed = self._signed(exchange.url, {"Content-Type": exchange.content_type}, exchange.body)
         if isinstance(signed, VendorAnswer):
             return signed
         answered = _answer_of(self._sender.mint(signed))
@@ -410,8 +509,8 @@ class HttpsTransport:
         return headers
 
     def send(self, request: VendorRequest) -> VendorAnswer:
-        if request.method != "POST":
-            msg = "a send is a POST; a read goes through `read`"
+        if request.method not in ("POST", "PATCH"):
+            msg = "a send is a POST, or a PATCH replacing a card; a read goes through `read`"
             raise ValueError(msg)
         headers = self._authorised(request)
         if isinstance(headers, VendorAnswer):
@@ -419,6 +518,8 @@ class HttpsTransport:
         signed = self._signed(request.url, headers, request.body)
         if isinstance(signed, VendorAnswer):
             return signed
+        if request.method == "PATCH":
+            return _answer_of(self._sender.edit(signed))
         return _answer_of(self._sender.send(signed))
 
     def read(self, request: VendorRequest) -> VendorAnswer:
@@ -514,6 +615,140 @@ def transport_of(request: Request) -> ChannelTransport:
     return found if found is not None else HttpsTransport()
 
 
+def relay_settings_of(
+    request: Request,
+) -> Callable[[], Coroutine[None, None, MailSettings | None]]:
+    """How the relay's settings are read: `app.state.mail_settings` for a test, `ops.setting`
+    otherwise, and none with no database."""
+    found = getattr(request.app.state, "mail_settings", None)
+
+    async def read() -> MailSettings | None:
+        if isinstance(found, MailSettings):
+            return found
+        sessions = sessions_of(request)
+        if sessions is None:
+            return None
+        async with sessions() as session:
+            return settings_from_rows(await settings_rows(session))
+
+    return read
+
+
+def relay_of(request: Request) -> Callable[[], MailTransport | None]:
+    """The mail relay a reply by mail leaves through, asked on the send's own thread.
+
+    The relay set up on Notifications, never one of a channel's own: see
+    `brain.channels.relay.ONE_RELAY_SERVES_EVERY_MESSAGE_THIS_INSTALL_SENDS`. Its settings are
+    read on this request's event loop, which is free while the send's thread waits, and its
+    password is borrowed from the vault for the one message and dropped with the transport. A
+    relay not set up, or whose password the vault will not give, answers None and sends nothing.
+    """
+    loop = asyncio.get_running_loop()
+    read_settings = relay_settings_of(request)
+    mail_password = mail_password_of(request)
+    build = mail_transport_of(request)
+
+    def relay() -> MailTransport | None:
+        if _on_a_running_loop():
+            msg = "the relay is asked on the send's thread, never on the event loop"
+            raise RuntimeError(msg)
+        settings = asyncio.run_coroutine_threadsafe(read_settings(), loop).result(
+            RELAY_SETTINGS_SECONDS
+        )
+        if settings is None:
+            return None
+        password: str | None = None
+        if settings.username:
+            try:
+                password = mail_password.read() if mail_password.configured else None
+            except MailPasswordUnavailableError:
+                return None
+            if password is None:
+                return None
+        return build(settings, password)
+
+    return relay
+
+
+def _on_a_running_loop() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+class PublishedKeys:
+    """`brain.identity.oidc.JwksFetch` for a `KeyedWire`: its metadata, then its key set.
+
+    Both are read through the channel transport, so the address rule applies to each, and the
+    key set is read only from the host the metadata document is on: a document that pointed
+    anywhere else would be choosing where this install's trust comes from. See
+    `brain.channels.adapter.A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE`.
+    """
+
+    def __init__(self, wire: KeyedWire, transport: ChannelTransport) -> None:
+        self._wire = wire
+        self._transport = transport
+
+    def _get(self, url: str) -> bytes:
+        answer = self._transport.read(VendorRequest(url=url, headers={}, body=b"", method="GET"))
+        if answer.status != 200 or not answer.body:
+            msg = f"{urlsplit(url).hostname} did not answer with its document"
+            raise IdentityError(msg)
+        return answer.body
+
+    def __call__(self, issuer: str) -> KeySet:
+        del issuer  # One address per wire; the cache's key is it.
+        address = self._wire.keys_address
+        metadata = self._get(address)
+        try:
+            listed = json.loads(metadata).get("jwks_uri")
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError) as exc:
+            raise IdentityError("the metadata document is not JSON") from exc
+        if (
+            not isinstance(listed, str)
+            or urlsplit(listed).scheme != "https"
+            or urlsplit(listed).hostname != urlsplit(address).hostname
+        ):
+            raise IdentityError("the metadata document names its keys on another host")
+        try:
+            return self._wire.key_set_of(metadata, self._get(listed), datetime.now(UTC))
+        except ValueError as exc:
+            raise IdentityError(describe(exc)) from exc
+
+
+def vendor_keys_of(request: Request, wire: object) -> Callable[[], Awaitable[KeySet | None]] | None:
+    """How a request fetches its vendor's published keys: None for a wire that needs none.
+
+    `app.state.channel_keys` when a test put a key set there; otherwise one cache per
+    application and address, so a key set is fetched once an hour rather than once a request,
+    and an unreachable vendor leaves the cached set in use for its grace, then refuses.
+    """
+    if not isinstance(wire, KeyedWire):
+        return None
+    keyed: KeyedWire = wire
+    found = getattr(request.app.state, "channel_keys", None)
+    caches: dict[str, JwksCache] | None = getattr(request.app.state, "channel_key_caches", None)
+    if caches is None:
+        caches = {}
+        request.app.state.channel_key_caches = caches
+    cache = caches.setdefault(
+        keyed.keys_address, JwksCache(PublishedKeys(keyed, transport_of(request)))
+    )
+
+    async def load() -> KeySet | None:
+        if isinstance(found, KeySet):
+            return found
+        try:
+            return await asyncio.to_thread(cache.keys_for, keyed.keys_address, datetime.now(UTC))
+        except TokenRefusedError:
+            log.info("vendor keys not read", address=urlsplit(keyed.keys_address).hostname)
+            return None
+
+    return load
+
+
 def ledger_of(request: Request) -> LedgerRunner:
     """How one send reaches the operation ledger: `app.state.operation_ledger` for a test, or a
     connection of its own in autocommit mode, opened for the one send on the send's thread, as
@@ -571,6 +806,47 @@ def binder_of(request: Request) -> ChatBinder | None:
     return None if sessions is None else StoredBinder(sessions, trace_id=trace_of_request())
 
 
+def addresses_of(request: Request) -> StoredAddresses | None:
+    """`app.state.channel_addresses` when a test put one there, `auth.principal_identity`'s kept
+    Lark addresses through `brain.ops.binding_store.StoredAddresses` otherwise, and None with no
+    database, which keeps no address and sends no card on a raise (needs-rupash 118)."""
+    found = getattr(request.app.state, "channel_addresses", None)
+    if found is not None:
+        # A cast at the boundary of a test's state, where proving the structural match buys
+        # nothing: a stand-in answers `remember` and `addressed` as the store does.
+        return cast("StoredAddresses", found)
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredAddresses(sessions)
+
+
+def _approval_cards(request: Request) -> object | None:
+    """`app.state.approval_cards` when a test put one there; otherwise the cards over this
+    process's gate, directory and suspension store, for this request's trace; otherwise None.
+
+    None answers a decision word with where to decide and nothing else, and a press with the one
+    refusal: a process with no gate or no directory has nobody to decide as."""
+    found: object = getattr(request.app.state, "approval_cards", None)
+    if found is not None:
+        return found
+    if wiring_of(request) is None:
+        return None
+    try:
+        return ApprovalCards.of(request, bindings=bindings_of(request))
+    except Failed:
+        return None
+
+
+def approval_cards_of(request: Request) -> ApprovalOfferer | None:
+    """What a bound sender's decision word is answered by. See `_approval_cards`."""
+    # A cast at the boundary of a test's state, where proving the structural match buys nothing.
+    return cast("ApprovalOfferer | None", _approval_cards(request))
+
+
+def presser_of(request: Request) -> CardPresser | None:
+    """What decides a press on a card: the same object as `approval_cards_of`."""
+    return cast("CardPresser | None", _approval_cards(request))
+
+
 class _NoReach:
     """The entitlement store on a process with no gate wired: asked, it fails loudly."""
 
@@ -622,6 +898,83 @@ def tenant_problems(wire: ChannelWire, tenant: Mapping[str, str]) -> list[str]:
     return problems
 
 
+def secret_problems(wire: ChannelWire, body: ChannelAsked) -> list[str]:
+    """What is wrong with the secret asked: the wrong shape for this channel, or a part missing.
+
+    A channel with parts takes every part at once or none, and never a single `secret`; one with
+    none takes `secret` alone. See `brain.channels.adapter.SEVERAL_PARTS_ARE_WRITTEN_AS_ONE`.
+    """
+    parts = wire.secret_parts
+    if not parts:
+        return [] if body.secret_parts is None else ["this channel's secret is one value"]
+    if body.secret is not None:
+        return [f"this channel's secret is given as its parts: {', '.join(parts)}"]
+    if body.secret_parts is None:
+        return []
+    given = body.secret_parts
+    problems = [
+        f"{name} is not a part of this channel's secret" for name in given if name not in parts
+    ]
+    for name in parts:
+        value = given.get(name, "")
+        if not value.strip() or len(value) > MAX_CREDENTIAL_CHARS:
+            problems.append(f"{name} is needed with the others, as one line")
+    return problems
+
+
+def secret_to_keep(wire: ChannelWire, body: ChannelAsked) -> str | None:
+    """The value the channel's slot keeps: the secret, or its parts as one JSON object."""
+    if not wire.secret_parts or body.secret_parts is None:
+        return body.secret
+    return json.dumps(
+        {name: body.secret_parts[name] for name in wire.secret_parts}, separators=(",", ":")
+    )
+
+
+def _saved(name: str) -> str:
+    try:
+        return value_of(name)
+    except InstallError:
+        return ""
+
+
+def events_path_of(channel: Channel) -> str:
+    """Where a channel's vendor posts, under this install's origin; empty for one with no wire."""
+    if channel not in channel_wires():
+        return ""
+    return API_PREFIX + EVENTS_PATH.format(name=channel.value)
+
+
+def events_address_of(channel: Channel) -> str:
+    """The same address in full, for a person to paste into the vendor.
+
+    Built on the install setting that already names its public address, as Lark's is (see
+    `brain.ops.lark_connect.events_address`), so no second setting can disagree with it. Empty
+    while the install names none, rather than a relative path a vendor could not reach.
+    """
+    path = events_path_of(channel)
+    origin = install_origin(_saved(PUBLIC_ADDRESS_SETTING))
+    return f"{origin}{path}" if origin and path else ""
+
+
+def steps_of(channel: Channel) -> list[GuideStepView]:
+    """The steps that connect a channel, holding its own form; none for a channel with none.
+
+    A text to copy that names the events address has this install's written in, where it names
+    one; see `brain.ops.connect_steps.EVENTS_ADDRESS_MARK`.
+    """
+    address = events_address_of(channel)
+    served = []
+    for one in channel_guides().get(channel, ()):
+        view = step_view(one)
+        if address and EVENTS_ADDRESS_MARK in view.copy_text:
+            view = view.model_copy(
+                update={"copy_text": view.copy_text.replace(EVENTS_ADDRESS_MARK, address)}
+            )
+        served.append(view)
+    return served
+
+
 def _error(status: int, message: str) -> JSONResponse:
     body = ErrorBody(message=message, trace_id=trace_of_request())
     return JSONResponse(status_code=status, content=body.model_dump(mode="json"))
@@ -653,8 +1006,11 @@ async def _view(
     return ChannelView(
         channel=channel.value,
         receives=wire is not None,
-        events_path=API_PREFIX + EVENTS_PATH.format(name=channel.value) if wire else "",
+        events_path=events_path_of(channel),
+        events_address=events_address_of(channel),
+        steps=steps_of(channel),
         tenant_fields=list(wire.tenant_fields) if wire else [],
+        secret_parts=list(wire.secret_parts) if wire else [],
         configured=record is not None,
         enabled=record is not None and record.enabled,
         tenant=dict(record.tenant) if record else {},
@@ -669,6 +1025,47 @@ async def _view(
 router = APIRouter(prefix=API_PREFIX, tags=["channels"], route_class=NoEchoRoute)
 
 Name = Annotated[str, Path(max_length=32)]
+
+
+@router.get(
+    EVENTS_PATH,
+    response_model=None,
+    responses={
+        **COMMON_RESPONSES,
+        200: {
+            "description": "The vendor's challenge, as it was sent.",
+            "content": {"text/plain": {"schema": {"type": "string"}}},
+        },
+    },
+)
+async def channel_address_check(name: Name, request: Request) -> Response:
+    """A vendor checking the events address with a GET before it posts. Takes no caller: the
+    word agreed with the vendor is what is proved, and a refusal says nothing about why.
+
+    See `brain.channels.adapter.AN_ADDRESS_CHECK_BY_GET_IS_ANSWERED_ONLY_FOR_THE_AGREED_WORD`. A
+    channel whose vendor makes no such check has nothing at this address, and neither has one
+    whose record is absent or switched off.
+    """
+    channel = channel_named(name)
+    # Typed as an object: whether a vendor checks by a GET is a question about the wire's class.
+    wire: object = None if channel is None else channel_wires().get(channel)
+    if channel is None or not isinstance(wire, SubscribedWire):
+        return _error(404, NOT_HERE)
+    record = await records_of(request).get(channel)
+    if record is None or not record.enabled:
+        return _error(404, NOT_HERE)
+    try:
+        secret = await asyncio.to_thread(secrets_of(request).read, record.secret)
+    except ChannelSecretsUnavailableError:
+        return _error(503, NOT_NOW)
+    if secret is None:
+        return _error(503, NOT_NOW)
+    answer = wire.subscription_answer(dict(request.query_params), secret)
+    del secret
+    log.info("channel address checked", channel=channel.value, answered=answer is not None)
+    if answer is None:
+        return _error(403, NOT_ACCEPTED)
+    return PlainTextResponse(answer)
 
 
 @router.post(EVENTS_PATH, response_model=EventView, responses=COMMON_RESPONSES)
@@ -704,7 +1101,21 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         claims=claims_of(request),
         deliveries=deliveries,
         now=now,
+        keys=vendor_keys_of(request, wire),
     )
+    if receipt.more:
+        # A request of several messages is acknowledged whatever became of each, and every one
+        # accepted is answered after the vendor has its answer; see
+        # `brain.channels.adapter.A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL`.
+        assert record is not None
+        accepted = [one for one in (receipt, *receipt.more) if one.kind is ReceiptKind.ACCEPTED]
+        answering = BackgroundTasks()
+        for one in accepted:
+            answering.add_task(answer_receipt, request, one, record, now)
+        came_to = ReceiptKind.ACCEPTED if accepted else receipt.kind
+        return JSONResponse(
+            status_code=200, content=EventView(status=came_to).model_dump(), background=answering
+        )
     if receipt.kind is ReceiptKind.REFUSED:
         assert receipt.reason is not None
         status, message = _REFUSED_STATUS[receipt.reason]
@@ -716,6 +1127,8 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         return JSONResponse(status_code=200, content=EventView(status=receipt.kind).model_dump())
 
     assert record is not None
+    if receipt.inbound is not None and receipt.inbound.press is not None:
+        return await _pressed(request, wire, receipt, record, now)
     if receipt.inbound is not None and receipt.inbound.conversation is not None:
         # A chat vendor waits seconds, not the length of an answer, and posts the event again
         # when it hears nothing: so the reply is made after the answer to the vendor has gone.
@@ -724,14 +1137,14 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         return JSONResponse(
             status_code=200,
             content=view.model_dump(),
-            background=BackgroundTask(_reply, request, receipt, record, now),
+            background=BackgroundTask(answer_receipt, request, receipt, record, now),
         )
-    outcome = await _reply(request, receipt, record, now)
+    outcome = await answer_receipt(request, receipt, record, now)
     view = EventView(status=receipt.kind, reply=outcome)
     return JSONResponse(status_code=200, content=view.model_dump())
 
 
-async def _reply(
+async def answer_receipt(
     request: Request, receipt: Receipt, record: ChannelRecord, now: datetime
 ) -> DeliveryOutcome | None:
     """Make and send the reply to an accepted message; what the first message sent came to.
@@ -749,6 +1162,8 @@ async def _reply(
             bindings=bindings_of(request),
             answerer=answerer_of(request),
             binder=binder_of(request),
+            offerer=approval_cards_of(request),
+            addresses=addresses_of(request),
             now=now,
         )
     except Exception as exc:
@@ -771,6 +1186,52 @@ async def _reply(
     return outcomes[0] if outcomes else None
 
 
+async def _pressed(
+    request: Request, wire: ChannelWire, receipt: Receipt, record: ChannelRecord, now: datetime
+) -> JSONResponse:
+    """Decide a press and answer the vendor in its wire's words; close the card after.
+
+    A process with nothing to decide a press, or a wire with no cards, answers the one refusal and
+    decides nothing. Whatever deciding raised is answered the same way and logged by its kind,
+    because the vendor is waiting and the presser is told in words either way.
+    """
+    assert receipt.inbound is not None
+    presser = presser_of(request)
+    pressed = Pressed(told=PRESS_NOT_TAKEN_TOLD)
+    if presser is not None and isinstance(wire, CardWire):
+        try:
+            pressed = await presser.press(
+                receipt.inbound, record=record, reply_to=receipt.reply_to, now=now
+            )
+        except Exception as exc:
+            log.warning(
+                "card press not decided", channel=record.channel.value, kind=type(exc).__name__
+            )
+    if not isinstance(wire, CardWire):
+        view = EventView(status=receipt.kind)
+        return JSONResponse(status_code=200, content=view.model_dump())
+    body = dict(
+        wire.press_answer(told=pressed.told, closed=pressed.closed, decided=pressed.decided)
+    )
+    if pressed.patch is None and pressed.fallback is None:
+        return JSONResponse(status_code=200, content=body)
+    return JSONResponse(
+        status_code=200,
+        content=body,
+        background=BackgroundTask(_close_after_press, request, pressed, record),
+    )
+
+
+async def _close_after_press(request: Request, pressed: Pressed, record: ChannelRecord) -> None:
+    """The card a press decided, replaced; the text fallback when the replacement did not go."""
+    await closed_after(
+        pressed,
+        send=lambda one: _deliver(request, one, record, datetime.now(UTC)),
+        windows=card_windows_of(request),
+        now=datetime.now(UTC),
+    )
+
+
 async def _deliver(
     request: Request, outgoing: Outgoing, record: ChannelRecord | None, now: datetime
 ) -> Delivered:
@@ -779,7 +1240,7 @@ async def _deliver(
         record=record,
         secrets=secrets_of(request),
         reach=reach_of(request),
-        transport=transport_of(request),
+        transport=RelayingTransport(transport_of(request), relay_of(request)),
         ledger=ledger_of(request),
         deliveries=deliveries_of(request),
         now=now,
@@ -804,21 +1265,73 @@ async def channels(request: Request, asked: Asked) -> ChannelsView:
     )
 
 
+async def _register(
+    request: Request,
+    channel: Channel,
+    wire: RegisteredWire,
+    kept: str | None,
+    tenant: Mapping[str, str],
+) -> JSONResponse | None:
+    """Tell the vendor this install's events address, or say why not; None when it accepted.
+
+    See `brain.channels.adapter.A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE`. Made
+    before the secret is kept, so a secret the vendor refused never replaces the one that works.
+    The secret is the one being saved, or else the one the vault holds, borrowed for the call.
+    """
+    address = events_address_of(channel)
+    if not address:
+        return _error(409, NO_PUBLIC_ADDRESS)
+    secret = kept
+    if secret is None:
+        record = await records_of(request).get(channel)
+        try:
+            held = (
+                None
+                if record is None
+                else await asyncio.to_thread(secrets_of(request).read, record.secret)
+            )
+        except ChannelSecretsUnavailableError:
+            return _error(503, NOT_NOW)
+        if held is None:
+            return _error(409, NOTHING_HELD_TO_REGISTER_WITH)
+        secret = held
+    try:
+        told = wire.registration_for(address=address, secret=secret, tenant=tenant)
+    except RegistrationRefusedError as problem:
+        return _error(422, str(problem))
+    except ValueError:
+        return _error(422, REGISTRATION_NOT_BUILT)
+    del secret
+    answer = await asyncio.to_thread(transport_of(request).send, told)
+    outcome = wire.judge(answer)
+    log.info("channel address registered", channel=channel.value, outcome=outcome.value)
+    if outcome is CallOutcome.OK:
+        return None
+    return _error(502, REGISTRATION_TOLD.get(outcome, REGISTRATION_TOLD[CallOutcome.REJECTED]))
+
+
 @router.put(CHANNEL_PATH, response_model=ChannelView, responses=COMMON_RESPONSES)
 async def configure(
     name: Name, body: ChannelAsked, request: Request, asked: Asked
 ) -> ChannelView | JSONResponse:
     """Keep this channel's record, and its secret first when one is given."""
     channel, wire = _managed_wire(name, asked)
-    problems = tenant_problems(wire, body.tenant)
+    problems = tenant_problems(wire, body.tenant) + secret_problems(wire, body)
     if problems:
         return _error(422, " ".join(problems))
     actor = asked.caller.principal.id
-    if body.secret is not None:
+    kept = secret_to_keep(wire, body)
+    # Typed as an object: whether a wire registers its address is a question about its class.
+    registering: object = wire
+    if isinstance(registering, RegisteredWire):
+        refused = await _register(request, channel, registering, kept, body.tenant)
+        if refused is not None:
+            return refused
+    if kept is not None:
         try:
             await credentials_of(request).keep(
                 channel_secret_slot(channel),
-                body.secret,
+                kept,
                 actor=actor,
                 trace_id=trace_of_request(),
                 ent_hash=asked.reach.ent_hash(),

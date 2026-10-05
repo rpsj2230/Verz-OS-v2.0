@@ -23,10 +23,12 @@ Task ids: M42.6.5, M27.15.8
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import Any, Final
 
 import pytest
@@ -38,9 +40,11 @@ from pydantic import ValidationError
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
 from brain.connector_routes import (
+    ACCEPT_PATH,
     CONNECTORS_PATH,
     CONNECTORS_READ,
     DISCONNECT_PATH,
+    DRIFT_PATH,
     EDIT_PATH,
     EXPORT_PATH,
     KEY_PATH,
@@ -72,17 +76,26 @@ from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
 from brain.identity.data_steward import declared_capabilities
-from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE, manifest_for
+from brain.ops.connectable import (
+    CONNECTABLE,
+    DECLARED_FORMS,
+    NOT_FROM_THE_CONSOLE,
+    THIS_INSTALL_CANNOT_READ_IT_YET,
+    manifest_for,
+)
 from brain.ops.connector_admin import (
+    ALLOWING_A_WRITE,
     CONNECTED,
     CONNECTING_A_SOURCE,
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
     EDITED,
     KEY_REPLACED,
+    NO_SUCH_WRITE,
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
+    WRITE_ALLOWED,
 )
 from brain.ops.connector_probe import (
     TEST_WAITING,
@@ -145,10 +158,33 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "cloudflare": "0123456789abcdef0123456789abcdef",
+    "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
+    "google_analytics": "123456789",
+    "search_console": "sc-domain:example.com",
+    "laravel": "portal",
+    "domains": "example.com, example.org",
 }
 
-#: The settings after the first that a source asks for, for the one source that asks for two.
-FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {"freshdesk": {"department": "support"}}
+#: The settings after the first that a source asks for, for the sources that ask for more than one.
+FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
+    "freshdesk": {"department": "support"},
+    "cloudflare": {"department": "operations"},
+    "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "domains": {"department": "operations"},
+    "google_analytics": {"department": "marketing"},
+    "search_console": {"department": "marketing"},
+    "laravel": {
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
+        "client_rule": "department = sales",
+        "user_rule": "department = operations",
+        "max_rows": "500",
+        "timeout_seconds": "10",
+    },
+}
 
 
 def _grant(capability: Any, scope: Scope) -> Grant:
@@ -206,10 +242,11 @@ class NoDatabase:
 
 
 def settings_for(name: str) -> dict[str, str]:
-    """The settings a connectable source takes, and none for a source the console cannot connect."""
-    if name not in CONNECTABLE:
+    """The settings a declared form takes, and none for a source with no form."""
+    if name not in DECLARED_FORMS:
         return {}
-    return {CONNECTABLE[name].settings[0].name: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
+    first = DECLARED_FORMS[name].settings[0].name
+    return {first: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
 
 
 def a_connection(
@@ -253,6 +290,7 @@ class Records:
         ent_hash: str,
         keep_key: Callable[[], Awaitable[datetime | None]],
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         self.asked += 1
         self.declared.append(tuple(declared))
@@ -265,6 +303,7 @@ class Records:
             digest=digest,
             connected_by=actor,
             connected_at=LONG_AGO,
+            agreed=agreed,
         )
         self.rows[connector] = made
         self.connects.append({"connection": made, "ent_hash": ent_hash})
@@ -301,12 +340,19 @@ def client(app: FastAPI) -> Iterator[TestClient]:
         yield c
 
 
+async def everybody_is_live(principal_id: str) -> bool:
+    """A directory in which every id names somebody, for the routes' own tests."""
+    del principal_id
+    return True
+
+
 def attach(
     app: FastAPI, records: Records | None, vault: Vault | None, writes: Recorded | None = None
 ) -> None:
     if records is not None:
         app.state.connector_records = records
     app.state.credentials = Credentials(vault, environ={}, writes=writes)
+    app.state.people_are_live = everybody_is_live
 
 
 def headers(pid: str, claims: Mapping[str, object] | None = None) -> dict[str, str]:
@@ -344,6 +390,39 @@ def held_vault() -> Vault:
 
 
 # ------------------------------------------------------------------ what a reader is told
+
+
+@pytest.fixture
+def hubspot_unmeasured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HubSpot with its recorded ceiling taken away, so its plan refuses as an unmeasured source's
+    does. Since 2026-09-30 every source the console offers has a ceiling, so a refusal for want
+    of one is shown on a source that had it taken away."""
+    from brain.ops import limits
+
+    kept = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    monkeypatch.setattr(limits, "_BY_NAME", kept)
+
+
+@pytest.fixture
+def forms_offered_as_if_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Google Drive's and Laravel's declared forms offered as though this install could read them,
+    so their route halves (a key file, a database user, an answerable person) are proved before
+    their readings land. See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS` in
+    `brain.ops.connectable`."""
+    import brain.connector_routes as routes
+    import brain.ops.connectable as connectable
+    import brain.ops.connector_admin as admin
+
+    both = ("google_drive", "laravel")
+    offered = MappingProxyType(
+        {**connectable.CONNECTABLE, **{one: connectable.DECLARED_FORMS[one] for one in both}}
+    )
+    listed = {k: v for k, v in connectable.NOT_FROM_THE_CONSOLE.items() if k not in both}
+    for module in (routes, connectable, admin):
+        if hasattr(module, "CONNECTABLE"):
+            monkeypatch.setattr(module, "CONNECTABLE", offered)
+        if hasattr(module, "NOT_FROM_THE_CONSOLE"):
+            monkeypatch.setattr(module, "NOT_FROM_THE_CONSOLE", MappingProxyType(listed))
 
 
 def test_a_reader_is_told_which_sources_are_connected_and_what_each_may_read(
@@ -418,7 +497,7 @@ def an_attempt(name: str, **changed: Any) -> SyncState:
 
 
 def test_a_connected_source_shows_when_it_was_last_read_and_how_that_went(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, hubspot_unmeasured: None
 ) -> None:
     """**The screen's half of the leaf.** A source read to the end shows the attempt's time and
     health in its trust row and its last read beside them. A source whose key was declined shows
@@ -672,7 +751,9 @@ def test_the_screen_lists_every_shipped_connector_from_its_own_declaration(
     for name, label in offered.items():
         assert declared[name].console is not None and label == declared[name].label
     for name, (label, why) in explained.items():
-        assert (label, why) == (declared[name].label, declared[name].not_from_the_console)
+        # A form this install cannot read yet says so; a source with no form, in its own words.
+        said = declared[name].not_from_the_console or THIS_INSTALL_CANNOT_READ_IT_YET
+        assert (label, why) == (declared[name].label, said)
 
 
 def test_every_source_is_served_with_the_steps_of_its_connect_flow(
@@ -690,13 +771,17 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
     for one in body["connectable"]:
         keys = [step["key"] for step in one["steps"]]
         assert keys == [step.key for step in declared[one["name"]].guide]
+        # A source that takes no key (M11.7.4) asks for its settings alone.
+        key = [] if one["credential_shape"] == "none" else ["credential"]
         assert one["steps"][-1]["asks"] == [
             *(setting["name"] for setting in one["settings"]),
-            "credential",
+            *key,
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
-    drive = next(one for one in body["not_connectable"] if one["name"] == "google_drive")
-    assert drive["steps"][-1]["asks"] == [] and len(drive["steps"]) == 4
+    # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
+    # own. Laravel's form is offered since M11.6.1 and Drive's since M11.6.7, because each reads.
+    served = {one["name"]: one for one in body["not_connectable"]}
+    assert set(served) == {"lark_base", "lark_wiki"}
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -718,6 +803,12 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "xero": True,
         "hubspot": False,
         "freshdesk": False,
+        "cloudflare": False,
+        "domains": False,
+        "google_analytics": False,
+        "google_drive": False,
+        "search_console": False,
+        "laravel": False,
     }
 
 
@@ -808,6 +899,94 @@ def test_an_administrator_connects_a_source_and_its_key_is_kept_in_its_slot_and_
     assert KEY not in answered.text
 
 
+def test_a_key_file_and_a_database_user_reach_their_slots_in_their_own_shapes(
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
+) -> None:
+    """M11.7.7 through the route: Google Drive's key file is kept whole as its slot's key, and the
+    Laravel user as its password with its name beside it, and the forms say which shape each
+    takes. Delete this and the two sources connect with their credentials kept where no reader
+    looks, or a form offers a key box for a key file."""
+    from brain.ops.credentials import MAX_KEY_FILE_CHARS, SERVICE_ACCOUNT, USER_FIELD
+
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    key_file = json.dumps(
+        {"type": SERVICE_ACCOUNT, "client_email": "a@b.example", "private_key": "FILE-SENTINEL"},
+        indent=2,
+    )
+    user = json.dumps({"user": "brain_reader", "password": "PASSWORD-SENTINEL"})
+    drive = post(client, "u_admin", LISTING, connection_body("google_drive", credential=key_file))
+    views = post(client, "u_admin", LISTING, connection_body("laravel", credential=user))
+
+    assert (drive.status_code, views.status_code) == (200, 200)
+    assert vault.written == [
+        ("connector_keys/google_drive", {KEY_FIELD: key_file}),
+        ("connector_keys/laravel", {KEY_FIELD: "PASSWORD-SENTINEL", USER_FIELD: "brain_reader"}),
+    ]
+    assert "FILE-SENTINEL" not in drive.text and "PASSWORD-SENTINEL" not in views.text
+    forms = {one["name"]: one for one in get(client, "u_admin").json()["connectable"]}
+    assert (forms["google_drive"]["credential_shape"], forms["laravel"]["credential_shape"]) == (
+        "key_file",
+        "database_user",
+    )
+    assert forms["google_drive"]["credential_max_chars"] == MAX_KEY_FILE_CHARS
+    assert forms["xero"]["credential_shape"] == "key"
+
+
+def test_an_answerable_person_who_is_nobody_here_is_refused_and_nothing_is_kept(
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
+) -> None:
+    """`Setting.names_a_person`: Google Drive's steward must be somebody live on this install. The
+    connector reads no table, so the route asks. Delete this and a mistyped id is kept as the
+    person answerable for a folder, and nobody is ever asked to re-check its files."""
+    from brain.ops.credentials import SERVICE_ACCOUNT
+
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    asked: list[str] = []
+
+    async def only_one(principal_id: str) -> bool:
+        asked.append(principal_id)
+        return principal_id == "u_steward"
+
+    app.state.people_are_live = only_one
+    key_file = json.dumps({"type": SERVICE_ACCOUNT, "client_email": "a", "private_key": "b"})
+    nobody = connection_body(
+        "google_drive",
+        settings={**settings_for("google_drive"), "steward": "u_nobody"},
+        credential=key_file,
+    )
+    refused = post(client, "u_admin", LISTING, nobody)
+    kept = post(client, "u_admin", LISTING, connection_body("google_drive", credential=key_file))
+
+    assert refused.status_code == 422
+    assert [(one["field"], one["code"]) for one in refused.json()["problems"]] == [
+        ("steward", "refused")
+    ]
+    assert kept.status_code == 200 and asked == ["u_nobody", "u_steward"]
+    assert [slot for slot, _ in vault.written] == ["connector_keys/google_drive"]
+
+
+def test_a_credential_in_the_wrong_shape_is_refused_and_nothing_is_kept(
+    app: FastAPI, client: TestClient, forms_offered_as_if_read: None
+) -> None:
+    """Delete this and a pasted key is kept as though it were a key file, or a user with no
+    password is kept and every read fails at the database."""
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    drive = post(client, "u_admin", LISTING, connection_body("google_drive", credential=KEY))
+    views = post(client, "u_admin", LISTING, connection_body("laravel", credential='{"user": "u"}'))
+
+    assert (drive.status_code, views.status_code) == (422, 422)
+    assert [(one["field"], one["code"]) for one in drive.json()["problems"]] == [
+        ("credential", "not_a_key_file")
+    ]
+    assert [(one["field"], one["code"]) for one in views.json()["problems"]] == [
+        ("credential", "blank")
+    ]
+    assert records.asked == 0 and vault.written == []
+
+
 def test_a_connection_hands_the_store_what_the_source_declares_for_the_data_steward(
     app: FastAPI, client: TestClient
 ) -> None:
@@ -847,7 +1026,7 @@ def test_a_caller_who_may_not_connect_this_source_is_refused_before_anything_is_
         post(client, "u_elsewhere", LISTING, connection_body()),
         post(client, "u_narrow", LISTING, connection_body("hubspot")),
         post(client, "u_none", LISTING, connection_body(settings={}, credential="")),
-        post(client, "u_narrow", LISTING, connection_body("laravel")),
+        post(client, "u_narrow", LISTING, connection_body("lark_base")),
     ]
     for refused in refusals:
         assert (refused.status_code, without_trace(refused)) == (
@@ -883,7 +1062,7 @@ def test_every_problem_with_a_connection_is_told_at_once_and_nothing_is_written(
     records, vault = Records(), Vault()
     attach(app, records, vault)
     both = post(client, "u_admin", LISTING, connection_body(settings={}, credential="one two"))
-    unknown = post(client, "u_admin", LISTING, connection_body("laravel"))
+    unknown = post(client, "u_admin", LISTING, connection_body("lark_base"))
     refused = post(client, "u_admin", LISTING, connection_body(settings={"tenant_id": "*"}))
 
     assert both.status_code == unknown.status_code == refused.status_code == 422
@@ -1067,6 +1246,7 @@ class ChangingRecords(Records):
         trace_id: str,
         ent_hash: str,
         declared: Sequence[str] = (),
+        agreed: str = "",
     ) -> Connection:
         old = self.rows.get(connector)
         if old is None:
@@ -1088,6 +1268,7 @@ class ChangingRecords(Records):
             digest=digest,
             connected_by=actor,
             connected_at=LONG_AGO + timedelta(days=1),
+            agreed=agreed,
         )
         self.rows[connector] = made
         self.edits.append({"connection": made, "declared": tuple(declared)})
@@ -1147,7 +1328,7 @@ def test_the_module_lists_every_shipped_source_and_a_connection_only_adds_to_its
         "console",
         "lark",
     )
-    assert rows["laravel"]["connect_from"] == "server"
+    assert rows["laravel"]["connect_from"] == "console"
     assert body["total"] is None
     narrowed = read(client, "u_admin", f"{SOURCES}?filter=status:connected").json()
     assert [one["name"] for one in narrowed["items"]] == ["xero"]
@@ -1313,6 +1494,48 @@ def test_a_replaced_key_is_a_credential_write_and_changes_no_connection(
     assert len(vault.written) == 1
 
 
+def test_a_write_grants_key_goes_to_its_own_slot_and_the_screen_says_the_write_is_allowed(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**A write is a grant of its own (M11.7.3).** The key route naming Cloudflare's DNS change
+    grant keeps the key in that grant's slot and never the read key's, recorded as a credential
+    write by the person, and says the write is now allowed; a grant the source does not declare is
+    a problem on the field, and nothing is written. The screen lists the grant on the form and says
+    which grants this install has given: none while the slot is empty, this one once it holds a
+    key. Delete this and the second key can land in the read key's slot, or the screen can say a
+    write is allowed that is not."""
+    records, vault, writes = ChangingRecords((a_connection("cloudflare"),)), Vault(), Recorded()
+    attach(app, records, vault, writes)
+    body = {"credential": KEY, "grant": "dns_changes"}
+
+    answered = post(client, "u_admin", key_path("cloudflare"), body)
+    unknown = post(client, "u_admin", key_path("cloudflare"), {**body, "grant": "zone_changes"})
+
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["told"] == WRITE_ALLOWED
+    assert vault.written == [("connector_keys/cloudflare_dns_changes", {KEY_FIELD: KEY})]
+    assert [one["slot"] for one in writes.records] == ["connector_keys/cloudflare_dns_changes"]
+    assert unknown.status_code == 422
+    assert [(one["field"], one["code"], one["message"]) for one in unknown.json()["problems"]] == [
+        ("grant", "unknown", NO_SUCH_WRITE)
+    ]
+    assert len(vault.written) == 1 and KEY not in answered.text
+    form = next(
+        one for one in get(client, "u_admin").json()["connectable"] if one["name"] == "cloudflare"
+    )
+    assert [one["name"] for one in form["writes"]] == ["dns_changes"]
+    assert "DNS Edit" in form["writes"][0]["credential_hint"]
+    assert form["writes"][0]["confirmation"] == ALLOWING_A_WRITE
+    empty = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    attach(app, records, held_vault())
+    held = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    assert (empty["writes_allowed"], held["writes_allowed"]) == ([], ["dns_changes"])
+
+
 # ------------------------------------------------------------------ testing a connection
 
 
@@ -1362,7 +1585,7 @@ def test_an_administrator_asks_for_a_test_and_is_told_it_waits_for_the_worker(
 
 
 def test_a_test_is_refused_before_anything_is_asked_when_it_should_be(
-    app: FastAPI, client: TestClient
+    app: FastAPI, client: TestClient, hubspot_unmeasured: None
 ) -> None:
     """A caller who may not manage the source, a source not connected and a name that is not a
     source are the one refusal; a source whose plan refuses it is a problem in the plan's own words.
@@ -1433,3 +1656,171 @@ def test_the_test_route_leaves_connect_larks_own_test_to_connect_lark() -> None:
     assert [one for one in router.routes if one.matches(scope)[0] is not Match.NONE] == []
     probing = {"type": "http", "path": probe_path("xero"), "method": "POST"}
     assert [one for one in router.routes if one.matches(probing)[0] is Match.FULL]
+
+
+# ------------------------------------------------------------------ a changed declaration
+
+
+def an_older_xero() -> tuple[str, str, str]:
+    """Xero as an earlier release declared it, one field fewer kept in its index: the text agreed,
+    its digest, and the field this release added. Built from this release's own manifest, so the
+    field is one Xero really keeps."""
+    import dataclasses
+
+    from brain.connectors.manifest import digest_input
+
+    current = manifest_for("xero", settings_for("xero"))
+    entity = current.projections[0]
+    dropped = entity.fields[-1]
+    older = dataclasses.replace(
+        current,
+        version="0.9.0",
+        projections=(
+            dataclasses.replace(entity, fields=entity.fields[:-1]),
+            *current.projections[1:],
+        ),
+    )
+    return digest_input(older), manifest_digest(older), f"a {entity.entity}'s {dropped.name}"
+
+
+def drift_path(name: str) -> str:
+    return API_PREFIX + DRIFT_PATH.replace("{connector}", name)
+
+
+def accept_path(name: str) -> str:
+    return API_PREFIX + ACCEPT_PATH.replace("{connector}", name)
+
+
+def an_agreed_connection(agreed: str, digest: str) -> Connection:
+    return dataclasses.replace(a_connection("xero", digest=digest), agreed=agreed)
+
+
+def test_the_diff_names_a_field_the_new_declaration_keeps(app: FastAPI, client: TestClient) -> None:
+    """A connection agreed when Xero kept one field fewer is told, in words, that the index now
+    keeps that field, and which versions are compared. Delete this and a person accepts a change
+    they were never shown, which is the gap the pill alone left."""
+    agreed, digest, field = an_older_xero()
+    field_words = field.replace("_", " ")
+    attach(app, ChangingRecords((an_agreed_connection(agreed, digest),)), held_vault())
+    answered = read(client, "u_admin", drift_path("xero")).json()
+    assert answered["changed"] is True and answered["known"] is True
+    assert {"kind": "added", "what": f"Now also keeps in its index: {field_words}", "was": ""} in (
+        answered["lines"]
+    )
+    assert answered["was_version"] == "0.9.0" and answered["now_version"] != "0.9.0"
+    assert answered["agreed_digest"] == digest
+    assert answered["current_digest"] == manifest_digest(manifest_for("xero", settings_for("xero")))
+    assert answered["may_accept"] is True and answered["confirm"]
+
+
+def test_an_agreed_text_that_does_not_hash_to_the_pin_is_not_believed(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A row whose kept text is not the declaration its digest names, or keeps none, cannot say
+    what changed, and the screen lists everything the declaration does now instead. Delete this
+    and a row edited by hand puts words in front of the person about to accept."""
+    agreed, digest, _ = an_older_xero()
+    forged = agreed.replace("0.9.0", "0.9.1")
+    attach(app, ChangingRecords((an_agreed_connection(forged, digest),)), held_vault())
+    answered = read(client, "u_admin", drift_path("xero")).json()
+    assert answered["changed"] is True and answered["known"] is False
+    assert answered["lines"] == [] and answered["now_does"]
+    current = manifest_for("xero", settings_for("xero"))
+    assert current.tools[0].description in answered["now_does"]
+
+
+def test_an_unchanged_connection_shows_no_pill_and_no_diff(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The positive case: a connection agreed under this release's declaration is not marked and
+    has nothing to accept. Delete this and every connected source shows a change, which teaches
+    people to accept without reading."""
+    attach(app, ChangingRecords((a_connection("xero"),)), held_vault())
+    answered = read(client, "u_admin", drift_path("xero")).json()
+    assert answered["changed"] is False and answered["lines"] == [] and not answered["may_accept"]
+    [row] = [
+        one
+        for one in read(client, "u_admin", f"{API_PREFIX}{SOURCES_PATH}").json()["items"]
+        if one["name"] == "xero"
+    ]
+    assert row["declaration_changed"] is False
+
+
+def test_accepting_repins_the_declaration_and_the_source_is_read_again(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The accept names the digest shown, connects the source again with its own settings under
+    this release's declaration and keeps the text agreed; the pill goes and the scheduled read's
+    plan no longer refuses it. Delete this and accepting a change leaves the source unread, or
+    pins something other than what was shown."""
+    from brain.connectors.manifest import digest_input
+    from brain.ops.connector_sync import DECLARATION_NOT_AGREED, plan_for
+
+    agreed, digest, _ = an_older_xero()
+    records = ChangingRecords((an_agreed_connection(agreed, digest),))
+    attach(app, records, held_vault())
+    before = records.rows["xero"]
+    assert plan_for(before, last=None, now=AT).refused == DECLARATION_NOT_AGREED
+    shown = read(client, "u_admin", drift_path("xero")).json()["current_digest"]
+    answered = post(client, "u_admin", accept_path("xero"), {"digest": shown})
+    assert answered.status_code == 200 and answered.json()["digest"] == shown
+    after = records.rows["xero"]
+    current = manifest_for("xero", settings_for("xero"))
+    assert (after.digest, after.settings, after.agreed) == (
+        shown,
+        before.settings,
+        digest_input(current),
+    )
+    assert records.ended[-1].digest == digest
+    assert plan_for(after, last=None, now=AT).refused != DECLARATION_NOT_AGREED
+    assert read(client, "u_admin", drift_path("xero")).json()["changed"] is False
+
+
+def test_an_accept_naming_another_digest_or_nothing_changed_is_refused(
+    app: FastAPI, client: TestClient
+) -> None:
+    """An accept must name the declaration the reader was shown; a release landing in between is
+    refused by field, and an accept with nothing changed says so. Delete this and a change can be
+    accepted by a person who read a different one."""
+    agreed, digest, _ = an_older_xero()
+    records = ChangingRecords((an_agreed_connection(agreed, digest),))
+    attach(app, records, held_vault())
+    moved = post(client, "u_admin", accept_path("xero"), {"digest": "f" * 64})
+    assert moved.status_code == 422
+    assert [one["field"] for one in moved.json()["problems"]] == ["digest"]
+    assert records.edits == []
+    same = ChangingRecords((a_connection("xero"),))
+    attach(app, same, held_vault())
+    current = manifest_digest(manifest_for("xero", settings_for("xero")))
+    unchanged = post(client, "u_admin", accept_path("xero"), {"digest": current})
+    assert unchanged.status_code == 422 and same.edits == []
+
+
+def test_a_reader_without_the_install_authority_sees_the_diff_and_cannot_accept(
+    app: FastAPI, client: TestClient
+) -> None:
+    """u_wide reads the Connectors screen and holds no installation authority: they are shown the
+    pill and what changed, offered no accept, and refused one in the one way this router refuses.
+    Delete this and anybody who can read the screen can agree a source to a new declaration."""
+    agreed, digest, field = an_older_xero()
+    records = ChangingRecords((an_agreed_connection(agreed, digest),))
+    attach(app, records, held_vault())
+    answered = read(client, "u_wide", drift_path("xero")).json()
+    assert answered["changed"] is True and answered["may_accept"] is False
+    assert any(field.replace("_", " ") in one["what"] for one in answered["lines"])
+    refused = post(client, "u_wide", accept_path("xero"), {"digest": answered["current_digest"]})
+    assert refused.status_code == 404 and records.edits == []
+
+
+def test_connecting_and_editing_keep_the_declaration_text_the_digest_is_taken_over(
+    app: FastAPI, client: TestClient
+) -> None:
+    """Every row written from now on keeps what it agreed to, so the next release can say what
+    changed. Delete this and the drift view can never be anything but "not kept"."""
+    import hashlib
+
+    records = ChangingRecords()
+    attach(app, records, held_vault())
+    assert post(client, "u_admin", LISTING, connection_body()).status_code == 200
+    made = records.rows["xero"]
+    assert hashlib.sha256(made.agreed.encode("utf-8")).hexdigest() == made.digest

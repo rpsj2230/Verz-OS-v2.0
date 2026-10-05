@@ -33,6 +33,14 @@ exactly like a scope never added. So a test where no chosen use got any scope re
 not yet released and says both remedies in order, and a partial one names the scopes and reminds
 that each addition needs a new version. See `A_SCOPE_NOT_RELEASED_LOOKS_LIKE_A_SCOPE_NOT_ADDED`.
 
+**A scope Lark checks per field is tested by reading the field, because the call succeeds without
+it.** The staff list's test read one person and called it working. On 2026-09-29 the owner's app
+passed that and the night's sync then placed 123 people in no department: Lark admits the
+department walk without `contact:department.base:readonly` and leaves each department's `name`
+out. So the test reads one department as the sync does and names that scope when the name is
+missing, and a refused department walk (the "no dept authority" the owner's first sync met) is
+the data range, reported as such rather than hidden behind a person the root could list.
+
 **Knowledge is switched on as configuration and never copied.** The owner's rule is that a
 connector keeps a minimal index and reads content live at question time. Switching knowledge on
 here writes which Base and which platform, as installation settings, and keeps the credential in
@@ -67,12 +75,13 @@ import enum
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final
 from urllib.parse import quote, urlencode, urlsplit
 
+from brain.channels.lark import MISSING_SCOPE_CODE as LARK_MISSING_SCOPE_CODE
 from brain.connectors.staff_directories import (
     LARK_PLATFORMS,
     LARK_SCOPE_PURPOSE,
@@ -82,6 +91,7 @@ from brain.connectors.staff_directories import (
     Fetch,
     Outbound,
 )
+from brain.identity.staff_adapters import LARK_DEPARTMENT_NAME_SCOPE
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 
 # ------------------------------------------------------------------ written-down reasons
@@ -96,10 +106,10 @@ A_SCOPE_IS_ASKED_FOR_ONLY_BY_A_USE_THAT_NEEDS_IT: Final = (
 #: What the test may send, and what it may not.
 THE_TEST_ONLY_READS: Final = (
     "The test exchanges the app's identifier and secret for a tenant token, which changes nothing "
-    "in Lark, and then makes small GET requests: a page size of one, and a document's metadata "
-    "rather than its body. It writes nothing in Lark and keeps nothing it read. Here it records "
-    "only when it ran and each use's verdict in a word, so the card can say when Lark was last "
-    "tested."
+    "in Lark, and then makes small GET requests: a page size of one (the wiki's spaces are listed "
+    "so they can be named), and a document's metadata rather than its body. It writes nothing "
+    "in Lark and keeps nothing it read. Here it records only when it ran and each use's verdict "
+    "in a word, so the card can say when Lark was last tested."
 )
 
 #: Why a test where nothing was granted reads as a version not released.
@@ -142,7 +152,8 @@ MESSAGE_EVENT: Final = "im.message.receive_v1"
 # --------------------------------------------------------------------- the figures
 
 #: Lark's code for a call whose token lacks a scope. The message lists the scopes that admit it.
-MISSING_SCOPE_CODE: Final = 99991672
+#: The chat wire's own, so the test here and the group list the digest reads cannot disagree.
+MISSING_SCOPE_CODE: Final = LARK_MISSING_SCOPE_CODE
 
 #: Codes Lark answers when the token itself is not accepted.
 TOKEN_REFUSED_CODES: Final = frozenset({99991661, 99991663, 99991668})
@@ -164,11 +175,23 @@ _BASE_IN_LINK: Final = re.compile(r"/base/([A-Za-z0-9]{8,64})")
 #: A scope name as Lark writes it inside a refusal: words joined by colons.
 _SCOPE_IN_TEXT: Final = re.compile(r"[a-z]+(?::[a-z_.]+)+")
 
+#: How many of the app's wiki spaces the test lists, for the step that declares each one. A
+#: space beyond these is declared by pasting its link.
+SPACES_LISTED: Final = 50
+
+#: Where the bot's groups are listed, which the chat channel's test asks for one of.
+CHAT_LIST_PATH: Final = "/open-apis/im/v1/chats"
+
 #: A chat id that names no chat, which the chat channel's test asks the members of. See `_channel`.
 MEMBERS_CHECK_CHAT: Final = "oc_brain_connect_check"
 
 #: The scope a group question reads who is present with.
 MEMBERS_SCOPE: Final = "im:chat.members:read"
+
+#: The scope the bot lists the groups it has been added to with, so a person choosing where a
+#: message goes picks a group from a list rather than typing its id (the evening digest's
+#: destination, `brain.ops.digest_destination`). Read-only: it lists groups and their names.
+CHAT_LIST_SCOPE: Final = "im:chat:read"
 
 #: The scope a wiki page's permission settings are read with, which is how the Lark Wiki
 #: connector knows whether a page was restricted (`brain.connectors.lark_wiki.restriction_of`).
@@ -314,6 +337,11 @@ USES: Final[Mapping[Use, UseSpec]] = MappingProxyType(
                     "read who is in a group, so what the room reads fits everyone in it",
                 ),
                 Scope(
+                    CHAT_LIST_SCOPE,
+                    "list the groups the bot has been added to, so a group is chosen from a list "
+                    "and never typed",
+                ),
+                Scope(
                     "im:message:send_as_bot",
                     "send the bot's own replies and the cards only one person sees. The one "
                     "scope that writes: it posts as the bot and cannot read or change anybody "
@@ -383,6 +411,8 @@ class StepKey(enum.StrEnum):
     SHARE_WIKI = "share_wiki"
     SHARE_BASE = "share_base"
     TEST = "test"
+    WIKI_SPACES = "wiki_spaces"
+    BASE_ACCESS = "base_access"
 
 
 #: The developer console's own page for each step, under an app's id, as its address bar shows
@@ -421,6 +451,7 @@ ASKS: Final[Mapping[StepKey, tuple[str, ...]]] = MappingProxyType(
         StepKey.EVENTS_ADDRESS: ("events_address",),
         StepKey.SHARE_BASE: ("base_link",),
         StepKey.TEST: ("test", "save"),
+        StepKey.WIKI_SPACES: ("spaces",),
     }
 )
 
@@ -706,10 +737,16 @@ def _share_wiki() -> GuideStep:
 
 
 def _share_base() -> GuideStep:
+    scopes = " and ".join(one.name for one in USES[Use.BASE].scopes)
     return GuideStep(
         key=StepKey.SHARE_BASE,
         title="Share the Base with the app and paste its link",
-        text=f"{USES[Use.BASE].extra[0]} {USES[Use.BASE].extra[1]}",
+        text=(
+            f"The app reads a Base with {scopes}, which the permissions you added include, and "
+            "only once a version with them is released. "
+            f"{USES[Use.BASE].extra[0]} {USES[Use.BASE].extra[1]} Knowledge from Base must be "
+            "ticked on the first step; the Base is switched on when you save on the test step."
+        ),
         sketch=Sketch(
             place="Lark Base",
             heading="More",
@@ -754,6 +791,58 @@ def _test(chosen: Sequence[Use]) -> GuideStep:
     )
 
 
+def _wiki_spaces() -> GuideStep:
+    return GuideStep(
+        key=StepKey.WIKI_SPACES,
+        title="Say who may read each wiki space",
+        text=(
+            "For each wiki space shared with the app, choose who on this install may be told "
+            "its pages: the whole company, or one department. A space nobody declares here is "
+            "never read, and you are the steward of each space you declare. The test lists the "
+            "spaces Lark shows the app; for one it does not show, paste the link of the space's "
+            "settings page, which contains /wiki/space/ and a number."
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="Wiki spaces",
+            lines=(
+                SketchLine(LineKind.FIELD, "A shared space", "The whole company", mark=True),
+                SketchLine(LineKind.FIELD, "Another space", "One department", mark=True),
+            ),
+            button="Save the spaces",
+        ),
+        asks=ASKS[StepKey.WIKI_SPACES],
+    )
+
+
+#: Where a person is granted a Base's tables, and where each table is listed by its title.
+PEOPLE_SCREEN: Final = "/people"
+CAPABILITIES_SCREEN: Final = "/capabilities"
+
+
+def _base_access() -> GuideStep:
+    return GuideStep(
+        key=StepKey.BASE_ACCESS,
+        title="Grant each table to the people who may read it",
+        text=(
+            "Within about five minutes of saving, the worker indexes the Base: the ids, names "
+            "and dates of its records, never their values. Nobody reads a table until they are "
+            "granted it. On Capabilities each table is listed by its own title, as "
+            "read:lark_<table> to find its records and read:lark_<table>.* to read their values; "
+            "grant them to a person from their page on People."
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="Capabilities",
+            lines=(
+                SketchLine(LineKind.ITEM, "read:lark_<table>", "Find records", mark=True),
+                SketchLine(LineKind.ITEM, "read:lark_<table>.*", "Read values", mark=True),
+            ),
+            button="Grant",
+        ),
+    )
+
+
 def steps_for(uses: Sequence[Use], *, platform: str, app_id: str = "") -> tuple[GuideStep, ...]:
     """The screens from nothing to a working connection, for the uses chosen, in order.
 
@@ -776,11 +865,19 @@ def steps_for(uses: Sequence[Use], *, platform: str, app_id: str = "") -> tuple[
     if Use.BASE in chosen:
         found.append(_share_base())
     found.append(_test(chosen))
+    if Use.WIKI in chosen:
+        found.append(_wiki_spaces())
+    if Use.BASE in chosen:
+        found.append(_base_access())
     return keyed(tuple(found))
 
 
-def _origin(redirect_uris: str) -> str:
-    """This install's public origin, from the first redirect URI, or empty when it names none."""
+def install_origin(redirect_uris: str) -> str:
+    """This install's public origin, from the first redirect URI, or empty when it names none.
+
+    Public because every address a vendor is told to post to is built on it: Lark's here, and
+    every other channel's in `brain.channel_routes`.
+    """
     first = next((one.strip() for one in redirect_uris.split(",") if one.strip()), "")
     parts = urlsplit(first)
     if parts.scheme not in ("https", "http") or not parts.netloc:
@@ -794,7 +891,7 @@ def events_address(redirect_uris: str) -> str:
     Built from `INSTALL_OIDC_REDIRECT_URIS`, the one installation setting that already names this
     install's public address, so no second setting can disagree with it. Empty when it names none.
     """
-    origin = _origin(redirect_uris)
+    origin = install_origin(redirect_uris)
     return f"{origin}{LARK_EVENTS_PATH}" if origin else ""
 
 
@@ -804,7 +901,7 @@ def ask_address(redirect_uris: str) -> str:
     From the same setting as `events_address`, for its reason. The page carries no answer and no
     question, so following it runs the gate again for whoever follows it (M10.4.3).
     """
-    origin = _origin(redirect_uris)
+    origin = install_origin(redirect_uris)
     return f"{origin}{ASK_PATH}" if origin else ""
 
 
@@ -947,6 +1044,11 @@ class UseResult:
     verdict: Verdict
     told: str
     missing: tuple[str, ...] = ()
+    #: True when every call was answered and a field was left out, which is a scope Lark checks
+    #: per field. Lark granted something, so this is never read as a version not released.
+    answered: bool = False
+    #: The wiki spaces Lark showed the app, as (id, name), for the step that declares them.
+    spaces: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1055,8 +1157,8 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
     refused = _refused_or_other(spec, people, not_shared=range_sentence)
     if refused is not None:
         return refused
-    if _items(people):
-        return UseResult(spec.use, Verdict.WORKING, "Working: the app can read the staff list.")
+    # The department walk is the sync's first call, so it is read even when a person was: the
+    # root can list people while the walk is refused, and a department can come back unnamed.
     departments = await _get(
         fetch,
         base,
@@ -1068,7 +1170,10 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
     refused = _refused_or_other(spec, departments, not_shared=range_sentence)
     if refused is not None:
         return refused
-    if _items(departments):
+    found = _items(departments)
+    if found and not str(found[0].get("name") or "").strip():
+        return replace(_missing(spec, (LARK_DEPARTMENT_NAME_SCOPE,)), answered=True)
+    if found or _items(people):
         return UseResult(spec.use, Verdict.WORKING, "Working: the app can read the staff list.")
     return UseResult(spec.use, Verdict.NOT_SHARED, range_sentence)
 
@@ -1076,11 +1181,18 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
 async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
     spec = USES[Use.WIKI]
     unshared = "The app is in no wiki space yet. " + spec.extra[0]
-    spaces = await _get(fetch, base, "/open-apis/wiki/v2/spaces", token, page_size="1")
+    spaces = await _get(
+        fetch, base, "/open-apis/wiki/v2/spaces", token, page_size=str(SPACES_LISTED)
+    )
     refused = _refused_or_other(spec, spaces, not_shared=unshared)
     if refused is not None:
         return refused
-    space = next((str(one.get("space_id") or "") for one in _items(spaces)), "")
+    seen = tuple(
+        (str(one.get("space_id") or ""), str(one.get("name") or ""))
+        for one in _items(spaces)
+        if one.get("space_id")
+    )
+    space = seen[0][0] if seen else ""
     if not space:
         return UseResult(spec.use, Verdict.NOT_SHARED, unshared)
     nodes = await _get(
@@ -1099,6 +1211,7 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
             spec.use,
             Verdict.WORKING,
             "Working: the app can list a wiki space, which has no page yet to check further.",
+            spaces=seen,
         )
     node_token = str(node.get("node_token") or "")
     # The call `brain.connectors.lark_wiki.read_live` makes before it answers from a page.
@@ -1132,6 +1245,7 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
         Verdict.WORKING,
         "Working: the app can list the wiki, see whether a page was restricted, and read a "
         "page's details.",
+        spaces=seen,
     )
 
 
@@ -1179,6 +1293,11 @@ async def _channel(fetch: Fetch, base: str, token: str) -> UseResult:
     code = _code(members)
     if code == MISSING_SCOPE_CODE:
         return _missing(spec, (MEMBERS_SCOPE,))
+    groups = await _get(fetch, base, CHAT_LIST_PATH, token, page_size="1")
+    if _code(groups) == MISSING_SCOPE_CODE:
+        # Answered: the bot and the members read were granted, so this app's version is released
+        # and one scope is missing from it, which `_released` must not read as nothing granted.
+        return replace(_missing(spec, (CHAT_LIST_SCOPE,)), answered=True)
     if code in TOKEN_REFUSED_CODES:
         return UseResult(
             spec.use,
@@ -1192,7 +1311,8 @@ async def _channel(fetch: Fetch, base: str, token: str) -> UseResult:
     return UseResult(
         spec.use,
         Verdict.WORKING,
-        "Working: the bot is on and may read who is in a group. The two receiving scopes are "
+        "Working: the bot is on, may read who is in a group and may list the groups it is in. "
+        "The two receiving scopes are "
         "checked by Lark when the first message arrives: send the bot a direct message and watch "
         "Events arriving on this card.",
     )
@@ -1239,7 +1359,9 @@ async def bot_open_id(
 
 def _released(results: Sequence[UseResult]) -> tuple[UseResult, ...]:
     """Every result, with an all-missing test read as a version not released. See the constant."""
-    if not results or any(one.verdict is not Verdict.MISSING_SCOPE for one in results):
+    if not results or any(
+        one.verdict is not Verdict.MISSING_SCOPE or one.answered for one in results
+    ):
         return tuple(results)
     return tuple(
         UseResult(

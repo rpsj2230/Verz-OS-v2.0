@@ -145,6 +145,7 @@ MIGRATION_ACCESS_REQUEST_HANDLED = (
     VERSIONS / "0146_access_request_handled_and_certification_export.py"
 )
 MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
+MIGRATION_ESCALATION = VERSIONS / "0168_escalation.py"
 MIGRATION_RETRIEVAL_EVENT = VERSIONS / "0151_retrieval_event.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
@@ -412,6 +413,8 @@ TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
     "obs.trace_step",
     "obs.trace_read",
 )
+#: And the one 0168 adds: a question handed to a person, kept until it expires.
+ESCALATION_TABLES: tuple[str, ...] = ("gate.escalation",)
 #: And the one 0151 adds: a retrieval a person was answered from, for the learning signal.
 RETRIEVAL_EVENT_TABLES: tuple[str, ...] = ("ops.retrieval_event",)
 
@@ -484,6 +487,7 @@ ALL_TABLES = (
     + MANIFEST_DRAFT_TABLES
     + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
+    + ESCALATION_TABLES
     + RETRIEVAL_EVENT_TABLES
 )
 
@@ -1309,6 +1313,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert access_request_handled.TABLES == ACCESS_REQUEST_HANDLED_TABLES
     trace_and_browser_session = migration_module(MIGRATION_TRACE_AND_BROWSER_SESSION)
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
+    escalation = migration_module(MIGRATION_ESCALATION)
+    assert escalation.TABLES == ESCALATION_TABLES
     retrieval_event = migration_module(MIGRATION_RETRIEVAL_EVENT)
     assert retrieval_event.TABLES == RETRIEVAL_EVENT_TABLES
     assert core.TABLES == CORE_TABLES
@@ -1403,6 +1409,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(manifest_draft.TABLES)
         + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
+        + tuple(escalation.TABLES)
         + tuple(retrieval_event.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
@@ -1477,6 +1484,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(manifest_draft.TABLES),
         set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
+        set(escalation.TABLES),
         set(retrieval_event.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)

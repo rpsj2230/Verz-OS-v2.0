@@ -103,9 +103,17 @@ class LeaseOutcome(enum.StrEnum):
 
 
 def judge_minted(
-    *, renewable: bool, policies: tuple[str, ...], lease_seconds: int, asked: timedelta
+    *,
+    renewable: bool,
+    policies: tuple[str, ...],
+    lease_seconds: int,
+    asked: timedelta,
+    policy: str = RUN_POLICY,
 ) -> str:
     """Why a minted run token may not be used, or an empty string when it may.
+
+    `policy` is the one policy the role was defined to give, `RUN_POLICY` for a connector run and
+    `brain.ops.channel_lease.SEND_POLICY` for one channel send: the same three checks either way.
 
     See `A_RUN_LEASE_THE_VAULT_WIDENED_IS_GIVEN_BACK_UNUSED`. Each refusal is a sentence naming the
     kind of disagreement and never the token.
@@ -114,8 +122,8 @@ def judge_minted(
         return (
             "the vault minted a run token that may be renewed, so its end is not the TTL asked for"
         )
-    if set(policies) != {RUN_POLICY}:
-        return f"the vault minted a run token carrying policies other than {RUN_POLICY} alone"
+    if set(policies) != {policy}:
+        return f"the vault minted a run token carrying policies other than {policy} alone"
     if lease_seconds <= 0 or lease_seconds > int(asked.total_seconds()):
         return "the vault minted a run token that lives longer than the TTL asked for"
     return ""

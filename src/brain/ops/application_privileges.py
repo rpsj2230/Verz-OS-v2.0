@@ -113,6 +113,12 @@ _SET_BY_THE_CALLER: Final = (
     "brain.knowledge.search.session_settings for the owner's reach in the same transaction before "
     "it, so the upsert reads and writes the item as its owner"
 )
+_MARKED_AS_THE_CALLER: Final = (
+    "marking_of and record_marking are called by brain.knowledge_public_routes and "
+    "brain.ops.acceptance_checks_public only inside a transaction that "
+    "brain.knowledge.lifecycle_store.as_person told the marker's reach first, so know.item's "
+    "policy reads the settings for the person brain.knowledge.public judged"
+)
 USES_EXPLAINED: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
     {
         ("brain.ops.schedule_store", "ops.control_run", "INSERT"): _RECORDED_BY_THE_WORKER,
@@ -122,8 +128,17 @@ USES_EXPLAINED: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
             "the database owner, and refuses a connection row-level security narrows, because a "
             "row a policy hides is a row the erasure would silently leave behind"
         ),
+        ("brain.ops.escalation_store", "gate.escalation", "UPDATE"): (
+            "expire_overdue is run by run_expiry_now, which brain.ops.schedule_runner starts with "
+            "the worker's database URL on sessions from make_session_factory, never "
+            "make_application_sessions, so expired_at is written by the database owner; 0168 "
+            "grants brain_app UPDATE of the two delivery columns alone, which are the only ones "
+            "record_delivery writes"
+        ),
         ("brain.knowledge.item_store", "know.item", "SELECT"): _SET_BY_THE_CALLER,
         ("brain.knowledge.item_store", "know.item", "UPDATE"): _SET_BY_THE_CALLER,
+        ("brain.knowledge.public_store", "know.item", "SELECT"): _MARKED_AS_THE_CALLER,
+        ("brain.knowledge.public_store", "know.item", "UPDATE"): _MARKED_AS_THE_CALLER,
         ("brain.ops.trace_store", "obs.trace_step", "SELECT"): (
             "StoredTraces.read selects the steps only after SET LOCAL ROLE brain_trace_reader in "
             "the same transaction, and 0150 grants SELECT to that role and deliberately not to "

@@ -17,7 +17,16 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { FLAGGED } from "../src/components/kit";
-import { guidePath, LARK_FLOW, type LarkGuide, type LarkStep, type LarkTested } from "../src/pages/larkConnectQuery";
+import {
+  guidePath,
+  LARK_FLOW,
+  skippedPages,
+  skippedWords,
+  type LarkGuide,
+  type LarkStep,
+  type LarkTested,
+} from "../src/pages/larkConnectQuery";
+import { SKIPPED_LABEL } from "../src/pages/connectors/WikiSpaces";
 import { ACT_LABELS } from "../src/pages/connectors/connectorActions";
 import { LARK_HEADING, switchOffLabel } from "../src/pages/connectors/LarkCard";
 import {
@@ -70,6 +79,7 @@ async function memory(): Promise<typeof import("../src/components/kit/flowMemory
 
 beforeEach(() => {
   clipboard = [];
+  GUIDE_EXTRA = {};
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
@@ -119,6 +129,10 @@ function step(key: string, title: string, link = ""): LarkStep {
     link,
     link_label: link === "" ? "" : `Open ${title}`,
     asks: [],
+    copy_text: "",
+    copy_label: "",
+    path: "",
+    choices: [],
   };
 }
 
@@ -137,6 +151,12 @@ function steps(chosen: readonly string[], appId: string): LarkStep[] {
   }
   found.push(step("release", "Release a version and have it approved", page("version")));
   found.push(step("test", "Test, then save"));
+  if (chosen.includes("knowledge_wiki")) {
+    found.push(step("wiki_spaces", "Say who may read each wiki space"));
+  }
+  if (chosen.includes("knowledge_base")) {
+    found.push(step("base_access", "Grant each table to the people who may read it"));
+  }
   return found;
 }
 
@@ -174,6 +194,9 @@ function guide(chosen: readonly string[], over: Partial<LarkGuide> = {}, appId =
     last_test: null,
     switch_off_note: "SWITCH-OFF-NOTE",
     staff_off_note: "STAFF-OFF-NOTE",
+    // Sent only to a reader who may switch the Wiki on; null for anybody else.
+    wiki_pages_skipped: null,
+    wiki_pages_skipped_note: "",
     ...over,
   };
 }
@@ -194,11 +217,32 @@ const TESTED: LarkTested = {
   ],
 };
 
+/** A wiki test that saw one space, which the declaring step then offers. */
+const WIKI_TESTED: LarkTested = {
+  accepted: true,
+  told: "Lark accepted the App ID and App Secret.",
+  redo: [],
+  uses: [
+    {
+      name: "knowledge_wiki",
+      label: "Knowledge from Wiki",
+      verdict: "working",
+      told: "Working.",
+      missing: [],
+      redo: [],
+      spaces: [{ space_id: "7000000000000000001", name: "Handbook" }],
+    },
+  ],
+};
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
 /** The stand-in API: the guide for the uses and App ID asked about, a test, a save, a switch off. */
+/** Fields the stand-in guide carries beyond `guide()`'s, for a field the API adds later. */
+let GUIDE_EXTRA: Readonly<Record<string, unknown>> = {};
+
 function larkApi(connected: LarkGuide | null = null) {
   return (raw: string, init?: RequestInit): Response | null => {
     const url = new URL(raw, ORIGIN);
@@ -207,10 +251,23 @@ function larkApi(connected: LarkGuide | null = null) {
         return json(connected);
       }
       const asked = url.searchParams.get("uses");
-      return json(guide(asked === null || asked === "none" ? [] : asked.split(","), {}, url.searchParams.get("app_id") ?? ""));
+      return json({
+        ...guide(asked === null || asked === "none" ? [] : asked.split(","), {}, url.searchParams.get("app_id") ?? ""),
+        ...GUIDE_EXTRA,
+      });
     }
     if (url.pathname === "/api/v1/connectors/lark-app/test") {
-      return json(TESTED);
+      const sent = JSON.parse(String(init?.body)) as { uses: string[] };
+      return json(sent.uses.includes("knowledge_wiki") ? WIKI_TESTED : TESTED);
+    }
+    if (url.pathname === "/api/v1/connectors/lark-app/wiki-spaces" && init?.method === "POST") {
+      return json({ declared: ["7000000000000000001"], told: "SPACES-DECLARED" });
+    }
+    if (url.pathname === "/api/v1/connectors/lark-app/wiki-spaces") {
+      return json({ spaces: [], may_declare: true, told: "SPACES-TOLD" });
+    }
+    if (url.pathname === "/api/v1/govern/departments") {
+      return json({ items: [{ slug: "finance", name: "Finance", teams: [], members: [], lead: null, shapeable: false }] });
     }
     if (url.pathname === "/api/v1/connectors/lark-app/switch-off") {
       return json({ switched_off: ["knowledge_wiki"], told: "SWITCHED-OFF" });
@@ -392,9 +449,9 @@ describe("the flow", () => {
     // pasted text drifts from the list the test checks.
     await openFlow({ at: "choose", add: ["staff_list", "knowledge_wiki"] });
     await waitFor(() => {
-      expect(stepLine()).toBe("Step 1 of 6");
+      expect(stepLine()).toBe("Step 1 of 7");
     });
-    fireEvent.click(screen.getByRole("button", { name: /Step 4 of 6/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Step 4 of 7/ }));
     fireEvent.click(screen.getByRole("button", { name: COPY_ALL }));
     await waitFor(() => {
       expect(screen.getByText(COPIED)).toBeTruthy();
@@ -616,5 +673,89 @@ describe("Lark once it is connected", () => {
     await waitFor(() => {
       expect(posts(idp)).toEqual([{ path: "/api/v1/connectors/lark-app/switch-off", body: { uses: ["knowledge_wiki"] } }]);
     });
+  });
+});
+
+describe("the knowledge steps", () => {
+  test("the wiki's step offers the spaces the test saw and declares the one given a reach, confirmed", async () => {
+    // What breaks if this is deleted: a wiki is switched on and no space is ever declared, so the
+    // Brain answers from none, or a space is declared at a reach nobody confirmed.
+    const { idp } = await openFlow({ at: "choose", add: ["knowledge_wiki"] });
+    await waitFor(() => {
+      expect(stepLine()).toBe("Step 1 of 7");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Step 3 of 7/ }));
+    type("connect-lark-app_id", APP_ID);
+    type("connect-lark-app_secret", SECRET);
+    fireEvent.click(screen.getByRole("button", { name: /Step 6 of 7/ }));
+    fireEvent.click(screen.getByRole("button", { name: TEST_CONNECTION }));
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Test results" })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Step 7 of 7/ }));
+    const handbook = await screen.findByLabelText("Handbook");
+    fireEvent.change(handbook, { target: { value: "company" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save the spaces" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm.textContent).toContain("Handbook");
+    expect(posts(idp).map((one) => one.path)).toEqual(["/api/v1/connectors/lark-app/test"]);
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole("button", { name: "Save the spaces" }));
+    });
+    await waitFor(() => {
+      expect(posts(idp).map((one) => one.path)).toContain("/api/v1/connectors/lark-app/wiki-spaces");
+    });
+    expect(posts(idp).find((one) => one.path.endsWith("/wiki-spaces"))?.body).toEqual({
+      spaces: [{ space: "7000000000000000001", reach: "company", department: "" }],
+    });
+    await screen.findByText("SPACES-DECLARED");
+  });
+
+  test("the Base's last step says its tables are granted per table and links to where", async () => {
+    // What breaks if this is deleted: a Base is indexed and the administrator is never told that
+    // nobody reads a table until they are granted it, or where to grant it.
+    await openFlow({ at: "choose", add: ["knowledge_base"] });
+    await waitFor(() => {
+      expect(stepLine()).toBe("Step 1 of 7");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Step 7 of 7/ }));
+    expect(screen.getByRole("heading", { name: "Grant each table to the people who may read it" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Capabilities" }).getAttribute("href")).toBe("/capabilities");
+    expect(screen.getByRole("link", { name: "Open People" }).getAttribute("href")).toBe("/people");
+  });
+});
+
+describe("wiki pages a question matched and did not read", () => {
+  const NOTE = "SKIPPED-NOTE: restricted in Lark, settings unreadable, or the space undeclared.";
+
+  async function wikiStep(): Promise<void> {
+    await openFlow({ at: "choose", add: ["knowledge_wiki"] });
+    await waitFor(() => {
+      expect(stepLine()).toBe("Step 1 of 7");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Step 7 of 7/ }));
+    await screen.findByRole("heading", { name: "Say who may read each wiki space" });
+  }
+
+  test("an administrator is told how many matched pages were not read, and why, and no page by name", async () => {
+    // What breaks if this is deleted: an administrator never learns that questions are meeting
+    // pages the Brain may not read, which looks exactly like a wiki with nothing on the subject.
+    GUIDE_EXTRA = { wiki_pages_skipped: 12, wiki_pages_skipped_note: NOTE };
+    await wikiStep();
+    const skipped = await screen.findByRole("region", { name: SKIPPED_LABEL });
+    expect(skipped.textContent).toBe(`${skippedWords(12)}${NOTE}`);
+    expect(skippedWords(12)).toBe("12 wiki pages questions matched were not read.");
+    expect(skippedWords(1)).toBe("1 wiki page a question matched was not read.");
+  });
+
+  test("nothing is shown when the API sends no count, or nought", async () => {
+    // What breaks if this is deleted: a reader the API sends no count to is shown a line anyway,
+    // or a zero is drawn as if something had been withheld.
+    GUIDE_EXTRA = { wiki_pages_skipped: null, wiki_pages_skipped_note: NOTE };
+    await wikiStep();
+    expect(screen.queryByRole("region", { name: SKIPPED_LABEL })).toBeNull();
+    expect(document.body.textContent).not.toContain("SKIPPED-NOTE");
+    expect(skippedPages({ ...guide([]), wiki_pages_skipped: 0, wiki_pages_skipped_note: NOTE } as LarkGuide)).toBeNull();
+    expect(skippedPages(guide([]))).toBeNull();
   });
 });

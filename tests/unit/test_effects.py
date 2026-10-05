@@ -195,6 +195,82 @@ def test_a_function_of_the_same_name_that_is_not_the_one_handed_to_the_door_is_n
     assert _admitted(tmp_path, source) == [Admitted.UNKEYED] * 3
 
 
+def test_a_function_defined_in_a_block_of_the_same_scope_is_the_one_handed_to_the_door(
+    tmp_path: Path,
+) -> None:
+    """A `def` inside a `try` binds in the function around it, so it is the function the call
+    names; a `def` inside a nested function is in another scope and is not.
+
+    Delete this and an effect defined inside the `try` that closes its lease would be a finding
+    with nothing wrong, or a same-named function in a nested scope would be admitted."""
+    source = """
+    from brain.ops.idempotency import issue_once
+    from brain.ports import Messenger
+
+    def in_a_try(adapter: Messenger, ledger, operation) -> None:
+        try:
+            if ledger:
+                def send(_):
+                    adapter.send("hello", to="room")
+            issue_once(ledger, operation, send)
+        finally:
+            pass
+
+    def in_a_nested_function(adapter: Messenger, ledger, operation) -> None:
+        def inner():
+            def send(_):
+                adapter.send("hello", to="room")
+        issue_once(ledger, operation, send)
+    """
+
+    assert _admitted(tmp_path, source) == [Admitted.THROUGH_THE_DOOR, Admitted.UNKEYED]
+
+
+def test_an_execution_handed_to_the_leash_is_admitted_and_one_handed_elsewhere_is_not(
+    tmp_path: Path,
+) -> None:
+    """`AN_EXECUTION_HANDED_TO_THE_LEASH_IS_HANDED_TO_THE_DOOR`: an `execute` handed to the
+    leash's `resume` by name, or to `leash.govern` as a lambda, is admitted; the same function
+    handed to a `resume` from another module, or to the leash under another keyword, is not.
+
+    Delete this and a connector's approved change, sent from the leash's execution, is either a
+    finding its author answers by keying it twice, or any function called `resume` admits
+    whatever it is handed."""
+    through = """
+    from brain.gate import leash
+    from brain.gate.leash import resume
+    from brain.ports import Messenger
+
+    def by_name(adapter: Messenger, suspension) -> None:
+        def execute(action):
+            adapter.send("hello", to="room")
+        resume(suspension, execute=execute)
+
+    def by_module(adapter: Messenger, suspension) -> None:
+        leash.govern(suspension, execute=lambda action: adapter.send("hello", to="room"))
+    """
+    elsewhere = """
+    from brain.gate.leash import govern
+    from brain.ops.idempotency import resume
+    from brain.ports import Messenger
+
+    def another_resume(adapter: Messenger, operation) -> None:
+        def execute(action):
+            adapter.send("hello", to="room")
+        resume(operation, execute=execute)
+
+    def another_keyword(adapter: Messenger, suspension) -> None:
+        def execute(action):
+            adapter.send("hello", to="room")
+        govern(suspension, simulate=execute)
+    """
+
+    (tmp_path / "through").mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    assert _admitted(tmp_path / "through", through) == [Admitted.THROUGH_THE_DOOR] * 2
+    assert _admitted(tmp_path / "elsewhere", elsewhere) == [Admitted.UNKEYED] * 2
+
+
 def test_a_call_after_the_no_side_effect_guard_is_admitted_and_one_before_it_is_not(
     tmp_path: Path,
 ) -> None:

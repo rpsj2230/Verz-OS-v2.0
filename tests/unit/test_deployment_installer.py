@@ -262,8 +262,9 @@ def test_every_step_that_writes_something_says_when_it_is_already_done() -> None
     Delete this and a step added next year makes the whole installer unsafe to re-run, with
     nothing to say which one."""
     # 23 since 2026-09-29: the vault's seal key and the release's vault changes are steps of
-    # their own (needs-rupash 114), and both write, so both carry a done test.
-    assert len(PLAN) == 23
+    # their own (needs-rupash 114), and both write, so both carry a done test. 24 the same day:
+    # the staff sync's sign-in accounts client (needs-rupash 115), which writes the vault.
+    assert len(PLAN) == 24
     for step in PLAN:
         if step.changes:
             assert step.already_done.strip(), f"{step.name} writes and cannot say it is done"

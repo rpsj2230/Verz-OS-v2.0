@@ -45,10 +45,38 @@ contact the company's directory every time anybody looked.
 Option A names, from the same roster, once the roster's transaction has committed. A failure there
 is logged and changes nothing the roster wrote, for that module's reason (M1.8.3).
 
+**Every run that read says what it read, and a trial is the same run applied to nobody.** The
+reading's `brain.identity.staff_adapters.ReadReport` goes on the run row as `report`, one sentence
+an element: departments read and named, people read and placed, and why anybody is in no
+department, so a sync that places nobody says so on the Staff sources screen and in the job's
+history rather than only "applied". `sync_staff_on(..., trial=True)` is the read somebody asks for
+from that screen (`brain.ops.staff_trial`): the same choice, lease, reader, checks and plan, then
+one row with outcome `tried` saying what a run would change, in counts, and no member written. One
+code path, so a trial cannot pass where the night's run would fail. See
+`A_TRIAL_IS_THE_RUN_WITH_NOTHING_APPLIED`.
+
 **Then each synced person's Starter pack, in a third transaction.** Needs Rupash item 105 decided
 that everybody the sync brings in gets the Starter pack for their own department;
 `brain.ops.starter_pack_store.grant_starter_packs` gives it, moves it with a mover and ends it
 with a leaver, and fails the way the heads' reach does: logged, and never undoing the roster.
+
+**Then each person's team and leadership, in a fourth transaction (since 2026-09-29).**
+`brain.ops.source_organisation.apply_organisation` applies `brain.identity.organisation_sync`'s plan
+for the team memberships and department leads the source names, ending only what this source's
+sync made, and fails the way the heads' reach does.
+
+**Each active person gets a sign-in account, before the roster is written (since 2026-09-29).**
+Needs Rupash item 115 decided that the sync gives everybody the list names as active a Brain
+account; `brain.ops.staff_accounts_run.provide_accounts` makes, links, closes and opens them in the
+install's Keycloak and sends nobody anything, and its counts go on the same run row. It runs
+only for a plan `dry_run` marks safe and never raises. See
+`ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`.
+
+**Before the accounts, each active person on the list is a Brain person (since 2026-09-30).**
+`brain.ops.staff_people_run.provide_people` makes one for every active address no person is joined
+to, without the sign-in service, so People shows the whole list on an install whose accounts client
+is not set up yet, and the accounts step and the standing step then find those people by the same
+join. It fails the way the heads' reach does. See `PEOPLE_UNDECIDED`.
 
 Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.5, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9, M26.1.2, M26.1.3
 """
@@ -58,7 +86,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final, Protocol
@@ -87,6 +115,8 @@ from brain.connectors.staff_directories import (
     location_problem,
     pull,
 )
+from brain.identity.organisation_sync import sync_trace
+from brain.identity.staff_accounts import allowed_types
 from brain.identity.staff_adapters import (
     GOOGLE_SHEET,
     GOOGLE_WORKSPACE,
@@ -97,15 +127,17 @@ from brain.identity.staff_adapters import (
     GoogleSheetSource,
     RosterUnavailableError,
 )
-from brain.identity.staff_roster import RunOutcome, application_for
+from brain.identity.staff_roster import Application, RunOutcome, application_for, digest_of
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
+    EmploymentType,
     Roster,
     StaffSource,
     StaffSourceError,
     roster_from,
     selected_source,
 )
+from brain.identity.standing import Standing, StandingPlan, standings
 from brain.install import value_of
 from brain.ops.connectable import key_reference
 from brain.ops.connector_sync_run import (
@@ -115,10 +147,13 @@ from brain.ops.connector_sync_run import (
     key_detail,
     worker_connector_keys,
 )
-from brain.ops.head_audit_store import rewrite_head_audit_reach
+from brain.ops.head_audit_store import bound_principals, known_from, rewrite_head_audit_reach
 from brain.ops.openbao import VaultUnreachableError
 from brain.ops.safe_error import redact
 from brain.ops.secrets import SecretsUnavailableError
+from brain.ops.source_organisation import apply_organisation
+from brain.ops.staff_accounts_run import ACCOUNT_TYPES_SETTING, provide_accounts
+from brain.ops.staff_people_run import PeopleRun, provide_people
 from brain.ops.staff_sync_store import (
     RunRecord,
     read_last_applied,
@@ -127,6 +162,7 @@ from brain.ops.staff_sync_store import (
     stop_leavers_agents,
     write_application,
 )
+from brain.ops.standing_run import apply_standing, plan_standing
 from brain.ops.starter_pack_store import grant_starter_packs
 from brain.settings import process_environment
 
@@ -178,6 +214,18 @@ A_LEAVERS_AGENT_STOPS_UNTIL_A_NEW_OWNER_ACCEPTS_IT: Final = (
     "leaver disables every agent they own in the same transaction, disabled and never archived, "
     "and taking one on from the Staff sources screen is what starts it again."
 )
+
+#: Why a trial is this run and not a second reader.
+A_TRIAL_IS_THE_RUN_WITH_NOTHING_APPLIED: Final = (
+    "A trial read written apart from the run would be a second account of how the staff list is "
+    "read, and it would pass on the day the run fails. So a trial chooses, leases, reads, checks "
+    "and plans exactly as the night's run does, and where the run writes members it appends one "
+    "row saying what a run would change, in counts, with outcome tried, which last_applied never "
+    "reads: a trial cannot make the next run look like a second run of a source never applied."
+)
+
+#: How a trial's row opens, so a failed trial is never read as a failed night.
+TRIAL_OPENING: Final = "Trial read."
 
 #: The slot the staff source's credential is kept in, as `connector_key_slot` builds it.
 STAFF_SOURCE_SLOT: Final = "staff_source"
@@ -246,10 +294,14 @@ class StaffSyncRun:
 
     outcome: RunOutcome | None
     detail: str
+    #: What the run read, one sentence an element, as the run row keeps it. Empty when it read
+    #: nothing.
+    report: tuple[str, ...] = ()
 
     def summary(self) -> str:
-        """One line for `ops.control_run`."""
-        return self.detail if self.outcome is None else f"{self.outcome.value}: {self.detail}"
+        """One line for `ops.control_run`, with what was read after what came of it."""
+        said = " ".join((self.detail, *self.report))
+        return said if self.outcome is None else f"{self.outcome.value}: {said}"
 
 
 # -------------------------------------------------------------------------- the readers
@@ -411,6 +463,10 @@ async def http_fetch(outbound: Outbound) -> Answer:
         body = response.json()
     except ValueError:
         body = {}
+    if isinstance(body, list):
+        # A listing that answers with a bare array, which Keycloak's admin interface does: kept
+        # under `items` so an `Answer` stays a mapping, where it used to be dropped as `{}`.
+        return Answer(status=response.status_code, body={"items": body})
     return Answer(status=response.status_code, body=body if isinstance(body, Mapping) else {})
 
 
@@ -425,8 +481,13 @@ async def sync_staff_on(
     clock: Callable[[], datetime],
     readers: Mapping[str, Reader] = READERS,
     saved: Mapping[str, str] | None = None,
+    trial: bool = False,
 ) -> StaffSyncRun:
     """One scheduled run: choose, lease, read, check, plan, apply, record, in that order.
+
+    `trial` stops before apply: the row appended is `tried` and says what a run would change, and
+    no member is written, nobody's agents are stopped and no reach or pack is granted. See
+    `A_TRIAL_IS_THE_RUN_WITH_NOTHING_APPLIED`.
 
     `none` records nothing, because an install that reads no staff list has no run to show and
     a row every night saying so would bury the runs of an install that does. Every other path
@@ -438,6 +499,10 @@ async def sync_staff_on(
     """
     if saved:
         env = {**(process_environment() if env is None else env), **saved}
+
+    def said(text: str) -> str:
+        return f"{TRIAL_OPENING} {text}" if trial else text
+
     try:
         chosen = selected_source(env)
     except StaffSourceError as refused:
@@ -453,7 +518,7 @@ async def sync_staff_on(
             chosen.name, f"{chosen.name!r} has no scheduled reader. {NOBODY_CHANGED}"
         )
         outcome = RunOutcome.NOT_SCHEDULABLE
-        return await _record_failure(sessions, chosen.name, now, clock, outcome, detail)
+        return await _record_failure(sessions, chosen.name, now, clock, outcome, said(detail))
 
     leases: list[KeyLease] = [keys.lease(key_reference(STAFF_SOURCE_SLOT), now=now)]
     try:
@@ -475,22 +540,22 @@ async def sync_staff_on(
                 if isinstance(unavailable, VaultUnreachableError)
                 else RunOutcome.NO_CREDENTIAL
             )
-            return await _record_failure(sessions, chosen.name, now, clock, outcome, detail)
+            return await _record_failure(sessions, chosen.name, now, clock, outcome, said(detail))
         location = value_of(STAFF_SOURCE_LOCATION_SETTING, env)
         try:
             source = await reader(fetch, credential, location)
             roster = roster_from(source, chosen)
         except CredentialRefusedError as refused:
             return await _record_failure(
-                sessions, chosen.name, now, clock, RunOutcome.CREDENTIAL_REFUSED, str(refused)
+                sessions, chosen.name, now, clock, RunOutcome.CREDENTIAL_REFUSED, said(str(refused))
             )
         except (DirectorySignInError, RosterUnavailableError) as unread:
-            detail = _sentence(str(unread))
+            detail = said(_sentence(str(unread)))
             return await _record_failure(
                 sessions, chosen.name, now, clock, RunOutcome.UNREACHABLE, detail
             )
         except (StaffSourceError, ValueError) as refused:
-            detail = _sentence(redact(str(refused)))
+            detail = said(_sentence(redact(str(refused))))
             return await _record_failure(
                 sessions, chosen.name, now, clock, RunOutcome.MISCONFIGURED, detail
             )
@@ -501,31 +566,77 @@ async def sync_staff_on(
     reading = getattr(source, "reading", None)
     stable_ids: Mapping[str, str] = {}
     aliases: Mapping[str, tuple[str, ...]] = {}
+    report: tuple[str, ...] = ()
     if callable(reading):
         read = reading()
         stable_ids, aliases = read.stable_ids, read.aliases
+        report = read.report.sentences()
 
     async with sessions() as session, session.begin():
         members = await read_members(session, chosen.name)
         last_applied = await read_last_applied(session, chosen.name)
-        application = application_for(
-            roster,
-            stable_ids=stable_ids,
-            aliases=aliases,
-            members=members,
-            last_applied=last_applied,
+    application = application_for(
+        roster,
+        stable_ids=stable_ids,
+        aliases=aliases,
+        members=members,
+        last_applied=last_applied,
+    )
+    if not application.plan.safe_to_apply:
+        detail = said(_sentence(" ".join(application.plan.refusals)))
+        record = RunRecord(
+            source=chosen.name,
+            started_at=now,
+            finished_at=max(clock(), now),
+            outcome=RunOutcome.MISCONFIGURED,
+            detail=detail,
+            report=report,
         )
-        if not application.plan.safe_to_apply:
-            detail = _sentence(" ".join(application.plan.refusals))
+        async with sessions() as session, session.begin():
+            await session.execute(run_row(record))
+        return StaffSyncRun(outcome=record.outcome, detail=detail, report=report)
+    # Before the roster is written and outside any transaction, because they call the sign-in
+    # service; see `ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`. A trial plans, makes nothing.
+    allowed = allowed_types(value_of(ACCOUNT_TYPES_SETTING, env))
+    said_people = await _people(sessions, roster, now, trial)
+    where = standings(members=members, writes=application.writes, people=roster.people)
+    first = await _standing(sessions, chosen.name, where, allowed, now)
+    accounts = await provide_accounts(
+        sessions=sessions,
+        roster=roster,
+        stable_ids=stable_ids,
+        keys=keys,
+        fetch=fetch,
+        env=env,
+        now=now,
+        absent_is_gone=roster.may_remove() and last_applied is not None,
+        trial=trial,
+        keep_open=frozenset(first.kept_in) if first is not None else frozenset(),
+    )
+    # Planned again once the accounts step has joined its new people to their rows.
+    kept = first if trial else await _standing(sessions, chosen.name, where, allowed, now)
+    if kept is not None and not trial:
+        try:
+            await apply_standing(sessions, kept, source=chosen.name, now=now)
+        except Exception as exc:
+            # Broad on purpose, for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason.
+            log.warning("staff_sync.standing_unapplied", error=type(exc).__name__)
+            kept = None
+    said_standing = kept.sentences() if kept is not None else (STANDING_UNDECIDED,)
+    report = (*report, *said_people, *accounts.sentences, *said_standing)
+    async with sessions() as session, session.begin():
+        if trial:
             record = RunRecord(
                 source=chosen.name,
                 started_at=now,
                 finished_at=max(clock(), now),
-                outcome=RunOutcome.MISCONFIGURED,
-                detail=detail,
+                outcome=RunOutcome.TRIED,
+                detail=said(_would_change(chosen.name, application)),
+                withheld=application.withheld,
+                report=report,
             )
             await session.execute(run_row(record))
-            return StaffSyncRun(outcome=record.outcome, detail=detail)
+            return StaffSyncRun(outcome=record.outcome, detail=record.detail, report=report)
         outcome = application.outcome
         detail = (
             f"Read the staff list from {chosen.name} and applied it."
@@ -542,6 +653,7 @@ async def sync_staff_on(
             marked_left=application.marked_left,
             renamed=application.renamed,
             withheld=application.withheld,
+            report=report,
         )
         await write_application(session, application, record)
         # In the run's own transaction, so a leaver is never marked with their agents running.
@@ -549,7 +661,73 @@ async def sync_staff_on(
         await session.execute(stop_leavers_agents(now))
     await _rewrite_heads(sessions, roster, now)
     await _grant_starter_packs(sessions, roster, now)
-    return StaffSyncRun(outcome=outcome, detail=detail)
+    await _place_in_organisation(sessions, roster, last_applied, now)
+    return StaffSyncRun(outcome=outcome, detail=detail, report=report)
+
+
+def _would_change(source: str, application: Application) -> str:
+    """What a run now would change, in counts. A trial's row names nobody, so it carries no list."""
+    return (
+        f"Read {source}. A run now would add {len(application.added)}, mark "
+        f"{len(application.marked_left)} as having left and move {len(application.renamed)} to a "
+        f"new address. {NOBODY_CHANGED}"
+    )
+
+
+#: What a run says when it could not decide who the list keeps out.
+#: What a run says when the people step failed, which leaves the roster applied.
+PEOPLE_UNDECIDED: Final = (
+    "Nobody on the list was added to People this run; the next run tries again."
+)
+
+
+async def _people(
+    sessions: async_sessionmaker[AsyncSession], roster: Roster, now: datetime, trial: bool
+) -> tuple[str, ...]:
+    """The people step's sentences. Never raises, for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s
+    reason: a person not made tonight is made by the next run, and the roster is still applied."""
+    try:
+        made: PeopleRun = await provide_people(sessions, roster, now=now, trial=trial)
+    except Exception as exc:
+        # Broad on purpose, as the standing step's.
+        log.warning("staff_sync.people_unmade", error=type(exc).__name__)
+        return (PEOPLE_UNDECIDED,)
+    return made.sentences(trial=trial)
+
+
+STANDING_UNDECIDED: Final = (
+    "Who is kept out of the Brain was not decided this run; the next run tries again."
+)
+
+
+async def _standing(
+    sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    where: Mapping[str, Standing],
+    allowed: Collection[EmploymentType],
+    now: datetime,
+) -> StandingPlan | None:
+    """The standing step's plan, or None when it could not be read. Never raises."""
+    try:
+        return await plan_standing(
+            sessions, source=source, standings=where, allowed=allowed, now=now
+        )
+    except Exception as exc:
+        # Broad on purpose, for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason.
+        log.warning("staff_sync.standing_unplanned", error=type(exc).__name__)
+        return None
+
+
+#: Why the accounts step comes before the roster is written rather than after it.
+ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN: Final = (
+    "The run row is appended once and never updated, so what the accounts step did can only be "
+    "on it if the step has run before the row is written; and a person the step brings in is "
+    "then joined to their row by the time the Starter packs, the heads' reach and the "
+    "organisation are worked out, on the same run rather than the next. It runs only for a plan "
+    "dry_run marks safe, so an accounts step never acts on a list the roster itself refused, and "
+    "it never raises: a sign-in service that refuses is a sentence on the row and the roster is "
+    "applied as it would have been."
+)
 
 
 #: Why a head's reach that cannot be written does not fail the run.
@@ -597,6 +775,51 @@ async def _grant_starter_packs(
         )
 
 
+async def roster_principals(
+    sessions: async_sessionmaker[AsyncSession], roster: Roster
+) -> dict[str, str]:
+    """Casefolded work address to the principal a proven email binding names, for this roster."""
+    async with sessions() as session, session.begin():
+        digests = [digest_of(one.work_address) for one in roster.people]
+        bound = {
+            str(digest): str(principal)
+            for digest, principal in (await session.execute(bound_principals(digests))).all()
+        }
+    return known_from(roster, bound)
+
+
+async def _place_in_organisation(
+    sessions: async_sessionmaker[AsyncSession],
+    roster: Roster,
+    last_applied: datetime | None,
+    now: datetime,
+) -> None:
+    """The team memberships and leads the source names, after the packs, in their own
+    transaction, for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason. `last_applied` is the one
+    this run read before it applied, so a first run ends no placement."""
+    try:
+        plan = await apply_organisation(
+            sessions,
+            roster,
+            known=await roster_principals(sessions, roster),
+            last_applied=last_applied,
+            trace_id=sync_trace("staff-sync", now),
+        )
+    except Exception as exc:
+        # Broad on purpose, as the heads' reach is: the roster is already committed.
+        log.warning("staff_sync.organisation_unplaced", error=type(exc).__name__)
+        return
+    if plan.unregistered or plan.contested or plan.withheld or plan.refusals:
+        # Department and team names and sentences, never a person.
+        log.info(
+            "staff_sync.organisation_withheld",
+            unregistered=list(plan.unregistered),
+            contested=list(plan.contested),
+            withheld=list(plan.withheld),
+            refusals=list(plan.refusals),
+        )
+
+
 def _sentence(said: str) -> str:
     """A refusal cut to the run row's width, ending by saying nobody changed."""
     text = " ".join(said.split())
@@ -637,10 +860,12 @@ def run_staff_sync_now(
     vault_address: str,
     vault_token: str,
     loop_factory: Callable[[], asyncio.AbstractEventLoop] | None = None,
+    trial: bool = False,
 ) -> StaffSyncRun:
     """`sync_staff_on`, from a thread with no event loop, with the worker's real parts.
 
     The shape `brain.ops.connector_sync_run.run_connector_sync_now` takes, for its reasons.
+    `trial` is the read somebody asked for on the Staff sources screen; see `brain.ops.staff_trial`.
     """
     from brain.ops.install_settings import load
     from brain.session import make_app_engine, make_session_factory
@@ -659,6 +884,7 @@ def run_staff_sync_now(
                 fetch=http_fetch,
                 clock=_utc_now,
                 saved=saved,
+                trial=trial,
             )
         finally:
             await engine.dispose()

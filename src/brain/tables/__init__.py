@@ -74,6 +74,7 @@ from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
+from brain.tables.escalation import EscalationRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -412,6 +413,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "obs.trace_read",
     # 0151_retrieval_event. Points at nothing: it names no document, question or person.
     "ops.retrieval_event",
+    # 0168_escalation. Points at nothing: the asker, the named person, the agent and the skill are
+    # values, so a handoff outlives all four.
+    "gate.escalation",
 )
 
 __all__ = [
@@ -463,6 +467,7 @@ __all__ = [
     "EntityLinkRow",
     "ErasureOutcome",
     "ErasureRequestRow",
+    "EscalationRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GoldenQuestionRow",

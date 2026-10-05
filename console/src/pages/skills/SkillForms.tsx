@@ -10,12 +10,17 @@
  * shape is right, with the reason drawn under the fields. The API still judges everything; a
  * refusal is drawn where it was made, with each problem beside the input it names.
  *
+ * **A written procedure is imported from its file (M12.2.10).** The procedure form says what it takes
+ * (a `.docx`, or a Confluence page exported as `.html`, at most 10 MB) before anything is chosen, stays
+ * disabled until `procedureProblem` accepts the file, and sends the file itself. What the API's reader
+ * found for a reviewer is told beneath the sentence that says the draft is waiting, one line each.
+ *
  * **Adding, importing, editing and categorising end nothing, so none asks to be confirmed**; each
  * is recorded in `tests/destructive-confirmed.test.ts` with its reason. **Assigning replaces the
  * version an agent runs, so its submit opens a `ConfirmDialog`** naming the agent, and only the
  * dialog's confirm sends it.
  *
- * Task ids: M27.16.1, M12.2.2, M12.2.3, M12.3.2, M12.4.13
+ * Task ids: M27.16.1, M12.2.2, M12.2.3, M12.3.2, M12.4.13, M12.2.10
  */
 
 import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
@@ -40,11 +45,15 @@ import {
   categorisedSentence,
   chosen,
   editedSentence,
+  findingWords,
   IMPORT_PATH,
   importProblem,
   MAX_PACKAGE_BYTES,
   packageProblem,
   pasted,
+  PROCEDURE_PATH,
+  procedureProblem,
+  procedureSentence,
   repositoryImport,
   SKILLS_API_PATH,
   versionsPath,
@@ -59,6 +68,8 @@ import {
 export interface Told {
   readonly ok: boolean;
   readonly sentence: string;
+  /** Lines said beneath the sentence: what a procedure's reader found for a reviewer. */
+  readonly details?: readonly string[];
 }
 
 export type Tell = (told: Told) => void;
@@ -92,6 +103,12 @@ export const REPOSITORY_FORMAT =
   "The repository as owner/repository, the full forty-character commit (not a branch), and the folder " +
   "holding the SKILL.md, left empty for the top folder. Only the SKILL.md is taken.";
 export const ADDRESS_FORMAT = "An https:// address on GitHub answering with a SKILL.md or a .zip holding one.";
+export const PROCEDURE_LABEL = "The document";
+export const IMPORT_PROCEDURE = "Import the procedure";
+export const PROCEDURE_FORMAT =
+  "A standard operating procedure as a Word document (.docx), or a Confluence page exported as HTML " +
+  "(.html), at most 10 MB. Its headings, numbered steps and tables of steps are kept, and it becomes a " +
+  "draft skill that waits for review; anything in it a reviewer should read first is listed.";
 export const EDIT_FORMAT =
   "The whole SKILL.md. Keep the name, and give a later version number than this one; the edit waits for review.";
 
@@ -336,6 +353,60 @@ export function ImportSkillForm({ onTold }: { readonly onTold: Tell }) {
       <div>
         <Button type="submit" disabled={busy || problem !== null}>
           {IMPORT}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Import a written procedure from a Word document or a Confluence page (M12.2.10). */
+export function ImportProcedureForm({ onTold }: { readonly onTold: Tell }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const problem = procedureProblem(file);
+
+  async function importOne(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (file === null || problem !== null) {
+      return;
+    }
+    setBusy(true);
+    setFailure(null);
+    const result = await request<LibrarySkill>(PROCEDURE_PATH, {
+      method: "POST",
+      file: { body: file, type: file.type === "" ? "application/octet-stream" : file.type, name: file.name },
+    });
+    setBusy(false);
+    if (result.ok) {
+      form.reset();
+      setFile(null);
+      onTold({ ok: true, sentence: procedureSentence(result.data), details: result.data.findings.map(findingWords) });
+    } else {
+      setFailure(result.failure);
+    }
+  }
+
+  return (
+    <form className="flex min-w-0 flex-col gap-3" aria-label="Import a procedure" onSubmit={(event) => void importOne(event)}>
+      <Note>{PROCEDURE_FORMAT}</Note>
+      {failure === null ? null : <FailureNotice failure={failure} fields={["file"]} />}
+      <Field id="skills-procedure" label={PROCEDURE_LABEL} hint="A .docx, or an .html page export.">
+        <Input
+          id="skills-procedure"
+          type="file"
+          name="file"
+          accept=".docx,.html,.htm,.xhtml,.xml"
+          onChange={(event) => {
+            setFile(event.target.files?.[0] ?? null);
+          }}
+        />
+      </Field>
+      <Problem text={file === null ? null : problem} />
+      <div>
+        <Button type="submit" disabled={busy || problem !== null}>
+          {IMPORT_PROCEDURE}
         </Button>
       </div>
     </form>

@@ -39,7 +39,9 @@ import { TESTING_WORDS, VERDICT_WORDS } from "../src/pages/connectors/connectorP
 import { CHECK_AGAIN, NOT_NOW } from "../src/pages/connectors/TestConnection";
 import { connectorAddress, readSourceRows } from "../src/pages/connectors/connectorSources";
 import { CONNECT_A_SOURCE, CONNECTORS_HEADING, NOT_AVAILABLE } from "../src/pages/connectors/ConnectorsPage";
-import { KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY } from "../src/pages/connectors/SourceActs";
+import { GRANT_OFF, GRANT_ON, KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY } from "../src/pages/connectors/SourceActs";
+import { ACCEPT, BEFORE, DRIFT_HEADING, NOW_DOES } from "../src/pages/connectors/DeclarationDrift";
+import { DECLARATION_CHANGED_WORDS } from "../src/pages/connectors/pills";
 import { AT_THE_SERVER, FROM_HERE, START } from "../src/pages/connectors/SourceFlow";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredNavigation } from "./support/navigation";
@@ -89,6 +91,8 @@ function aSource(over: Partial<Connectable> = {}): Connectable {
     ],
     credential_label: "The key Xero issued for this connection",
     credential_hint: sentinel("key-hint"),
+    credential_shape: "key",
+    credential_max_chars: 1000,
     may_connect: true,
     steps: [aStep("create"), aStep("authorise"), aStep("connect", ["tenant_id", "credential"])],
     ...over,
@@ -263,6 +267,28 @@ const XERO_DETAIL = {
   confirm_key: sentinel("confirm-key"),
 };
 
+/** What changed in Xero's declaration, as `brain.connector_routes.DeclarationDriftView` sends it. */
+function aDrift(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    connector: "xero",
+    changed: true,
+    known: true,
+    lines: [
+      { kind: "added", what: "Now also keeps in its index: an invoice's due date", was: "" },
+      { kind: "changed", what: sentinel("now-does"), was: sentinel("did-before") },
+    ],
+    now_does: [],
+    was_version: "0.9.0",
+    now_version: "1.0.0",
+    agreed_digest: "a".repeat(64),
+    current_digest: "c".repeat(64),
+    may_accept: true,
+    told: sentinel("drift-told"),
+    confirm: sentinel("drift-confirm"),
+    ...over,
+  };
+}
+
 /** A connection test's answer, as `brain.connector_routes.ConnectorProbeView` sends it. */
 function aProbe(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -283,6 +309,20 @@ interface Answer {
   readonly body: unknown;
 }
 
+/** A write the source can be allowed to make, as `brain.connector_routes.WriteGrantView` sends it. */
+function aGrant(): NonNullable<Connectable["writes"]>[number] {
+  return {
+    name: "dns_changes",
+    label: "Allow approved DNS changes",
+    credential_label: "A second token that can edit DNS",
+    credential_hint: sentinel("grant-hint"),
+    credential_shape: "key",
+    credential_max_chars: 1000,
+    not_allowed: sentinel("not-allowed"),
+    confirmation: sentinel("confirm-grant"),
+  };
+}
+
 const ANSWERS: Readonly<Record<string, Answer>> = {
   "/api/v1/console/connectors": { body: LIST },
   "/api/v1/connectors": { body: aPage() },
@@ -294,7 +334,21 @@ const ANSWERS: Readonly<Record<string, Answer>> = {
   },
   "/api/v1/console/connectors/xero/export": { body: { connector: "xero", credential: sentinel("no-key"), history: [] } },
   "/api/v1/console/connectors/xero/probe": { body: aProbe() },
+  "/api/v1/console/connectors/xero/drift": { body: aDrift() },
 };
+
+/** The answers with Xero declaring one write, whose key the vault holds for the grants named. */
+function withGrant(allowed: string[]): Readonly<Record<string, Answer>> {
+  return {
+    ...ANSWERS,
+    "/api/v1/connectors": {
+      body: aPage({
+        connectors: [aConnected({ writes_allowed: allowed })],
+        connectable: [aSource({ writes: [aGrant()] }), aSource({ name: "hubspot", label: "HubSpot", settings: [] })],
+      }),
+    },
+  };
+}
 
 interface Mounted {
   readonly container: HTMLElement;
@@ -388,10 +442,14 @@ describe("what this module agrees with the API about", () => {
     // What breaks if this is deleted: a body key the route forbids with `extra="forbid"`, refused
     // with a 422 naming no field the form can draw, or an edit that carries a key it must not.
     expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/edit", "post"))).toEqual(["settings"]);
-    expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/key", "post"))).toEqual(["credential"]);
+    expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/key", "post"))).toEqual([
+      "credential",
+      "grant",
+    ]);
     const acts = readConsoleFile("src/pages/connectors/SourceActs.tsx");
     expect(acts).toContain("const body = { settings: Object.fromEntries(");
-    expect(acts).toContain("const body = { credential: secret.take() };");
+    expect(acts).toContain("const credential = shaped ? credentialFor(asked.credential_shape, held, secret) : secret.take();");
+    expect(acts).toContain("const body = grant === undefined ? { credential } : { credential, grant: grant.name };");
   });
 
   test("no model the module reads carries a field that could hold a key or where one is kept", () => {
@@ -407,6 +465,7 @@ describe("what this module agrees with the API about", () => {
       "ConnectorEditedView",
       "ConnectorKeyReplacedView",
       "ConnectorProbeView",
+      "WriteGrantView",
     ]) {
       const fields = backendModelFields(ROUTES, model);
       expect(fields.length, model).toBeGreaterThan(0);
@@ -681,7 +740,8 @@ describe("one source's page", () => {
     expect(text).toContain("Books helper");
     expect(text).toContain("invoice-chaser");
     expect(text).not.toContain(NO_AGENT);
-    const advanced = container.querySelector('[data-slot="advanced"]');
+    // The profile's own Advanced, beside the drift card's, which holds the two digests.
+    const advanced = [...container.querySelectorAll('[data-slot="advanced"]')].find((one) => one.textContent?.includes("u_admin"));
     expect(advanced?.textContent).toContain("u_admin");
     const outside = text.replace(advanced?.textContent ?? "", "");
     expect(outside).not.toContain("u_admin");
@@ -771,6 +831,71 @@ describe("one source's page", () => {
     expect(drawer.textContent).toContain(sentinel("key-blank"));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(posts(idp)).toEqual([]);
+  });
+
+  test("allowing a write is its own item, asks for the grant's key in its words, and sends it naming the grant", async () => {
+    // What breaks if this is deleted: Cloudflare's DNS Edit token pasted into the read key's drawer
+    // and sent as the read key, the grant's key sent without a confirmation, or shown on one, or a
+    // drawer that says a write is off while the vault holds its key (M11.7.3). The item is the
+    // API's label, under the key; the body names the grant; the key leaves the page once.
+    const grant = aGrant();
+    const { container, idp } = await consoleAt(`${connectorAddress("xero")}/profile`, withGrant([]));
+    const menu = await openMenu("Manage this source");
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      ACT_LABELS.edit,
+      ACT_LABELS.key,
+      grant.label,
+      ACT_LABELS.export,
+      ACT_LABELS.disconnect,
+    ]);
+    await choose(menu, grant.label);
+    const drawer = await screen.findByRole("dialog");
+    expect(drawer.textContent).toContain(GRANT_OFF);
+    expect(drawer.textContent).toContain(sentinel("grant-hint"));
+    expect(drawer.textContent).not.toContain(sentinel("key-hint"));
+    const field = within(drawer).getByLabelText(grant.credential_label) as HTMLInputElement;
+    fireEvent.input(field, { target: { value: KEY } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: REVIEW_KEY }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(sentinel("confirm-grant"));
+    expect(dialog.textContent).not.toContain(sentinel("confirm-key"));
+    expect(dialog.textContent).toContain(KEY_SUPPLIED);
+    expect(dialog.textContent).not.toContain(KEY);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: grant.label }));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toEqual([{ path: "/api/v1/connectors/xero/key", body: { credential: KEY, grant: grant.name } }]);
+    });
+    expect(field.value).toBe("");
+    expect(document.body.innerHTML).not.toContain(KEY);
+    expect(container.innerHTML).not.toContain(KEY);
+  });
+
+  test("a write whose key is held says it is on", async () => {
+    // What breaks if this is deleted: a drawer that says off whatever the vault holds, which tells
+    // an administrator a write is not happening while approved changes are being sent.
+    await consoleAt(`${connectorAddress("xero")}/profile`, withGrant([aGrant().name]));
+    await choose(await openMenu("Manage this source"), aGrant().label);
+    const drawer = await screen.findByRole("dialog");
+    expect(drawer.textContent).toContain(GRANT_ON);
+    expect(drawer.textContent).not.toContain(GRANT_OFF);
+    expect(drawer.textContent).toContain(SECRET_STORED);
+  });
+
+  test("a source that declares no write offers no item to allow one", async () => {
+    // What breaks if this is deleted: the grant offered for every source, so a drawer asks Xero for
+    // a DNS token it has no use for.
+    await consoleAt(`${connectorAddress("xero")}/profile`);
+    const plain = await openMenu("Manage this source");
+    expect(within(plain).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      ACT_LABELS.edit,
+      ACT_LABELS.key,
+      ACT_LABELS.export,
+      ACT_LABELS.disconnect,
+    ]);
   });
 
   test("the export reads the record and changes nothing", async () => {
@@ -887,5 +1012,65 @@ describe("testing a connection", () => {
     // which is clutter the owner asked to be rid of.
     const { container } = await consoleAt(connectorAddress("xero"));
     expect(container.querySelector('[data-slot="connection-test"]')).toBeNull();
+  });
+});
+
+describe("a changed declaration", () => {
+  test("what changed is shown before the accept, and accepting is confirmed and names the digest shown", async () => {
+    // What breaks if this is deleted: the pill says a source stopped being read and a person
+    // accepts the change without being shown it, or accepts one they did not read.
+    const { idp } = await consoleAt(connectorAddress("xero"));
+    const card = await screen.findByRole("region", { name: DRIFT_HEADING });
+    expect(card.textContent).toContain("Now also keeps in its index: an invoice's due date");
+    expect(card.textContent).toContain(`${BEFORE}: ${sentinel("did-before")}`);
+    expect(card.textContent).toContain("Version 0.9.0 to 1.0.0");
+    await act(async () => {
+      fireEvent.click(within(card).getByRole("button", { name: ACCEPT }));
+    });
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm.textContent).toContain(sentinel("drift-confirm"));
+    expect(confirm.textContent).toContain("an invoice's due date");
+    expect(posts(idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole("button", { name: ACCEPT }));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toEqual([{ path: "/api/v1/connectors/xero/accept", body: { digest: "c".repeat(64) } }]);
+    });
+  });
+
+  test("a reader who may not accept is shown the change and offered no accept", async () => {
+    // What breaks if this is deleted: anybody who can read the screen is offered a button that
+    // agrees a source to a new declaration, or the change is hidden from the people who watch it.
+    await consoleAt(connectorAddress("xero"), {
+      ...ANSWERS,
+      "/api/v1/console/connectors/xero/drift": { body: aDrift({ may_accept: false }) },
+    });
+    const card = await screen.findByRole("region", { name: DRIFT_HEADING });
+    expect(card.textContent).toContain("an invoice's due date");
+    expect(within(card).queryByRole("button", { name: ACCEPT })).toBeNull();
+  });
+
+  test("a declaration that was not kept lists everything the source does now", async () => {
+    // What breaks if this is deleted: a connection agreed before the declaration was kept shows
+    // an empty list, which reads as nothing having changed.
+    await consoleAt(connectorAddress("xero"), {
+      ...ANSWERS,
+      "/api/v1/console/connectors/xero/drift": {
+        body: aDrift({ known: false, lines: [], now_does: [sentinel("reads-invoices"), sentinel("keeps-status")] }),
+      },
+    });
+    const now = await screen.findByRole("region", { name: NOW_DOES });
+    expect(now.textContent).toContain(sentinel("reads-invoices"));
+    expect(now.textContent).toContain(sentinel("keeps-status"));
+  });
+
+  test("an unchanged source shows no pill and asks for no diff", async () => {
+    // What breaks if this is deleted: every source shows a change to accept, which teaches people
+    // to accept without reading.
+    const { idp } = await consoleAt(connectorAddress("hubspot"));
+    expect(document.body.textContent).not.toContain(DECLARATION_CHANGED_WORDS);
+    expect(screen.queryByRole("region", { name: DRIFT_HEADING })).toBeNull();
+    expect(asked(idp, "/api/v1/console/connectors/hubspot/drift")).toBe(0);
   });
 });

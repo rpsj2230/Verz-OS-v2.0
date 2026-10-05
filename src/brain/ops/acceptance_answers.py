@@ -77,6 +77,10 @@ if TYPE_CHECKING:
     from brain.gate.provenance import Evidence
     from brain.ops.model_service import ModelService
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 120
+
 A, B = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons

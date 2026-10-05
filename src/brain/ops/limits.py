@@ -423,6 +423,11 @@ class ConnectorLimit:
     note: str = ""
 
 
+#: Cloudflare's documented global ceiling, in its own unit: 1,200 calls per five minutes per user
+#: (https://developers.cloudflare.com/fundamentals/api/reference/limits/). The row below records it
+#: per minute, as every row does, at a fifth, which a sliding minute can never exceed over five.
+CLOUDFLARE_CALLS_PER_FIVE_MINUTES = 1_200
+
 SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
     ConnectorLimit(
         name="xero",
@@ -447,6 +452,58 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
         ),
     ),
     ConnectorLimit(
+        name="google_analytics",
+        per_minute=20,
+        per_day=20_000,
+        note=(
+            "Google counts the Data API in tokens rather than calls: a standard property allows "
+            "14,000 tokens an hour to one Cloud project and 200,000 a day, and a simple report "
+            "costs about ten (https://developers.google.com/analytics/devguides/reporting/data/v1/"
+            "quotas). At ten a report that is 23 calls a minute and 20,000 calls a day, recorded "
+            "at 20 a minute. An Analytics 360 property allows ten times as much, which is the "
+            "property owner's plan to buy, so the ceiling can be raised."
+        ),
+    ),
+    ConnectorLimit(
+        name="google_drive",
+        per_minute=1_625,
+        per_day=2_000_000,
+        note=(
+            "Google counts the Drive API in quota units: 325,000 a minute for one user of one "
+            "project, 1,000,000 for the project, and 400,000,000 a day before billing applies; a "
+            "listing costs 100 units, a metadata read 5 and a download 200 "
+            "(https://developers.google.com/workspace/drive/api/guides/limits, read 2026-09-30). "
+            "Recorded at the dearest call a read makes, 1,625 downloads a minute and 2,000,000 "
+            "calls a day, so no mix of calls spends more. A project owner may ask for more on the "
+            "Cloud console's Quotas page, so it can be raised."
+        ),
+    ),
+    ConnectorLimit(
+        name="hubspot",
+        per_minute=100,
+        per_day=250_000,
+        note=(
+            "A private app may make 100 calls per 10 seconds, and the account 250,000 calls a day, "
+            "on the Free and Starter tiers; Professional and Enterprise allow 190 per 10 seconds "
+            "and 625,000 or 1,000,000 a day, and the API Limit Increase add-on raises both "
+            "(HubSpot's usage guidelines, read 2026-09-30, cited in brain.connectors.hubspot). "
+            "Recorded at the lowest tier, and the ten-second allowance as the minute's, so no "
+            "burst inside a minute can reach HubSpot's ten-second window."
+        ),
+    ),
+    ConnectorLimit(
+        name="search_console",
+        per_minute=200,
+        raisable=False,
+        note=(
+            "Google limits the Search Console API per user and per site rather than by plan: "
+            "search analytics to 1,200 queries a minute for a site, and the site list and "
+            "sitemaps to 200 a minute and 20 a second for a user "
+            "(https://developers.google.com/webmaster-tools/limits). Recorded at 200 a minute, the "
+            "lowest that governs a report's calls. There is no plan to buy that raises them."
+        ),
+    ),
+    ConnectorLimit(
         name="lark_base",
         per_minute=100,
         raisable=False,
@@ -454,6 +511,44 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
             "100 requests a minute, fixed. Their documentation states it cannot be raised, "
             "so it is 1.67 calls a second for the whole tenant permanently. Sizing against "
             "a higher number is sizing against a number that does not exist."
+        ),
+    ),
+    ConnectorLimit(
+        name="laravel",
+        per_minute=30,
+        raisable=False,
+        note=(
+            "Ours, not a vendor's: nobody publishes a rate for a company's own database. Thirty "
+            "bounded reads a minute across the worker and every question together, one every two "
+            "seconds on average, each stopped at its own row cap and time bound: a load a database "
+            "serving an application does not notice, and a burst of questions is held to it rather "
+            "than read as fast as it is asked. Not raisable by buying anything; a release changes "
+            "it."
+        ),
+    ),
+    ConnectorLimit(
+        name="cloudflare",
+        per_minute=CLOUDFLARE_CALLS_PER_FIVE_MINUTES // 5,
+        raisable=False,
+        note=(
+            "1,200 requests per five minutes per user, across every token and the dashboard "
+            "(developers.cloudflare.com/fundamentals/api/reference/limits), recorded as 240 a "
+            "minute, so no five minutes can hold more than 1,200. Past it Cloudflare refuses "
+            "every call for five minutes with a 429. The ceiling is on the client's own user "
+            "rather than on our subscription, so no plan we can buy moves it. Separately, the "
+            "GraphQL Analytics API allows 300 queries per five minutes."
+        ),
+    ),
+    ConnectorLimit(
+        name="domains",
+        per_minute=30,
+        raisable=False,
+        note=(
+            "RDAP servers state no common figure: RFC 7480 section 5.5 lets each registry limit "
+            "as it chooses and answer 429 when it does, and one domains connection's calls go "
+            "to many registries. Thirty a minute is this product's own pace, one lookup every "
+            "two seconds, which reads a book of two hundred domains in under seven minutes and "
+            "is below every limit a registry publishes. Not a vendor's figure, and said so."
         ),
     ),
 )
@@ -1210,16 +1305,22 @@ def _whose(scope: LimitScope, period: str) -> str:
             assert_never(scope)
 
 
-def when_again(retry_after_seconds: float) -> str:
-    """When the person may ask again, from the same rounding the header uses.
+def wait_in_words(seconds: float) -> str:
+    """A wait as a person reads it, from the same rounding the header uses.
 
     Seconds under two minutes and whole minutes, rounded up, from there. See
-    `A_REFUSAL_SAYS_WHEN_IN_WORDS`.
+    `A_REFUSAL_SAYS_WHEN_IN_WORDS`. Shared with the queued upload's expected wait
+    (`brain.knowledge.ingest_queue.outcome_sentence`), so a wait is said one way everywhere.
     """
-    whole = int(retry_after_header(retry_after_seconds))
+    whole = int(retry_after_header(seconds))
     if whole < 2 * MINUTE_SECONDS:
-        return f"You can ask again in {whole} second{'' if whole == 1 else 's'}."
-    return f"You can ask again in {math.ceil(whole / MINUTE_SECONDS)} minutes."
+        return f"{whole} second{'' if whole == 1 else 's'}"
+    return f"{math.ceil(whole / MINUTE_SECONDS)} minutes"
+
+
+def when_again(retry_after_seconds: float) -> str:
+    """When the person may ask again, in `wait_in_words`."""
+    return f"You can ask again in {wait_in_words(retry_after_seconds)}."
 
 
 def refusal_sentence(binding: Limit | None, retry_after_seconds: float) -> str:

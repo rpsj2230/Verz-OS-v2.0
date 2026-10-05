@@ -61,6 +61,16 @@ windows. Who is unusual is `brain.console.installation.unusual_now` over
 `brain.ops.volume_store`, narrowed by the reader's grant exactly as the throttling list is and
 carrying a band and never a count (M23.2.1).
 
+**The Limits screen also names the work being deferred now, by class and budget (M22.1.5).**
+`brain.ops.admission.shed_plan` over the live counts `brain.ops.capacity_ledger` holds, at the
+budgets `brain.ops.tuning.configured_budgets` puts in force, read through
+`brain.api_routes.capacity_ledger_of`. Each row names a workload class and the budget it has used
+its share of, in the order the classes give way, and carries the share and the budget, which are
+configuration and the same for every reader. It carries no figure for what is in use: that is a
+count of other people's work, and a row's presence already says its class's share is spent. No
+cache is a sentence and not an empty list, for `AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE`'s reason, and
+so is a cache that did not answer. See `A_DEFERRED_ROW_NAMES_A_CLASS_AND_A_BUDGET_AND_NOBODY`.
+
 **A bucket that does not answer is a sentence too, and never a panel of what was read before it
 stopped.** The listing is read once, in a worker thread because the client blocks, and a store
 that fails part way raises rather than handing over a partial listing, so the panel is either
@@ -133,6 +143,7 @@ is the one it deliberately does not open.
 
 Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5, M23.1.1, M23.2.1, M27.15.51
 Task ids: M22.3.1, M22.3.2, M22.3.4
+Task ids: M22.1.5
 """
 
 from __future__ import annotations
@@ -149,7 +160,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked, Asking, limit_store_of
+from brain.api_routes import Asked, Asking, capacity_ledger_of, limit_store_of
 from brain.connector_routes import records_of
 from brain.connectors.declaration import shipped
 from brain.console.connector_trust import admitted_connections
@@ -176,8 +187,17 @@ from brain.console.version_view import panel as updates_panel
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.deployment.release_feed import ReleaseWatch, feed_address
-from brain.ops.admission import FIRST_BOTTLENECK_AT_SCALE, Ceiling, seed_profiles
+from brain.ops.admission import (
+    FIRST_BOTTLENECK_AT_SCALE,
+    Budget,
+    Ceiling,
+    ShedNotice,
+    WorkloadClass,
+    seed_profiles,
+    shed_plan,
+)
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills, read_manifests
+from brain.ops.capacity_ledger import LedgerUnreadableError
 from brain.ops.deployment_history import History, history_from, recorded
 from brain.ops.features import RELEASE_CHECK, is_on
 from brain.ops.install_from_empty import read_plan
@@ -188,6 +208,7 @@ from brain.ops.release_manifest import read_manifest
 from brain.ops.reliability import recovery_objective
 from brain.ops.retention import BACKUP_RETENTION_DAYS
 from brain.ops.storage import StoreUnansweredError
+from brain.ops.tuning import budget_knob, configured_budgets
 from brain.ops.volume_store import PrincipalVolume, StoredVolumes
 from brain.settings import Settings
 
@@ -326,6 +347,37 @@ THE_COUNTING_STORE_DID_NOT_ANSWER: Final = (
     "does not answer, check that the cache is running. While it is down, a person's own "
     "window lets questions through and a connector's refuses them."
 )
+
+#: What the deferred list answers on a process with no cache.
+NOTHING_HERE_COUNTS_WORK_IN_FLIGHT: Final = (
+    "Which kinds of work are waiting for room cannot be read here: this process has no cache "
+    "configured, so the work in progress across the install is not counted anywhere it can "
+    "read. An empty list would read as nothing being deferred, so there is none."
+)
+
+#: What the deferred list answers when the cache that counts work in flight did not answer.
+THE_CAPACITY_LEDGER_DID_NOT_ANSWER: Final = (
+    "The cache that counts the work in progress did not answer when this screen was opened, so "
+    "which kinds of work are waiting for room cannot be said. Open the screen again, and if it "
+    "still does not answer, check that the cache is running. While it is down, each kind of "
+    "work is let in by what its own process can count."
+)
+
+#: Why a deferred row carries no count of what is in use.
+A_DEFERRED_ROW_NAMES_A_CLASS_AND_A_BUDGET_AND_NOBODY: Final = (
+    "A row names a kind of work and the budget it has used its share of, with the share and the "
+    "budget, which are configuration and the same for every reader who may open the screen. "
+    "What is in use is a count of other people's work, so it is not sent: the row being there "
+    "already says the share is spent, which is all an operator needs to act on."
+)
+
+#: The kinds of work, as the screen names them. Plural nouns, because a row says they are
+#: deferred. Exhaustive over `WorkloadClass`, which a test holds.
+WORK_WORDS: Final[Mapping[WorkloadClass, str]] = {
+    WorkloadClass.BATCH: "Background uploads, re-indexing and reports",
+    WorkloadClass.BACKGROUND: "Tasks and agents",
+    WorkloadClass.INTERACTIVE: "Requests somebody is waiting for",
+}
 
 #: What the unusual-volume half answers on a process with no database.
 NOTHING_HERE_COUNTS_WHAT_PEOPLE_ASK: Final = (
@@ -859,6 +911,26 @@ class UnusualView(BaseModel):
     said: str
 
 
+class DeferredView(BaseModel):
+    """One kind of work that has used its share of one budget and is being deferred now.
+
+    No figure for what is in use: `A_DEFERRED_ROW_NAMES_A_CLASS_AND_A_BUDGET_AND_NOBODY`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The workload class, as `brain.ops.admission.WorkloadClass` names it.
+    workload_class: str
+    #: The class in words.
+    work: str
+    #: The budget, in the words the Rate limits screen's own settings call it.
+    budget: str
+    #: How much of the budget this class may hold, and the budget.
+    share: int
+    limit: int
+    said: str
+
+
 class LimitsView(BaseModel):
     """The ceilings this install applies, and who is behind one, when that can be read.
 
@@ -883,6 +955,10 @@ class LimitsView(BaseModel):
     #: Who is asking far beyond their own week, or None with `unusual_unread` saying why.
     unusual: list[UnusualView] | None = None
     unusual_unread: str = ""
+    #: The kinds of work deferred now, in the order they give way, or None with
+    #: `deferred_unread` saying why (M22.1.5).
+    deferred: list[DeferredView] | None = None
+    deferred_unread: str = ""
 
     @model_validator(mode="after")
     def _exactly_one(self) -> LimitsView:
@@ -900,6 +976,9 @@ class LimitsView(BaseModel):
             raise ValueError(msg)
         if self.unusual is not None and self.unusual_unread:
             msg = "an unusual-volume list is set with a reason for having none beside it"
+            raise ValueError(msg)
+        if self.deferred is not None and self.deferred_unread:
+            msg = "a deferred list is set with a reason for having none beside it"
             raise ValueError(msg)
         return self
 
@@ -1153,6 +1232,24 @@ def window_view(one: DeclaredWindow) -> WindowView:
     )
 
 
+def deferred_view(one: ShedNotice) -> DeferredView:
+    """One deferred class on one budget, named in the words the screen's settings use."""
+    knob = budget_knob(one.resource, one.key)
+    budget = knob.label if knob is not None else f"{one.resource}{'/' + one.key if one.key else ''}"
+    work = WORK_WORDS[one.workload_class]
+    return DeferredView(
+        workload_class=one.workload_class.value,
+        work=work,
+        budget=budget,
+        share=one.ceiling,
+        limit=one.limit,
+        said=(
+            f"{work} are deferred on {budget.lower()}: {one.ceiling} of {one.limit} may be "
+            "theirs, and that many are in use."
+        ),
+    )
+
+
 def unusual_view(one: UnusualRow) -> UnusualView:
     return UnusualView(subject=one.subject, band=one.band, said=one.said)
 
@@ -1388,6 +1485,7 @@ async def limits(request: Request, asked: Asked) -> LimitsView:
     declared = [ceiling_view(one, sources) for one in ceilings() if one.name in sources]
     windows = [window_view(one) for one in declared_windows(sources)]
     unusual, unusual_unread = await _unusual(request, asked)
+    deferred, deferred_unread = await _deferred(request, asked, configured_budgets())
     source = throttle_source_of(request)
     if source is None:
         return LimitsView(
@@ -1396,6 +1494,8 @@ async def limits(request: Request, asked: Asked) -> LimitsView:
             unread=NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS,
             unusual=unusual,
             unusual_unread=unusual_unread,
+            deferred=deferred,
+            deferred_unread=deferred_unread,
         )
     try:
         live, state = await asyncio.to_thread(source, asked.now)
@@ -1406,6 +1506,8 @@ async def limits(request: Request, asked: Asked) -> LimitsView:
             unread=THE_COUNTING_STORE_DID_NOT_ANSWER,
             unusual=unusual,
             unusual_unread=unusual_unread,
+            deferred=deferred,
+            deferred_unread=deferred_unread,
         )
     return LimitsView(
         ceilings=declared,
@@ -1415,7 +1517,28 @@ async def limits(request: Request, asked: Asked) -> LimitsView:
         ],
         unusual=unusual,
         unusual_unread=unusual_unread,
+        deferred=deferred,
+        deferred_unread=deferred_unread,
     )
+
+
+async def _deferred(
+    request: Request, asked: Asking, budgets: Sequence[Budget]
+) -> tuple[list[DeferredView] | None, str]:
+    """The kinds of work deferred now, or why that cannot be said (M22.1.5).
+
+    `shed_plan` over the ledger's live counts at the budgets in force, in the order the classes
+    give way. The same for every reader who may open the screen; see
+    `A_DEFERRED_ROW_NAMES_A_CLASS_AND_A_BUDGET_AND_NOBODY`.
+    """
+    ledger = capacity_ledger_of(request.app.state)
+    if ledger is None:
+        return None, NOTHING_HERE_COUNTS_WORK_IN_FLIGHT
+    try:
+        state = await asyncio.to_thread(ledger.counts, budgets, now=asked.now)
+    except LedgerUnreadableError:
+        return None, THE_CAPACITY_LEDGER_DID_NOT_ANSWER
+    return [deferred_view(one) for one in shed_plan(budgets, state)], ""
 
 
 async def _unusual(request: Request, asked: Asking) -> tuple[list[UnusualView] | None, str]:
