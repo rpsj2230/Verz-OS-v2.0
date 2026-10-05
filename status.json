@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T15:51:51.701524+00:00",
-  "commit": "19732966",
-  "commit_subject": "A connector declares its own Ask rows, key scopes and example settings, so adding one stops editing every other connector's lists (#342)",
+  "generated_at": "2026-10-05T16:06:53.905650+00:00",
+  "commit": "2442392e",
+  "commit_subject": "An agent's automation is proved on the install: installed from the gallery, listed under its agent, started by a second person, run as its owner, stopped and removed as rows (#228)",
   "total": 1592,
   "done": 551,
   "percent": 34.6,
