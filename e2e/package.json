@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "The console in a real browser against a furnished install. See README.md and .github/workflows/browser.yml.",
+  "description": "The console in a real browser against a furnished install. See playwright.config.ts and .github/workflows/browser.yml.",
   "engines": {
     "node": ">=22"
   },
