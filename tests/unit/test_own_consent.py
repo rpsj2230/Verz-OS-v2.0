@@ -376,3 +376,130 @@ def test_the_drain_removes_a_persons_own_tokens_and_a_refusing_vault_leaves_the_
         assert vault.removed == [connector_person_oauth_slot("xero", "p_ada").path]
         assert said.endswith("their own refresh token removed from 1 source(s)")
         assert one(url, "SELECT count(*) FROM ops.erasure_request WHERE finished_at IS NULL") == 0
+
+
+# ------------------------------------------------------------------ the consent rows
+def test_a_table_removed_on_erasure_must_name_whose_rows_it_holds() -> None:
+    """`REMOVED` is held to the subject declarations: the consent table names `principal_id` and
+    is no finding, and a table declared removed that names nobody is one. Delete this and a table
+    can be declared removed with no column saying whose rows the erasure deletes, so it would
+    delete by a condition nobody wrote."""
+    from brain.ops.erasure_store import REMOVED, SUBJECT_COLUMNS, declaration_gaps
+
+    assert SUBJECT_COLUMNS["ops.oauth_consent"] == "principal_id"
+    assert "ops.oauth_consent" in REMOVED
+    assert not [one for one in declaration_gaps(("ops.oauth_consent",)) if "removed" in one]
+    found = declaration_gaps(
+        ("ops.nobodys",),
+        subjects={},
+        through={},
+        about_nobody=frozenset({"ops.nobodys"}),
+        retained={},
+        removed={"ops.nobodys": "a reason"},
+    )
+    assert any("ops.nobodys is removed on erasure and names nobody" in one for one in found)
+
+
+@pytest.mark.needs_db
+def test_erasing_a_person_removes_their_consent_rows_and_the_application_never_can() -> None:
+    """At head: the erasure queue removes Ada's consent rows and leaves Bea's, and records them
+    removed; the application role, as Ada herself, is refused a DELETE of her own row while it
+    may still start and take her consents. Delete this and an erased person's consents stay, or
+    a debugging session grants the application DELETE and a person can erase the record that they
+    asked a vendor for access."""
+    import uuid
+
+    import psycopg
+
+    from brain.connectors.oauth import ConsentKind, new_consent, state_digest
+    from brain.ops.connector_consent import StoredConsents
+    from brain.ops.erasure_store import drain_erasure_queue
+    from brain.session import make_app_engine, make_application_sessions
+    from brain.tables.audit import attributed_to
+    from brain.tables.oauth_consent import OAuthConsentRow
+    from tests.fixtures.scratch_postgres import run, sql
+    from tests.unit.test_acceptance import at_head
+
+    back = "https://console.example/connector-consent"
+    with at_head("brain_oauth_consent_erased") as url:
+
+        async def started() -> None:
+            engine = make_app_engine(url)
+            try:
+                for who, _ in ((ADA, 1), (ADA, 2), (BEA, 1), (BEA, 2)):
+                    await StoredConsents(make_application_sessions(engine)).issue(
+                        connector="xero",
+                        principal_id=who,
+                        start=new_consent(),
+                        return_address=back,
+                        now=NOW,
+                        kind=ConsentKind.PERSON,
+                    )
+            finally:
+                await engine.dispose()
+
+        run(started)
+
+        async def deleted_as_ada() -> None:
+            from sqlalchemy import delete
+
+            engine = make_app_engine(url)
+            try:
+                sessions = make_application_sessions(engine)
+                async with sessions() as session, session.begin():
+                    for one in attributed_to(actor_id=ADA, ent_hash="", trace_id=""):
+                        await session.execute(one)
+                    await session.execute(
+                        delete(OAuthConsentRow).where(OAuthConsentRow.principal_id == ADA)
+                    )
+            finally:
+                await engine.dispose()
+
+        with pytest.raises(Exception, match="permission denied"):
+            run(deleted_as_ada)
+        assert sql(url, "SELECT count(*) FROM ops.oauth_consent WHERE principal_id = %s", ADA) == [
+            (2,)
+        ]
+        # The sibling: the application still starts and takes a consent of hers.
+        later = new_consent()
+
+        async def issue_and_take() -> object:
+            engine = make_app_engine(url)
+            try:
+                store = StoredConsents(make_application_sessions(engine))
+                await store.issue(
+                    connector="xero",
+                    principal_id=ADA,
+                    start=later,
+                    return_address=back,
+                    now=NOW,
+                    kind=ConsentKind.PERSON,
+                )
+                return await store.take(state=later.state, principal_id=ADA, now=NOW)
+            finally:
+                await engine.dispose()
+
+        assert run(issue_and_take) is not None
+        assert state_digest(later.state)
+
+        request = uuid.uuid4()
+        sql(
+            url,
+            "INSERT INTO ops.erasure_request "
+            "(request_id, subject_id, reason_reference, requested_by, requested_at) "
+            "VALUES (%s, %s, 'DSAR-1', 'u_admin', %s)",
+            request,
+            ADA,
+            NOW,
+        )
+        with psycopg.connect(url) as conn:
+            drain_erasure_queue(conn, now=NOW, consented=())
+            conn.commit()
+        assert sql(url, "SELECT principal_id, count(*) FROM ops.oauth_consent GROUP BY 1") == [
+            (BEA, 2)
+        ]
+        [(stores,)] = sql(
+            url, "SELECT stores FROM ops.erasure_request WHERE request_id = %s", request
+        )
+        operations = next(one for one in stores if one["store"] == "operations")
+        assert operations["removed"] >= 3 and operations["reached"] is True

@@ -707,6 +707,8 @@ def consented_personally() -> ConnectorDeclaration:
     ),
 )
 async def a_persons_own_consent_is_read_for_them_alone(h: Harness) -> None:
+    from sqlalchemy import func, select, text
+
     from brain.connector_routes import (
         YOUR_CONSENT_KEPT,
         ConsentExchange,
@@ -742,8 +744,9 @@ async def a_persons_own_consent_is_read_for_them_alone(h: Harness) -> None:
         connector_oauth_slot,
         connector_person_oauth_slot,
     )
-    from brain.ops.erasure_store import erase_own_refresh_tokens
+    from brain.ops.erasure_store import REMOVED, SUBJECT_COLUMNS, erase_own_refresh_tokens
     from brain.ops.secrets import SecretsUnavailableError
+    from brain.tables.oauth_consent import OAuthConsentRow
 
     declared = consented_personally()
     consent = declared.oauth
@@ -937,6 +940,30 @@ async def a_persons_own_consent_is_read_for_them_alone(h: Harness) -> None:
         raise CheckFailedError("erasing a person did not remove their own token and only theirs")
     if vault.refused:
         raise CheckFailedError("a token was asked for something its policy does not grant")
+    # And her consent rows: the erasure queue removes them, by her principal, and the application
+    # may never delete one. The queue runs as the database owner on a schedule, outside this
+    # check's transaction, so what is asked here is what it decides by; the removal itself is
+    # `tests/unit/test_own_consent.py`'s, at head.
+    if (
+        REMOVED.get("ops.oauth_consent") is None
+        or SUBJECT_COLUMNS.get("ops.oauth_consent") != "principal_id"
+    ):
+        raise CheckFailedError("erasing a person would not remove their consent rows")
+    may_delete = await h.execute(
+        text("SELECT has_table_privilege(current_user, 'ops.oauth_consent', 'DELETE')")
+    )
+    if may_delete.scalar_one():
+        raise CheckFailedError("the application may delete a person's consent rows")
+    held = await h.execute(
+        *h.attributed(ada),
+        select(func.count())
+        .select_from(OAuthConsentRow)
+        .where(OAuthConsentRow.principal_id == ada),
+    )
+    if held.scalar_one() < 1:
+        raise CheckFailedError(
+            "a person's consent is not held as theirs, so erasure cannot find it"
+        )
     for secret in (vendor.client_secret, *vendor.refresh, *vendor.access):
         if await _search(h, secret):
             raise CheckFailedError("a client secret or a person's token was found in a table")
