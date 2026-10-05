@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T15:06:22.856351+00:00",
-  "commit": "f9c82402",
-  "commit_subject": "Item 150: Google Drive is connectable, with the owner's steps (#340)",
+  "generated_at": "2026-10-05T15:12:40.563365+00:00",
+  "commit": "18dde3eb",
+  "commit_subject": "The scrub budget is timed on the thread's processor clock, so a busy host at deploy time no longer fails it (#338)",
   "total": 1592,
   "done": 548,
   "percent": 34.4,
