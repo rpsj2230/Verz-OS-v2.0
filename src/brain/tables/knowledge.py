@@ -107,9 +107,14 @@ class KnowledgeItemRow(TimestampMixin, Base):
             "(verified_by IS NULL) = (verified_at IS NULL)",
             name="a_verification_is_a_person_and_a_date",
         ),
+        # Both or neither, as two halves the release gate can read; see `0171`.
         CheckConstraint(
-            "(public_by IS NULL) = (public_at IS NULL)",
-            name="a_public_marking_is_a_person_and_a_date",
+            "public_at IS NULL OR public_by IS NOT NULL",
+            name="a_public_marking_names_a_person",
+        ),
+        CheckConstraint(
+            "public_by IS NULL OR public_at IS NOT NULL",
+            name="a_public_marker_names_a_time",
         ),
         CheckConstraint(
             "public_at IS NULL OR visibility <> 'personal'",

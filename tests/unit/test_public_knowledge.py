@@ -236,7 +236,7 @@ def test_a_public_statement_runs_as_the_public_role_and_names_nobody() -> None:
 
 
 # ------------------------------------------------------------------ what 0171 holds
-def test_0171_copies_the_models_two_checks() -> None:
+def test_0171_copies_the_models_three_checks() -> None:
     """Delete this and the model and the database can disagree about whether a marking names a
     person, or whether a personal document may be marked."""
     checks = {
@@ -245,9 +245,8 @@ def test_0171_copies_the_models_two_checks() -> None:
         if isinstance(one, CheckConstraint)
     }
     module = migration("0171")
-    assert checks["ck_item_a_public_marking_is_a_person_and_a_date"] == (
-        module.A_MARKING_IS_A_PERSON_AND_A_DATE
-    )
+    assert checks["ck_item_a_public_marking_names_a_person"] == module.A_MARKING_NAMES_A_PERSON
+    assert checks["ck_item_a_public_marker_names_a_time"] == module.A_MARKER_NAMES_A_TIME
     assert (
         checks["ck_item_a_personal_item_is_never_public"] == module.A_PERSONAL_ITEM_IS_NEVER_PUBLIC
     )

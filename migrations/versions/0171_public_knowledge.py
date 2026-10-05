@@ -54,8 +54,14 @@ TABLES: tuple[str, ...] = ()
 #: The columns this adds to `know.item`, named for that table as `0115`'s are.
 ITEM_COLUMNS_ADDED: tuple[str, ...] = ("public_by", "public_at")
 
-#: `brain.tables.knowledge.KnowledgeItemRow`'s two checks, copied and held equal by a test.
-A_MARKING_IS_A_PERSON_AND_A_DATE = "(public_by IS NULL) = (public_at IS NULL)"
+#: `brain.tables.knowledge.KnowledgeItemRow`'s three checks, copied and held equal by a test. The
+#: first two together are "both or neither", written as two halves that each begin with a column
+#: this migration adds being null, which is the form `brain.deployment.compatibility` reads as
+#: binding no row the previous release can write: it never names either column, so both are null
+#: in every row it writes. `(public_by IS NULL) = (public_at IS NULL)` says the same and is a
+#: predicate the gate cannot order, so it was reported as a narrowing of a table already there.
+A_MARKING_NAMES_A_PERSON = "public_at IS NULL OR public_by IS NOT NULL"
+A_MARKER_NAMES_A_TIME = "public_by IS NULL OR public_at IS NOT NULL"
 A_PERSONAL_ITEM_IS_NEVER_PUBLIC = "public_at IS NULL OR visibility <> 'personal'"
 
 #: `brain.knowledge.search.OWNER_ID_CHARS`, the width of every principal id on the table.
@@ -267,10 +273,10 @@ def upgrade() -> None:
         "item", sa.Column("public_at", sa.DateTime(timezone=True), nullable=True), schema="know"
     )
     op.create_check_constraint(
-        "a_public_marking_is_a_person_and_a_date",
-        "item",
-        A_MARKING_IS_A_PERSON_AND_A_DATE,
-        schema="know",
+        "a_public_marking_names_a_person", "item", A_MARKING_NAMES_A_PERSON, schema="know"
+    )
+    op.create_check_constraint(
+        "a_public_marker_names_a_time", "item", A_MARKER_NAMES_A_TIME, schema="know"
     )
     op.create_check_constraint(
         "a_personal_item_is_never_public", "item", A_PERSONAL_ITEM_IS_NEVER_PUBLIC, schema="know"
@@ -291,8 +297,7 @@ def downgrade() -> None:
     for statement in REVOKES:
         op.execute(statement)
     op.drop_constraint("a_personal_item_is_never_public", "item", schema="know", type_="check")
-    op.drop_constraint(
-        "a_public_marking_is_a_person_and_a_date", "item", schema="know", type_="check"
-    )
+    op.drop_constraint("a_public_marker_names_a_time", "item", schema="know", type_="check")
+    op.drop_constraint("a_public_marking_names_a_person", "item", schema="know", type_="check")
     op.drop_column("item", "public_at", schema="know")
     op.drop_column("item", "public_by", schema="know")
