@@ -7,6 +7,7 @@
  * Task ids: none
  */
 
+import { agentPreviewApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { STEWARD_API_PATH } from "../../../src/pages/dataStewardQuery";
 import {
   DISABLE_API_PATH,
@@ -44,6 +45,9 @@ const DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN = t(
 );
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)": [
+    at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
+  ],
   "src/pages/people/PersonPlacements.tsx MEMBERSHIP_API_PATH": [
     at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
   ],

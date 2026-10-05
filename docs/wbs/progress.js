@@ -54,6 +54,11 @@ const PROGRESS = {
     why: "built (M1/people-status): somebody the list says is suspended, gone or never activated, or of a type not allowed, is disabled on the next sync and their page says why; the last administrator is never kept out; proved on the install with M1.6.15",
     updated: "2026-09-30",
   },
+  "M40.7.1": {
+    status: "READY FOR TESTING",
+    why: "built (M1/relay-to-sign-in): every release gives the sign-in realm the mail relay saved on Notifications, through the step that already signs in to Keycloak inside its container, writing only when the relay changed and leaving a realm with no relay alone; an install check compares the host the realm reported with the relay's. Not built: hiding Forgot password while no relay is set. Proved on the install when a release has run and a reserved person's Forgot password email arrives",
+    updated: "2026-09-30",
+  },
   "M1.6.16": {
     status: "READY FOR TESTING",
     why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
@@ -62,6 +67,16 @@ const PROGRESS = {
   "M1.6.17": {
     status: "READY FOR TESTING",
     why: "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
+    updated: "2026-09-30",
+  },
+  "M1.10.1": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3",
+    updated: "2026-09-30",
+  },
+  "M1.10.2": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
     updated: "2026-09-30",
   },
   "M1.8.3": {
@@ -174,14 +189,24 @@ const PROGRESS = {
     why: "Slack is connectable (#288): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
     updated: "2026-09-30",
   },
+  "M10.5.2": {
+    status: "READY FOR TESTING",
+    why: "Teams is connectable (M10/channel-teams): Bot Framework tokens verified against Microsoft's published keys, the bot's App ID and the pinned tenant, answers in the chat on a token exchanged at the tenant's login, Connect Teams from an Azure Bot, and an install check; the owner's tenant proves the vendor's half",
+    updated: "2026-09-30",
+  },
   "M10.5.6": {
     status: "READY FOR TESTING",
-    why: "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (M10/channel-email-mailbox), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
+    why: "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (#296), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
+    updated: "2026-09-30",
+  },
+  "M10.5.4": {
+    status: "READY FOR TESTING",
+    why: "Telegram is connectable (M10/channel-telegram): saving the bot's username and token registers this install's events address with Telegram, updates carry a header made from the token, answers go out with sendMessage, and an install check; the owner's bot proves the vendor's half",
     updated: "2026-09-30",
   },
   "M10.6.1": {
     status: "IN PROGRESS",
-    why: "the webhook, Lark, email and Slack wires are live (PR #105; L1, merged d426e3d3; #285; M10/channel-slack); Teams, Telegram and WhatsApp each come with their own package",
+    why: "the webhook, Lark, email, Slack, Teams and Telegram wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams; M10/channel-telegram); WhatsApp comes with its own package",
     updated: "2026-09-30",
   },
   "M10.6.3": {
@@ -673,6 +698,26 @@ const PROGRESS = {
     status: "IN PROGRESS",
     why: "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
     updated: "2026-09-28",
+  },
+  "M8.3.1": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.3.2": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.3.4": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.4.1": {
+    status: "READY FOR TESTING",
+    why: "escalation and sensitive topics (migration 0168): proved when both install checks in brain.ops.acceptance_escalation pass after deploy, and on a real channel once a queue's person is named on the Compliance screen",
+    updated: "2026-09-30",
   },
 };
 

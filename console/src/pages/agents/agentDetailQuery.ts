@@ -13,7 +13,11 @@
  * see is not a hole in the numbering. This file keeps the lines in the order they came and adds no
  * sentence of its own.
  *
- * Task ids: M27.10.2
+ * **The header's role line (M39.1.2.1)** is the agent's summary, its department and its template by
+ * name and version, each read only when sent: the department travels to everybody the roster already
+ * tells it to, and the template's name only with its lineage.
+ *
+ * Task ids: M27.10.2, M39.1.2.1
  */
 
 /** Where one agent's About tab is asked for, under the API base. */
@@ -55,6 +59,12 @@ export interface HeaderFacts {
   readonly state?: string;
   /** The highest rung any action could be held to, sent where the state is. */
   readonly leashUpTo?: string;
+  /** What the agent is for, in one line: its role line. */
+  readonly summary?: string;
+  /** The department its audience names. Absent for a company agent. */
+  readonly department?: string;
+  /** The template's own name, sent with its lineage. */
+  readonly templateName?: string;
 }
 
 export function readHeaderFacts(payload: unknown): HeaderFacts {
@@ -64,7 +74,13 @@ export function readHeaderFacts(payload: unknown): HeaderFacts {
   const createdAt = created !== undefined && !Number.isNaN(Date.parse(created)) ? created : undefined;
   const state = said(agent?.["state"]);
   const leashUpTo = said(agent?.["leash_up_to"]);
+  const summary = said(agent?.["summary"]);
+  const department = said(agent?.["department"]);
+  const templateName = said(agent?.["template_name"]);
   return {
+    ...(summary === undefined ? {} : { summary }),
+    ...(department === undefined ? {} : { department }),
+    ...(templateName === undefined ? {} : { templateName }),
     ...(ownerName === undefined ? {} : { ownerName }),
     ...(createdAt === undefined ? {} : { createdAt }),
     ...(state === undefined ? {} : { state }),

@@ -676,13 +676,14 @@ async def _enqueue(request: Request, job: Job | None) -> None:
     """Queue an embedding job after the commit, as K1's store does, and log a refusal."""
     if job is None:
         return
-    from brain.ops.queue import enqueue_job, queue_app
+    from brain.ops.queue import enqueue_job, queue_app, queue_url_of
     from brain.ops.worker import register_tasks
 
     settings = getattr(request.app.state, "settings", None)
     url = str(getattr(settings, "database_url", "") or "")
     try:
-        app = queue_app(url, pool_max=1)
+        # The queue's own URL: `brain.ops.queue.queue_url_of`.
+        app = queue_app(queue_url_of(settings), pool_max=1)
         register_tasks(app, database_url=url)
         async with app.open_async():
             await enqueue_job(app, job)

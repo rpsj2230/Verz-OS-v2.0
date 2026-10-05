@@ -95,9 +95,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Final, cast
+from urllib.parse import urlsplit
 
 import psycopg
 import structlog
@@ -119,6 +120,9 @@ from brain.channels.adapter import (
     CardWire,
     ChannelTransport,
     ChannelWire,
+    KeyedWire,
+    RegisteredWire,
+    RegistrationRefusedError,
     VendorAnswer,
     VendorRequest,
     channel_adapters,
@@ -142,6 +146,7 @@ from brain.channels.inbound import (
 from brain.channels.outbound import Delivered, LedgerRunner, Outgoing, deliver
 from brain.channels.relay import RelayingTransport
 from brain.chat_answer import ChatAnswerer
+from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import credentials_of
@@ -149,6 +154,8 @@ from brain.db import libpq_conninfo
 from brain.gate.context import Channel
 from brain.gate.resolve import EntitlementStore
 from brain.guide_views import GuideStepView, step_view
+from brain.identity.oidc import JwksCache, KeySet, TokenRefusedError
+from brain.identity.roles import IdentityError
 from brain.install import InstallError, value_of
 from brain.install_routes import settings_of
 from brain.notification_routes import mail_password_of
@@ -190,6 +197,7 @@ from brain.ops.openbao import OpenBaoVault
 from brain.ops.operation_store import PostgresOperationLedger
 from brain.ops.outbox import SignedRequest
 from brain.ops.outbox_store import SendResult
+from brain.ops.safe_error import describe
 from brain.ops.secrets import VaultRole
 from brain.ops.webhook_delivery import HttpsSender, SystemResolver
 from brain.routing_routes import sessions_of
@@ -299,6 +307,28 @@ TEST_TOLD: Final[Mapping[DeliveryOutcome, str]] = {
     DeliveryOutcome.UNKNOWN: (
         "The vendor did not answer, so the test message may or may not have arrived. Check at "
         "the other end before sending another."
+    ),
+}
+
+#: What a person saving a set-up the vendor must be told about is told when it was not.
+NO_PUBLIC_ADDRESS: Final = (
+    "This install has no public address yet, so the vendor could not be told where to send. "
+    "Set the install's address first, then save this set-up again."
+)
+NOTHING_HELD_TO_REGISTER_WITH: Final = (
+    "No secret is held for this channel yet. Paste it into the secret field and save again."
+)
+REGISTRATION_NOT_BUILT: Final = (
+    "Not saved. This set-up is not one the vendor takes: check each field against the steps."
+)
+REGISTRATION_TOLD: Final[Mapping[CallOutcome, str]] = {
+    CallOutcome.REJECTED: (
+        "Not saved. The vendor did not accept this set-up: check the secret you pasted, and that "
+        "this install's address is reachable over HTTPS."
+    ),
+    CallOutcome.QUOTA: "Not saved. The vendor asked to be called less often. Save again shortly.",
+    CallOutcome.UNAVAILABLE: (
+        "Not saved. The vendor could not be reached just now. Save again in a minute."
     ),
 }
 
@@ -467,7 +497,7 @@ class HttpsTransport:
         exchange = request.exchange
         if exchange is None:
             return headers
-        signed = self._signed(exchange.url, {}, exchange.body)
+        signed = self._signed(exchange.url, {"Content-Type": exchange.content_type}, exchange.body)
         if isinstance(signed, VendorAnswer):
             return signed
         answered = _answer_of(self._sender.mint(signed))
@@ -645,6 +675,77 @@ def _on_a_running_loop() -> bool:
     except RuntimeError:
         return False
     return True
+
+
+class PublishedKeys:
+    """`brain.identity.oidc.JwksFetch` for a `KeyedWire`: its metadata, then its key set.
+
+    Both are read through the channel transport, so the address rule applies to each, and the
+    key set is read only from the host the metadata document is on: a document that pointed
+    anywhere else would be choosing where this install's trust comes from. See
+    `brain.channels.adapter.A_PUBLISHED_KEY_IS_FETCHED_BY_THE_ROUTE_AND_JUDGED_BY_THE_WIRE`.
+    """
+
+    def __init__(self, wire: KeyedWire, transport: ChannelTransport) -> None:
+        self._wire = wire
+        self._transport = transport
+
+    def _get(self, url: str) -> bytes:
+        answer = self._transport.read(VendorRequest(url=url, headers={}, body=b"", method="GET"))
+        if answer.status != 200 or not answer.body:
+            msg = f"{urlsplit(url).hostname} did not answer with its document"
+            raise IdentityError(msg)
+        return answer.body
+
+    def __call__(self, issuer: str) -> KeySet:
+        del issuer  # One address per wire; the cache's key is it.
+        address = self._wire.keys_address
+        metadata = self._get(address)
+        try:
+            listed = json.loads(metadata).get("jwks_uri")
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError) as exc:
+            raise IdentityError("the metadata document is not JSON") from exc
+        if (
+            not isinstance(listed, str)
+            or urlsplit(listed).scheme != "https"
+            or urlsplit(listed).hostname != urlsplit(address).hostname
+        ):
+            raise IdentityError("the metadata document names its keys on another host")
+        try:
+            return self._wire.key_set_of(metadata, self._get(listed), datetime.now(UTC))
+        except ValueError as exc:
+            raise IdentityError(describe(exc)) from exc
+
+
+def vendor_keys_of(request: Request, wire: object) -> Callable[[], Awaitable[KeySet | None]] | None:
+    """How a request fetches its vendor's published keys: None for a wire that needs none.
+
+    `app.state.channel_keys` when a test put a key set there; otherwise one cache per
+    application and address, so a key set is fetched once an hour rather than once a request,
+    and an unreachable vendor leaves the cached set in use for its grace, then refuses.
+    """
+    if not isinstance(wire, KeyedWire):
+        return None
+    keyed: KeyedWire = wire
+    found = getattr(request.app.state, "channel_keys", None)
+    caches: dict[str, JwksCache] | None = getattr(request.app.state, "channel_key_caches", None)
+    if caches is None:
+        caches = {}
+        request.app.state.channel_key_caches = caches
+    cache = caches.setdefault(
+        keyed.keys_address, JwksCache(PublishedKeys(keyed, transport_of(request)))
+    )
+
+    async def load() -> KeySet | None:
+        if isinstance(found, KeySet):
+            return found
+        try:
+            return await asyncio.to_thread(cache.keys_for, keyed.keys_address, datetime.now(UTC))
+        except TokenRefusedError:
+            log.info("vendor keys not read", address=urlsplit(keyed.keys_address).hostname)
+            return None
+
+    return load
 
 
 def ledger_of(request: Request) -> LedgerRunner:
@@ -958,6 +1059,7 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         claims=claims_of(request),
         deliveries=deliveries,
         now=now,
+        keys=vendor_keys_of(request, wire),
     )
     if receipt.kind is ReceiptKind.REFUSED:
         assert receipt.reason is not None
@@ -1108,6 +1210,51 @@ async def channels(request: Request, asked: Asked) -> ChannelsView:
     )
 
 
+async def _register(
+    request: Request,
+    channel: Channel,
+    wire: RegisteredWire,
+    kept: str | None,
+    tenant: Mapping[str, str],
+) -> JSONResponse | None:
+    """Tell the vendor this install's events address, or say why not; None when it accepted.
+
+    See `brain.channels.adapter.A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE`. Made
+    before the secret is kept, so a secret the vendor refused never replaces the one that works.
+    The secret is the one being saved, or else the one the vault holds, borrowed for the call.
+    """
+    address = events_address_of(channel)
+    if not address:
+        return _error(409, NO_PUBLIC_ADDRESS)
+    secret = kept
+    if secret is None:
+        record = await records_of(request).get(channel)
+        try:
+            held = (
+                None
+                if record is None
+                else await asyncio.to_thread(secrets_of(request).read, record.secret)
+            )
+        except ChannelSecretsUnavailableError:
+            return _error(503, NOT_NOW)
+        if held is None:
+            return _error(409, NOTHING_HELD_TO_REGISTER_WITH)
+        secret = held
+    try:
+        told = wire.registration_for(address=address, secret=secret, tenant=tenant)
+    except RegistrationRefusedError as problem:
+        return _error(422, str(problem))
+    except ValueError:
+        return _error(422, REGISTRATION_NOT_BUILT)
+    del secret
+    answer = await asyncio.to_thread(transport_of(request).send, told)
+    outcome = wire.judge(answer)
+    log.info("channel address registered", channel=channel.value, outcome=outcome.value)
+    if outcome is CallOutcome.OK:
+        return None
+    return _error(502, REGISTRATION_TOLD.get(outcome, REGISTRATION_TOLD[CallOutcome.REJECTED]))
+
+
 @router.put(CHANNEL_PATH, response_model=ChannelView, responses=COMMON_RESPONSES)
 async def configure(
     name: Name, body: ChannelAsked, request: Request, asked: Asked
@@ -1119,6 +1266,12 @@ async def configure(
         return _error(422, " ".join(problems))
     actor = asked.caller.principal.id
     kept = secret_to_keep(wire, body)
+    # Typed as an object: whether a wire registers its address is a question about its class.
+    registering: object = wire
+    if isinstance(registering, RegisteredWire):
+        refused = await _register(request, channel, registering, kept, body.tenant)
+        if refused is not None:
+            return refused
     if kept is not None:
         try:
             await credentials_of(request).keep(

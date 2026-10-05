@@ -73,13 +73,20 @@ for file in "$HERE"/policies/*.hcl; do
   POLICIES=$((POLICIES + 1))
 done
 
-# The token role a connector run's token is minted against.
-role_ok() { test "$(bao_ read -field=allowed_policies auth/token/roles/connector-run 2>/dev/null)" = "[connector-run]" && test "$(bao_ read -field=orphan auth/token/roles/connector-run 2>/dev/null)" = "false" && test "$(bao_ read -field=renewable auth/token/roles/connector-run 2>/dev/null)" = "false" && test "$(bao_ read -field=token_no_default_policy auth/token/roles/connector-run 2>/dev/null)" = "true" && test "$(bao_ read -field=token_explicit_max_ttl auth/token/roles/connector-run 2>/dev/null)" = "3600"; }
-if ! role_ok; then
+# The token roles a connector run's token and one send's token are minted against.
+role_ok_connector_run() { test "$(bao_ read -field=allowed_policies auth/token/roles/connector-run 2>/dev/null)" = "[connector-run]" && test "$(bao_ read -field=orphan auth/token/roles/connector-run 2>/dev/null)" = "false" && test "$(bao_ read -field=renewable auth/token/roles/connector-run 2>/dev/null)" = "false" && test "$(bao_ read -field=token_no_default_policy auth/token/roles/connector-run 2>/dev/null)" = "true" && test "$(bao_ read -field=token_explicit_max_ttl auth/token/roles/connector-run 2>/dev/null)" = "3600"; }
+if ! role_ok_connector_run; then
   if test "$CHECK_ONLY" = no; then
     bao_ write auth/token/roles/connector-run allowed_policies=connector-run orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600 >/dev/null || fail "the vault would not define the connector-run token role"
   fi
-  role_ok || missing "the connector-run token role"
+  role_ok_connector_run || missing "the connector-run token role"
+fi
+role_ok_channel_send() { test "$(bao_ read -field=allowed_policies auth/token/roles/channel-send 2>/dev/null)" = "[channel-send]" && test "$(bao_ read -field=orphan auth/token/roles/channel-send 2>/dev/null)" = "false" && test "$(bao_ read -field=renewable auth/token/roles/channel-send 2>/dev/null)" = "false" && test "$(bao_ read -field=token_no_default_policy auth/token/roles/channel-send 2>/dev/null)" = "true" && test "$(bao_ read -field=token_explicit_max_ttl auth/token/roles/channel-send 2>/dev/null)" = "3600"; }
+if ! role_ok_channel_send; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ write auth/token/roles/channel-send allowed_policies=channel-send orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600 >/dev/null || fail "the vault would not define the channel-send token role"
+  fi
+  role_ok_channel_send || missing "the channel-send token role"
 fi
 
 # Every connected source's slot: its scopes, and no key.
@@ -90,11 +97,17 @@ if ! slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs an
   fi
   slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs and delete tickets scopes:an agent API key with read access]' || missing "the credential slot for freshdesk"
 fi
-if ! slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:read on the named shared drive only]'; then
+if ! slot_ok google_analytics 'map[not_requested:analytics.edit; domain-wide delegation scopes:analytics.readonly; Viewer on the one property]'; then
   if test "$CHECK_ONLY" = no; then
-    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=read on the named shared drive only' -custom-metadata='not_requested=domain-wide delegation' google_drive >/dev/null || fail "the vault would not define the credential slot for google_drive"
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=analytics.readonly; Viewer on the one property' -custom-metadata='not_requested=analytics.edit; domain-wide delegation' google_analytics >/dev/null || fail "the vault would not define the credential slot for google_analytics"
   fi
-  slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:read on the named shared drive only]' || missing "the credential slot for google_drive"
+  slot_ok google_analytics 'map[not_requested:analytics.edit; domain-wide delegation scopes:analytics.readonly; Viewer on the one property]' || missing "the credential slot for google_analytics"
+fi
+if ! slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewer on the one folder shared with it]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=Viewer on the one folder shared with it' -custom-metadata='not_requested=domain-wide delegation' google_drive >/dev/null || fail "the vault would not define the credential slot for google_drive"
+  fi
+  slot_ok google_drive 'map[not_requested:domain-wide delegation scopes:Viewer on the one folder shared with it]' || missing "the credential slot for google_drive"
 fi
 if ! slot_ok hubspot 'map[not_requested:crm.objects.*.write; anything touching settings scopes:crm.objects.contacts.read; crm.objects.deals.read]'; then
   if test "$CHECK_ONLY" = no; then
@@ -140,4 +153,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, the connector-run token role and 8 credential slots"
+say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 9 credential slots"

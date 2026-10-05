@@ -121,6 +121,7 @@ from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
+from brain.ops.live_read_run import live_records_for
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.matrix_gate_run import InstallMatrixGate
 from brain.ops.model_service import (
@@ -256,6 +257,18 @@ AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN: Final = (
     "the key set has never been fetched, and a background task asks again with a growing wait "
     "until it answers, then reports sign_in ready. Until then a token is refused, because the "
     "key cache has nothing to check it against."
+)
+
+#: Why the endpoints `create_app` defines read their application from the request.
+AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION: Final = (
+    "FastAPI keeps every endpoint and dependency it inspects in module-level caches of 4096 "
+    "entries (fastapi.dependencies.models), holding the function itself. An endpoint defined "
+    "inside create_app that closes over app therefore keeps that application, its engines and "
+    "its routing table alive for as long as the cache does. A server builds one application and "
+    "never notices. The test suite builds thousands, two cache entries each, so up to some two "
+    "thousand stayed alive at once; measured on 2026-09-30, five route test files left 122, and "
+    "in a full run one request took 504 seconds against a deadline of 30. So such an endpoint "
+    "takes request: Request and reads request.app."
 )
 
 
@@ -505,7 +518,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # the same True. What would fix it is readiness knowing which profile it is in, which is
     # a change to what the check means rather than to this line.
     records = SessionRowSource(app.state.db_sessions) if app.state.db_sessions else None
-    app.state.tools = build_registry(source=settings.tool_source, records=records)
+    # The live reads a connected source's figure tools make (M11.7.1), kept on the state so the
+    # answer lane's refreshes share their throttle, breakers and fetches in flight
+    # (`brain.api_routes.live_records_of` finds this one).
+    live = live_records_for(app.state.db_sessions or None, app.state.vault)
+    if live is not None:
+        app.state.live_records = live
+    app.state.tools = build_registry(
+        source=settings.tool_source, records=records, figures=live if records else None
+    )
     app.state.ready["tools"] = True
     # Every call to a registered tool asks the switch table first, and each tool's catalogue row
     # is written so a stop has a row to name. Never fatal: a catalogue row a switch needs is
@@ -1237,15 +1258,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Health(status="ok", commit=settings.resolved_commit())
 
     @app.get("/health/ready", response_model=Health, tags=["health"])
-    async def ready(response: Response) -> Health:
+    async def ready(request: Request, response: Response) -> Health:
         """Every dependency is reachable. Deployment gates on this, not on liveness.
 
         `checks` decide the status; `reported` are named beside them and decide nothing. See
-        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
+        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`. The application is the request's,
+        never the enclosing `app`: see `AN_ENDPOINT_NEVER_CLOSES_OVER_ITS_APPLICATION`.
         """
-        await app.state.readings.refresh(app.state.ready)
-        checks: dict[str, bool] = dict(app.state.ready)
-        reported: dict[str, bool] = dict(getattr(app.state, "reported", {}))
+        state = request.app.state
+        await state.readings.refresh(state.ready)
+        checks: dict[str, bool] = dict(state.ready)
+        reported: dict[str, bool] = dict(getattr(state, "reported", {}))
         ok = all(checks.values()) if checks else True
         if not ok:
             response.status_code = 503

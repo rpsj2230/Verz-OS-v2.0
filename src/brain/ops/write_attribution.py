@@ -31,7 +31,8 @@ its policies read, for the same reason.
 first administrator's appointment writes the first reach there is, so no writer's reach exists to
 carry; reconciliation runs when the process starts, with no request; the vault's log is shipped
 by the worker, whose actor is the vault; the staff sync rewrites heads' audit grants and gives
-each synced person their department's Starter pack at night with nobody signed in. Each is in
+each synced person their department's Starter pack at night with nobody signed in; the release
+records the mail relay it gave the sign-in service with nobody signed in. Each is in
 `NOT_A_REQUEST_WITH_A_REACH`, and an entry
 that stops matching a path the sweep takes is itself a finding.
 
@@ -123,6 +124,12 @@ NOT_A_REQUEST_WITH_A_REACH: Final[Mapping[str, str]] = MappingProxyType(
             "trigger on agent.agent records an owner change only, so the statement appends no "
             "entry for a placeholder to reach; the owner change it waits for is attributed by "
             "the route that makes it."
+        ),
+        "brain.ops.sign_in_mail:record": (
+            "The release's step records the relay it gave the sign-in service, on the server after "
+            "a deploy or from the installer, with nobody signed in: the rows name the release "
+            "step as their writer, which the trigger records as the actor, and there is no "
+            "request and no person's reach."
         ),
         "brain.ops.vault_audit_ship:StoredVaultAccess.ship": (
             "The worker copies the vault's own audit log into the ledger; the actor is the vault, "

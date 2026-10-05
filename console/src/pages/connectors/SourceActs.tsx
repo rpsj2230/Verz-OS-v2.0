@@ -27,6 +27,7 @@ import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
 import { ConfirmDialog, Drawer, Fact, FactList } from "../../components/kit";
+import { CredentialField, credentialFor, credentialGiven } from "../../components/CredentialField";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -243,6 +244,11 @@ export function KeyDrawer({
   readonly onDone: (told: string) => void;
 }) {
   const secret = useSecret();
+  // A key file or a database user is held until it is sent, as the connect form holds it; a key is
+  // never held here at all. See `components/CredentialField.tsx`.
+  const shaped = form.credential_shape !== "key";
+  const [held, setHeld] = useState("");
+  const [passwordPresent, setPasswordPresent] = useState(false);
   const [present, setPresent] = useState(false);
   const [blank, setBlank] = useState<FieldProblem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -264,7 +270,8 @@ export function KeyDrawer({
 
   function send(): void {
     // The key leaves the field in the same call that empties it, and goes into this body only.
-    const body = { credential: secret.take() };
+    const body = { credential: shaped ? credentialFor(form.credential_shape, held, secret) : secret.take() };
+    setHeld("");
     setPresent(false);
     setBusy(true);
     void (async () => {
@@ -303,16 +310,42 @@ export function KeyDrawer({
       <div className="flex min-w-0 flex-col gap-3">
         {failure === null ? null : <FailureNotice failure={failure} title={NOT_REPLACED} fields={["credential"]} />}
         <form id={prefix} className="flex flex-col gap-2" noValidate autoComplete="off" onSubmit={ask}>
-          <SecretField
-            secret={secret}
-            label={form.credential_label}
-            stored={keyHeld}
-            description={form.credential_hint}
-            disabled={busy}
-            invalid={problems.some((one) => one.field === "credential")}
-            onPresenceChange={setPresent}
-            {...(described === undefined ? {} : { describedBy: described })}
-          />
+          {shaped ? (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={form.credential_shape === "database_user" ? `${prefix}-credential-user` : `${prefix}-credential`}>
+                {form.credential_label}
+              </Label>
+              <CredentialField
+                shape={form.credential_shape}
+                id={`${prefix}-credential`}
+                maxChars={form.credential_max_chars}
+                value={held}
+                onChange={(value) => {
+                  setHeld(value);
+                  setPresent(credentialGiven(form.credential_shape, value, passwordPresent));
+                }}
+                secret={secret}
+                onPasswordPresence={(typed) => {
+                  setPasswordPresent(typed);
+                  setPresent(credentialGiven(form.credential_shape, held, typed));
+                }}
+                disabled={busy}
+                problemProps={problemAttributes(problems, prefix, "credential")}
+              />
+              <p className="text-sm text-muted-foreground">{form.credential_hint}</p>
+            </div>
+          ) : (
+            <SecretField
+              secret={secret}
+              label={form.credential_label}
+              stored={keyHeld}
+              description={form.credential_hint}
+              disabled={busy}
+              invalid={problems.some((one) => one.field === "credential")}
+              onPresenceChange={setPresent}
+              {...(described === undefined ? {} : { describedBy: described })}
+            />
+          )}
           <FieldProblems problems={problems} form={prefix} names="credential" />
         </form>
       </div>
