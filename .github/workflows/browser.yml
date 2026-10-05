@@ -154,7 +154,24 @@ jobs:
             sudo dmesg | grep -iE "oom|killed process|out of memory" | tail -20 || true
           fi
 
-      - uses: actions/setup-node@v4
+      - name: What the imported realm gives the console's token
+        # Read from Keycloak's own admin API with the bootstrap administrator this job minted,
+        # so a token the API refuses can be traced to the realm or to the API. Names and claim
+        # names only: no token, no credential.
+        run: |
+          kc=https://localhost:8443
+          admin=$(curl -skf "$kc/realms/master/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=admin-cli \
+            --data-urlencode "username=$KEYCLOAK_ADMIN" --data-urlencode "password=$KEYCLOAK_ADMIN_PASSWORD" | jq -r .access_token)
+          echo "::add-mask::$admin"
+          auth="Authorization: Bearer $admin"
+          client=$(curl -skf -H "$auth" "$kc/admin/realms/brain/clients?clientId=brain-console" | jq -r '.[0].id')
+          echo "console default scopes: $(curl -skf -H "$auth" "$kc/admin/realms/brain/clients/$client/default-client-scopes" | jq -c '[.[].name]')"
+          echo "realm default scopes: $(curl -skf -H "$auth" "$kc/admin/realms/brain/default-default-client-scopes" | jq -c '[.[].name]')"
+          echo "realm scopes and their mappers: $(curl -skf -H "$auth" "$kc/admin/realms/brain/client-scopes" | jq -c '[.[] | {name, mappers: [.protocolMappers[]?.name]}]')"
+          person=$(curl -skf -H "$auth" "$kc/admin/realms/brain/users?username=e2e-admin&exact=true" | jq -r '.[0].id')
+          echo "example token claim names: $(curl -skf -H "$auth" "$kc/admin/realms/brain/clients/$client/evaluate-scopes/generate-example-access-token?scope=openid&userId=$person" | jq -c '{aud, azp, scope, keys: keys}')"
+
         with:
           node-version: "22"
           cache: npm
