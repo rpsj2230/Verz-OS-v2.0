@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.connectors import lark_base
-from brain.connectors.manifest import ConnectorManifest
+from brain.connectors.manifest import ConnectorManifest, FieldShape, HotUse
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     SEEN_AT,
@@ -304,8 +307,61 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def _read_back_table() -> lark_base.LarkBaseTable:
+    return lark_base.LarkBaseTable(
+        base_id="bascnCMII2ORej2RItqpZZUNMIe",
+        table_id="tblsRc9GRRXKqhvW",
+        entity="maintenance",
+        bindings=(
+            lark_base.FieldBinding(
+                target="client",
+                base_field="Client",
+                kind=lark_base.FieldKind.TEXT,
+                uses=(HotUse.JOIN,),
+                shape=FieldShape.JOIN_KEY,
+            ),
+            lark_base.FieldBinding(
+                target="hours_remaining",
+                base_field="Hours Remaining",
+                kind=lark_base.FieldKind.NUMBER,
+            ),
+        ),
+    )
+
+
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Lark Base's read-back reading, as one table's record listing."""
+    operation = _read_back_table().operation(
+        lark_base.Endpoint.LIST_RECORDS, host="open.larksuite.com"
+    )
+    reply = lark_base.LarkReply(
+        status=recorded.status, headers=recorded.headers, body=recorded.body
+    )
+    return answered(SOURCE, operation, reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "LARK-200-records": Verification.FOUND,
+        "LARK-200-code-permission": Verification.INCONCLUSIVE,
+        # One record under data.record says nothing about more, so it is unreadable as a listing.
+        "LARK-200-record": Verification.INCONCLUSIVE,
+        "LARK-429": Verification.INCONCLUSIVE,
+        # A Base's tables and fields carry no record id, so they are not a listing of its records.
+        "LARK-200-tables": Verification.INCONCLUSIVE,
+        "LARK-200-fields": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    wait_not_in_retry_after="x-ogw-ratelimit-reset",
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

@@ -10,7 +10,9 @@ Task ids: M11.7.1
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import date
+from types import MappingProxyType
 from typing import Final
 
 from brain.connectors import google_analytics, google_token
@@ -18,6 +20,8 @@ from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import PageReply
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import CallOutcome, classify
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -325,8 +329,39 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Google Analytics' read-back reading, as the property read."""
+    reply = google_analytics.Reply(
+        status=recorded.status, headers=recorded.headers, body=recorded.body
+    )
+    return answered(SOURCE, google_analytics.operation_for(PROPERTY), reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "GA-200-property": Verification.FOUND,
+        # A report, a token and every refusal hold no property, and a property read never proves
+        # one is gone: see `google_analytics.A_PROPERTY_READ_CANNOT_PROVE_ABSENCE`.
+        "GA-200-report": Verification.INCONCLUSIVE,
+        "GA-200-range-report": Verification.INCONCLUSIVE,
+        "GA-200-token": Verification.INCONCLUSIVE,
+        "GA-400-token": Verification.INCONCLUSIVE,
+        "GA-401": Verification.INCONCLUSIVE,
+        "GA-403-property": Verification.INCONCLUSIVE,
+        "GA-429-report": Verification.INCONCLUSIVE,
+        "GA-500-report": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    wait_not_in_retry_after="none documented; Google asks for exponential backoff",
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

@@ -11,11 +11,15 @@ Task ids: M11.7.5
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.connectors import slack_messages as slack
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import CallOutcome, classify
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     SEEN_AT,
@@ -281,8 +285,31 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Slack's read-back reading, as the list call it was made against."""
+    said = slack.Reply(status=recorded.status, body=recorded.body)
+    return answered(SOURCE, operation_of(recorded), said)
+
+
+#: How each recording this connector's read-back names is answered. Every Slack list is a listing;
+#: ok false inside a 200 is a refusal and proves nothing.
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "SLACK-200-channels": Verification.FOUND,
+        "SLACK-200-members": Verification.FOUND,
+        "SLACK-200-membership": Verification.FOUND,
+        "SLACK-200-history": Verification.FOUND,
+        "SLACK-200-not-ok": Verification.INCONCLUSIVE,
+        "SLACK-429": Verification.INCONCLUSIVE,
+        "SLACK-503": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

@@ -123,12 +123,14 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.connectors.ask import AskEntity, AskRows, of_entity
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     AccessMode,
@@ -143,9 +145,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -2099,6 +2103,12 @@ CONNECTOR: Final = ConnectorDeclaration(
             "shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={"portal_id": "12345678"},
+            fresh=lambda _: {"portal_id": str(10**8 + secrets.randbelow(9 * 10**8))},
+            edit="portal_id",
+            edited=lambda: str(10**8 + secrets.randbelow(9 * 10**8)),
+        ),
     ),
     read_back=ReadBack(
         reading=classified_reading,
@@ -2117,4 +2127,44 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=HubSpotReading(),
     live=HubSpotLiveLookup(),
+    # Compiled from `HUBSPOT_FIELD_RULES`. The deal's amount is CONFIDENTIAL there and never in the
+    # index, so a person is told it only from HubSpot's own answer, read while they wait. A contact
+    # is kept with no name, by `A_CRM_IS_MOSTLY_THE_DENYLIST`, so a person asks about a company or a
+    # deal by name and reaches its contacts through it.
+    ask=AskRows(
+        scoped_by="portal_id",
+        entities=(
+            AskEntity(
+                entity=ENTITY_CLIENT,
+                fields=of_entity(HUBSPOT_FIELD_RULES, ENTITY_CLIENT),
+                description=(
+                    "Look up HubSpot companies by name: lifecycle stage, web domain and owner, "
+                    "read live from HubSpot"
+                ),
+                named_by="name",
+            ),
+            AskEntity(
+                entity=ENTITY_CONTACT,
+                fields=of_entity(HUBSPOT_FIELD_RULES, ENTITY_CONTACT),
+                description=(
+                    "Look up HubSpot contacts: lifecycle stage and company, read live from HubSpot"
+                ),
+            ),
+            AskEntity(
+                entity=ENTITY_DEAL,
+                fields=of_entity(HUBSPOT_FIELD_RULES, ENTITY_DEAL),
+                description=(
+                    "Look up HubSpot deals by name: stage, pipeline and close date, and the amount "
+                    "read live from HubSpot for a reader allowed it"
+                ),
+                named_by="deal_name",
+            ),
+        ),
+    ),
+    # Read off the scopes the readings' own calls need, so the slot, the hint and the guide are held
+    # to one account of them (`required_scopes`).
+    scopes=KeyScopes(
+        request=required_scopes(),
+        refuse=("crm.objects.*.write", "anything touching settings"),
+    ),
 )

@@ -199,9 +199,17 @@ def test_every_connector_the_code_knows_about_has_a_credential_slot(connector: s
     That argument is cheap now and expensive later. Deleting this test means the scopes get
     decided during the hour somebody is trying to make the connector work, and "read and
     write, we can narrow it later" is the fastest thing to type in that hour.
+
+    Held to the key slot the installer defines and the document's key slot table since
+    2026-10-05, rather than to the prose table of leased `connectors/creds/` paths nothing reads:
+    the scopes are argued in the connector's own declaration now (`scopes`), and the key slot
+    table is held to them row for row by the test below.
     """
-    assert f"connectors/creds/{connector}" in _slot_paths(), (
-        f"{connector} has a measured rate limit and no credential slot"
+    from brain.ops.connector_slots import SLOT_SCOPES
+
+    assert connector in SLOT_SCOPES, f"{connector} has a measured rate limit and no credential slot"
+    assert SLOT_SCOPES[connector].path in _slot_paths(), (
+        f"{connector} has a measured rate limit and no row in the key slot table"
     )
 
 

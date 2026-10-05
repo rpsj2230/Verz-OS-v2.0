@@ -30,34 +30,11 @@ from typing import Any
 import pytest
 import yaml
 
-from brain.connectors.cloudflare import CloudflareConnection
-from brain.connectors.cloudflare import manifest as cloudflare_manifest
 from brain.connectors.contract import AccessMode, CredentialBinding
-from brain.connectors.domains import DomainsConnection
-from brain.connectors.domains import manifest as domains_manifest
-from brain.connectors.freshdesk import manifest as freshdesk_manifest
-from brain.connectors.google_analytics import AnalyticsConnection
-from brain.connectors.google_analytics import manifest as analytics_manifest
-from brain.connectors.google_drive import DriveConnection
-from brain.connectors.google_drive import manifest as drive_manifest
-from brain.connectors.hubspot import HubSpotConnection, hubspot_manifest
-from brain.connectors.laravel import (
-    DatabaseTls,
-    LaravelConnection,
-    ReadBounds,
-    TlsMode,
-    laravel_manifest,
-)
+from brain.connectors.declaration import shipped
 from brain.connectors.lark_base import FieldBinding, FieldKind, LarkBaseTable
 from brain.connectors.lark_base import manifest as lark_base_manifest
-from brain.connectors.lark_wiki import SpaceDeclaration
-from brain.connectors.lark_wiki import manifest as lark_wiki_manifest
 from brain.connectors.manifest import ConnectorManifest, FieldShape, HotUse, PermissionSync
-from brain.connectors.search_console import SearchConsoleConnection
-from brain.connectors.search_console import manifest as search_console_manifest
-from brain.connectors.slack_messages import SlackConnection
-from brain.connectors.slack_messages import manifest as slack_manifest
-from brain.connectors.xero import XeroConnection, xero_manifest
 from brain.core.scope import Clause, Op, Scope
 from brain.deployment.installer import PLAN, render
 from brain.deployment.installer import Step as InstallStep
@@ -70,7 +47,6 @@ from brain.deployment.requirements import (
     spec_for,
 )
 from brain.deployment.variables import parse_env
-from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.controls import control
 from brain.ops.install_docs import (
     A_BLANK_DEFAULT_AND_AN_EMPTY_ONE_ARE_THE_SAME_LINE_ON_A_SERVER,
@@ -126,6 +102,7 @@ from brain.ops.queue import DeployStep, StepKind
 from brain.ops.secrets import SecretRef, VaultRole
 from brain.ops.wiring import PROFILES, WiringError
 from brain.setup_wizard import WIZARD
+from tests.fixtures.cassettes import FILES
 
 REPO = Path(__file__).resolve().parents[2]
 GUIDES = REPO / "docs" / "install"
@@ -219,78 +196,19 @@ def lark_base_for(entity: str) -> ConnectorManifest:
 
 
 def manifests() -> tuple[ConnectorManifest, ...]:
-    """Every connector's manifest, built with placeholder deployment values.
+    """Every connector's manifest, as its own cassette file builds it for its tests.
 
-    Placeholders rather than any install's real ones, and it costs nothing: every field this
-    guide states is a property of the connector rather than of the deployment, so the selectors
-    below could be anything a scope accepts.
+    Read off `tests.fixtures.cassettes.FILES` rather than typed here since 2026-10-05: a typed list
+    was a line every connector PR edited. The values are placeholders rather than any install's
+    real ones, and it costs nothing: every field this guide states is a property of the connector
+    rather than of the deployment, so the selectors could be anything a scope accepts.
     """
-    return (
-        freshdesk_manifest(
-            domain="helpdesk.example.invalid",
-            credential=CredentialBinding(ref=ref("connectors/creds/freshdesk")),
-            visibility=VISIBILITY,
-        ),
-        drive_manifest(
-            DriveConnection(
-                folder_id="fld0447AbC-_x",
-                domain="example.invalid",
-                department="one",
-                steward_id="u_one",
-            ),
-            ref=ref("connectors/creds/google_drive"),
-        ),
-        hubspot_manifest(
-            HubSpotConnection(portal_id="12345678"), ref=ref("connectors/creds/hubspot")
-        ),
-        laravel_manifest(
-            LaravelConnection(
-                schema="portal",
-                bounds=ReadBounds(max_rows=200, timeout_seconds=5.0),
-                host="db.example.invalid",
-                port=3306,
-                private_network=False,
-                tls=DatabaseTls(TlsMode.VERIFIED),
-            ),
-            ref=ref("connectors/creds/laravel"),
-            visibility={"laravel_client": VISIBILITY, "laravel_user": VISIBILITY},
-        ),
-        lark_base_for("maintenance"),
-        lark_wiki_manifest(
-            spaces=(
-                SpaceDeclaration(
-                    space_id="spcOne",
-                    visibility=KnowledgeVisibility.of_department("one", owner_id="u_one"),
-                    owner_id="u_one",
-                ),
-            ),
-            credential=CredentialBinding(ref=ref("connectors/creds/lark_wiki")),
-        ),
-        slack_manifest(
-            SlackConnection(workspace="T0123ABCD", department="one"),
-            ref=ref("connectors/creds/slack"),
-        ),
-        xero_manifest(
-            XeroConnection(tenant_id="11111111-2222-3333-4444-555555555555"),
-            ref=ref("connectors/creds/xero"),
-        ),
-        cloudflare_manifest(
-            CloudflareConnection(account_id="0" * 32, department="one"),
-            ref=ref("connectors/creds/cloudflare"),
-        ),
-        analytics_manifest(
-            AnalyticsConnection(property_id="123456789", department="one"),
-            ref=ref("connectors/creds/google_analytics"),
-        ),
-        search_console_manifest(
-            SearchConsoleConnection(site="sc-domain:example.com", department="one"),
-            ref=ref("connectors/creds/search_console"),
-        ),
-        domains_manifest(
-            DomainsConnection(domains=("example.com", "example.org"), department="one"),
-            ref=ref("connectors/creds/domains"),
-        ),
-    )
+    return tuple(one.manifest() for one in FILES.values())
+
+
+def manifest_of(name: str) -> ConnectorManifest:
+    """One connector's manifest out of `manifests`, by its name."""
+    return next(one for one in manifests() if one.name == name)
 
 
 # --------------------------------------------------------------------- small guides to fail on
@@ -799,23 +717,15 @@ def test_a_port_row_with_too_few_cells_is_a_finding() -> None:
 
 
 # =================================================================== connector discovery
-def test_the_nine_connectors_are_discovered_from_the_package() -> None:
+def test_the_connectors_are_discovered_from_the_package() -> None:
     """Delete this and the guide is held to whatever list somebody handed the check, so a
-    connector added tomorrow is not a finding but a gap nobody notices."""
-    assert connector_modules(CONNECTOR_PACKAGE) == (
-        "cloudflare",
-        "domains",
-        "freshdesk",
-        "google_analytics",
-        "google_drive",
-        "hubspot",
-        "laravel",
-        "lark_base",
-        "lark_wiki",
-        "search_console",
-        "slack_messages",
-        "xero",
-    )
+    connector added tomorrow is not a finding but a gap nobody notices. Compared with the
+    connectors the platform finds by importing the package (`shipped`), which is a second read of
+    it by another route, and anchored on Xero and Lark Wiki so a read finding nothing fails."""
+    found = connector_modules(CONNECTOR_PACKAGE)
+
+    assert found == tuple(shipped())
+    assert {"xero", "lark_wiki"} <= set(found)
 
 
 def test_a_module_with_no_manifest_builder_is_not_a_connector(tmp_path: Path) -> None:
@@ -867,7 +777,7 @@ def test_a_connector_with_no_manifest_handed_to_the_check_is_a_finding() -> None
 def test_a_manifest_for_a_module_that_does_not_exist_is_a_finding() -> None:
     """Delete this and a connector deleted from the package leaves its fixture behind, so the
     guide keeps a section for a source nobody can install."""
-    found = connector_gaps((), (manifests()[0],))
+    found = connector_gaps((), (manifest_of("freshdesk"),))
     assert found == ("freshdesk: a manifest for a connector this package has no module for",)
 
 
@@ -884,7 +794,7 @@ def test_a_connector_with_no_row_is_a_finding() -> None:
     it may read, which is the one question an install has to answer about a source."""
     found = integration_gaps(
         a_connector_guide("| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `x` |"),
-        manifests=(manifests()[0], manifests()[2]),
+        manifests=(manifest_of("freshdesk"), manifest_of("hubspot")),
     )
     assert any(one.startswith("hubspot: no row in the table") for one in found)
 
@@ -897,7 +807,7 @@ def test_a_row_for_a_connector_that_does_not_exist_is_a_finding() -> None:
             "| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |",
             "| `myspace` | `rest` | `wall` | `read_only` | `none` | `x` |",
         ),
-        manifests=(manifests()[0],),
+        manifests=(manifest_of("freshdesk"),),
     )
     assert any(one.startswith("myspace: a row for a connector") for one in found)
 
@@ -910,7 +820,7 @@ def test_a_connector_with_a_row_and_no_section_is_a_finding() -> None:
             "| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |",
             sections=(),
         ),
-        manifests=(manifests()[0],),
+        manifests=(manifest_of("freshdesk"),),
     )
     assert found == (
         "freshdesk: no section of its own, so the table names a connector the guide never "
@@ -927,7 +837,7 @@ def test_a_section_for_a_connector_that_does_not_exist_is_a_finding() -> None:
             "| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |",
             sections=("freshdesk", "myspace"),
         ),
-        manifests=(manifests()[0],),
+        manifests=(manifest_of("freshdesk"),),
     )
     assert any(one.startswith("myspace: a section for a connector") for one in found)
 
@@ -950,7 +860,7 @@ def test_every_checked_cell_is_read_off_the_manifest(index: int, wrong: str, col
     cells = ["`freshdesk`", "`rest`", "`helpdesk`", "`read_only`", "`none`", "`freshdesk`"]
     cells[index] = wrong
     found = integration_gaps(
-        a_connector_guide("| " + " | ".join(cells) + " |"), manifests=(manifests()[0],)
+        a_connector_guide("| " + " | ".join(cells) + " |"), manifests=(manifest_of("freshdesk"),)
     )
     assert len(found) == 1
     assert found[0].startswith(f"freshdesk: {column} reads")
@@ -975,13 +885,13 @@ def test_a_connector_with_no_verified_ceiling_says_so_rather_than_leaving_a_cell
     measured one. Every connector shipping since Google Drive's ceiling was recorded has one, so
     the case is built from a shipped manifest with its ceiling taken away, and the shipped ones are
     held to naming their own."""
-    unmeasured = replace(manifests()[0], ceiling="")
+    unmeasured = replace(manifest_of("freshdesk"), ceiling="")
     # The literal rather than NO_CEILING, which the guide's own cell is compared against: a
     # test asserting the constant against itself is green for every value it could hold.
     assert ceiling_cell(unmeasured) == "none measured"
     assert NO_CEILING == "none measured"
-    assert ceiling_cell(manifests()[1]) == "google_drive"
-    assert ceiling_cell(manifests()[0]) == "freshdesk"
+    assert ceiling_cell(manifest_of("google_drive")) == "google_drive"
+    assert ceiling_cell(manifest_of("freshdesk")) == "freshdesk"
     assert all(one.ceiling for one in manifests())
 
 

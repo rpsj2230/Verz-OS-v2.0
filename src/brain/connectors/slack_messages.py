@@ -45,11 +45,13 @@ Task ids: M11.7.5
 from __future__ import annotations
 
 import re
+import secrets
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, Self
 
+from brain.connectors.ask import AskRows
 from brain.connectors.contract import (
     AccessMode,
     ConnectorContractError,
@@ -60,9 +62,11 @@ from brain.connectors.contract import (
 )
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -527,6 +531,15 @@ CONSOLE: Final = ConsoleForm(
         + ". It is kept in the vault and never shown again."
     ),
     build=built_from_the_console,
+    example=ConnectExample(
+        settings={WORKSPACE_SETTING: "T0123ABCD", DEPARTMENT_SETTING: "operations"},
+        fresh=lambda departments: {
+            WORKSPACE_SETTING: f"T{secrets.token_hex(5).upper()}",
+            DEPARTMENT_SETTING: departments[0],
+        },
+        edit=WORKSPACE_SETTING,
+        edited=lambda: f"T{secrets.token_hex(5).upper()}",
+    ),
 )
 
 APPS_URL: Final = "https://api.slack.com/apps"
@@ -616,4 +629,18 @@ CONNECTOR: Final = ConnectorDeclaration(
     ),
     recorded=Recorded(tested=True),
     reading=SlackReading(),
+    # A person's channels are read live as passages for the question's model step
+    # (`brain.ops.slack_messages_live.SlackPassages`, M11.7.5), not classified.
+    ask=AskRows(by_passages=True),
+    scopes=KeyScopes(
+        request=(
+            "channels:read",
+            "groups:read",
+            "channels:history",
+            "groups:history",
+            "users:read",
+            "users:read.email",
+        ),
+        refuse=("chat:write or any other write scope", "a user token"),
+    ),
 )

@@ -250,15 +250,14 @@ def test_the_freshdesk_ceiling_is_recorded_as_a_ceiling() -> None:
 
 
 #: Sources whose own documentation states the wait somewhere other than `Retry-After`, or not at
-#: all, with where. Listed rather than inferred: a recording that dropped the header to match a
-#: connector would otherwise pass as a vendor that never sends one.
+#: all, with where, as each source's own cassette file declares it. Listed in the files rather than
+#: inferred: a recording that dropped the header to match a connector would otherwise pass as a
+#: vendor that never sends one. Read off the files since 2026-10-05, when a map typed here was a
+#: line every connector PR edited.
 WAIT_NOT_IN_RETRY_AFTER: dict[str, str] = {
-    "hubspot": "no wait header documented; X-HubSpot-RateLimit-* state the allowance",
-    "lark_base": "x-ogw-ratelimit-reset",
-    "lark_wiki": "x-ogw-ratelimit-reset",
-    "google_drive": "none documented; Google asks for exponential backoff",
-    "google_analytics": "none documented; Google asks for exponential backoff",
-    "search_console": "none documented; Google asks for exponential backoff",
+    name: file.wait_not_in_retry_after
+    for name, file in FILES.items()
+    if file.wait_not_in_retry_after
 }
 
 
@@ -280,6 +279,7 @@ def test_a_retry_after_is_present_on_every_rate_limit_response() -> None:
             continue
         assert "Retry-After" in c.headers, f"{c.cid} is a 429 with no Retry-After"
     assert "Retry-After" in next(c for c in CASSETTES if c.cid == "XERO-429").headers
+    assert WAIT_NOT_IN_RETRY_AFTER["lark_base"] == "x-ogw-ratelimit-reset"
     assert exempted_and_seen, "no exempted source has a 429 recording, so the list checks nothing"
 
 

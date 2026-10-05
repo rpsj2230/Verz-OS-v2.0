@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import functools
 import json
 import math
 import re
@@ -175,54 +176,14 @@ CONNECTED_ALREADY: Final = (
 )
 
 # ------------------------------------------------------------------------ the figures
-#: How each source the console connects is filled in, by name. See
-#: `A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN`.
+#: How each source the console connects is filled in, by name: its own declaration's
+#: `ConnectExample.fresh`, given the departments a check may write grants in, so a connector added
+#: is filled in here with nothing typed. See `A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN`.
 FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
     {
-        "freshdesk": lambda: {
-            "domain": f"acceptance-{secrets.token_hex(4)}.freshdesk.com",
-            "department": RESERVED_DEPARTMENTS[0],
-        },
-        "hubspot": lambda: {"portal_id": str(10**8 + secrets.randbelow(9 * 10**8))},
-        "slack_messages": lambda: {
-            "workspace": f"T{secrets.token_hex(5).upper()}",
-            "department": RESERVED_DEPARTMENTS[0],
-        },
-        "cloudflare": lambda: {
-            "account_id": secrets.token_hex(16),
-            "department": RESERVED_DEPARTMENTS[0],
-        },
-        SOURCE: _settings,
-        "google_drive": lambda: {
-            "folder": f"acceptance{secrets.token_hex(8)}",
-            "domain": f"acceptance-{secrets.token_hex(4)}.example",
-            "department": RESERVED_DEPARTMENTS[0],
-            "steward": f"acceptance-steward-{secrets.token_hex(4)}",
-        },
-        "domains": lambda: {
-            "domains": f"acceptance-{secrets.token_hex(4)}.example, "
-            f"acceptance-{secrets.token_hex(4)}.example",
-            "department": RESERVED_DEPARTMENTS[0],
-        },
-        "google_analytics": lambda: {
-            "property": str(10**8 + secrets.randbelow(9 * 10**8)),
-            "department": RESERVED_DEPARTMENTS[0],
-        },
-        "search_console": lambda: {
-            "site": f"sc-domain:acceptance-{secrets.token_hex(4)}.example",
-            "department": RESERVED_DEPARTMENTS[0],
-        },
-        "laravel": lambda: {
-            "schema": f"acceptance_{secrets.token_hex(4)}",
-            "host": f"acceptance-{secrets.token_hex(4)}.invalid",
-            "port": "3306",
-            "private_network": "no",
-            "tls": "verify",
-            "client_rule": f"department = {RESERVED_DEPARTMENTS[0]}",
-            "user_rule": f"department = {RESERVED_DEPARTMENTS[0]}",
-            "max_rows": "500",
-            "timeout_seconds": "10",
-        },
+        name: functools.partial(one.console.example.fresh, RESERVED_DEPARTMENTS)
+        for name, one in shipped().items()
+        if one.console is not None and one.console.example is not None
     }
 )
 

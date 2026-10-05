@@ -107,12 +107,14 @@ import enum
 import inspect
 import math
 import re
+import secrets
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, Self
 
+from brain.connectors.ask import AskEntity, AskRows, each_behind_its_own
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     ConnectorContractError,
@@ -124,9 +126,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -1680,6 +1684,15 @@ CONNECTOR: Final = ConnectorDeclaration(
             "Paste it as one piece. It is kept in the vault and never shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={DOMAIN_SETTING: "example.freshdesk.com", DEPARTMENT_SETTING: "support"},
+            fresh=lambda departments: {
+                DOMAIN_SETTING: f"acceptance-{secrets.token_hex(4)}.freshdesk.com",
+                DEPARTMENT_SETTING: departments[0],
+            },
+            edit=DOMAIN_SETTING,
+            edited=lambda: f"acceptance-{secrets.token_hex(4)}.freshdesk.com",
+        ),
     ),
     read_back=ReadBack(
         reading=read_back_reading,
@@ -1697,4 +1710,24 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=FreshdeskReading(),
     live=FreshdeskLiveLookup(),
+    # Freshdesk declares no field rules, so each field the index keeps, and the body read live
+    # (`LIVE_BODY_FIELD`), is behind its own capability: being told one is a grant of its own.
+    ask=AskRows(
+        scoped_by=DEPARTMENT_SETTING,
+        entities=(
+            AskEntity(
+                entity=TICKET,
+                fields=each_behind_its_own(TICKET, (*projected_field_names(), LIVE_BODY_FIELD)),
+                description=(
+                    "Look up Freshdesk tickets by subject: status, priority, due date and when it "
+                    "last changed"
+                ),
+                named_by="subject",
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("an agent API key with read access",),
+        refuse=("an admin key, which can change SLAs and delete tickets",),
+    ),
 )

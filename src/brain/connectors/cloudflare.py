@@ -80,12 +80,14 @@ from __future__ import annotations
 import enum
 import ipaddress
 import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.connectors.ask import AskEntity, AskRows, each_behind_its_own
 from brain.connectors.contract import (
     ConnectorContractError,
     ConnectorScope,
@@ -94,9 +96,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     ListedUnder,
     PageReply,
     Recorded,
@@ -1139,6 +1143,10 @@ DNS_CHANGES: Final = WriteGrant(
     ),
     not_allowed=THIS_INSTALL_HAS_NOT_ALLOWED_DNS_CHANGES,
     prepares=DnsChangeWrites(),
+    scopes=KeyScopes(
+        request=("DNS Edit",),
+        refuse=("Zone Edit", "any Account permission", "the Global API Key"),
+    ),
 )
 
 
@@ -1276,6 +1284,18 @@ CONNECTOR: Final = ConnectorDeclaration(
             "in the vault and never shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={
+                ACCOUNT_SETTING: "0123456789abcdef0123456789abcdef",
+                DEPARTMENT_SETTING: "operations",
+            },
+            fresh=lambda departments: {
+                ACCOUNT_SETTING: secrets.token_hex(16),
+                DEPARTMENT_SETTING: departments[0],
+            },
+            edit=ACCOUNT_SETTING,
+            edited=lambda: secrets.token_hex(16),
+        ),
     ),
     read_back=ReadBack(
         reading=read_back_reading,
@@ -1297,4 +1317,33 @@ CONNECTOR: Final = ConnectorDeclaration(
     reading=CloudflareReading(),
     live=CloudflareLiveLookup(),
     writes=(DNS_CHANGES,),
+    # Each field behind its own capability, as Freshdesk's are. A record's content, time to live
+    # and proxying (`LIVE_DNS_FIELDS`) are read live and never kept, and are classified like any
+    # field, so being told a record's content is a grant of its own (M11.7.3).
+    ask=AskRows(
+        scoped_by=DEPARTMENT_SETTING,
+        entities=(
+            AskEntity(
+                entity=ZONE,
+                fields=each_behind_its_own(ZONE, (one.name for one in ZONE_FIELDS)),
+                description="Look up Cloudflare zones by domain name: status and account",
+                named_by="name",
+            ),
+            AskEntity(
+                entity=DNS_RECORD,
+                fields=each_behind_its_own(
+                    DNS_RECORD, (*(one.name for one in DNS_RECORD_FIELDS), *LIVE_DNS_FIELDS)
+                ),
+                description=(
+                    "Look up DNS records by name: type and zone, and the content read live from "
+                    "Cloudflare for a reader allowed it"
+                ),
+                named_by="name",
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("Zone Read", "DNS Read", "Analytics Read"),
+        refuse=("DNS Write", "any Edit permission", "the Global API Key"),
+    ),
 )

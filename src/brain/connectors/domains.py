@@ -53,11 +53,13 @@ Task ids: M11.7.4
 from __future__ import annotations
 
 import re
+import secrets
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, Self
 
+from brain.connectors.ask import AskEntity, AskRows, each_behind_its_own
 from brain.connectors.contract import (
     AccessMode,
     ConnectorContractError,
@@ -67,6 +69,7 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
@@ -645,6 +648,18 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.NONE,
+    example=ConnectExample(
+        settings={DOMAINS_SETTING: "example.com, example.org", DEPARTMENT_SETTING: "operations"},
+        fresh=lambda departments: {
+            DOMAINS_SETTING: (
+                f"acceptance-{secrets.token_hex(4)}.example, "
+                f"acceptance-{secrets.token_hex(4)}.example"
+            ),
+            DEPARTMENT_SETTING: departments[0],
+        },
+        edit=DOMAINS_SETTING,
+        edited=lambda: f"acceptance-{secrets.token_hex(4)}.example",
+    ),
 )
 
 #: The screens that connect it: gather the list, then type it here.
@@ -722,4 +737,21 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=DomainsReading(),
     live=DomainsLiveLookup(),
+    # A domain's kept fields and the three read live, each behind its own capability (M11.7.4):
+    # a domain is reached with `read:domain` in the connection's department, and each fact a
+    # person is told is a further grant. Keyless, so it declares no scopes and has no slot.
+    ask=AskRows(
+        scoped_by=DEPARTMENT_SETTING,
+        entities=(
+            AskEntity(
+                entity=DOMAIN,
+                fields=each_behind_its_own(DOMAIN, (*(one.name for one in FIELDS), *LIVE_ONLY)),
+                description=(
+                    "Look up the agency's domains by name: when each expires and its registration "
+                    "status, and its registrar and whether its site answers, read live"
+                ),
+                named_by="name",
+            ),
+        ),
+    ),
 )

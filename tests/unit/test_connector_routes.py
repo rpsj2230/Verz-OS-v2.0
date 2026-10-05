@@ -121,6 +121,7 @@ from brain.ops.connector_sync import (
 )
 from brain.ops.credentials import KEY_FIELD, Credentials, VaultState
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
+from tests.fixtures.connector_examples import example_settings, identifier
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     AUDIENCE,
@@ -152,41 +153,6 @@ SECOND_FACTOR: Final[Mapping[str, object]] = {"amr": ["otp"]}
 
 #: Far outside any plausible wall clock. See `CLAUDE.md` on a fixture with a date in it.
 LONG_AGO: Final = datetime(2019, 1, 1, tzinfo=UTC)
-
-#: One identifier per connectable source, shaped as the source's own would be and naming nobody.
-IDENTIFIERS: Final[Mapping[str, str]] = {
-    "xero": "11111111-2222-3333-4444-555555555555",
-    "hubspot": "12345678",
-    "freshdesk": "example.freshdesk.com",
-    "cloudflare": "0123456789abcdef0123456789abcdef",
-    "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
-    "google_analytics": "123456789",
-    "search_console": "sc-domain:example.com",
-    "laravel": "portal",
-    "domains": "example.com, example.org",
-    "slack_messages": "T0123ABCD",
-}
-
-#: The settings after the first that a source asks for, for the sources that ask for more than one.
-FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
-    "freshdesk": {"department": "support"},
-    "cloudflare": {"department": "operations"},
-    "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
-    "domains": {"department": "operations"},
-    "google_analytics": {"department": "marketing"},
-    "search_console": {"department": "marketing"},
-    "laravel": {
-        "host": "db.example.invalid",
-        "port": "3306",
-        "private_network": "no",
-        "tls": "verify",
-        "client_rule": "department = sales",
-        "user_rule": "department = operations",
-        "max_rows": "500",
-        "timeout_seconds": "10",
-    },
-    "slack_messages": {"department": "operations"},
-}
 
 
 def _grant(capability: Any, scope: Scope) -> Grant:
@@ -244,11 +210,11 @@ class NoDatabase:
 
 
 def settings_for(name: str) -> dict[str, str]:
-    """The settings a declared form takes, and none for a source with no form."""
+    """The settings a declared form takes, as its declaration's example gives them, and none for a
+    source with no form."""
     if name not in DECLARED_FORMS:
         return {}
-    first = DECLARED_FORMS[name].settings[0].name
-    return {first: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
+    return example_settings(name)
 
 
 def a_connection(
@@ -452,7 +418,7 @@ def test_a_reader_is_told_which_sources_are_connected_and_what_each_may_read(
     assert xero["trust"]["serving"] is False
     assert xero["trust"]["health"] == ""
     assert xero["trust"]["credential"] == KEY_HELD
-    assert IDENTIFIERS["xero"] in xero["trust"]["reaches"]
+    assert identifier("xero") in xero["trust"]["reaches"]
     assert xero["may_disconnect"] is False
     assert all(one["may_disconnect"] for one in get(client, "u_admin").json()["connectors"])
 
@@ -781,9 +747,12 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
     # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
-    # own. Laravel's form is offered since M11.6.1 and Drive's since M11.6.7, because each reads.
+    # own, and a declared form this install cannot read yet waits, with no steps.
     served = {one["name"]: one for one in body["not_connectable"]}
-    assert set(served) == {"lark_base", "lark_wiki"}
+    assert set(served) == set(NOT_FROM_THE_CONSOLE)
+    assert {"lark_base", "lark_wiki"} <= set(served)
+    for name in set(served) & set(DECLARED_FORMS):
+        assert served[name]["steps"] == [], name
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -801,18 +770,9 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
     assert [one["name"] for one in holder["connectors"]] == [
         one["name"] for one in without["connectors"]
     ]
-    assert {one["name"]: one["may_connect"] for one in narrow["connectable"]} == {
-        "xero": True,
-        "hubspot": False,
-        "freshdesk": False,
-        "cloudflare": False,
-        "domains": False,
-        "google_analytics": False,
-        "google_drive": False,
-        "search_console": False,
-        "laravel": False,
-        "slack_messages": False,
-    }
+    may = {one["name"]: one["may_connect"] for one in narrow["connectable"]}
+    assert may == {name: name == "xero" for name in CONNECTABLE}
+    assert (may["xero"], may["hubspot"]) == (True, False)
 
 
 # ------------------------------------------------------------------ what the vault said
@@ -883,7 +843,7 @@ def test_an_administrator_connects_a_source_and_its_key_is_kept_in_its_slot_and_
     store a digest of nothing, write the key somewhere nothing looks, or write it unrecorded."""
     records, vault, writes = Records(), Vault(), Recorded()
     attach(app, records, vault, writes)
-    sent = connection_body(settings={"tenant_id": f"  {IDENTIFIERS['xero']}\n"})
+    sent = connection_body(settings={"tenant_id": f"  {identifier('xero')}\n"})
     answered = post(client, "u_admin", LISTING, sent)
 
     assert answered.status_code == 200

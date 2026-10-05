@@ -28,10 +28,10 @@ Task ids: M11.7.7
 from __future__ import annotations
 
 import json
-import secrets
 from collections.abc import Callable, Mapping
 from typing import Final
 
+from brain.connectors.declaration import shipped
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
 from brain.ops.acceptance_checks_connector_framework import _credential, _form
 from brain.ops.acceptance_checks_connectors import _nothing_kept
@@ -52,19 +52,13 @@ A_CONNECTED_SOURCE_IS_JUDGED_ONLY: Final = (
     "connect, edit or switch it off: the install's own connection is never touched."
 )
 
-#: What each source's edit changes, by name: a setting a person would change, and its new value.
-#: Made up for the run, in the shape the source's own connection accepts.
+#: What each source's edit changes, by name: a setting a person would change, and its new value,
+#: from the source's own declaration (`ConnectExample.edit`), made up for the run in the shape the
+#: source's own connection accepts.
 EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
-    "xero": ("tenant_id", lambda: "22222222-3333-4444-5555-" + secrets.token_hex(6)),
-    "hubspot": ("portal_id", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
-    "freshdesk": ("domain", lambda: f"acceptance-{secrets.token_hex(4)}.freshdesk.com"),
-    "cloudflare": ("account_id", lambda: secrets.token_hex(16)),
-    "google_drive": ("folder", lambda: f"acceptance{secrets.token_hex(8)}"),
-    "google_analytics": ("property", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
-    "search_console": ("site", lambda: f"sc-domain:acceptance-{secrets.token_hex(4)}.example"),
-    "laravel": ("client_rule", lambda: "status = active"),
-    "domains": ("domains", lambda: f"acceptance-{secrets.token_hex(4)}.example"),
-    "slack_messages": ("workspace", lambda: f"T{secrets.token_hex(5).upper()}"),
+    name: (one.console.example.edit, one.console.example.edited)
+    for name, one in shipped().items()
+    if one.console is not None and one.console.example is not None
 }
 
 #: A credential in the wrong shape for each kind that takes one, which the connect route must

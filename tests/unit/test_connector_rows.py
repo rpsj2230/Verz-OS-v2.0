@@ -7,7 +7,7 @@ whoever reaches the row. The questions are held to the connected sources alone. 
 agent install reads is held to the connections: serving under this release's declaration and
 quarantined under another.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.1.6
 """
 
 from __future__ import annotations
@@ -17,15 +17,19 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from brain.connectors import freshdesk, xero
+from brain.connectors.ask import AskEntity, AskRows, AskRowsError, each_behind_its_own
+from brain.connectors.declaration import shipped
 from brain.connectors.registry import ConnectorState
 from brain.knowledge.connector_rows import (
+    ANSWERED_BY_PASSAGES,
+    CONNECTOR_ROW_DESCRIPTIONS,
     CONNECTOR_ROW_ENTITIES,
     NAMED_BY,
     SCOPED_BY,
     connected_questions,
-    freshdesk_classifications,
-    xero_classifications,
 )
 from brain.tools.startup import SOURCE_ROW_ENTITIES, connector_row_sources
 
@@ -33,11 +37,65 @@ from brain.tools.startup import SOURCE_ROW_ENTITIES, connector_row_sources
 LONG_AGO = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
 
 
+def test_the_maps_are_read_off_every_connector_s_own_declaration() -> None:
+    """`THE_ROWS_ARE_READ_OFF_THE_DECLARATIONS`. Every connector declaring classified Ask rows is in
+    every map, with its own scope field, entities, descriptions and named fields, and every one
+    declaring passages is a passage source, read here off the raw declarations rather than the
+    maps. Xero's invoice, HubSpot's unnamed contact and Lark Wiki's passages are the anchors, so an
+    assembly that found nothing or dropped one connector fails.
+
+    Delete this and the assembly can drop a connector, or a field the connector names, and Ask
+    tells a reader of it nothing was found, which is the answer for a record that does not exist."""
+    declared = {name: one.ask for name, one in shipped().items() if one.ask is not None}
+    classified = {name for name, rows in declared.items() if rows.entities}
+
+    assert set(CONNECTOR_ROW_ENTITIES) == set(SCOPED_BY) == set(CONNECTOR_ROW_DESCRIPTIONS)
+    assert set(CONNECTOR_ROW_ENTITIES) == classified
+    assert {name for name, rows in declared.items() if rows.by_passages} == ANSWERED_BY_PASSAGES
+    for name in classified:
+        rows = declared[name]
+        assert SCOPED_BY[name] == rows.scoped_by
+        assert [one.entity for one in CONNECTOR_ROW_ENTITIES[name]] == [
+            one.entity for one in rows.entities
+        ]
+        for entity in rows.entities:
+            assert CONNECTOR_ROW_DESCRIPTIONS[name][entity.entity] == entity.description
+            assert NAMED_BY.get((name, entity.entity), "") == entity.named_by
+    assert {"xero", "freshdesk", "hubspot"} <= classified
+    assert NAMED_BY[(xero.CONNECTOR_NAME, xero.ENTITY_INVOICE)] == "invoice_number"
+    assert ("hubspot", "hubspot_contact") not in NAMED_BY
+    assert "lark_wiki" in ANSWERED_BY_PASSAGES
+    assert "lark_wiki" not in CONNECTOR_ROW_ENTITIES
+
+
+def test_ask_rows_are_either_classified_or_passages_and_name_only_fields_they_classify() -> None:
+    """Each refusal beside the declaration it narrows, which builds. Delete this and a connector can
+    declare rows that are both classified and passages, or name a record by a field it never
+    classifies, and the question shape built over it matches nothing."""
+    fields = each_behind_its_own("widget", ("name", "status"))
+    one = AskEntity(entity="widget", fields=fields, description="Look up widgets", named_by="name")
+
+    assert AskRows(scoped_by="department", entities=(one,)).entities == (one,)
+    assert AskRows(by_passages=True).by_passages
+    with pytest.raises(AskRowsError):
+        AskRows(scoped_by="department", entities=(one,), by_passages=True)
+    with pytest.raises(AskRowsError):
+        AskRows()
+    with pytest.raises(AskRowsError):
+        AskRows(entities=(one,))
+    with pytest.raises(AskRowsError):
+        AskEntity(entity="widget", fields=fields, description="Look up widgets", named_by="colour")
+    with pytest.raises(AskRowsError):
+        AskEntity(entity="gadget", fields=fields, description="Look up gadgets")
+    with pytest.raises(AskRowsError):
+        AskEntity(entity="widget", fields=fields, description="Look up", live_only=("colour",))
+
+
 def test_every_field_xero_classifies_is_classified_by_the_capability_xero_names() -> None:
     """Held against `xero.XERO_FIELD_RULES`. Delete this and the Ask answer could require a
     different capability for an invoice's amount than the connector's own policy says, which is a
     second place deciding who may be told it."""
-    for classification in xero_classifications():
+    for classification in CONNECTOR_ROW_ENTITIES[xero.CONNECTOR_NAME]:
         declared = {
             rule.field: (rule.required_capability, rule.classification)
             for rule in xero.XERO_FIELD_RULES
@@ -57,7 +115,7 @@ def test_every_field_freshdesk_keeps_or_reads_live_is_classified_behind_its_own_
     """Held against the fields the Freshdesk index keeps and the body its live read returns. Delete
     this and a field can go unclassified, withheld from everybody with nothing saying why, or the
     ticket's body can be answered under the row's capability alone."""
-    [ticket] = freshdesk_classifications()
+    [ticket] = CONNECTOR_ROW_ENTITIES[freshdesk.FRESHDESK]
     kept = set(freshdesk.projected_field_names())
     columns = {rule.column: rule.required_capability.value for rule in ticket.rules}
     read = kept | {freshdesk.LIVE_BODY_FIELD}

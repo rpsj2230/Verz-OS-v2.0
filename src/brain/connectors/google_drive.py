@@ -231,6 +231,7 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -238,6 +239,7 @@ from types import MappingProxyType
 from typing import Any, Final, Protocol, final
 from urllib.parse import urlencode
 
+from brain.connectors.ask import AskRows
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     AccessMode,
@@ -251,10 +253,12 @@ from brain.connectors.contract import (
 )
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -2840,6 +2844,22 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.KEY_FILE,
+    example=ConnectExample(
+        settings={
+            FOLDER_SETTING: "1AbCdEfGhIjKlMnOpQrStUv",
+            DOMAIN_SETTING: "example.com",
+            DEPARTMENT_SETTING: "operations",
+            STEWARD_SETTING: "u_steward",
+        },
+        fresh=lambda departments: {
+            FOLDER_SETTING: f"acceptance{secrets.token_hex(8)}",
+            DOMAIN_SETTING: f"acceptance-{secrets.token_hex(4)}.example",
+            DEPARTMENT_SETTING: departments[0],
+            STEWARD_SETTING: f"acceptance-steward-{secrets.token_hex(4)}",
+        },
+        edit=FOLDER_SETTING,
+        edited=lambda: f"acceptance{secrets.token_hex(8)}",
+    ),
 )
 
 
@@ -2985,4 +3005,11 @@ CONNECTOR: Final = ConnectorDeclaration(
     ),
     recorded=Recorded(tested=True),
     reading=DriveReading(),
+    # Its folder's files are read live as passages for the question's model step
+    # (`brain.ops.drive_passages`, M11.6.7), not classified.
+    ask=AskRows(by_passages=True),
+    scopes=KeyScopes(
+        request=("Viewer on the one folder shared with it",),
+        refuse=("domain-wide delegation",),
+    ),
 )

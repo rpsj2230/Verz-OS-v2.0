@@ -9,13 +9,17 @@ Task ids: M11.7.2
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, timedelta
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.connectors import search_console
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import CallOutcome, classify
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -311,8 +315,39 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Search Console's read-back reading, as the site list."""
+    reply = search_console.Reply(
+        status=recorded.status, headers=recorded.headers, body=recorded.body
+    )
+    return answered(SOURCE, search_console.listing_for(SITE), reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "SC-200-sites": Verification.FOUND,
+        # A report's calls and every refusal hold no site list, and a list without the connected
+        # site never proves it gone: see `search_console.A_SITE_LIST_CANNOT_PROVE_ABSENCE`.
+        "SC-200-days": Verification.INCONCLUSIVE,
+        "SC-200-totals": Verification.INCONCLUSIVE,
+        "SC-200-top-queries": Verification.INCONCLUSIVE,
+        "SC-200-top-pages": Verification.INCONCLUSIVE,
+        "SC-200-sitemaps": Verification.INCONCLUSIVE,
+        "SC-403-site": Verification.INCONCLUSIVE,
+        "SC-429-query": Verification.INCONCLUSIVE,
+        "SC-503-query": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    wait_not_in_retry_after="none documented; Google asks for exponential backoff",
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

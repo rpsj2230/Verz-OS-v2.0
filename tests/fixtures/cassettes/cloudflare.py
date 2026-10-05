@@ -11,11 +11,15 @@ Task ids: M11.7.3, M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.connectors import cloudflare
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.throttle import CallOutcome
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -366,8 +370,42 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Cloudflare's read-back reading, as the listing it was made against."""
+    operation = (
+        cloudflare.dns_records_operation()
+        if "/dns_records" in recorded.request
+        else cloudflare.zones_operation()
+    )
+    return answered(SOURCE, operation, status=recorded.status, body=recorded.body)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "CF-200-zones": Verification.FOUND,
+        "CF-200-zones-full-page": Verification.FOUND,
+        "CF-200-dns-records": Verification.FOUND,
+        # An answered last page with no records is the one complete empty reading.
+        "CF-200-dns-records-empty": Verification.ABSENT,
+        # One zone, one record and a GraphQL answer are not listings, so they prove nothing absent.
+        "CF-200-zone": Verification.INCONCLUSIVE,
+        "CF-200-dns-record": Verification.INCONCLUSIVE,
+        "CF-200-security-events": Verification.INCONCLUSIVE,
+        "CF-200-graphql-errors": Verification.INCONCLUSIVE,
+        "CF-429": Verification.INCONCLUSIVE,
+        "CF-403": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    recorded_under={"account_id": ACCOUNT},
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

@@ -51,6 +51,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.session import make_session_factory
 from brain.setup_routes import steward_of
 from brain.setup_wizard import StepId, answer, apply_install, new_draft, steward_answer
+from tests.fixtures.connector_examples import EXAMPLES
 from tests.fixtures.console_http import headers
 from tests.fixtures.retirable import has_pgvector
 from tests.fixtures.scratch_postgres import migrate, run, sql
@@ -68,34 +69,9 @@ STEWARD = "u_wide"
 SECOND = "u_narrow"
 CONNECTING = "u_elsewhere"
 
-#: One identifier per connectable source, as `tests/unit/test_connector_routes.py` names them.
-SETTINGS: Mapping[str, Mapping[str, str]] = {
-    "xero": {"tenant_id": "11111111-2222-3333-4444-555555555555"},
-    "hubspot": {"portal_id": "12345678"},
-    "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
-    "cloudflare": {"account_id": "0123456789abcdef0123456789abcdef", "department": "operations"},
-    "google_drive": {
-        "folder": "1AbCdEfGhIjKlMnOpQrStUv",
-        "domain": "example.com",
-        "department": "operations",
-        "steward": "u_steward",
-    },
-    "domains": {"domains": "example.com, example.org", "department": "operations"},
-    "google_analytics": {"property": "123456789", "department": "marketing"},
-    "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
-    "laravel": {
-        "schema": "portal",
-        "host": "db.example.invalid",
-        "port": "3306",
-        "private_network": "no",
-        "tls": "verify",
-        "client_rule": "department = sales",
-        "user_rule": "department = operations",
-        "max_rows": "500",
-        "timeout_seconds": "10",
-    },
-    "slack_messages": {"workspace": "T0123ABCD", "department": "operations"},
-}
+#: Every declared form's settings, as each connector's own declaration gives them
+#: (`ConnectExample.settings`), so a connector added is covered here with nothing typed.
+SETTINGS: Mapping[str, Mapping[str, str]] = EXAMPLES
 
 FINANCE = "finance"
 
@@ -163,6 +139,7 @@ def test_a_source_declares_each_entity_it_reaches_as_its_row_and_its_fields_and_
         assert list(declared) == sorted(declared)
         assert all(one.startswith("read:") for one in declared)
     assert set(SETTINGS) == set(DECLARED_FORMS)
+    assert {"xero", "google_drive"} <= set(SETTINGS)
 
 
 def test_the_same_person_is_refused_unless_said_and_said_only_of_an_administrator() -> None:

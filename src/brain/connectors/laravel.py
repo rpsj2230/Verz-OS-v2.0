@@ -138,6 +138,7 @@ from __future__ import annotations
 import enum
 import ipaddress
 import re
+import secrets
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -145,6 +146,7 @@ from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
+from brain.connectors.ask import AskEntity, AskRows, of_entity
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     CREDENTIAL_ATTRIBUTE_RE,
@@ -162,10 +164,12 @@ from brain.connectors.contract import (
 )
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
     DatabaseLogin,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -2268,6 +2272,32 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.DATABASE_USER,
+    example=ConnectExample(
+        settings={
+            SCHEMA_SETTING: "portal",
+            HOST_SETTING: "db.example.invalid",
+            PORT_SETTING: "3306",
+            PRIVATE_NETWORK_SETTING: "no",
+            TLS_SETTING: "verify",
+            CLIENT_RULE_SETTING: "department = sales",
+            USER_RULE_SETTING: "department = operations",
+            MAX_ROWS_SETTING: "500",
+            TIMEOUT_SETTING: "10",
+        },
+        fresh=lambda departments: {
+            SCHEMA_SETTING: f"acceptance_{secrets.token_hex(4)}",
+            HOST_SETTING: f"acceptance-{secrets.token_hex(4)}.invalid",
+            PORT_SETTING: "3306",
+            PRIVATE_NETWORK_SETTING: "no",
+            TLS_SETTING: "verify",
+            CLIENT_RULE_SETTING: f"department = {departments[0]}",
+            USER_RULE_SETTING: f"department = {departments[0]}",
+            MAX_ROWS_SETTING: "500",
+            TIMEOUT_SETTING: "10",
+        },
+        edit=CLIENT_RULE_SETTING,
+        edited=lambda: "status = active",
+    ),
 )
 
 
@@ -2400,4 +2430,33 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=LaravelReading(),
     live=LaravelLiveLookup(),
+    # Compiled from `LARAVEL_FIELD_RULES`; the department both views keep is the scope column,
+    # read under the row's own capability (`brain.knowledge.connector_rows`).
+    ask=AskRows(
+        scoped_by="department",
+        entities=(
+            AskEntity(
+                entity=ENTITY_CLIENT,
+                fields=of_entity(LARAVEL_FIELD_RULES, ENTITY_CLIENT),
+                description=(
+                    "Look up clients in the company's own database by name: status, department "
+                    "and account manager, and the contract value read live for a reader allowed it"
+                ),
+                named_by="name",
+            ),
+            AskEntity(
+                entity=ENTITY_USER,
+                fields=of_entity(LARAVEL_FIELD_RULES, ENTITY_USER),
+                description=(
+                    "Look up staff records in the company's own database by name: department, "
+                    "status and when the record last changed"
+                ),
+                named_by="display_name",
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("SELECT on the allowlisted views only",),
+        refuse=("SELECT on tables", "any write"),
+    ),
 )
