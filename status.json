@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T11:22:39.863535+00:00",
-  "commit": "fc9dd89d",
-  "commit_subject": "The queue is opened on the worker's own connection everywhere, so a queued upload and the install's queue check stop being refused on every install (#320)",
+  "generated_at": "2026-10-05T11:25:54.887934+00:00",
+  "commit": "8d5589c5",
+  "commit_subject": "Items 138 to 141: Laravel's departments, the widget's answers, Teams and Telegram (#319)",
   "total": 1584,
   "done": 472,
   "percent": 29.8,
