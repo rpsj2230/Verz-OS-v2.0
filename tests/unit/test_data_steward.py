@@ -85,8 +85,12 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
     "search_console": {"site": "sc-domain:example.com", "department": "marketing"},
     "laravel": {
         "schema": "portal",
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
         "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
+        "user_rule": "department = operations",
         "max_rows": "500",
         "timeout_seconds": "10",
     },

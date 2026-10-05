@@ -40,7 +40,13 @@ from brain.connectors.google_analytics import manifest as analytics_manifest
 from brain.connectors.google_drive import DriveConnection
 from brain.connectors.google_drive import manifest as drive_manifest
 from brain.connectors.hubspot import HubSpotConnection, hubspot_manifest
-from brain.connectors.laravel import LaravelConnection, ReadBounds, laravel_manifest
+from brain.connectors.laravel import (
+    DatabaseTls,
+    LaravelConnection,
+    ReadBounds,
+    TlsMode,
+    laravel_manifest,
+)
 from brain.connectors.lark_base import FieldBinding, FieldKind, LarkBaseTable
 from brain.connectors.lark_base import manifest as lark_base_manifest
 from brain.connectors.lark_wiki import SpaceDeclaration
@@ -236,10 +242,15 @@ def manifests() -> tuple[ConnectorManifest, ...]:
         ),
         laravel_manifest(
             LaravelConnection(
-                schema="portal", bounds=ReadBounds(max_rows=200, timeout_seconds=5.0)
+                schema="portal",
+                bounds=ReadBounds(max_rows=200, timeout_seconds=5.0),
+                host="db.example.invalid",
+                port=3306,
+                private_network=False,
+                tls=DatabaseTls(TlsMode.VERIFIED),
             ),
-            ref=ref("connectors/creds/laravel_readonly"),
-            visibility={"client": VISIBILITY, "user": VISIBILITY},
+            ref=ref("connectors/creds/laravel"),
+            visibility={"laravel_client": VISIBILITY, "laravel_user": VISIBILITY},
         ),
         lark_base_for("maintenance"),
         lark_wiki_manifest(

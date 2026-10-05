@@ -644,11 +644,22 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:SourceReading.allowance_spent": Repeat.READS,
         "brain.connectors.declaration:SourceReading.projected": Repeat.READS,
         "brain.connectors.declaration:ReadsListedUnder.listed_under": Repeat.READS,
+        # A database's views read the same way (M11.6.1): one bounded SELECT per view, in a session
+        # that is read-only, so a repeat is a second read of a database this connector cannot write.
+        "brain.connectors.declaration:ViewReading.entities": Repeat.READS,
+        "brain.connectors.declaration:ViewReading.refresh_interval": Repeat.READS,
+        "brain.connectors.declaration:ViewReading.read": Repeat.READS,
+        "brain.connectors.declaration:ViewReading.projected": Repeat.READS,
+        "brain.ops.laravel_reader:Cursor.execute": Repeat.READS,
+        "brain.ops.laravel_reader:Cursor.fetchall": Repeat.READS,
+        "brain.ops.laravel_reader:Session.cursor": Repeat.READS,
+        "brain.ops.laravel_reader:Session.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         # A run's vault lease (0093): a child token minted per attempt that expires at its own
         # TTL, read through once and revoked at the attempt's end, where a second revoke finds it
         # gone. See `brain.ops.connector_lease`.
         "brain.ops.connector_sync_run:ConnectorKeys.lease": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.ops.connector_sync_run:KeyLease.key": Repeat.READS,
+        "brain.ops.connector_sync_run:KeyLease.user": Repeat.READS,
         "brain.ops.connector_sync_run:KeyLease.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.connector_sync_run:RunTokenVault.mint_role_token": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.ops.connector_sync_run:RunTokenVault.holding": Repeat.READS,

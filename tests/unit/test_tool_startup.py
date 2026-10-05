@@ -375,6 +375,7 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         "freshdesk",
         "google_analytics",
         "hubspot",
+        "laravel",
         "search_console",
         "xero",
     )
@@ -391,6 +392,8 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         ("hubspot", "hubspot_contact"),
         ("hubspot", "hubspot_deal"),
         ("search_console", "search_site"),
+        ("laravel", "laravel_client"),
+        ("laravel", "laravel_user"),
     }
     assert classification_for("invoice", source="xero") == xero_invoices
 

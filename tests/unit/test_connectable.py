@@ -73,8 +73,12 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "google_analytics": {"department": "marketing"},
     "search_console": {"department": "marketing"},
     "laravel": {
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
         "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
+        "user_rule": "department = operations",
         "max_rows": "500",
         "timeout_seconds": "10",
     },
@@ -89,9 +93,6 @@ KEY_KIND_WITHOUT_SCOPES: Final = {
     "google_drive": ("viewer", "delegation"),
     "laravel": ("select", "tables"),
 }
-
-#: The row a source's slot has in the leased-path table, where it is not the source's own name.
-SLOT_ROWS: Final = {"laravel": "laravel_readonly"}
 
 
 def in_scope(identifier: str, selectors: tuple[str, ...]) -> bool:
@@ -168,7 +169,7 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
     row = next(
         line
         for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
-        if line.startswith(f"| `connectors/creds/{SLOT_ROWS.get(name, name)}`")
+        if line.startswith(f"| `connectors/creds/{name}`")
     )
     requested, refused = row.split("|")[3], row.split("|")[4]
     scopes = re.findall(r"`([a-z.]+)`", requested)
@@ -207,7 +208,8 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every source offered today:
     each has a reading or a live lookup, and a recorded ceiling. Delete this and the screen can
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
-    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
+    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling. Laravel is
+    offered since M11.6.1 because it reads, and by this rule alone."""
     declared = shipped()
     assert set(CONNECTABLE) == {
         "cloudflare",
@@ -215,6 +217,7 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
         "freshdesk",
         "google_analytics",
         "hubspot",
+        "laravel",
         "search_console",
         "xero",
     }

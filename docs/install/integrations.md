@@ -43,11 +43,13 @@ account or a bot token: the source is answering as us, and it never sees the per
 What stands between a person and a row in those sources is this system's own entitlements and
 nothing else. Read that as a requirement on how you grant, not as a gap to be worked around.
 
-**What it will run against.** Two of the nine have no measured rate ceiling, and the ones that
-do are the source's published limit rather than a number chosen here. Where the ceiling belongs
-to your own account rather than to a subscription, spending it is your outage: the accounting
-connector's allowance is five thousand calls a day for your whole organisation, shared with
-every other integration you run, and it does not refill until midnight.
+**What it will run against.** One of the eleven has no rate ceiling recorded. Every other is the
+source's published limit rather than a number chosen here, except your own Laravel database's
+and the domains connector's, for which nobody publishes one figure: each is this product's own
+pace, and says so. Where the ceiling belongs to your own account rather than to a subscription,
+spending it is your outage: the accounting connector's allowance is five thousand calls a day for
+your whole organisation, shared with every other integration you run, and it does not refill until
+midnight.
 
 ## The table
 
@@ -66,7 +68,7 @@ exists, because a row for something that is gone reads as coverage.
 | `google_analytics` | `rest` | `analytics_property` | `read_only` | `none` | `google_analytics` |
 | `google_drive` | `rest` | `folder` | `read_only` | `none` | none measured |
 | `hubspot` | `rest` | `portal` | `read_only` | `none` | `hubspot` |
-| `laravel` | `database` | `view` | `read_only` | `none` | none measured |
+| `laravel` | `database` | `view` | `read_only` | `none` | `laravel` |
 | `lark_base` | `rest` | `base_table` | `read_only` | `none` | `lark_base` |
 | `lark_wiki` | `rest` | `wiki_space` | `read_only` | `none` | `lark_base` |
 | `search_console` | `rest` | `search_site` | `read_only` | `none` | `search_console` |
@@ -234,8 +236,17 @@ you change it, reviewable by you without reading any of this system's code.
 views is inside your database and not visible from here. This connector refuses to ask for
 anything else; it cannot stop a grant that is wider than it needs.
 
-**No measured ceiling**, because the limit is your own database's capacity rather than a
-vendor's published figure. Reads are bounded by a row count and a timeout supplied at connect.
+**Where the database is, you say.** The server's address and port have no default. Let this
+system's server reach the database on that port only: allow the server's own address in the
+database's firewall or security group, or, where the database is on a private network, run an
+SSH tunnel from this system's server to a machine that reaches it and give the tunnel's local end
+with the private network setting at yes. An address inside a private network is refused unless
+that setting says so, by the same rule every other source's address passes.
+
+**This product's own pace, not a measured ceiling**, because the limit is your own database's
+capacity rather than a vendor's published figure: thirty bounded reads a minute across the worker
+and every question together. Every read is also bounded by the row count and the timeout you
+give at connect, in a read-only session, one connection per read.
 
 ## `lark_base`
 

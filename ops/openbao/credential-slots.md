@@ -18,7 +18,7 @@ later" is a scope nobody removes.
 | `connectors/creds/lark_wiki` | Lark Wiki | `wiki:wiki:readonly` | Anything under `docs:document` that would allow editing |
 | `connectors/creds/freshdesk` | Freshdesk | Agent key, read scope | An admin key. An admin key can change SLAs and delete tickets |
 | `connectors/creds/hubspot` | HubSpot | `crm.objects.contacts.read`, `crm.objects.deals.read` | `crm.objects.*.write`, and anything touching `settings` |
-| `connectors/creds/laravel_readonly` | Laravel MySQL | A database user with SELECT on the allowlisted views only | SELECT on tables. The views are the contract; tables change shape without warning |
+| `connectors/creds/laravel` | Laravel MySQL | A database user with SELECT on the allowlisted views only | SELECT on tables. The views are the contract; tables change shape without warning |
 | `connectors/creds/cloudflare_dns_changes` | Cloudflare, approved DNS changes | A second API token with DNS Edit over the same zones, given only to allow approved DNS changes | Zone Edit, any Account permission and the Global API Key. The read token never holds a write permission |
 | `connectors/creds/cloudflare` | Cloudflare | An API token with Zone Read, DNS Read and Analytics Read over the one account's zones | DNS Write, any Edit permission and the Global API Key. A DNS change is only ever prepared for a person to approve |
 | `connectors/creds/google_analytics` | Google Analytics | A service account's key file, the account a Viewer on the one property, asking only for `analytics.readonly` | `analytics.edit`, and domain-wide delegation. It reads one property as itself |

@@ -109,6 +109,10 @@ class Lease:
             raise ConnectorKeyAbsentError("no key is kept here")
         return self.given
 
+    def user(self) -> str:
+        # A write's key is one key; the database branch that asks for a user is tested elsewhere.
+        raise AssertionError("a write's lease was asked for a user")
+
     def close(self, now: datetime) -> LeaseOutcome:
         self.closed.append(now)
         return LeaseOutcome.REVOKED

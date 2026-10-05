@@ -175,6 +175,13 @@ class _Lease:
             raise ConnectorKeyAbsentError("no key is kept for this grant")
         return self.given
 
+    def user(self) -> str:
+        from brain.ops.connector_sync import NO_KEY
+        from brain.ops.connector_sync_run import ConnectorKeyAbsentError
+
+        # A Cloudflare token is one key, so its slot keeps no user beside it (M11.6.1).
+        raise ConnectorKeyAbsentError(NO_KEY)
+
     def close(self, now: datetime) -> LeaseOutcome:
         from brain.ops.connector_lease import LeaseOutcome
 

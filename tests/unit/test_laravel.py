@@ -33,6 +33,7 @@ Task ids: M11.6.1
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -67,12 +68,14 @@ from brain.connectors.laravel import (
     REASON_FOR_FAULT,
     BoundedRead,
     DatabaseFault,
+    DatabaseTls,
     LaravelConnection,
     LaravelDegraded,
     LaravelError,
     LaravelOutcome,
     LaravelReply,
     ReadBounds,
+    TlsMode,
     ViewReply,
     assert_builds_no_sql,
     assert_columns_are_selectable,
@@ -118,7 +121,7 @@ NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
 SCHEMA = "portal"
 
-REF = SecretRef(path="connectors/creds/laravel_readonly", role=VaultRole.APPLICATION)
+REF = SecretRef(path="connectors/creds/laravel", role=VaultRole.APPLICATION)
 
 MONEY_CANARY = CANARIES["client.contract_value"]
 
@@ -134,8 +137,20 @@ def bounds(*, max_rows: int = 200, timeout_seconds: float = 5.0) -> ReadBounds:
     return ReadBounds(max_rows=max_rows, timeout_seconds=timeout_seconds)
 
 
+#: Where the test's database server is: a name under `.invalid`, which resolves nowhere, so nothing
+#: here could reach a real server even by mistake.
+HOST = "db.example.invalid"
+
+
 def connection(**overrides: Any) -> LaravelConnection:
-    settings: dict[str, Any] = {"schema": SCHEMA, "bounds": bounds()}
+    settings: dict[str, Any] = {
+        "schema": SCHEMA,
+        "bounds": bounds(),
+        "host": HOST,
+        "port": 3306,
+        "private_network": False,
+        "tls": DatabaseTls(TlsMode.VERIFIED),
+    }
     settings.update(overrides)
     return LaravelConnection(**settings)
 
@@ -524,7 +539,7 @@ def test_money_is_selected_live_and_never_projected() -> None:
     """`contract_value` is why somebody asks this connector a question and it is a payload
     rather than a pointer: stored, it is filtered and quoted as current long after the
     contract was renegotiated. It is selected on every client read for whoever holds
-    `read:client.contract_value`, and it is not one of the projected fields.
+    `read:laravel_client.contract_value`, and it is not one of the projected fields.
 
     Delete this and the field the company canaries protect becomes a stored column, which
     reads as an optimisation in a diff."""
@@ -773,7 +788,7 @@ def test_a_fetch_addressed_to_another_entity_never_reaches_the_database() -> Non
     output."""
     reader = Reader(ViewReply(rows=(client_row(),)))
     fetch = connector_fetch(connection(), ENTITY_CLIENT, reader=reader, fetched_at=NOW.isoformat())
-    with pytest.raises(LaravelError, match="was asked for 'user'"):
+    with pytest.raises(LaravelError, match="was asked for 'laravel_user'"):
         fetch(FetchRequest(entity=ENTITY_USER))
     assert reader.reads == []
 
@@ -845,17 +860,32 @@ def test_the_manifest_is_read_only_over_a_database_transport() -> None:
     assert declared.tool_names() == ("laravel.read_clients", "laravel.read_users")
 
 
-def test_the_manifest_declares_no_ceiling_and_the_platform_refuses_to_invent_one() -> None:
-    """The recorded corpus says this source has no ceiling because it is our own system, and
-    `brain.ops.limits` holds no verified figure for it. So the manifest declares none and
-    `throttle.limits_for` refuses, which is the correct refusal and also a real gap: nothing
-    paces this connector, and the per-read bound is what exists instead.
+def test_the_manifest_names_this_product_s_own_pace_and_says_it_is_nobody_s_measurement() -> None:
+    """`THERE_IS_NO_MEASURED_CEILING_HERE`, as it stands since M11.6.1. The manifest names this
+    connector's own row of `brain.ops.limits`, every read is admitted by it, the recorded corpus
+    and the operational row agree on the figure, and the note says it is ours and that nothing a
+    person buys raises it.
 
-    Delete this and somebody adds a plausible number that looks measured and is not."""
-    assert limit_for(Source.LARAVEL).calls == 0
-    assert manifest().ceiling == ""
+    Delete this and the ceiling can be dropped again, which leaves nothing pacing reads of a
+    company's database and takes the source off the Connectors screen, or be given a note that
+    reads as a vendor's measurement."""
+    from brain.connectors.laravel import CEILING_NAME
+    from brain.ops.limits import connector_ceiling
+
+    assert CEILING_NAME == CONNECTOR_NAME
+    assert manifest().ceiling == CEILING_NAME
+    ours = connector_ceiling(CEILING_NAME)
+    assert ours is not None
+    assert (ours.per_minute, ours.per_day, ours.raisable) == (
+        limit_for(Source.LARAVEL).calls,
+        None,
+        limit_for(Source.LARAVEL).raisable,
+    )
+    assert ours.raisable is False and "not a vendor" in ours.note
+    windows = limits_for(manifest(), principal_id="u_weiling")
+    assert {one.limit for one in windows} == {ours.per_minute, 7}
     with pytest.raises(UnmeasuredSourceError, match="declares no ceiling"):
-        limits_for(manifest(), principal_id="u_weiling")
+        limits_for(dataclasses.replace(manifest(), ceiling=""), principal_id="u_weiling")
 
 
 def test_a_visibility_predicate_over_a_column_nothing_projects_is_refused() -> None:
@@ -894,7 +924,7 @@ def test_a_projection_with_no_predicate_at_all_is_refused_by_the_manifest() -> N
     capability."""
     with pytest.raises(ManifestError, match="stores no visibility predicate"):
         projection_for(ENTITY_CLIENT, visibility=Scope())
-    with pytest.raises(LaravelError, match=r"\['user'\]"):
+    with pytest.raises(LaravelError, match=r"\['laravel_user'\]"):
         laravel_manifest(connection(), ref=REF, visibility={ENTITY_CLIENT: department()})
 
 

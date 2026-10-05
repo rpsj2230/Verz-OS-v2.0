@@ -53,7 +53,12 @@ Scope: every part that touches the world is handed in (the keys, the caller, the
 clock), so the tests drive it over recorded replies, and `live_records_for` is the one place the
 real ones are chosen.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
+**A database's views are read by the same borrowed lease (M11.6.1).** A connector whose reading is
+a `brain.connectors.declaration.ViewReading` is read here by one bounded read narrowed to the
+record's id, as the user the slot keeps beside the password, and the lease is given back in the
+same `finally` as a REST source's.
+
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
 """
 
 from __future__ import annotations
@@ -75,10 +80,12 @@ from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import (
     ChecksLiveFacts,
     ConnectorDeclaration,
+    DatabaseLogin,
     LiveLookup,
     PageReply,
     ReportCall,
     RoutedReading,
+    ViewReading,
     listed_under,
     shipped,
 )
@@ -101,6 +108,7 @@ from brain.ops.connector_store import Connection, StoredConnections
 from brain.ops.connector_sync_run import (
     ConnectorKeys,
     HttpsSourceCaller,
+    KeyLease,
     RunTokenVault,
     SourceAnswer,
     SourceCaller,
@@ -115,6 +123,7 @@ from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
 from brain.ops.lark_base_live import BaseSchema, with_base
 from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, wiki_host
 from brain.ops.lark_wiki_spaces import declared_spaces
+from brain.ops.leases import SealedSecret
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.webhook_delivery import SystemResolver
@@ -238,6 +247,11 @@ class ConnectedSources:
                 key = lease.key()
             except SecretsUnavailableError:
                 return _refused(connection.connector, NO_KEY_FOR_THE_READ)
+            if isinstance(reading, ViewReading):
+                # A database's view has no report and no call; its record is read by a lookup.
+                if live is None:
+                    return _refused(connection.connector, NOT_ONE_RECORD)
+                return self._read_view(connection, live, reading, lease, key, request, ids[0])
             try:
                 shown = presented(
                     reading,
@@ -308,6 +322,44 @@ class ConnectedSources:
             return replace(replied, rows=self._with_facts(live, entity, replied.rows))
         finally:
             lease.close(self._clock())
+
+    def _read_view(
+        self,
+        connection: Connection,
+        live: LiveLookup,
+        reading: ViewReading,
+        lease: KeyLease,
+        key: str,
+        request: FetchRequest,
+        source_id: str,
+    ) -> LiveReply:
+        """One record of a database's view, read as the user the slot keeps (M11.6.1).
+
+        The lookup narrows the read to the record's id, which the view's own read binds as a
+        parameter, and the view's row cap and time bound apply as they do to the worker's read. The
+        lease is `read_one`'s, closed in its `finally`. See
+        `brain.connectors.declaration.A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+        """
+        try:
+            login = DatabaseLogin(lease.user(), SealedSecret(key))
+        except (SecretsUnavailableError, ConnectorContractError):
+            return _refused(connection.connector, NO_KEY_FOR_THE_READ)
+        try:
+            narrowed = live.arguments_for(request.entity, source_id)
+            page = reading.read(
+                FetchRequest(entity=request.entity, filters=tuple(sorted(narrowed.items()))),
+                settings=connection.settings,
+                login=login,
+                resolver=self._resolver,
+                fetched_at=self._clock().isoformat(),
+            )
+        except Exception:
+            # Broad, and the type is not kept, for `read_one`'s reason.
+            return _refused(connection.connector, ADDRESS_OR_SHAPE)
+        if page.rows is None:
+            return LiveReply(outcome=page.call)
+        # The facts a lookup reads besides the record, where it reads any, as for a REST source.
+        return LiveReply(outcome=page.call, rows=self._with_facts(live, request.entity, page.rows))
 
     def _read_report(
         self,
@@ -381,7 +433,8 @@ class ConnectedSources:
     def _failed(self, declared: ConnectorDeclaration, answer: SourceAnswer) -> LiveReply | None:
         """The reply for an answer that was not an answer, or None when the source answered."""
         reading = declared.reading
-        assert reading is not None  # `_declared` admits no other
+        # `_declared` admits no other, and a database's view makes no call: `_read_view` reads it.
+        assert reading is not None and not isinstance(reading, ViewReading)
         call = classify(
             status=answer.status,
             timed_out=answer.timed_out,

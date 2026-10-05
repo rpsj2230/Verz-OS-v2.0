@@ -175,8 +175,12 @@ FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
     "google_analytics": {"department": "marketing"},
     "search_console": {"department": "marketing"},
     "laravel": {
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
         "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
+        "user_rule": "department = operations",
         "max_rows": "500",
         "timeout_seconds": "10",
     },
@@ -775,10 +779,11 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
     # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
-    # own, and Drive's and Laravel's forms wait until this install can read them, with no steps.
+    # own, and Drive's form waits until this install can read it, with no steps. Laravel's is
+    # offered since M11.6.1, because it reads.
     served = {one["name"]: one for one in body["not_connectable"]}
-    assert set(served) == {"lark_base", "lark_wiki", "google_drive", "laravel"}
-    assert served["google_drive"]["steps"] == served["laravel"]["steps"] == []
+    assert set(served) == {"lark_base", "lark_wiki", "google_drive"}
+    assert served["google_drive"]["steps"] == []
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -804,6 +809,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "domains": False,
         "google_analytics": False,
         "search_console": False,
+        "laravel": False,
     }
 
 

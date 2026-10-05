@@ -500,6 +500,19 @@ SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
         ),
     ),
     ConnectorLimit(
+        name="laravel",
+        per_minute=30,
+        raisable=False,
+        note=(
+            "Ours, not a vendor's: nobody publishes a rate for a company's own database. Thirty "
+            "bounded reads a minute across the worker and every question together, one every two "
+            "seconds on average, each stopped at its own row cap and time bound: a load a database "
+            "serving an application does not notice, and a burst of questions is held to it rather "
+            "than read as fast as it is asked. Not raisable by buying anything; a release changes "
+            "it."
+        ),
+    ),
+    ConnectorLimit(
         name="cloudflare",
         per_minute=CLOUDFLARE_CALLS_PER_FIVE_MINUTES // 5,
         raisable=False,

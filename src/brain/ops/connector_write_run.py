@@ -58,6 +58,7 @@ from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.declaration import (
     ConnectorDeclaration,
     PageReply,
+    ViewReading,
     WriteGrant,
     shipped,
 )
@@ -250,7 +251,9 @@ def send_approved(
     known = shipped() if declarations is None else declarations
     declared, grant = grant_for(connection, suspension.action.tool.name, known)
     reading = declared.reading
-    if reading is None:
+    # A database's views are read in a read-only session and have no call a write could be sent
+    # by (M11.6.1), so a write is declared only beside a reading that makes calls.
+    if reading is None or isinstance(reading, ViewReading):
         msg = f"{connection.connector} declares a write and no reading to send and read it with"
         raise ConnectorContractError(msg)
     lease = keys.lease(write_key(connection.connector, grant), now=clock())

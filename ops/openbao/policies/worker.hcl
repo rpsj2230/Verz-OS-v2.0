@@ -22,7 +22,7 @@ path "connectors/creds/lark_base" {
   capabilities = ["read"]
 }
 
-path "connectors/creds/laravel_readonly" {
+path "connectors/creds/laravel" {
   capabilities = ["read"]
 }
 
