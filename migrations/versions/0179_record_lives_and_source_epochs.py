@@ -36,12 +36,12 @@ keeps its retired row in `proj.record`, which the previous schema understands; w
 copy, and with it which retirements a sync made, so a downgrade leaves those rows retired for good
 under `0045`'s rule, which is the previous release's behaviour.
 
-Revises `0167`, the head of main when this was renumbered from `0152` on 2026-10-06.
+Revises `0154` (#246), which lands immediately before it; renumbered from `0152` on 2026-10-06.
 
 Task ids: M11.4.6, M11.4.8, M11.8.4, M11.8.11
 
 Revision ID: 0179
-Revises: 0167
+Revises: 0154
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0179"
-down_revision = "0167"
+down_revision = "0154"
 branch_labels = None
 depends_on = None
 
