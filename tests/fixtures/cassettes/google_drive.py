@@ -5,13 +5,17 @@ Task ids: M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 import pytest
 
 from brain.connectors import google_drive
 from brain.connectors.manifest import ConnectorManifest
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     Cassette,
@@ -269,8 +273,37 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through Drive's read-back reading, as a file read or a folder listing."""
+    endpoint = (
+        google_drive.Endpoint.GET_FILE
+        if recorded.kind is Kind.READ
+        else google_drive.Endpoint.LIST_FILES
+    )
+    reply = google_drive.Reply(status=recorded.status, headers=recorded.headers, body=recorded.body)
+    return answered(SOURCE, google_drive.operation_for(endpoint), reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "DRIVE-200-files-page": Verification.FOUND,
+        "DRIVE-200-file": Verification.FOUND,
+        "DRIVE-403-user-rate-limit": Verification.INCONCLUSIVE,
+        "DRIVE-429": Verification.INCONCLUSIVE,
+        "DRIVE-401": Verification.INCONCLUSIVE,
+        "DRIVE-404": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    wait_not_in_retry_after="none documented; Google asks for exponential backoff",
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

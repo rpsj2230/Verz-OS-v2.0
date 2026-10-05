@@ -114,6 +114,7 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -138,9 +139,11 @@ from brain.connectors.contract import (
 )
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
+    KeyScopes,
     Recorded,
     Setting,
     SettingRefusedError,
@@ -1762,6 +1765,24 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.DATABASE_USER,
+    example=ConnectExample(
+        settings={
+            SCHEMA_SETTING: "portal",
+            CLIENT_RULE_SETTING: "department = sales",
+            USER_RULE_SETTING: "department in sales, operations",
+            MAX_ROWS_SETTING: "500",
+            TIMEOUT_SETTING: "10",
+        },
+        fresh=lambda departments: {
+            SCHEMA_SETTING: f"acceptance_{secrets.token_hex(4)}",
+            CLIENT_RULE_SETTING: f"department = {departments[0]}",
+            USER_RULE_SETTING: f"department in {', '.join(departments)}",
+            MAX_ROWS_SETTING: "500",
+            TIMEOUT_SETTING: "10",
+        },
+        edit=CLIENT_RULE_SETTING,
+        edited=lambda: "status in active, pending",
+    ),
 )
 
 
@@ -1857,4 +1878,8 @@ CONNECTOR: Final = ConnectorDeclaration(
         findings=(LARAVEL_THE_CREDENTIAL_IS_READ_ONLY,),
     ),
     recorded=Recorded(tested=True),
+    scopes=KeyScopes(
+        request=("SELECT on the allowlisted views only",),
+        refuse=("SELECT on tables", "any write"),
+    ),
 )

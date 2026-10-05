@@ -198,6 +198,7 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -217,9 +218,11 @@ from brain.connectors.contract import (
 )
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
+    KeyScopes,
     Recorded,
     Setting,
     SettingRefusedError,
@@ -2350,6 +2353,22 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.KEY_FILE,
+    example=ConnectExample(
+        settings={
+            FOLDER_SETTING: "1AbCdEfGhIjKlMnOpQrStUv",
+            DOMAIN_SETTING: "example.com",
+            DEPARTMENT_SETTING: "operations",
+            STEWARD_SETTING: "u_steward",
+        },
+        fresh=lambda departments: {
+            FOLDER_SETTING: f"acceptance{secrets.token_hex(8)}",
+            DOMAIN_SETTING: f"acceptance-{secrets.token_hex(4)}.example",
+            DEPARTMENT_SETTING: departments[0],
+            STEWARD_SETTING: f"acceptance-steward-{secrets.token_hex(4)}",
+        },
+        edit=FOLDER_SETTING,
+        edited=lambda: f"acceptance{secrets.token_hex(8)}",
+    ),
 )
 
 
@@ -2498,5 +2517,9 @@ CONNECTOR: Final = ConnectorDeclaration(
             "Google's documentation does not say whether a user grant carries the domain that "
             "reduction needs, so only a live capture can settle it",
         ),
+    ),
+    scopes=KeyScopes(
+        request=("Viewer on the one folder shared with it",),
+        refuse=("domain-wide delegation",),
     ),
 )
