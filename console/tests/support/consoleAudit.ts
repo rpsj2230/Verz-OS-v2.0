@@ -370,6 +370,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/{digest}/retirement",
       "/api/v1/skills/{digest}/reinstatement",
       "/api/v1/skills/{digest}/detachments",
+      "/api/v1/skills/{digest}/export",
       "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
@@ -385,6 +386,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_retirement",
       "agent.skill_script",
       "agent.skill_detachment",
+      "agent.skill_export",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [

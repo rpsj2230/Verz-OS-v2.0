@@ -287,8 +287,8 @@ class LegalHoldChange(enum.StrEnum):
 
 
 class SkillChange(enum.StrEnum):
-    """What happened to a skill in the library. The values `0056`'s, `0121`'s and `0139`'s
-    triggers write.
+    """What happened to a skill in the library. The values `0056`'s, `0121`'s, `0139`'s and
+    `0191`'s triggers write.
 
     `0121` adds an edit, a decision by the person who added the skill, and a change of categories.
     A self-decision is its own word rather than a flag beside `approved`, because the audit screen
@@ -305,6 +305,8 @@ class SkillChange(enum.StrEnum):
     #: `0139`: a version retired, so no agent may newly be assigned it, or reinstated.
     RETIRED = "retired"
     REINSTATED = "reinstated"
+    #: `0191`: an approved version taken off the install as a package (M12.3.1).
+    EXPORTED = "exported"
 
 
 class CredentialChange(enum.StrEnum):

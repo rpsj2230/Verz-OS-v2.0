@@ -9,6 +9,9 @@
  * saves a new version beside this one and changes nothing, so it is a form. Trying a skill out has
  * no route and is drawn inert with its sentence (`skillActions.ts`).
  *
+ * **Exporting takes an approved version away as a file** (M12.3.1): one press, recorded in the ledger,
+ * and the package waits for review on whichever install adds it.
+ *
  * **Retiring lists and never removes.** The answer to a retirement names the agents still running
  * the version among those this reader may see, and each keeps it until somebody detaches it here
  * (M27.15.56). **Detaching ends an assignment by adding a record**, and the agents list is read
@@ -21,10 +24,10 @@
  * the version it was edited from and the people's identifiers are in each version's Advanced
  * section; the page names people and agents.
  *
- * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.2.10
+ * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.2.10, M12.3.1
  */
 
-import { FlaskConical, Pencil } from "lucide-react";
+import { Download, FlaskConical, Pencil } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
@@ -42,6 +45,12 @@ import {
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import {
+  EXPORT,
+  EXPORT_NOT_SAVED,
+  exportedSentence,
+  exportPath,
+  readExported,
+  savePackage,
   decidedSentence,
   decisionConsequence,
   decisionQuestion,
@@ -294,6 +303,48 @@ function Retirement({ one, onTold }: { readonly one: LibrarySkill; readonly onTo
   );
 }
 
+/**
+ * Export one approved version as a package another install adds (M12.3.1). Not confirmed: it ends,
+ * removes and changes nothing here, and the export is recorded in the ledger as it is taken.
+ */
+function Export({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: Tell }) {
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  async function takeIt() {
+    setBusy(true);
+    setFailure(null);
+    const result = await request<unknown>(exportPath(one.digest), { method: "POST" });
+    setBusy(false);
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
+    }
+    const exported = readExported(result.data);
+    if (exported === null || !savePackage(exported, globalThis.document)) {
+      onTold({ ok: false, sentence: EXPORT_NOT_SAVED });
+      return;
+    }
+    onTold({ ok: true, sentence: exportedSentence(exported) });
+  }
+
+  return (
+    <>
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      <Button
+        size="sm"
+        variant="outline"
+        className="min-h-11 sm:min-h-8"
+        disabled={busy}
+        aria-label={`${EXPORT} ${one.name} ${one.version}`}
+        onClick={() => void takeIt()}
+      >
+        <Download aria-hidden /> {EXPORT}
+      </Button>
+    </>
+  );
+}
+
 function Version({
   one,
   newest,
@@ -309,7 +360,7 @@ function Version({
 }) {
   const [editing, setEditing] = useState(false);
   const assignable = one.assignable && agents.length > 0;
-  const acts = one.reviewable || one.editable || one.retirable === true || assignable;
+  const acts = one.reviewable || one.editable || one.retirable === true || one.exportable === true || assignable;
   return (
     <section
       data-slot="skill-version"
@@ -381,6 +432,7 @@ function Version({
             </Button>
           ) : null}
           {one.retirable === true ? <Retirement one={one} onTold={onTold} /> : null}
+          {one.exportable === true ? <Export one={one} onTold={onTold} /> : null}
           {one.review === "approved" && one.retired !== true ? (
             <UnavailableAction label={TRY_OUT} text={TRY_OUT} icon={<FlaskConical aria-hidden />} reason={UNAVAILABLE.tryOut.reason} />
           ) : null}

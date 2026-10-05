@@ -29,6 +29,7 @@ import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/Skill
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
 import { IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, FINDINGS_HEADING } from "../src/pages/skills/SkillProfile";
+import { EXPORT, exportedSentence } from "../src/pages/skillsQuery";
 import { PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
 import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
 import { readHistory, readSkillDetail } from "../src/pages/skills/skillDetailQuery";
@@ -156,6 +157,7 @@ function version(overrides: Record<string, unknown> = {}): Record<string, unknow
     retired_at: null,
     retired_by: null,
     retirable: true,
+    exportable: false,
     submitted_by_name: "Iris Importer",
     reviewer_name: "Rex Reviewer",
     findings: [],
@@ -546,6 +548,42 @@ describe("one skill's page", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("Still running it until you detach it: Company Desk");
     });
+  });
+
+  test("exporting an approved version is one press that saves the package and says where it goes next", async () => {
+    // What breaks if this is deleted: an Export button that posts and saves nothing, one offered on
+    // a version the API says may not leave, or a file saved under a name other than the API's (M12.3.1).
+    const saved: string[] = [];
+    const created = URL.createObjectURL;
+    const revoked = URL.revokeObjectURL;
+    URL.createObjectURL = () => "blob:skill-package";
+    URL.revokeObjectURL = () => undefined;
+    const clicked = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    };
+    try {
+      const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ exportable: true })], [PIN], {
+        [`POST ${API}/skills/${DIGEST}/export`]: {
+          body: { file_name: `${NAME}-1.1.0.zip`, content: btoa("PK"), encoding: "base64", name: NAME, version: "1.1.0", digest: DIGEST },
+        },
+      }));
+
+      pressed(`${EXPORT} ${NAME} 1.1.0`, container);
+      await waitFor(() => {
+        expect(container.textContent).toContain(exportedSentence({ name: NAME, version: "1.1.0", file_name: `${NAME}-1.1.0.zip` }));
+      });
+      expect(sent.filter((one) => one.method === "POST").map((one) => one.path)).toEqual([`${API}/skills/${DIGEST}/export`]);
+      expect(saved).toEqual([`${NAME}-1.1.0.zip`]);
+      expect(document.querySelector('[role="alertdialog"], [role="dialog"]')).toBeNull();
+    } finally {
+      URL.createObjectURL = created;
+      URL.revokeObjectURL = revoked;
+      HTMLAnchorElement.prototype.click = clicked;
+    }
+
+    const plain = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ exportable: false })], [PIN]));
+    expect([...plain.container.querySelectorAll("button")].some((one) => one.getAttribute("aria-label")?.startsWith(EXPORT))).toBe(false);
   });
 
   test("a retired version offers reinstating and no assignment", async () => {

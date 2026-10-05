@@ -101,6 +101,7 @@ Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the
 instant arrive as arguments.
 
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.15.55
+Task ids: M12.3.1
 Task ids: M12.2.10
 """
 
@@ -108,6 +109,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import re
 import tarfile
 import zipfile
@@ -275,6 +277,25 @@ A_PACKAGE_REFUSAL_SAYS_WHAT_TO_CHANGE: Final = (
 )
 
 
+#: Why only an approved version leaves the install, and why it arrives undecided (M12.3.1).
+AN_EXPORT_IS_OF_AN_APPROVED_VERSION_AND_LANDS_UNREVIEWED: Final = (
+    "An export carries a version a named person here approved, unchanged since, because a package "
+    "is how a skill is shared and sharing what nobody reviewed would be publishing a draft. The "
+    "approval does not travel: on the install that imports it the package is a submission like "
+    "any other, read, refused or added undecided, because a review here is a statement about this "
+    "install's tools and people and says nothing about another's."
+)
+
+#: Why an exported package says what it is, and why an import checks it.
+AN_EXPORT_SAYS_WHAT_IT_HOLDS_AND_AN_IMPORT_CHECKS_IT: Final = (
+    "An exported package carries a small manifest beside its SKILL.md naming the skill, its "
+    "version and its digest, which covers the SKILL.md and every script's bytes. An import reads "
+    "the package exactly as any other and then compares: a package whose contents no longer "
+    "digest to what its manifest says was changed after it was exported, and is refused saying so "
+    "rather than added as the version it claims to be."
+)
+
+
 class SkillLibraryError(Exception):
     """A skill could not be added, decided about or assigned, in words its caller can act on.
 
@@ -305,6 +326,16 @@ MAX_PACKAGE_BYTES: Final = 256 * 1024
 #: The two file shapes a package may take.
 MARKDOWN_SUFFIX: Final = ".md"
 ARCHIVE_SUFFIX: Final = ".zip"
+
+#: The manifest an exported package carries in its SKILL.md's folder, and its shape (M12.3.1).
+EXPORT_MANIFEST: Final = "skill-export.json"
+EXPORT_SCHEMA: Final = "brain.skill.export.v1"
+EXPORT_FIELDS: Final[tuple[str, ...]] = ("schema", "name", "version", "digest")
+MAX_EXPORT_MANIFEST_BYTES: Final = 1024
+
+#: Every member of an exported zip is written at this instant, so one version always exports
+#: the same bytes and two exports of it can be compared by their hash.
+EXPORT_TIMESTAMP: Final = (1980, 1, 1, 0, 0, 0)
 
 #: The first bytes of a zip, which is how a URL's answer is told from a `SKILL.md`: an address
 #: names no file type anybody can trust, and the bytes do.
@@ -366,6 +397,12 @@ def may_add(reach: EntitlementSet, now: datetime | None = None) -> bool:
     administrator adding one would be adding a procedure to every department's review queue.
     """
     return _library_screen_read(reach, now) and _in_reach(reach, SKILL_AUTHORITY, NOWHERE, now)
+
+
+def may_export(reach: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this reader may export a version: they may add skills, and the library is theirs to
+    read, so a version they cannot see is one they cannot take away either (M12.3.1)."""
+    return may_add(reach, now) and may_read_library(reach, now)
 
 
 def may_review(reach: EntitlementSet, now: datetime | None = None) -> bool:
@@ -607,6 +644,122 @@ def runnable_here(package: Package, *, sandbox: bool) -> Package:
     return package
 
 
+# ------------------------------------------------------------------- exporting (M12.3.1)
+def _export_manifest_of(
+    files: dict[str, bytes],
+) -> tuple[dict[str, bytes], dict[str, str] | None]:
+    """The files beside the `SKILL.md` without an export manifest, and the manifest, or None.
+
+    The manifest is taken out before the files are held to the declared scripts, since it is not
+    one and carries no code. Its shape is refused here, before anything is compared: a manifest
+    that cannot be read says nothing an import could check.
+    """
+    held = dict(files)
+    raw = held.pop(EXPORT_MANIFEST, None)
+    if raw is None:
+        return held, None
+    if len(raw) > MAX_EXPORT_MANIFEST_BYTES:
+        raise _refused(
+            f"its {EXPORT_MANIFEST} is over the {MAX_EXPORT_MANIFEST_BYTES} bytes one holds"
+        )
+    try:
+        said = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise _refused(f"its {EXPORT_MANIFEST} is not JSON; export the skill again") from None
+    if (
+        not isinstance(said, dict)
+        or sorted(said) != sorted(EXPORT_FIELDS)
+        or not all(isinstance(value, str) for value in said.values())
+        or said["schema"] != EXPORT_SCHEMA
+    ):
+        raise _refused(
+            f"its {EXPORT_MANIFEST} is not one this install writes; export the skill again"
+        )
+    return held, {key: str(value) for key, value in said.items()}
+
+
+def _checked_against(skill: Skill, said: Mapping[str, str] | None) -> Skill:
+    """The skill, or a refusal where an export manifest names something else.
+
+    See `AN_EXPORT_SAYS_WHAT_IT_HOLDS_AND_AN_IMPORT_CHECKS_IT`. A package with no manifest is
+    any other package and is not asked about.
+    """
+    if said is None:
+        return skill
+    held = {"name": skill.name, "version": skill.version, "digest": skill.digest()}
+    differ = [key for key in ("name", "version", "digest") if said[key] != held[key]]
+    if differ:
+        raise _refused(
+            f"its {EXPORT_MANIFEST} names {said['name']!r} version {said['version']} with digest "
+            f"{said['digest']}, and what it holds is {held['name']!r} version {held['version']} "
+            f"with digest {held['digest']}: it was changed after it was exported. "
+            f"{AN_EXPORT_SAYS_WHAT_IT_HOLDS_AND_AN_IMPORT_CHECKS_IT}"
+        )
+    return skill
+
+
+@dataclass(frozen=True)
+class ExportedSkill:
+    """One approved version as a package: the file name another install is given, and its bytes."""
+
+    file_name: str
+    content: bytes
+    name: str
+    version: str
+    digest: str
+
+
+def exported(one: LibrarySkill, scripts: Mapping[str, bytes]) -> ExportedSkill:
+    """One approved, unchanged version as a zip another install's library reads, or a refusal.
+
+    The `SKILL.md` as `brain.tools.skills.markdown_of` writes it, each script's bytes at the path
+    the skill declares, and `EXPORT_MANIFEST`, all in one folder named for the skill, written in a
+    fixed order at a fixed instant so a version always exports the same bytes. The bytes it carries
+    are checked against the digest before anything is written, so an export can never claim a
+    digest its scripts no longer match. See
+    `AN_EXPORT_IS_OF_AN_APPROVED_VERSION_AND_LANDS_UNREVIEWED`.
+    """
+    # `is_executable` compares the approval with the bytes, so a version edited in place since,
+    # which `moved` would also say, is refused by it too.
+    if not one.imported.is_executable():
+        raise SkillLibraryError(
+            "nothing was exported: only a version a named person approved, unchanged since, "
+            "leaves this install"
+        )
+    skill = one.imported.skill
+    if set(scripts) != set(skill.scripts) or any(
+        script_sha256_of(scripts[path]) != sha for path, sha in skill.script_sha256
+    ):
+        raise SkillLibraryError(
+            "nothing was exported: the scripts this install holds for that version no longer "
+            "match its digest"
+        )
+    manifest = {"schema": EXPORT_SCHEMA, "name": skill.name, "version": skill.version}
+    manifest["digest"] = one.digest
+    # The SKILL.md is written without the scripts' hashes, which no SKILL.md carries: the reader
+    # on the other side computes them from the bytes beside it, so the digest arrives intact.
+    written = markdown_of(skill.model_copy(update={"script_sha256": ()}))
+    members = {
+        SKILL_FILE: written.encode("utf-8"),
+        **{path: scripts[path] for path in sorted(scripts)},
+        EXPORT_MANIFEST: (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode("utf-8"),
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path, content in members.items():
+            info = zipfile.ZipInfo(f"{skill.name}/{path}", date_time=EXPORT_TIMESTAMP)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, content)
+    return ExportedSkill(
+        file_name=f"{skill.name}-{skill.version}{ARCHIVE_SUFFIX}",
+        content=buffer.getvalue(),
+        name=skill.name,
+        version=skill.version,
+        digest=one.digest,
+    )
+
+
 def read_package(file_name: str, content: bytes) -> Package:
     """Parse a package into a skill and its source, or refuse it in words to act on (M12.2.4).
 
@@ -627,8 +780,10 @@ def read_package(file_name: str, content: bytes) -> Package:
         ) from None
     lowered = file_name.lower()
     files: dict[str, bytes] | None = None
+    said: dict[str, str] | None = None
     if lowered.endswith(ARCHIVE_SUFFIX):
         text, files = _from_archive(content)
+        files, said = _export_manifest_of(files)
     elif lowered.endswith(MARKDOWN_SUFFIX):
         text = _markdown_text(content)
     else:
@@ -638,7 +793,7 @@ def read_package(file_name: str, content: bytes) -> Package:
         location=file_name,
         content_digest=hashlib.sha256(content).hexdigest(),
     )
-    skill = _skill_of(text, files=files)
+    skill = _checked_against(_skill_of(text, files=files), said)
     return Package(skill=skill, source=source, scripts=MappingProxyType(dict(files or {})))
 
 
@@ -680,14 +835,16 @@ def read_url(url: str, content: bytes) -> Package:
             "and a commit instead"
         )
     files: dict[str, bytes] | None = None
+    said: dict[str, str] | None = None
     if content.startswith(ZIP_MAGIC):
         text, files = _from_archive(content)
+        files, said = _export_manifest_of(files)
     else:
         text = _markdown_text(content)
     source = SkillSource(
         kind=SourceKind.URL, location=url, content_digest=hashlib.sha256(content).hexdigest()
     )
-    skill = _skill_of(text, files=files)
+    skill = _checked_against(_skill_of(text, files=files), said)
     return Package(skill=skill, source=source, scripts=MappingProxyType(dict(files or {})))
 
 

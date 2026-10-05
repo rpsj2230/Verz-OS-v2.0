@@ -80,6 +80,7 @@ from brain.tables.skill import (
     SkillAssignmentRow,
     SkillCategoryRow,
     SkillDetachmentRow,
+    SkillExportRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
@@ -539,6 +540,14 @@ class StoredSkills:
             await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
             await session.execute(retiring_row(digest, retired=retired, by=by))
+
+    async def export(self, digest: str, *, by: str, ent_hash: str, trace_id: str) -> None:
+        """Record one version exported, in the exporter's name, with its ledger entry (M12.3.1)."""
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(insert(SkillExportRow).values(digest=digest, exported_by=by))
 
     async def detach(
         self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str

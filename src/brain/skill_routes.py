@@ -135,7 +135,7 @@ who decided it, who retired it and who assigned it are sent as display names bes
 page used to print, read from the directory for exactly those people.
 
 Task ids: M42.6.4, M27.8.6, M12.2.2, M12.2.3, M12.2.5, M12.2.6, M12.3.2, M12.4.6, M12.4.13
-Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1, M12.2.10
+Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1, M12.2.10, M12.3.1
 """
 
 from __future__ import annotations
@@ -204,9 +204,11 @@ from brain.console.skill_library import (
     decided,
     detachment,
     edited,
+    exported,
     github_source,
     may_add,
     may_assign,
+    may_export,
     may_read_library,
     may_review,
     procedure_findings,
@@ -488,6 +490,9 @@ class LibrarySkillView(BaseModel):
     retired_by: str | None = None
     #: This reader may retire or reinstate it. Decides whether a button is drawn and nothing more.
     retirable: bool = False
+    #: This reader may export it: an approved version, unchanged since, for a reader who may add
+    #: skills (M12.3.1). Decides whether a button is drawn and nothing more.
+    exportable: bool = False
     #: The display names of whoever added it and whoever decided it, when the directory holds one.
     submitted_by_name: str | None = None
     reviewer_name: str | None = None
@@ -713,6 +718,10 @@ class SkillLibrary(Protocol):
     async def retire(
         self, digest: str, *, retired: bool, by: str, ent_hash: str, trace_id: str
     ) -> None: ...
+
+    async def script_bytes(self, digest: str) -> dict[str, bytes]: ...
+
+    async def export(self, digest: str, *, by: str, ent_hash: str, trace_id: str) -> None: ...
 
     async def detach(
         self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str
@@ -1071,6 +1080,7 @@ def library_view(
         retired_at=retirement.at if retired and retirement is not None else None,
         retired_by=named.get(retirement.set_by) if retired and retirement is not None else None,
         retirable=edits,
+        exportable=edits and state is Review.APPROVED,
         submitted_by_name=named.get(one.submitted_by),
         reviewer_name=named.get(imported.reviewer) if imported.reviewer else None,
         findings=(
@@ -1828,6 +1838,67 @@ async def _retirement(
         version=one.imported.skill.version,
         retired=retire,
         holding=holders,
+    )
+
+
+#: Where one approved version is exported, under the API base (M12.3.1).
+EXPORT_PATH: Final = "/skills/{digest}/export"
+
+
+class ExportedSkillView(BaseModel):
+    """One exported package: what `POST /skills` on another install takes, and what it is.
+
+    `file_name`, `content` and `encoding` are `SkillPackageAsked`'s own fields, so the package can
+    be handed to another install's library as it is; `name`, `version` and `digest` say which
+    version it is, as its manifest does.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file_name: str
+    content: str
+    encoding: Literal["base64"]
+    name: str
+    version: str
+    digest: str
+
+
+@router.post(EXPORT_PATH, response_model=ExportedSkillView, responses=COMMON_RESPONSES)
+async def export_skill(request: Request, digest: Digest, asked: Asked) -> ExportedSkillView:
+    """One approved version as a package another install imports, recorded in the ledger.
+
+    A POST because it writes: each export is a row and a ledger entry, so "who took which version
+    off the install" is answerable. The authority that adds skills, asked with the library's own
+    read, before the digest is looked up, so a version the reader cannot see is the same 404 as one
+    that does not exist. See
+    `brain.console.skill_library.AN_EXPORT_IS_OF_AN_APPROVED_VERSION_AND_LANDS_UNREVIEWED`.
+    """
+    if not may_export(asked.reach, asked.now):
+        log.info("skill export not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    store = library_of(request)
+    one = await store.skill(digest)
+    if one is None:
+        raise _not_answerable()
+    scripts = await store.script_bytes(digest) if one.imported.skill.scripts else {}
+    try:
+        package = exported(one, scripts)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+    await store.export(
+        digest,
+        by=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    log.info("skill exported", skill=one.name, principal=asked.caller.principal.id)
+    return ExportedSkillView(
+        file_name=package.file_name,
+        content=base64.b64encode(package.content).decode("ascii"),
+        encoding="base64",
+        name=package.name,
+        version=package.version,
+        digest=package.digest,
     )
 
 

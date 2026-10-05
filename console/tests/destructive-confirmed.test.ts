@@ -39,6 +39,8 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/skills/SkillProfile.tsx exportPath(one.digest)":
+    "Exporting an approved skill version hands its package to the person as a file and records that it was taken; nothing on this install ends, changes or is removed.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
     "Adding a work email binds an address to a person who has none. It retires the staff list's " +
     "person for that address only when they have never signed in and hold nothing but what the sync " +

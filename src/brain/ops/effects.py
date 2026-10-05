@@ -214,6 +214,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # A second detachment finds the install changed and writes nothing.
         "brain.skill_routes:SkillLibrary.detach": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:SkillLibrary.assignment_history": Repeat.READS,
+        "brain.skill_routes:SkillLibrary.script_bytes": Repeat.READS,
+        # A second export of one version is a second row and a second ledger entry, which is what
+        # happened: somebody took the package twice.
+        "brain.skill_routes:SkillLibrary.export": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:AgentInstalls.agent": Repeat.READS,
         # An agent's lifecycle (0137): reads, a move written by compare-and-set against the state
         # the page drew, so a second press finds the row already moved and writes nothing, and an
