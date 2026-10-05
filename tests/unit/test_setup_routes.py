@@ -25,6 +25,7 @@ Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -971,11 +972,14 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
 #: Where the lifespan mints this install's template signing key, as kv version 2 is called.
 TEMPLATE_KEY_DATA: Final = "template_signing/data/key"
 
+#: Where the lifespan creates this install's join-key pepper, as kv version 2 is called.
+PEPPER_DATA: Final = "resolution/data/pepper"
+
 
 class InstalledVault:
     """An OpenBao reached through the real client's `urlopen`, as the installer leaves one.
 
-    The four kv engines are enabled and empty, and the application's token is the one the
+    The five kv engines are enabled and empty, and the application's token is the one the
     installer minted: periodic, renewable, a whole period left. Every request is recorded by method
     and path, with the token it presented, so a test can say which token asked for what. Standing in
     at `urlopen` rather than at a client method, so every component the lifespan builds from the
@@ -1039,8 +1043,9 @@ def test_a_hosted_install_named_the_installers_vault_keeps_the_key_with_no_hand_
     Delete this and the installer and the wizard can each be right on their own and not meet: an
     address the credential store cannot use, a token the lifespan never reads, or a finishing
     screen asking a person serving alone to restart a system that has nothing to restart. The
-    one other slot the process writes is its template signing key, minted at start into the
-    fourth engine with the vault's create-only check-and-set (`brain.ops.template_key`)."""
+    two other slots the process writes are its template signing key and its join-key pepper, each
+    created at start with the vault's create-only check-and-set (`brain.ops.template_key`,
+    `brain.ops.join_key_pepper`), the pepper in the shape its reader accepts."""
     del carried
     from brain.deployment.vault_setup import APPLICATION_TOKEN, VAULT_ADDRESS
     from brain.settings import settings_from as settings_read_from
@@ -1069,8 +1074,10 @@ def test_a_hosted_install_named_the_installers_vault_keeps_the_key_with_no_hand_
     assert answer.json()["provider_key"] == ProviderKeyKept.IN_USE
     assert answer.json()["restart_needed"] is (not alone)
     assert vault.held["providers/data/anthropic"] == {KEY_FIELD: KEY}
-    assert set(vault.held) == {"providers/data/anthropic", TEMPLATE_KEY_DATA}
+    assert set(vault.held) == {"providers/data/anthropic", TEMPLATE_KEY_DATA, PEPPER_DATA}
     assert vault.options[TEMPLATE_KEY_DATA] == {"cas": 0}
+    assert vault.options[PEPPER_DATA] == {"cas": 0}
+    assert re.fullmatch(r"[0-9a-f]{64}", vault.held[PEPPER_DATA]["value"])
     assert vault.options["providers/data/anthropic"] == {}
     assert {presented for _, _, presented in vault.asked} == {minted_by_the_installer}
     assert ("GET", "auth/token/lookup-self", minted_by_the_installer) in vault.asked
