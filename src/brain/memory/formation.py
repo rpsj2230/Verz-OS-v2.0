@@ -69,7 +69,7 @@ they decide whether a memory is reached at all, on every read, with nothing reco
 record is written about it. Putting decay beside supersession would suggest they work the same
 way, and they do not: one is arithmetic on the clock and the other is a row.
 
-Task ids: M16.1.1, M16.1.4, M16.1.5, M16.4.1, M16.4.4
+Task ids: M16.1.1, M16.1.4, M16.1.5, M16.4.1, M16.4.4, M16.6.8
 """
 
 from __future__ import annotations
@@ -280,6 +280,22 @@ def confidence_now(
     return formed_confidence * math.pow(0.5, elapsed_days / half_life_days)
 
 
+def in_force_half_life_days() -> float:
+    """The half-life of an inference as this install has it: saved within bounds, or the default.
+
+    **Read here, once, rather than passed down by every surface.** Nine places ask `may_recall`,
+    from the answer's hints to the weekly digest, and a figure each of them had to be handed is a
+    figure one of them is eventually handed wrong, so the Memory screen would show an inference
+    the model is no longer shown. Imported when asked rather than at the top, because
+    `brain.ops.tuning` reads this module's `HALF_LIFE_DAYS` for its default and a module both
+    sides import at load is a cycle. What is read is a dictionary lookup in what the process
+    holds; no request reaches the database for it.
+    """
+    from brain.ops.tuning import inferred_half_life_days
+
+    return inferred_half_life_days()
+
+
 def may_recall(
     formation: Formation,
     reader: EntitlementSet,
@@ -288,6 +304,7 @@ def may_recall(
     where: Mapping[str, object] | None = None,
     formed_confidence: float = 1.0,
     floor: float = RECALL_FLOOR,
+    half_life_days: float | None = None,
 ) -> Recollection | None:
     """Whether this reader may be told this memory, and on what terms.
 
@@ -302,6 +319,9 @@ def may_recall(
     `where` is the place the recall is happening, checked against the scope the reader
     reaches. Absent, it is the memory's own scope, which is the case where somebody is asking
     about exactly what the memory is about.
+
+    `half_life_days` absent is the figure in force, `in_force_half_life_days`, so every surface
+    that asks this question decays an inference at the one rate an administrator set.
     """
     shared = requirement(formation).intersect(reader, now)
 
@@ -320,7 +340,12 @@ def may_recall(
         return None
 
     confidence = (
-        confidence_now(formed_confidence, formed_at=formation.formed_at, now=now)
+        confidence_now(
+            formed_confidence,
+            formed_at=formation.formed_at,
+            now=now,
+            half_life_days=in_force_half_life_days() if half_life_days is None else half_life_days,
+        )
         if DECAYS_WITH_TIME[formation.kind]
         else formed_confidence
     )

@@ -37,13 +37,14 @@ and holds nothing a reader could use. Rows are small and one is written per pres
 
 **The downgrade** drops the table; its policies and grants go with it.
 
-Revises `0167`, the head of main when it was written, and re-pointed at whichever migration is the
-head when it lands: nothing here depends on anything after `0068`'s connections.
+Revised `0167` when it was written, and is re-pointed at whichever migration is the head when it
+lands: nothing here depends on anything after `0068`'s connections. Now `0154`, main's head when
+the Google Workspace connector was stacked on it.
 
 Task ids: M11.8.6
 
 Revision ID: 0180
-Revises: 0167
+Revises: 0154
 """
 
 from __future__ import annotations
@@ -52,8 +53,8 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0180"
-# The head of origin/main when it was written: 0167, which lands after 0177 and 0171.
-down_revision = "0167"
+# The head of origin/main when this branch last took it in: 0154, which lands after 0167.
+down_revision = "0154"
 branch_labels = None
 depends_on = None
 

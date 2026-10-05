@@ -81,14 +81,22 @@ one without.
 **Nothing here computes a reach.** There is no `.intersect(` in this module.
 `brain.console.workspace.intersections_in` is run over this source by its test.
 
-Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6, M7.6.1
+**The Waiting view carries the review queue's alarm, raised on the rows it lists (M16.5.4).**
+`brain.memory.review.review_queue` decides whether the gated changes waiting have grown past one
+sitting of review, and it is handed the learnings the page lists as tier three and no others, so
+the alarm is a statement about what this reader was shown. Handing it every stored learning
+would raise an alarm on rows the reader may not see, which is a count of them arriving as a
+banner. The alarm carries a sentence and no figure, and is absent wherever tier three is. See
+`brain.memory.review.THE_ALARM_IS_RAISED_ON_WHAT_THE_READER_CAN_SEE`.
+
+Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6, M7.6.1, M16.5.4
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Annotated, Final, Protocol
 
@@ -106,6 +114,7 @@ from brain.console.govern import NOWHERE, Placed
 from brain.console.govern_estate import (
     UNDO_AUTHORITY,
     LibraryItem,
+    conversation_learnings,
     departments_represented,
     learning_estate,
     learnings_in_view,
@@ -118,13 +127,14 @@ from brain.console.reach_view import (
     MemoryText,
     MemoryViewError,
     Revision,
+    TierThreeRouting,
     provenance_of,
 )
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import Basis
-from brain.core.entitlement import Capability
+from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
 from brain.knowledge.kinds import KnowledgeKind
@@ -133,8 +143,10 @@ from brain.listing import Column, ListAsked, Listing
 from brain.memory.correction import Correction, Supersession
 from brain.memory.digest import Learning, Undo
 from brain.memory.formation import Formation, MemoryKind
+from brain.memory.review import review_queue
 from brain.memory.signals import Signal
 from brain.memory.tiers import BLAST_RADIUS, Change, Proposal, Tier, TierError
+from brain.ops.learning_signal_store import Tallied, counted_in
 from brain.ops.memory_store import (
     Corrections,
     MemoryRecords,
@@ -144,6 +156,7 @@ from brain.ops.memory_store import (
     inferred_named,
     learnings_named,
     learnings_of_agents,
+    learnings_of_conversations,
     stated_named,
 )
 from brain.ops.replica_store import ConsoleReads
@@ -216,6 +229,9 @@ A_TRUNCATION_FLAG_ON_A_LOOKUP_BY_PERSON_COUNTS_WHAT_IS_REMEMBERED_ABOUT_THEM: Fi
 LIBRARY_SCREEN: Final = "library"
 LEARNING_SCREEN: Final = "learning"
 MEMORY_SCREEN: Final = "memory"
+
+#: How far back the Learning screen counts marks: the week its recent learnings are counted over.
+MARKS_OVER: Final = timedelta(days=7)
 
 #: Where the undo is posted, under the learning screen's own path.
 UNDO_PATH: Final = "/govern/learning/undo"
@@ -379,6 +395,39 @@ class LearningReviewView(BaseModel):
     #: What the confirmation says an undo will do, keyed by `control_writes`. See `UNDO_SAYS`.
     undo_says: dict[str, str]
     staleness: StalenessBanner | None = None
+    #: How the week's answers were marked (M16.7.4), on the everyone basis, and null otherwise.
+    marks: MarksView | None = None
+    #: The review queue's alarm over the tier-three rows above (M16.5.4), null where they are.
+    queue_alarm: QueueAlarmView | None = None
+
+
+class QueueAlarmView(BaseModel):
+    """Whether the gated changes this reader is shown have grown past one sitting of review.
+
+    A sentence and no figure, for `brain.memory.review.QueueAlarm`'s reasons: a queue length
+    beside a filtered list is a subtraction, and a number is the part of an alarm that gets
+    forwarded out of context.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    raised: bool
+    says: str
+
+
+class MarksView(BaseModel):
+    """How many answers were last marked helpful and not helpful over the week to `as_of`.
+
+    Counted over the whole install and never by who, for
+    `brain.memory.signals.A_COUNT_PER_PERSON_IS_A_PERFORMANCE_REVIEW`'s reason, and shown only on
+    the everyone basis, since it is a figure about everybody's answers.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    since: datetime
+    helpful: int
+    unhelpful: int
 
 
 class UndoAsked(BaseModel):
@@ -697,6 +746,22 @@ async def remembered_about(session: AsyncSession, subject_id: str, limit: int) -
     return RememberedAbout(entries=entries, corrections=corrections_of(marks))
 
 
+async def learning_of(session: AsyncSession, memory_id: str) -> Learning | None:
+    """One memory as the domain's `Learning`, from its learning record and its row, or None.
+
+    None for a memory with no learning record, one in neither table, and one the types refuse, which
+    a route answers as it answers a memory that does not exist.
+    """
+    row = (await session.execute(learnings_named((memory_id,)))).scalars().first()
+    if row is None:
+        return None
+    stated = (await session.execute(stated_named((memory_id,)))).scalars().all()
+    inferred = (await session.execute(inferred_named((memory_id,)))).scalars().all()
+    memory_rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [*stated, *inferred]
+    memories = [found for found in (stored_memory(one) for one in memory_rows) if found]
+    return None if not memories else recorded_learning(row, memories[0][0])
+
+
 @dataclass(frozen=True)
 class StoredLearnings:
     """The agents a review was assembled over, their learnings, and the corrections naming them."""
@@ -709,20 +774,26 @@ class StoredLearnings:
 async def learnings_stored(
     session: AsyncSession, visible: Sequence[AgentRecord], limit: int
 ) -> StoredLearnings:
-    """The learnings formed while these agents ran, with their memories and corrections.
+    """The learnings formed while these agents ran, and in plain conversations, with their
+    memories and corrections.
 
     `visible` has already been narrowed to the caller's audience, so nothing is loaded about an
-    agent the caller may not see. The memories are read by id from both tables, because a learning
-    record does not say which table its memory is in, and a learning whose memory is in neither is
-    skipped: there is no formation to decide recall from.
+    agent the caller may not see. The learnings formed with no agent running are loaded beside
+    them, bounded the same way, and `learning_estate` decides which the caller is told of. The
+    memories are read by id from both tables, because a learning record does not say which table
+    its memory is in, and a learning whose memory is in neither is skipped: there is no formation
+    to decide recall from.
     """
-    if not visible:
-        return StoredLearnings(records=(), learnings=(), corrections=Corrections((), ()))
-    rows = (
-        (await session.execute(learnings_of_agents([one.agent_id for one in visible], limit)))
-        .scalars()
-        .all()
-    )
+    rows = [
+        *(
+            (await session.execute(learnings_of_agents([one.agent_id for one in visible], limit)))
+            .scalars()
+            .all()
+            if visible
+            else ()
+        ),
+        *(await session.execute(learnings_of_conversations(limit))).scalars().all(),
+    ]
     ids = [one.memory_id for one in rows]
     if not ids:
         return StoredLearnings(
@@ -948,17 +1019,26 @@ async def learning(request: Request, asked: Asked) -> LearningReviewView:
 
     reads = _require_console_reads(request)
 
-    async def load(session: AsyncSession) -> StoredLearnings:
+    basis = spans_departments(asked.reach, asked.now)
+    since = asked.now - MARKS_OVER
+
+    async def load(session: AsyncSession) -> tuple[StoredLearnings, Tallied | None]:
         agent_rows = (await session.execute(bounded_agents(MAX_AGENTS_CONSIDERED))).scalars().all()
         records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
-        return await learnings_stored(
+        stored = await learnings_stored(
             session, visible_records(records, asked), MAX_LEARNINGS_CONSIDERED
         )
+        marks = (
+            await counted_in(session, since=since, until=asked.now)
+            if basis is Basis.EVERYONE
+            else None
+        )
+        return stored, marks
 
     served = await reads.read(load, now=asked.now)
-    stored = served.value
+    stored, marks = served.value
     review = learning_estate(
-        basis=spans_departments(asked.reach, asked.now),
+        basis=basis,
         records=stored.records,
         learnings=stored.learnings,
         caller=asked.reach,
@@ -1001,7 +1081,36 @@ async def learning(request: Request, asked: Asked) -> LearningReviewView:
         tiers=tier_rules(),
         undo_says={correction.value: said for correction, said in UNDO_SAYS.items()},
         staleness=served.banner,
+        marks=None
+        if marks is None
+        else MarksView(since=since, helpful=marks.helpful, unhelpful=marks.unhelpful),
+        queue_alarm=waiting_alarm(
+            review.tier_three, stored.learnings, reader=asked.reach, now=asked.now
+        ),
     )
+
+
+def waiting_alarm(
+    tier_three: Sequence[TierThreeRouting] | None,
+    learnings: Sequence[Learning],
+    *,
+    reader: EntitlementSet,
+    now: datetime,
+) -> QueueAlarmView | None:
+    """The review queue's alarm over the tier-three rows the page lists, or None with none listed.
+
+    `brain.memory.review.review_queue` decides, over the learnings named by those rows and no
+    others, so the alarm reads exactly what this reader is shown. The sentence is the domain's,
+    made one a page can print.
+    """
+    if tier_three is None:
+        return None
+    shown = {one.memory_id for one in tier_three}
+    queue = review_queue(
+        now=now, caller=reader, learnings=[one for one in learnings if one.memory_id in shown]
+    )
+    said = queue.alarm.reason
+    return QueueAlarmView(raised=queue.alarm.raised, says=f"{said[:1].upper()}{said[1:]}.")
 
 
 @router.post(UNDO_PATH, response_model=LearningUndoneView, responses=COMMON_RESPONSES)
@@ -1046,15 +1155,17 @@ async def undo_learning(request: Request, body: UndoAsked, asked: Asked) -> Lear
     memories = [found for found in (stored_memory(one) for one in memory_rows) if found]
     found = None if row is None or not memories else recorded_learning(row, memories[0][0])
     visible = () if record is None else visible_records((record,), asked)
+    found_here = () if found is None else (found,)
     shown = learnings_in_view(
-        records=visible,
-        learnings=() if found is None else (found,),
-        caller=asked.reach,
-        now=asked.now,
+        records=visible, learnings=found_here, caller=asked.reach, now=asked.now
     )
+    in_view = {one.memory_id for theirs in shown.values() for one in theirs} | {
+        one.memory_id
+        for one in conversation_learnings(found_here, caller=asked.reach, now=asked.now)
+    }
     if (
         found is None
-        or found.memory_id not in {one.memory_id for theirs in shown.values() for one in theirs}
+        or found.memory_id not in in_view
         or not may_undo(asked.reach, found, asked.now)
     ):
         log.info("undo not answerable", principal=asked.caller.principal.id)

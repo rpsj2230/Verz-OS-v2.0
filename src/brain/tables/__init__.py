@@ -100,6 +100,7 @@ from brain.tables.identity import (
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
 from brain.tables.learning import CorrectionRow, LearningRow
+from brain.tables.learning_signal import LearningPauseRow, MarkRow
 from brain.tables.manifest_draft import (
     ManifestActRow,
     ManifestDraftRow,
@@ -412,6 +413,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    # 0154_answer_marks_and_learning_pause. Neither points at anything: a mark names a trace and
+    # a pause an agent by value, so each outlives what it names.
+    "mem.mark",
+    "agent.learning_pause",
     # 0168_escalation. Points at nothing: the asker, the named person, the agent and the skill are
     # values, so a handoff outlives all four.
     "gate.escalation",
@@ -481,11 +486,13 @@ __all__ = [
     "GroupRoleRuleRow",
     "HaltRow",
     "KnowledgeItemRow",
+    "LearningPauseRow",
     "LearningRow",
     "LegalHoldRow",
     "ManifestActRow",
     "ManifestDraftRow",
     "ManifestRevisionRow",
+    "MarkRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",

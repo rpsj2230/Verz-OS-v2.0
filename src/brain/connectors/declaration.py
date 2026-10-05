@@ -151,6 +151,7 @@ from brain.connectors.write_verification import ReadBack, builds_a_manifest
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.ops.connect_steps import GuideStep
 from brain.ops.leases import SealedSecret
+from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -1046,10 +1047,19 @@ class ConnectorDeclaration:
     scopes: KeyScopes | None = None
     #: How a person consents to it at its vendor, when it authorises by OAuth (M11.8.6).
     oauth: OAuthConsent | None = None
+    #: Its verified rate ceiling, or None when nobody has measured one. Named for this source, so
+    #: `brain.ops.limits.connector_ceiling` finds it. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+    ceiling: ConnectorLimit | None = None
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
             msg = f"connector {self.name!r} is not a name"
+            raise DeclarationError(msg)
+        if self.ceiling is not None and self.ceiling.name != self.name:
+            msg = (
+                f"connector {self.name!r} declares the ceiling of {self.ceiling.name!r}; a source "
+                "is admitted by its own vendor's figure, found under its own name"
+            )
             raise DeclarationError(msg)
         if not self.label.strip():
             msg = f"connector {self.name!r} has no label, and the screen shows the label"

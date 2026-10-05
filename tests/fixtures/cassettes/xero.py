@@ -165,7 +165,7 @@ RATE_LIMIT: Final = RateLimit(
     "Also 60/minute. Resets 00:00 NZT. Not raisable, and this file said it was until "
     "2026-09-06: the ceiling sits on the client's tenant and is shared with every other "
     "integration they run, so no plan we can buy moves it and the only lever is asking "
-    "for less. `brain.ops.limits.SOURCE_CEILINGS` had the correct value and the argument "
+    "for less. `brain.ops.limits.source_ceilings()` had the correct value and the argument "
     "for it the whole time; the two records simply disagreed, and the disagreement was "
     "found by a connector being written against both at once.",
     False,
