@@ -239,6 +239,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_TIME_ZONE",
       "INSTALL_DIGEST_DESTINATION",
       "INSTALL_DIGEST_TIME",
+      "INSTALL_SERVICES",
     ],
     gaps: [
       {
