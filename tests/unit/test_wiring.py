@@ -235,17 +235,24 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
     2026-09-21 by exactly 1024 MiB, when the personal data analyser was given an image and its
     512 MiB placeholder became the 1536 MiB Microsoft requests for that image.
 
+    **It moved a fourth time on 2026-10-05, by the cap and not by a component, from 5128 to
+    648.** Item 120's Option A took the neighbours' 6,016 MiB of reservations off the host, and
+    the eight neighbours left reserve nothing and use 1,389 MiB, which `NEIGHBOUR_MIB` records
+    as a 1,536 MiB floor. The cap went from 5688 to 10,168 and wave 2's share from 1,720 to
+    6,200. Standard still names the inference server, and 648 is less than that one container,
+    which is the arithmetic behind item 120 leaving the model server waiting.
+
     Delete this and the overrun stops being visible anywhere, which means it is discovered by
     deploying it."""
     breaches = budget_breaches("standard")
 
     assert len(breaches) == 1, breaches
     assert "inference-server" in breaches[0]
-    assert "over by 5128 MiB" in breaches[0], (
+    assert "over by 648 MiB" in breaches[0], (
         "the standard overrun has moved; something has grown or shrunk and this test is the "
         "only place that would have said so"
     )
-    assert wave_two_mib("standard") - spendable_mib() == 5128
+    assert wave_two_mib("standard") - spendable_mib() == 648
 
 
 def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -> None:
@@ -645,31 +652,38 @@ def _langfuse_services() -> list[str]:
     return sorted(raw["services"])
 
 
-def test_the_trace_ledger_service_set_does_not_fit_with_nothing_else_of_ours_deployed() -> None:
-    """**The finding M32.1.1.1 turns on, computed rather than asserted in prose.**
+#: The cap the owner's host offered from 2026-09-06 until item 120 took the neighbours'
+#: reservations off it on 2026-10-05. Kept as a figure of its own so the refusal it produced is
+#: still asserted exactly, on the host where it was true.
+CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB = 5688
 
-    `budget_breaches("full")` already reports an overrun, and it names the inference server
-    as the largest container in the profile, which is true and is read as an invitation:
-    move that one somewhere else and the ledger presumably fits. It does not. Costed on its
-    own against the whole of what wave 2 may spend, the five services in this compose file
-    are 2304 MiB against 1720, which is the most generous host this system will ever offer
-    them.
 
-    The figures are exact on purpose, in the shape
-    `test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference_server`
-    uses: an overrun asserted only as "greater than" stays green while a container grows,
-    and the whole value of this number is that somebody notices when it moves.
+def test_the_trace_ledger_service_set_did_not_fit_beside_the_old_neighbours() -> None:
+    """**The finding M32.1.1.1 was blocked on from 2026-09-06 to 2026-10-05, computed rather
+    than asserted in prose.**
+
+    `budget_breaches("full")` reports an overrun and names the inference server as the largest
+    container in the profile, which is true and is read as an invitation: move that one
+    somewhere else and the ledger presumably fits. On the host as it was then it did not.
+    Costed on its own against the whole of what wave 2 might spend, the five services in this
+    compose file were 2304 MiB against 1720, the most generous host this system would ever
+    have offered them while the neighbours reserved 6,016 MiB.
+
+    Asked of that host by its cap rather than of today's, so the refusal keeps its exact
+    figures after the host changed: an overrun asserted only as "greater than" stays green
+    while a container grows, and the value of this number is that somebody notices when it
+    moves.
 
     Delete this and the only arithmetic left is per profile, which can be made to pass by
-    removing a neighbouring component, and the compose file gets deployed on the strength
-    of a subtraction that was never true."""
+    removing a neighbouring component, and a compose file gets deployed on the strength of a
+    subtraction that was never true."""
     services = _langfuse_services()
 
     assert len(services) == 5, services
     assert set_cost_mib(services) == 2304
-    assert spendable_mib() == 1720
+    assert spendable_mib(headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB) == 1720
 
-    breaches = set_breaches(services)
+    breaches = set_breaches(services, headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB)
     assert len(breaches) == 1, breaches
     assert "over by 584 MiB" in breaches[0]
     # The whole phrase, not the name on its own. The message lists every service in the set,
@@ -679,6 +693,34 @@ def test_the_trace_ledger_service_set_does_not_fit_with_nothing_else_of_ours_dep
         "the message exists to say which container to look at first, and a test that "
         "checked only the overrun would keep passing while it named the smallest one"
     )
+
+
+def test_rows_one_and_three_of_item_120_fit_beside_what_the_install_already_runs() -> None:
+    """**The arithmetic item 120 rests on, against the host as re-measured on 2026-10-05.**
+
+    The install already runs four wave 2 containers (the worker, its session pooler, the
+    identity provider and its database) and the secrets vault, which no profile here budgets
+    and whose limit is read from its own compose file. Beside them, row 1 (the personal data
+    detector) and row 3 (the trace ledger's five services) fit inside the 6,200 MiB wave 2 may
+    spend, and row 2 (the model server and the document worker) does not fit beside row 1,
+    which is why it waits.
+
+    Exact on purpose, for the reason the standard overrun is: a figure that moves is the
+    finding. Delete this and the room item 120 hands out is a paragraph in a document that
+    nothing recomputes, and the next container added decides the question by being deployed."""
+    vault = yaml.safe_load((REPO / "ops" / "openbao" / "compose.yml").read_text(encoding="utf-8"))
+    vault_mib = int(
+        str(vault["services"]["vault"]["deploy"]["resources"]["limits"]["memory"]).rstrip("M")
+    )
+    running = set_cost_mib(("brain-worker", "pgbouncer-session", "keycloak", "keycloak-db"))
+    row_one = set_cost_mib(("presidio-analyzer",))
+    row_three = set_cost_mib(_langfuse_services())
+    row_two = set_cost_mib(("inference-server", "brain-parse-worker"))
+
+    assert spendable_mib() == 6200
+    assert running + vault_mib == 1728
+    assert spendable_mib() - running - vault_mib - row_one - row_three == 632
+    assert row_two > spendable_mib() - running - vault_mib - row_one
 
 
 def test_the_same_service_set_would_fit_on_the_host_the_neighbours_have_left() -> None:
@@ -730,11 +772,14 @@ def test_a_set_that_does_not_fit_alone_does_not_fit_in_any_profile_that_runs_it(
     Delete this and `set_breaches` and `budget_breaches` can drift into two budgets, and the
     one that says a deployment fits is the one that gets believed."""
     services = _langfuse_services()
+    # On the host where the set did not fit alone, which is the only host the implication can
+    # be asked of: on today's host the set fits on its own, and the implication says nothing.
+    cap = CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB
 
-    assert set_breaches(services)
+    assert set_breaches(services, headroom_mib=cap)
     for profile in PROFILES:
         if set(services) <= {c.name for c in components_for(profile)}:
-            assert budget_breaches(profile), (
+            assert budget_breaches(profile, headroom_mib=cap), (
                 f"{profile!r} runs every one of {services} and reports that it fits, while "
                 "the same containers costed on their own do not"
             )
@@ -752,7 +797,11 @@ def test_the_written_reason_carries_the_figures_the_arithmetic_actually_produces
 
     assert f"{set_cost_mib(TRACE_LEDGER)} MiB of containers" in reason
     assert f"{set_cost_mib(_langfuse_services())} with the object store" in reason
-    assert f"has {spendable_mib()} MiB on this host" in reason
+    assert (
+        f"had {spendable_mib(headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB)} MiB on this host"
+        in reason
+    )
+    assert f"It has {spendable_mib()} since" in reason
 
 
 def test_an_empty_service_set_is_reported_rather_than_passing_as_a_fit() -> None:
