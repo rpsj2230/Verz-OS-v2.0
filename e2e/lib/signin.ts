@@ -42,7 +42,20 @@ export async function answerSignIn(page: Page, person: Person, codeSecret?: () =
   if (typeof body.access_token !== "string") {
     throw new Error("the token response carried no access token");
   }
+  console.log(`${person.username} signed in: ${describeToken(body.access_token)}`);
   return body.access_token;
+}
+
+/**
+ * The claims of an access token that say who it is for and how it was earned, and nothing that
+ * would let it be used: no signature, no subject, no session. Logged on every sign-in, because a
+ * token the API refuses for its audience or its assurance is otherwise a page that quietly signs
+ * the person out, and the reason is in these four claims.
+ */
+export function describeToken(token: string): string {
+  const payload = token.split(".")[1] ?? "";
+  const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+  return JSON.stringify({ aud: claims["aud"], azp: claims["azp"], typ: claims["typ"], amr: claims["amr"], scope: claims["scope"] });
 }
 
 /** Open the console as the administrator, through both factors. Returns the access token. */
