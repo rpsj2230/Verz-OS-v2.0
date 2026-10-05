@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T11:53:06.202248+00:00",
-  "commit": "a22f666c",
-  "commit_subject": "Everybody active on the staff list is on People before they sign in, and Staff sources has Sync now (#322)",
+  "generated_at": "2026-10-05T12:03:52.264045+00:00",
+  "commit": "4e57c96d",
+  "commit_subject": "WhatsApp is a channel an install can connect: Meta's signature checked over the exact bytes, its check of the address answered for the verify token, and every message in a notification answered to its own sender (#329)",
   "total": 1587,
   "done": 472,
   "percent": 29.7,
@@ -41,10 +41,10 @@
       "total": 265,
       "done": 120,
       "percent": 45.3,
-      "in_progress": 13,
-      "ready_for_testing": 10,
+      "in_progress": 12,
+      "ready_for_testing": 12,
       "blocked": 17,
-      "open": 105,
+      "open": 104,
       "acts": 0,
       "decided": 20
     },
@@ -1168,6 +1168,11 @@
       "why": "Teams is connectable (M10/channel-teams): Bot Framework tokens verified against Microsoft's published keys, the bot's App ID and the pinned tenant, answers in the chat on a token exchanged at the tenant's login, Connect Teams from an Azure Bot, and an install check; the owner's tenant proves the vendor's half",
       "updated": "2026-09-30"
     },
+    "M10.5.3": {
+      "status": "READY FOR TESTING",
+      "why": "WhatsApp is connectable (M10/channel-whatsapp): Meta's signature checked over the exact bytes, its GET check of the address answered for the verify token, a notification of several messages answered message by message, answers on a system user's access token, and an install check; the owner's number proves the vendor's half",
+      "updated": "2026-09-30"
+    },
     "M10.5.4": {
       "status": "READY FOR TESTING",
       "why": "Telegram is connectable (M10/channel-telegram): saving the bot's username and token registers this install's events address with Telegram, updates carry a header made from the token, answers go out with sendMessage, and an install check; the owner's bot proves the vendor's half",
@@ -1179,8 +1184,8 @@
       "updated": "2026-09-30"
     },
     "M10.6.1": {
-      "status": "IN PROGRESS",
-      "why": "the webhook, Lark, email, Slack, Teams and Telegram wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams; M10/channel-telegram); WhatsApp comes with its own package",
+      "status": "READY FOR TESTING",
+      "why": "all seven wires are live: webhook, Lark, email (a mailbox or Cloudflare), Slack, Teams, Telegram and WhatsApp (PR #105; L1, merged d426e3d3; #285; #296; #288; M10/channel-teams; M10/channel-telegram; M10/channel-whatsapp), each with its Connect steps and an install check",
       "updated": "2026-09-30"
     },
     "M11.4.9": {
