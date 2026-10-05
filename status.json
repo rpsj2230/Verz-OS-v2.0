@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-30T05:31:52.998905+00:00",
-  "commit": "49dcbf2a",
-  "commit_subject": "An application the tests let go is freed, so late route tests stop failing on a 503 in a full run (#309)",
+  "generated_at": "2026-10-05T10:00:33.710803+00:00",
+  "commit": "415212f7",
+  "commit_subject": "Item 135 decided: the Brain's Google account is a Viewer on the Drive folder (#307)",
   "total": 1584,
   "done": 471,
   "percent": 29.7,
@@ -1215,7 +1215,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 2,
+  "closed_today": 0,
   "next_up": [
     "M1.6.13",
     "M1.6.14",
