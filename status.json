@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T14:27:42.945214+00:00",
-  "commit": "657f9b07",
-  "commit_subject": "Google Drive is read: the worker walks the folder into a minimal index, and a question reads a file's words live for a reader granted the folder (M11.6.7, M11.7.7) (#332)",
+  "generated_at": "2026-10-05T14:33:54.296361+00:00",
+  "commit": "c1a37560",
+  "commit_subject": "A website visitor reads only what an administrator marked public (0171) (#315)",
   "total": 1592,
   "done": 472,
   "percent": 29.6,
