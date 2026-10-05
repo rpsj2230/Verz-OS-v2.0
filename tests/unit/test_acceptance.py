@@ -589,6 +589,8 @@ WRITTEN_BY_CHECKS = (
     "agent.manifest_draft",
     "agent.manifest_revision",
     "agent.manifest_act",
+    "gate.elevation_request",
+    "gate.break_glass_notice",
 )
 
 
