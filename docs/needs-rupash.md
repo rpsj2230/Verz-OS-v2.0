@@ -935,6 +935,9 @@ What is being built:
    Whether pressing it decides the approval is item 117's setting.
 3. The same stored address is what signing in with Lark (item 115, option A) will use later.
 
+The decision is applied to every channel that carries a person's own address (Lark, Slack and
+email), because items 125 and 126 made delivery channel-agnostic.
+
 **What you do:** nothing.
 
 ## 116. Who may see the records in a Lark Base - DECIDED 2026-09-29: the Brain's own roles and permissions

@@ -229,6 +229,7 @@ def test_the_screen_lists_every_notice_on_and_an_unconfigured_relay_with_no_pass
         NoticeKind.REVERIFICATION_REQUEST.value,
         NoticeKind.DENIAL_PATTERN.value,
         NoticeKind.HANDED_TO_A_PERSON.value,
+        NoticeKind.QUESTION_NOT_PICKED_UP.value,
     }
     assert body["email"]["configured"] is False and body["email"]["host"] is None
     assert body["email"]["password"] == {
