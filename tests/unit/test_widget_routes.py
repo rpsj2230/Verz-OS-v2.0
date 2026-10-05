@@ -12,7 +12,7 @@ Task ids: M10.5.5, M10.7.2
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
@@ -61,14 +61,18 @@ def test_a_listed_site_is_handed_a_session_that_ends_within_the_widgets_bounds(
     before = datetime.now(tz=UTC)
 
     response = http.post(PATH, headers={"Origin": SITE})
+    after = datetime.now(tz=UTC)
 
     assert response.status_code == 201
     body = response.json()
     assert body["session"].startswith(SESSION_ID_PREFIX)
     expires = datetime.fromisoformat(body["expires_at"])
     absolute = datetime.fromisoformat(body["absolute_expiry"])
-    assert expires <= before + WIDGET_SESSION_IDLE + timedelta(seconds=5)
-    assert absolute <= before + WIDGET_SESSION_ABSOLUTE_MAX + timedelta(seconds=5)
+    # Bounded by the clock either side of the request, not by a fixed slack after it: a loaded
+    # runner took eight seconds over this request on 2026-09-30 and a five-second slack failed.
+    earliest = before.replace(microsecond=0) + WIDGET_SESSION_IDLE
+    assert earliest <= expires <= after + WIDGET_SESSION_IDLE
+    assert absolute <= after + WIDGET_SESSION_ABSOLUTE_MAX
     assert set(body) == {"session", "expires_at", "absolute_expiry"}
 
 

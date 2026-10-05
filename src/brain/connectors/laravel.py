@@ -107,12 +107,13 @@ declared contract, is read live and never stored, which the canary planted in th
 contract value proves on every build. It is declared as `CONNECTOR` at the foot of this
 module (`brain.connectors.declaration`).
 
-Task ids: M11.6.1, M38.4.1.1
+Task ids: M11.6.1, M38.4.1.1, M11.7.7
 """
 
 from __future__ import annotations
 
 import enum
+import re
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -123,6 +124,7 @@ from typing import Any, Final, Protocol
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     CREDENTIAL_ATTRIBUTE_RE,
+    UNBOUNDED_SELECTORS,
     AccessMode,
     ConnectorContractError,
     ConnectorHealth,
@@ -134,7 +136,15 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
-from brain.connectors.declaration import ConnectorDeclaration, Recorded
+from brain.connectors.declaration import (
+    CREDENTIAL_ASK,
+    ConnectorDeclaration,
+    ConsoleForm,
+    CredentialShape,
+    Recorded,
+    Setting,
+    SettingRefusedError,
+)
 from brain.connectors.federation import FailureReason, PartialAnswer, SourceFailure
 from brain.connectors.manifest import (
     ChangeSignal,
@@ -160,7 +170,7 @@ from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.errors import Degraded
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.projection import ProjectionRefusedError
-from brain.core.scope import Scope
+from brain.core.scope import Clause, Op, Scope
 from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.knowledge.rows import assert_takes_no_sql
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
@@ -1585,14 +1595,178 @@ LARAVEL_THE_CREDENTIAL_IS_READ_ONLY: Final = (
 )
 
 
-#: Why this screen cannot connect it, said by the declaration and by the guide's last step.
-NOT_FROM_THE_CONSOLE_SAYS: Final = (
-    "It reads database views, each kept under a visibility rule written by whoever "
-    "read the view's definition. This screen has no way to write those rules yet, so "
-    "it is connected at the server."
+# ------------------------------------------------- connecting from the console (M11.7.7)
+#: The settings Connectors asks for: the database the views live in, each view's visibility rule
+#: and the bound on one read, which `ReadBounds` refuses to default.
+SCHEMA_SETTING: Final = "schema"
+CLIENT_RULE_SETTING: Final = "client_rule"
+USER_RULE_SETTING: Final = "user_rule"
+MAX_ROWS_SETTING: Final = "max_rows"
+TIMEOUT_SETTING: Final = "timeout_seconds"
+
+#: Each view's rule, by the entity it keeps.
+RULE_SETTING_FOR: Final[Mapping[str, str]] = MappingProxyType(
+    {ENTITY_CLIENT: CLIENT_RULE_SETTING, ENTITY_USER: USER_RULE_SETTING}
 )
-#: The screens that prepare your own database for this system, ending where the server takes
-#: over: the visibility rules this source needs cannot be written on a screen yet.
+
+#: How a view's visibility rule is written on the form, and the whole of the grammar.
+A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES: Final = (
+    "A view's visibility rule is one field the view keeps and the value or values a reader's own "
+    "scope must hold for it: department = sales, or department in sales, marketing. One clause, "
+    "because that is what a person reading a view's definition can check against it, and a field "
+    "the view does not keep is refused, because a rule over a column that never arrives matches "
+    "nothing for ever and reads as a company with no records."
+)
+
+_RULE_EQ: Final = re.compile(r"^\s*([a-z][a-z0-9_]{0,59})\s*=\s*(.+?)\s*$")
+_RULE_IN: Final = re.compile(r"^\s*([a-z][a-z0-9_]{0,59})\s+in\s+(.+?)\s*$")
+_RULE_VALUE: Final = re.compile(r"^[A-Za-z0-9_.@-]{1,120}$")
+
+
+def rule_of(text: str) -> Scope:
+    """One view's visibility rule, as the form writes it, or `LaravelError` when it is not one.
+
+    See `A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES`. Whether the field is one the view keeps is
+    `projection_for`'s refusal, not a second one here.
+    """
+    listed = _RULE_IN.match(text)
+    equal = None if listed is not None else _RULE_EQ.match(text)
+    found = listed or equal
+    if found is None:
+        msg = f"a rule is a field, = or in, and values. {A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES}"
+        raise LaravelError(msg)
+    field, rest = found.groups()
+    values = tuple(one.strip() for one in rest.split(",")) if listed else (rest.strip(),)
+    if not all(_RULE_VALUE.match(one) for one in values):
+        msg = f"a view rule's values are names or codes. {A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES}"
+        raise LaravelError(msg)
+    clause = (
+        Clause(field=field, op=Op.IN, value=values)
+        if listed
+        else Clause(field=field, op=Op.EQ, value=values[0])
+    )
+    return Scope(clauses=(clause,))
+
+
+def _whole(settings: Mapping[str, str], name: str, *, most: int) -> int:
+    """A positive whole number no greater than `most`, or the refusal naming its setting."""
+    given = settings.get(name, "").strip()
+    if not given.isdigit() or not 1 <= int(given) <= most:
+        raise SettingRefusedError(f"not a whole number from 1 to {most}", setting=name)
+    return int(given)
+
+
+def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
+    """The manifest a connection made on the Connectors screen declares (M11.7.7).
+
+    Each setting is judged by the rule the connection already holds it to and a refusal names the
+    setting: the database by `assert_is_a_view` on the views it would hold, each rule by
+    `rule_of` and `projection_for`, and the bound by `ReadBounds`, which refuses a figure past
+    its cap. Then the manifest is built, which is the check that they agree.
+    """
+    schema = settings.get(SCHEMA_SETTING, "").strip()
+    if schema.casefold() in UNBOUNDED_SELECTORS:
+        # A database called `all` is a legal name and reads as everything to whoever reads the
+        # connection afterwards, so it is refused in front of the person connecting it.
+        raise SettingRefusedError("reads as everything", setting=SCHEMA_SETTING)
+    try:
+        connection = LaravelConnection(
+            schema=schema,
+            bounds=ReadBounds(
+                max_rows=_whole(settings, MAX_ROWS_SETTING, most=MAX_ROWS_EVER),
+                timeout_seconds=float(
+                    _whole(settings, TIMEOUT_SETTING, most=int(MAX_TIMEOUT_SECONDS))
+                ),
+            ),
+        )
+    except SettingRefusedError:
+        raise
+    except ConnectorContractError as refused:
+        raise SettingRefusedError("not a database name", setting=SCHEMA_SETTING) from refused
+    visibility: dict[str, Scope] = {}
+    for entity, name in RULE_SETTING_FOR.items():
+        try:
+            visibility[entity] = rule_of(settings.get(name, ""))
+            projection_for(entity, visibility=visibility[entity])
+        except (ConnectorContractError, ValueError) as refused:
+            raise SettingRefusedError("not a rule over the view", setting=name) from refused
+    return laravel_manifest(connection, ref=ref, visibility=visibility)
+
+
+#: What the Connectors screen asks for. The credential is the read-only user, as a name and a
+#: password, kept together in the vault.
+CONSOLE: Final = ConsoleForm(
+    settings=(
+        Setting(
+            name=SCHEMA_SETTING,
+            label="Database holding the views",
+            hint=(
+                "The name of the database the two views are in, as your database lists it. The "
+                f"views are named {VIEW_OBJECT_FOR[ENTITY_CLIENT]} for clients and "
+                f"{VIEW_OBJECT_FOR[ENTITY_USER]} for staff, and nothing else there is read."
+            ),
+            refused=(
+                "That is not a database name. Use lower-case letters, digits and underscores, "
+                "as your database lists it."
+            ),
+        ),
+        Setting(
+            name=CLIENT_RULE_SETTING,
+            label="Who may be told a client",
+            hint=(
+                "The rule the client view is kept under, read from its definition: one field it "
+                "keeps and the values, such as department = sales, or department in sales, "
+                "marketing. The fields are " + ", ".join(one.name for one in CLIENT_PROJECTED) + "."
+            ),
+            refused=(
+                "That is not a rule over the client view. Write one field it keeps, = or in, and "
+                "the values, such as department = sales."
+            ),
+        ),
+        Setting(
+            name=USER_RULE_SETTING,
+            label="Who may be told a staff record",
+            hint=(
+                "The rule the staff view is kept under, in the same words. The fields are "
+                + ", ".join(one.name for one in USER_PROJECTED)
+                + "."
+            ),
+            refused=(
+                "That is not a rule over the staff view. Write one field it keeps, = or in, and "
+                "the values, such as department = operations."
+            ),
+        ),
+        Setting(
+            name=MAX_ROWS_SETTING,
+            label="Most rows one read may return",
+            hint=(
+                f"A whole number up to {MAX_ROWS_EVER}. Every read of your database stops there, "
+                "so a question can never scan it whole."
+            ),
+            refused=f"Type a whole number from 1 to {MAX_ROWS_EVER}.",
+        ),
+        Setting(
+            name=TIMEOUT_SETTING,
+            label="Longest one read may take, in seconds",
+            hint=(
+                f"A whole number up to {int(MAX_TIMEOUT_SECONDS)}. A read that takes longer is "
+                "stopped, so your application is never slowed by a question."
+            ),
+            refused=f"Type a whole number of seconds from 1 to {int(MAX_TIMEOUT_SECONDS)}.",
+        ),
+    ),
+    credential_label="The read-only database user",
+    credential_hint=(
+        "The name and password of the database user with SELECT on the allowlisted views only: no "
+        "SELECT on tables and no write. They are kept in the vault together and never shown again."
+    ),
+    build=built_from_the_console,
+    credential_shape=CredentialShape.DATABASE_USER,
+)
+
+
+#: The screens that prepare your own database for this system, ending with the form that connects
+#: it: the database, each view's rule, the bound on a read and the read-only user (M11.7.7).
 GUIDE: Final = keyed(
     (
         GuideStep(
@@ -1631,21 +1805,32 @@ GUIDE: Final = keyed(
             ),
         ),
         GuideStep(
-            key="at_the_server",
-            title="Connect it at the server",
+            key="connect",
+            title="Name the database, write each view's rule and give the user here",
             text=(
-                "This screen cannot finish this one. "
-                + NOT_FROM_THE_CONSOLE_SAYS
-                + " Hand whoever runs this install's server the read-only user's name and password "
-                "and the list of views."
+                "Type the database the views are in, the rule each view is kept under as its "
+                "definition says, and the most rows and seconds one read may take, then the "
+                "read-only user's name and password, and press Connect Laravel database views."
             ),
             sketch=Sketch(
-                place="Your server",
-                heading="Connected at the server",
+                place="Company Brain",
+                heading="Connect Laravel database views",
                 lines=(
-                    SketchLine(LineKind.ITEM, "The read-only user", mark=True),
-                    SketchLine(LineKind.ITEM, "The list of views", mark=True),
+                    SketchLine(LineKind.FIELD, "Database", "portal", mark=True),
+                    SketchLine(LineKind.FIELD, "Clients", "department = sales", mark=True),
+                    SketchLine(LineKind.FIELD, "Staff", "department = operations", mark=True),
+                    SketchLine(LineKind.FIELD, "Most rows, seconds", "500, 10", mark=True),
+                    SketchLine(LineKind.FIELD, "User and password", "********", mark=True),
                 ),
+                button="Connect Laravel database views",
+            ),
+            asks=(
+                SCHEMA_SETTING,
+                CLIENT_RULE_SETTING,
+                USER_RULE_SETTING,
+                MAX_ROWS_SETTING,
+                TIMEOUT_SETTING,
+                CREDENTIAL_ASK,
             ),
         ),
     )
@@ -1656,7 +1841,7 @@ CONNECTOR: Final = ConnectorDeclaration(
     name=CONNECTOR_NAME,
     label="Laravel database views",
     guide=GUIDE,
-    not_from_the_console=NOT_FROM_THE_CONSOLE_SAYS,
+    console=CONSOLE,
     read_back=ReadBack(
         reading=classified_reading,
         recorded=(

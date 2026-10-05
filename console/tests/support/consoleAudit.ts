@@ -228,10 +228,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/install/limits",
       "/api/v1/install/tuning*",
       "/api/v1/install/capacity",
+      "/api/v1/digest/destination",
       "/setup/*",
     ],
     tables: ["ops.setting", "ops.budget_version"],
-    installation: ["INSTALL_LOCALES", "INSTALL_CURRENCY", "INSTALL_TIME_ZONE"],
+    installation: [
+      "INSTALL_LOCALES",
+      "INSTALL_CURRENCY",
+      "INSTALL_TIME_ZONE",
+      "INSTALL_DIGEST_DESTINATION",
+      "INSTALL_DIGEST_TIME",
+    ],
     gaps: [
       {
         what: "Spending budgets are read and never changed.",
@@ -300,6 +307,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
       "/api/v1/console/agents/{agent_id}/stats",
+      "/api/v1/agents/{agent_id}/budget",
+      "/api/v1/agents/{agent_id}/capabilities",
+      "/api/v1/agents/{agent_id}/preview",
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",

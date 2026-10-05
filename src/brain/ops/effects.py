@@ -628,12 +628,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_sync_run:RunKeyReader.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.connector_sync_store:LeaseCounts.tallies": Repeat.READS,
         "brain.ops.connector_sync_run:SourceCaller.get": Repeat.READS,
+        # A switched-on Lark Base and Wiki (M11.6.3, M11.6.4): every call a GET the app's token may
+        # only read, and the token exchanged for one run and dropped, lapsing on Lark's own clock.
+        "brain.ops.lark_base_index:LarkCaller.get": Repeat.READS,
+        "brain.ops.lark_base_index:TokenIssuer.issue": Repeat.EXPIRES_ON_ITS_OWN,
         # Reading a connected source while somebody waits (M11.9.2). Which records are read live,
         # under whose credentials and narrowed how are computed from what they are handed, and the
         # source handed back is a GET this connection may only read, so a repeat is a second read.
         "brain.connectors.declaration:LiveLookup.entities": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.arguments_for": Repeat.READS,
+        "brain.connectors.declaration:LiveLookup.operation": Repeat.READS,
         "brain.connectors.live_read:LiveSources.reads": Repeat.READS,
         "brain.connectors.live_read:LiveSources.source_for": Repeat.READS,
         "brain.gate.live_records:LiveRecords.refresh": Repeat.READS,
@@ -666,6 +671,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
         "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The evening digest's destination and its send (M38.3.3): a channel's list of the
+        # conversations it may post to is a request built and a page read, and a send's secret is
+        # borrowed through a token that expires on its own if its revocation is lost.
+        "brain.ops.digest_destination:ConversationLister.conversations_request": Repeat.READS,
+        "brain.ops.digest_destination:ConversationLister.conversations_page": Repeat.READS,
+        "brain.ops.channel_lease:ChannelSecretLeases.lease": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
@@ -751,6 +762,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.adapter:ChannelWire.read": Repeat.READS,
         "brain.channels.adapter:ChannelWire.request_for": Repeat.READS,
         "brain.channels.adapter:ChannelWire.judge": Repeat.READS,
+        "brain.channels.adapter:KeyedWire.key_set_of": Repeat.READS,
         "brain.channels.adapter:ChannelTransport.send": Repeat.ISSUES,
         "brain.channels.inbound:ChannelBindings.binding_for": Repeat.READS,
         # The gate run as the bound person: a model call and reads, and the send is `deliver`'s.

@@ -324,6 +324,10 @@ class Control:
     route: str = ""
     #: The file carrying the schedule, for a control whose recurrence is not in Python.
     schedule_file: str = ""
+    #: The install setting holding the time of day this control is owed at, `HH:MM` in the
+    #: install's zone, or empty for a control owed on its interval. See
+    #: `brain.ops.schedule.A_DAILY_MESSAGE_IS_OWED_AT_ITS_HOUR_AND_NOT_A_DAY_AFTER_THE_LAST`.
+    daily_at: str = ""
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -877,6 +881,8 @@ CONTROLS: Final[tuple[Control, ...]] = (
             "brain.ops.connector_sync_run:run_connector_sync_now",
             "brain.ops.connector_sync:plan_for",
             "brain.ops.connector_sync:after_attempt",
+            # The switched-on Lark Base's minimal index, read on the same schedule (M11.6.3).
+            "brain.ops.lark_base_index:index_if_due",
         ),
         guards=(
             "that every source an administrator connected is read on its own interval under its "
