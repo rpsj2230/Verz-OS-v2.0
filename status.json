@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T17:15:26.278688+00:00",
-  "commit": "ac5a6809",
-  "commit_subject": "The trace ledger and its file store start as an optional service by the release, with their secrets minted on the server and their limits reported back (#349)",
+  "generated_at": "2026-10-05T17:37:49.605322+00:00",
+  "commit": "476d4bbe",
+  "commit_subject": "A connector's every write is proved on an install to be a declared tool, off until its key is given and audited when it is (#353)",
   "total": 1592,
   "done": 551,
   "percent": 34.6,
