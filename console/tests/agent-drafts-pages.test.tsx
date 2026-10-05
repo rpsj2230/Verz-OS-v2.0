@@ -168,6 +168,11 @@ function aDraft(overrides: Readonly<Record<string, unknown>> = {}): Record<strin
     widened: [],
     drawable_tools: [],
     publish_unavailable: null,
+    channels: [
+      { name: "console", label: "Web console" },
+      { name: "lark", label: "Lark" },
+    ],
+    channels_note: "NO-CHANNEL-SENTENCE",
     ...overrides,
   };
 }
@@ -413,6 +418,27 @@ describe("one draft", () => {
     });
   });
 
+  test("a new agent is offered every channel unticked, is told what none means, and sends none", async () => {
+    // What breaks if this is deleted: a new agent switched on somewhere nobody chose, or one made
+    // mute with nobody told that it answers nowhere (M13.7.4).
+    const { idp } = await consoleAt(draftAddress(DRAFT_ID, "publish"), {
+      [`GET ${DRAFT_API}`]: { body: aDraft({ state: "checked" }) },
+      [`POST ${DRAFT_API}/publish`]: {
+        status: 201,
+        body: { state: "published", agent_id: "invoice_helper_ab12cd", sentence: "Published.", widened: [] },
+      },
+    });
+    const boxes = await screen.findAllByRole("checkbox");
+    expect(boxes.map((one) => (one as HTMLInputElement).checked)).toEqual([false, false]);
+    expect(document.body.textContent).toContain("NO-CHANNEL-SENTENCE");
+    fireEvent.click(button(PUBLISH_LABEL));
+    await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
+
+    expect(posts(idp)).toEqual([
+      { path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: false, channels: [] } },
+    ]);
+  });
+
   test("publishing is confirmed and names the version checked and who can find the new agent", async () => {
     // What breaks if this is deleted: a publish of a version the person was not looking at, or of a
     // new agent to an audience nobody chose.
@@ -424,10 +450,13 @@ describe("one draft", () => {
       },
     });
     fireEvent.click(screen.getByRole("radio", { name: "My department" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lark" }));
     fireEvent.click(button(PUBLISH_LABEL));
     await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
 
-    expect(posts(idp)).toEqual([{ path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: true } }]);
+    expect(posts(idp)).toEqual([
+      { path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: true, channels: ["lark"] } },
+    ]);
     await waitFor(() => {
       expect(document.body.textContent).toContain("It waits for a second person.");
     });

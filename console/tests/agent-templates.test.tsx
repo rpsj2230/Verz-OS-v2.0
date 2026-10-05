@@ -59,7 +59,13 @@ async function consoleAt(path: string, gets: Readonly<Record<string, { status?: 
     "/api/v1/agent-templates": { body: LIST },
     "/api/v1/agent-templates/pricing_desk": { body: detail() },
     "/api/v1/agent-templates/pricing_desk/versions/3": {
-      body: { template_id: "pricing_desk", version: 3, display_name: "Pricing desk", summary: null, content_digest: DIGEST, starts: "STARTS-SENTENCE", unavailable: null },
+      body: { template_id: "pricing_desk", version: 3, display_name: "Pricing desk", summary: null, content_digest: DIGEST, starts: "STARTS-SENTENCE", unavailable: null,
+        channels: [
+          { name: "console", label: "Web console" },
+          { name: "lark", label: "Lark" },
+        ],
+        channels_note: "NO-CHANNEL-SENTENCE",
+      },
     },
     ...gets,
   };
@@ -168,6 +174,10 @@ describe("one template's page", () => {
     // from a single press.
     const { idp, router } = await consoleAt("/agent-templates/pricing_desk");
 
+    const boxes = await screen.findAllByRole("checkbox", { name: /Web console|Lark/ });
+    expect(boxes.map((one) => (one as HTMLInputElement).checked)).toEqual([false, false]);
+    expect(document.body.textContent).toContain("NO-CHANNEL-SENTENCE");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Web console" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.install }));
     });
@@ -182,7 +192,10 @@ describe("one template's page", () => {
       expect(router.state.location.pathname).toBe("/agents/pricing_desk_1");
     });
     expect(posts(idp)).toEqual([
-      { path: "/api/v1/agent-templates/pricing_desk/versions/3/install", body: { expected_digest: DIGEST, for_department: false } },
+      {
+        path: "/api/v1/agent-templates/pricing_desk/versions/3/install",
+        body: { expected_digest: DIGEST, for_department: false, channels: ["console"] },
+      },
     ]);
   });
 

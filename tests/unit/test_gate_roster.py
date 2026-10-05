@@ -37,6 +37,7 @@ def an_agent(
     persona: str = "Answer briefly.",
     capabilities: tuple[str, ...] = ("read:client.name",),
     disabled: bool = False,
+    channels: tuple[str, ...] = ("console",),
 ) -> AgentRecord:
     return AgentRecord(
         agent_id=agent_id,
@@ -46,6 +47,7 @@ def an_agent(
         authority=AgentAuthority(capabilities=tuple(Capability(value=one) for one in capabilities)),
         created_by=owner_id,
         disabled_at=LONG_AGO if disabled else None,
+        channels=channels,
     )
 
 
@@ -81,6 +83,7 @@ def test_the_roster_holds_the_default_and_every_agent_the_person_may_run() -> No
             an_agent("resting", disabled=True),
         ),
         VIEWER,
+        channel=Channel.CONSOLE,
         default=DEFAULT,
         tool_names=TOOLS,
     )
@@ -103,8 +106,59 @@ def test_a_personal_agent_is_in_its_owners_roster_and_a_department_agent_in_its_
             "audience": AgentAudience(level=Visibility.DEPARTMENT, owner_id="u_s", department="hr")
         }
     )
-    roster = answer_roster((mine, ours, theirs), VIEWER, default=DEFAULT, tool_names=TOOLS)
+    roster = answer_roster(
+        (mine, ours, theirs), VIEWER, channel=Channel.CONSOLE, default=DEFAULT, tool_names=TOOLS
+    )
     assert roster.visible == {"brain", "mine", "ours"}
+
+
+def test_an_agent_not_enabled_on_the_requests_channel_is_not_in_its_roster() -> None:
+    """**M13.7.4.** An agent switched on for Lark alone is in a Lark question's roster and not in a
+    console question's, and an agent switched on for nothing is in neither, so a name for it on the
+    wrong channel finds what a name nobody created finds.
+
+    Delete this and an agent answers on a channel nobody enabled it on, which is the leaf's whole
+    refusal gone with every other test still green."""
+    agents = (
+        an_agent("lark_only", channels=("lark",)),
+        an_agent("both", channels=("console", "lark")),
+        an_agent("mute", channels=()),
+    )
+
+    def roster_on(channel: Channel) -> frozenset[str]:
+        return answer_roster(
+            agents, VIEWER, channel=channel, default=DEFAULT, tool_names=TOOLS
+        ).visible
+
+    assert roster_on(Channel.LARK) == {"brain", "lark_only", "both"}
+    assert roster_on(Channel.CONSOLE) == {"brain", "both"}
+    assert roster_on(Channel.SLACK) == {"brain"}
+
+
+def test_an_agent_enabled_on_a_channel_is_still_held_to_its_audience_there() -> None:
+    """Being switched on for a channel admits nobody: somebody else's personal agent enabled on the
+    console is still not in this person's console roster. Delete this and enabling a channel could
+    be read as publishing the agent to everybody who asks there."""
+    secret = an_agent("secret", level=Visibility.PERSONAL, owner_id="u_other")
+    roster = answer_roster(
+        (secret,), VIEWER, channel=Channel.CONSOLE, default=DEFAULT, tool_names=TOOLS
+    )
+    assert roster.visible == {"brain"}
+
+
+def test_one_agents_cache_key_does_not_depend_on_the_order_its_channels_arrived_in() -> None:
+    """Two records built from the same channels in different orders, with a repeat, are one value
+    and one `setup_of` hash. Delete this and a set of channels dumped in iteration order gives one
+    agent a different cache key on every replica, so an answer computed on one is never served on
+    another."""
+    one = an_agent(channels=("teams", "console", "lark"))
+    other = an_agent(channels=("lark", "teams", "console", "lark"))
+    assert one == other
+    assert one.channels == ("console", "lark", "teams")
+    assert setup_of(one, TOOLS).config_hash == setup_of(other, TOOLS).config_hash
+    assert setup_of(an_agent(channels=("console",)), TOOLS).config_hash != (
+        setup_of(one, TOOLS).config_hash
+    )
 
 
 def test_a_selected_agent_answers_at_the_callers_reach_intersected_with_its_ceiling() -> None:
