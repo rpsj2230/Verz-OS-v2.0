@@ -628,7 +628,7 @@ def test_a_source_nothing_may_read_is_counted_as_such_and_never_called(
     Delete this and a source with no verified ceiling is read against no limit at all."""
     from brain.ops import limits
 
-    measured = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    measured = {name: one for name, one in limits.ceilings_by_name().items() if name != "hubspot"}
     monkeypatch.setattr(limits, "_BY_NAME", measured)
     with a_database("brain_connector_sync_unverified") as url:
         connect(url)

@@ -40,6 +40,7 @@ import pytest
 from brain.connectors import cloudflare
 from brain.connectors.cloudflare import (
     CLOUDFLARE,
+    CLOUDFLARE_CALLS_PER_FIVE_MINUTES,
     CONNECTOR,
     DNS_CHANGE_TOOL,
     DNS_RECORD,
@@ -90,7 +91,7 @@ from brain.ops.connectable import connectable, key_reference, manifest_for, sett
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.connector_sync_run import authorization
 from brain.ops.credentials import connector_write_slot
-from brain.ops.limits import CLOUDFLARE_CALLS_PER_FIVE_MINUTES, connector_ceiling
+from brain.ops.limits import connector_ceiling
 from brain.tools.registry import (
     SensitiveEffect,
     ToolRegistrationError,

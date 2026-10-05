@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 from brain.ops.credentials import SLOTS
-from brain.ops.limits import SOURCE_CEILINGS
+from brain.ops.limits import source_ceilings
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
 from brain.ops.secrets import VaultRole, policy_of
 
@@ -189,10 +189,10 @@ def _keyless() -> frozenset[str]:
 
 
 @pytest.mark.parametrize(
-    "connector", sorted(c.name for c in SOURCE_CEILINGS if c.name not in _keyless())
+    "connector", sorted(c.name for c in source_ceilings() if c.name not in _keyless())
 )
 def test_every_connector_the_code_knows_about_has_a_credential_slot(connector: str) -> None:
-    """Parametrised from `SOURCE_CEILINGS`, which is the closed list of sources this system
+    """Parametrised from `source_ceilings()`, which is the closed list of sources this system
     has measured a ceiling for. A connector in that list with no slot in the document is a
     connector whose scopes have not been argued about.
 
