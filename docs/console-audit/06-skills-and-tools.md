@@ -1,7 +1,7 @@
 ### Skills and tools
 
 - **Screens:** `/skills`, `/skills/:name`, `/skills/:name/:view`, `/tools`, `/tools/:name`
-- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`, `agent.skill_category`, `agent.skill_invocation`, `agent.skill_retirement`, `agent.skill_detachment`
+- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`, `agent.skill_category`, `agent.skill_invocation`, `agent.skill_retirement`, `agent.skill_script`, `agent.skill_detachment`
 - **Installation values:** `INSTALL_ACCEPTANCE_SKILL_SOURCE`
 - **Measured here:** 15 routes, 0 called by no screen; 11 write routes, 11 with all three proofs; 2 gaps.
 

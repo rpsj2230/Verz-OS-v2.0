@@ -219,6 +219,7 @@ from brain.console.skill_library import (
     read_url,
     retired_digests,
     retiring,
+    runnable_here,
     trusted_reach,
     url_source_problem,
 )
@@ -781,6 +782,16 @@ def library_of(request: Request) -> SkillLibrary:
     if isinstance(found, SkillLibrary):
         return found
     return StoredSkills(_require_sessions(request))
+
+
+def sandbox_of(request: Request) -> bool:
+    """Whether this install runs a script sandbox: the address the lifespan resolved, or none.
+
+    `app.state.sandbox_address` is `brain.ops.sandbox.sandbox_address` over the installation's
+    settings, set once at start; absent, the install runs none, and a skill with scripts is
+    refused with `brain.console.skill_library.THIS_INSTALL_RUNS_NO_SANDBOX`.
+    """
+    return bool(getattr(request.app.state, "sandbox_address", None))
 
 
 def fetcher_of(request: Request) -> Fetcher:
@@ -1457,7 +1468,9 @@ async def add_skill(request: Request, body: SkillPackageAsked, asked: Asked) -> 
         raise _not_answerable()
     categories = _categories_or_refused(body.categories)
     try:
-        package = read_package(body.file_name, _package_bytes(body))
+        package = runnable_here(
+            read_package(body.file_name, _package_bytes(body)), sandbox=sandbox_of(request)
+        )
     except SkillLibraryError as refused:
         raise _refused_because(str(refused)) from None
     return await _added(request, asked, _adding(package, asked), categories)
@@ -1514,6 +1527,10 @@ async def import_skill(request: Request, body: SkillImportAsked, asked: Asked) -
         raise _not_answerable()
     categories = _categories_or_refused(body.categories)
     package = await _fetched_package(request, body)
+    try:
+        runnable_here(package, sandbox=sandbox_of(request))
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
     return await _added(request, asked, _adding(package, asked), categories)
 
 

@@ -142,6 +142,7 @@ from brain.ops.pii import analyzer_address
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
+from brain.ops.sandbox import sandbox_address
 from brain.ops.secrets import VaultRole
 from brain.ops.sensitive_read_store import SensitiveReadRecorder
 from brain.ops.starter_store import furnish as furnish_install
@@ -618,6 +619,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # per call from the ladder, the provider switches and the keys this process holds, so a
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
+    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9). No
+    # installation switches it on until the sandbox overlay lands with its switch; until then
+    # the set of switched services is empty and every skill with scripts is refused at the door.
+    app.state.sandbox_address = sandbox_address(settings.sandbox_url, frozenset())
     # Every request to a third-party model is scrubbed of personal data on its way out, by the
     # rules and by the install's analyser where its profile deploys one (`brain.ops.egress`).
     app.state.models = model_service_at_start(
