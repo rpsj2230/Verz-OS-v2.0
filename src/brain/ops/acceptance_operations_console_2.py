@@ -21,7 +21,7 @@ address is resolved and no request leaves the process. An install that has Xero 
 already is not run, because the check would be connecting over somebody's real connection. See
 `brain.ops.acceptance_checks_connectors.A_RECORDED_ANSWER_IS_NEVER_A_CALL`.
 
-Task ids: M27.2.2, M27.2.6, M27.8.13, M27.15.47, M27.15.7, M27.15.36, M27.15.39
+Task ids: M27.2.2, M27.8.13, M27.15.47, M27.15.7, M27.15.36, M27.15.39
 Task ids: M27.2.4, M27.12.2, M27.15.8
 """
 
@@ -118,7 +118,7 @@ def a_job() -> Control:
 
 # ------------------------------------------------------- 1. live runs and the queue (M27.2.2)
 @check(
-    leaves=("M27.2.2", "M27.2.6"),
+    leaves=("M27.2.2",),
     sentence=(
         "A run of a scheduled job started by the worker and not finished is listed on Live runs, "
         "by the route that page calls, for a reader of running work; the queue lists every "
@@ -427,20 +427,30 @@ async def a_connected_source_is_kept_apart_and_exported_without_a_key(h: Harness
 @check(
     leaves=("M27.15.8", "M27.12.2", "M27.2.4"),
     sentence=(
-        "An administrator presses Test connection on a Xero tenant made up for the check: the "
-        "worker's probe pass makes one call to a transport answering from memory, records the "
-        "result on the source's health and returns no business rows, and Connectors shows it "
-        "connected; a test the source refuses is shown as failing; anybody else is refused."
+        "A Xero tenant made up for the check is read by the worker's scheduled read and shown "
+        "read on Connectors; Test connection pressed there makes one call through the worker's "
+        "probe pass to a transport answering from memory, recorded on the source's health with "
+        "no business rows returned; a test the source refuses shows it failing; anybody else is "
+        "refused."
     ),
 )
 async def a_source_test_is_one_call_whose_health_is_shown(h: Harness) -> None:
     from brain.connector_routes import ask_probe, connector_probe, connector_sources
     from brain.console.connector_detail import SourceStatus
     from brain.listing import ListAsked
-    from brain.ops.acceptance_checks_connectors import SOURCE, _Keys, _Resolver
+    from brain.ops.acceptance_checks_connectors import (
+        SOURCE,
+        _clock,
+        _Keys,
+        _no_wait,
+        _Resolver,
+    )
     from brain.ops.connector_probe import PROBE_SPACING
     from brain.ops.connector_probe_run import probe_on
-    from brain.ops.connector_sync import ProbeVerdict
+    from brain.ops.connector_sync import ProbeVerdict, plan_for
+    from brain.ops.connector_sync_run import attempt
+    from brain.ops.connector_sync_store import attempt_row
+    from brain.ops.connector_sync_store import read_live as live_rows
 
     await h.found_departments()
     admin, other = h.principal(A, "connects"), h.principal(A, "other")
@@ -451,6 +461,33 @@ async def a_source_test_is_one_call_whose_health_is_shown(h: Harness) -> None:
     console = console_for(h)
     if not await refused(ask_probe(console.request("POST"), SOURCE, await asking_as(h, other))):
         raise CheckFailedError("a person without the authority asked for a source's test")
+
+    # M27.12.2: the worker's scheduled read, due by the plan the schedule asks, records its
+    # health, and Connectors shows the source read.
+    async with h.sessions() as session, session.begin():
+        found = [one for one in await live_rows(session) if one.connection.connector == SOURCE]
+    plan = plan_for(found[0].connection, last=None, now=datetime.now(UTC))
+    if len(found) != 1 or plan.refused or not plan.due:
+        raise CheckFailedError("the worker's schedule would not read a connected source")
+    reader = Answering(status=200)
+    read = await attempt(
+        found[0],
+        plan,
+        previous=None,
+        sessions=h.sessions,
+        keys=_Keys(),
+        caller=reader,
+        resolver=_Resolver(),
+        clock=_clock,
+        sleep=_no_wait,
+    )
+    await h.execute(attempt_row(found[0].id, read))
+    listed = await connector_sources(console.request(), await asking_as(h, admin), ListAsked())
+    row = next(one for one in listed.items if one.name == SOURCE)
+    if not reader.asked or row.status is not SourceStatus.CONNECTED or not row.health:
+        raise CheckFailedError("a scheduled read of a source was not recorded on its health")
+    if row.last_read_at is None:
+        raise CheckFailedError("Connectors did not show when the schedule last read the source")
 
     async def pressed_and_probed(status: int, later: timedelta) -> tuple[Any, Answering]:
         """Test connection pressed, then the worker's pass `later` than now, as its clock reads."""

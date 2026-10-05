@@ -10,7 +10,7 @@ that anybody may ask for.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M27.2.2, M27.2.6, M27.8.13, M27.15.47, M27.15.7, M27.15.36, M27.15.39
+Task ids: M27.2.2, M27.8.13, M27.15.47, M27.15.7, M27.15.36, M27.15.39
 Task ids: M27.2.4, M27.12.2, M27.15.8
 """
 
@@ -45,7 +45,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
     """Five checks, each closing its own leaves. Delete this and a check can lose a leaf with the
     page showing the same rows, and the leaf closes on a check that never looked."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
-        (RUNS, ("M27.2.2", "M27.2.6")),
+        (RUNS, ("M27.2.2",)),
         (JOBS, ("M27.8.13", "M27.15.47")),
         (TOOLS, ("M27.15.7", "M27.15.36")),
         (SOURCE, ("M27.15.39",)),
