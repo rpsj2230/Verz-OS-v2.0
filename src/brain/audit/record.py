@@ -513,7 +513,8 @@ class ElevationChange(enum.StrEnum):
 
 
 class AgentChange(enum.StrEnum):
-    """What happened to an agent. The seven words `0137`'s trigger writes, in the order it checks.
+    """What happened to an agent. The words `0137`'s trigger writes, in the order it checks, and the
+    one `0190` adds after them.
 
     No `transferred`: a hand-over is `agent_owner`, which `0105`'s trigger writes with both
     owners, so the same change is not recorded twice.
@@ -530,6 +531,8 @@ class AgentChange(enum.StrEnum):
     UNARCHIVED = "unarchived"
     PUBLISHED = "published"
     AUDIENCE_CHANGED = "audience_changed"
+    #: The channels it answers on were switched (M13.7.4), by `0190`'s branch of the same trigger.
+    CHANNELS_CHANGED = "channels_changed"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
