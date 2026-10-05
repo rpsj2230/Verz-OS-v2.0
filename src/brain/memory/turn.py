@@ -193,6 +193,8 @@ class NotFormed(enum.StrEnum):
 
     NOT_ANSWERED = "not_answered"
     REFUSED = "refused"
+    #: The agent that answered has its learning paused (M16.7.13).
+    PAUSED = "paused"
     NOTHING_TO_REMEMBER = "nothing_to_remember"
     NOT_ABOUT_THE_PERSON = "not_about_the_person"
     NO_REACH = "no_reach"

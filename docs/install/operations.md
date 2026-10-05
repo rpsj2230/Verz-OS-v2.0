@@ -476,6 +476,27 @@ before PostgreSQL notices. Lower that setting on the replica if sixty seconds is
 The replica's database role only needs to read. The application runs every console read with
 `SET TRANSACTION READ ONLY` on both databases, so a read-only role is enough.
 
+## A known limit on an install set up before 2026-10-06: the application's pooler
+
+PgBouncer counts its pool per login and database, not per database. The application reaches the
+pooler as two logins, `brain_app` for requests and the owner for migrations and the worker's jobs,
+so a pooler given `DEFAULT_POOL_SIZE` 20 and nothing else can hold 40 server connections, while
+the database's connection budget (`brain.ops.connections`) counts 20. On a busy day that is the
+difference between a queue at the pooler and the database refusing a connection somebody needed.
+
+The product's compose files now cap the database across logins with `MAX_DB_CONNECTIONS`, set to
+the same figure as the pool, so an install set up from them is bounded. **An install set up before
+then is not, and a release cannot change it:** Coolify keeps its own copy of the compose file, and
+a release never edits that copy. Add one line to the `pgbouncer` service's `environment` in that
+copy, beside `DEFAULT_POOL_SIZE`, with the same number:
+
+```yaml
+      MAX_DB_CONNECTIONS: "20"
+```
+
+Then redeploy the application in Coolify once. Nothing else changes: requests queue at the pooler
+for a moment under load, which is what the pool was always meant to do.
+
 ## What is checked and what is not
 
 | Claim | Held by |
@@ -486,6 +507,7 @@ The replica's database role only needs to read. The application runs every conso
 | That a service level statement is refused when the arithmetic does not support it | `test_launch.py` |
 | The thirteen mechanisms, and which have a caller | `test_controls.py`, read out of the source in both directions |
 | That every component declares what ready means | `test_wiring.py` |
+| That the application's pooler is capped across logins at the figure the connection budget counts, and that this page gives the line an older install adds | `test_install_docs.py`, against every compose file's `pgbouncer` |
 | That the database command table names every command, no other, and how to run it | `test_install_docs.py`, against `brain.deployment.database` |
 | That the commands refuse in order, run twice safely, and name a full disk | `test_deployment_database.py`, against a real server where `DATABASE_URL` is set |
 | **That `migrate` reaches the newest schema on a server without pgvector** | **nobody, and it cannot: the first migration installs `vector`** |
