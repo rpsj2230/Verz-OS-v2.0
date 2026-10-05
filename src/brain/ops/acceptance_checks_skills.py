@@ -32,7 +32,7 @@ skills fetched from GitHub keep their public names, because renaming them would 
 the import pins; if the install's library already holds either, the check says not run rather than
 asking an import the library would refuse for a reason that is not the product's.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M27.15.57
 """
 
 from __future__ import annotations
@@ -392,7 +392,7 @@ def _transport() -> tuple[Fetcher, Resolver]:
 
 
 @check(
-    leaves=("M12.2.2", "M12.2.3"),
+    leaves=("M12.2.2", "M12.2.3", "M27.15.57"),
     sentence=(
         "A public skill fetched by the install's own transport from a GitHub repository at a full "
         "commit, and another from a raw address, both land undecided, keeping the commit and "
