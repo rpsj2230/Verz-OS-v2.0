@@ -1192,16 +1192,21 @@ def model_lane_for(
     return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
 
 
-async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
+async def follow_up_for(
+    state: Any, asking: Answering, ask: Question, registry: ToolRegistry | None = None
+) -> FollowUp | None:
     """What a question continuing one of this person's threads brings, or None (M9.2.3).
 
-    None for a question naming no thread, one naming a thread that is not theirs or holds no
-    earlier question, and on a process with no database. The passages cited are the ones
-    `brain.chat.threads.continuation_context` still admits at this reach now, and the earlier
-    questions are the person's own words. A follow-up is never looked up in or kept by the answer
-    cache, whose key knows nothing of the thread; see
+    None for a question naming no thread, one naming a thread that is not theirs or holds neither
+    an earlier question nor an attachment, and on a process with no database. The files attached
+    to the thread are read by the registry's own `chat.read_attachment` handler (M12.3.6), and a
+    document reference they hold is not also recalled as a cited passage. The passages cited are
+    the ones `brain.chat.threads.continuation_context` still admits at this reach now, and the
+    earlier questions are the person's own words. A follow-up is never looked up in or kept by
+    the answer cache, whose key knows nothing of the thread; see
     `A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH`.
     """
+    from brain.chat.attachments import ATTACHED
     from brain.chat.remember import threads_of
     from brain.chat.threads import continuation_context
     from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, recaller
@@ -1215,16 +1220,58 @@ async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowU
     if thread is None:
         return None
     earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
-    if not earlier:
+    attached = tuple(
+        dict.fromkeys(
+            ref.record_id
+            for one in thread.messages
+            if one.role is MessageRole.SYSTEM and one.body == ATTACHED
+            for ref in one.refs or ()
+        )
+    )
+    if not earlier and not attached:
         return None
     cited = tuple(
         one.record_id
         for one in continuation_context(thread, asking.reach, now=asking.now)
-        if one.entity == KNOWLEDGE_ENTITY
+        if one.entity == KNOWLEDGE_ENTITY and one.record_id not in attached
     )
     sessions = getattr(state, "db_sessions", None)
     recall = None if sessions is None else recaller(SessionRowSource(sessions))
-    return FollowUp(earlier=earlier, cited=cited, recall=recall)
+    return FollowUp(
+        earlier=earlier,
+        cited=cited,
+        recall=recall,
+        attached=attached,
+        read_attached=attachment_handler(registry),
+    )
+
+
+def attachment_handler(
+    registry: ToolRegistry | None,
+) -> Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None:
+    """The registry's `chat.read_attachment` handler, taking a document's reference, or None.
+
+    None where the registry holds no such tool, which is a process with no database, so a thread's
+    attachments are then read by nothing rather than by a reader of the route's own.
+    """
+    from brain.chat.attachments import READ_ATTACHMENT, AttachmentRead
+
+    if registry is None or not registry.has(READ_ATTACHMENT):
+        return None
+    # The registry keeps a handler as an untyped callable; this is the one it registered.
+    handler = cast(
+        "Callable[..., Awaitable[TypedResult[KnowledgePassage]]]",
+        registry.get(READ_ATTACHMENT).handler,
+    )
+
+    async def read(
+        attachment_id: str, *, entitlement: EntitlementSet, now: datetime | None = None
+    ) -> TypedResult[KnowledgePassage]:
+        return await handler(
+            AttachmentRead(attachment_id=attachment_id), entitlement=entitlement, now=now
+        )
+
+    return read
 
 
 #: Why a follow-up skips the answer cache both ways.
@@ -1682,7 +1729,9 @@ async def answered_for(
     # What a question continuing one of this person's threads brings (M9.2.3), read at their
     # own reach before an agent narrows it, because what they may still read is theirs to judge.
     follow_up = (
-        None if referral is not None else await follow_up_for(request.app.state, asking, ask)
+        None
+        if referral is not None
+        else await follow_up_for(request.app.state, asking, ask, registry)
     )
     caching = (
         None

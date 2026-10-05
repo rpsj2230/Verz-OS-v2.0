@@ -722,6 +722,16 @@ EARLIER_SHOWN: Final = 3
 EARLIER_CHARS: Final = 1_000
 
 
+#: Why a file attached to the thread is read by its tool, at the run's reach, and shown first.
+AN_ATTACHED_FILE_IS_READ_BY_ITS_TOOL_AT_THE_RUN_S_REACH: Final = (
+    "A file the person attached to their conversation is what they are asking about. It is read "
+    "through the registered chat.read_attachment handler, at the reach the answer runs at, which "
+    "for an agent is the person's narrowed by the agent's ceiling, and its passages go ahead of "
+    "the search's, through the same redactor every passage passes. A file the reach cannot read "
+    "contributes nothing, as any other passage the reader may not read."
+)
+
+
 @dataclass(frozen=True)
 class FollowUp:
     """What a question continuing a thread brings (M9.2.3). See
@@ -730,11 +740,17 @@ class FollowUp:
     `earlier` is the person's own earlier questions, oldest first. `cited` is the passages
     earlier answers cited that `brain.chat.turns.context_for` still admits, and `recall` reads
     them under the caller's reach, as `brain.knowledge.document_tools.recaller` does.
+
+    `attached` is the documents the person attached to the thread, in the order attached, and
+    `read_attached` reads one by its reference through the registered attachment tool (M12.3.6).
+    See `AN_ATTACHED_FILE_IS_READ_BY_ITS_TOOL_AT_THE_RUN_S_REACH`.
     """
 
     earlier: tuple[str, ...] = ()
     cited: tuple[str, ...] = ()
     recall: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
+    attached: tuple[str, ...] = ()
+    read_attached: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
 
 
 def with_recalled(
@@ -1072,6 +1088,12 @@ async def draft(
         # under this reach and go first. See the reason constant beside `FollowUp`.
         recalled = await follow_up.recall(follow_up.cited, entitlement=entitlement, now=now)
         found = with_recalled(recalled, found)
+    if follow_up is not None and follow_up.attached and follow_up.read_attached is not None:
+        # The files the person attached go first of all, the first attached first, each read
+        # through its tool at this reach. See the reason constant beside `FollowUp`.
+        for attachment in reversed(follow_up.attached):
+            read = await follow_up.read_attached(attachment, entitlement=entitlement, now=now)
+            found = with_recalled(read, found)
     # The redactor's own trace travels to the sink with the payload, so what it withheld is
     # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
     step(GateStep.REDACT)

@@ -814,6 +814,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage.",
   "GET /api/v1/threads/{thread_id}":
     "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
+  "POST /api/v1/threads/attachments":
+    "A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":

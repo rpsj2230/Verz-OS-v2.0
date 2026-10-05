@@ -60,6 +60,7 @@ from brain.gate.model_lane import (
     SHOWN_FIELDS,
     DocumentSearchTool,
     FixedHints,
+    FollowUp,
     ModelLane,
     hints_block,
     messages_of,
@@ -214,6 +215,7 @@ def ask(
     rules: Sequence[FastPathRule] = (HOURS,),
     rows: Rows | None = None,
     hints: tuple[str, ...] = (),
+    follow_up: FollowUp | None = None,
 ) -> Run:
     """The lane, with a model step whose model is a real executor over a recording transport."""
     transport = Scripted(*script) if script else Scripted(completion() if reply is None else reply)
@@ -249,7 +251,10 @@ def ask(
                     now=NOW,
                     clock=lambda: NOW,
                     model=ModelLane(
-                        search=found, model=calls, hints=FixedHints(hints) if hints else None
+                        search=found,
+                        model=calls,
+                        hints=FixedHints(hints) if hints else None,
+                        follow_up=follow_up,
                     )
                     if with_model
                     else None,
@@ -1064,3 +1069,52 @@ def test_the_attempt_row_names_the_categories_of_data_the_prompt_carried() -> No
 
     categories = [row["categories"] for row in run.attempts.rows.values()]
     assert categories == [("document_passages", "question")]
+
+
+# --- a file attached to the thread (M12.3.6) ----------------------------------------------------
+
+
+def test_a_file_attached_to_the_thread_is_read_by_its_tool_at_the_run_reach_and_shown() -> None:
+    """**AN_ATTACHED_FILE_IS_READ_BY_ITS_TOOL_AT_THE_RUN_S_REACH.** The search finds nothing, and
+    the passage of the file the person attached is read through the attachment reader with the
+    reach the answer runs at, passes the redactor, reaches the model and is cited. Delete this and
+    a question about the file someone attached is answered from a search that never reads it."""
+    read: list[tuple[str, EntitlementSet]] = []
+
+    async def attached(
+        attachment_id: str, *, entitlement: EntitlementSet, now: datetime | None = None
+    ) -> TypedResult[KnowledgePassage]:
+        del now
+        read.append((attachment_id, entitlement))
+        return TypedResult(records=(VISIBLE,), source="knowledge", fetched_at=NOW.isoformat())
+
+    run = ask(
+        "summarise the file I attached",
+        search=Passages(),
+        follow_up=FollowUp(attached=(READABLE_DOCUMENT,), read_attached=attached),
+    )
+
+    assert read == [(READABLE_DOCUMENT, CALLER)]
+    assert run.answered is not None and run.answered.composed is not None
+    assert "Annual leave is twenty five days a year." in prompt(run)
+    assert {one.record_id for one in run.answered.composed.citations} == {VISIBLE.id}
+
+
+def test_an_attached_file_the_reach_may_not_read_contributes_nothing() -> None:
+    """The positive test's sibling: the attachment reader handed back a passage the caller may not
+    read, and the redactor withholds it as it withholds any other, so nothing reaches a model.
+    Delete this and an attachment could be the one passage that skips the redactor."""
+
+    async def attached(
+        attachment_id: str, *, entitlement: EntitlementSet, now: datetime | None = None
+    ) -> TypedResult[KnowledgePassage]:
+        del attachment_id, entitlement, now
+        return TypedResult(records=(WITHHELD,), source="knowledge", fetched_at=NOW.isoformat())
+
+    run = ask(
+        "summarise the file I attached",
+        search=Passages(),
+        follow_up=FollowUp(attached=(WITHHELD_DOCUMENT,), read_attached=attached),
+    )
+
+    assert run.sent == []

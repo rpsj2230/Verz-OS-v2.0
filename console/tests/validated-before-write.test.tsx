@@ -230,6 +230,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +
     "takes. The second test below holds the button disabled for an empty question.",
+  "src/pages/AskAttach.tsx":
+    "The attach form is drawn only once the upload options arrive, which this harness's stand-in " +
+    "does not serve. tests/ask-attach.test.tsx submits it with a file of a type the options do not " +
+    "offer and holds that nothing is sent and the form says so beside the field.",
   "src/pages/knowledge/addForms.tsx":
     "Every form here is drawn in a drawer from the Add menu, which renders outside the page's main " +
     "landmark where these cases look. tests/knowledge-page.test.tsx submits each one blank and holds " +

@@ -209,7 +209,10 @@ def test_a_follow_up_and_a_narrowed_question_are_neither_served_from_the_cache_n
     from brain import api_routes
     from brain.gate.model_lane import FollowUp
 
-    async def following(state: object, asking: object, asked: api_routes.Question) -> object:
+    async def following(
+        state: object, asking: object, asked: api_routes.Question, registry: object = None
+    ) -> object:
+        del registry
         return FollowUp(earlier=("an earlier question",)) if asked.thread else None
 
     monkeypatch.setattr(api_routes, "follow_up_for", following)
@@ -409,3 +412,202 @@ def test_an_answer_through_one_agent_is_not_served_through_another(
     ask(client, agent=agent)
     ask(client, agent="helper" if not agent else "")
     assert len(transport.sent) == 2
+
+
+def test_a_thread_s_attachments_are_read_through_the_registered_tool_and_not_recalled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**M12.3.6 on the answer route.** A thread whose only message is an attachment note still
+    brings a follow-up, naming the document; the document is not also recalled as a cited
+    passage; and it is read through the registry's own `chat.read_attachment` handler, handed the
+    reach the draft passes. With no such tool registered nothing reads it. Delete this and an
+    attached file is either never shown to the model or read by something other than the tool."""
+    import asyncio
+
+    from brain import api_routes
+    from brain.chat import remember
+    from brain.chat.attachments import ATTACHED, READ_ATTACHMENT, attachment_definition
+    from brain.chat.threads import Thread, ThreadMessage
+    from brain.chat.turns import RecordRef
+    from brain.core.entitlement import EntitlementSet
+    from brain.core.envelope import TypedResult
+    from brain.core.principal import Employment, Principal, PrincipalKind
+    from brain.gate.context import Channel
+    from brain.knowledge.document_tools import KNOWLEDGE_PIN, KnowledgePassage
+    from brain.knowledge.search import KNOWLEDGE_READ
+    from brain.tables.chat import MessageRole
+    from brain.tools.registry import ResultContract, ToolRegistry
+
+    at = datetime(2999, 1, 1, tzinfo=UTC)
+    document = "upload.attached.0001"
+    thread = Thread(
+        thread_id="3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b",
+        owner_id=READER,
+        title="",
+        messages=(
+            ThreadMessage(
+                role=MessageRole.SYSTEM,
+                at=at,
+                channel=Channel.CONSOLE,
+                body=ATTACHED,
+                refs=(RecordRef("knowledge", document, KNOWLEDGE_READ),),
+            ),
+        ),
+    )
+
+    class Store:
+        async def thread(self, principal_id: str, thread_id: str) -> Thread | None:
+            del principal_id
+            return thread if thread_id == thread.thread_id else None
+
+    monkeypatch.setattr(remember, "threads_of", lambda state: Store())
+    reach = EntitlementSet(
+        principal_id=READER,
+        grants=(Grant(capability=KNOWLEDGE_READ, scope=Scope.unrestricted()),),
+    )
+    asking = api_routes.Answering(
+        principal=Principal(
+            id=READER, kind=PrincipalKind.HUMAN, employment=Employment.STAFF, display_name="R"
+        ),
+        reach=reach,
+        channel=Channel.CONSOLE,
+        now=at,
+    )
+    handed: list[tuple[str, EntitlementSet]] = []
+
+    async def handler(
+        request: object, *, entitlement: EntitlementSet, now: object
+    ) -> TypedResult[KnowledgePassage]:
+        del now
+        handed.append((str(getattr(request, "attachment_id", "")), entitlement))
+        return TypedResult[KnowledgePassage](records=(), source="knowledge")
+
+    registry = ToolRegistry()
+    registry.register(
+        attachment_definition(),
+        handler,
+        result_contract=ResultContract.TYPED,
+        scope=KNOWLEDGE_PIN,
+    )
+    question = api_routes.Question(question="what does it say", thread=thread.thread_id)
+
+    with_tool = asyncio.run(api_routes.follow_up_for(object(), asking, question, registry))
+    without = asyncio.run(api_routes.follow_up_for(object(), asking, question, ToolRegistry()))
+
+    assert with_tool is not None and without is not None
+    assert (with_tool.earlier, with_tool.cited, with_tool.attached) == ((), (), (document,))
+    assert without.read_attached is None
+    read = with_tool.read_attached
+    assert read is not None
+
+    async def read_it() -> None:
+        await read(document, entitlement=reach, now=at)
+
+    asyncio.run(read_it())
+    assert handed == [(document, reach)]
+    assert registry.has(READ_ATTACHMENT)
+
+
+def test_only_the_attachment_note_names_an_attachment_and_it_is_not_also_cited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**What counts as attached, and what is then left as cited.** A system note with other
+    words, and an answer whose words happen to be the attachment note's, attach nothing; the
+    attached document is read through its tool and not also recalled, though an answer in the
+    thread cited it, while the answer's other citation is still recalled. Delete this and any
+    system note, or an answer quoting the note's words, makes its references attachments read as
+    the person's own file, or an attached file reaches the model twice."""
+    import asyncio
+
+    from brain import api_routes
+    from brain.chat import remember
+    from brain.chat.attachments import ATTACHED
+    from brain.chat.threads import Thread, ThreadMessage
+    from brain.chat.turns import RecordRef
+    from brain.core.entitlement import EntitlementSet
+    from brain.core.principal import Employment, Principal, PrincipalKind
+    from brain.gate.context import Channel
+    from brain.knowledge.search import KNOWLEDGE_READ
+    from brain.tables.chat import MessageRole
+
+    at = datetime(2999, 1, 1, tzinfo=UTC)
+    attached, noted, cited = "upload.attached.0001", "upload.noted.0002", "upload.cited.0003"
+
+    def message(role: MessageRole, body: str, *documents: str) -> ThreadMessage:
+        return ThreadMessage(
+            role=role,
+            at=at,
+            channel=Channel.CONSOLE,
+            body=body,
+            refs=tuple(RecordRef("knowledge", one, KNOWLEDGE_READ) for one in documents) or None,
+        )
+
+    thread = Thread(
+        thread_id="3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b",
+        owner_id=READER,
+        title="",
+        messages=(
+            message(MessageRole.SYSTEM, ATTACHED, attached),
+            message(MessageRole.SYSTEM, "The answer below was marked wrong.", noted),
+            message(MessageRole.USER, "what does my file say"),
+            message(MessageRole.ASSISTANT, ATTACHED, attached, cited),
+        ),
+    )
+
+    class Store:
+        async def thread(self, principal_id: str, thread_id: str) -> Thread | None:
+            del principal_id
+            return thread if thread_id == thread.thread_id else None
+
+    monkeypatch.setattr(remember, "threads_of", lambda state: Store())
+    reach = EntitlementSet(
+        principal_id=READER,
+        grants=(Grant(capability=KNOWLEDGE_READ, scope=Scope.unrestricted()),),
+    )
+    asking = api_routes.Answering(
+        principal=Principal(
+            id=READER, kind=PrincipalKind.HUMAN, employment=Employment.STAFF, display_name="R"
+        ),
+        reach=reach,
+        channel=Channel.CONSOLE,
+        now=at,
+    )
+    question = api_routes.Question(question="and the rest", thread=thread.thread_id)
+
+    found = asyncio.run(api_routes.follow_up_for(object(), asking, question))
+
+    assert found is not None
+    assert (found.earlier, found.attached, found.cited) == (
+        ("what does my file say",),
+        (attached,),
+        (cited,),
+    )
+
+
+def test_the_answer_route_hands_its_own_registry_to_the_follow_up(
+    client: TestClient, transport: Scripted, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The route asks for a thread's follow-up with the registry it answers with, which is where
+    the attachment tool is. Delete this and the route can ask with none, and every attached file
+    is then read by nothing while each piece below the route passes its own test."""
+    from brain import api_routes
+    from brain.tools.registry import ToolRegistry
+
+    handed: list[object] = []
+
+    async def following(
+        state: object, asking: object, asked: api_routes.Question, registry: object = None
+    ) -> None:
+        del state, asking, asked
+        handed.append(registry)
+
+    monkeypatch.setattr(api_routes, "follow_up_for", following)
+    sent = client.post(
+        f"{API_PREFIX}/answer",
+        headers=headers(READER),
+        json={"question": QUESTION, "thread": "3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b"},
+    )
+
+    assert sent.status_code == 200
+    assert len(handed) == 1
+    assert isinstance(handed[0], ToolRegistry)

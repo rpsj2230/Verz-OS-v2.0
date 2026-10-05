@@ -98,7 +98,7 @@
  * conversations sees no panel.
  *
  * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
- * Task ids: M9.1.1, M9.1.2, M9.1.3
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -108,6 +108,7 @@ import type { ApiFailure } from "../api/errors";
 import { Badge } from "../ui/Badge";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
+import { AskAttach, AttachedFiles } from "./AskAttach";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
   ANSWER_API_PATH,
@@ -349,6 +350,8 @@ export function Ask() {
   const [kind, setKind] = useState("");
   // The conversation the next question continues, and this person's conversations (M9.1).
   const [thread, setThread] = useState("");
+  // The titles of the files attached to this conversation, until a new one (M12.3.6).
+  const [attached, setAttached] = useState<readonly string[]>([]);
   const [threads, setThreads] = useState<readonly ThreadSummary[] | null>(null);
   const [searching, setSearching] = useState("");
   const [found, setFound] = useState<readonly ThreadSummary[] | null>(null);
@@ -474,6 +477,8 @@ export function Ask() {
       <h1>{ASK_HEADING}</h1>
       <p className="lede">{ASK_LEDE}</p>
 
+      <AttachedFiles titles={attached} />
+
       <form className="ask__form" onSubmit={ask} ref={form}>
         <label className="ask__label" htmlFor={QUESTION_FIELD_ID}>
           {QUESTION_LABEL}
@@ -538,6 +543,15 @@ export function Ask() {
           </button>
         </div>
       </form>
+
+      <AskAttach
+        thread={thread}
+        disabled={busy}
+        onAttached={(threadId, title) => {
+          setThread(threadId);
+          setAttached((before) => [...before, title]);
+        }}
+      />
 
       {answered ? (
         <button
@@ -654,6 +668,7 @@ export function Ask() {
             onClick={() => {
               setThread("");
               setReopened(null);
+              setAttached([]);
             }}
           >
             {NEW_CONVERSATION}
@@ -723,6 +738,7 @@ export function Ask() {
                       if (read !== null) {
                         setReopened(read);
                         setThread(read.threadId);
+                        setAttached([]);
                       }
                     })();
                   }}
