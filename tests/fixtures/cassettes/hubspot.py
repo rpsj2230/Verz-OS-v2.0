@@ -83,7 +83,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "The absence of paging.next is the only end signal.",
         kind=Kind.PAGINATION,
         tools=("hubspot.read_companies",),
-        projects="client",
+        projects=hubspot.ENTITY_CLIENT,
         expect=Expect.MORE_TO_READ,
         origin=DOCUMENTED,
         reference=HUBSPOT_OBJECTS_DOC,
@@ -117,7 +117,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         why="A last page: no paging object. The email and phone arrive and nothing maps them.",
         kind=Kind.LIST,
         tools=("hubspot.read_contacts",),
-        projects="contact",
+        projects=hubspot.ENTITY_CONTACT,
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference="https://developers.hubspot.com/docs/api/crm/contacts",
@@ -149,7 +149,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "must not carry it.",
         kind=Kind.LIST,
         tools=("hubspot.read_deals",),
-        projects="deal",
+        projects=hubspot.ENTITY_DEAL,
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference="https://developers.hubspot.com/docs/api/crm/deals",
@@ -294,7 +294,10 @@ def replay(recorded: Cassette) -> Replayed:
         return Replayed(Expect.ABSENT)
     if entity == hubspot.ENTITY_ASSOCIATION:
         edges = hubspot.association_edges(
-            from_entity=hubspot.ENTITY_CLIENT, from_id="88", to_entity="contact", rows=tuple(rows)
+            from_entity=hubspot.ENTITY_CLIENT,
+            from_id="88",
+            to_entity=hubspot.ENTITY_CONTACT,
+            rows=tuple(rows),
         )
         return Replayed(Expect.ANSWERED if edges else Expect.ABSENT)
     kept = [hubspot.projected_record(entity, row, last_seen_at=SEEN_AT) for row in rows]

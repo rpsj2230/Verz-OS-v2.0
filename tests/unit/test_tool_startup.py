@@ -375,9 +375,9 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         ("local", "price_list"),
         ("xero", "invoice"),
         ("freshdesk", "ticket"),
-        ("hubspot", "client"),
-        ("hubspot", "contact"),
-        ("hubspot", "deal"),
+        ("hubspot", "hubspot_company"),
+        ("hubspot", "hubspot_contact"),
+        ("hubspot", "hubspot_deal"),
     }
     assert classification_for("invoice", source="xero") == xero_invoices
 

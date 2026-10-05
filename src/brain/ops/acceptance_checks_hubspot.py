@@ -206,18 +206,19 @@ async def a_hubspot_deal_is_answered_on_ask_and_its_amount_read_live(h: Harness)
     def asking(field_name: str, slot: str) -> str:
         return QUESTION_SHAPES[0].format(label=label_of(field_name), slot=slot)
 
+    company, deal = hubspot.ENTITY_CLIENT, hubspot.ENTITY_DEAL
     reads = (
-        "read:client",
-        "read:client.name",
-        "read:client.lifecycle_stage",
-        "read:deal",
-        "read:deal.deal_name",
+        f"read:{company}",
+        f"read:{company}.name",
+        f"read:{company}.lifecycle_stage",
+        f"read:{deal}",
+        f"read:{deal}.deal_name",
     )
     sales, clerk = h.principal(A, "sales"), h.principal(A, "clerk")
     await h.person(
         sales,
         department=A,
-        grants=tuple((one, Scope.unrestricted()) for one in (*reads, "read:deal.amount")),
+        grants=tuple((one, Scope.unrestricted()) for one in (*reads, f"read:{deal}.amount")),
     )
     await h.person(clerk, department=A, grants=tuple((one, Scope.unrestricted()) for one in reads))
 

@@ -414,7 +414,7 @@ def test_a_pipeline_figure_is_confidential_and_a_payroll_figure_is_restricted() 
     rule = hubspot_field_policy().rule_for(ENTITY_DEAL, "amount")
     assert rule is not None
     assert rule.classification is Classification.CONFIDENTIAL
-    assert rule.required_capability == Capability(value="read:deal.amount")
+    assert rule.required_capability == Capability(value=f"read:{ENTITY_DEAL}.amount")
     assert Classification.CONFIDENTIAL.rank < Classification.RESTRICTED.rank
     assert Classification.INTERNAL.rank < Classification.CONFIDENTIAL.rank
 
@@ -1042,11 +1042,13 @@ def test_a_rule_that_disagrees_with_another_sources_opinion_is_refused() -> None
     inside whatever merges the fragments, which reads as a bug in the merge."""
     agreeing = FieldPolicy(
         rules=(
-            FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.INTERNAL),
+            FieldRule.of(
+                ENTITY_CLIENT, "name", f"read:{ENTITY_CLIENT}.name", Classification.INTERNAL
+            ),
             FieldRule.of(
                 ENTITY_CLIENT,
                 "hours_remaining",
-                "read:client.hours_remaining",
+                f"read:{ENTITY_CLIENT}.hours_remaining",
                 Classification.INTERNAL,
             ),
         )
@@ -1054,27 +1056,35 @@ def test_a_rule_that_disagrees_with_another_sources_opinion_is_refused() -> None
     assert_policy_merges_with(agreeing)
 
     disagreeing = FieldPolicy(
-        rules=(FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.PUBLIC),)
+        rules=(
+            FieldRule.of(
+                ENTITY_CLIENT, "name", f"read:{ENTITY_CLIENT}.name", Classification.PUBLIC
+            ),
+        )
     )
-    with pytest.raises(HubSpotError, match=r"client\.name"):
+    with pytest.raises(HubSpotError, match=r"hubspot_company\.name"):
         assert_policy_merges_with(disagreeing)
 
 
-def test_the_house_spelling_is_used_for_a_field_another_source_already_classifies() -> None:
-    """The positive form of the rule above, and the reason there is no conflict to resolve:
-    `client.name` is spelled exactly as `tests/invariants/test_redaction_invariants.py` and
-    `brain.connectors.xero` already spell their shared fields.
+def test_hubspot_s_entities_are_its_own_and_no_other_source_classifies_them() -> None:
+    """`ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`: HubSpot's company, contact and deal are named for
+    HubSpot, each field behind a capability under that name, and no other source's rules, the
+    demo's or a connector's, classify an entity of the same name. Delete this and HubSpot can go
+    back to the house nouns, and the records screen answers neither its contacts nor Xero's."""
+    from brain.tools.startup import every_row_classification
 
-    Delete this and a capability of `read:hubspot.client_name`, which reads as tidier, makes
-    every existing grant for `read:client.name` stop reaching this connector's rows."""
     policy = hubspot_field_policy()
     name = policy.rule_for(ENTITY_CLIENT, "name")
     assert name is not None
-    assert name.required_capability == Capability(value="read:client.name")
+    assert name.required_capability == Capability(value="read:hubspot_company.name")
     assert name.classification is Classification.INTERNAL
     updated = policy.rule_for(ENTITY_CONTACT, "updated_at")
     assert updated is not None
-    assert updated.required_capability == Capability(value="read:contact.updated_at")
+    assert updated.required_capability == Capability(value="read:hubspot_contact.updated_at")
+    entities = [one.entity for one in every_row_classification()]
+    for mine in (ENTITY_CLIENT, ENTITY_CONTACT, ENTITY_DEAL):
+        assert mine.startswith("hubspot_")
+        assert entities.count(mine) == 1, mine
 
 
 # ------------------------------------------------- three answers, not one (M11.5.5)

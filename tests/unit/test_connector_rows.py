@@ -167,9 +167,9 @@ def test_an_agent_install_reads_a_connected_source_as_serving_and_a_changed_one_
 def test_hubspot_is_asked_by_a_company_or_deal_name_and_its_amount_is_confidential() -> None:
     """HubSpot on Ask since 2026-09-30: its companies and deals are asked about by the name a
     person knows them by, its contacts by no name at all (a contact is kept without one), and the
-    deal's amount is CONFIDENTIAL behind `read:deal.amount`, as HubSpot's own rules say. Delete this
-    and HubSpot can fall back to being read and asked about by nothing, or a deal's amount can be
-    told under an INTERNAL grant."""
+    deal's amount is CONFIDENTIAL behind `read:hubspot_deal.amount`, as HubSpot's own rules say.
+    Delete this and HubSpot can fall back to being read and asked about by nothing, or a deal's
+    amount can be told under an INTERNAL grant."""
     from brain.connectors import hubspot
     from brain.core.field_policy import Classification
 
@@ -181,7 +181,7 @@ def test_hubspot_is_asked_by_a_company_or_deal_name_and_its_amount_is_confidenti
     amount = deal.rule_for("amount")
     assert amount is not None
     assert (amount.required_capability.value, amount.classification) == (
-        "read:deal.amount",
+        "read:hubspot_deal.amount",
         Classification.CONFIDENTIAL,
     )
     assert deal.rule_for("portal_id") is not None
