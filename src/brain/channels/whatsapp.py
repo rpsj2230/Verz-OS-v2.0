@@ -67,16 +67,22 @@ HMAC under. Meta signs no time and no nonce, so a replay is refused by the claim
 for `brain.channels.webhook.A_REPLAY_IS_REFUSED_BY_THE_CLAIM`'s reason. See
 `A_WHATSAPP_REQUEST_IS_SIGNED_BY_META_OR_REFUSED`.
 
-**The wire verifies and reads, and it sends nothing, deliberately.** A reply needs the Cloud API's
-send, its access token and the template and session-window rules above wired to it, which is this
-module's own leaf and is not built; so `request_for` refuses every reply and
-`brain.channels.outbound.deliver` records it as refused `incomplete`, never as sent. Meta's
-subscription check is a GET carrying `hub.challenge`, which the one events address, a POST, does
-not answer, so subscribing the address in Meta's console is not built either. A delivery carrying
-no text message, or more than one, is refused as unreadable, as Lark's wire refuses an event it
-does not read. See `A_REPLY_ON_WHATSAPP_IS_NOT_BUILT`.
+**`WhatsAppWire` also answers, and the events address answers Meta's check of it.** A
+notification about another phone number of the same app is refused as unsigned
+(`A_NOTIFICATION_ABOUT_ANOTHER_NUMBER_IS_REFUSED`), and Meta checks the address first with a GET
+carrying a verify token the person chose, answered by the events route through
+`subscription_answer`. A notification is split into one request per text message and each is
+claimed and answered alone (`A_BATCH_IS_ANSWERED_ONE_MESSAGE_AT_A_TIME`), which is
+`normalise_messages`' own argument carried through the pipeline rather than read as its first
+message; one with no text message in it, a delivery receipt most often, is acknowledged and never
+claimed, because Meta retries whatever it is not answered 200 for. A reply is free text on the
+system user's access token, which is only possible because the person's own message opened the
+window; a test message to somebody who has not written in twenty-four hours is refused by Meta
+and recorded so. Rejected: the access token the API Setup page shows, which expires within a
+day, and a verify token made from the app secret, which the console could not show without
+reading a secret back.
 
-Task ids: M10.5.3, M10.6.2
+Task ids: M10.5.3, M10.6.1, M10.6.2
 """
 
 from __future__ import annotations
@@ -87,13 +93,15 @@ import hmac
 import json
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from brain.channels.adapter import (
+    EVENTS_ADDRESS_ASK,
     Arrived,
     ChannelCapabilities,
+    Conversation,
     Feature,
     Received,
     VendorAnswer,
@@ -109,6 +117,7 @@ from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
@@ -794,7 +803,7 @@ def deliver(
     return issue_once(ledger, operation, post)
 
 
-# ------------------------------------------------------------------- the wire (M10.6.2)
+# ------------------------------------------------------ the wire (M10.5.3, M10.6.1, M10.6.2)
 
 #: Why a WhatsApp request is checked over its bytes before anything reads them.
 A_WHATSAPP_REQUEST_IS_SIGNED_BY_META_OR_REFUSED: Final = (
@@ -810,13 +819,6 @@ AN_EMPTY_KEY_VERIFIES_NOTHING: Final = (
     "An HMAC under an empty key is one anybody can compute, so a slot holding an empty value "
     "would accept every forged request as signed. It is refused as a signature that does not "
     "match, and the channel stays shut until a real secret is kept."
-)
-
-#: Why the wire sends nothing back.
-A_REPLY_ON_WHATSAPP_IS_NOT_BUILT: Final = (
-    "This release verifies and reads a WhatsApp message and sends nothing back: the Cloud API "
-    "send, its access token, its templates and its session window are not wired, so a reply "
-    "planned for WhatsApp is refused as incomplete and recorded as refused, never as sent."
 )
 
 #: The header Meta signs a webhook in, lower-cased because `Arrived` lower-cases every name.
@@ -856,12 +858,105 @@ def verify_signature(*, app_secret: str, signature: str, body: bytes) -> None:
         raise WebhookRefusedError("this request was not accepted")
 
 
+#: Why a notification Meta signed is still refused when it is about another number.
+A_NOTIFICATION_ABOUT_ANOTHER_NUMBER_IS_REFUSED: Final = (
+    "One Meta app can send from several phone numbers and signs every one's notifications "
+    "with the same secret; the record answers one number, so a notification whose metadata "
+    "names any other is refused as though it were unsigned."
+)
+
+#: Why a notification carrying several messages is answered message by message.
+A_BATCH_IS_ANSWERED_ONE_MESSAGE_AT_A_TIME: Final = (
+    "The Cloud API may post messages from different people in one notification. Each is split "
+    "out, claimed and answered on its own, so one person's image or a message already seen never "
+    "speaks for somebody else's question; a notification with no text message in it, such as a "
+    "delivery receipt, is acknowledged and nothing is claimed."
+)
+
+#: The Graph API, and the version the steps and the shapes below were taken from.
+GRAPH_API_URL: Final = "https://graph.facebook.com"
+GRAPH_API_VERSION: Final = "v23.0"
+
+#: Where the steps send a person: Meta's app dashboard and the business settings.
+META_APPS_URL: Final = "https://developers.facebook.com/apps"
+META_BUSINESS_SETTINGS_URL: Final = "https://business.facebook.com/settings"
+
+#: The record's field: the phone number the Cloud API sends from and posts about.
+PHONE_NUMBER_ID: Final = "phone_number_id"
+
+#: The channel's three secrets, kept together in its one vault slot.
+APP_SECRET: Final = "app_secret"  # noqa: S105  a field name, not a secret
+ACCESS_TOKEN: Final = "access_token"  # noqa: S105  a field name, not a secret
+VERIFY_TOKEN: Final = "verify_token"  # noqa: S105  a field name, not a secret
+
+#: The longest text body the Cloud API sends, in characters.
+MAX_TEXT_CHARS: Final = 4096
+
+#: What an acknowledged notification that carried no message is answered with.
+ACKNOWLEDGED: Final[Mapping[str, str]] = {"status": "acknowledged"}
+
+#: The Cloud API's error codes that mean too many messages, per its error code reference.
+RATE_LIMIT_CODES: Final = frozenset({4, 80007, 130429, 131048, 131056})
+
+_DIGITS: Final = re.compile(r"^[0-9]{5,20}$")
+#: What every refusal a sender can cause says, whichever check failed.
+NOT_ACCEPTED: Final = "this notification was not accepted"
+
+
+def _refused() -> WebhookRefusedError:
+    return WebhookRefusedError(NOT_ACCEPTED)
+
+
+@dataclass(frozen=True)
+class WhatsAppSecret:
+    """The channel's three secrets, as the vault keeps them: one JSON object. Never printed."""
+
+    app_secret: str = field(repr=False)
+    access_token: str = field(repr=False)
+    verify_token: str = field(repr=False)
+
+    @classmethod
+    def parse(cls, secret: str) -> WhatsAppSecret:
+        """The three parts, or `ValueError` for anything that is not all three, each a line."""
+        try:
+            kept = json.loads(secret)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("this channel's secret is its three parts") from exc
+        parts = [kept.get(one) if isinstance(kept, Mapping) else None for one in SECRET_PARTS]
+        if not all(isinstance(one, str) and one.strip() for one in parts):
+            raise ValueError("this channel's secret is its three parts")
+        app, access, verify = (str(one).strip() for one in parts)
+        return cls(app_secret=app, access_token=access, verify_token=verify)
+
+
+#: The parts, in the order the form asks them.
+SECRET_PARTS: Final = (APP_SECRET, ACCESS_TOKEN, VERIFY_TOKEN)
+
+
+def _values(envelope: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Every change value in a notification, each an object, or `WhatsAppRefusedError`."""
+    found: list[Mapping[str, Any]] = []
+    for entry in _sequence(envelope.get("entry"), "the event entry list"):
+        for change in _sequence(_mapping(entry, "an entry").get("changes"), "an entry's changes"):
+            found.append(_mapping(_mapping(change, "a change").get("value"), "a change value"))
+    return found
+
+
+def _for_this_number(value: Mapping[str, Any], phone_number_id: str) -> bool:
+    metadata = value.get("metadata")
+    named = metadata.get("phone_number_id") if isinstance(metadata, Mapping) else None
+    return isinstance(named, str) and bool(phone_number_id) and named == phone_number_id
+
+
 @dataclass(frozen=True)
 class WhatsAppWire:
-    """`brain.channels.adapter.ChannelWire` for WhatsApp: verification and a read, no send.
+    """`ChannelWire`, `BatchedWire` and `SubscribedWire` for the WhatsApp Cloud API. Holds no
+    secret.
 
-    Holds no secret and opens nothing. The record takes no tenant field, because verifying needs
-    nothing but the secret and nothing here sends; see `A_REPLY_ON_WHATSAPP_IS_NOT_BUILT`.
+    `verify` checks Meta's signature over the exact bytes and that every change is about the
+    record's phone number; `parts` splits a notification into one request per text message
+    (`A_BATCH_IS_ANSWERED_ONE_MESSAGE_AT_A_TIME`); `subscription_answer` is Meta's GET check of
+    the address; `request_for` sends a text message from the record's number on the access token.
     """
 
     @property
@@ -870,64 +965,274 @@ class WhatsAppWire:
 
     @property
     def tenant_fields(self) -> tuple[str, ...]:
-        return ()
+        return (PHONE_NUMBER_ID,)
 
     @property
     def secret_parts(self) -> tuple[str, ...]:
-        """One value: the app secret the Cloud API signs with, kept whole in the channel's slot."""
-        return ()
+        """The app secret checks what Meta sends, the access token sends, and the verify token
+        answers Meta's check of the address."""
+        return SECRET_PARTS
 
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
-        """`verify_signature` over the exact bytes, and the same request back: Meta signs and
-        does not encrypt. `now` is the protocol's; Meta signs no time."""
+        """The signature over the exact bytes, then that the notification is about this number."""
         del now
-        verify_signature(
-            app_secret=secret,
-            signature=arrived.headers.get(SIGNATURE_HEADER, ""),
-            body=arrived.body,
-        )
+        try:
+            kept = WhatsAppSecret.parse(secret)
+            verify_signature(
+                app_secret=kept.app_secret,
+                signature=arrived.headers.get(SIGNATURE_HEADER, ""),
+                body=arrived.body,
+            )
+            values = _values(_mapping(json.loads(arrived.body), "the event"))
+        except (ValueError, WhatsAppRefusedError) as exc:
+            raise _refused() from exc
+        number = arrived.tenant.get(PHONE_NUMBER_ID, "")
+        if not values or not all(_for_this_number(one, number) for one in values):
+            raise _refused()
         return arrived
 
-    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
-        """Meta checks an address with a GET, which the events address does not serve, so a
-        verified POST is never a handshake."""
-        del arrived
-        return None
+    def parts(self, arrived: Arrived) -> tuple[Arrived, ...]:
+        """One request per text message, each a notification holding that message alone.
 
-    def read(self, arrived: Arrived) -> Received:
-        """The verified body as one text message and the sender to reply to, or `ValueError`.
-
-        `WhatsAppAdapter.normalise`'s rule: exactly one text message, since the events address
-        claims one message per request and picking the first of several would drop the rest.
+        `ValueError` for a notification whose messages are not a list of objects, which the
+        pipeline records as unreadable rather than answering 500.
         """
+        found: list[Arrived] = []
         try:
-            parsed = json.loads(arrived.body)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ValueError("a WhatsApp webhook is a JSON object") from exc
-        try:
-            event = WhatsAppAdapter().normalise(parsed)
+            envelope = _mapping(json.loads(arrived.body), "the event")
+            for value in _values(envelope):
+                messages = value.get("messages")
+                if messages is None:
+                    continue
+                for item in _sequence(messages, "a change's messages"):
+                    message = _mapping(item, "the message")
+                    if message.get("type") != TEXT_MESSAGE:
+                        continue
+                    alone = {"entry": [{"changes": [{"value": {**value, "messages": [message]}}]}]}
+                    found.append(replace(arrived, body=json.dumps(alone).encode("utf-8")))
         except WhatsAppRefusedError as exc:
             raise ValueError(str(exc)) from exc
-        return Received(event=event, reply_to=event.channel_identity)
+        return tuple(found)
+
+    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
+        """A notification with no text message, such as a delivery receipt, is acknowledged and
+        never claimed; Meta retries anything it is not answered 200 for. One that cannot be split
+        is left to `parts`, which refuses it."""
+        try:
+            return ACKNOWLEDGED if not self.parts(arrived) else None
+        except ValueError:
+            return None
+
+    def subscription_answer(self, query: Mapping[str, str], secret: str) -> str | None:
+        """Meta's check of the address: its challenge back when it names the verify token."""
+        try:
+            kept = WhatsAppSecret.parse(secret)
+        except ValueError:
+            return None
+        challenge = query.get("hub.challenge", "")
+        if query.get("hub.mode") != "subscribe" or not challenge or len(challenge) > 256:
+            return None
+        presented = query.get("hub.verify_token", "")
+        same = hmac.compare_digest(
+            hashlib.sha256(presented.encode("utf-8")).digest(),
+            hashlib.sha256(kept.verify_token.encode("utf-8")).digest(),
+        )
+        return challenge if same else None
+
+    def read(self, arrived: Arrived) -> Received:
+        """The one message a part holds, as the gate's event, answered in the sender's chat."""
+        try:
+            events = normalise_messages(json.loads(arrived.body))
+        except WhatsAppRefusedError as exc:
+            raise ValueError(str(exc)) from exc
+        if len(events) != 1:
+            raise ValueError("a part holds one message")
+        (event,) = events
+        sender = event.channel_identity
+        return Received(
+            event=event,
+            reply_to=sender,
+            conversation=Conversation(
+                room_to=sender, sender_to=sender, conversation_id=sender, shared=False
+            ),
+        )
 
     def request_for(
         self, *, to: str, text: str, secret: str, tenant: Mapping[str, str], now: datetime
     ) -> VendorRequest:
-        """Every reply is refused as incomplete: see `A_REPLY_ON_WHATSAPP_IS_NOT_BUILT`."""
-        del to, text, secret, tenant, now
-        raise ValueError(A_REPLY_ON_WHATSAPP_IS_NOT_BUILT)
+        """One text message from the record's number to one WhatsApp id, on the access token.
+
+        `ValueError` for an address that is not a WhatsApp id, a record naming no phone number
+        id, and a text longer than the Cloud API sends. Outside the twenty-four hours after the
+        person last wrote, Meta refuses free text, and `judge` records that as refused.
+        """
+        del now
+        kept = WhatsAppSecret.parse(secret)
+        number = tenant.get(PHONE_NUMBER_ID, "")
+        if not _DIGITS.fullmatch(to):
+            msg = f"{to!r} is not a WhatsApp id"
+            raise ValueError(msg)
+        if not _DIGITS.fullmatch(number):
+            msg = f"this channel's record names no {PHONE_NUMBER_ID}"
+            raise ValueError(msg)
+        if len(text) > MAX_TEXT_CHARS:
+            raise ValueError("this answer is longer than a WhatsApp message is")
+        sent = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "text",
+            "text": {"preview_url": False, "body": text},
+        }
+        return VendorRequest(
+            url=f"{GRAPH_API_URL}/{GRAPH_API_VERSION}/{number}/messages",
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": f"Bearer {kept.access_token}",
+            },
+            body=json.dumps(sent, separators=(",", ":")).encode("utf-8"),
+        )
 
     def judge(self, answer: VendorAnswer) -> CallOutcome:
-        """`brain.connectors.throttle.classify`'s, an unsafe address refused. Nothing is sent
-        today, so this is asked of nothing; it is the protocol's."""
+        """A 200 naming the message sent is delivered; Meta's rate-limit codes are a quota.
+
+        A 200 whose body names no message may or may not have been sent, so it is not known; a
+        redirect is refused, since the token would follow it.
+        """
         if answer.unsafe_address:
             return CallOutcome.REJECTED
-        return classify(
+        try:
+            parsed = json.loads(answer.body) if answer.body else None
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            parsed = None
+        error = parsed.get("error") if isinstance(parsed, Mapping) else None
+        code = error.get("code") if isinstance(error, Mapping) else None
+        if isinstance(code, int) and code in RATE_LIMIT_CODES:
+            return CallOutcome.QUOTA
+        if answer.status == 200:
+            sent = parsed.get("messages") if isinstance(parsed, Mapping) else None
+            return CallOutcome.OK if isinstance(sent, list) and sent else CallOutcome.UNAVAILABLE
+        outcome = classify(
             status=answer.status,
             timed_out=answer.timed_out,
             connection_failed=answer.connection_failed,
         )
+        return CallOutcome.REJECTED if outcome is CallOutcome.OK else outcome
 
 
 #: This channel's wire, found by `brain.channels.adapter.channel_wires`.
 WIRE: Final = WhatsAppWire()
+
+
+# ------------------------------------------------------------ the connect steps (M10.5.3)
+
+#: The steps that connect WhatsApp, found by `brain.channels.adapter.channel_guides`.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="app",
+            title="Make a Meta app with WhatsApp in it",
+            text=(
+                "In Meta for Developers click Create app, choose the Business type and your "
+                "business portfolio, then add the WhatsApp product. Under WhatsApp, API Setup, "
+                "add the phone number the Brain will answer from and verify it, then copy its "
+                "Phone number ID, a long number: the save step asks for it."
+            ),
+            sketch=Sketch(
+                place="Meta for Developers",
+                heading="WhatsApp API Setup",
+                lines=(
+                    SketchLine(LineKind.FIELD, "From", "+1 555 0100"),
+                    SketchLine(LineKind.FIELD, "Phone number ID", "10987654321", mark=True),
+                ),
+            ),
+            link=META_APPS_URL,
+            link_label="Open Meta for Developers",
+        ),
+        GuideStep(
+            key="token",
+            title="Make an access token that does not expire",
+            text=(
+                "In Business settings open System users, add a system user with the Admin role, "
+                "click Assign assets and give it your app with full control. Then click Generate "
+                "new token, choose the app, set it never to expire, tick "
+                "whatsapp_business_messaging and whatsapp_business_management, and copy the "
+                "token. The token on the API Setup page expires within a day, so do not use it."
+            ),
+            sketch=Sketch(
+                place="Meta Business settings",
+                heading="System users",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Expiry", "Never", mark=True),
+                    SketchLine(LineKind.ITEM, "whatsapp_business_messaging", mark=True),
+                    SketchLine(LineKind.ITEM, "whatsapp_business_management", mark=True),
+                ),
+                button="Generate token",
+            ),
+            link=META_BUSINESS_SETTINGS_URL,
+            link_label="Open Business settings",
+        ),
+        GuideStep(
+            key="secret",
+            title="Copy the app secret",
+            text=(
+                "Back in your app open App settings, Basic, click Show beside App secret, and "
+                "copy it. Meta signs every message it sends this install with it."
+            ),
+            sketch=Sketch(
+                place="Meta for Developers",
+                heading="App settings: Basic",
+                lines=(SketchLine(LineKind.FIELD, "App secret", "********", mark=True),),
+                button="Show",
+            ),
+            link=META_APPS_URL,
+            link_label="Open Meta for Developers",
+        ),
+        GuideStep(
+            key="save",
+            title="Save the number and the secrets here",
+            text=(
+                "Paste the Phone number ID into phone_number_id, then the app secret, the "
+                "system user's access token, and a verify token you make up now, a long random "
+                "word you will paste once more in the next step. Tick Switched on and press Save "
+                "set-up. All three are kept in the vault and never shown again."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect WhatsApp",
+                lines=(
+                    SketchLine(LineKind.FIELD, PHONE_NUMBER_ID, "10987654321", mark=True),
+                    SketchLine(LineKind.FIELD, APP_SECRET, "********", mark=True),
+                    SketchLine(LineKind.FIELD, ACCESS_TOKEN, "********", mark=True),
+                    SketchLine(LineKind.FIELD, VERIFY_TOKEN, "********", mark=True),
+                ),
+                button="Save set-up",
+            ),
+            asks=(PHONE_NUMBER_ID, *SECRET_PARTS),
+        ),
+        GuideStep(
+            key="webhook",
+            title="Point WhatsApp's webhook at this install",
+            text=(
+                "In your app open WhatsApp, Configuration. Under Webhook click Edit, paste this "
+                "install's events address, shown below, as the Callback URL and the verify "
+                "token you made up as the Verify token, then Verify and save. Under Webhook "
+                "fields subscribe to messages. Now write to the number from your own WhatsApp: "
+                "the first answer asks you to link your number to your Brain account."
+            ),
+            sketch=Sketch(
+                place="Meta for Developers",
+                heading="WhatsApp Configuration",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Callback URL", "Your events address", mark=True),
+                    SketchLine(LineKind.FIELD, "Verify token", "********", mark=True),
+                    SketchLine(LineKind.TOGGLE, "messages", mark=True),
+                ),
+                button="Verify and save",
+            ),
+            link=META_APPS_URL,
+            link_label="Open Meta for Developers",
+            asks=(EVENTS_ADDRESS_ASK,),
+        ),
+    )
+)

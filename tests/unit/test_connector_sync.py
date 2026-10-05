@@ -106,6 +106,7 @@ def _settings(name: str) -> dict[str, str]:
         "xero": {"tenant_id": TENANT},
         "hubspot": {"portal_id": PORTAL},
         "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
+        "google_analytics": {"property": "123456789", "department": "marketing"},
     }[name]
 
 

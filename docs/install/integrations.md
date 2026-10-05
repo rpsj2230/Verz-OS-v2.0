@@ -43,7 +43,7 @@ account or a bot token: the source is answering as us, and it never sees the per
 What stands between a person and a row in those sources is this system's own entitlements and
 nothing else. Read that as a requirement on how you grant, not as a gap to be worked around.
 
-**What it will run against.** One of the seven has no rate ceiling recorded. Every other is the
+**What it will run against.** One of the eight has no rate ceiling recorded. Every other is the
 source's published limit rather than a number chosen here, except your own Laravel database's,
 which nobody publishes: its figure is this product's own pace, and it says so. Where the ceiling
 belongs to your own account rather than to a subscription, spending it is your outage: the
@@ -62,6 +62,7 @@ exists, because a row for something that is gone reads as coverage.
 | Connector | Transport | Pinned at connect to | Access | What the source enforces | Rate ceiling |
 | --- | --- | --- | --- | --- | --- |
 | `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |
+| `google_analytics` | `rest` | `analytics_property` | `read_only` | `none` | `google_analytics` |
 | `google_drive` | `rest` | `folder` | `read_only` | `none` | none measured |
 | `hubspot` | `rest` | `portal` | `read_only` | `none` | `hubspot` |
 | `laravel` | `database` | `view` | `read_only` | `none` | `laravel` |
@@ -122,6 +123,25 @@ answerable; the answer will tell you when it could not see the whole list.
 so pinning the account refuses a credential pointed at a different helpdesk and narrows nothing
 inside this one. Inside this system, one department reads the whole helpdesk: a rule sending each
 Freshdesk group to a different department is not something a connection can hold yet.
+
+## `google_analytics`
+
+One Google Analytics property, pinned at connect by its property id.
+
+**Create** a service account, switch on the Google Analytics Data API and Admin API in its
+project, create a JSON key for it, and add its address to the one property as a Viewer. Do not
+grant domain-wide delegation: it reads the property as itself and needs nothing more. The key
+file is exchanged for a token that carries `analytics.readonly` and nothing else, for one read
+at a time, and never kept.
+
+**It keeps the property and never its figures.** The index holds the property's id, its name
+and when it was created and last changed. Sessions, users and conversions are read from Google
+when somebody asks, for yesterday or the last 7, 28 or 90 days, and are never stored anywhere
+here.
+
+**What it does not narrow.** One department reads the property: the one named at connect, whose
+people are then granted it by somebody holding it. A property several departments share is read
+by the one named.
 
 ## `google_drive`
 

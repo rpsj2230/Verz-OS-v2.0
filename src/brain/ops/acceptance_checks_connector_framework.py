@@ -187,6 +187,10 @@ FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
             "department": RESERVED_DEPARTMENTS[0],
             "steward": f"acceptance-steward-{secrets.token_hex(4)}",
         },
+        "google_analytics": lambda: {
+            "property": str(10**8 + secrets.randbelow(9 * 10**8)),
+            "department": RESERVED_DEPARTMENTS[0],
+        },
         "laravel": lambda: {
             "schema": f"acceptance_{secrets.token_hex(4)}",
             "host": f"acceptance-{secrets.token_hex(4)}.invalid",

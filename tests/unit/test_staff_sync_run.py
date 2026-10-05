@@ -24,7 +24,11 @@ import pytest
 from brain.connectors import ldap_directory
 from brain.connectors.staff_directories import Answer, Fetch, Outbound
 from brain.identity.staff_roster import Application, RunOutcome, StoredMember, digest_of
-from brain.identity.staff_source import STAFF_SOURCE_LOCATION_SETTING, STAFF_SOURCE_SETTING
+from brain.identity.staff_source import (
+    STAFF_SOURCE_LOCATION_SETTING,
+    STAFF_SOURCE_SETTING,
+    Roster,
+)
 from brain.identity.standing import StandingPlan
 from brain.ops import staff_sync_run
 from brain.ops.connectable import READING_ROLE
@@ -33,10 +37,12 @@ from brain.ops.connector_sync import NO_KEY
 from brain.ops.connector_sync_run import ConnectorKeyAbsentError
 from brain.ops.secrets import SecretRef, SecretsUnavailableError
 from brain.ops.staff_accounts_run import NO_ISSUER
+from brain.ops.staff_people_run import PeopleRun
 from brain.ops.staff_sync_run import (
     CREDENTIAL_REFUSED_PREFIX,
     NOBODY_CHANGED,
     NOT_READ_ON_A_SCHEDULE,
+    PEOPLE_UNDECIDED,
     STAFF_SOURCE_SLOT,
     sync_staff_on,
 )
@@ -140,6 +146,8 @@ class Store:
     members: tuple[StoredMember, ...] = ()
     last_applied: datetime | None = None
     written: list[tuple[Application, RunRecord]] = field(default_factory=list)
+    #: Each people step the run asked for: the addresses on the list, and whether it was a trial.
+    people: list[tuple[tuple[str, ...], bool]] = field(default_factory=list)
 
 
 @pytest.fixture
@@ -170,6 +178,15 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Store:
 
     monkeypatch.setattr(staff_sync_run, "plan_standing", plan_standing)
     monkeypatch.setattr(staff_sync_run, "apply_standing", apply_standing)
+
+    # The people step likewise; `tests/unit/test_staff_people_run.py` runs it against a database.
+    async def provide_people(
+        sessions: object, roster: Roster, *, now: datetime, trial: bool = False
+    ) -> PeopleRun:
+        held.people.append((tuple(one.work_address for one in roster.people), trial))
+        return PeopleRun(made=2)
+
+    monkeypatch.setattr(staff_sync_run, "provide_people", provide_people)
     return held
 
 
@@ -707,10 +724,41 @@ def test_a_run_that_read_puts_what_it_read_on_its_row_and_in_the_job_history(
     ((_, record),) = store.written
     assert record.report == (
         "Read 2 departments, 2 with a name, and 3 people; 3 placed in a department.",
+        "People: 2 on the list added to People.",
         NO_ISSUER,
     )
     assert ran.report == record.report
     assert record.report[0] in ran.summary()
+
+
+def test_every_run_asks_the_people_step_with_the_whole_list_and_a_trial_asks_it_to_count(
+    store: Store,
+) -> None:
+    """The people step is what puts the list on People without the sign-in service. Delete this
+    and a run can stop asking it, hand it part of the list, or let a trial make people."""
+    run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")))
+    run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), trial=True)
+
+    (listed, applied), (_, tried) = store.people
+    assert len(listed) == 3
+    assert (applied, tried) == (False, True)
+
+
+def test_a_people_step_that_fails_leaves_the_roster_applied_and_says_so(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Delete this and a database hiccup in the people step can undo the night's roster, or pass
+    in silence."""
+
+    async def broken(*_: object, **__: object) -> PeopleRun:
+        raise RuntimeError("the people step fell over")
+
+    monkeypatch.setattr(staff_sync_run, "provide_people", broken)
+
+    run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")))
+
+    ((_, record),) = store.written
+    assert PEOPLE_UNDECIDED in record.report
 
 
 def test_a_lark_read_without_department_names_says_nobody_was_placed_and_which_scope_to_add(

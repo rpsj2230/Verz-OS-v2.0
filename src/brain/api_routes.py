@@ -213,6 +213,7 @@ from brain.knowledge.rows import (
     MAX_ROW_LIMIT,
     RowRequest,
     entity_capability,
+    is_row_tool,
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
@@ -733,7 +734,7 @@ async def records(
         raise Failed("no tool registry on this process")
 
     classification = classification_for(entity)
-    matching = [d for d in registry.definitions() if d.entity == entity]
+    matching = [d for d in registry.definitions() if d.entity == entity and is_row_tool(d)]
     # `row_scope_for` and never a check written here. It is the same function `read_rows`
     # consults, so "does this caller reach rows of this kind" has one answer; the difference
     # is only that a route has to turn None into a status while a reader turns it into FALSE.
@@ -893,7 +894,9 @@ def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
     """
     readers: dict[tuple[str, str], RowReader] = {}
     for definition in registry.definitions():
-        if not definition.entity or not definition.source:
+        if not is_row_tool(definition):
+            # A figure tool shares its row tool's source and entity and takes a range; see
+            # `brain.knowledge.rows.is_row_tool`.
             continue
         # A cast at a boundary the registry keeps deliberately loose. It holds handlers of
         # two shapes and will go on doing so: `brain.tools.run_skill.handler` is synchronous
@@ -1725,6 +1728,20 @@ async def answered_for(
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
             source_policies={**source_field_policies(registry), **base.source_policies},
+        )
+        # An abstention under a skill that declares a queue is handed to the person named for it,
+        # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
+        # here because `brain.escalation_routes` sends through `brain.channel_routes`, which
+        # imports this module.
+        from brain.escalation_routes import escalated
+
+        answered = await escalated(
+            request,
+            answered,
+            agent=agent,
+            asking=asking,
+            question=address.question,
+            trace_id=recorder.trace_id,
         )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own

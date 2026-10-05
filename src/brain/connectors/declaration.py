@@ -70,10 +70,26 @@ be a second copy of the admission, the lease, the page write and the backoff, ea
 from the first; and a `RestOperation` that pretended a view read was a GET, which would put a
 statement's parts in a URL.
 
+**A source whose values are figures, not records, says how its figures are read (M11.7.1).**
+Google Analytics keeps an index of one property and answers a question with that property's
+traffic for a named date range, which is not the property read again: it is a report, asked for
+with a body, from another endpoint than the index's. `report` is a `LiveReport`: the entities whose
+figures are read that way, whose credentials, and the one call and its interpretation. It is a
+second field beside `live` rather than a second shape of `LiveLookup`, because a lookup's rule (the
+record read live is the index's own endpoint, interpreted once) is right for a record and is exactly
+what a report is not; one entity is read one way, and the declaration refuses both for one entity.
+See `A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT`.
+
+**And a source whose key is a service account's key file names a scope for the token it is
+exchanged for.** `KeyScheme.GOOGLE_SERVICE_ACCOUNT` is presented as a bearer token the run mints
+from the key file for one read (`brain.connectors.google_token`), and a reading naming it is a
+`ScopedReading`, which says which read-only scope that token carries. See
+`A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR`.
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.6.1
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.6.1, M11.7.1
 """
 
 from __future__ import annotations
@@ -84,14 +100,15 @@ import inspect
 import pkgutil
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
 from typing import Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.contract import ConnectorContractError, FetchRequest
+from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import RestOperation
@@ -153,6 +170,24 @@ A_DATABASE_IS_READ_BY_THE_SAME_LOOP: Final = (
     "for it, and a second loop that would copy all of that is not written."
 )
 
+#: Why a source's figures are declared apart from its records.
+A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT: Final = (
+    "A record read live is the index's own endpoint asked for one id and read by the same "
+    "interpretation, so the two cannot come to disagree about what the source said. A figure is "
+    "not the record read again: it is a report over a date range, asked for with a body from "
+    "another endpoint. So a declaration names its figures as a report of their own, and one "
+    "entity is read live one way or the other, never both."
+)
+
+#: Why a reading presented as a minted token names the token's scope.
+A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR: Final = (
+    "A service account's key file is exchanged for a token carrying the scopes asked for, and "
+    "which scope a source's reads need is a fact about that source. The run that mints the token "
+    "is shared by every source, so the scope comes from the reading, which is the source's own "
+    "declaration, and a reading naming the Google scheme without one is refused before any key "
+    "is read."
+)
+
 #: What the last screen of a console source's guide asks for besides its settings.
 CREDENTIAL_ASK: Final = "credential"
 
@@ -188,6 +223,12 @@ class KeyScheme(enum.StrEnum):
     #: HTTP Basic with the key as the user name and `X` as the password, which is how Freshdesk
     #: documents its API key (https://developers.freshdesk.com/api/#authentication).
     BASIC_KEY_AS_USER = "basic_key_as_user"
+    #: A service account's key file, exchanged by the run for a bearer token carrying the
+    #: reading's scope (`ScopedReading`) and sent as `Authorization: Bearer <token>`, which is how
+    #: Google documents a server reading its APIs as itself
+    #: (https://developers.google.com/identity/protocols/oauth2/service-account). The key file is
+    #: never sent: see `brain.connectors.google_token.A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER`.
+    GOOGLE_SERVICE_ACCOUNT = "google_service_account"
 
 
 # ---------------------------------------------------------------- connecting from the console
@@ -357,6 +398,20 @@ class SourceReading(Protocol):
         ...
 
 
+@runtime_checkable
+class ScopedReading(Protocol):
+    """A reading whose key is exchanged for a token, and the read-only scopes that token carries.
+
+    Asked for only when `SourceReading.key_scheme` is `KeyScheme.GOOGLE_SERVICE_ACCOUNT`. Checked
+    at run time rather than added to `SourceReading`, so a source whose key is sent as it is owes
+    nothing here. See `A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR`.
+    """
+
+    def token_scopes(self) -> tuple[str, ...]:
+        """The scopes the token minted for this source's reads carries. Read-only, every one."""
+        ...
+
+
 # ------------------------------------------------------------------ reading one record live
 #: Why a live lookup may name an operation of its own.
 A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
@@ -479,6 +534,86 @@ class ViewReading(Protocol):
         ...
 
 
+# ---------------------------------------------------------- reading one record's figures live
+#: Why a report may be several calls, and what one of them failing means.
+A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER: Final = (
+    "A source can need more than one call to answer one record's figures, reading its totals and "
+    "its lists from different endpoints. The calls are made at once, so a report costs its "
+    "slowest call rather than their sum, and a report any of whose calls did not answer is not "
+    "answered: it is never shown with some of its figures missing, which would read as figures "
+    "that are nought."
+)
+
+
+@dataclass(frozen=True)
+class ReportCall:
+    """One call of a report: where, and the JSON body saying what, or none for a read by GET.
+
+    The connector builds it and never resolves or connects; the run that holds the key checks the
+    address with `brain.tools.fetch.assert_fetchable` before anything is sent.
+    """
+
+    url: str
+    body: bytes | None = field(default=None, repr=False)
+
+
+class LiveReport(Protocol):
+    """How the figures one index row names are read from the source while somebody waits (M11.7.1).
+
+    The report is asked for once per record, with the record's id, the day it is asked on and the
+    range, as the calls it takes, made at once; when every call answered, their bodies are
+    interpreted into one `SourceRecord` whose id is that record's, so the lane lays its figures
+    over the index row exactly as it lays a live record's fields. With no range it is the report a
+    question on Ask reads, every range its fields name; with a `DateWindow` it is that one range,
+    which is what a figure tool asks for (`brain.knowledge.connector_figures`). See
+    `A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT` and
+    `A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER`.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind whose figures are read by a report."""
+        ...
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        """Whose credentials a report on this entity is read under (M11.2.5)."""
+        ...
+
+    def request_for(
+        self,
+        entity: str,
+        source_id: str,
+        *,
+        settings: Mapping[str, str],
+        today: date,
+        window: DateWindow | None,
+    ) -> tuple[ReportCall, ...]:
+        """The calls the report for the record with this id is, as of `today`, in order: for the
+        ranges a question names when `window` is None, or for that one window.
+
+        Raises for an id that is not the shape the source issues, because an id is laid into the
+        report's addresses, and a value that could change which report is read is refused here.
+        """
+        ...
+
+    def interpret(
+        self,
+        entity: str,
+        source_id: str,
+        *,
+        answers: tuple[Any, ...],
+        today: date,
+        window: DateWindow | None,
+        fetched_at: str,
+    ) -> PageReply:
+        """Every call's decoded body, in the order asked, as one record with this id and figures.
+
+        `today` is the day the calls were built for, handed back so a report that counts days does
+        not keep it between the two. Called only when every call answered; a reply this does not
+        read raises.
+        """
+        ...
+
+
 # ------------------------------------------------------------------------ the declaration
 @dataclass(frozen=True)
 class ConnectorDeclaration:
@@ -502,6 +637,8 @@ class ConnectorDeclaration:
     reading: SourceReading | ViewReading | None = None
     #: How one of its records is read live at question time, or None when none is.
     live: LiveLookup | None = None
+    #: How the figures one of its records names are read live, or None when it has none (M11.7.1).
+    report: LiveReport | None = None
     #: The screens the console's connect flow shows for it. See the module docstring.
     guide: tuple[GuideStep, ...] = ()
 
@@ -541,6 +678,22 @@ class ConnectorDeclaration:
             msg = (
                 f"connector {self.name!r} declares a live lookup and no reading; a record read "
                 "live is read through the reading's operation and interpretation"
+            )
+            raise DeclarationError(msg)
+        if self.report is not None and self.reading is None:
+            msg = (
+                f"connector {self.name!r} declares a report and no reading; a report is read with "
+                "the reading's key, headers and scope, and names a record its index holds"
+            )
+            raise DeclarationError(msg)
+        both = sorted(
+            set(() if self.live is None else self.live.entities())
+            & set(() if self.report is None else self.report.entities())
+        )
+        if both:
+            msg = (
+                f"connector {self.name!r} reads {both} live both as a record and as a report. "
+                f"{A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT}"
             )
             raise DeclarationError(msg)
 
