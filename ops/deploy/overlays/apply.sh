@@ -56,6 +56,10 @@ if [ -z "$project" ]; then
   exit 1
 fi
 overlays="${project}-overlays"
+# The image the application runs, which an overlay built from this product's own image (the
+# script sandbox) is started from. Exported for compose's interpolation and nothing else.
+APP_IMAGE="$(docker inspect "$APP" --format '{{.Config.Image}}')"
+export APP_IMAGE
 
 facts="$(mktemp)"
 planned="$(mktemp)"
@@ -69,6 +73,8 @@ trap 'rm -f "$facts" "$planned"' EXIT
     --format '{{.Name}}|{{index .Config.Labels "com.docker.compose.project"}}|{{.HostConfig.Memory}}'
   echo "## stats"
   docker stats --no-stream --format '{{.Name}}|{{.MemUsage}}'
+  echo "## runtimes"
+  docker info --format '{{range $name, $_ := .Runtimes}}{{println $name}}{{end}}'
 } > "$facts"
 
 if ! docker exec -i "$APP" python -m brain.ops.overlays plan --project "$overlays" \
@@ -170,7 +176,10 @@ for after in $afters; do
   fi
 done
 
-docker ps -aq --filter "label=com.docker.compose.project=$overlays" | xargs -r docker inspect \
-  --format '{{index .Config.Labels "com.docker.compose.service"}}|{{.HostConfig.Memory}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' |
-  docker exec -i "$APP" python -m brain.ops.overlays observe | sed -n 's/^SAY /overlays: /p' || true
+{
+  docker info --format '{{range $name, $_ := .Runtimes}}{{println $name}}{{end}}' |
+    sed -n 's/^\(..*\)$/runtime|\1/p'
+  docker ps -aq --filter "label=com.docker.compose.project=$overlays" | xargs -r docker inspect \
+    --format '{{index .Config.Labels "com.docker.compose.service"}}|{{.HostConfig.Memory}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.HostConfig.Runtime}}'
+} | docker exec -i "$APP" python -m brain.ops.overlays observe | sed -n 's/^SAY /overlays: /p' || true
 exit "$code"

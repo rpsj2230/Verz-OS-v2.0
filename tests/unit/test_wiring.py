@@ -158,6 +158,7 @@ def test_the_baseline_matches_the_compose_file_it_claims_to_describe() -> None:
         "docker-compose.parse-worker.yml",
         "docker-compose.keycloak.yml",
         "docker-compose.inference.yml",
+        "docker-compose.sandbox.yml",
     ],
 )
 def test_every_deployed_service_carries_an_explicit_memory_limit(compose: str) -> None:

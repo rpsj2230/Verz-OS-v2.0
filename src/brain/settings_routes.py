@@ -88,6 +88,7 @@ from brain.install import hold_saved, value_of
 from brain.ops.handover import Residue
 from brain.ops.handover_run import preview_steps
 from brain.ops.install_settings import load, retire, save
+from brain.ops.overlays import SERVICES_SETTING, runtime_problem
 from brain.ops.retention import BACKUP_RETENTION_DAYS, facts_for
 from brain.ops.setting_store import read_namespace
 from brain.ops.starter import COMPANY_SCOPE, PACKS, agents, roles
@@ -390,6 +391,13 @@ async def save_setting(request: Request, name: str, body: SaveAsked, asked: Aske
         told = ErrorBody(message=problem, trace_id=_trace_id())
         return JSONResponse(status_code=422, content=told.model_dump())
     async with _require_sessions(request)() as session:
+        # A service whose runtime the server lacks is refused before anything is written, from the
+        # deploy step's last report of the server (brain.ops.overlays.runtime_problem).
+        if name == SERVICES_SETTING:
+            lacking = await runtime_problem(session, normalised(name, body.value))
+            if lacking:
+                told = ErrorBody(message=lacking, trace_id=_trace_id())
+                return JSONResponse(status_code=422, content=told.model_dump())
         for statement in attributed_to(
             actor_id=asked.caller.principal.id,
             ent_hash=asked.reach.ent_hash(),

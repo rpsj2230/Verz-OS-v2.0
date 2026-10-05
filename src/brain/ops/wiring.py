@@ -427,6 +427,33 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         ready_when="the flow runner reports a worker and the egress proxy answers",
     ),
     Component(
+        # The script sandbox's front: it answers the application on an internal network, checks
+        # each request against the contract (`brain.ops.sandbox`) and hands it to the executor
+        # through a job volume. Python's standard library and nothing it imports from this
+        # product beyond the contract's shapes, so 64 MiB holds it with room. In no profile:
+        # only `INSTALL_SERVICES` starts it (`brain.ops.overlays`), and only under gVisor.
+        name="script-sandbox",
+        memory_mib=64,
+        profiles=frozenset(),
+        wiring=Wiring.NONE,
+        ready_when="the executor has reported in the last half minute that it runs under gVisor "
+        "with no network",
+    ),
+    Component(
+        # The executor, with no network at all. **384 MiB is 256 for the one script it runs at a
+        # time, the per-run ceiling the owner chose on 2026-10-05 (`SANDBOX_MEMORY_MIB` in
+        # `brain.ops.sandbox`), plus 128 for the executor's own interpreter and gVisor's kernel,
+        # which runs inside the same cgroup.** The 128 is a design figure, not a measurement; the
+        # install check runs a script to the ceiling and is what would show it short. Raising the
+        # per-run ceiling raises this by the same amount, and the release's plan refuses it on a
+        # server without the room.
+        name="script-sandbox-executor",
+        memory_mib=384,
+        profiles=frozenset(),
+        wiring=Wiring.NONE,
+        ready_when="it writes its heartbeat to the job volume, reporting gVisor and no network",
+    ),
+    Component(
         # The record matcher, `docs/needs-rupash.md` item 55: Splink and DuckDB in an image of
         # their own, run as a job over an export. Costed as if resident, because a job holds
         # its limit while it runs and a budget counting it at nought is wrong during the only
