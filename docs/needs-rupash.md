@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**32 items are open: 155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**33 items are open: 156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,30 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 156. What is your "maintenance portal"?
+
+**In plain terms:** the Maintenance Agent you asked for (Wave 3, M38.5.3 and M39.8.7) answers a
+maintenance question from your uploaded maintenance knowledge and the ticket desk, and the plan names
+a third source: "the maintenance portal" (M11.9.9). Nothing the Brain reads today is one, and I will
+not guess what it is. It is closely tied to item 137 (where client projects live).
+
+**Option A: maintenance records in your Laravel application.** If each website's maintenance plan,
+its scheduled work and its history sit in the Laravel database, whoever looks after it adds one more
+read-only view for maintenance beside the clients and staff views (and the project view, if you
+choose B in item 137). I write the view for them; the Brain reads only what it shows.
+
+**Option B: a separate system with its own web address and API.** If the portal is another product
+(a maintenance or hosting dashboard with an API), it connects through the new "Add an API" screen:
+you give its API description, a second person approves it, and it is read like any other source.
+
+**Option C: there is no separate portal.** If maintenance lives in Freshdesk tickets and your uploaded
+maintenance documents, the Maintenance Agent uses those two and nothing more, and I drop the third.
+
+**My recommendation:** tell me which is true today; if it is A, choose it together with item 137's B,
+so one change in Laravel adds both views.
+
+**What I need from you:** reply "156: A", "156: B (the portal's name)" or "156: C".
 
 ## 155. Recognising the same client across your systems: two choices before it is switched on
 
