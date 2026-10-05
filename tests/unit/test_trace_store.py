@@ -48,7 +48,14 @@ from brain.ops.tracing import (
     mask_value,
 )
 from brain.tables.identity import one_of
-from tests.unit.test_tables import DIALECT, as_amended, migration_module, rendered, squash
+from tests.unit.test_tables import (
+    DIALECT,
+    VERSIONS,
+    as_amended,
+    migration_module,
+    rendered,
+    squash,
+)
 
 NOW = datetime(2999, 6, 1, 9, 0, tzinfo=UTC)
 TRACE = "trace_store_test"
@@ -191,7 +198,10 @@ def test_0150_copies_each_rule_it_holds_from_the_code_that_owns_it() -> None:
     assert VALUE_TOKEN_RE.pattern == m.NAME_PATTERN
     assert f"payload_in IN {m.MASKED_IN}" == one_of("payload_in", MASKED_PAYLOADS)
     assert one_of("kind", StepKind) == m.KIND_IN
-    assert one_of("action", AuditAction) == m.WIDENED_ACTIONS
+    # `0183` widens the list once more, with `entity_unmerge`, from exactly this one.
+    later = migration_module(VERSIONS / "0183_entity_merges.py")
+    assert later.NARROWER_ACTIONS == m.WIDENED_ACTIONS
+    assert one_of("action", AuditAction) == later.WIDENED_ACTIONS
     assert m.SUPERSEDES == {m.NARROWER_ACTIONS: m.WIDENED_ACTIONS}
     assert m.READER_ROLE == TRACE_READER_ROLE
     assert f"SET LOCAL ROLE {TRACE_READER_ROLE}" == SET_TRACE_READER_ROLE
