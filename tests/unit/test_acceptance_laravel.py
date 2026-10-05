@@ -7,7 +7,7 @@ afterwards what it held before. Then it is run against the product broken where 
 database contributing no question shapes, a live read that is never made, and a classification
 that hands the contract value to a reader not granted it. Each fails with its own sentence.
 
-Task ids: M11.6.1, M11.7.7
+Task ids: M11.6.1, M11.7.7, M11.1.4
 """
 
 from __future__ import annotations
@@ -48,7 +48,9 @@ def mine() -> dict[str, Check]:
 def test_the_laravel_check_is_registered_with_the_leaves_it_proves() -> None:
     """Delete this and the check can close a leaf it does not exercise, or name an id no task
     has."""
-    assert {name: one.leaves for name, one in mine().items()} == {NAME: ("M11.6.1", "M11.7.7")}
+    assert {name: one.leaves for name, one in mine().items()} == {
+        NAME: ("M11.6.1", "M11.7.7", "M11.1.4")
+    }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
     assert set(mine()[NAME].leaves) <= leaves
@@ -136,14 +138,16 @@ def test_on_a_real_database_the_laravel_database_answers_and_nothing_is_left_beh
         ("questions", "the connected database contributed no question shapes to Ask"),
         ("live", "a client's contract value was not read live for a reader granted it"),
         ("withheld", "a client's contract value was told to a reader not granted it"),
+        ("allowlist", "a view off the connection's allowlist was planned for reading"),
     ],
 )
 def test_the_laravel_check_fails_where_the_path_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
-    """Three breaks, one per property: no question shapes for the connected database, a live
-    reader that never reads, and the contract value classified under the row's own capability.
-    Each fails the check with its own sentence. Delete this and the check can pass with the
+    """Four breaks, one per property: no question shapes for the connected database, a live
+    reader that never reads, the contract value classified under the row's own capability, and a
+    transport that plans a read of any view it is handed (M11.1.4). Each fails the check with its
+    own sentence. Delete this and the check can pass with the
     property gone."""
     import brain.api_routes as api_routes
     import brain.ops.live_records as live_records
@@ -163,6 +167,14 @@ def test_the_laravel_check_fails_where_the_path_is_broken(
             return None
 
         monkeypatch.setattr(live_records.SourceRecords, "refresh", never)
+    elif broken == "allowlist":
+        from brain.connectors.transports import DatabaseTransport, ViewRead
+
+        def anything(self: Any, view: str, *, filters: Any = (), limit: int = 0) -> ViewRead:
+            del self
+            return ViewRead(view=view, filters=filters, limit=limit)
+
+        monkeypatch.setattr(DatabaseTransport, "plan", anything)
     else:
         from dataclasses import replace
 

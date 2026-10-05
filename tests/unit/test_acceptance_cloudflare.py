@@ -7,7 +7,7 @@ route's own function and sent, or not, as the install allowed; every table the c
 afterwards what it held before. Then each is run against the product broken where it proves, and
 each break fails with its own sentence.
 
-Task ids: M11.7.3
+Task ids: M11.7.3, M11.2.4
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ def written(url: str) -> dict[str, int]:
 def test_the_cloudflare_checks_are_registered_with_the_leaf_they_prove() -> None:
     """Delete this and a check can close a leaf it does not exercise, or name an id no task has."""
     assert {name: one.leaves for name, one in mine().items()} == {
-        HELD: ("M11.7.3",),
-        SENT: ("M11.7.3",),
+        HELD: ("M11.7.3", "M11.2.4"),
+        SENT: ("M11.7.3", "M11.2.4"),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}

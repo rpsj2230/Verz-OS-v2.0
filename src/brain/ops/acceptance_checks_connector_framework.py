@@ -44,12 +44,13 @@ already unit tested that way; what an install has to show is that the executor i
 front of a real read, which only a read shows.
 
 Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1
-Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.3.4
+Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.3.4, M11.5.2
 """
 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import math
 import re
@@ -126,6 +127,8 @@ from brain.ops.secrets import MAX_LEASE
 
 if TYPE_CHECKING:
     from brain.connectors.manifest import ConnectorManifest
+    from brain.connectors.transports import SourceRecord
+    from brain.core.envelope import TypedResult
     from brain.ops.connector_sync import Attempt
     from brain.ops.connector_sync_run import ConnectorKeys, SourceCaller
     from brain.ops.openbao import RoleToken, StaticVersion
@@ -243,6 +246,12 @@ EARLIEST_FRACTION: Final = 0.9
 #: How long a silent source holds its call before the check releases it. Well past the budget, so
 #: only the executor's timeout can end the read on time.
 HOLD_SECONDS: Final = 5.0
+
+#: How many independent reads the fan-out step makes at once, and how long each is held. A fourth
+#: read needs the first, so the question's critical path is two holds long.
+FAN_OUT: Final = 3
+FAN_OUT_HOLD_SECONDS: Final = 0.2
+CRITICAL_PATH: Final = 2
 
 #: How many askers ask for one record at once. The leaf's twenty.
 HERD: Final = 20
@@ -862,12 +871,13 @@ async def a_run_leases_its_key_and_the_next_run_reads_a_replaced_one(h: Harness)
 
 # ------------------------------------------ 5. whose key, how long, and once for many
 @check(
-    leaves=("M11.2.5", "M11.5.1", "M11.5.4"),
+    leaves=("M11.2.5", "M11.5.1", "M11.5.4", "M11.5.2"),
     sentence=(
-        "A live read of a Xero record runs only under the service key the source declares: one "
-        "asked under the asker's own credentials borrows no key and makes no call. A source that "
-        "does not answer is cut off at 800 ms and left out while another answers, inside the live "
-        "read budget, and twenty askers of one record at once make one call to it."
+        "A live Xero read runs only under the service key the source declares; one asked under "
+        "the asker's own credentials borrows no key and makes no call. A silent source is cut off "
+        "at 800 ms while another answers, in budget; three independent reads run at once and one "
+        "needing the first waits only for it; and twenty askers of one record at once make one "
+        "call to it."
     ),
 )
 async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
@@ -926,6 +936,9 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
     if not LIVE_READ_TIMEOUT_MS * EARLIEST_FRACTION <= elapsed_ms < LIVE_READ_BUDGET_MS:
         raise CheckFailedError("a read of a silent source did not end at its timeout in budget")
 
+    # M11.5.2: independent reads at once, and the question as long as its one critical path.
+    await _fan_out_takes_its_critical_path(rig, number)
+
     # M11.5.4: twenty askers of one record at once, and one call.
     def held(url: str) -> SourceAnswer:
         time.sleep(HERD_HOLD_SECONDS)
@@ -960,6 +973,43 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
             raise CheckFailedError("an asker of a record read once was not answered with it")
         if [row.id for row in one.result.records] != [record_id]:
             raise CheckFailedError("an asker of a record read once was answered with another")
+
+
+async def _fan_out_takes_its_critical_path(rig: _Rig, number: str) -> None:
+    """Three reads of three records with nothing between them, and a fourth that needs the first.
+
+    Each is held for `FAN_OUT_HOLD_SECONDS`. Run at once, the three end in about one hold and the
+    fourth one hold later, so the question takes two holds: its critical path. Made one after
+    another they take four, and the check refuses anything from three. The fourth's request is
+    built from the first's answer, so it cannot have been sent before that answer came.
+    """
+    ids = [str(uuid.uuid4()) for _ in range(FAN_OUT)]
+
+    def held(url: str) -> SourceAnswer:
+        time.sleep(FAN_OUT_HOLD_SECONDS)
+        return _listed(url, _invoice(next(one for one in ids if one in url), number))
+
+    def after_the_first(answered: Mapping[str, TypedResult[SourceRecord]]) -> FetchRequest:
+        if "record-0" not in answered:
+            raise CheckFailedError("a dependent read was built before the read it needs answered")
+        return _call(FAN_OUT, ids[FAN_OUT]).request
+
+    ids.append(str(uuid.uuid4()))
+    calls = (
+        *(_call(index, ids[index]) for index in range(FAN_OUT)),
+        dataclasses.replace(
+            _call(FAN_OUT, ids[FAN_OUT]), depends_on=("record-0",), derive=after_the_first
+        ),
+    )
+    started = time.monotonic()
+    fanned = await _ask(rig.sources(_Answering(held)), calls)
+    elapsed = time.monotonic() - started
+    if sorted(fanned.rows) != [f"record-{index}" for index in range(FAN_OUT + 1)]:
+        raise CheckFailedError("a read in a fan-out, or one waiting on another, was not answered")
+    if elapsed < CRITICAL_PATH * FAN_OUT_HOLD_SECONDS * EARLIEST_FRACTION:
+        raise CheckFailedError("a read that needs another was made before that one answered")
+    if elapsed >= (CRITICAL_PATH + 1) * FAN_OUT_HOLD_SECONDS:
+        raise CheckFailedError("independent live reads were made one after another, not at once")
 
 
 # ------------------------------------------------------ 6. the bucket and the ceiling
