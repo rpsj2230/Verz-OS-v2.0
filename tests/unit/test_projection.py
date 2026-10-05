@@ -671,7 +671,7 @@ def test_a_retirement_is_kept_as_the_model_declares_it_and_never_changed_or_remo
     assert "GRANT SELECT, INSERT ON proj.record_retired TO brain_app" in lives.GRANTS
     assert not any("UPDATE ON proj.record_retired" in one for one in lives.GRANTS)
     assert "proj.record " not in upgrade.replace("proj.record_retired", "")
-    assert (lives.revision, lives.down_revision) == ("0179", "0171")
+    assert (lives.revision, lives.down_revision) == ("0179", "0167")
 
 
 def test_the_source_epoch_table_is_built_as_the_model_declares_it_and_never_deleted_from() -> None:

@@ -146,6 +146,7 @@ MIGRATION_ACCESS_REQUEST_HANDLED = (
 )
 MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
 MIGRATION_ESCALATION = VERSIONS / "0168_escalation.py"
+MIGRATION_STEWARDS = VERSIONS / "0167_stewards_and_self_grants.py"
 MIGRATION_RECORD_LIVES = VERSIONS / "0179_record_lives_and_source_epochs.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
@@ -415,6 +416,8 @@ TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
 )
 #: And the one 0168 adds: a question handed to a person, kept until it expires.
 ESCALATION_TABLES: tuple[str, ...] = ("gate.escalation",)
+#: And the two 0167 adds: who stewards each connected source, and every grant made to oneself.
+STEWARDS_TABLES: tuple[str, ...] = ("ops.connector_steward", "gate.self_grant")
 #: And the two 0179 adds: the records a read retired, and how often each source's rows changed.
 RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.record_retired", "proj.source_epoch")
 
@@ -488,6 +491,7 @@ ALL_TABLES = (
     + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
     + ESCALATION_TABLES
+    + STEWARDS_TABLES
     + RECORD_LIVES_TABLES
 )
 
@@ -1315,6 +1319,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
     escalation = migration_module(MIGRATION_ESCALATION)
     assert escalation.TABLES == ESCALATION_TABLES
+    stewards = migration_module(MIGRATION_STEWARDS)
+    assert stewards.TABLES == STEWARDS_TABLES
     record_lives = migration_module(MIGRATION_RECORD_LIVES)
     assert record_lives.TABLES == RECORD_LIVES_TABLES
     assert core.TABLES == CORE_TABLES
@@ -1410,6 +1416,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
         + tuple(escalation.TABLES)
+        + tuple(stewards.TABLES)
         + tuple(record_lives.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
@@ -1485,6 +1492,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
         set(escalation.TABLES),
+        set(stewards.TABLES),
         set(record_lives.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)

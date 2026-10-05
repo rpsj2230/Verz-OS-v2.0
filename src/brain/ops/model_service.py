@@ -54,7 +54,7 @@ go to and the probes that fenced a rung off are the ones in force at the moment 
 executor is handed the ring and alert stores too, so every attempt reaches `ops.provider_health`
 and every chain that went deep reaches `ops.chain_depth_alert`.
 
-Task ids: M27.8.8, M5.3.4, M5.1.2, M5.7.2, M5.6.4, M5.2.2, M5.4.3, M5.4.8, M5.5.1
+Task ids: M27.8.8, M5.3.4, M5.1.2, M5.7.2, M5.6.4, M5.2.2, M5.4.3, M5.4.8, M5.5.1, M32.2.2.1
 """
 
 from __future__ import annotations
@@ -64,6 +64,7 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, Final
 
 import httpx
@@ -89,6 +90,7 @@ from brain.models.wire import (
     http_transport,
     local_wire,
 )
+from brain.ops.egress import Detector, analyser
 from brain.ops.provider_health_store import (
     SessionDepthAlerts,
     SessionHealth,
@@ -507,7 +509,8 @@ def drivers_for(
     client: httpx.Client,
     *,
     inference_address: str,
-    make_transport: Callable[..., Any] = http_transport,
+    make_transport: Callable[..., Any] | None = None,
+    detector: Detector | None = None,
 ) -> dict[str, ModelDriver]:
     """One driver per provider this product can reach, and the local one when its address is usable.
 
@@ -515,7 +518,12 @@ def drivers_for(
     while the process runs; assembly leaves the rung out until it does. The local server's is
     built only when `endpoint_refusals` has nothing to say about the address, so a rung naming
     it on an install with an unusable address is told so rather than dialling it.
+
+    `detector` is the install's personal data analyser, handed to every transport, which scrubs
+    with it and the rules before a third party is sent anything (`brain.ops.egress`).
     """
+    if make_transport is None:
+        make_transport = partial(http_transport, detector=detector)
     drivers: dict[str, ModelDriver] = {
         slug: SdkDriver(provider=slug, transport=make_transport(wire, client=client))
         for slug, wire in PROVIDER_WIRES.items()
@@ -541,11 +549,16 @@ class AddedProviderDrivers:
         client: httpx.Client,
         *,
         slots: AddedProviderSlots = PROCESS_ADDED_SLOTS,
-        make_transport: Callable[..., Any] = http_transport,
+        make_transport: Callable[..., Any] | None = None,
+        detector: Detector | None = None,
     ) -> None:
         self._client = client
         self._slots = slots
-        self._make_transport = make_transport
+        self._make_transport = (
+            make_transport
+            if make_transport is not None
+            else partial(http_transport, detector=detector)
+        )
         self._lock = threading.Lock()
         self._built: dict[str, tuple[str, ModelDriver]] = {}
 
@@ -586,6 +599,7 @@ def model_service_at_start(
     sessions: async_sessionmaker[AsyncSession] | None,
     *,
     client: httpx.Client | None = None,
+    analyser_address: str | None = None,
 ) -> ModelService:
     """The executor this process calls models through. Never raises.
 
@@ -593,14 +607,19 @@ def model_service_at_start(
     driver is built once. The profile and the keys are read per call. Without a database there
     is no ladder, so every call finds no model configured, which is the honest answer on such a
     process.
+
+    `analyser_address` is where this install's personal data analyser answers, from
+    `brain.ops.pii.analyzer_address`, or None where the profile deploys none: every request to a
+    third party is then scrubbed by the rules alone, and never sent unscrubbed.
     """
     owned = client if client is not None else httpx.Client(follow_redirects=False)
+    detector = analyser(analyser_address, owned) if analyser_address else None
     try:
         address = value_of(ENDPOINT_SETTING)
     except Exception as exc:
         log.warning("models.inference_address_unreadable", error=type(exc).__name__)
         address = ""
-    drivers = drivers_for(owned, inference_address=address)
+    drivers = drivers_for(owned, inference_address=address, detector=detector)
     calls = ModelCalls(
         ladder=SessionLadder(sessions) if sessions is not None else NoLadder(),
         attempts=SessionAttempts(sessions) if sessions is not None else NoAttempts(),
@@ -608,7 +627,7 @@ def model_service_at_start(
         profile=lambda: value_of("INSTALL_MODEL_PROFILE"),
         held=held_providers,
         clock=wall_clock,
-        added=AddedProviderDrivers(owned),
+        added=AddedProviderDrivers(owned, detector=detector),
         health=SessionHealth(sessions) if sessions is not None else None,
         alerts=SessionDepthAlerts(sessions),
     )
@@ -616,5 +635,6 @@ def model_service_at_start(
         "model drivers built",
         providers=sorted(drivers),
         ladder="database" if sessions is not None else "none",
+        egress_detector="analyser" if detector is not None else "rules",
     )
     return ModelService(calls=calls, client=owned)

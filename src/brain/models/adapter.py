@@ -582,6 +582,14 @@ def litellm_transport(router: PoolRouter) -> Transport:
     instance = sdk.Router(model_list=litellm_model_list(router), num_retries=0)
 
     def send(request: DriverRequest) -> Completion:
+        # Imported here: `brain.ops.egress` imports this module for the transport types. Every
+        # pool behind a Router is treated as a third party, which over-scrubs a local one rather
+        # than under-scrubbing a hosted one. See `brain.ops.egress`.
+        from brain.ops.egress import third_party_call
+
+        return third_party_call(request, post, provider="litellm", detector=None)
+
+    def post(request: DriverRequest) -> Completion:
         try:
             raw = instance.completion(
                 # The deployment id, so the Router picks the endpoint we routed to rather
