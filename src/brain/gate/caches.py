@@ -78,6 +78,18 @@ answer that comes back is confidently incomplete. Refusing costs one fresh plann
 which is the same asymmetry `brain.gate.fast_lane` accepts when two rules match one question.
 Nothing about the refusal names the tool, or counts what was dropped.
 
+**Nothing caches a plan yet, and what it waits for is M13.7.1.** The plan store and `replay` are
+built and reached by no request, because no request has a model choose tools: the answer lane
+composes from what the lane read and hands the model no catalogue. A plan cache with no planner
+would be a store nobody writes, so M6.2.2 stays unclaimed until the one agent runtime M13.7.1
+asks for exists, and is wired there, through `replay`, in the same change.
+
+**Where the other three are read** (2026-10-06). The retrieval cache and the embedding cache are
+read by the document plane's search, `brain.knowledge.document_tools.searcher` and
+`QuestionEmbedder.vector`, through the store `brain.app.lifespan` builds when a cache is
+configured. The freshness reading is built on the per-source counter `proj.source_epoch` once
+that lands, because the counter moves on a deletion and `last_seen_at` does not.
+
 **Nothing here computes a similarity, and M6.2.6 is a shape rather than a rule.** Semantic
 answer caching means answering a new question from a similar old one, which under a permission
 model means answering person B out of an entry computed for person A because the questions
@@ -582,6 +594,15 @@ MAX_RETRIEVAL_REFERENCES: Final = 500
 
 _ITEM_ID_RE: Final = re.compile(ITEM_ID_PATTERN)
 
+#: Why the kinds a question was narrowed to and the number of passages it asked for are in the key.
+A_NARROWED_QUESTION_IS_A_DIFFERENT_RETRIEVAL: Final = (
+    "The same words narrowed to one kind of item, or asked for a different number of passages, "
+    "rank a different list: the narrowing is applied inside each leg before its limit, and fusion "
+    "cuts the merged list to the number asked for. A key without them hands a question narrowed "
+    "to SOPs the list ranked for every kind, which is not a disclosure, because every passage is "
+    "re-read under the reach, and is still a wrong answer served quickly."
+)
+
 
 @dataclass(frozen=True)
 class CachedRetrieval:
@@ -622,6 +643,8 @@ def retrieval_key(
     *,
     departments: Sequence[str],
     corpus_epoch: int,
+    kinds: Sequence[str],
+    limit: int,
 ) -> str:
     """The key a retrieval result is stored under, with the scope in it (M6.2.3).
 
@@ -644,10 +667,30 @@ def retrieval_key(
     And `corpus_epoch`, which is what a re-index or an upload moves. Without it a cached list
     of references outlives the chunks it names, and a citation nothing can resolve is a
     citation nobody checks.
+
+    **The request's own narrowing is in the key as well as the caller's reach**, and neither has
+    a default. `kinds` is the kinds of item a question was narrowed to and `limit` how many
+    passages it asked for: the same words narrowed to SOPs rank a different list, and a list
+    ranked for five passages is not the first five of one ranked for ten once fusion has cut
+    both. Neither is a permission (the passages are re-read under the reach whatever the list
+    says), and both are required so that a caller who forgets one fails here rather than being
+    handed a list ranked for somebody else's narrowing. See
+    `A_NARROWED_QUESTION_IS_A_DIFFERENT_RETRIEVAL`.
     """
     if corpus_epoch < 0:
         msg = "a corpus epoch is a counter and cannot be negative"
         raise CacheLayerError(msg)
+    if limit < 1:
+        msg = "a retrieval that asks for no passages has nothing to cache"
+        raise CacheLayerError(msg)
+    narrowed = tuple(sorted(kinds))
+    if len(set(narrowed)) != len(narrowed):
+        msg = "a retrieval key names one kind twice"
+        raise CacheLayerError(msg)
+    for kind in narrowed:
+        if not SLUG_RE.match(kind):
+            msg = "a retrieval key names something that is not a kind of item"
+            raise CacheLayerError(msg)
     ordered = tuple(sorted(departments))
     if len(set(ordered)) != len(ordered):
         # A repeat would not change the reach and would change the key, which is a miss
@@ -666,6 +709,8 @@ def retrieval_key(
             *caller.reach_fields,
             ",".join(ordered),
             str(corpus_epoch),
+            ",".join(narrowed),
+            str(limit),
         )
     )
 

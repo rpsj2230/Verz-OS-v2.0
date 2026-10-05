@@ -75,8 +75,10 @@ from brain.cache import (
     ValkeyAnswerStore,
     ValkeyEntitlementCache,
     check_reachable_async,
+    embedding_cache,
     make_async_client,
     make_client,
+    retrieval_cache,
 )
 from brain.channels.widget import allowed_origins
 from brain.console_static import mount_console_entry, mount_console_fallback
@@ -111,6 +113,7 @@ from brain.identity.roles import IdentityError
 from brain.identity.sign_in_binding import sign_in_bindings
 from brain.install import InstallError, installed_name, value_of
 from brain.knowledge.app_parse_budget import app_parse_gaps
+from brain.knowledge.document_tools import KnowledgeCaches
 from brain.knowledge.row_store import SessionRowSource
 from brain.mailbox_read import keep_reading_the_mailbox
 from brain.migrate import run_migrations
@@ -549,11 +552,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.live_records = live
     # The website check over HTTPS, to the address each hop was checked at (M12.4.4).
     website = WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber())
+    # The document plane's retrieval and embedding caches (M6.2.3, M6.2.4), only where a cache
+    # is configured and there is a database to search. Their own synchronous client, as the
+    # answer store has, closed below. See `brain.knowledge.document_tools.KnowledgeCaches`.
+    app.state.knowledge_cache_client = None
+    knowledge_caches = None
+    if records is not None and settings.valkey_url:
+        knowledge_client = make_client(settings.valkey_url)
+        app.state.knowledge_cache_client = knowledge_client
+        knowledge_caches = KnowledgeCaches(
+            retrievals=retrieval_cache(knowledge_client),
+            embeddings=embedding_cache(knowledge_client),
+        )
     app.state.tools = build_registry(
         source=settings.tool_source,
         records=records,
         figures=live if records else None,
         website=website,
+        caches=knowledge_caches,
     )
     app.state.ready["tools"] = True
     # Every call to a registered tool asks the switch table first, and each tool's catalogue row
@@ -805,9 +821,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if valkey is not None:
             await valkey.aclose()
         # `ValkeyClient` declares no close, deliberately; the object that built it holds one.
-        close_answers = getattr(getattr(app.state, "answer_client", None), "close", None)
-        if callable(close_answers):
-            close_answers()
+        for held in ("answer_client", "knowledge_cache_client"):
+            close_held = getattr(getattr(app.state, held, None), "close", None)
+            if callable(close_held):
+                close_held()
         console_reads = getattr(app.state, "console_reads", None)
         if console_reads is not None:
             await console_reads.close()
