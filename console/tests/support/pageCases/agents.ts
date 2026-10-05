@@ -18,17 +18,22 @@ const AGENT_STATS = {
   currency: "SGD",
   last_active: "2019-03-04T09:42:00Z",
   at_least: false,
-  periods: ["7d", "30d"].map((range) => ({
+  periods: ["7d", "30d", "90d", "mtd"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
     until: "2019-03-04T12:00:00Z",
     runs: 391,
+    messages: 360,
     answered: 360,
     nothing_returned: 31,
     p50_latency_ms: 1840.5,
-    cost_minor: null,
+    cost_minor: 18240,
+    // The cost per person, whose widest value is a name with nowhere to break.
+    callers: [{ principal_id: UNBROKEN, name: UNBROKEN, spend_minor: 18240 }],
   })),
-  unrecorded: [{ figure: "model_cost", why: UNBROKEN }],
+  unrecorded: [],
+  // The month against the agent's own budget, drawn for a reader of everybody's spend.
+  projection: { spent_minor: 18240, projected_minor: 99999999, ceiling_minor: 50000, over_ceiling: true },
 };
 
 const WORKSPACE = {
@@ -203,6 +208,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         },
       },
       "/api/v1/routing/rungs": MATRIX,
+      // The capability detail, whose widest values are a source, a projected field, a skill and a
+      // predicate value, each a token with nowhere to break.
+      "/api/v1/agents/quote-helper/capabilities": {
+        agent_id: "quote-helper",
+        availability: { level: "department", department: UNBROKEN, owner_id: UNBROKEN, reader_is_included: true, words: UNBROKEN },
+        connectors: [{ source: UNBROKEN, presence: "attached", projects: [UNBROKEN], health: "degraded", checked_at: "2019-03-04T09:00:00Z" }],
+        skills: [{ name: UNBROKEN, digest: "d".repeat(64), version: UNBROKEN, source: "upload", review: "approved", runs: 7, detachable: true }],
+        unused_skills: [],
+        usage_basis: "everyone",
+        skills_editable: true,
+        offers: [{ name: UNBROKEN, version: UNBROKEN, digest: "e".repeat(64), review: "pending", control: "review", route: "/skills/x" }],
+        knowledge: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }], matched: 1, verified: 1, stale: 0, unverified: 0, at_least: false },
+      },
     },
   },
   // New agent: start from scratch, or from a template the gallery offers.
