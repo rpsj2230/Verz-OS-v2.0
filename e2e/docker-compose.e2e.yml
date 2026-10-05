@@ -1,0 +1,54 @@
+# The browser harness's additions to an install, and nothing else (M27.10.6).
+#
+# Composed after `docker-compose.lite.yml` and `docker-compose.keycloak.yml`, the two files a lite
+# install with its own identity provider runs, so the stack under test is the product's and this
+# file is only what a runner lacks that a server has:
+#
+# - **Somewhere to sign in over https.** The product reads an issuer's keys over https and nothing
+#   else (`brain.identity.keycloak_tokens.jwks_url_for`), and an install puts Keycloak behind its
+#   proxy's certificate. A runner has no proxy, so Keycloak presents a certificate signed by an
+#   authority this job made (`tests/fixtures/tls.py`), under `keycloak.localhost`. The browser
+#   resolves every `*.localhost` to this machine and reaches the published port; the application
+#   resolves the same name to Keycloak on the identity network, so both see one issuer.
+# - **The application trusting that authority**, through `SSL_CERT_FILE`, which httpx honours.
+# - **Two people.** The realm one-shot runs `brain.ops.browser_harness`, which is the product's
+#   own `importable_realm` with the fixture's people and the credentials the job minted added.
+# - **Ports on this machine** for the browser.
+#
+# Paths are relative to the first compose file, which is the repository root.
+
+services:
+  app:
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      SSL_CERT_FILE: /e2e/tls/ca.pem
+    volumes:
+      - ${E2E_TLS_DIR:?set E2E_TLS_DIR to the directory tests.fixtures.tls wrote}:/e2e/tls:ro
+    networks:
+      - identity
+
+  keycloak-realm:
+    entrypoint: ["sh", "-c"]
+    command:
+      - python -m brain.ops.browser_harness realm /e2e/people.json /app/ops/keycloak/realm-export.json > /out/realm-export.json
+    environment:
+      E2E_ADMIN_PASSWORD: ${E2E_ADMIN_PASSWORD:?mint E2E_ADMIN_PASSWORD}
+      E2E_ADMIN_CODE_SECRET: ${E2E_ADMIN_CODE_SECRET:?mint E2E_ADMIN_CODE_SECRET}
+      E2E_READER_PASSWORD: ${E2E_READER_PASSWORD:?mint E2E_READER_PASSWORD}
+    volumes:
+      - ./e2e/fixtures/people.json:/e2e/people.json:ro
+
+  keycloak:
+    environment:
+      KC_HTTPS_PORT: "8443"
+      KC_HTTPS_CERTIFICATE_FILE: /e2e/tls/server.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /e2e/tls/server-key.pem
+    volumes:
+      - ${E2E_TLS_DIR:?set E2E_TLS_DIR to the directory tests.fixtures.tls wrote}:/e2e/tls:ro
+    ports:
+      - "127.0.0.1:8443:8443"
+    networks:
+      identity:
+        aliases:
+          - keycloak.localhost
