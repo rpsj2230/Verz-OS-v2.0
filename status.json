@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T15:05:31.857009+00:00",
-  "commit": "95a9f7cb",
-  "commit_subject": "Slack is a source on Ask: each person is read the channels Slack says they are in, and nothing is kept (#333)",
+  "generated_at": "2026-10-05T15:06:22.856351+00:00",
+  "commit": "f9c82402",
+  "commit_subject": "Item 150: Google Drive is connectable, with the owner's steps (#340)",
   "total": 1592,
   "done": 548,
   "percent": 34.4,
