@@ -382,6 +382,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_category",
       "agent.skill_invocation",
       "agent.skill_retirement",
+      "agent.skill_script",
       "agent.skill_detachment",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],

@@ -372,6 +372,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.skill_detachment",
         "agent.skill_retirement",
         "agent.skill_review",
+        # The bytes of a script a stored skill version carries (`0178`): about a skill, never a
+        # person.
+        "agent.skill_script",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.
         "agent.tool_definition",
