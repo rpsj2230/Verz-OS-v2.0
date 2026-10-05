@@ -1317,14 +1317,19 @@
      "why": "Slack is connectable (#288): signed events in, answers on the bot token with the room read like Lark's, Connect Slack from an app manifest, and an install check; the owner's workspace proves the vendor's half",
      "updated": "2026-09-30"
     },
+    "M10.5.2": {
+     "status": "READY FOR TESTING",
+     "why": "Teams is connectable (M10/channel-teams): Bot Framework tokens verified against Microsoft's published keys, the bot's App ID and the pinned tenant, answers in the chat on a token exchanged at the tenant's login, Connect Teams from an Azure Bot, and an install check; the owner's tenant proves the vendor's half",
+     "updated": "2026-09-30"
+    },
     "M10.5.6": {
      "status": "READY FOR TESTING",
-     "why": "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (M10/channel-email-mailbox), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
+     "why": "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (#296), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
      "updated": "2026-09-30"
     },
     "M10.6.1": {
      "status": "IN PROGRESS",
-     "why": "the webhook, Lark, email and Slack wires are live (PR #105; L1, merged d426e3d3; #285; M10/channel-slack); Teams, Telegram and WhatsApp each come with their own package",
+     "why": "the webhook, Lark, email, Slack and Teams wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams); Telegram and WhatsApp each come with their own package",
      "updated": "2026-09-30"
     },
     "M10.6.3": {
