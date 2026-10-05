@@ -33,6 +33,7 @@ SLACK = "a_slack_message_is_taken_signed_and_answered_on_the_bot_token"
 MAILBOX = "mail_in_the_mailbox_is_read_answered_and_marked"
 TEAMS = "a_teams_message_is_taken_signed_and_answered_in_its_chat"
 TELEGRAM = "a_telegram_message_on_the_registered_header_is_answered"
+WHATSAPP = "two_whatsapp_messages_in_one_notification_are_each_answered"
 
 
 def mine() -> dict[str, Check]:
@@ -48,20 +49,21 @@ def test_each_channel_check_is_registered_with_the_leaf_it_proves() -> None:
         MAILBOX: ("M10.5.6",),
         TEAMS: ("M10.5.2",),
         TELEGRAM: ("M10.5.4",),
+        WHATSAPP: ("M10.5.3",),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
-    assert {"M10.5.6", "M10.5.1", "M10.5.2", "M10.5.4"} <= {
+    assert {"M10.5.6", "M10.5.1", "M10.5.2", "M10.5.4", "M10.5.3"} <= {
         one for module in wbs["modules"] for one in module["leaf_ids"]
     }
 
 
 def test_the_channels_checks_are_listed_in_their_page_order() -> None:
     """Every check this module registers, in the order the Install page lists them: one per
-    way a vendor connects, email, Slack, email read from a mailbox, Teams, then Telegram. Held
-    here, beside the module's other tests, since 2026-09-30, so a package adding a check edits its
-    own file and never a list every package appends to. Delete this and a check can drop out of
+    way a vendor connects, email, Slack, email read from a mailbox, Teams, Telegram, then WhatsApp.
+    Held here, beside the module's other tests, since 2026-09-30, so a package adding a check edits
+    its own file and never a list every package appends to. Delete this and a check can drop out of
     the module with the page simply listing one fewer row."""
-    assert checks_in(MODULE) == [EMAIL, SLACK, MAILBOX, TEAMS, TELEGRAM]
+    assert checks_in(MODULE) == [EMAIL, SLACK, MAILBOX, TEAMS, TELEGRAM, WHATSAPP]
 
 
 def lends(password: str | None) -> MailPassword:
@@ -361,3 +363,48 @@ def test_the_telegram_check_fails_where_the_product_breaks(
     else:
         monkeypatch.setattr(telegram, "webhook_secret_of", lambda bot_token: bot_token)
     assert run_check(install, (mine()[TELEGRAM],)) == {TELEGRAM: (FAILED, reason)}
+
+
+@pytest.mark.needs_db
+def test_the_whatsapp_check_passes_on_a_real_schema_and_leaves_nothing_behind(install: str) -> None:
+    """**The WhatsApp check as the worker runs it**, with secrets the check made: it passes and
+    every table it wrote to holds what it held before. Delete this and a check that cannot pass on
+    the real schema, or one that commits a WhatsApp record, reaches the owner's server."""
+    before = counts(install)
+    assert run_check(install, (mine()[WHATSAPP],)) == {WHATSAPP: (PASSED, "")}
+    assert counts(install) == before
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("signature", "a notification signed with another app secret was accepted"),
+        ("batch", "each of the two people was not answered once, in their own chat"),
+        ("word", "Meta's check of the address was answered for another word"),
+    ],
+)
+def test_the_whatsapp_check_fails_where_the_product_breaks(
+    install: str, monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """Broken the way each would break: a signature check that passes anything, a batch read as
+    its first message, and an address check that answers any word. Delete this and any of them
+    could go with the check green."""
+    from brain.channels import whatsapp
+
+    if broken == "signature":
+        monkeypatch.setattr(whatsapp, "verify_signature", lambda **kwargs: None)
+    elif broken == "batch":
+        real = whatsapp.WhatsAppWire.parts
+
+        def first_only(self: Any, arrived: Any) -> Any:
+            return real(self, arrived)[:1]
+
+        monkeypatch.setattr(whatsapp.WhatsAppWire, "parts", first_only)
+    else:
+        monkeypatch.setattr(
+            whatsapp.WhatsAppWire,
+            "subscription_answer",
+            lambda self, query, secret: query.get("hub.challenge"),
+        )
+    assert run_check(install, (mine()[WHATSAPP],)) == {WHATSAPP: (FAILED, reason)}

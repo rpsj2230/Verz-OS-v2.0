@@ -103,9 +103,9 @@ from urllib.parse import urlsplit
 import psycopg
 import structlog
 from fastapi import APIRouter, Path, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.background import BackgroundTask
+from starlette.background import BackgroundTask, BackgroundTasks
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked, wiring_of
@@ -123,6 +123,7 @@ from brain.channels.adapter import (
     KeyedWire,
     RegisteredWire,
     RegistrationRefusedError,
+    SubscribedWire,
     VendorAnswer,
     VendorRequest,
     channel_adapters,
@@ -1013,6 +1014,47 @@ router = APIRouter(prefix=API_PREFIX, tags=["channels"], route_class=NoEchoRoute
 Name = Annotated[str, Path(max_length=32)]
 
 
+@router.get(
+    EVENTS_PATH,
+    response_model=None,
+    responses={
+        **COMMON_RESPONSES,
+        200: {
+            "description": "The vendor's challenge, as it was sent.",
+            "content": {"text/plain": {"schema": {"type": "string"}}},
+        },
+    },
+)
+async def channel_address_check(name: Name, request: Request) -> Response:
+    """A vendor checking the events address with a GET before it posts. Takes no caller: the
+    word agreed with the vendor is what is proved, and a refusal says nothing about why.
+
+    See `brain.channels.adapter.AN_ADDRESS_CHECK_BY_GET_IS_ANSWERED_ONLY_FOR_THE_AGREED_WORD`. A
+    channel whose vendor makes no such check has nothing at this address, and neither has one
+    whose record is absent or switched off.
+    """
+    channel = channel_named(name)
+    # Typed as an object: whether a vendor checks by a GET is a question about the wire's class.
+    wire: object = None if channel is None else channel_wires().get(channel)
+    if channel is None or not isinstance(wire, SubscribedWire):
+        return _error(404, NOT_HERE)
+    record = await records_of(request).get(channel)
+    if record is None or not record.enabled:
+        return _error(404, NOT_HERE)
+    try:
+        secret = await asyncio.to_thread(secrets_of(request).read, record.secret)
+    except ChannelSecretsUnavailableError:
+        return _error(503, NOT_NOW)
+    if secret is None:
+        return _error(503, NOT_NOW)
+    answer = wire.subscription_answer(dict(request.query_params), secret)
+    del secret
+    log.info("channel address checked", channel=channel.value, answered=answer is not None)
+    if answer is None:
+        return _error(403, NOT_ACCEPTED)
+    return PlainTextResponse(answer)
+
+
 @router.post(EVENTS_PATH, response_model=EventView, responses=COMMON_RESPONSES)
 async def channel_event(name: Name, request: Request) -> JSONResponse:
     """What a vendor posts. Takes no caller: the signature is what is proved."""
@@ -1048,6 +1090,19 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         now=now,
         keys=vendor_keys_of(request, wire),
     )
+    if receipt.more:
+        # A request of several messages is acknowledged whatever became of each, and every one
+        # accepted is answered after the vendor has its answer; see
+        # `brain.channels.adapter.A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL`.
+        assert record is not None
+        accepted = [one for one in (receipt, *receipt.more) if one.kind is ReceiptKind.ACCEPTED]
+        answering = BackgroundTasks()
+        for one in accepted:
+            answering.add_task(answer_receipt, request, one, record, now)
+        came_to = ReceiptKind.ACCEPTED if accepted else receipt.kind
+        return JSONResponse(
+            status_code=200, content=EventView(status=came_to).model_dump(), background=answering
+        )
     if receipt.kind is ReceiptKind.REFUSED:
         assert receipt.reason is not None
         status, message = _REFUSED_STATUS[receipt.reason]
