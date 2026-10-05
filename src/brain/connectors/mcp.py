@@ -137,7 +137,7 @@ class McpToolNotAsReviewedError(TransportError):
 
 
 # ------------------------------------------------------------------ messages
-def request_body(request_id: int, method: str, params: Mapping[str, Any]) -> bytes:
+def jsonrpc_request(request_id: int, method: str, params: Mapping[str, Any]) -> bytes:
     """One JSON-RPC request, compact and in a stable key order."""
     message = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params)}
     return json.dumps(message, sort_keys=True, separators=(",", ":")).encode("utf-8")

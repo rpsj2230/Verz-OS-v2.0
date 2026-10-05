@@ -48,11 +48,11 @@ from brain.connectors.mcp import (
     McpProtocolError,
     assert_as_reviewed,
     initialize_params,
+    jsonrpc_request,
     listed_tools,
     negotiated,
     notification_body,
     reply_to,
-    request_body,
 )
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
@@ -147,7 +147,7 @@ class McpSession:
     def request(self, method: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
         """One request and the result of its response."""
         request_id, self._next_id = self._next_id, self._next_id + 1
-        answer = self._post(request_body(request_id, method, params))
+        answer = self._post(jsonrpc_request(request_id, method, params))
         said = {key.lower(): value for key, value in (answer.headers or {}).items()}
         if method == "initialize":
             self.session_id = said.get(SESSION_HEADER.lower(), "")

@@ -31,9 +31,9 @@ from brain.connectors.mcp import (
     McpReading,
     McpToolNotAsReviewedError,
     assert_as_reviewed,
+    jsonrpc_request,
     negotiated,
     reply_to,
-    request_body,
     tool_digest,
 )
 from brain.connectors.throttle import CallOutcome
@@ -89,7 +89,7 @@ def _event_stream(*messages: Any) -> bytes:
 def test_a_request_is_one_json_rpc_message_carrying_its_id() -> None:
     """Delete this and a request could go out with no id, which a server answers as a
     notification: with nothing at all."""
-    assert json.loads(request_body(7, "tools/list", {})) == {
+    assert json.loads(jsonrpc_request(7, "tools/list", {})) == {
         "jsonrpc": "2.0",
         "id": 7,
         "method": "tools/list",
