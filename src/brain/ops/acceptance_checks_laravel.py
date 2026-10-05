@@ -348,12 +348,14 @@ async def a_laravel_database_answers_on_ask_from_its_views(h: Harness) -> None:
             source_policies=source_field_policies(registry),
         )
 
-    reads = ("read:client", "read:client.name", "read:client.status")
+    reads = ("read:laravel_client", "read:laravel_client.name", "read:laravel_client.status")
     finance, sales = h.principal(A, "finance"), h.principal(A, "sales")
     await h.person(
         finance,
         department=A,
-        grants=tuple((one, Scope.department(A)) for one in (*reads, "read:client.contract_value")),
+        grants=tuple(
+            (one, Scope.department(A)) for one in (*reads, "read:laravel_client.contract_value")
+        ),
     )
     await h.person(sales, department=A, grants=tuple((one, Scope.department(A)) for one in reads))
 

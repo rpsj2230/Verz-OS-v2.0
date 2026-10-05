@@ -375,8 +375,8 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         ("local", "price_list"),
         ("xero", "invoice"),
         ("freshdesk", "ticket"),
-        ("laravel", "client"),
-        ("laravel", "user"),
+        ("laravel", "laravel_client"),
+        ("laravel", "laravel_user"),
     }
     assert classification_for("invoice", source="xero") == xero_invoices
 

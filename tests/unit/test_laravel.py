@@ -539,7 +539,7 @@ def test_money_is_selected_live_and_never_projected() -> None:
     """`contract_value` is why somebody asks this connector a question and it is a payload
     rather than a pointer: stored, it is filtered and quoted as current long after the
     contract was renegotiated. It is selected on every client read for whoever holds
-    `read:client.contract_value`, and it is not one of the projected fields.
+    `read:laravel_client.contract_value`, and it is not one of the projected fields.
 
     Delete this and the field the company canaries protect becomes a stored column, which
     reads as an optimisation in a diff."""
@@ -788,7 +788,7 @@ def test_a_fetch_addressed_to_another_entity_never_reaches_the_database() -> Non
     output."""
     reader = Reader(ViewReply(rows=(client_row(),)))
     fetch = connector_fetch(connection(), ENTITY_CLIENT, reader=reader, fetched_at=NOW.isoformat())
-    with pytest.raises(LaravelError, match="was asked for 'user'"):
+    with pytest.raises(LaravelError, match="was asked for 'laravel_user'"):
         fetch(FetchRequest(entity=ENTITY_USER))
     assert reader.reads == []
 
@@ -924,7 +924,7 @@ def test_a_projection_with_no_predicate_at_all_is_refused_by_the_manifest() -> N
     capability."""
     with pytest.raises(ManifestError, match="stores no visibility predicate"):
         projection_for(ENTITY_CLIENT, visibility=Scope())
-    with pytest.raises(LaravelError, match=r"\['user'\]"):
+    with pytest.raises(LaravelError, match=r"\['laravel_user'\]"):
         laravel_manifest(connection(), ref=REF, visibility={ENTITY_CLIENT: department()})
 
 

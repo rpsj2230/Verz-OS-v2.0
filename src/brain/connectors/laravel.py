@@ -350,8 +350,11 @@ CEILING_NAME: Final = "laravel"
 
 MANIFEST_VERSION: Final = "1.0.0"
 
-ENTITY_CLIENT: Final = "client"
-ENTITY_USER: Final = "user"
+#: The entities, named for Laravel: the records screen and Ask read one row tool per entity, and
+#: the demo's `client` and HubSpot's would otherwise be a second tool for the same name. See
+#: `brain.connectors.hubspot.ONE_ENTITY_NAME_IS_ONE_SOURCE_S_ON_ASK`.
+ENTITY_CLIENT: Final = "laravel_client"
+ENTITY_USER: Final = "laravel_user"
 
 #: Every record's own identifier, and Laravel's own convention. Always in the column list and
 #: never one of the projected fields: `ProjectedRecord.source_id` carries it, and declaring it
@@ -641,7 +644,7 @@ PROJECTED_FIELDS: Final[Mapping[str, tuple[ProjectedField, ...]]] = MappingProxy
 #: Columns fetched on every read and never stored. One of them, and it is the money.
 #: `contract_value` is on `brain.core.projection.NEVER_PROJECT` already, so the platform
 #: refuses to store it whatever this module says; what this list does is state that it is
-#: still *selected*, because a person holding `read:client.contract_value` is asking a
+#: still *selected*, because a person holding `read:laravel_client.contract_value` is asking a
 #: question that has to be answered from the ledger of the moment rather than from a copy.
 #: The company canaries hold `CANARY-CONTRACT-7Q4XZ` in this field for exactly this test.
 LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
@@ -1206,7 +1209,7 @@ def projected_record(
 #:
 #: `contract_value` is RESTRICTED and is the point of the table: it is money, it is what the
 #: company canaries protect, and it is returnable live to somebody holding
-#: `read:client.contract_value` while never being storable.
+#: `read:laravel_client.contract_value` while never being storable.
 #:
 #: `manager_id` is INTERNAL rather than CONFIDENTIAL. It names which member of staff owns the
 #: relationship, which is the ordinary content of a project conversation, and classifying it
@@ -1216,21 +1219,33 @@ def projected_record(
 #: rather than an omission: they are not selected, so there is nothing to classify, and
 #: default-deny would withhold them from everybody even if a row arrived carrying one.
 LARAVEL_FIELD_RULES: Final[tuple[FieldRule, ...]] = (
-    FieldRule.of(ENTITY_CLIENT, "name", "read:client.name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "status", "read:client.status", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "department", "read:client.department", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, "manager_id", "read:client.manager_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CLIENT, CURSOR_COLUMN, "read:client.updated_at", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "name", "read:laravel_client.name", Classification.INTERNAL),
+    FieldRule.of(ENTITY_CLIENT, "status", "read:laravel_client.status", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_CLIENT, "department", "read:laravel_client.department", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CLIENT, "manager_id", "read:laravel_client.manager_id", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CLIENT, CURSOR_COLUMN, "read:laravel_client.updated_at", Classification.INTERNAL
+    ),
     FieldRule.of(
         ENTITY_CLIENT,
         "contract_value",
-        "read:client.contract_value",
+        "read:laravel_client.contract_value",
         Classification.RESTRICTED,
     ),
-    FieldRule.of(ENTITY_USER, "display_name", "read:user.display_name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_USER, "department", "read:user.department", Classification.INTERNAL),
-    FieldRule.of(ENTITY_USER, "status", "read:user.status", Classification.INTERNAL),
-    FieldRule.of(ENTITY_USER, CURSOR_COLUMN, "read:user.updated_at", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_USER, "display_name", "read:laravel_user.display_name", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_USER, "department", "read:laravel_user.department", Classification.INTERNAL
+    ),
+    FieldRule.of(ENTITY_USER, "status", "read:laravel_user.status", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_USER, CURSOR_COLUMN, "read:laravel_user.updated_at", Classification.INTERNAL
+    ),
 )
 
 
