@@ -80,6 +80,7 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
         "steward": "u_steward",
     },
     "domains": {"domains": "example.com, example.org", "department": "operations"},
+    "google_analytics": {"property": "123456789", "department": "marketing"},
     "laravel": {
         "schema": "portal",
         "client_rule": "department = sales",

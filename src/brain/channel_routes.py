@@ -103,9 +103,9 @@ from urllib.parse import urlsplit
 import psycopg
 import structlog
 from fastapi import APIRouter, Path, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.background import BackgroundTask
+from starlette.background import BackgroundTask, BackgroundTasks
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked, wiring_of
@@ -121,6 +121,9 @@ from brain.channels.adapter import (
     ChannelTransport,
     ChannelWire,
     KeyedWire,
+    RegisteredWire,
+    RegistrationRefusedError,
+    SubscribedWire,
     VendorAnswer,
     VendorRequest,
     channel_adapters,
@@ -144,6 +147,7 @@ from brain.channels.inbound import (
 from brain.channels.outbound import Delivered, LedgerRunner, Outgoing, deliver
 from brain.channels.relay import RelayingTransport
 from brain.chat_answer import ChatAnswerer
+from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import credentials_of
@@ -304,6 +308,28 @@ TEST_TOLD: Final[Mapping[DeliveryOutcome, str]] = {
     DeliveryOutcome.UNKNOWN: (
         "The vendor did not answer, so the test message may or may not have arrived. Check at "
         "the other end before sending another."
+    ),
+}
+
+#: What a person saving a set-up the vendor must be told about is told when it was not.
+NO_PUBLIC_ADDRESS: Final = (
+    "This install has no public address yet, so the vendor could not be told where to send. "
+    "Set the install's address first, then save this set-up again."
+)
+NOTHING_HELD_TO_REGISTER_WITH: Final = (
+    "No secret is held for this channel yet. Paste it into the secret field and save again."
+)
+REGISTRATION_NOT_BUILT: Final = (
+    "Not saved. This set-up is not one the vendor takes: check each field against the steps."
+)
+REGISTRATION_TOLD: Final[Mapping[CallOutcome, str]] = {
+    CallOutcome.REJECTED: (
+        "Not saved. The vendor did not accept this set-up: check the secret you pasted, and that "
+        "this install's address is reachable over HTTPS."
+    ),
+    CallOutcome.QUOTA: "Not saved. The vendor asked to be called less often. Save again shortly.",
+    CallOutcome.UNAVAILABLE: (
+        "Not saved. The vendor could not be reached just now. Save again in a minute."
     ),
 }
 
@@ -988,6 +1014,47 @@ router = APIRouter(prefix=API_PREFIX, tags=["channels"], route_class=NoEchoRoute
 Name = Annotated[str, Path(max_length=32)]
 
 
+@router.get(
+    EVENTS_PATH,
+    response_model=None,
+    responses={
+        **COMMON_RESPONSES,
+        200: {
+            "description": "The vendor's challenge, as it was sent.",
+            "content": {"text/plain": {"schema": {"type": "string"}}},
+        },
+    },
+)
+async def channel_address_check(name: Name, request: Request) -> Response:
+    """A vendor checking the events address with a GET before it posts. Takes no caller: the
+    word agreed with the vendor is what is proved, and a refusal says nothing about why.
+
+    See `brain.channels.adapter.AN_ADDRESS_CHECK_BY_GET_IS_ANSWERED_ONLY_FOR_THE_AGREED_WORD`. A
+    channel whose vendor makes no such check has nothing at this address, and neither has one
+    whose record is absent or switched off.
+    """
+    channel = channel_named(name)
+    # Typed as an object: whether a vendor checks by a GET is a question about the wire's class.
+    wire: object = None if channel is None else channel_wires().get(channel)
+    if channel is None or not isinstance(wire, SubscribedWire):
+        return _error(404, NOT_HERE)
+    record = await records_of(request).get(channel)
+    if record is None or not record.enabled:
+        return _error(404, NOT_HERE)
+    try:
+        secret = await asyncio.to_thread(secrets_of(request).read, record.secret)
+    except ChannelSecretsUnavailableError:
+        return _error(503, NOT_NOW)
+    if secret is None:
+        return _error(503, NOT_NOW)
+    answer = wire.subscription_answer(dict(request.query_params), secret)
+    del secret
+    log.info("channel address checked", channel=channel.value, answered=answer is not None)
+    if answer is None:
+        return _error(403, NOT_ACCEPTED)
+    return PlainTextResponse(answer)
+
+
 @router.post(EVENTS_PATH, response_model=EventView, responses=COMMON_RESPONSES)
 async def channel_event(name: Name, request: Request) -> JSONResponse:
     """What a vendor posts. Takes no caller: the signature is what is proved."""
@@ -1023,6 +1090,19 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         now=now,
         keys=vendor_keys_of(request, wire),
     )
+    if receipt.more:
+        # A request of several messages is acknowledged whatever became of each, and every one
+        # accepted is answered after the vendor has its answer; see
+        # `brain.channels.adapter.A_REQUEST_OF_SEVERAL_MESSAGES_IS_READ_AS_SEVERAL`.
+        assert record is not None
+        accepted = [one for one in (receipt, *receipt.more) if one.kind is ReceiptKind.ACCEPTED]
+        answering = BackgroundTasks()
+        for one in accepted:
+            answering.add_task(answer_receipt, request, one, record, now)
+        came_to = ReceiptKind.ACCEPTED if accepted else receipt.kind
+        return JSONResponse(
+            status_code=200, content=EventView(status=came_to).model_dump(), background=answering
+        )
     if receipt.kind is ReceiptKind.REFUSED:
         assert receipt.reason is not None
         status, message = _REFUSED_STATUS[receipt.reason]
@@ -1171,6 +1251,51 @@ async def channels(request: Request, asked: Asked) -> ChannelsView:
     )
 
 
+async def _register(
+    request: Request,
+    channel: Channel,
+    wire: RegisteredWire,
+    kept: str | None,
+    tenant: Mapping[str, str],
+) -> JSONResponse | None:
+    """Tell the vendor this install's events address, or say why not; None when it accepted.
+
+    See `brain.channels.adapter.A_VENDOR_THAT_MUST_BE_TOLD_THE_ADDRESS_IS_TOLD_ON_SAVE`. Made
+    before the secret is kept, so a secret the vendor refused never replaces the one that works.
+    The secret is the one being saved, or else the one the vault holds, borrowed for the call.
+    """
+    address = events_address_of(channel)
+    if not address:
+        return _error(409, NO_PUBLIC_ADDRESS)
+    secret = kept
+    if secret is None:
+        record = await records_of(request).get(channel)
+        try:
+            held = (
+                None
+                if record is None
+                else await asyncio.to_thread(secrets_of(request).read, record.secret)
+            )
+        except ChannelSecretsUnavailableError:
+            return _error(503, NOT_NOW)
+        if held is None:
+            return _error(409, NOTHING_HELD_TO_REGISTER_WITH)
+        secret = held
+    try:
+        told = wire.registration_for(address=address, secret=secret, tenant=tenant)
+    except RegistrationRefusedError as problem:
+        return _error(422, str(problem))
+    except ValueError:
+        return _error(422, REGISTRATION_NOT_BUILT)
+    del secret
+    answer = await asyncio.to_thread(transport_of(request).send, told)
+    outcome = wire.judge(answer)
+    log.info("channel address registered", channel=channel.value, outcome=outcome.value)
+    if outcome is CallOutcome.OK:
+        return None
+    return _error(502, REGISTRATION_TOLD.get(outcome, REGISTRATION_TOLD[CallOutcome.REJECTED]))
+
+
 @router.put(CHANNEL_PATH, response_model=ChannelView, responses=COMMON_RESPONSES)
 async def configure(
     name: Name, body: ChannelAsked, request: Request, asked: Asked
@@ -1182,6 +1307,12 @@ async def configure(
         return _error(422, " ".join(problems))
     actor = asked.caller.principal.id
     kept = secret_to_keep(wire, body)
+    # Typed as an object: whether a wire registers its address is a question about its class.
+    registering: object = wire
+    if isinstance(registering, RegisteredWire):
+        refused = await _register(request, channel, registering, kept, body.tenant)
+        if refused is not None:
+            return refused
     if kept is not None:
         try:
             await credentials_of(request).keep(

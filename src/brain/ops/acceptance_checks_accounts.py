@@ -31,7 +31,14 @@ release's, read inside Keycloak's container by its own administrator, because no
 application may read a realm's settings (`brain.ops.sign_in_mail`); the password is never compared
 or read, and Keycloak shows it masked anyway.
 
-Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15, M40.7.1
+**The fourth check is the people step (2026-09-30)**: a staff list naming one reserved person
+already joined, one new active person and one leaver, read by `provide_people` exactly as the
+nightly run reads it, makes one person, who is then on the directory's own read of People and
+joined to their row by their address's digest, and a second read makes nobody. The person it makes
+is named as a reserved principal through `new_id`, so nothing outside the harness's rolled-back
+transaction ever holds them.
+
+Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15, M40.7.1, M1.10.3
 """
 
 from __future__ import annotations
@@ -40,6 +47,7 @@ from typing import Any, Final
 
 from sqlalchemy import insert, select
 
+from brain.directory_routes import live_people
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.identity.organisation_sync import sync_actor
@@ -70,6 +78,7 @@ from brain.ops.acceptance import (
 )
 from brain.ops.acceptance_run import Harness
 from brain.ops.staff_accounts_run import person_for
+from brain.ops.staff_people_run import provide_people
 from brain.ops.standing_run import apply_standing, plan_standing
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
 
@@ -353,3 +362,52 @@ async def forgot_password_is_sent_through_the_relay_on_notifications(h: Harness)
         raise CheckFailedError(
             "the sign-in service reported a mail host that is not the relay saved on Notifications"
         )
+
+
+@check(
+    leaves=("M1.10.1", "M1.10.3"),
+    sentence=(
+        "On a reserved staff list: an active person nobody is joined to is made a person, on "
+        "People and joined to their row, one already joined is not made again, a leaver is not "
+        "made, and a second read makes nobody. It calls no sign-in service and sends nothing; the "
+        "person is reserved and rolled back with the check."
+    ),
+)
+async def the_staff_list_puts_every_active_person_on_people(
+    h: Harness,
+) -> None:
+    first, _second = RESERVED_DEPARTMENTS
+    known = h.principal(first, "one")
+    await h.person(known, department=first)
+    await _joined(h, known)
+    newcomer, leaver = h.principal(first, "made"), h.principal(first, "left")
+    roster = Roster(
+        source=SOURCE,
+        complete=True,
+        asserts=DEFAULT_TRUST["lark"],
+        people=(
+            StaffRecord(_address(h, known), "Acceptance check one"),
+            StaffRecord(_address(h, newcomer), "Acceptance check made", department=first),
+            StaffRecord(_address(h, leaver), "Acceptance check left", active=False),
+        ),
+    )
+    made = await provide_people(h.sessions, roster, now=h.now, new_id=lambda: newcomer)
+    if made.made != 1:
+        raise CheckFailedError("the staff list did not make exactly the one new active person")
+    listed = {row[0] for row in (await h.execute(live_people(100_000))).all()}
+    if newcomer not in listed:
+        raise CheckFailedError("the person the staff list made is not on People")
+    if leaver in listed:
+        raise CheckFailedError("a leaver on the staff list was made a person")
+    joined = await h.execute(
+        select(PrincipalIdentityRow.principal_id).where(
+            PrincipalIdentityRow.channel == Channel.EMAIL.value,
+            PrincipalIdentityRow.identity_hash == digest_of(_address(h, newcomer)),
+            PrincipalIdentityRow.deleted_at.is_(None),
+        )
+    )
+    if joined.scalar_one_or_none() != newcomer:
+        raise CheckFailedError("the person the staff list made is not joined to their row")
+    again = await provide_people(h.sessions, roster, now=h.now, new_id=lambda: leaver)
+    if again.made != 0:
+        raise CheckFailedError("a second read of the same list made another person")

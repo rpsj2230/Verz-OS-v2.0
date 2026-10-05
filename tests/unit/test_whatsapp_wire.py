@@ -8,9 +8,9 @@ was asked to read a body, and the count is zero; the one request Meta did sign i
 signature itself is recomputed here from `hmac` and `hashlib`, not from the module, so a check that
 agreed with itself about the wrong construction would fail.
 
-**Nothing is sent back, and a reply is recorded as refused, never as sent.** The Cloud API send is
-not built, so the wire refuses every reply and `deliver` records it as incomplete with the
-transport never asked.
+**A record that names no phone number sends nothing.** The Cloud API send is built since M10.5.3
+(`tests/unit/test_whatsapp_channel.py`), from the record's number; a record without one is refused
+as incomplete by `deliver`, with the transport never asked, rather than sent from nowhere.
 
 Task ids: M10.6.2
 """
@@ -32,12 +32,17 @@ from brain.channels.inbound import ReceiptKind, receive
 from brain.channels.outbound import Outgoing, deliver
 from brain.channels.webhook import WebhookRefusedError
 from brain.channels.whatsapp import (
-    A_REPLY_ON_WHATSAPP_IS_NOT_BUILT,
+    ACCESS_TOKEN,
+    PHONE_NUMBER_ID,
     SIGNATURE_HEADER,
+    VERIFY_TOKEN,
     WIRE,
     WhatsAppWire,
     signature_for,
     verify_signature,
+)
+from brain.channels.whatsapp import (
+    APP_SECRET as APP_SECRET_PART,
 )
 from brain.gate.context import Channel
 from brain.ops.acceptance_checks_channel_framework import whatsapp_message
@@ -49,6 +54,10 @@ from tests.unit.test_channel_pipeline import Claims, Deliveries, Secrets, Transp
 
 #: The app secret every request here is signed with. Not one Meta issued.
 APP_SECRET = "a0" * 16
+#: The channel's slot as the vault keeps it: the app secret beside the two parts it does not use.
+KEPT = json.dumps({APP_SECRET_PART: APP_SECRET, ACCESS_TOKEN: "t" * 24, VERIFY_TOKEN: "v"})
+#: The number every message here is about, as the record names it.
+NUMBER = "0"
 
 #: The sender and the message, as Meta posts them.
 SENDER = "999000000001"
@@ -82,11 +91,11 @@ def received(body: bytes, headers: dict[str, str], wire: Reading) -> Any:
     return asyncio.run(
         receive(
             wire,
-            record=fresh_record(Channel.WHATSAPP, tenant={}),
+            record=fresh_record(Channel.WHATSAPP, tenant={PHONE_NUMBER_ID: NUMBER}),
             headers=headers,
             declared_length=len(body),
             body=the_bytes,
-            secrets=Secrets(slots={channel_secret_ref(Channel.WHATSAPP).path: APP_SECRET}),
+            secrets=Secrets(slots={channel_secret_ref(Channel.WHATSAPP).path: KEPT}),
             claims=Claims(),
             deliveries=Deliveries(),
             now=datetime.now(UTC),
@@ -186,14 +195,13 @@ def test_a_verified_body_that_is_not_one_text_message_is_unreadable_and_not_gues
             WIRE.read(Arrived(headers={}, body=body))
 
 
-def test_a_reply_on_whatsapp_is_recorded_refused_and_never_reaches_the_vendor() -> None:
-    """`A_REPLY_ON_WHATSAPP_IS_NOT_BUILT`, through the one send: the wire builds no request, so
-    `deliver` records the reply as refused and incomplete and the transport is never asked. Delete
-    this and a WhatsApp channel set up on an install could be recorded as sending what it cannot."""
-    with pytest.raises(ValueError, match="sends nothing back"):
-        WIRE.request_for(
-            to=SENDER, text="Hello.", secret=APP_SECRET, tenant={}, now=datetime.now(UTC)
-        )
+def test_a_reply_from_a_record_naming_no_number_is_refused_and_never_reaches_the_vendor() -> None:
+    """The Cloud API sends from a phone number, and the record names it. Without one the wire
+    builds no request, so `deliver` records the reply as refused and incomplete and the transport
+    is never asked. Delete this and a WhatsApp channel set up without its number could be recorded
+    as sending, or post to a path with no number in it."""
+    with pytest.raises(ValueError, match=PHONE_NUMBER_ID):
+        WIRE.request_for(to=SENDER, text="Hello.", secret=KEPT, tenant={}, now=datetime.now(UTC))
     transport, deliveries = Transport(), Deliveries()
     ledger = MemoryLedger()
     delivered = asyncio.run(
@@ -205,7 +213,7 @@ def test_a_reply_on_whatsapp_is_recorded_refused_and_never_reaches_the_vendor() 
                 text="Hello.",
             ),
             record=fresh_record(Channel.WHATSAPP, tenant={}),
-            secrets=Secrets(slots={channel_secret_ref(Channel.WHATSAPP).path: APP_SECRET}),
+            secrets=Secrets(slots={channel_secret_ref(Channel.WHATSAPP).path: KEPT}),
             reach=_NoReach(),
             transport=transport,
             ledger=lambda work: work(ledger),
@@ -218,7 +226,6 @@ def test_a_reply_on_whatsapp_is_recorded_refused_and_never_reaches_the_vendor() 
         RefusedBecause.INCOMPLETE,
     )
     assert transport.sent == [] and deliveries.seen() == [("outbound", "refused", "incomplete")]
-    assert "sends nothing back" in A_REPLY_ON_WHATSAPP_IS_NOT_BUILT
 
 
 class _NoReach:
@@ -233,5 +240,5 @@ def test_the_registry_finds_the_whatsapp_wire_beside_its_adapter() -> None:
     WhatsApp received at all. Delete this and the wire can drop out of discovery with every test
     of it still green and every WhatsApp request answered as an address with nothing at it."""
     assert channel_wires()[Channel.WHATSAPP] is WIRE
-    assert WIRE.channel is Channel.WHATSAPP and WIRE.tenant_fields == ()
+    assert WIRE.channel is Channel.WHATSAPP and WIRE.tenant_fields == (PHONE_NUMBER_ID,)
     assert WIRE.handshake(Arrived(headers={}, body=RAW)) is None
