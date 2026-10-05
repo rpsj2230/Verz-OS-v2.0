@@ -845,11 +845,13 @@ class WriteCall:
 class PreparesWrite(Protocol):
     """How a connector turns an approved action into its call, and judges the record read back."""
 
-    def call_for(self, action: Action) -> WriteCall:
+    def call_for(self, action: Action, *, settings: Mapping[str, str]) -> WriteCall:
         """The call that sends this approved action. Raises for an action it cannot send.
 
         Builds the call and sends nothing, which is why it is not named `call`: `brain.ops.effects`
-        presumes a method of that name issues, and this one only reads the action.
+        presumes a method of that name issues, and this one only reads the action. `settings` are
+        the connection's, so a source reached at an address of its own (a helpdesk, say) is sent
+        the change there and never at an address the action carries.
         """
         ...
 
