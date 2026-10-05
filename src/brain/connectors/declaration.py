@@ -136,6 +136,7 @@ from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
@@ -1129,6 +1130,10 @@ class ConnectorDeclaration:
     #: Its verified rate ceiling, or None when nobody has measured one. Named for this source, so
     #: `brain.ops.limits.connector_ceiling` finds it. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
     ceiling: ConnectorLimit | None = None
+    #: Which of its records entity resolution reads, as what type, by which field, and whether
+    #: they carry money. Empty when none of its records is a company, a person or a project.
+    #: See `brain.connectors.resolves`.
+    resolves: tuple[ResolvesAs, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -1195,6 +1200,21 @@ class ConnectorDeclaration:
                         f"under. {A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
                     )
                     raise DeclarationError(msg)
+        resolved = [one.entity for one in self.resolves]
+        if len(resolved) != len(set(resolved)):
+            msg = f"connector {self.name!r} declares one entity for resolution twice"
+            raise DeclarationError(msg)
+        unread = (
+            ()
+            if self.reading is None
+            else tuple(sorted(set(resolved) - set(self.reading.entities())))
+        )
+        if unread:
+            msg = (
+                f"connector {self.name!r} declares {unread} for resolution and its reading keeps "
+                "no record of them, so nothing would ever be resolved"
+            )
+            raise DeclarationError(msg)
         if self.report is not None and self.reading is None:
             msg = (
                 f"connector {self.name!r} declares a report and no reading; a report is read with "
