@@ -324,6 +324,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
       "/api/v1/agents/{agent_id}/drafts",
+      "/api/v1/agents/{agent_id}/publications",
       "/api/v1/agent-drafts*",
       "/api/v1/builder/form",
     ],
