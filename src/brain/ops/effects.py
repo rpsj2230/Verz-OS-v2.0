@@ -353,6 +353,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The gate.
         "brain.gate.answer_cache:AnswerStore.get": Repeat.READS,
         "brain.gate.answer_cache:AnswerStore.set": Repeat.DERIVED_STATE,
+        "brain.knowledge.document_tools:RecordStore.get": Repeat.READS,
+        "brain.knowledge.document_tools:RecordStore.set": Repeat.DERIVED_STATE,
         "brain.gate.compose:TraceSink.emit": Repeat.DERIVED_STATE,
         "brain.gate.finish:RequestRecorder.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The answer lane's model step: passages found at a reach, and a model that answers and
