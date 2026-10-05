@@ -54,7 +54,7 @@ the reader may not see.
 Scope: domain logic. Nothing here opens a connection or reads a clock; `now` and the rows are
 parameters.
 
-Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33
+Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33, M39.1.3.1, M39.1.3.2
 """
 
 from __future__ import annotations
@@ -104,6 +104,15 @@ AN_ENTITY_OUT_OF_REACH_ANSWERS_AS_ONE_THAT_DOES_NOT_EXIST: Final = (
     "both with its own one refusal, the one its list screen already makes."
 )
 
+#: What an agent's message count counts, and why it is not a count of chat messages.
+A_MESSAGE_IS_A_RUN_A_PERSON_STARTED: Final = (
+    "A chat message row names its conversation and never the agent that answered it, so no "
+    "table can say how many chat messages an agent received. What the request ledger does say, "
+    "per request, is whether a person was waiting or an automation ran it. So an agent's "
+    "messages are the requests a person sent it and its runs are every request, a scheduled "
+    "one included, both counted over the same rows at the same basis."
+)
+
 # --------------------------------------------------------------------------- the periods
 #: The two windows every periodised figure is given over, shortest first.
 #:
@@ -125,6 +134,27 @@ MAX_ACTIVITY_ROWS: Final = 20_000
 def periods(now: datetime) -> tuple[tuple[Range, datetime, datetime], ...]:
     """Each period with the instants it covers, from the one `window` the headline asks."""
     return tuple((one, *window(one, now)) for one in PERIODS)
+
+
+#: The four windows an agent's own page offers (M39.1.3.2): the two every module shares, then
+#: ninety days and the month to date. Every `Range` member, in its declared order, so a fifth
+#: range added there is offered here and a selector cannot list a window the figures lack.
+AGENT_PERIODS: Final[tuple[Range, ...]] = tuple(Range)
+
+
+def agent_periods(now: datetime) -> tuple[tuple[Range, datetime, datetime], ...]:
+    """Each of an agent's four periods with the instants it covers, from the one `window`."""
+    return tuple((one, *window(one, now)) for one in AGENT_PERIODS)
+
+
+def earliest(spans: Iterable[tuple[Range, datetime, datetime]]) -> datetime:
+    """The start of the widest of these periods, which is the instant every statement reads from.
+
+    Taken over the windows rather than named, because the widest of ninety days and the month
+    to date is ninety days on every date there is, and a constant saying so would be a claim
+    nothing checks.
+    """
+    return min(start for _, start, _ in spans)
 
 
 def _within(at: datetime, since: datetime, until: datetime) -> bool:
@@ -177,6 +207,9 @@ class Run:
     at: datetime
     status: RequestStatus
     duration_ms: float
+    #: Whether a person sent it, from the request's traffic class, and false for an automation's
+    #: or the system's own run. See `A_MESSAGE_IS_A_RUN_A_PERSON_STARTED`.
+    by_a_person: bool = True
 
 
 @dataclass(frozen=True)
@@ -193,6 +226,9 @@ class RunFigures:
     #: The median duration in milliseconds, or None over no requests. None rather than nought,
     #: because nought milliseconds is a measurement of something very fast.
     p50_latency_ms: float | None
+    #: The runs a person started by sending a message, which excludes an automation's. See
+    #: `A_MESSAGE_IS_A_RUN_A_PERSON_STARTED`.
+    messages: int = 0
 
 
 class Attributed(Protocol):
@@ -256,6 +292,7 @@ def run_figures(
         answered=sum(1 for one in kept if one.status is RequestStatus.ANSWERED),
         nothing_returned=sum(1 for one in kept if one.status is RequestStatus.NOTHING_RETURNED),
         p50_latency_ms=statistics.median(durations) if durations else None,
+        messages=sum(1 for one in kept if one.by_a_person),
     )
 
 

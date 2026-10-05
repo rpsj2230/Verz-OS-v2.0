@@ -773,6 +773,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.adapter:ChannelWire.read": Repeat.READS,
         "brain.channels.adapter:ChannelWire.request_for": Repeat.READS,
         "brain.channels.adapter:ChannelWire.judge": Repeat.READS,
+        "brain.channels.adapter:KeyedWire.key_set_of": Repeat.READS,
         "brain.channels.adapter:ChannelTransport.send": Repeat.ISSUES,
         "brain.channels.inbound:ChannelBindings.binding_for": Repeat.READS,
         # The gate run as the bound person: a model call and reads, and the send is `deliver`'s.
