@@ -149,6 +149,7 @@ MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_s
 MIGRATION_ESCALATION = VERSIONS / "0168_escalation.py"
 MIGRATION_STEWARDS = VERSIONS / "0167_stewards_and_self_grants.py"
 MIGRATION_RECORD_LIVES = VERSIONS / "0179_record_lives_and_source_epochs.py"
+MIGRATION_SKILL_SCRIPTS = VERSIONS / "0178_skill_scripts.py"
 MIGRATION_REGISTRY_OBSERVATIONS = VERSIONS / "0182_entity_registry_observations.py"
 MIGRATION_ENTITY_MERGES = VERSIONS / "0183_entity_merges.py"
 MIGRATION_REVIEW_ITEMS = VERSIONS / "0184_entity_review_items.py"
@@ -426,6 +427,8 @@ ESCALATION_TABLES: tuple[str, ...] = ("gate.escalation",)
 STEWARDS_TABLES: tuple[str, ...] = ("ops.connector_steward", "gate.self_grant")
 #: And the two 0179 adds: the records a read retired, and how often each source's rows changed.
 RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.record_retired", "proj.source_epoch")
+#: And the one 0178 adds: the bytes of every script a stored skill carries.
+SKILL_SCRIPT_TABLES: tuple[str, ...] = ("agent.skill_script",)
 #: And the two 0182 adds: each record's comparison keys, and the join keys an install blocks.
 REGISTRY_OBSERVATION_TABLES: tuple[str, ...] = (
     "er.observation",
@@ -509,6 +512,7 @@ ALL_TABLES = (
     + ESCALATION_TABLES
     + STEWARDS_TABLES
     + RECORD_LIVES_TABLES
+    + SKILL_SCRIPT_TABLES
     + REGISTRY_OBSERVATION_TABLES
     + ENTITY_MERGE_TABLES
     + REVIEW_ITEM_TABLES
@@ -1344,6 +1348,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert stewards.TABLES == STEWARDS_TABLES
     record_lives = migration_module(MIGRATION_RECORD_LIVES)
     assert record_lives.TABLES == RECORD_LIVES_TABLES
+    skill_scripts = migration_module(MIGRATION_SKILL_SCRIPTS)
+    assert skill_scripts.TABLES == SKILL_SCRIPT_TABLES
     registry_observations = migration_module(MIGRATION_REGISTRY_OBSERVATIONS)
     assert registry_observations.TABLES == REGISTRY_OBSERVATION_TABLES
     entity_merges = migration_module(MIGRATION_ENTITY_MERGES)
@@ -1446,6 +1452,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(escalation.TABLES)
         + tuple(stewards.TABLES)
         + tuple(record_lives.TABLES)
+        + tuple(skill_scripts.TABLES)
         + tuple(registry_observations.TABLES)
         + tuple(entity_merges.TABLES)
         + tuple(review_items.TABLES)
@@ -1526,6 +1533,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(escalation.TABLES),
         set(stewards.TABLES),
         set(record_lives.TABLES),
+        set(skill_scripts.TABLES),
         set(registry_observations.TABLES),
         set(entity_merges.TABLES),
         set(review_items.TABLES),

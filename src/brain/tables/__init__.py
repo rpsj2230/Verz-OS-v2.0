@@ -142,6 +142,7 @@ from brain.tables.skill import (
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
+    SkillScriptRow,
 )
 from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
@@ -431,6 +432,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # by value, because the live row it copied can serve again.
     "proj.record_retired",
     "proj.source_epoch",
+    # 0178_skill_scripts. A script points at the skill version whose digest covers its bytes.
+    "agent.skill_script",
     # 0182_entity_registry_observations. None points at anything: each names a source record or a
     # digest by value, so each outlives what it names.
     "er.observation",
@@ -557,6 +560,7 @@ __all__ = [
     "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
+    "SkillScriptRow",
     "SolutionRow",
     "SourceEpochRow",
     "SpendActualRow",
