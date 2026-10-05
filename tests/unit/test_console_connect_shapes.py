@@ -50,8 +50,12 @@ DRIVE = {
 }
 LARAVEL = {
     "schema": "portal",
+    "host": "db.example.invalid",
+    "port": "3306",
+    "private_network": "no",
+    "tls": "verify",
     "client_rule": "department = sales",
-    "user_rule": "department in sales, operations",
+    "user_rule": "department = operations",
     "max_rows": "500",
     "timeout_seconds": "10",
 }
@@ -183,8 +187,9 @@ def test_a_drive_setting_is_refused_naming_that_setting(setting: str, typed: str
 
 
 def test_a_view_rule_is_one_field_and_its_value_or_values() -> None:
-    """`A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES`, the positive case in both spellings. Delete this
-    and a rule a person wrote correctly is refused, or read as another predicate."""
+    """`A_VIEW_RULE_IS_ONE_FIELD_AND_ITS_VALUES`, the positive case in both spellings. A list is
+    still read as one, so the form can refuse it for the index's reason rather than as a typo.
+    Delete this and a rule a person wrote correctly is refused, or read as another predicate."""
     assert laravel.rule_of("department = sales") == Scope(
         clauses=(Clause(field="department", op=Op.EQ, value="sales"),)
     )
@@ -212,6 +217,22 @@ def test_anything_but_a_field_and_its_values_is_not_a_view_rule(written: str) ->
         ("client_rule", "contract_value = 1"),
         ("user_rule", "password = x"),
         ("user_rule", "department sales"),
+        ("user_rule", "department in sales, operations"),
+        ("host", ""),
+        ("host", "db.example.invalid:3306"),
+        ("host", "https://db.example.invalid"),
+        ("host", "reader@db.example.invalid"),
+        ("host", "10.0.0.5"),
+        ("host", "[fd00::5]"),
+        ("port", "0"),
+        ("port", f"{laravel.MAX_PORT + 1}"),
+        ("port", "mysql"),
+        ("private_network", "maybe"),
+        ("private_network", "true"),
+        ("tls", "maybe"),
+        ("tls", "none"),
+        ("tls", "-----BEGIN PRIVATE KEY-----MIIB-----END PRIVATE KEY-----"),
+        ("tls", "-----BEGIN CERTIFICATE-----AAAA-----END CERTIFICATE-----"),
         ("max_rows", "0"),
         ("max_rows", f"{laravel.MAX_ROWS_EVER + 1}"),
         ("timeout_seconds", "31"),
@@ -227,6 +248,45 @@ def test_a_laravel_setting_is_refused_naming_that_setting(setting: str, typed: s
     assert refused.value.setting == setting
 
 
+def test_a_rule_listing_several_values_is_refused_because_the_index_holds_one() -> None:
+    """`A_RULE_THE_INDEX_CANNOT_CARRY_IS_REFUSED`. The rule is laid onto every record the view keeps
+    (`connector_sync.stored_fields`), and a record holds one value, so a list was connected and
+    then never read. Delete this and a connection can keep its user and read nothing, which is
+    the one thing the Connectors screen must never offer."""
+    from brain.ops.connector_sync import storable_predicate
+
+    listed = laravel.rule_of("department in sales, operations")
+    assert not storable_predicate(listed)
+    with pytest.raises(SettingRefusedError) as refused:
+        laravel.built_from_the_console(
+            {**LARAVEL, "client_rule": "department in sales, operations"}, key_reference("laravel")
+        )
+    assert refused.value.setting == "client_rule"
+    manifest = laravel.built_from_the_console(LARAVEL, key_reference("laravel"))
+    assert all(storable_predicate(one.visibility) for one in manifest.projections)
+
+
+def test_a_private_address_is_taken_only_where_the_connection_says_its_database_is_private() -> (
+    None
+):
+    """`A_PRIVATE_ADDRESS_IS_THE_CONNECTION_S_OWN_DECISION`, at the form, both ways. The same
+    private address and the same bracketed IPv6 address are refused with the setting at no and
+    taken with it at yes, and the setting's words decide it, not its case. Delete this and the
+    refusal above could be a form that refuses every address, or the setting could be ignored."""
+    for typed in ("10.0.0.5", "[fd00::5]", "127.0.0.1"):
+        with pytest.raises(SettingRefusedError) as refused:
+            laravel.built_from_the_console(
+                {**LARAVEL, "host": typed, "private_network": "no"}, key_reference("laravel")
+            )
+        assert refused.value.setting == "host"
+        built = laravel.built_from_the_console(
+            {**LARAVEL, "host": typed, "private_network": " YES "}, key_reference("laravel")
+        )
+        assert built.name == "laravel"
+    connection = laravel.connection_of({**LARAVEL, "host": "[FD00::5]", "private_network": "yes"})
+    assert (connection.host, connection.port, connection.private_network) == ("fd00::5", 3306, True)
+
+
 def test_a_laravel_connection_keeps_each_view_under_the_rule_written_for_it() -> None:
     """The positive case. Delete this and the rules typed can be dropped, or crossed between the
     two views, with every refusal above still green."""
@@ -237,3 +297,41 @@ def test_a_laravel_connection_keeps_each_view_under_the_rule_written_for_it() ->
         laravel.ENTITY_USER: laravel.rule_of(LARAVEL["user_rule"]),
     }
     assert manifest.scope.selectors == ("portal.v_client", "portal.v_user")
+
+
+def test_encryption_verifies_by_default_takes_an_authority_and_allows_none_in_a_tunnel() -> None:
+    """`A_LOGIN_CROSSES_ONLY_A_VERIFIED_CHANNEL` and `NO_ENCRYPTION_IS_THE_TUNNEL_S_CASE`, at the
+    form. `verify` in any case is the verified default; a certificate authority pasted on one line,
+    past the form's usual bound, is taken as the connection's own; `none` is refused naming the
+    setting unless the database is on a private network, and taken when it is. Delete this and the
+    form could take none on the internet, or refuse the tunnel and the company's own authority."""
+    from tests.fixtures.tls import issued
+
+    authority = issued().authority
+    pasted = authority.replace("\n", "")
+    assert len(pasted) > 200
+    form = DECLARED_FORMS["laravel"]
+    assert settings_problems(form, {**LARAVEL, "tls": pasted}) == ()
+    assert settings_problems(form, {**LARAVEL, "schema": "p" * 201})[0].code == "too_long"
+
+    verified = laravel.connection_of({**LARAVEL, "tls": " VERIFY "})
+    assert verified.tls == laravel.DatabaseTls(laravel.TlsMode.VERIFIED)
+    own = laravel.connection_of({**LARAVEL, "tls": pasted})
+    assert own.tls == laravel.DatabaseTls(laravel.TlsMode.OWN_AUTHORITY, authority)
+
+    with pytest.raises(SettingRefusedError) as refused:
+        laravel.connection_of({**LARAVEL, "tls": "none"})
+    assert refused.value.setting == "tls"
+    tunnel = laravel.connection_of(
+        {**LARAVEL, "tls": "none", "private_network": "yes", "host": "127.0.0.1"}
+    )
+    assert (tunnel.tls.mode, tunnel.private_network) == (laravel.TlsMode.NONE, True)
+    with pytest.raises(laravel.LaravelError):
+        laravel.LaravelConnection(
+            schema="portal",
+            bounds=laravel.ReadBounds(max_rows=10, timeout_seconds=5.0),
+            host="db.example.invalid",
+            port=3306,
+            private_network=False,
+            tls=laravel.DatabaseTls(laravel.TlsMode.NONE),
+        )

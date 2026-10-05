@@ -27,6 +27,8 @@ from typing import Any
 import pytest
 
 from brain.connectors import (
+    cloudflare,
+    domains,
     freshdesk,
     google_analytics,
     google_drive,
@@ -124,7 +126,12 @@ def hubspot_answer(
 
 def laravel_answer(reply: laravel.ViewReply) -> Verification:
     connection = laravel.LaravelConnection(
-        schema="portal", bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0)
+        schema="portal",
+        bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0),
+        host="db.example.invalid",
+        port=3306,
+        private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     read = laravel.read_plan(connection, laravel.ENTITY_CLIENT)
     answered = laravel.interpret(read, reply, fetched_at=FETCHED_AT)
@@ -136,6 +143,16 @@ def freshdesk_answer(reply: freshdesk.Reply) -> Verification:
         freshdesk.Endpoint.SEARCH_TICKETS, domain="helpdesk.example.invalid"
     )
     return verdict(reading("freshdesk")(operation, reply))
+
+
+def cloudflare_answer(recorded: Cassette) -> Verification:
+    """A Cloudflare reply read as the listing its request was made against."""
+    operation = (
+        cloudflare.dns_records_operation()
+        if "/dns_records" in recorded.request
+        else cloudflare.zones_operation()
+    )
+    return verdict(reading("cloudflare")(operation, status=recorded.status, body=recorded.body))
 
 
 def lark_table() -> LarkBaseTable:
@@ -264,6 +281,12 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("google_drive", "DRIVE-403-user-rate-limit"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-429"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-401"): Verification.INCONCLUSIVE,
+    # A registry's record of one domain is complete when answered; a refusal or an outage
+    # proves nothing, and a registry's 404 is not read as an absence by the read-back.
+    ("domains", "DOMAINS-200-domain"): Verification.FOUND,
+    ("domains", "DOMAINS-404"): Verification.INCONCLUSIVE,
+    ("domains", "DOMAINS-429"): Verification.INCONCLUSIVE,
+    ("domains", "DOMAINS-503"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-200-property"): Verification.FOUND,
     # A report, a token and every refusal hold no property, and a property read never proves one
@@ -294,6 +317,18 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("laravel", "LARAVEL-1146"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-3024"): Verification.INCONCLUSIVE,
     ("laravel", "LARAVEL-2006"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-zones"): Verification.FOUND,
+    ("cloudflare", "CF-200-zones-full-page"): Verification.FOUND,
+    ("cloudflare", "CF-200-dns-records"): Verification.FOUND,
+    # An answered last page with no records is the one complete empty reading.
+    ("cloudflare", "CF-200-dns-records-empty"): Verification.ABSENT,
+    # One zone, one record and a GraphQL answer are not listings, so they prove nothing absent.
+    ("cloudflare", "CF-200-zone"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-dns-record"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-security-events"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-200-graphql-errors"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-429"): Verification.INCONCLUSIVE,
+    ("cloudflare", "CF-403"): Verification.INCONCLUSIVE,
 }
 
 
@@ -356,10 +391,16 @@ def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
             return verdict(reading("search_console")(site_list, listed))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
+        case "cloudflare":
+            return cloudflare_answer(recorded)
         case "lark_base":
             return lark_base_answer(lark_reply(recorded.cid))
         case "lark_wiki":
             return lark_wiki_answer(wiki_reply(recorded.cid))
+        case "domains":
+            said = domains.Reply(status=recorded.status, body=recorded.body)
+            operation = domains.operation_at("https://rdap.example")
+            return verdict(reading("domains")(operation, said))
     msg = f"no way to drive {connector!r} from a recording is written in this test"
     raise AssertionError(msg)
 
@@ -585,7 +626,12 @@ def test_the_two_connectors_recorded_as_read_only_really_are() -> None:
     finding is wrong in a test rather than in a file nobody rereads."""
     ref = SecretRef(path="connectors/creds/laravel", role=VaultRole.APPLICATION)
     connection = laravel.LaravelConnection(
-        schema="portal", bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0)
+        schema="portal",
+        bounds=laravel.ReadBounds(max_rows=200, timeout_seconds=5.0),
+        host="db.example.invalid",
+        port=3306,
+        private_network=False,
+        tls=laravel.DatabaseTls(laravel.TlsMode.VERIFIED),
     )
     visibility = {entity: brain_scope() for entity in laravel.ENTITIES}
     built = laravel.laravel_manifest(connection, ref=ref, visibility=visibility)

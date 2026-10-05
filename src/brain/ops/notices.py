@@ -89,6 +89,7 @@ class NoticeKind(enum.StrEnum):
     BUDGET_STOPPED = "budget_stopped"
     ACCESS_REQUEST = "access_request"
     HANDED_TO_A_PERSON = "handed_to_a_person"
+    QUESTION_NOT_PICKED_UP = "question_not_picked_up"
     LEARNING_DIGEST = "learning_digest"
     CONTROL_NOT_RUN = "control_not_run"
     BACKUP_EXPOSURE = "backup_exposure"
@@ -211,6 +212,19 @@ NOTICES: Final[tuple[Notice, ...]] = (
         ),
         composed_by="brain.gate.abstain:raise_escalation",
         sent_by="brain.escalation_routes:handed_on",
+    ),
+    Notice(
+        kind=NoticeKind.QUESTION_NOT_PICKED_UP,
+        title="A handed-on question nobody picked up",
+        told="The person who asked, about their own question.",
+        about="That nobody from the queue picked it up by its deadline, naming the queue.",
+        how=(
+            "Sent once to the asker's own chat, on the channel they last wrote on, when the "
+            "worker marks the question expired, and listed for them in the web application. "
+            "Switched off, the expiry is still listed, and nothing is sent."
+        ),
+        composed_by="brain.escalation_told:expired_text",
+        sent_by="brain.escalation_told:tell_expired_askers",
     ),
     Notice(
         kind=NoticeKind.LEARNING_DIGEST,

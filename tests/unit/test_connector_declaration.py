@@ -68,6 +68,8 @@ def test_every_connector_that_ships_declares_itself_under_its_own_module_name() 
     found = shipped()
 
     assert set(found) == {
+        "cloudflare",
+        "domains",
         "freshdesk",
         "google_analytics",
         "google_drive",
@@ -109,7 +111,16 @@ def test_every_registry_that_used_to_be_a_list_is_read_off_the_declarations() ->
     }
     assert dict(RECORDINGS) == {name: one.recorded for name, one in declared.items()}
     assert dict(read_backs()) == {name: one.read_back for name, one in declared.items()}
-    assert set(READINGS) == {"freshdesk", "google_analytics", "hubspot", "search_console", "xero"}
+    assert set(READINGS) == {
+        "cloudflare",
+        "domains",
+        "freshdesk",
+        "google_analytics",
+        "hubspot",
+        "laravel",
+        "search_console",
+        "xero",
+    }
 
 
 # ------------------------------------------------------------------ discovery

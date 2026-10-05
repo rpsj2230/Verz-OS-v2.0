@@ -176,7 +176,21 @@ def test_the_loader_reads_the_directory_rather_than_a_list_of_names() -> None:
 
 
 # ------------------------------------------- a slot per connector and provider (M38.4.1.3)
-@pytest.mark.parametrize("connector", sorted(c.name for c in SOURCE_CEILINGS))
+def _keyless() -> frozenset[str]:
+    """Sources that take no key, which have a ceiling and nothing to keep: domains, whose RDAP
+    records are published."""
+    from brain.connectors.declaration import CredentialShape, shipped
+
+    return frozenset(
+        name
+        for name, one in shipped().items()
+        if one.console is not None and one.console.credential_shape is CredentialShape.NONE
+    )
+
+
+@pytest.mark.parametrize(
+    "connector", sorted(c.name for c in SOURCE_CEILINGS if c.name not in _keyless())
+)
 def test_every_connector_the_code_knows_about_has_a_credential_slot(connector: str) -> None:
     """Parametrised from `SOURCE_CEILINGS`, which is the closed list of sources this system
     has measured a ceiling for. A connector in that list with no slot in the document is a

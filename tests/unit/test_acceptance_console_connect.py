@@ -63,7 +63,9 @@ def test_every_source_the_console_connects_has_an_edit_and_a_wrong_shape() -> No
     from brain.ops.connectable import CONNECTABLE, DECLARED_FORMS
 
     assert set(CONNECTABLE) <= set(EDITS) <= set(DECLARED_FORMS)
-    assert set(WRONG_SHAPE) == {one.value for one in CredentialShape}
+    assert set(WRONG_SHAPE) == {
+        one.value for one in CredentialShape if one is not CredentialShape.NONE
+    }
 
 
 def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:

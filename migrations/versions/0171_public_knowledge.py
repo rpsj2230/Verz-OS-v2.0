@@ -30,12 +30,12 @@ survives `brain.audit.ledger.redact_details`. Every other entry is unchanged.
 **The downgrade** puts `0120`'s function back, drops the policies and the columns, and revokes the
 role from the application. The role itself is left, for `0001`'s reason about roles on a cluster.
 
-Revises `0166`, the head of main when this was written; the coordinator re-points it at landing.
+Revises `0177`, the head of main when this landed.
 
 Task ids: M10.7.2
 
 Revision ID: 0171
-Revises: 0166
+Revises: 0177
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0171"
-down_revision = "0166"
+down_revision = "0177"
 branch_labels = None
 depends_on = None
 

@@ -219,8 +219,18 @@ class _Lease:
 
     given: str = field(repr=False)
 
+    user_name: str = ""
+
     def key(self) -> str:
         return self.given
+
+    def user(self) -> str:
+        from brain.ops.connector_sync import NO_KEY
+        from brain.ops.connector_sync_run import ConnectorKeyAbsentError
+
+        if not self.user_name:
+            raise ConnectorKeyAbsentError(NO_KEY)
+        return self.user_name
 
     def close(self, now: datetime) -> LeaseOutcome:
         from brain.ops.connector_lease import LeaseOutcome

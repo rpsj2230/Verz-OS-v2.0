@@ -22,7 +22,7 @@ import pytest
 
 import brain.connectors
 from brain.connectors.contract import AccessMode
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.write_verification import builds_a_manifest
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
@@ -56,21 +56,29 @@ IDENTIFIERS: Final = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "cloudflare": "0123456789abcdef0123456789abcdef",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "google_analytics": "123456789",
     "search_console": "sc-domain:example.com",
     "laravel": "portal",
+    "domains": "example.com, example.org",
 }
 
 #: The settings after the first, for a source whose form asks for more than one.
 FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
     "freshdesk": {"department": "support"},
+    "cloudflare": {"department": "operations"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "domains": {"department": "operations"},
     "google_analytics": {"department": "marketing"},
     "search_console": {"department": "marketing"},
     "laravel": {
+        "host": "db.example.invalid",
+        "port": "3306",
+        "private_network": "no",
+        "tls": "verify",
         "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
+        "user_rule": "department = operations",
         "max_rows": "500",
         "timeout_seconds": "10",
     },
@@ -81,18 +89,22 @@ FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
 #: account's, shared one folder as a viewer; a Laravel user holds SELECT on views, never on tables.
 KEY_KIND_WITHOUT_SCOPES: Final = {
     "freshdesk": ("agent", "admin"),
+    "cloudflare": ("dns read", "dns write"),
     "google_drive": ("viewer", "delegation"),
     "laravel": ("select", "tables"),
 }
 
-#: The row a source's slot has in the leased-path table, where it is not the source's own name.
-SLOT_ROWS: Final = {"laravel": "laravel_readonly"}
-
 
 def in_scope(identifier: str, selectors: tuple[str, ...]) -> bool:
-    """Whether the scope names the identifier typed: as a selector, or as what each is inside, as
-    a database holds the views a Laravel connection names (`portal.v_client`)."""
-    return identifier in selectors or all(one.startswith(f"{identifier}.") for one in selectors)
+    """Whether the scope names the identifier typed: as a selector, as what each is inside, as
+    a database holds the views a Laravel connection names (`portal.v_client`), or as the list the
+    selectors are, as a domains connection's are."""
+    listed = tuple(one.strip() for one in identifier.split(","))
+    return (
+        identifier in selectors
+        or all(one.startswith(f"{identifier}.") for one in selectors)
+        or listed == selectors
+    )
 
 
 def settings_for(name: str, value: str | None = None) -> dict[str, str]:
@@ -150,10 +162,14 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
     """The scopes an administrator is told to request are the ones `credential-slots.md` argued for
     that connector. Delete this and the form's hint drifts from the document, and the scope asked
     for on install day is whichever one somebody last typed."""
+    if CONNECTABLE[name].credential_shape is CredentialShape.NONE:
+        # A source that takes no key has no slot and no scope; its hint says nothing is kept.
+        assert "nothing is kept" in CONNECTABLE[name].credential_hint
+        return
     row = next(
         line
         for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
-        if line.startswith(f"| `connectors/creds/{SLOT_ROWS.get(name, name)}`")
+        if line.startswith(f"| `connectors/creds/{name}`")
     )
     requested, refused = row.split("|")[3], row.split("|")[4]
     scopes = re.findall(r"`([a-z.]+)`", requested)
@@ -192,12 +208,16 @@ def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
     """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every source offered today:
     each has a reading or a live lookup, and a recorded ceiling. Delete this and the screen can
     offer a connection that keeps its key and reads nothing, which is what Google Drive and
-    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
+    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling. Laravel is
+    offered since M11.6.1 because it reads, and by this rule alone."""
     declared = shipped()
     assert set(CONNECTABLE) == {
+        "cloudflare",
+        "domains",
         "freshdesk",
         "google_analytics",
         "hubspot",
+        "laravel",
         "search_console",
         "xero",
     }

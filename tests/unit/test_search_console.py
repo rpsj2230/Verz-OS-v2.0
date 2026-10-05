@@ -405,6 +405,10 @@ class Leased:
     def key(self) -> str:
         return self.given
 
+    def user(self) -> str:
+        # A key file is one key; the database branch that asks for a user is tested in its own file.
+        raise AssertionError("a Google source's lease was asked for a user")
+
     def close(self, now: datetime) -> Any:
         from brain.ops.connector_lease import LeaseOutcome
 

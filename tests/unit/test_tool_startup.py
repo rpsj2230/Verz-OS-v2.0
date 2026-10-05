@@ -370,9 +370,12 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
     )
 
     assert startup.connector_row_sources() == (
+        "cloudflare",
+        "domains",
         "freshdesk",
         "google_analytics",
         "hubspot",
+        "laravel",
         "search_console",
         "xero",
     )
@@ -381,11 +384,16 @@ def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_
         ("local", "price_list"),
         ("xero", "invoice"),
         ("freshdesk", "ticket"),
+        ("cloudflare", "zone"),
+        ("cloudflare", "dns_record"),
+        ("domains", "domain"),
         ("google_analytics", "analytics_property"),
         ("hubspot", "hubspot_company"),
         ("hubspot", "hubspot_contact"),
         ("hubspot", "hubspot_deal"),
         ("search_console", "search_site"),
+        ("laravel", "laravel_client"),
+        ("laravel", "laravel_user"),
     }
     assert classification_for("invoice", source="xero") == xero_invoices
 

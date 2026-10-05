@@ -101,6 +101,10 @@ class Lease:
         assert self.given is not None
         return self.given
 
+    def user(self) -> str:
+        # A key-shaped slot keeps no user; the database branch is tested in its own file.
+        raise AssertionError("a REST source's lease was asked for a user")
+
     def close(self, now: datetime) -> LeaseOutcome:
         self.closed.append(now)
         return LeaseOutcome.REVOKED

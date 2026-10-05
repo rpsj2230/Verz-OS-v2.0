@@ -29,14 +29,24 @@ from typing import Any
 import pytest
 import yaml
 
+from brain.connectors.cloudflare import CloudflareConnection
+from brain.connectors.cloudflare import manifest as cloudflare_manifest
 from brain.connectors.contract import AccessMode, CredentialBinding
+from brain.connectors.domains import DomainsConnection
+from brain.connectors.domains import manifest as domains_manifest
 from brain.connectors.freshdesk import manifest as freshdesk_manifest
 from brain.connectors.google_analytics import AnalyticsConnection
 from brain.connectors.google_analytics import manifest as analytics_manifest
 from brain.connectors.google_drive import DriveConnection
 from brain.connectors.google_drive import manifest as drive_manifest
 from brain.connectors.hubspot import HubSpotConnection, hubspot_manifest
-from brain.connectors.laravel import LaravelConnection, ReadBounds, laravel_manifest
+from brain.connectors.laravel import (
+    DatabaseTls,
+    LaravelConnection,
+    ReadBounds,
+    TlsMode,
+    laravel_manifest,
+)
 from brain.connectors.lark_base import FieldBinding, FieldKind, LarkBaseTable
 from brain.connectors.lark_base import manifest as lark_base_manifest
 from brain.connectors.lark_wiki import SpaceDeclaration
@@ -232,10 +242,15 @@ def manifests() -> tuple[ConnectorManifest, ...]:
         ),
         laravel_manifest(
             LaravelConnection(
-                schema="portal", bounds=ReadBounds(max_rows=200, timeout_seconds=5.0)
+                schema="portal",
+                bounds=ReadBounds(max_rows=200, timeout_seconds=5.0),
+                host="db.example.invalid",
+                port=3306,
+                private_network=False,
+                tls=DatabaseTls(TlsMode.VERIFIED),
             ),
-            ref=ref("connectors/creds/laravel_readonly"),
-            visibility={"client": VISIBILITY, "user": VISIBILITY},
+            ref=ref("connectors/creds/laravel"),
+            visibility={"laravel_client": VISIBILITY, "laravel_user": VISIBILITY},
         ),
         lark_base_for("maintenance"),
         lark_wiki_manifest(
@@ -252,6 +267,10 @@ def manifests() -> tuple[ConnectorManifest, ...]:
             XeroConnection(tenant_id="11111111-2222-3333-4444-555555555555"),
             ref=ref("connectors/creds/xero"),
         ),
+        cloudflare_manifest(
+            CloudflareConnection(account_id="0" * 32, department="one"),
+            ref=ref("connectors/creds/cloudflare"),
+        ),
         analytics_manifest(
             AnalyticsConnection(property_id="123456789", department="one"),
             ref=ref("connectors/creds/google_analytics"),
@@ -259,6 +278,10 @@ def manifests() -> tuple[ConnectorManifest, ...]:
         search_console_manifest(
             SearchConsoleConnection(site="sc-domain:example.com", department="one"),
             ref=ref("connectors/creds/search_console"),
+        ),
+        domains_manifest(
+            DomainsConnection(domains=("example.com", "example.org"), department="one"),
+            ref=ref("connectors/creds/domains"),
         ),
     )
 
@@ -773,6 +796,8 @@ def test_the_nine_connectors_are_discovered_from_the_package() -> None:
     """Delete this and the guide is held to whatever list somebody handed the check, so a
     connector added tomorrow is not a finding but a gap nobody notices."""
     assert connector_modules(CONNECTOR_PACKAGE) == (
+        "cloudflare",
+        "domains",
         "freshdesk",
         "google_analytics",
         "google_drive",
