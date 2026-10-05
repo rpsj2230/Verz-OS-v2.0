@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T16:06:53.905650+00:00",
-  "commit": "2442392e",
-  "commit_subject": "An agent's automation is proved on the install: installed from the gallery, listed under its agent, started by a second person, run as its owner, stopped and removed as rows (#228)",
+  "generated_at": "2026-10-05T16:18:10.196923+00:00",
+  "commit": "8d20ba27",
+  "commit_subject": "An install switches the personal data detector on in Settings, and the next release starts it where the server's memory has room (#343)",
   "total": 1592,
   "done": 551,
   "percent": 34.6,
