@@ -1313,8 +1313,9 @@ def test_the_cascade_is_reached_by_the_worker_run_and_by_nothing_on_the_request_
     """Said in a constant and held to the source in both directions.
 
     The worker's registry run reaches the cascade through `matching_store`, which is inside the
-    package; outside it, only the matching run's own install check imports this module, for the
-    feature names and the scorer it compares the database's total with. Nothing in the gate, the
+    package; outside it, only two install checks import this module: the matching run's, for the
+    feature names and the scorer it compares the database's total with, and the weekly fit's, for
+    the feature it requires the fit to have measured. Nothing in the gate, the
     tools or the channels imports it, because no answer resolves a named client yet.
 
     Imports are parsed rather than searched for, because half the package is quoted by name in
@@ -1344,4 +1345,7 @@ def test_the_cascade_is_reached_by_the_worker_run_and_by_nothing_on_the_request_
             if "brain.resolution.cascade" in named:
                 importers.append(str(path.relative_to(root)))
 
-    assert importers == ["ops/acceptance_checks_matching.py"]
+    assert sorted(importers) == [
+        "ops/acceptance_checks_calibration.py",
+        "ops/acceptance_checks_matching.py",
+    ]
