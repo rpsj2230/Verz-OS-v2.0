@@ -312,6 +312,14 @@ A_GROUP_CHAT_IS_ANSWERED_BY_ITS_INSTALLED_AGENT_WHEN_NONE_IS_NAMED: Final = (
     "and never what the room is told."
 )
 
+#: Why an install whose agent no longer answers on the channel chooses nobody (M39.2.4.4).
+AN_INSTALL_IS_PAUSED_WHILE_ITS_AGENT_DOES_NOT_ANSWER_ON_THE_CHANNEL: Final = (
+    "Switching an agent's channel off stops it answering there, in a group chat as anywhere: an "
+    "install whose agent does not answer on the chat's channel is paused, and a message in that "
+    "chat goes where it would with no install. The install is kept, so switching the channel "
+    "back on resumes it without anybody installing it again."
+)
+
 
 async def installed_agent_addressed(
     request: Request, inbound: Inbound, conversation: Conversation
@@ -331,9 +339,22 @@ async def installed_agent_addressed(
             return inbound
         found = StoredGroupInstalls(sessions)
     agent_id = await found.installed_in(inbound.event.channel, conversation.conversation_id)
-    if agent_id is None:
+    if agent_id is None or not await answers_on(request, agent_id, inbound.event.channel):
+        # No install, or one paused: see the constant above.
         return inbound
     return replace(inbound, address=replace(inbound.address, agent_id=agent_id))
+
+
+async def answers_on(request: Request, agent_id: str, channel: Channel) -> bool:
+    """Whether this agent answers on this channel now, read off its own record.
+
+    Imported where it is called, because `brain.agent_lifecycle_routes` reaches the router and the
+    router reaches this module.
+    """
+    from brain.agent_lifecycle_routes import lifecycles_of
+
+    found = await lifecycles_of(request).agent(agent_id)
+    return found is not None and channel.value in found.record.channels
 
 
 class ChatAnswerer:

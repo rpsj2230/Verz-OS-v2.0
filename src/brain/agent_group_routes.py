@@ -91,6 +91,10 @@ class GroupInstallView(BaseModel):
     name: str
     #: False once the bot has been removed from the room; the install stays until removed.
     present: bool
+    #: False while this agent does not answer on the install's channel: the install is paused,
+    #: and resumes when the channel is switched back on. See
+    #: `chat_answer.AN_INSTALL_IS_PAUSED_WHILE_ITS_AGENT_DOES_NOT_ANSWER_ON_THE_CHANNEL`.
+    answering: bool
     installed_at: datetime
 
 
@@ -156,6 +160,7 @@ def groups_view(
                 room_ref=one.room_ref,
                 name=one.name,
                 present=one.present,
+                answering=one.channel.value in record.channels,
                 installed_at=one.installed_at,
             )
             for one in installs

@@ -7,6 +7,10 @@
  * card at all. The chats offered are the ones the bot is in, as the vendor named them, on channels
  * this agent answers on; nobody types a chat's id.
  *
+ * **An install whose agent no longer answers on the chat's channel is shown paused**, because the
+ * chat path then answers the chat as if it had no agent, and switching the channel back on resumes
+ * it without a new install.
+ *
  * **Both writes go through `kit/ConfirmDialog`**: installing changes which agent answers in a chat for
  * everybody in it, and removing stops it. Neither changes what may be said there, which is the room's
  * floor whichever agent answers, and the confirmation says so.
@@ -46,6 +50,8 @@ export const WHAT_AN_INSTALL_DOES =
   "Messages in the chat that name no agent are answered by this one. What it may say there is still decided by who is in the chat.";
 export const WHAT_A_REMOVAL_DOES = "Messages in the chat that name no agent are no longer answered by this one.";
 export const THE_BOT_LEFT = "The bot has left this chat";
+export const PAUSED =
+  "Paused: this agent does not answer on this channel now, so the chat is answered as if it had no agent. Switching the channel back on resumes it.";
 export const NOT_CHANGED = "Nothing was changed";
 
 type Pending = { readonly kind: "install"; readonly room: GroupRoom } | { readonly kind: "remove"; readonly install: GroupInstall };
@@ -117,6 +123,7 @@ export function AgentGroups({ agentId }: { readonly agentId: string }) {
                 <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{chatName(one)}</span>
                 <Chip>{one.channel}</Chip>
                 {one.present ? null : <span className="text-[12px] text-dim">{THE_BOT_LEFT}</span>}
+                {one.answering ? null : <span className="text-[12px] text-dim">{PAUSED}</span>}
                 <Button
                   size="sm"
                   variant="outline"
