@@ -15,7 +15,7 @@ import {
 } from "../../../src/pages/automationGalleryQuery";
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
-import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/agents/agentMemoryQuery";
+import { memoryDeletionApiPath, memoryEditApiPath, promotionApiPath } from "../../../src/pages/agents/agentMemoryQuery";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
@@ -57,6 +57,13 @@ export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> =
   },
 };
 
+/** `tests/unit/test_acceptance_promotion.py`, which runs the promotion check against PostgreSQL. */
+const A_RULE_IS_PROMOTED = t(
+  "test_acceptance_promotion",
+  "test_on_a_real_database_the_promotion_check_passes_and_leaves_nothing",
+  true,
+);
+
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/agents/AgentCapabilities.tsx path": [
     at("POST /api/v1/skills/{digest}/assignments", "skillAssignApiPath", skillAssignApiPath("d".repeat(64))),
@@ -72,6 +79,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit", "memoryEditApiPath", memoryEditApiPath("quote-helper", "m1")),
   ],
   "src/pages/agents/AgentMemory.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
+  "src/pages/agents/AgentMemory.tsx promotionApiPath(one.memoryId)": [
+    at("POST /api/v1/learning/{memory_id}/promote", "promotionApiPath", promotionApiPath("lr_one")),
+  ],
   "src/pages/agents/AgentSpend.tsx agentBudgetApiPath(agentId)": [
     at("PUT /api/v1/agents/{agent_id}/budget", "agentBudgetApiPath", agentBudgetApiPath("quote-helper")),
   ],
@@ -130,6 +140,11 @@ const MEMORY_CHANGED = t(
 );
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/learning/{memory_id}/promote": {
+    row: A_RULE_IS_PROMOTED,
+    audit: A_RULE_IS_PROMOTED,
+    behaviour: A_RULE_IS_PROMOTED,
+  },
   "POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion": {
     row: MEMORY_CHANGED,
     audit: MEMORY_CHANGED,

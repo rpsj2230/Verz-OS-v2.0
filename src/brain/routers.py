@@ -304,6 +304,10 @@ from brain.operation_routes import router as operation_router
 # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
 from brain.principal_state_routes import router as principal_state_router
 
+# A learned fast-lane rule promoted by one person, or two across money, never its proposer, once
+# enough conversations would have used it (M39.4.2.3). See `brain.promotion_routes`.
+from brain.promotion_routes import router as promotion_router
+
 # Prompts: the system instructions every agent is given, shown and never edited, and each
 # agent's own instructions, edited as a local change to its template. See
 # `brain.prompt_routes`.

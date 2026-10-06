@@ -100,6 +100,7 @@ from brain.tables.identity import (
 )
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
+from brain.tables.learned_rule import LearnedRuleRow, RuleOccurrenceRow
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.learning_candidate import CandidateEvidenceRow, LearningCandidateRow
 from brain.tables.learning_signal import LearningPauseRow, MarkRow
@@ -454,6 +455,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # outlives a version being replaced. Its evidence points at the candidate it grew.
     "know.learning_candidate",
     "know.candidate_evidence",
+    # 0206_learned_rule_promotion. A learned rule points at the learning that proposed it, and an
+    # occurrence at the learned rule it would have used.
+    "mem.learned_rule",
+    "mem.rule_occurrence",
 )
 
 __all__ = [
@@ -518,6 +523,7 @@ __all__ = [
     "GroupRoleRuleRow",
     "HaltRow",
     "KnowledgeItemRow",
+    "LearnedRuleRow",
     "LearningCandidateRow",
     "LearningPauseRow",
     "LearningRow",
@@ -557,6 +563,7 @@ __all__ = [
     "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",
+    "RuleOccurrenceRow",
     "ScopeRow",
     "SelfGrantRow",
     "SensitiveReadRow",

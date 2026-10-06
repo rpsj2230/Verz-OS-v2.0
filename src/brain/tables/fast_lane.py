@@ -175,6 +175,10 @@ class FastPathRuleRow(TimestampMixin, SoftDeleteMixin, Base):
     #: The department whose askers this rule answers, or None for the whole install (`0199`).
     department: Mapped[str | None] = mapped_column(String(NAME_CHARS), nullable=True)
 
+    #: The tier-two learning this rule was promoted from, or None for a rule a person wrote
+    #: (`0206`). Fixed on a live rule with its words.
+    learned_from: Mapped[str | None] = mapped_column(String(26), nullable=True)
+
     __table_args__ = (
         CheckConstraint(f"rule_id ~ '{OBJECT_NAME_PATTERN}'", name="rule_id_is_a_name"),
         CheckConstraint(f"slot ~ '{OBJECT_NAME_PATTERN}'", name="slot_is_a_name"),

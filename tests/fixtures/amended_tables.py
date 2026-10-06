@@ -22,7 +22,7 @@ ADDED_LATER: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
         "ops.model_attempt": ("data_categories",),
         "agent.agent": ("model_pin_provider", "model_pin_model", "connectors"),
-        "gate.fast_path_rule": ("department",),
+        "gate.fast_path_rule": ("department", "learned_from"),
     }
 )
 

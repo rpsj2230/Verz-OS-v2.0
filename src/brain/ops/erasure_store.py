@@ -416,6 +416,12 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "gate.department",
         "gate.fast_path_rule",
         "gate.field_policy",
+        # A learned fast-lane rule and the questions it would have used (`0206`): a rule's words
+        # are configuration, its proposer and promoters are actors and not owners, and an
+        # occurrence names a conversation and a day and never a person, so it says nothing once
+        # the conversation it names is erased.
+        "mem.learned_rule",
+        "mem.rule_occurrence",
         "gate.policy_epoch",
         "gate.scope",
         "gate.team",

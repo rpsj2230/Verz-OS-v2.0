@@ -153,6 +153,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from starlette.background import BackgroundTask
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
 from brain.agents.template import config_hash
@@ -218,6 +219,7 @@ from brain.knowledge.rows import (
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
+from brain.memory.promotion_store import counted_after_answering
 from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
@@ -2122,9 +2124,22 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     thread = await remembered(
         request, Answering.of(asked), ask, outcome, trace_id=recorder.trace_id
     )
+    # Whether a learned rule held for review would have answered this, counted once the response
+    # has gone and never at its cost (M39.4.2.3). See `brain.memory.promotion.
+    # A_SHADOW_OCCURRENCE_NEVER_SLOWS_OR_FAILS_AN_ANSWER`.
+    counting = BackgroundTask(
+        counted_after_answering,
+        request.app.state,
+        ask.question,
+        principal_id=asked.caller.principal.id,
+        department=asked.caller.principal.primary_department,
+        thread_id=thread,
+        now=asked.now,
+    )
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
+        background=counting,
         headers={
             # The thread the exchange was kept in, which the page continues by (M9.1.1). Empty
             # when nothing was kept: a referred question, or a process with no database.
