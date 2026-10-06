@@ -34,6 +34,7 @@ from brain.agents.model import (
 from brain.core.entitlement import EntitlementSet
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.gate.context import Channel, TrafficClass, traffic_class_for
+from brain.gate.roster import StoredAgents
 from brain.knowledge.visibility import Visibility
 
 #: Far from any wall clock: nothing here is about the present.
@@ -181,8 +182,8 @@ def _roster_on(channel: Channel, records: Sequence[AgentRecord]) -> frozenset[st
     from brain.api_routes import Answering, roster_of
     from brain.tools.registry import ToolRegistry
 
-    async def read() -> Sequence[AgentRecord]:
-        return records
+    async def read() -> StoredAgents:
+        return StoredAgents(records=records)
 
     asking = Answering(
         principal=_person(),

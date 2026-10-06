@@ -92,7 +92,7 @@ if TYPE_CHECKING:
 
     from brain.core.errors import Degraded
     from brain.gate.answer import Answered
-    from brain.gate.roster import AgentRoster
+    from brain.gate.roster import AgentRoster, StoredAgents
     from brain.models.driver import ModelDriver
     from brain.ops.matrix_gate import RungAddition
     from brain.ops.model_service import ModelService
@@ -377,12 +377,11 @@ def roster_over(h: Harness) -> AgentRoster:
     What `brain.app.agent_roster_for` installs, built here because nothing under src imports the
     application: every agent row, and the ones that construct.
     """
-    from brain.agent_routes import every_agent, record_of
+    from brain.agent_routes import read_stored_agents
 
-    async def read() -> Sequence[Any]:
+    async def read() -> StoredAgents:
         async with h.sessions() as session:
-            rows = (await session.execute(every_agent())).scalars().all()
-        return [one for one in (record_of(row) for row in rows) if one is not None]
+            return await read_stored_agents(session)
 
     return read
 
