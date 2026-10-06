@@ -933,6 +933,8 @@ function lifecycleWire(overrides: Readonly<Record<string, unknown>> = {}): Recor
     may_change: false,
     may_duplicate: false,
     duplicate_unavailable: null,
+    level: "department",
+    may_publish: false,
     channels: ["console", "lark"],
     channel_choices: [
       { name: "console", label: "Web console" },
