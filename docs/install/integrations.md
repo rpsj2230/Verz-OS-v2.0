@@ -51,6 +51,15 @@ spending it is your outage: the accounting connector's allowance is five thousan
 your whole organisation, shared with every other integration you run, and it does not refill until
 midnight.
 
+**What happens when a source renames a field.** Every source is read on a schedule at least once a
+day, and each read is also the check of what the source sends. When a record that carried one of
+the fields this system keeps is read again without it, and no record of the read carries it, the
+source's health on the Connectors screen turns to degraded and says which field, by its name here
+and never with a value. Until a later read finds the field again, a question that would read that
+kind of record from the source is told the source could not be read, rather than given records with
+the field missing. A field that is only ever read live, and never kept, is not judged this way,
+because nothing holds what it used to be.
+
 ## The table
 
 Every cell below except the last column is read out of the connector's manifest by

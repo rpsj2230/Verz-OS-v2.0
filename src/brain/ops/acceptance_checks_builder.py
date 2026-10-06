@@ -194,7 +194,7 @@ async def _publish(
     answered = await publish_agent_draft(
         _request(app),
         draft_id,
-        DraftPublishAsked(revision=revision, for_department=True),
+        DraftPublishAsked(revision=revision, for_department=True, channels=("console",)),
         await _asking(h, builder),
     )
     return answered.status_code, _body(answered)

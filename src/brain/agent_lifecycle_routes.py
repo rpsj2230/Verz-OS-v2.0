@@ -65,13 +65,13 @@ list of what is missing. `app.state.connector_registry` still wins when a test p
 is changing under another package; these are writes, and a write and the read it changes are
 already separate modules for the Prompts screen and the Skills screen.
 
-Task ids: M27.11.6, M27.11.7, M11.9.4
+Task ids: M27.11.6, M27.11.7, M11.9.4, M13.7.4
 """
 
 from __future__ import annotations
 
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Literal, Protocol, runtime_checkable
@@ -109,7 +109,14 @@ from brain.agents.lifecycle import (
     enable,
     transfer_ownership,
 )
-from brain.agents.model import DISPLAY_NAME_CHARS, AgentAudience, AgentError, AgentRecord
+from brain.agents.model import (
+    ASKING_CHANNELS,
+    DISPLAY_NAME_CHARS,
+    AgentAudience,
+    AgentError,
+    AgentRecord,
+    EnabledChannels,
+)
 from brain.agents.model import visible_agent_ids as _visible_agent_ids
 from brain.agents.template import SignedManifest, TemplateError, TemplateInstance
 from brain.api import API_PREFIX, COMMON_RESPONSES
@@ -128,6 +135,7 @@ from brain.console.screens import screen
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
 from brain.core.principal import Principal
+from brain.gate.context import Channel
 from brain.gate.leash import Leash
 from brain.identity.principal_store import StoredPrincipals
 from brain.ops.connectable import NotConnectableError, manifest_for
@@ -287,6 +295,44 @@ class CreatedView(BaseModel):
     leash: list[LeashRungView]
 
 
+#: What each channel an agent may be enabled on is called on a screen (M13.7.4). A product word,
+#: the same on every install, and the same word `brain.binding_routes.CHANNEL_LABELS` uses for
+#: every channel both name, which a test holds. Keyed by `ASKING_CHANNELS`, which a test holds too.
+AGENT_CHANNEL_LABELS: Final[Mapping[str, str]] = {
+    Channel.CONSOLE.value: "Web console",
+    Channel.LARK.value: "Lark",
+    Channel.WHATSAPP.value: "WhatsApp",
+    Channel.EMAIL.value: "Email",
+    Channel.TELEGRAM.value: "Telegram",
+    Channel.API.value: "Programs using a service key",
+    Channel.WEBHOOK.value: "Webhook",
+    Channel.WIDGET.value: "Website widget",
+    Channel.SLACK.value: "Slack",
+    Channel.TEAMS.value: "Microsoft Teams",
+}
+
+#: The one sentence beside the boxes, so nobody makes a mute agent without being told.
+NO_CHANNEL_ANSWERS_NOWHERE: Final = (
+    "An agent with no channel ticked answers nowhere: nobody can ask it anything until one is."
+)
+
+
+class ChannelChoiceView(BaseModel):
+    """One channel a new agent may be switched on for, as a box on the page."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+
+
+def channel_choices() -> list[ChannelChoiceView]:
+    """Every channel an agent may answer on, in `Channel`'s order, none of them ticked."""
+    return [
+        ChannelChoiceView(name=name, label=AGENT_CHANNEL_LABELS[name]) for name in ASKING_CHANNELS
+    ]
+
+
 class TemplateVersionView(BaseModel):
     """A published version, the digest an install must name, and what installing it makes."""
 
@@ -301,6 +347,10 @@ class TemplateVersionView(BaseModel):
     starts: str
     #: Why this version cannot be installed here, when it cannot.
     unavailable: str | None = None
+    #: The channels the new agent may be switched on for, offered unticked (M13.7.4).
+    channels: list[ChannelChoiceView] = Field(default_factory=channel_choices)
+    #: `NO_CHANNEL_ANSWERS_NOWHERE`.
+    channels_note: str = NO_CHANNEL_ANSWERS_NOWHERE
 
 
 class LifecycleStateAsked(BaseModel):
@@ -357,6 +407,8 @@ class TemplateInstallAsked(BaseModel):
     display_name: str | None = Field(default=None, max_length=DISPLAY_NAME_CHARS)
     expected_digest: str = Field(pattern=DIGEST)
     for_department: bool = False
+    #: The channels the new agent answers on, as the person ticked them; none answers nowhere.
+    channels: EnabledChannels = ()
 
 
 # ------------------------------------------------------------------------ the store
@@ -400,6 +452,7 @@ class AgentLifecycles(Protocol):
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        channels: tuple[str, ...] = (),
     ) -> Finished: ...
 
 
@@ -499,6 +552,7 @@ class StoredAgentLifecycles:
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        channels: tuple[str, ...] = (),
     ) -> Finished:
         return await StoredAgentInstalls(self._sessions).finish(
             draft,
@@ -509,6 +563,7 @@ class StoredAgentLifecycles:
             at=at,
             ent_hash=ent_hash,
             trace_id=trace_id,
+            channels=channels,
         )
 
 
@@ -806,10 +861,12 @@ async def _create(
     for_department: bool,
     asked: Asking,
     source: AgentRecord | None,
+    channels: tuple[str, ...],
 ) -> JSONResponse:
     """Make one agent from a draft, for a caller already admitted, or say why not.
 
     `draft_for` builds the draft from a minted id, so the id is minted here and nowhere else.
+    `channels` has no default, so each way of making an agent says where it answers (M13.7.4).
     """
     key = template_key_of(request)
     if key is None:
@@ -849,6 +906,7 @@ async def _create(
             at=asked.now,
             ent_hash=asked.reach.ent_hash(),
             trace_id=_trace_id(),
+            channels=channels,
         )
     except (InstallStoreError, TemplateError) as refused:
         return _not_changed(REFUSED, str(refused))
@@ -906,6 +964,8 @@ async def duplicate_agent(
         for_department=body.for_department,
         asked=asked,
         source=found.record,
+        # A copy answers where the agent it copies answers, so duplicating never makes a mute one.
+        channels=found.record.channels,
     )
 
 
@@ -980,6 +1040,7 @@ async def install_version(
         for_department=body.for_department,
         asked=asked,
         source=None,
+        channels=body.channels,
     )
 
 
