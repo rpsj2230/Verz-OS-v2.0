@@ -91,6 +91,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       "artifactSupersedeApiPath",
       artifactSupersedeApiPath("quote-helper", "a".repeat(32)),
     ),
+  ],
   "src/pages/agents/AgentTools.tsx agentAttachmentsApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/attachments", "agentAttachmentsApiPath", agentAttachmentsApiPath("quote-helper")),
   ],
