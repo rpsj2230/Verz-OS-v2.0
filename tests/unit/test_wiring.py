@@ -947,33 +947,54 @@ def test_the_trace_stack_and_the_trace_ledger_differ_by_exactly_the_object_store
     assert "seaweedfs" in AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT
 
 
-#: Measured on 2026-10-06 by the browser harness on an empty runner, with Keycloak 26.0.8 in a
-#: 768 MiB cgroup and its heap capped at 50 per cent: the changesets that create its schema on a new
-#: database took it to this resident size and the kernel killed it.
-KEYCLOAK_KILLED_AT_KIB = 749_668
-KEYCLOAK_KILLED_LIMIT_MIB = 768
-KEYCLOAK_KILLED_AT_PERCENT = 50
+#: Measured on 2026-10-06 with native memory tracking in Keycloak 26.0.8 on the browser harness's
+#: runner (run 37413871825): everything the JVM had committed outside its heap, which is an upper
+#: bound for a smaller heap, because the collector's structures shrink with the heap they describe.
+KEYCLOAK_OUTSIDE_HEAP_KIB = 3_772_662 - 3_371_008
+
+#: The share of a container's limit its JVM may plan to fill, leaving the rest for what nothing
+#: here measures: glibc's own bookkeeping, a burst of threads, the page cache it reclaims last.
+KEYCLOAK_PLANNED_SHARE = 0.85
+
+#: Why the heap is a figure. See `docker-compose.keycloak.yml`.
+KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE = (
+    "Keycloak's own JVM sized its heap from the host's memory, not the container's limit, so a "
+    "percentage became an 8 GiB heap in a 1024M cgroup. A fixed -Xmx does not depend on what the "
+    "JVM believes about the machine, and the figure can be held against the limit."
+)
 
 
-def test_keycloak_s_limit_and_heap_leave_room_for_the_start_that_was_killed() -> None:
-    """The server's heap cap plus what lived beside the heap when it was killed fits its limit.
+def _heap_mib(options: str) -> int:
+    found = re.search(r"-Xmx(\d+)m\b", options)
+    assert found is not None, f"no fixed heap in {options!r}"
+    assert "RAMPercentage" not in options, KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE
+    return int(found.group(1))
 
-    What lived outside the heap at that kill is at least the resident size less the heap's cap
-    then, about 348 MiB, far past the 150 MiB the compose header once assumed. The limit
-    `brain.ops.wiring` budgets, with the heap share the compose file gives the JVM, has to hold
-    that beside a full heap with a tenth to spare. Delete this and the limit can go back to 768M,
-    or the heap share up to 70, with every unit test green, and every fresh install's identity
-    provider is killed on its first start and comes back by its restart policy, which nobody sees.
+
+def test_keycloak_s_fixed_heap_and_what_lives_beside_it_fit_inside_its_limit() -> None:
+    """The server's and the build's fixed heaps, plus the measured overhead, fit their limits.
+
+    A heap given as a share of memory is refused, because Keycloak's JVM read the host's memory
+    and a share became 8 GiB. A fixed heap is added to what native memory tracking measured
+    outside it, about 392 MiB, and has to sit inside 85 per cent of the limit `brain.ops.wiring`
+    budgets for the server, and of the one-shot's own limit for the build. Delete this and the
+    heap can go back to a share, or up to 512 MiB, with every unit test green, and the kernel
+    kills the identity provider on its first sign-ins.
     """
     compose = yaml.safe_load((REPO / "docker-compose.keycloak.yml").read_text(encoding="utf-8"))
-    service = compose["services"]["keycloak"]
+    outside_mib = KEYCLOAK_OUTSIDE_HEAP_KIB / 1024
+    assert outside_mib > 350
+    server = compose["services"]["keycloak"]
     limit_mib = component("keycloak").memory_mib
-    assert service["deploy"]["resources"]["limits"]["memory"] == f"{limit_mib}M"
-    found = re.search(r"-XX:MaxRAMPercentage=(\d+)\b", service["environment"]["JAVA_OPTS_APPEND"])
-    assert found is not None
-    percent = int(found.group(1))
-    outside_heap_mib = (
-        KEYCLOAK_KILLED_AT_KIB / 1024 - KEYCLOAK_KILLED_LIMIT_MIB * KEYCLOAK_KILLED_AT_PERCENT / 100
+    assert server["deploy"]["resources"]["limits"]["memory"] == f"{limit_mib}M"
+    assert _heap_mib(server["environment"]["JAVA_OPTS_APPEND"]) + outside_mib <= (
+        limit_mib * KEYCLOAK_PLANNED_SHARE
     )
-    assert outside_heap_mib > 300
-    assert limit_mib * percent / 100 + outside_heap_mib <= limit_mib * 0.9
+    build = compose["services"]["keycloak-build"]
+    build_limit = int(str(build["deploy"]["resources"]["limits"]["memory"]).rstrip("M"))
+    assert _heap_mib(build["environment"]["JAVA_OPTS_APPEND"]) + outside_mib <= (
+        # A tenth spare for the one-shot, which serves nobody and exits.
+        build_limit * 0.9
+    )
+    for one in (server, build):
+        assert one["environment"]["MALLOC_ARENA_MAX"] == "2"
