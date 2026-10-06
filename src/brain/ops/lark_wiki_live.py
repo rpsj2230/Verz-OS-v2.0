@@ -63,6 +63,7 @@ from brain.connectors.lark_wiki import (
 )
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.staff_directories import LARK_PLATFORMS
+from brain.core.entitlement import Capability
 from brain.core.envelope import TypedResult
 from brain.install import value_of
 from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, KnowledgePassage
@@ -190,23 +191,30 @@ def words_of(question: str) -> tuple[str, ...]:
     return tuple(kept[:MAX_WORDS])
 
 
+#: The read a wiki page needs beside the library's, so an agent reaches the wiki only through a
+#: connector list naming Lark Wiki. See `brain.agents.binding.A_WIKI_PAGE_HAS_A_READ_OF_ITS_OWN`.
+WIKI_PAGE_READ: Final = Capability(value=f"read:{lark_wiki.WIKI_PAGE}")
+
+
 def told_to(document: WikiDocument, entitlement: EntitlementSet, now: datetime) -> bool:
-    """Whether this reader may be told this page, by the library search's own evaluator.
+    """Whether this reader may be told this page, by the library search's own evaluator, under
+    both the library's read and the wiki's own, each of which must admit it.
 
     See `A_WIKI_PAGE_IS_TOLD_ONLY_TO_A_READER_ITS_REACH_ADMITS`.
     """
     visibility = document.page.visibility
     departments = (visibility.department,) if visibility.department else ()
-    reach = reach_for(entitlement, departments=departments, now=now)
-    if reach is None:
-        return False
+    reaches = [
+        reach_for(entitlement, departments=departments, now=now, capability=one)
+        for one in (KNOWLEDGE_READ, WIKI_PAGE_READ)
+    ]
     row = {
         "state": KnowledgeState.PUBLISHED.value,
         "visibility": visibility.level.value,
         "department": visibility.department or None,
         "owner_id": document.page.owner_id,
     }
-    return reach.admits(row)
+    return all(reach is not None and reach.admits(row) for reach in reaches)
 
 
 def passage_of(document: WikiDocument, *, now: datetime) -> KnowledgePassage:
@@ -294,7 +302,9 @@ class WikiPassages:
             records=(), source=lark_wiki.LARK_WIKI, fetched_at=now.isoformat()
         )
         words = words_of(question)
-        if not words or entitlement.scope_for(KNOWLEDGE_READ, now) is None:
+        if not words or any(
+            entitlement.scope_for(one, now) is None for one in (KNOWLEDGE_READ, WIKI_PAGE_READ)
+        ):
             return empty
         declared = await self._spaces()
         if not declared:

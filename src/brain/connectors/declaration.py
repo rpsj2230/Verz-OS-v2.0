@@ -1182,6 +1182,10 @@ class ConnectorDeclaration:
     #: known until an install connects it, so an agent's connector list can narrow them. See
     #: `brain.agents.binding.discovered_prefixes`.
     discovers: str = ""
+    #: Entities it provides that no reading, live lookup or manifest tool names, for a source read
+    #: by a module of its own, so an agent's connector list can narrow them. See
+    #: `brain.agents.binding.entities_of`.
+    provides: tuple[str, ...] = ()
     #: Which of its records entity resolution reads, as what type, by which field, and whether
     #: they carry money. Empty when none of its records is a company, a person or a project.
     #: See `brain.connectors.resolves`.
