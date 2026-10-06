@@ -35,9 +35,13 @@ Approval is checked for what it can be today, and the screen says what was and w
 **Option B: hold approval-by-rehearsal until examples can be run for real.** Skills are approved as
 today until then.
 
-**My recommendation:** A. I am building it that way.
+One more choice inside A: **a skill version with no examples at all is not held**, so the skills
+already in the library can still be reviewed. That also means somebody could leave examples out to
+skip the rehearsal. The alternative is to require at least one example on every new version.
 
-**What I need from you:** nothing, or reply "161: B".
+**My recommendation:** A, and versions without examples not held for now. I am building it that way.
+
+**What I need from you:** nothing, or reply "161: B", or "161: A, but require examples".
 
 ## 160. May a department's administrator stop one of that department's agents?
 
