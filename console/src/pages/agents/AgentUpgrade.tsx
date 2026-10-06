@@ -151,10 +151,38 @@ function Updates({ review }: { readonly review: Review }) {
   );
 }
 
-export function AgentUpgrade({ agentId, onChanged }: { readonly agentId: string; readonly onChanged: () => void }) {
+/** What the page holds of an agent's upgrade: the review once it has answered, and a way to ask again. */
+export interface UpgradeReview {
+  readonly review: Review | null;
+  /** True while the first answer, or a fresh one after a write, is on its way. */
+  readonly busy: boolean;
+  readonly refresh: () => void;
+}
+
+/** Asks for the review, and asks again whenever `refresh` is called. A 404 is `review: null`. */
+export function useUpgradeReview(agentId: string): UpgradeReview {
   const [version, setVersion] = useState(0);
   const answer = useResource<unknown>(agentUpgradeApiPath(agentId), version);
-  const review = useMemo(() => (answer.data === null ? null : readUpgrade(answer.data)), [answer.data]);
+  const review = useMemo(
+    () => (answer.failure !== null || answer.data === null ? null : readUpgrade(answer.data)),
+    [answer.data, answer.failure],
+  );
+  const refresh = useCallback(() => {
+    setVersion((count) => count + 1);
+  }, []);
+  return { review, busy: answer.busy, refresh };
+}
+
+export function AgentUpgrade({
+  agentId,
+  upgrade,
+  onChanged,
+}: {
+  readonly agentId: string;
+  readonly upgrade: UpgradeReview;
+  readonly onChanged: () => void;
+}) {
+  const { review, busy, refresh } = upgrade;
   const [chosen, setChosen] = useState<Readonly<Record<string, Resolution>>>({});
   const [step, setStep] = useState<Step | null>(null);
   const [sending, setSending] = useState(false);
@@ -173,7 +201,7 @@ export function AgentUpgrade({ agentId, onChanged }: { readonly agentId: string;
       setRefused(null);
       setTold(what === "accept" ? DONE_UPGRADED : DONE_DECLINED);
       setChosen({});
-      setVersion((count) => count + 1);
+      refresh();
       onChanged();
       return;
     }
@@ -224,7 +252,7 @@ export function AgentUpgrade({ agentId, onChanged }: { readonly agentId: string;
     ) : null;
 
   // A 404 is the one answer for a reader who may not act and an agent that is not there: no card.
-  if (answer.failure !== null || answer.busy || !hasAnOffer(review)) {
+  if (busy || !hasAnOffer(review)) {
     return notice === null ? null : <div className="min-w-0">{notice}</div>;
   }
 

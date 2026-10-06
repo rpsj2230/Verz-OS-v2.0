@@ -158,6 +158,18 @@ describe("a newer version on the Profile", () => {
     expect(shown.querySelectorAll('input[type="radio"]')).toHaveLength(2);
   });
 
+  test("a version nobody has said no to is a badge in the header, and one somebody turned away is not", async () => {
+    // What breaks if this is deleted: M13.4.2's badge never drawn, or drawn for a version the page
+    // was told not to nag about.
+    const available = await consoleAt(answers({ body: reviewWire() }));
+    await waitForCard(available.container);
+    expect(available.container.querySelector('[data-slot="upgrade-pill"]')?.textContent).toBe("Version 3 available");
+    const declined = await consoleAt(answers({ body: reviewWire({ badge: "declined" }) }));
+    const shown = await waitForCard(declined.container);
+    expect(shown.textContent).toContain("You said no to it before.");
+    expect(declined.container.querySelector('[data-slot="upgrade-pill"]')).toBeNull();
+  });
+
   test("the upgrade waits until every conflict has an answer, says why, and sends the answers with what was drawn", async () => {
     // What breaks if this is deleted: an upgrade pressed with a conflict decided by default, or sent
     // without the version and digest the page was drawn against.
