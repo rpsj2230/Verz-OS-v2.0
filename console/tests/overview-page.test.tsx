@@ -14,13 +14,14 @@
  * and the readers are held against raw bodies, so a test of what the page draws is not also a test
  * of what the reader built.
  *
- * Task ids: M27.15.17, M27.16.1
+ * Task ids: M27.15.17, M27.16.1, M27.15.71
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED } from "../src/components/kit";
+import { Button } from "../src/components/ui/button";
 import {
   ACTIVITY,
   AGENTS_LABEL,
@@ -159,6 +160,37 @@ function textOutsideAdvanced(root: Element): string {
 }
 
 describe("what the Overview draws", () => {
+  test("the figures are KPI tiles, and Needs you and Recent activity are each a headed card", async () => {
+    // What breaks if this is deleted (M27.15.71): the landing screen's three blocks can be drawn as
+    // loose text, a figure without its tile or a list without the heading that says what it is.
+    const page = await overviewWith();
+    expect(page.root.querySelector("[data-slot='kpi-strip'], [data-slot='stats-strip']")).not.toBeNull();
+    expect(page.root.querySelectorAll("[data-slot='stat-card']").length).toBeGreaterThan(0);
+    for (const name of [NEEDS_YOU, ACTIVITY]) {
+      const card = section(page.root, name);
+      expect(card?.getAttribute("data-slot")).toBe("section-card");
+      const heading = card?.querySelector("h2, h3");
+      expect(heading?.textContent).toBe(name);
+      expect(card?.getAttribute("aria-labelledby")).toBe(heading?.id);
+    }
+  });
+
+  test("a button is drawn in a primary, a quiet and a danger variant, each its own look", () => {
+    // What breaks if this is deleted (M27.15.71): a destructive act drawn exactly like the primary
+    // one, or a quiet action as loud as the act a page is for.
+    const drawn = render(
+      <div>
+        <Button>Save</Button>
+        <Button variant="ghost">Cancel</Button>
+        <Button variant="destructive">Remove</Button>
+      </div>,
+    );
+    const buttons = [...drawn.container.querySelectorAll("button")];
+    expect(buttons.map((one) => one.getAttribute("data-variant"))).toEqual(["default", "ghost", "destructive"]);
+    expect(new Set(buttons.map((one) => one.className)).size).toBe(3);
+    drawn.unmount();
+  });
+
   test("the health strip draws the halts the API sent, none only over a state it read, and never why", async () => {
     // What breaks if this is deleted: a strip reading "None" while admission refuses everything
     // because the halts could not be read, or a halt in force missing from the landing screen.

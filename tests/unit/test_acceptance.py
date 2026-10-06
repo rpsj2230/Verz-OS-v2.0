@@ -35,7 +35,7 @@ from brain.ops import (
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_operations_console,
-    acceptance_operations_console_4,
+    acceptance_operations_console_5,
     acceptance_people_console_2,
     acceptance_run,
 )
@@ -637,6 +637,7 @@ WRITTEN_BY_CHECKS = (
     "ops.question_asked",
     "ops.question_gap",
     "ops.erasure_request",
+    "ops.routing_change",
     "agent.artifact",
     "agent.artifact_change",
     "agent.leash_change",
@@ -750,11 +751,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
-    # No object store is connected here; `tests/unit/test_acceptance_operations_console_4.py`
+    # No object store is connected here; `tests/unit/test_acceptance_operations_console_5.py`
     # connects one over a bucket holding a copy and its rehearsal, and passes.
     assert outcomes.pop("the_recovery_screen_reads_this_installs_backups") == (
         NOT_RUN,
-        acceptance_operations_console_4.NO_BACKUP_BUCKET_IS_READ_HERE,
+        acceptance_operations_console_5.NO_BACKUP_BUCKET_IS_READ_HERE,
     )
     # No optional service is switched on here; `tests/unit/test_acceptance_services.py` switches
     # each on and answers for it.

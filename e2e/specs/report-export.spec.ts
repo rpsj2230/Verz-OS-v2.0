@@ -7,7 +7,7 @@
  * page's rows, in the page's order, and no line about any row the page did not draw. Service
  * levels is the report exported here because its lanes are the product's own and are drawn on
  * every install, a fresh one included, so the export control is always there to press. The log's
- * export is written on the server and is proved by `brain.ops.acceptance_operations_console_4`.
+ * export is written on the server and is proved by `brain.ops.acceptance_operations_console_5`.
  *
  * Task ids: M27.15.48
  */
