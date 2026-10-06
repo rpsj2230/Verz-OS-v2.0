@@ -243,7 +243,11 @@ def test_a_kept_verifier_opens_only_with_the_state_it_was_sealed_under() -> None
     assert sealed_verifier(start) != sealed
     with pytest.raises(ConnectorContractError):
         opened_verifier(other.state, sealed)
-    flipped = sealed[:-2] + ("A" if sealed[-2] != "A" else "B") + sealed[-1]
+    # A character from the middle of the nonce, whose six bits are all data. The old flip took the
+    # second to last, which in a seal ending in one "=" holds two padding bits: a replacement that
+    # differed only there decoded to the same bytes and the seal opened (measured at 6.25%).
+    middle = len(sealed) // 8
+    flipped = sealed[:middle] + ("A" if sealed[middle] != "A" else "B") + sealed[middle + 1 :]
     with pytest.raises(ConnectorContractError):
         opened_verifier(start.state, flipped)
     with pytest.raises(ConnectorContractError):
