@@ -86,7 +86,7 @@ class WebhookChangeRow(Base):
         DateTime(timezone=True), nullable=True
     )
     #: The delivery a replay put back, by its event id. Present on a replay and on nothing else,
-    #: and one replay per delivery, which `ux_ops_webhook_change_one_replay` holds.
+    #: and one replay per delivery, which `uq_webhook_change_one_replay` holds.
     event_id: Mapped[str | None] = mapped_column(String(MAX_IDENTIFIER_CHARS), nullable=True)
 
     __table_args__ = (
@@ -102,7 +102,7 @@ class WebhookChangeRow(Base):
         ),
         Index("ix_ops_webhook_change_subscriber", "subscriber_id", "changed_at"),
         Index(
-            "ux_ops_webhook_change_one_replay",
+            "uq_webhook_change_one_replay",
             "subscriber_id",
             "event_id",
             unique=True,

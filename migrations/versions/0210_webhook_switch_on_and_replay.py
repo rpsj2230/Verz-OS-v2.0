@@ -114,7 +114,7 @@ def upgrade() -> None:
         "a_replay_names_its_delivery", "webhook_change", REPLAY_NAMES_ITS_DELIVERY, schema="ops"
     )
     op.create_index(
-        "ux_ops_webhook_change_one_replay",
+        "uq_webhook_change_one_replay",
         "webhook_change",
         ["subscriber_id", "event_id"],
         unique=True,
@@ -128,7 +128,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("DROP POLICY outbox_delivery_replayable ON ops.outbox_delivery")
     op.execute("DROP POLICY webhook_subscriber_reactivatable ON ops.webhook_subscriber")
-    op.drop_index("ux_ops_webhook_change_one_replay", table_name="webhook_change", schema="ops")
+    op.drop_index("uq_webhook_change_one_replay", table_name="webhook_change", schema="ops")
     op.execute(_drop_by_suffix("a_replay_names_its_delivery"))
     op.execute(_drop_by_suffix("only_writes_carry_a_secret"))
     op.create_check_constraint(
