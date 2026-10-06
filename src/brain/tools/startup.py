@@ -145,6 +145,7 @@ from types import MappingProxyType
 from typing import Final
 
 from brain import demo
+from brain.chat.attachments import attachment_definition, attachment_reader
 from brain.connectors.declaration import shipped
 from brain.gate.caches import CachedEmbedding
 from brain.knowledge.columns import PRICE_LIST, TableClassification
@@ -396,6 +397,13 @@ def build_registry(
                 result_contract=ResultContract.TYPED,
                 scope=KNOWLEDGE_PIN,
             )
+        # A file a person attached to their own conversation, read at their reach (M12.3.6).
+        registry.register(
+            attachment_definition(),
+            attachment_reader(records),
+            result_contract=ResultContract.TYPED,
+            scope=KNOWLEDGE_PIN,
+        )
 
     # The website check, where the caller handed it a transport (M12.4.4). Not tied to a row
     # source: it reads a site, not a table.

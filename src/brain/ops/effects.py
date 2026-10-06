@@ -748,6 +748,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # Each source's epoch, read into the answer cache's key (M11.8.4). The advance is a
         # statement the worker runs in its own transaction, not a door.
         "brain.ops.connector_sync_store:SourceEpochs.epochs": Repeat.READS,
+        # The source epochs reading's store (M6.2.5): a read, and a write of a value the counter
+        # can always produce again, kept for its own lifetime.
+        "brain.ops.connector_sync_store:EpochsCache.get": Repeat.READS,
+        "brain.ops.connector_sync_store:EpochsCache.set": Repeat.DERIVED_STATE,
         # Asking for a test of a connection is one row in `ops.setting` a second press moves to a
         # later instant; the worker makes one test for however many presses it finds.
         "brain.ops.connector_sync_store:ConnectorProbes.ask": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

@@ -80,6 +80,7 @@ from brain.cache import (
     make_async_client,
     make_client,
     retrieval_cache,
+    source_epochs_cache,
 )
 from brain.channels.widget import allowed_origins
 from brain.console_static import mount_console_entry, mount_console_fallback
@@ -124,6 +125,7 @@ from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.builtin_templates import sign_built_ins
 from brain.ops.class_pools import keep_following
+from brain.ops.connector_sync_store import ReadThroughSourceEpochs, StoredSourceEpochs
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
@@ -760,6 +762,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             answer_client = make_client(settings.valkey_url)
             app.state.answer_client = answer_client
             app.state.answer_store = ValkeyAnswerStore(answer_client)
+            # The answer key's source epochs (M6.2.5), read through the cache on the answer
+            # store's client, so a question costs no database read for them. Without a cache
+            # `brain.api_routes.source_epochs_of` reads the counter itself, and with none it
+            # keys on nothing because nothing is cached.
+            app.state.source_epochs = ReadThroughSourceEpochs(
+                StoredSourceEpochs(app.state.db_sessions), source_epochs_cache(answer_client)
+            )
 
             async def cache_probe() -> bool:
                 return await check_reachable_async(cache_client)

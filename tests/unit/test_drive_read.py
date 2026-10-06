@@ -13,7 +13,10 @@ Task ids: M11.6.7
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import pairwise
 from typing import Any, Final
 from urllib.parse import parse_qs, urlsplit
 
@@ -27,10 +30,12 @@ from brain.connectors.google_drive import (
     FILE,
     FOLDER_MIME,
     GOOGLE_DOC_MIME,
-    MAX_FOLDERS_WALKED,
+    MAX_FOLDER_DEPTH,
     PASSAGE_CHARS,
     THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT,
     WALK_FOLDER,
+    WALK_LEFT_OUT,
+    WALK_PATH,
     WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT,
     DriveConnection,
     DriveError,
@@ -396,45 +401,286 @@ def test_a_loop_of_folders_is_walked_once_and_ends() -> None:
     assert listed == [FOLDER_ID, "fldLoopA001", "fldLoopB001"]
 
 
-def test_a_pass_walks_no_more_folders_than_its_bound() -> None:
-    """`MAX_FOLDERS_WALKED`: a pin with more subfolders than one pass carries queues that many and
-    no more. Delete this and a tree of thousands of folders is carried through a run in its page
-    arguments."""
-    many = [
-        a_child(f"fldMany{n:05d}", FOLDER_ID, mimeType=FOLDER_MIME)
-        for n in range(MAX_FOLDERS_WALKED + 5)
-    ]
-    listed, _ = walk({FOLDER_ID: many}, pages=MAX_FOLDERS_WALKED + 10)
+def a_chain(top: str, depth: int, *, name: str = "fldChain") -> dict[str, list[dict[str, Any]]]:
+    """A chain of `depth` folders under `top`, each holding one file and the next folder down."""
+    tree: dict[str, list[dict[str, Any]]] = {}
+    parent = top
+    for level in range(1, depth + 1):
+        folder = f"{name}{level:04d}"
+        tree.setdefault(parent, []).append(a_child(folder, parent, mimeType=FOLDER_MIME))
+        tree[folder] = [a_child(f"file{name}{level:04d}", folder)]
+        parent = folder
+    return tree
 
-    assert len(listed) == 1 + MAX_FOLDERS_WALKED
 
-
-def test_a_pass_that_left_a_folder_out_at_its_bound_says_so_on_every_page_after() -> None:
-    """`DriveReading.left_out`, the `BoundedWalk` the worker asks: the page that queued past the
-    bound says a folder was left out, and so does every page the walk asks after it, because the
-    mark travels in the walk's own arguments. A tree inside the bound says nothing was. Delete
-    this and a pass that never listed some folders reads as the whole tree, and the worker retires
-    every file in the folders it did not reach."""
+def test_a_folder_deeper_than_the_bound_is_not_entered_and_every_page_after_says_so() -> None:
+    """`MAX_FOLDER_DEPTH`, the `BoundedWalk` the worker asks: a chain three deeper than the bound is
+    listed down to the bound and no further, its deeper files are not kept, the walk still ends,
+    and `left_out` is true on the page that met the bound and on every page the walk asks after
+    it, because the mark travels in the walk's own arguments. Its sibling below is a chain exactly
+    as deep as the bound, read whole with nothing left out. Delete this and a tree deeper than the
+    bound is read in part with nothing said, and the worker retires every file it did not reach."""
     from brain.connectors.declaration import BoundedWalk
 
     reading = DriveReading()
     assert isinstance(reading, BoundedWalk)
-    many = {
-        "files": [
-            a_child(f"fldMany{n:05d}", FOLDER_ID, mimeType=FOLDER_MIME)
-            for n in range(MAX_FOLDERS_WALKED + 1)
-        ]
-    }
-    first = reading.first_page(FILE)
-    assert reading.left_out(FILE, first, many)
-    following = reading.next_page(FILE, first, many, len(many["files"]))
-    assert following is not None and reading.left_out(FILE, following, {"files": []})
-    folder_listing(a_connection()).url_for(following)
+    tree = a_chain(FOLDER_ID, MAX_FOLDER_DEPTH + 3)
+    listed, kept = walk(tree, pages=MAX_FOLDER_DEPTH * 2)
 
-    few = {"files": [a_child("fldFew00001", FOLDER_ID, mimeType=FOLDER_MIME)]}
-    assert not reading.left_out(FILE, first, few)
-    after = reading.next_page(FILE, first, few, 1)
-    assert after is not None and not reading.left_out(FILE, after, {"files": []})
+    assert listed == [FOLDER_ID, *(f"fldChain{n:04d}" for n in range(1, MAX_FOLDER_DEPTH + 1))]
+    assert f"filefldChain{MAX_FOLDER_DEPTH:04d}" in kept
+    assert f"filefldChain{MAX_FOLDER_DEPTH + 1:04d}" not in kept
+
+    deepest = f"fldChain{MAX_FOLDER_DEPTH:04d}"
+    arguments: Any = reading.first_page(FILE)
+    while arguments.get(WALK_FOLDER) != deepest:
+        arguments = reading.next_page(FILE, arguments, {"files": tree[_folder(arguments)]}, 1)
+    assert not reading.left_out(FILE, arguments, {"files": []})
+    met = {"files": tree[deepest]}
+    assert reading.left_out(FILE, arguments, met)
+    assert reading.next_page(FILE, arguments, met, 2) is None
+    marked = dict(arguments, **{WALK_LEFT_OUT: "1"})
+    assert reading.left_out(FILE, marked, {"files": []})
+
+
+def test_a_tree_exactly_as_deep_as_the_bound_is_read_whole_and_nothing_is_left_out() -> None:
+    """The positive sibling of the test above: a chain `MAX_FOLDER_DEPTH` deep is listed to its
+    last folder, every file is kept, and no page says a folder was left out. And the figure is the
+    one connector health states. Delete this and a bound that refuses one level too early, or a
+    health sentence naming another depth, passes."""
+    from brain.ops.connector_sync import READ_BUT_PART_LEFT_OUT
+
+    reading = DriveReading()
+    tree = a_chain(FOLDER_ID, MAX_FOLDER_DEPTH)
+    listed, kept = walk(tree, pages=MAX_FOLDER_DEPTH * 2)
+
+    assert len(listed) == MAX_FOLDER_DEPTH + 1
+    assert f"filefldChain{MAX_FOLDER_DEPTH:04d}" in kept
+    arguments: Any = reading.first_page(FILE)
+    while arguments is not None:
+        body = {"files": tree.get(_folder(arguments), [])}
+        assert not reading.left_out(FILE, arguments, body)
+        arguments = reading.next_page(FILE, arguments, body, 1)
+    assert f"more than {MAX_FOLDER_DEPTH} levels" in READ_BUT_PART_LEFT_OUT
+
+
+def _folder(arguments: Any) -> str:
+    return str(arguments.get(WALK_FOLDER) or FOLDER_ID)
+
+
+# ------------------------------------------------------- a tree read whole over passes
+#: Drive's list endpoint as the recordings in `tests/fixtures/cassettes/google_drive.py` spell it.
+LISTED: Final = "GET /drive/v3/files?q='{folder}' in parents and trashed = false"
+
+
+def recorded_pages(
+    tree: dict[str, list[list[dict[str, Any]]]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Recorded Drive list pages, one per folder page, keyed by the folder and the page token that
+    asked for it, each body in the documented envelope with `nextPageToken` where more follows."""
+    pages: dict[tuple[str, str], dict[str, Any]] = {}
+    for folder, listed in tree.items():
+        for index, rows in enumerate(listed):
+            body: dict[str, Any] = {"files": rows}
+            if index + 1 < len(listed):
+                body["nextPageToken"] = f"~!!~{folder}.{index + 1}"
+            pages[(folder, f"~!!~{folder}.{index}" if index else "")] = body
+    return pages
+
+
+def wide_and_deep() -> dict[str, list[list[dict[str, Any]]]]:
+    """A tree wider and deeper than one pass: the pin answers two pages naming five subfolders
+    between them; four of those are chains twelve deep whose every folder answers two pages, and
+    the fifth is a chain sixty deep, more than one pass's fifty pages on its own."""
+    folder = {"mimeType": FOLDER_MIME}
+    pin_first = [a_child("filePin0001", FOLDER_ID)] + [
+        a_child(f"fldWide{n}000", FOLDER_ID, **folder) for n in range(3)
+    ]
+    pin_second = [a_child("filePin0002", FOLDER_ID), a_child("fldWide3000", FOLDER_ID, **folder)]
+    pin_second.append(a_child("fldDeep0000", FOLDER_ID, **folder))
+    tree: dict[str, list[list[dict[str, Any]]]] = {FOLDER_ID: [pin_first, pin_second]}
+    for n in range(4):
+        for level in range(12):
+            here = f"fldWide{n}{level:03d}"
+            first = [a_child(f"fileWide{n}{level:03d}a", here)]
+            if level < 11:
+                first.append(a_child(f"fldWide{n}{level + 1:03d}", here, **folder))
+            tree[here] = [first, [a_child(f"fileWide{n}{level:03d}b", here)]]
+    for level in range(60):
+        here = f"fldDeep{level:04d}"
+        rows = [a_child(f"fileDeep{level:04d}", here)]
+        if level < 59:
+            rows.append(a_child(f"fldDeep{level + 1:04d}", here, **folder))
+        tree[here] = [rows]
+    return tree
+
+
+@dataclass
+class Pass:
+    """One pass of the worker over recorded pages: the pages it asked, what it kept, the place it
+    saved for the next pass (None when the walk ended), and whether it left a folder out."""
+
+    asked: list[tuple[str, str]]
+    kept: list[str]
+    saved: str | None
+    left_out: bool
+
+
+def passes_over(
+    pages: dict[tuple[str, str], dict[str, Any]], *, bound: int, most: int = 20
+) -> list[Pass]:
+    """The reading over recorded pages as the worker runs it, pass after pass: each pass asks at
+    most `bound` pages from the place the last one saved, and saves the page it would ask next
+    through the read state's own text (`page_cursor`, `page_of`), until a pass ends the walk."""
+    from brain.ops.connector_sync import page_cursor, page_of
+
+    reading = DriveReading()
+    listing = folder_listing(a_connection())
+    done: list[Pass] = []
+    saved: str | None = ""
+    while saved is not None and len(done) < most:
+        arguments: Any = page_of(saved) if saved else reading.first_page(FILE)
+        one = Pass(asked=[], kept=[], saved=None, left_out=False)
+        while arguments is not None:
+            if len(one.asked) >= bound:
+                one.saved = page_cursor(arguments)
+                break
+            asked = parse_qs(urlsplit(listing.url_for(arguments)).query)
+            folder = asked["q"][0].split("'")[1]
+            assert LISTED.format(folder=folder).endswith(asked["q"][0])
+            key = (folder, asked.get("pageToken", [""])[0])
+            one.asked.append(key)
+            body = pages[key]
+            for row in listing.records(body, fetched_at=SEEN.isoformat()).records:
+                entry = reading.projected(FILE, row.model_dump(), seen_at=SEEN)
+                if entry is not None:
+                    one.kept.append(entry.source_id)
+            one.left_out = one.left_out or reading.left_out(FILE, arguments, body)
+            arguments = reading.next_page(FILE, arguments, body, len(body["files"]))
+        done.append(one)
+        saved = one.saved
+    return done
+
+
+def test_a_tree_wider_and_deeper_than_a_pass_is_read_whole_over_several_passes() -> None:
+    """**M11.9.15, depth first.** A recorded tree of a hundred and fifty-eight pages, five
+    subfolders wide at the pin and sixty deep down one branch, is read over four passes of fifty:
+    every recorded page is asked exactly once across them, every file and folder is kept exactly
+    once, the walk's place is gone after the last, and each pass after the first starts at the
+    page the one before saved, never at the pin. What a saved place holds is the path, no longer
+    than the folder's depth. Delete this and a tree larger than one pass is read from the pin on
+    every pass and never past its first fifty pages, or read twice over, or a place grows with
+    the tree until it is the tree."""
+    from brain.ops.connector_sync import page_of
+
+    pages = recorded_pages(wide_and_deep())
+    done = passes_over(pages, bound=50)
+
+    asked = [key for one in done for key in one.asked]
+    kept = [file_id for one in done for file_id in one.kept]
+    recorded = [row["id"] for body in pages.values() for row in body["files"]]
+    assert len(done) == 4 and done[-1].saved is None
+    assert sorted(asked) == sorted(pages) and len(asked) == len(set(asked)) == 158
+    assert sorted(kept) == sorted(recorded) and len(kept) == len(set(kept))
+    for before, after in pairwise(done):
+        assert before.saved is not None
+        place = page_of(before.saved)
+        assert after.asked[0] == (_folder(place), place.get("pageToken", ""))
+        assert after.asked[0] != (FOLDER_ID, "")
+        assert len(google_drive.walk_path(place)) <= 61
+    assert not any(one.left_out for one in done)
+
+
+def test_a_small_tree_is_read_whole_in_one_pass_and_leaves_no_place() -> None:
+    """The positive case: a pin with two subfolders, one of them answering two pages, is read in one
+    pass, every page once and every file kept, and the pass saves no place, so the next starts again
+    at the pin. Delete this and a walk that never ends, or one that saves a place after its last
+    page, passes the test above's passes as long as they stop."""
+    folder = {"mimeType": FOLDER_MIME}
+    tree = {
+        FOLDER_ID: [
+            [
+                a_child("fileTop0001", FOLDER_ID),
+                a_child("fldSmallA01", FOLDER_ID, **folder),
+                a_child("fldSmallB01", FOLDER_ID, **folder),
+            ]
+        ],
+        "fldSmallA01": [
+            [a_child("fileSmallA1", "fldSmallA01")],
+            [a_child("fileSmallA2", "fldSmallA01")],
+        ],
+        "fldSmallB01": [[a_child("fileSmallB1", "fldSmallB01")]],
+    }
+    pages = recorded_pages(tree)
+    (only,) = passes_over(pages, bound=50)
+
+    assert only.saved is None and not only.left_out
+    assert only.asked == [
+        (FOLDER_ID, ""),
+        ("fldSmallA01", ""),
+        ("fldSmallA01", "~!!~fldSmallA01.1"),
+        ("fldSmallB01", ""),
+    ]
+    assert sorted(only.kept) == sorted(
+        ["fileTop0001", "fldSmallA01", "fldSmallB01", "fileSmallA1", "fileSmallA2", "fileSmallB1"]
+    )
+
+
+def test_a_loop_met_in_a_later_pass_is_not_walked_again() -> None:
+    """The cycle guard holds across passes: a chain sixty deep whose deepest folder names the
+    tenth folder down and the pin as children meets both in the second pass, after the first has
+    saved its place, and walks neither again; every folder is listed once and the walk ends.
+    Delete this and a loop met after a pass boundary is walked until the page bound stops every
+    pass, and the tree is never read to its end."""
+    tree = a_chain(FOLDER_ID, 60, name="fldRing")
+    deepest = "fldRing0060"
+    tree[deepest] += [
+        a_child("fldRing0010", deepest, mimeType=FOLDER_MIME),
+        a_child(FOLDER_ID, deepest, mimeType=FOLDER_MIME),
+    ]
+    pages = recorded_pages({folder: [rows] for folder, rows in tree.items()})
+    done = passes_over(pages, bound=50)
+
+    asked = [key for one in done for key in one.asked]
+    assert len(done) == 2 and done[-1].saved is None
+    assert [folder for folder, _ in asked] == [
+        FOLDER_ID,
+        *(f"fldRing{n:04d}" for n in range(1, 61)),
+    ]
+
+
+def test_a_place_saved_by_the_breadth_first_walk_is_carried_on() -> None:
+    """A place an earlier release saved names the folder it was listing and the folders it still had
+    to list, and no path: the listing still accepts it, and the walk lists those folders and then
+    ends, so a pass under way when this release arrived is finished rather than dropped. Delete
+    this and the first run after the release fails on its saved place for ever, or ends the pass
+    early and reports a tree read whole that was not."""
+    reading = DriveReading()
+    saved = {
+        WALK_FOLDER: "fldOldA0001",
+        google_drive.BREADTH_FIRST_PENDING: "fldOldB0001 fldOldC0001",
+        google_drive.BREADTH_FIRST_SEEN: "fldOldA0001 fldOldB0001 fldOldC0001",
+    }
+    folder_listing(a_connection()).url_for(saved)
+    listed: list[str] = []
+    arguments: Any = saved
+    while arguments is not None:
+        listed.append(_folder(arguments))
+        arguments = reading.next_page(FILE, arguments, {"files": []}, 0)
+    assert listed == ["fldOldA0001", "fldOldB0001", "fldOldC0001"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["not json", '{"a": 1}', '[["fld", "", "x"]]', '[["../up", "", []]]', '[["fld", "", ["a b"]]]'],
+)
+def test_a_path_this_reading_did_not_write_is_refused(path: str) -> None:
+    """`walk_path` reads back only the shape `next_page` writes, and refuses anything else rather
+    than reading it as a shorter path. Its siblings are the passes above, whose saved paths are
+    read back. Delete this and a damaged place reads as a walk near its end, which ends it and
+    reports a tree read whole that was not."""
+    with pytest.raises(DriveError):
+        google_drive.walk_path({WALK_PATH: path})
 
 
 def test_a_listing_names_the_folder_it_walked_to_and_its_rows_are_checked_against_it() -> None:
@@ -511,7 +757,7 @@ class EndlessTree:
 def test_a_pass_cut_short_by_its_bound_is_degraded_and_the_next_carries_on() -> None:
     """A tree deeper than one pass may walk is read to the worker's page bound and the attempt is
     recorded DEGRADED, read but cut short, rather than as a source read to the end; and the next
-    pass starts at the folder the first did not reach, with the folders the first queued, rather
+    pass starts at the folder the first did not reach, with the path the first saved, rather
     than at the pin (M11.9.15). Its sibling is the install check, whose tree is read to the end and
     is OK. Delete this and a folder too large for one pass reads as completely indexed, or is read
     from the pin on every pass and never past its first fifty folders."""
@@ -591,3 +837,154 @@ def test_a_pass_cut_short_by_its_bound_is_degraded_and_the_next_carries_on() -> 
     # first pass queued last and never reached.
     assert first[0] == FOLDER_ID and second[0] == f"fld{MAX_PAGES_PER_ENTITY:08d}"
     assert len(second) == MAX_PAGES_PER_ENTITY and not set(first) & set(second)
+
+
+class RecordedDrive(EndlessTree):
+    """Google as recorded list pages (`recorded_pages`): each listing is answered by the page its
+    folder and token name, and noted as that pair."""
+
+    def __init__(self, pages: dict[tuple[str, str], dict[str, Any]]) -> None:
+        super().__init__()
+        self.pages = pages
+        self.asked: list[tuple[str, str]] = []
+
+    def get(self, url: str, *, address: str, headers: Any, max_bytes: int) -> Any:
+        import json
+
+        from brain.ops.connector_sync_run import SourceAnswer
+
+        del address, headers, max_bytes
+        query = parse_qs(urlsplit(url).query)
+        key = (query["q"][0].split("'")[1], query.get("pageToken", [""])[0])
+        self.asked.append(key)
+        return SourceAnswer(status=200, headers={}, body=json.dumps(self.pages[key]).encode())
+
+
+@dataclass
+class Synced:
+    """What each pass of the worker left: its health and detail, its read state, and the index."""
+
+    said: list[tuple[str, str]]
+    walking: list[bool]
+    held: dict[str, int]
+    retired: int
+
+
+def synced_over_passes(name: str, caller: RecordedDrive, *, passes: int) -> Synced:
+    """Connect the pin and let the worker's own `sync_on` read it `passes` times, a day apart."""
+    from datetime import timedelta
+
+    from brain.connectors.manifest import manifest_digest
+    from brain.ops.acceptance_checks_google import _KeyFiles, a_key_file
+    from brain.ops.connectable import manifest_for
+    from brain.ops.connector_store import StoredConnections
+    from brain.ops.connector_sync_run import sync_on
+    from tests.fixtures.scratch_postgres import sql
+    from tests.unit.test_connector_sync_run import Resolver, a_database, no_sleep, through
+
+    settings = {
+        "folder": FOLDER_ID,
+        "domain": OWN,
+        "department": "operations",
+        "steward": "u_steward",
+    }
+    digest = manifest_digest(manifest_for(google_drive.GOOGLE_DRIVE, settings))
+    clock = iter(SEEN.replace(year=2026) + timedelta(seconds=n) for n in range(100_000))
+
+    async def kept() -> datetime | None:
+        return None
+
+    said: list[tuple[str, str]] = []
+    walking: list[bool] = []
+    with a_database(name) as url:
+        through(
+            url,
+            lambda sessions: StoredConnections(sessions).connect(
+                connector=google_drive.GOOGLE_DRIVE,
+                settings=settings,
+                digest=digest,
+                actor="u_admin",
+                trace_id="t-connect",
+                ent_hash="0" * 32,
+                keep_key=kept,
+            ),
+        )
+
+        def a_pass(at: datetime) -> Callable[[Any], Awaitable[Any]]:
+            def run(sessions: Any) -> Awaitable[Any]:
+                return sync_on(
+                    sessions=sessions,
+                    now=at,
+                    keys=_KeyFiles(a_key_file()),
+                    caller=caller,
+                    resolver=Resolver(),
+                    clock=lambda: next(clock),
+                    sleep=no_sleep,
+                    poster=caller,
+                )
+
+            return run
+
+        for day in range(passes):
+            through(url, a_pass(SEEN.replace(year=2026) + timedelta(days=day)))
+            ((health, detail, state),) = sql(
+                url,
+                "SELECT health, detail, read_state FROM ops.connector_sync"
+                " ORDER BY finished_at DESC LIMIT 1",
+            )
+            said.append((health, detail))
+            walking.append(bool(state and state.get("walking")))
+        held = dict(sql(url, "SELECT source_id, count(*) FROM proj.record GROUP BY source_id"))
+        ((retired,),) = sql(url, "SELECT count(*) FROM proj.record_retired")
+    return Synced(said=said, walking=walking, held=held, retired=retired)
+
+
+@pytest.mark.needs_db
+def test_the_worker_reads_a_tree_wider_than_a_pass_whole_and_then_forgets_its_place() -> None:
+    """The recorded wide and deep tree through the worker and PostgreSQL: three passes are cut
+    short and carried on, the fourth reads to the end and leaves no place, so the fifth starts again
+    at the pin; every recorded page was asked once by the first four, and the index holds each file
+    and folder once. Delete this and the place the walk saves can be dropped between the run and
+    the store, which reads a large tree from the pin on every pass and never to its end."""
+    from brain.connectors.contract import HealthState
+    from brain.ops.connector_sync import READ_BUT_CUT_SHORT, READ_TO_THE_END
+
+    pages = recorded_pages(wide_and_deep())
+    drive = RecordedDrive(pages)
+    done = synced_over_passes("brain_drive_depth_first", drive, passes=5)
+
+    cut, whole = (
+        (HealthState.DEGRADED.value, READ_BUT_CUT_SHORT),
+        (
+            HealthState.OK.value,
+            READ_TO_THE_END,
+        ),
+    )
+    assert done.said[:4] == [cut, cut, cut, whole]
+    assert done.walking == [True, True, True, False, True]
+    first_four = drive.asked[: len(pages)]
+    assert sorted(first_four) == sorted(pages) and len(set(first_four)) == len(pages)
+    assert drive.asked[len(pages)] == (FOLDER_ID, "")
+    recorded = {row["id"] for body in pages.values() for row in body["files"]}
+    assert set(done.held) == recorded and set(done.held.values()) == {1}
+
+
+@pytest.mark.needs_db
+def test_a_tree_deeper_than_the_bound_is_refused_in_words_on_connector_health() -> None:
+    """A chain two deeper than `MAX_FOLDER_DEPTH` is read over three passes down to the bound; the
+    pass that ends the walk says, on connector health, that part of the source was left out and
+    why, rather than that it was read to the end, and nothing is retired. Delete this and a tree
+    too deep to read reads as one read whole, and the files below the bound are retired from
+    every answer."""
+    from brain.connectors.contract import HealthState
+    from brain.ops.connector_sync import READ_BUT_CUT_SHORT, READ_BUT_PART_LEFT_OUT
+
+    tree = a_chain(FOLDER_ID, MAX_FOLDER_DEPTH + 2)
+    drive = RecordedDrive(recorded_pages({folder: [rows] for folder, rows in tree.items()}))
+    done = synced_over_passes("brain_drive_too_deep", drive, passes=3)
+
+    cut = (HealthState.DEGRADED.value, READ_BUT_CUT_SHORT)
+    assert done.said == [cut, cut, (HealthState.DEGRADED.value, READ_BUT_PART_LEFT_OUT)]
+    assert done.walking == [True, True, False]
+    assert len(drive.asked) == MAX_FOLDER_DEPTH + 1 and done.retired == 0
+    assert f"filefldChain{MAX_FOLDER_DEPTH + 1:04d}" not in done.held

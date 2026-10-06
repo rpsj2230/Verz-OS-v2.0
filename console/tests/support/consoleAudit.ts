@@ -186,6 +186,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_STAFF_SOURCE_LOCATION",
       "INSTALL_BROKERED_CLIENT_ID",
       "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
+      "INSTALL_DEPARTMENTS_FROM",
     ],
     gaps: [
       {
@@ -556,6 +557,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/artifacts",
       "/api/v1/records/{entity}/access",
       "/api/v1/resolution/review*",
+      "/api/v1/resolution/weights*",
     ],
     tables: [
       "know.item",
@@ -740,12 +742,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs"],
-    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview"],
+    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview", "/api/v1/halts*"],
     tables: ["ops.halt"],
     installation: [],
     gaps: [
       {
-        what: "The install cannot be stopped or resumed from the console: 0136 stores a halt and its resume, GET /api/v1/console/overview reads the halts in force, and no route or Stop control writes one yet.",
+        what: "The install cannot be stopped or resumed from the console yet: GET, POST /api/v1/halts and POST /api/v1/halts/resume stop and resume through brain.ops.halt_store, and no Stop screen or header control calls them.",
         leaf: "M27.12.4",
       },
     ],
@@ -825,6 +827,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage.",
   "GET /api/v1/threads/{thread_id}":
     "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
+  "POST /api/v1/threads/attachments":
+    "A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":

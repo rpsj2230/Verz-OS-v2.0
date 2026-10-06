@@ -3,7 +3,7 @@
 `brain.gate.cache_key` decides what makes two questions the same question and
 `brain.gate.answer_cache` decides whether a stored answer may be served. Both are about the
 answer. This is the rest of M6.2: the plan cache, the retrieval cache, the embedding cache,
-the projection freshness cache, and the prohibition on semantic answer caching. It holds no
+the source epochs cache, and the prohibition on semantic answer caching. It holds no
 client, for the reason `brain.ops.limits` holds none: the cases worth testing in a cache are
 the ones where a key is missing a dimension, and those are not reachable through a module
 that opens a socket. `brain.cache` is the other half and stores what this module keys.
@@ -59,9 +59,9 @@ anywhere else can. It is one comparison and it rules out the catastrophic case, 
 - The **embedding** key carries nothing about the caller at all, which is the exception and
   needs its argument rather than an exemption. See `AN_EMBEDDING_KEY_IS_A_PROOF_OF_POSSESSION`.
 
-- The **freshness** key carries nothing about the caller either, because how stale a source's
-  projection is has nothing to do with who is asking. What it must never become is a number
-  reported per principal: see `A_HIT_RATE_PER_PRINCIPAL_IS_A_REPORT_ABOUT_THAT_PRINCIPAL`.
+- The **source epochs** key carries nothing about the caller either, because how many times a
+  source has changed has nothing to do with who is asking. What it must never become is a
+  number reported per principal: see `A_HIT_RATE_PER_PRINCIPAL_IS_A_REPORT_ABOUT_THAT_PRINCIPAL`.
 
 **A cached plan is re-projected for whoever reuses it (M6.2.2).** A plan is a list of tool
 names, and a tool name is the one thing about a caller's catalogue that must never travel
@@ -87,8 +87,10 @@ asks for exists, and is wired there, through `replay`, in the same change.
 **Where the other three are read** (2026-10-06). The retrieval cache and the embedding cache are
 read by the document plane's search, `brain.knowledge.document_tools.searcher` and
 `QuestionEmbedder.vector`, through the store `brain.app.lifespan` builds when a cache is
-configured. The freshness reading is built on the per-source counter `proj.source_epoch` once
-that lands, because the counter moves on a deletion and `last_seen_at` does not.
+configured. The source epochs reading is `proj.source_epoch` read through
+`brain.ops.connector_sync_store.ReadThroughSourceEpochs`, which the answer route keys every
+answer on; the `last_seen_at` derivation it replaced moved on every confirming read and never
+on a deletion (`ONE_EPOCH_SOURCE_KEYS_AN_ANSWER`).
 
 **Nothing here computes a similarity, and M6.2.6 is a shape rather than a rule.** Semantic
 answer caching means answering a new question from a similar old one, which under a permission
@@ -139,7 +141,7 @@ import ast
 import hashlib
 import inspect
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import datetime
 from types import MappingProxyType, ModuleType
@@ -578,8 +580,7 @@ def replay(plan: CachedPlan, catalogue: ProjectedCatalogue) -> ReplayedPlan:
 #: How long a retrieval result may sit in the store. Shorter than a plan, because the corpus
 #: is the thing that changes without anybody deciding to change it: somebody uploads a
 #: document and expects to find it. The corpus epoch is in the key and does the real
-#: invalidating; this bounds the case where the epoch has not been re-read yet, so it is held
-#: at the freshness cache's own lifetime rather than at a number of its own.
+#: invalidating; this bounds the case where the epoch has not been re-read yet.
 RETRIEVAL_TTL_SECONDS: Final = 300
 
 #: How many references one cached retrieval may hold.
@@ -802,128 +803,73 @@ def embedding_key(content: str, *, model: str) -> str:
     return "emb:" + digest_of((f"emb/{KEY_VERSION}", content_hash(content), model))
 
 
-# ------------------------------------------------------ the projection freshness (M6.2.5)
+# ------------------------------------------------------- the source epochs (M6.2.5)
 
-#: How long a freshness reading may be reused. Short, because this is the reading that
-#: invalidates the others: the epoch it yields is in every answer key, so a reading held past
-#: its usefulness holds every answer built on it fresh alongside. Half of
+#: How long one reading of every source's epoch may be reused. Short, because this is the
+#: reading that invalidates the others: the epochs are in every answer key, so a reading held
+#: past its usefulness holds every answer built on it alongside. Half of
 #: `resolve.CACHE_TTL_SECONDS`, which is the shortest lifetime anything else in the request
-#: path runs on, because this one gates more than that one does.
-FRESHNESS_TTL_SECONDS: Final = CACHE_TTL_SECONDS // 2
+#: path runs on, because this one gates more than that one does. It is also the longest a
+#: connector's change can go unseen by the answer cache after the worker has written it.
+SOURCE_EPOCHS_TTL_SECONDS: Final = CACHE_TTL_SECONDS // 2
 
-#: Microseconds per second. Named because the epoch below multiplies by it, and a bare
-#: 1_000_000 in that expression reads like a unit conversion nobody chose.
-MICROSECONDS_PER_SECOND: Final = 1_000_000
+#: The one key the reading is stored under. Nothing about the caller, because how many times a
+#: source has changed has nothing to do with who is asking, and one reading serves everybody,
+#: which is the point: the alternative is a database read on every question to learn a mapping
+#: that is the same for all of them.
+SOURCE_EPOCHS_KEY: Final = "epochs:sources"
+
+#: Why there is one epoch source and why it is the counter.
+ONE_EPOCH_SOURCE_KEYS_AN_ANSWER: Final = (
+    "An answer key's source epochs come from proj.source_epoch, a counter the worker advances "
+    "in the transaction that changed a source's rows, read through this cache and from nowhere "
+    "else. An epoch derived from proj.record.last_seen_at moved on every read that merely "
+    "confirmed a record and never on a deletion, which is the wrong way round on both counts; "
+    "and two epoch sources in one key would be two answers to one question, the newer winning "
+    "or losing by whichever was folded last."
+)
 
 _OBJECT_NAME_RE: Final = re.compile(OBJECT_NAME_PATTERN)
 
 
 @dataclass(frozen=True)
-class CachedFreshness:
-    """When a source last confirmed one entity's rows, and the epoch that follows from it.
+class CachedSourceEpochs:
+    """Every source's epoch as the database held it, kept for `SOURCE_EPOCHS_TTL_SECONDS`.
 
-    **`epoch` is a property rather than a field**, and that is the leaf's substance rather
-    than tidiness. An epoch supplied alongside a timestamp is two records of one fact, and
-    the way they disagree is the way that cannot be noticed: a refresh moves `last_seen_at`
-    and a caller forgets to bump the integer, so every answer key built from it is unchanged
-    and every cached answer built on data that has since moved stays servable. Derived from
-    the timestamp, an epoch that has not moved is a projection that has not moved, which is
-    a true statement rather than an assumption.
+    **The counter, not a timestamp.** This type held `proj.record.last_seen_at` per source and
+    entity until 2026-10-06 and derived an epoch from it; nothing read it, and the answer route
+    read `proj.source_epoch` instead. See `ONE_EPOCH_SOURCE_KEYS_AN_ANSWER` and
+    `brain.tables.projection.SourceEpochRow` for why the counter is the right one. The grain is
+    the source rather than the source and entity, because that is the counter's grain: a source
+    that changed one entity invalidates answers about its others too, which costs a recompute
+    and never serves a stale answer, where the timestamp's finer grain invalidated every
+    answer on every pass whether anything changed or not.
 
-    Microsecond resolution rather than seconds, because a reconciliation pass confirms many
-    rows inside one second and a second-resolution epoch would be stuck across all of them.
+    **The reading is cached, and the database is still the record.** A reading lost to an
+    eviction or a restart is read again; a counter kept only here could start again at zero
+    under an answer it once invalidated, which is why the counter is not kept here.
 
-    **The reading is cached and the verdict is not**, which is the distinction that makes
-    this cache safe at all. `brain.connectors.projection.assess_staleness` turns a
-    `last_seen_at`, a promise and a clock into LIVE, AGEING or STALE. Two of those three are
-    facts that sit still and the third is the clock, so a cached verdict is a statement about
-    how fresh something was when somebody last asked, served to somebody asking now. It would
-    be wrong in the direction that never gets noticed: a row that went stale during the
-    cache's own lifetime keeps reporting LIVE, and the notice that would have told the reader
-    is the thing that goes missing. So what is stored here is the timestamp the database had,
-    and the verdict is recomputed against the current clock by the module that owns it. There
-    is no field on this type that could hold a `Freshness`.
-
-    It carries no field about who asked and there is nowhere to put one either. How stale a
-    projection is has nothing to do with who is reading it, and a freshness reading recorded
-    per principal would be a record of who asks about which source. See
-    `A_HIT_RATE_PER_PRINCIPAL_IS_A_REPORT_ABOUT_THAT_PRINCIPAL`.
+    Its own checks, because a reading arriving from the store never went through the code that
+    built it: a name that is not an object name would reach an answer key verbatim, and an
+    epoch below one is a number no advance writes.
     """
 
     key: str
-    source: str
-    entity: str
-    #: When the source last confirmed the record, which is `proj.record.last_seen_at` and is
-    #: deliberately not `updated_at`. `brain.tables.projection` argues the difference: a row
-    #: rewritten by a backfill has a new `updated_at` and the same `last_seen_at`, and
-    #: staleness derived from the first would report a record confirmed that nobody confirmed.
-    last_seen_at: datetime
+    #: By source, as `proj.source_epoch.source` spells it. A source with none has never changed
+    #: a row, and an answer key carries it as nought.
+    epochs: dict[str, int]
 
     def __post_init__(self) -> None:
         if not self.key:
-            msg = "a cached freshness reading carries the key it is stored under"
+            msg = "a cached epochs reading carries the key it is stored under"
             raise CacheLayerError(msg)
-        for name, value in (("source", self.source), ("entity", self.entity)):
-            if not _OBJECT_NAME_RE.match(value):
-                msg = f"a freshness reading's {name} is not an object name"
+        for name, epoch in self.epochs.items():
+            if not _OBJECT_NAME_RE.match(name):
+                msg = "a cached epoch names a source that is not an object name"
                 raise CacheLayerError(msg)
-        if self.last_seen_at.tzinfo is None:
-            # The same refusal `ProjectedRecord` makes about its own. A naive timestamp
-            # compares wrongly against an aware one and produces an epoch off by the
-            # deployment's offset from UTC, which is a number that looks entirely ordinary.
-            msg = "a naive last_seen_at yields an epoch off by the deployment's UTC offset"
-            raise CacheLayerError(msg)
-
-    @property
-    def name(self) -> str:
-        """`source.entity`, which is how a source epoch is named in an answer key.
-
-        Both halves, because `proj.record` is keyed by both: a Freshdesk company and a Xero
-        contact are different companies, and one epoch covering a whole connector would make
-        a refresh of either invalidate answers that drew on neither.
-        """
-        return f"{self.source}.{self.entity}"
-
-    @property
-    def epoch(self) -> int:
-        """The integer an answer key carries for this source. Moves when the projection does."""
-        return int(self.last_seen_at.timestamp() * MICROSECONDS_PER_SECOND)
-
-
-def freshness_key(source: str, entity: str) -> str:
-    """The key a freshness reading is stored under (M6.2.5).
-
-    Nothing about the caller, because freshness is a property of the pipeline. That also
-    means one reading serves every caller, which is the point: the alternative is a read of
-    `proj.record` on every request to learn a number that is the same for everybody.
-    """
-    for name, value in (("source", source), ("entity", entity)):
-        if not _OBJECT_NAME_RE.match(value):
-            msg = f"a freshness key's {name} is not an object name"
-            raise CacheLayerError(msg)
-    return f"fresh:{source}.{entity}"
-
-
-def source_epochs(readings: Iterable[CachedFreshness]) -> Mapping[str, int]:
-    """The `source_epochs` mapping an answer key takes, from a set of freshness readings.
-
-    One entry per source and entity rather than one per source. Folding a connector's
-    entities into a single epoch would need a rule for combining them, and only the newest
-    is safe: the oldest does not move when a newer entity refreshes, so an answer drawing on
-    that entity would stay cached across a change to the data it was built from. Having to
-    choose is the sign the fold is wrong, so nothing is folded.
-
-    Refuses two readings of one pair rather than taking either. Silently keeping the last is
-    how a stale reading wins by arriving second, and there is no order here that would make
-    the choice meaningful.
-    """
-    out: dict[str, int] = {}
-    for reading in readings:
-        if reading.name in out:
-            msg = f"two freshness readings for {reading.name}; one of them would be dropped"
-            raise CacheLayerError(msg)
-        out[reading.name] = reading.epoch
-    return MappingProxyType(out)
+            if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 1:
+                msg = "a cached epoch below one is a number no advance writes"
+                raise CacheLayerError(msg)
 
 
 # ------------------------------------------------- the prohibition, structurally (M6.2.6)
@@ -1146,14 +1092,14 @@ def ttl_invariants() -> tuple[str, ...]:
             "a plan may outlive the answer cache's own idea of recent, so two numbers "
             "meaning 'recently enough' disagree and neither is the rule"
         )
-    if FRESHNESS_TTL_SECONDS >= CACHE_TTL_SECONDS:
+    if SOURCE_EPOCHS_TTL_SECONDS >= CACHE_TTL_SECONDS:
         findings.append(
-            "a freshness reading outlives a resolved entitlement set, so the epoch that "
+            "a source epochs reading outlives a resolved entitlement set, so the epoch that "
             "invalidates every answer key is held longer than the reach those keys carry"
         )
-    if RETRIEVAL_TTL_SECONDS <= FRESHNESS_TTL_SECONDS:
+    if RETRIEVAL_TTL_SECONDS <= SOURCE_EPOCHS_TTL_SECONDS:
         findings.append(
-            "a retrieval result expires no later than the freshness reading that would "
+            "a retrieval result expires no later than the source epochs reading that would "
             "have invalidated it, so the epoch in its key can never do any work"
         )
     if EMBEDDING_TTL_SECONDS <= PLAN_TTL_SECONDS:
@@ -1178,6 +1124,6 @@ TTL_SECONDS: Mapping[str, int] = MappingProxyType(
         "plans": PLAN_TTL_SECONDS,
         "retrievals": RETRIEVAL_TTL_SECONDS,
         "embeddings": EMBEDDING_TTL_SECONDS,
-        "freshness": FRESHNESS_TTL_SECONDS,
+        "source_epochs": SOURCE_EPOCHS_TTL_SECONDS,
     }
 )

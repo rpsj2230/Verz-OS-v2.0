@@ -731,12 +731,12 @@ class ChangedSince(Protocol):
 class BoundedWalk(Protocol):
     """A reading whose walk may leave part of its source out at a bound of its own (M11.9.15).
 
-    Google Drive queues no more than its folder bound in one pass, so a tree with more folders
+    Google Drive does not walk into a folder nested deeper than its depth bound, so a tree deeper
     than that is walked to an end that is not the tree's. The worker asks a reading that is one of
-    these after each page, and a pass that left something out is reported cut short and retires
-    nothing (`brain.ops.connector_sync.
-    WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`): a file in a folder the walk
-    did not reach was not asked for, and is not therefore gone.
+    these after each page, and a pass that left something out is reported as part of the source
+    left out (`brain.ops.connector_sync.READ_BUT_PART_LEFT_OUT`) and retires nothing
+    (`brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`):
+    a file in a folder the walk did not reach was not asked for, and is not therefore gone.
     Optional, and asked with `isinstance`, so a reading whose walk has no bound of its own owes
     nothing here.
     """

@@ -24,7 +24,12 @@ slower reading cannot overwrite a faster one's. See
 `retire_unseen` stamps `statement_timestamp()`, the one instant `0045`'s policy lets the application
 write, and copies each row it retires into `proj.record_retired` in the same statement, and
 `advance_epoch` counts a change in `proj.source_epoch`; the worker runs each in the
-transaction of the write it describes. `StoredSourceEpochs` is the answer path's read of them.
+transaction of the write it describes. `StoredSourceEpochs` is the answer path's read of them,
+and `ReadThroughSourceEpochs` keeps that read for `SOURCE_EPOCHS_TTL_SECONDS` in the cache when an
+install has one (M6.2.5), so a question costs no database read for its epochs. **A read-through and
+not a cache the worker writes**, because the worker holds no cache client and a counter kept only in
+the cache could start again at zero under an answer it once invalidated; a reading lost here is
+read again from the counter, which is the record.
 
 **The worker writes as the login its URL names**, which on an install is the database's owner, as
 `brain.ops.erasure_store` and `brain.ops.webhook_delivery` already do. Under the application role
@@ -70,6 +75,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import HealthState
 from brain.connectors.projection import ProjectedRecord
+from brain.gate.caches import (
+    SOURCE_EPOCHS_KEY,
+    SOURCE_EPOCHS_TTL_SECONDS,
+    CachedSourceEpochs,
+)
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_probe import (
     REQUEST_NAMESPACE,
@@ -336,6 +346,44 @@ class StoredSourceEpochs:
         async with self._sessions() as session, session.begin():
             rows = (await session.execute(source_epochs())).all()
         return MappingProxyType({str(name): int(epoch) for name, epoch in rows})
+
+
+class EpochsCache(Protocol):
+    """Where a reading of every source's epoch is kept: `brain.cache.source_epochs_cache`.
+
+    Never raises: a store that is down is a miss on `get` and a dropped write on `set`, which is
+    `brain.cache.ValkeyRecordCache`'s promise, so an unreachable cache slows a question down and
+    never fails it.
+    """
+
+    def get(self, key: str) -> CachedSourceEpochs | None: ...
+
+    def set(self, key: str, value: CachedSourceEpochs, ttl_seconds: int) -> None: ...
+
+
+class ReadThroughSourceEpochs:
+    """`SourceEpochs` from the cache when it holds a reading, else from `inner`, which it keeps.
+
+    See `brain.gate.caches.ONE_EPOCH_SOURCE_KEYS_AN_ANSWER`: this is the counter, read less often,
+    and never a second epoch source. The reading is the whole mapping under one key, because the
+    database read it saves is the whole table in one statement.
+    """
+
+    def __init__(self, inner: SourceEpochs, cache: EpochsCache) -> None:
+        self._inner = inner
+        self._cache = cache
+
+    async def epochs(self) -> Mapping[str, int]:
+        kept = self._cache.get(SOURCE_EPOCHS_KEY)
+        if kept is not None:
+            return MappingProxyType(dict(kept.epochs))
+        read = await self._inner.epochs()
+        self._cache.set(
+            SOURCE_EPOCHS_KEY,
+            CachedSourceEpochs(key=SOURCE_EPOCHS_KEY, epochs=dict(read)),
+            SOURCE_EPOCHS_TTL_SECONDS,
+        )
+        return read
 
 
 def attempt_row(connection_id: uuid.UUID, attempt: Attempt) -> Insert:
