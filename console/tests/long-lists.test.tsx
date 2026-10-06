@@ -74,7 +74,7 @@ const A_RUNG_IS_SAVED_ONE_AT_A_TIME =
   "brain.routing_routes.A_RUNG_IS_SAVED_ONE_AT_A_TIME.";
 const AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD =
   "An approval lets one suspended action run and its card is the statement of what it will do, so " +
-  "approving several at once approves artefacts nobody read, and a rejection names its own reason: " +
+  "approving several at once approves requests nobody read, and a rejection names its own reason: " +
   "brain.approval_routes.AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD.";
 const AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON =
   "Approving an elevation widens one person's reach for hours on the strength of the explanation " +

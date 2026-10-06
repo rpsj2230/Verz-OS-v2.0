@@ -23,27 +23,50 @@ that says what a document is about, sitting in a bucket listing somebody else ca
 is in the key so a lifecycle rule scoped to a prefix can apply that class's window to the bytes,
 which is the one way a bucket with a single rule can hold several windows.
 
-**No state column, no successor, never edited, never removed.** SELECT and INSERT only.
-`supersede` and `archive` in `brain.console.agent_output` return new records and nothing here
-stores one yet, so every row is current, and saying so in the schema is better than a column
-nothing writes.
+**No state column, never edited, never removed.** SELECT and INSERT only. What an artifact is
+now is its row with its changes folded over it: `agent.artifact_change` holds one row when it was
+superseded and one when it was archived, which `0194` added, so the record that was sent to
+somebody is never rewritten to say what happened to it afterwards. A state column would be an
+UPDATE grant on the evidence, and `brain.console.agent_output.supersede` already refuses the
+second of two successors, which a unique key on the change says again in the schema.
 
-Task ids: M39.5.1.1, M39.5.1.2
+**The client is a canonical entity's id held by value** (`0194`). `er.canonical` is never deleted
+from, a merge forwards it, and the artifact is read back by the whole family the id now belongs
+to (`brain.ops.artifact_store.family_of`), so a key would buy nothing a merge does not already
+keep; the store refuses an id that names no entity when the row is written.
+
+**What the content drew on is carried as grants** (`drew_on`, `0194`): the capability and the scope
+the producing run's reach held for each field that reached the file. It is what a re-download is
+checked against, so a requester whose reach has since narrowed is refused even for their own
+artifact. It is never a permission: see `brain.console.agent_output.may_download`.
+
+Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.5, M39.5.2.4, M39.8.5
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Final
+from typing import Any, Final
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, Index, String, Text, text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from brain.console.agent_output import ArtifactKind
+from brain.console.agent_output import ArtifactKind, ArtifactState
 from brain.db import Base
 from brain.ops.retention import DataClass
 from brain.tables.identity import PRINCIPAL_ID_CHARS, one_of
+from brain.tables.resolution import ENTITY_ID_CHARS
 
 #: How wide an artifact's identifier may be. A uuid in hex is thirty-two.
 ARTIFACT_ID_CHARS: Final = 64
@@ -69,6 +92,17 @@ OBJECT_KEY_PATTERN: Final = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}/artifacts/[a-z_]{
 ENT_HASH_PATTERN: Final = r"^[0-9a-f]{32}$"
 #: A sha256 in lower-case hex.
 DIGEST_PATTERN: Final = r"^[0-9a-f]{64}$"
+#: How wide a trace id may be.
+TRACE_ID_CHARS: Final = 128
+#: The two ways an artifact stops being current. `ArtifactState` less `CURRENT`, which is the
+#: absence of a change rather than a change.
+CHANGED_STATES: Final[tuple[ArtifactState, ...]] = tuple(
+    one for one in ArtifactState if one is not ArtifactState.CURRENT
+)
+#: A supersession names its successor and an archive names none.
+SUCCESSOR_IFF_SUPERSEDED: Final = (
+    f"(state = '{ArtifactState.SUPERSEDED.value}') = (superseded_by IS NOT NULL)"
+)
 
 
 class ArtifactRow(Base):
@@ -97,6 +131,12 @@ class ArtifactRow(Base):
     knowledge_items: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default=text("'{}'")
     )
+    #: The canonical client it was produced for, by value (`0194`), or null for none.
+    client_id: Mapped[str | None] = mapped_column(String(ENTITY_ID_CHARS), nullable=True)
+    #: The grants the content was drawn under, as `Grant.model_dump(mode="json")` (`0194`).
+    drew_on: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
 
     __table_args__ = (
         CheckConstraint(f"artifact_id ~ '{ARTIFACT_ID_PATTERN}'", name="artifact_id_shape"),
@@ -111,6 +151,53 @@ class ArtifactRow(Base):
         CheckConstraint(f"content_digest ~ '{DIGEST_PATTERN}'", name="digest_shape"),
         CheckConstraint(f"object_key ~ '{OBJECT_KEY_PATTERN}'", name="object_key_shape"),
         CheckConstraint("bytes_stored > 0", name="holds_bytes"),
+        CheckConstraint("jsonb_typeof(drew_on) = 'array'", name="drew_on_is_a_list_of_grants"),
+        CheckConstraint(
+            "client_id IS NULL OR length(btrim(client_id)) > 0", name="client_id_present"
+        ),
         Index("ix_artifact_caller_produced", "caller_id", "produced_at"),
+        Index("ix_artifact_agent_produced", "agent_id", "produced_at"),
+        Index(
+            "ix_artifact_client_kind_produced",
+            "client_id",
+            "kind",
+            "produced_at",
+            postgresql_where=text("client_id IS NOT NULL"),
+        ),
+        {"schema": "agent"},
+    )
+
+
+class ArtifactChangeRow(Base):
+    """`agent.artifact_change`. An artifact superseded or archived, by whom and when (`0194`).
+
+    Keyed by the artifact and the state, so an artifact is superseded at most once and archived
+    at most once, which is `brain.console.agent_output.supersede`'s refusal of a second successor
+    written into the schema. Written in the session's own name.
+    """
+
+    __tablename__ = "artifact_change"
+
+    artifact_id: Mapped[str] = mapped_column(String(ARTIFACT_ID_CHARS), primary_key=True)
+    state: Mapped[str] = mapped_column(String(KIND_CHARS), primary_key=True)
+    superseded_by: Mapped[str | None] = mapped_column(String(ARTIFACT_ID_CHARS), nullable=True)
+    changed_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    entitlement_hash: Mapped[str] = mapped_column(String(32), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(TRACE_ID_CHARS), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(["artifact_id"], ["agent.artifact.artifact_id"]),
+        ForeignKeyConstraint(["superseded_by"], ["agent.artifact.artifact_id"]),
+        CheckConstraint(one_of("state", CHANGED_STATES), name="state"),
+        CheckConstraint(SUCCESSOR_IFF_SUPERSEDED, name="successor_iff_superseded"),
+        CheckConstraint(
+            "superseded_by IS NULL OR superseded_by <> artifact_id", name="not_its_own_successor"
+        ),
+        CheckConstraint("length(btrim(changed_by)) > 0", name="attributed"),
+        CheckConstraint(f"entitlement_hash ~ '{ENT_HASH_PATTERN}'", name="ent_hash_shape"),
+        CheckConstraint("length(btrim(trace_id)) > 0", name="traced"),
         {"schema": "agent"},
     )

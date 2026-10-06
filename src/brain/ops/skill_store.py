@@ -51,6 +51,7 @@ hashes beside it, which its digest covers, and never the bytes; `script_bytes` r
 run, which checks them against the approved hashes before anything executes.
 
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M27.15.55, M27.15.56, M12.4.11
+Task ids: M12.3.1, M12.3.4
 """
 
 from __future__ import annotations
@@ -80,12 +81,15 @@ from brain.tables.skill import (
     SkillAssignmentRow,
     SkillCategoryRow,
     SkillDetachmentRow,
+    SkillExportRow,
+    SkillRehearsalRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
     SkillScriptRow,
 )
 from brain.tables.template import TemplateInstanceRow
+from brain.tools.skill_examples import ExampleOutcome, Rehearsal, RehearsalKind
 from brain.tools.skills import ImportedSkill, Skill, SkillSource, SkillState, SourceKind
 
 log = structlog.get_logger()
@@ -397,6 +401,66 @@ def library_skill_of(
     )
 
 
+def rehearsal_values(made: Rehearsal) -> dict[str, Any]:
+    """One rehearsal as its row: the outcomes as a list of plain objects, in the order rehearsed."""
+    return {
+        "digest": made.digest,
+        "kind": made.kind.value,
+        "agent_id": made.agent_id,
+        "passed": made.passed,
+        "outcomes": [
+            {"task": one.task, "passed": one.passed, "missing": list(one.missing)}
+            for one in made.outcomes
+        ],
+        "rehearsed_by": made.rehearsed_by,
+    }
+
+
+def rehearsals_of(digests: Sequence[str]) -> Select[tuple[SkillRehearsalRow]]:
+    """Every rehearsal of these versions, oldest first."""
+    return (
+        select(SkillRehearsalRow)
+        .where(SkillRehearsalRow.digest.in_(sorted(set(digests))))
+        .order_by(SkillRehearsalRow.digest, SkillRehearsalRow.seq)
+    )
+
+
+def _names(value: object) -> tuple[object, ...]:
+    """A JSON list as a tuple, or a refusal the reader turns into an unknown row."""
+    if not isinstance(value, list | tuple):
+        raise TypeError("a rehearsal's missing tools are not a list")
+    return tuple(value)
+
+
+def rehearsal_of(row: SkillRehearsalRow) -> Rehearsal | None:
+    """A row as the rehearsal it records, or None for a kind this release does not know.
+
+    None rather than a guess, so a later release's kind written to the table is not read here as
+    one that cleared approval: an unknown kind clears nothing.
+    """
+    try:
+        kind = RehearsalKind(row.kind)
+        outcomes = tuple(
+            ExampleOutcome(
+                task=str(one["task"]),
+                passed=bool(one["passed"]),
+                missing=tuple(str(name) for name in _names(one.get("missing", ()))),
+            )
+            for one in row.outcomes
+        )
+    except (ValueError, KeyError, TypeError):
+        log.warning("skill rehearsal row does not construct", digest=row.digest)
+        return None
+    return Rehearsal(
+        digest=row.digest,
+        kind=kind,
+        outcomes=outcomes,
+        rehearsed_by=row.rehearsed_by,
+        agent_id=row.agent_id,
+        at=row.created_at,
+    )
+
+
 def retirement_of(row: SkillRetirementRow) -> Retirement:
     return Retirement(digest=row.digest, retired=row.retired, set_by=row.set_by, at=row.created_at)
 
@@ -539,6 +603,35 @@ class StoredSkills:
             await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
             await session.execute(retiring_row(digest, retired=retired, by=by))
+
+    async def rehearse(self, made: Rehearsal, *, ent_hash: str, trace_id: str) -> None:
+        """Record one rehearsal of a version, in the rehearser's name, with its entry (M12.3.4)."""
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, made.rehearsed_by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(insert(SkillRehearsalRow).values(rehearsal_values(made)))
+
+    async def rehearsals(self, digests: Sequence[str]) -> Mapping[str, tuple[Rehearsal, ...]]:
+        """Every rehearsal of each of these versions, oldest first. One with none is absent."""
+        if not digests:
+            return {}
+        async with self._sessions() as session:
+            rows = (await session.execute(rehearsals_of(digests))).scalars().all()
+        found: dict[str, list[Rehearsal]] = {}
+        for row in rows:
+            made = rehearsal_of(row)
+            if made is not None:
+                found.setdefault(row.digest, []).append(made)
+        return {digest: tuple(made) for digest, made in found.items()}
+
+    async def export(self, digest: str, *, by: str, ent_hash: str, trace_id: str) -> None:
+        """Record one version exported, in the exporter's name, with its ledger entry (M12.3.1)."""
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(insert(SkillExportRow).values(digest=digest, exported_by=by))
 
     async def detach(
         self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str

@@ -41,15 +41,17 @@ Cases are identified by question id, and the corpus is what knows who asked.
 testable without a model, a socket or a clock, which is the same split `brain.ops.limits` and
 `brain.ops.canaries` make.
 
-**M28.1.4 is not claimed and this is the reason.** That leaf is CI blocking a merge on a
-regression, and blocking needs observations: something has to ask the golden questions and
-record what came back. Nothing does, because there is no route behind the gate to ask one
-through. A CI step added today would score an empty run, `score` would correctly refuse it,
-and the build would be red for ever, so the wiring would be reverted within the hour by
-somebody who was right to revert it. The scoring and the thresholds are what can be built
-before the runner exists, and they are what is here.
+**M28.1.4 was not claimed until 2026-10-06, and the reason it gave stopped being true.** It
+said nothing could ask the golden questions, because there was no route behind the gate to ask
+one through. The answer lane and its route were built the next day, and
+`tests/invariants/test_golden_through_the_gate.py` asks every case through it as its persona and
+scores the run with this module. It lives under `tests/invariants`, which the `Lint, types,
+invariants` job runs and main's branch protection requires, so a permission failure or a fall in
+quality below the committed baseline blocks the merge. `tests/unit/test_ci_workflow.py` holds the
+job, the directory and the two blocking tests together. This module is still the half that
+decides and runs nothing.
 
-Task ids: M28.1.3
+Task ids: M28.1.3, M28.1.4
 """
 
 from __future__ import annotations

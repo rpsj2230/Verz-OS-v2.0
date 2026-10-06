@@ -44,7 +44,15 @@ See `SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS`.
 wrong and the answer's references, and `corrections` hands the learning signal one observation per
 note. See `A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6
+**The learning signals an exchange is evidence of are written with it** (M16.2.8): a question that
+asks the thread's last one again, a question handed to a person, and a correction, each to
+`mem.signal` through `brain.ops.signal_store.noticed` in the same transaction and in the asker's
+name, naming the answer it is about and never the words. See
+`A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`. Rejected: writing them from the answer route after the
+thread, which would need the thread's earlier question read a second time and the message ids
+handed back through every caller.
+
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6, M16.2.8
 """
 
 from __future__ import annotations
@@ -65,8 +73,9 @@ from brain.chat.threads import Thread, ThreadMessage, as_turns, refs_as_json, re
 from brain.chat.turns import Correction, CorrectionKind, RecordRef, record_correction
 from brain.core.field_policy import Classification
 from brain.gate.context import Channel
-from brain.memory.signals import Observation, Signal
-from brain.tables.chat import TITLE_CHARS, ConversationRow, MessageRole, MessageRow
+from brain.memory.signals import Observation, Signal, is_reask
+from brain.ops.signal_store import noticed
+from brain.tables.chat import TITLE_CHARS, ConversationRow, MessageRole, MessageRow, RunState
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why a chat channel's thread id is derived rather than stored.
@@ -101,6 +110,13 @@ SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS: Final = (
     "them, so the search reads questions and titles, which are questions, and nothing else."
 )
 
+#: Why a failed run is kept as a question and an empty turn.
+FAILED_RUN_SHOWS_NOTHING: Final = (
+    "A run that failed produced nothing the person was shown, so its thread keeps the question and "
+    "an answer turn marked failed with no words and no references. A failed turn carrying text "
+    "would be model output nobody was shown, stored as if it had been."
+)
+
 #: Why the console is a surface of the highest ceiling here.
 THE_CONSOLE_CARRIES_WHAT_ITS_READER_MAY_READ: Final = (
     "The web application renders an answer to the person signed in, at the reach admission "
@@ -116,6 +132,14 @@ A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT: Final = (
     "and read by the learning signal as a contradiction. Nothing the person says the right "
     "answer is gets kept, because a chat box that could write facts would be a write path into "
     "the company's knowledge with no review, no scope and no provenance."
+)
+
+#: Why the re-ask is decided where the exchange is written, and nothing is copied to decide it.
+A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE: Final = (
+    "Whether a question asks an earlier one again needs both questions, and the one place both "
+    "already exist is the thread. So the comparison is made as the exchange is written, in the "
+    "asker's own session, and what is kept is a signal naming the earlier answer by its message "
+    "and never either question; the log never holds what it was shown to decide."
 )
 
 # ------------------------------------------------------------------------ the figures
@@ -174,17 +198,105 @@ class Exchange:
 
     `refs` is what the answer drew on, or None when that was not recorded, which is stored so the
     answer is never shown again; see `AN_ANSWER_WHOSE_SOURCES_ARE_UNKNOWN_IS_NEVER_SHOWN_AGAIN`.
+    `agent_id`, `trace_id` and `state` are the run behind the answer (`0192`): the stored agent
+    that answered or empty for the asker's own reach, the request's trace, and how it ended.
     """
 
     question: str
     answer: str
     refs: tuple[RecordRef, ...] | None
+    #: Whether the person was told their question was handed to a person (M8.3.1), which is the
+    #: learning signal `brain.memory.signals.Signal.ESCALATED` about this answer.
+    escalated: bool = False
+    agent_id: str = ""
+    trace_id: str = ""
+    state: RunState = RunState.ANSWERED
+
+    def __post_init__(self) -> None:
+        if self.state is RunState.FAILED and (self.answer or self.refs is not None):
+            msg = FAILED_RUN_SHOWS_NOTHING
+            raise ValueError(msg)
+
+
+def failed_exchange(question: str, *, agent_id: str, trace_id: str) -> Exchange:
+    """The question of a run that failed, and a turn saying so with nothing in it.
+
+    See `FAILED_RUN_SHOWS_NOTHING`. Its references are unrecorded, so a reader that ignored the
+    state would still never show it.
+    """
+    return Exchange(
+        question=question,
+        answer="",
+        refs=None,
+        agent_id=agent_id,
+        trace_id=trace_id,
+        state=RunState.FAILED,
+    )
 
 
 def _title(question: str) -> str:
     """A thread's title: its first question, on one line, cut to the column."""
     one_line = " ".join(question.split())
     return one_line[:TITLE_CHARS]
+
+
+async def _reasked(
+    session: AsyncSession, held: uuid.UUID, question: str, now: datetime
+) -> uuid.UUID | None:
+    """The earlier answer in this thread that `question` asks again, or None.
+
+    The latest answer and the question it answered, read in the asker's own session, and the
+    verdict `brain.memory.signals.is_reask`'s: the same subject again, in different words, inside
+    its window from the answer. See `A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`.
+    """
+    latest = (
+        await session.execute(
+            sa.select(MessageRow.id, MessageRow.created_at)
+            .where(
+                MessageRow.conversation_id == held,
+                MessageRow.role == MessageRole.ASSISTANT.value,
+            )
+            .order_by(MessageRow.created_at.desc(), MessageRow.id.desc())
+            .limit(1)
+        )
+    ).first()
+    if latest is None:
+        return None
+    answer_id, answered_at = latest
+    earlier = (
+        await session.execute(
+            sa.select(MessageRow.body)
+            .where(
+                MessageRow.conversation_id == held,
+                MessageRow.role == MessageRole.USER.value,
+                MessageRow.created_at <= answered_at,
+            )
+            .order_by(MessageRow.created_at.desc(), MessageRow.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if earlier is None or not is_reask(earlier, question, apart=now - answered_at):
+        return None
+    return uuid.UUID(str(answer_id))
+
+
+async def _answer_at(
+    session: AsyncSession, held: uuid.UUID, answered_at: datetime
+) -> uuid.UUID | None:
+    """The answer in this thread written at `answered_at`, which is the one a correction names."""
+    found = (
+        await session.execute(
+            sa.select(MessageRow.id)
+            .where(
+                MessageRow.conversation_id == held,
+                MessageRow.role == MessageRole.ASSISTANT.value,
+                MessageRow.created_at == answered_at,
+            )
+            .order_by(MessageRow.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return None if found is None else uuid.UUID(str(found))
 
 
 class StoredThreads:
@@ -210,16 +322,27 @@ class StoredThreads:
 
         The id the exchange was written under, which is the one to continue with. See
         `AN_ID_THAT_IS_NOT_YOURS_STARTS_A_NEW_THREAD`.
+
+        The learning signals this exchange is evidence of are written beside it, in the same
+        transaction and in this person's name: the earlier answer it re-asks, when it re-asks one,
+        and this answer handed to a person, when it was. See
+        `A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`.
+        The signals name the exchange's own `trace_id`, the request it was answered on.
         """
         wanted = parsed_thread_id(thread_id)
         async with self._sessions() as session, session.begin():
             await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
             held = await self._own(session, wanted)
+            reasked = None
             if held is None:
                 held = await self._opened(session, principal_id, wanted, exchange.question)
+            else:
+                reasked = await _reasked(session, held, exchange.question, now)
             refs = list(UNREADABLE_REFS) if exchange.refs is None else refs_as_json(exchange.refs)
-            await session.execute(
-                sa.insert(MessageRow),
+            written = await session.execute(
+                sa.insert(MessageRow).returning(
+                    MessageRow.id, MessageRow.role, sort_by_parameter_order=True
+                ),
                 [
                     {
                         "conversation_id": held,
@@ -235,10 +358,31 @@ class StoredThreads:
                         "channel": channel.value,
                         "body": exchange.answer,
                         "refs": refs,
+                        "agent_id": exchange.agent_id or None,
+                        "trace_id": exchange.trace_id or None,
+                        "run_state": exchange.state.value,
                         "created_at": now + ANSWER_AFTER_QUESTION,
                     },
                 ],
             )
+            answer = next(one for one, role in written.all() if role == MessageRole.ASSISTANT.value)
+            noticing: list[tuple[Signal, uuid.UUID]] = []
+            if reasked is not None:
+                noticing.append((Signal.REASKED, reasked))
+            if exchange.escalated:
+                noticing.append((Signal.ESCALATED, answer))
+            for signal, about in noticing:
+                await noticed(
+                    session,
+                    Observation(
+                        signal=signal,
+                        conversation_id=str(held),
+                        message_id=str(about),
+                        principal_id=principal_id,
+                        at=now,
+                    ),
+                    trace_id=exchange.trace_id or None,
+                )
         return str(held)
 
     async def _own(self, session: AsyncSession, wanted: uuid.UUID | None) -> uuid.UUID | None:
@@ -308,7 +452,13 @@ class StoredThreads:
         return str(held)
 
     async def correct(
-        self, principal_id: str, thread_id: str, kind: CorrectionKind, *, now: datetime
+        self,
+        principal_id: str,
+        thread_id: str,
+        kind: CorrectionKind,
+        *,
+        now: datetime,
+        trace_id: str | None = None,
     ) -> Correction | None:
         """Mark the latest answer in one of this person's threads as wrong (M9.2.4).
 
@@ -317,6 +467,9 @@ class StoredThreads:
         agent and references off the answer itself, and it is kept as a system note in the
         thread naming its kind and nothing the person said about it. See
         `A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`.
+
+        And it is written to the learning signal as a contradiction of the answer it corrects,
+        naming that answer's message, in the same transaction as the note (M16.2.3, M16.2.8).
         """
         found = await self.thread(principal_id, thread_id)
         if found is None:
@@ -325,7 +478,8 @@ class StoredThreads:
             correction = record_correction(as_turns(found), kind, principal_id=principal_id, at=now)
         except ValueError:
             return None
-        wanted = parsed_thread_id(found.thread_id)
+        # A thread read back from the table: its id is the conversation's own UUID.
+        wanted = uuid.UUID(found.thread_id)
         async with self._sessions() as session, session.begin():
             await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
             await session.execute(
@@ -338,6 +492,19 @@ class StoredThreads:
                     created_at=now,
                 )
             )
+            corrected = await _answer_at(session, wanted, correction.answer_at)
+            if corrected is not None:
+                await noticed(
+                    session,
+                    Observation(
+                        signal=Signal.CONTRADICTED,
+                        conversation_id=str(wanted),
+                        message_id=str(corrected),
+                        principal_id=principal_id,
+                        at=now,
+                    ),
+                    trace_id=trace_id,
+                )
         return correction
 
     async def corrections(self, principal_id: str) -> tuple[Observation, ...]:
@@ -389,6 +556,46 @@ class StoredThreads:
                         sa.select(ConversationRow.id)
                         .join(latest, latest.c.conversation_id == ConversationRow.id)
                         .where(ConversationRow.principal_id == principal_id)
+                        .order_by(latest.c.at.desc(), ConversationRow.id)
+                        .limit(max(1, min(limit, MOST_THREADS)))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return await self._loaded(session, principal_id, list(ids))
+
+    async def threads_with_agent(
+        self, principal_id: str, agent_id: str, *, limit: int = MOST_THREADS
+    ) -> tuple[Thread, ...]:
+        """This person's threads an agent answered in, most recently used first (M39.8.9).
+
+        The person's own and nobody else's, for the reason `threads` gives: `app.principal_id`
+        names them first and row-level security shows only their conversations. An agent is in a
+        thread when one of its answers is, which `0192` records on the answer.
+        """
+        async with self._sessions() as session, session.begin():
+            await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
+            latest = (
+                sa.select(
+                    MessageRow.conversation_id, sa.func.max(MessageRow.created_at).label("at")
+                )
+                .group_by(MessageRow.conversation_id)
+                .subquery()
+            )
+            answered = sa.exists(
+                sa.select(MessageRow.id).where(
+                    MessageRow.conversation_id == ConversationRow.id,
+                    MessageRow.role == MessageRole.ASSISTANT.value,
+                    MessageRow.agent_id == agent_id,
+                )
+            )
+            ids = (
+                (
+                    await session.execute(
+                        sa.select(ConversationRow.id)
+                        .join(latest, latest.c.conversation_id == ConversationRow.id)
+                        .where(ConversationRow.principal_id == principal_id, answered)
                         .order_by(latest.c.at.desc(), ConversationRow.id)
                         .limit(max(1, min(limit, MOST_THREADS)))
                     )
@@ -499,12 +706,19 @@ def _message_of(row: MessageRow) -> ThreadMessage:
         # read back as the API's is never shown again, which is the direction to fail in.
         channel = Channel.API
     raw: Any = row.refs
+    try:
+        state = None if row.run_state is None else RunState(row.run_state)
+    except ValueError:
+        # A state this build does not know is read as not recorded, never as answered.
+        state = None
     return ThreadMessage(
         role=MessageRole(row.role),
         at=row.created_at,
         channel=channel,
         body=row.body,
         refs=refs_from_json(raw),
+        agent_id=row.agent_id or "",
+        run_state=state,
     )
 
 

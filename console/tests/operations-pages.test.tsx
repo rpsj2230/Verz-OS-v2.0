@@ -13,7 +13,7 @@
  * that nothing looked at is a sentence and never an empty table; and every field a page reads is one
  * the Python model declares, read out of the Python source rather than out of this console.
  *
- * Task ids: M27.8.13, M27.15.47, M27.15.48, M27.16.1
+ * Task ids: M27.8.13, M27.15.47, M27.15.48, M27.16.1, M27.9.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -36,6 +36,7 @@ import {
 } from "../src/pages/operations/LimitsPage";
 import { CHANGE_LIMIT, KEEP_LIMIT, SAVE_LIMIT, TUNING_HEADING } from "../src/pages/tuningQuery";
 import { NOTHING_RECORDED } from "../src/pages/operations/ArtifactsPage";
+import { NOTHING_DEGRADED } from "../src/pages/operations/IncidentsPage";
 import { EXPORT_LABEL, KEEP_LABEL, NOT_A_WINDOW, NOT_EXPORTABLE } from "../src/pages/operations/DataTransferPage";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./support/navigation";
@@ -48,6 +49,7 @@ const CONSOLE_ORIGIN = "https://console.test";
 const JOBS_ROUTES = "src/brain/jobs_routes.py";
 const INSTALL_ROUTES = "src/brain/install_routes.py";
 const TUNING_ROUTES = "src/brain/tuning_routes.py";
+const INCIDENT_ROUTES = "src/brain/incident_routes.py";
 
 beforeAll(async () => {
   installRadixStubs();
@@ -757,6 +759,44 @@ describe("Storage", () => {
     expect(text).toContain(NOT_RECORDED);
     expect(container.querySelector(`[title="NOT-COUNTED-BECAUSE"]`)).not.toBeNull();
     expect(text).toContain("The address set for the store is not one this page can show.");
+  });
+
+  test("Incidents lists each degraded source with what stops working, or the API's sentence when it cannot say", async () => {
+    // What breaks if this is deleted: a source that is down drawn with an empty cell beside it,
+    // or the tools it takes with it left off the one screen that exists to name them.
+    const body = {
+      items: [
+        {
+          subject: "xero",
+          state: "down",
+          since: "2019-03-06T09:00:00Z",
+          blocks: ["xero.list_invoices", "xero.get_invoice"],
+          blocks_unknown: "",
+        },
+        { subject: "laravel", state: "degraded", since: "2019-03-06T09:00:00Z", blocks: [], blocks_unknown: "BLOCKS-UNKNOWN-SENTENCE" },
+      ],
+      unread: "",
+      told: "TOLD-SENTENCE",
+    };
+    expect(Object.keys(body).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentsView").sort());
+    expect(Object.keys(body.items[0] ?? {}).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentView").sort());
+    const { container } = await open("/incidents", { "GET /api/v1/console/incidents": () => ({ body }) });
+    const text = mainText(container);
+    expect(text).toContain("xero.list_invoices, xero.get_invoice");
+    expect(text).toContain("Not answering");
+    expect(text).toContain("Slow or partly failing");
+    expect(text).toContain("BLOCKS-UNKNOWN-SENTENCE");
+    expect(text).toContain("TOLD-SENTENCE");
+  });
+
+  test("Incidents says what the API could not read rather than that nothing is degraded", async () => {
+    // What breaks if this is deleted: a process that looked at nothing drawn as an install where
+    // every source is answering, which is the reassuring answer and a false one.
+    const body = { items: [], unread: "UNREAD-SENTENCE", told: "TOLD" };
+    const { container } = await open("/incidents", { "GET /api/v1/console/incidents": () => ({ body }) });
+    const text = mainText(container);
+    expect(text).toContain("UNREAD-SENTENCE");
+    expect(text).not.toContain(NOTHING_DEGRADED);
   });
 
 });

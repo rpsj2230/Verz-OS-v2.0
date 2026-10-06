@@ -365,6 +365,25 @@ def currency(env: Mapping[str, str] | None = None) -> str:
     return code
 
 
+#: The code a money figure is sent with when the install's currency does not resolve. See
+#: `A_VISIBLY_UNSET_UNIT_BEATS_A_PLAUSIBLY_WRONG_ONE`.
+NO_CURRENCY_CODE: Final = "XXX"
+
+
+def currency_or_unset(env: Mapping[str, str] | None = None) -> str:
+    """`currency`, or `NO_CURRENCY_CODE` when the setting does not resolve.
+
+    For a figure that is served either way: a route answering a ceiling or a spend does not refuse
+    the reader because the install's currency is misspelled, it says the unit is unset, which is
+    the same `XXX` the reports send. A route that would write money in that unit refuses instead,
+    as setting a price does.
+    """
+    try:
+        return currency(env)
+    except LocaleError:
+        return NO_CURRENCY_CODE
+
+
 def time_zone(env: Mapping[str, str] | None = None) -> ZoneInfo:
     """The zone a timestamp with no reader attached is rendered in.
 

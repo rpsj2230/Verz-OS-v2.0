@@ -42,7 +42,7 @@ from brain.gate.finish import Finished, Origin
 from brain.gate.streaming import Event, frames
 from brain.knowledge.columns import ColumnRule, TableClassification
 from brain.knowledge.rows import RowQuery, RowTool
-from brain.ops.live_records import SourceRecords
+from brain.ops.live_records import FIELD_LOST_AT_THE_SOURCE, SourceRecords
 from brain.ops.telemetry import RequestStatus, status_of_finished
 from brain.tools import startup
 from brain.tools.startup import build_registry
@@ -425,3 +425,55 @@ def test_the_policy_is_the_sources_own_first_and_the_entitys_only_where_the_sour
         other
     )
     assert answer_module.policy_for(found, {}, None) is None
+
+
+# ------------------------------------------------------------- a field the source lost (M11.8.7)
+def live_with_lost(ledger: Ledger, lost: Mapping[str, frozenset[str]]) -> SourceRecords:
+    async def connected() -> Connected:
+        return Connected(ledger)
+
+    async def found() -> Mapping[str, frozenset[str]]:
+        return lost
+
+    return SourceRecords(
+        connected=connected, throttle=LiveThrottle(), clock=lambda: NOW, lost=found
+    )
+
+
+def test_a_source_whose_newest_read_lost_a_field_is_answered_as_degraded_and_not_read() -> None:
+    """**A_SOURCE_THAT_LOST_A_FIELD_IS_ANSWERED_AS_DEGRADED.** Xero's newest read found the
+    invoice's status gone: the invoice is not read, the asker who sees Xero is told it could not be
+    reached, the request is degraded, and the trace names the reason and never the field. Delete
+    this and a renamed field is answered as empty on every record, which reads as a true answer."""
+    ledger = Ledger()
+    recorder = Recorder()
+
+    answered = ask(
+        live=live_with_lost(ledger, {"xero": frozenset({"invoice.status"})}), recorder=recorder
+    )
+
+    (said,) = texts(answered)
+    assert "xero" in said
+    assert ledger.calls == []
+    assert answered.partial is not None
+    assert answered.partial.trace_lines() == (f"xero: shape_changed ({FIELD_LOST_AT_THE_SOURCE})",)
+    assert "status" not in FIELD_LOST_AT_THE_SOURCE
+    assert status_of_finished(recorder.seen[0]) is RequestStatus.DEGRADED
+
+
+def test_a_field_lost_on_another_entity_or_source_leaves_this_answer_alone() -> None:
+    """The positive sibling: a contact's lost field, or another source's, does not stop the
+    invoice being read and answered. Delete this and one lost field degrades every question about
+    every source, which is the check refusing everything."""
+    ledger = Ledger()
+
+    answered = ask(
+        live=live_with_lost(
+            ledger,
+            {"xero": frozenset({"contact.name"}), "freshdesk": frozenset({"invoice.status"})},
+        )
+    )
+
+    assert answered.abstention is None
+    assert texts(answered)[0].startswith("4,180.00")
+    assert len(ledger.calls) == 1

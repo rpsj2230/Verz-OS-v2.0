@@ -47,6 +47,7 @@ import {
 import { Skeleton } from "../../components/ui/skeleton";
 import { CONNECTORS_API_PATH, CONNECTORS_LABEL, type Connectors as ConnectorsBody } from "../connectorsQuery";
 import { LARK_API_PATH, type LarkGuide } from "../larkConnectQuery";
+import { CUSTOM_HEADING as ADD_AN_API } from "./CustomConnectorsPage";
 import { ACT_LABELS } from "./connectorActions";
 import {
   CONNECT_FROM_WORDS,
@@ -332,17 +333,22 @@ export function ConnectorsPage() {
           </Button>
         }
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-h-11 sm:min-h-8"
-            onClick={() => {
-              setTold(null);
-              setOpen({ act: "lark", start: larkConnected ? { at: "choose" } : undefined });
-            }}
-          >
-            {larkConnected ? ACT_LABELS.addLarkUse : ACT_LABELS.connectLark}
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-8"
+              onClick={() => {
+                setTold(null);
+                setOpen({ act: "lark", start: larkConnected ? { at: "choose" } : undefined });
+              }}
+            >
+              {larkConnected ? ACT_LABELS.addLarkUse : ACT_LABELS.connectLark}
+            </Button>
+            <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-8">
+              <Link to="/connectors/new-api">{ADD_AN_API}</Link>
+            </Button>
+          </>
         }
         notice={
           <>

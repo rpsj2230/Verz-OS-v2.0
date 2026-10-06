@@ -331,9 +331,9 @@ def test_the_card_shows_the_writes_that_wait_and_never_the_capability() -> None:
     shown = card(suspension, an_approver(), NOW)
 
     assert shown is not None
-    assert "writes: filing submit x1" in shown.artefact
-    assert f"origins: {ORIGIN}" in shown.artefact
-    assert WRITE.value not in shown.artefact
+    assert "writes: filing submit x1" in shown.request.text
+    assert f"origins: {ORIGIN}" in shown.request.text
+    assert WRITE.value not in shown.request.text
     assert shown.runs_as == "alex"
     assert suspension.expires_at == NOW + DEFAULT_APPROVAL_WINDOW
 
