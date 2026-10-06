@@ -17,6 +17,13 @@ queue the governance staff then have to read.
 appointment's separation-of-duties sentence is said to a confirmer exactly as it is said to an
 appointer: only once they have shown the authority to make the grant.
 
+**A nominee is named only to a reader who may name them, and existing is never said.** The
+nominee is a value (`brain.tables.role_nomination`), so a nomination of an id nobody holds is
+written exactly as one of a colleague, and the listing shows a name only where
+`brain.console.organisation.nameable` admits the nominee, which is the People screen's own rule.
+An id that names nobody and a person the reader may not name both come back nameless. See
+`A_NOMINATION_SAYS_NOTHING_ABOUT_WHETHER_ITS_NOMINEE_EXISTS`.
+
 **One refusal for everything else.** A nomination that does not exist, one already decided, one
 the reader may not decide and a scope gone since are one answer, `_no_nomination_here`, so the
 queue's address answers nothing about what else is in it. The listing is the nominations the
@@ -41,6 +48,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.attribution import trace_of_request
 from brain.console.global_surfaces import GlobalSurfaceError, Nomination, confirm, may_confirm
+from brain.console.organisation import Member, nameable
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
@@ -62,6 +70,13 @@ A_NOMINATION_IS_A_PROPOSAL_ANYBODY_ON_THE_ROLES_SCREEN_MAY_MAKE: Final = (
     "holds that authority appoints directly, and a nomination is for the person who cannot. The "
     "Roles screen's read is asked, so the proposals come from people who can see the roles they "
     "are proposing somebody for."
+)
+
+#: Why a nomination's answer is the same whether or not its nominee exists.
+A_NOMINATION_SAYS_NOTHING_ABOUT_WHETHER_ITS_NOMINEE_EXISTS: Final = (
+    "A nomination is written whether or not its nominee id names anybody, with the same answer, "
+    "and the listing names a nominee only to a reader the People screen would show them to, so "
+    "nominating an id is never a way to learn whether a person exists or what they are called."
 )
 
 #: What a person nominating themselves is told. The refusal is the constructor's
@@ -180,6 +195,21 @@ def nomination_of(row: RoleNominationRow, scope: Scope | None = None) -> Nominat
         return None
 
 
+def _named(
+    row: RoleNominationRow, department: str | None, name: str | None, asked: Asking
+) -> str | None:
+    """The nominee's name where this reader may be shown them, and None for anybody else.
+
+    See `A_NOMINATION_SAYS_NOTHING_ABOUT_WHETHER_ITS_NOMINEE_EXISTS`.
+    """
+    if name is None:
+        return None
+    member = Member(
+        principal_id=row.principal_id, display_name=name, department=department, disabled=False
+    )
+    return name if nameable([member], asked.reach, asked.now) else None
+
+
 def view_of(row: RoleNominationRow, display_name: str | None) -> NominationView:
     return NominationView(
         id=str(row.id),
@@ -207,8 +237,9 @@ async def listed_nominations(request: Request, asked: Asked) -> NominationsPage:
     deciding: list[NominationView] = []
     mine: list[NominationView] = []
     for row, department, name in await _store(request).listed():
+        named = _named(row, department, name, asked)
         if row.nominated_by == caller:
-            mine.append(view_of(row, name))
+            mine.append(view_of(row, named))
             continue
         nomination = nomination_of(row)
         if (
@@ -216,7 +247,7 @@ async def listed_nominations(request: Request, asked: Asked) -> NominationsPage:
             and nomination is not None
             and may_confirm(nomination, asked.reach, _where(department), asked.now)
         ):
-            deciding.append(view_of(row, name))
+            deciding.append(view_of(row, named))
     return NominationsPage(deciding=tuple(deciding), mine=tuple(mine))
 
 
