@@ -726,6 +726,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    # No vault answers here, so the Credentials screen offers no write;
+    # `tests/unit/test_acceptance_operations_console_5.py` answers with one holding every slot.
+    assert outcomes.pop("every_slot_is_listed_and_written_from_the_screen_never_read_back") == (
+        NOT_RUN,
+        acceptance_operations_console_5.THE_SCREEN_OFFERS_NO_WRITE_HERE,
+    )
     # No optional service is switched on here; `tests/unit/test_acceptance_services.py` switches
     # each on and answers for it.
     assert outcomes.pop("the_detector_finds_every_entity_the_scrub_relies_on_it_for") == (
