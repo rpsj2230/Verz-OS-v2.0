@@ -34,6 +34,7 @@ from brain.ops import (
     acceptance_checks_class_pools,
     acceptance_checks_recovery,
     acceptance_checks_services,
+    acceptance_operations_console,
     acceptance_people_console_2,
     acceptance_run,
 )
@@ -600,6 +601,13 @@ WRITTEN_BY_CHECKS = (
     "agent.learning_pause",
     "ops.operation",
     "ops.budget_version",
+    "gate.role_grant",
+    "auth.staff_member",
+    "agent.manifest_draft",
+    "agent.manifest_revision",
+    "agent.manifest_act",
+    "gate.elevation_request",
+    "gate.break_glass_notice",
     # A Lark Base indexed by a check offers its table's grants on the grants screen.
     "gate.capability_registry",
     "gate.capability_pack",
@@ -674,6 +682,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # `tests/unit/test_acceptance_templates.py` signs the catalogue on and runs it.
     assert outcomes.pop("every_built_in_template_is_on_file_and_installs_at_shadow")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
+    assert outcomes.pop("rate_limits_and_capacity_answer_their_readers")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
@@ -762,10 +771,14 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # Nothing started the application against this database, so nothing furnished it;
+    # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
+    assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (
+        NOT_RUN,
+        acceptance_operations_console.NOTHING_HAS_FURNISHED_THIS_DATABASE,
     # Nobody here has opened a console session with a second factor, so the realm's half is not
     # run; `tests/unit/test_acceptance_people_console_2.py` records one and it passes.
     assert outcomes.pop("a_second_factor_reported_by_the_realm_admits_administration") == (
-        NOT_RUN,
         acceptance_people_console_2.NOBODY_HAS_SIGNED_IN_WITH_AN_AUTHENTICATOR,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
