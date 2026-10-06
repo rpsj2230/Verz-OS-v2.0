@@ -84,6 +84,7 @@ sed -n 's/^SAY /overlays: /p' "$planned"
 # Each overlay's lines, kept only when its preparation succeeded.
 files=""
 waits=""
+afters=""
 joins="$(mktemp)"
 trap 'rm -f "$facts" "$planned" "$joins"' EXIT
 current=""
@@ -103,6 +104,7 @@ while IFS= read -r line; do
     "FILE "*) [ -n "$skipped" ] || files="$files -f $HERE/${line#FILE }" ;;
     "JOIN "*) [ -n "$skipped" ] || echo "$line" >> "$joins" ;;
     "WAIT "*) [ -n "$skipped" ] || waits="$waits ${line#WAIT }" ;;
+    "AFTER "*) [ -n "$skipped" ] || afters="$afters ${line#AFTER }" ;;
   esac
 done < "$planned"
 
@@ -162,6 +164,14 @@ docker compose -p "$overlays" $envfile $files up -d --wait --wait-timeout 300 $w
 if [ "$code" -ne 0 ]; then
   say "a service did not report healthy within five minutes; docker compose -p $overlays ps says which"
 fi
+
+# What the application must be handed from the server once the services run, such as keys
+# minted here. A failure is said and changes nothing that runs.
+for after in $afters; do
+  if ! BRAIN_OVERLAYS_ENV="$ENV_FILE" BRAIN_APP_CONTAINER="$APP" sh "$HERE/$after" < /dev/null; then
+    say "$after did not finish; it is tried again on the next deploy"
+  fi
+done
 
 docker ps -aq --filter "label=com.docker.compose.project=$overlays" | xargs -r docker inspect \
   --format '{{index .Config.Labels "com.docker.compose.service"}}|{{.HostConfig.Memory}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' |

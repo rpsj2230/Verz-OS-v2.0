@@ -36,6 +36,7 @@ import pytest
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+from brain.core.redaction import LOCK_TEXT
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import Channel
 from brain.gate.injection import AutonomyTier, RiskAssessment
@@ -182,36 +183,23 @@ class Executor:
 
 
 # ------------------------------------------- M40.6.1.1 what will happen, stated before
-def test_an_envelope_shows_the_artefact_that_was_stored_and_never_a_new_one() -> None:
-    """**The claim `brain.gate.leash` makes about its own artefact, kept on this surface.** An
-    approval of a re-rendered artefact is an approval of something nobody read.
-
-    Delete this and the member surface can call `render_artefact` again, which agrees with
-    itself in every test and disagrees with the approval the moment a stored action has been
-    edited."""
+def test_an_envelope_shows_the_action_at_its_reader_s_reach_and_never_the_stored_artefact() -> None:
+    """**M33.8.1 on the member surface.** The person it waits on may change the status and not
+    read it, so the envelope locks the status, is rendered for them at their reach, and is not the
+    requester's artefact. Delete this and the envelope can go back to carrying the stored
+    artefact, which it refused to carry anything but until 2026-10-06."""
     waiting = suspension()
 
-    envelope = envelope_for(waiting)
+    envelope = envelope_for(waiting, APPROVER, NOW)
 
-    assert envelope.what_will_happen == waiting.artefact
-    assert "status: closed" in envelope.what_will_happen
+    assert envelope.what_will_happen.text != waiting.artefact
+    assert f"status: {LOCK_TEXT}" in envelope.what_will_happen.text
+    assert "closed" not in envelope.what_will_happen.text
+    assert (envelope.what_will_happen.rendered_for, envelope.what_will_happen.ent_hash) == (
+        APPROVER.principal_id,
+        APPROVER.ent_hash(),
+    )
     assert envelope.expires_at == waiting.expires_at
-
-
-def test_an_envelope_showing_anything_but_the_stored_artefact_is_refused() -> None:
-    """The guard, reached by constructing the disagreement rather than by trusting the
-    constructor above never to produce it. A row loaded from a table has been through no
-    constructor of ours.
-
-    Delete this and `Envelope` can be built from a re-rendered string with nothing failing."""
-    waiting = suspension()
-
-    with pytest.raises(ValueError, match="other than the artefact"):
-        Envelope(
-            suspension=waiting,
-            what_will_happen=waiting.artefact + " (tidied up)",
-            effect=effect_sentence(SideEffect.WRITE),
-        )
 
 
 def test_an_envelope_describing_the_wrong_effect_is_refused() -> None:
@@ -225,7 +213,7 @@ def test_an_envelope_describing_the_wrong_effect_is_refused() -> None:
     with pytest.raises(ValueError, match="not the consequence of the action"):
         Envelope(
             suspension=waiting,
-            what_will_happen=waiting.artefact,
+            what_will_happen=envelope_for(waiting, APPROVER, NOW).what_will_happen,
             effect=effect_sentence(SideEffect.NONE),
         )
 
@@ -243,7 +231,7 @@ def test_an_envelope_with_no_stated_consequence_of_not_answering_is_refused() ->
     with pytest.raises(ValueError, match="reads as a threat"):
         Envelope(
             suspension=waiting,
-            what_will_happen=waiting.artefact,
+            what_will_happen=envelope_for(waiting, APPROVER, NOW).what_will_happen,
             effect=effect_sentence(SideEffect.WRITE),
             if_nothing_happens=" ",
         )
@@ -627,13 +615,11 @@ def test_the_diagnostic_reports_an_envelope_that_shows_the_wrong_thing() -> None
 
     Delete this and the diagnostic only ever runs on inputs a constructor already vetted,
     where switching off its checks changes nothing observable."""
-    envelope = envelope_for(suspension())
-    object.__setattr__(envelope, "what_will_happen", "something else entirely")
+    envelope = envelope_for(suspension(), APPROVER, NOW)
     object.__setattr__(envelope, "if_nothing_happens", " ")
 
     found = approvals_gaps((envelope,))
 
-    assert any("other than the stored" in one for one in found)
     assert any("states no consequence" in one for one in found)
 
 
@@ -642,7 +628,7 @@ def test_the_diagnostic_is_quiet_about_an_envelope_the_constructor_built() -> No
     everything and the deployment check becomes noise.
 
     Delete this and `approvals_gaps` can complain about correct envelopes."""
-    assert approvals_gaps((envelope_for(suspension()),)) == ()
+    assert approvals_gaps((envelope_for(suspension(), APPROVER, NOW),)) == ()
 
 
 def test_the_diagnostic_reports_a_side_effect_with_no_sentence_behind_it() -> None:
