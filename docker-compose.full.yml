@@ -410,18 +410,30 @@ services:
   keycloak-build:
     image: quay.io/keycloak/keycloak:26.0
     restart: 'no'
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+      keycloak-realm:
+        condition: service_completed_successfully
     entrypoint:
     - /bin/bash
     - -c
     command:
-    - "set -eu\nmarker=/opt/keycloak/lib/quarkus/brain-build.txt\nbuilt_for=\"$$(ls /opt/keycloak/lib/lib/main | sha256sum | cut -d' ' -f1) KC_DB=$$KC_DB KC_HEALTH_ENABLED=$$KC_HEALTH_ENABLED KC_VAULT=$$KC_VAULT\"\nif [ -f \"$$marker\" ] && [ \"$$(cat \"$$marker\")\" = \"$$built_for\" ]; then\n  echo \"keycloak-build: already built for this distribution and these options\"\n  exit 0\nfi\n/opt/keycloak/bin/kc.sh build\nprintf '%s' \"$$built_for\" > \"$$marker\"\n# The most this container held, from its own cgroup, so the limit below is checked\n# against a measurement on every build rather than once.\necho \"keycloak-build: built, peak $$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown) bytes\"\n"
+    - "set -eu\nmarker=/opt/keycloak/lib/quarkus/brain-build.txt\nbuilt_for=\"$$(ls /opt/keycloak/lib/lib/main | sha256sum | cut -d' ' -f1) KC_DB=$$KC_DB KC_HEALTH_ENABLED=$$KC_HEALTH_ENABLED KC_VAULT=$$KC_VAULT\"\nif [ -f \"$$marker\" ] && [ \"$$(cat \"$$marker\")\" = \"$$built_for\" ]; then\n  echo \"keycloak-build: already built for this distribution and these options\"\n  exit 0\nfi\n/opt/keycloak/bin/kc.sh build\n/opt/keycloak/bin/kc.sh import --optimized --dir /opt/keycloak/data/import --override false\nprintf '%s' \"$$built_for\" > \"$$marker\"\n# The most this container held, from its own cgroup, so the limit below is checked\n# against a measurement on every run rather than once.\necho \"keycloak-build: built and imported, peak $$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown) bytes\"\n"
     environment:
       KC_DB: postgres
       KC_HEALTH_ENABLED: 'true'
       KC_VAULT: file
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+      KC_VAULT_DIR: /opt/keycloak/vault
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:?set KEYCLOAK_HOSTNAME}
       JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40
     volumes:
     - keycloak-build:/opt/keycloak/lib/quarkus
+    - realm-import:/opt/keycloak/data/import:ro
+    - keycloak-vault:/opt/keycloak/vault:ro
     networks:
     - identity
     deploy:
