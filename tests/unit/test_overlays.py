@@ -10,7 +10,7 @@ the same `read_host` the server runs. The deploy hook that copies the script out
 Every date and figure here is a fixture of a host that does not exist, chosen so the arithmetic is
 easy to follow: an 8,192 MiB machine, never the owner's.
 
-Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M12.4.5
 """
 
 from __future__ import annotations
@@ -40,8 +40,10 @@ from brain.ops.overlays import (
     observation,
     plan,
     read_host,
+    read_runtimes,
     read_seen,
     render,
+    runtimes_in,
     seen_in,
     services_problem,
     switched_on,
@@ -1088,3 +1090,120 @@ def test_keys_that_cannot_be_handed_or_kept_are_said_and_exit_non_zero(
     that was handed them."""
     code, said, _, _ = hand(tmp_path, env=env, keep_exit=keep_exit)
     assert code == 1, said
+
+
+# ------------------------------------------------------------------------ the script sandbox
+SANDBOX = BY_NAME["sandbox"]
+
+
+def _with_runtimes(available: int, runtimes: frozenset[str]) -> Host:
+    return Host(
+        total_mib=available + HOST_RESERVE_MIB,
+        reserved_mib=0,
+        unlimited_used_mib=0,
+        runtimes=runtimes,
+    )
+
+
+def test_the_sandbox_starts_only_where_the_server_s_docker_has_gvisor() -> None:
+    """`AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED`, both sides, with memory to spare in each. Delete
+    this and a server without gVisor starts the sandbox on docker's own runtime, which runs a
+    stranger's code against the host's kernel."""
+    room = SANDBOX.cost_mib * 4
+    without = plan((SANDBOX,), _with_runtimes(room, frozenset({"runc"})))
+    with_it = plan((SANDBOX,), _with_runtimes(room, frozenset({"runc", "runsc"})))
+
+    assert without.start == ()
+    [(refused, reason)] = without.refused
+    assert refused is SANDBOX
+    assert "needs the runsc runtime" in reason
+    assert with_it.start == (SANDBOX,)
+
+
+def test_the_server_s_runtimes_are_read_from_its_facts_and_default_to_docker_s_own() -> None:
+    """Delete this and a runtimes section the planner cannot read refuses the sandbox on a server
+    that has gVisor, or a server that never said is taken to have it."""
+    facts = [*FACTS.splitlines(), "## runtimes", "io.containerd.runc.v2", "runc", "runsc"]
+    assert read_host(facts, project="u-overlays").runtimes == frozenset(
+        {"io.containerd.runc.v2", "runc", "runsc"}
+    )
+    assert read_host(FACTS.splitlines(), project="u-overlays").runtimes == frozenset({"runc"})
+
+
+def test_the_step_s_report_carries_each_container_s_runtime_and_the_server_s() -> None:
+    """The install check reads both. Delete this and it cannot tell a sandbox under gVisor from one
+    that is not."""
+    lines = [
+        "runtime|runc",
+        "runtime|runsc",
+        f"script-sandbox|{64 * MIB}|running|healthy|runsc",
+    ]
+    kept = observation(read_seen(lines), commit="c1", runtimes=read_runtimes(lines))
+    back = seen_in(kept, commit="c1")
+    assert back is not None and back["script-sandbox"].runtime == "runsc"
+    assert runtimes_in(kept) == frozenset({"runc", "runsc"})
+    assert runtimes_in({"commit": "c1"}) is None
+    assert runtimes_in("nope") is None
+
+
+class _Row:
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+
+@pytest.mark.parametrize(
+    ("value", "report", "said"),
+    [
+        ("presidio", None, False),
+        ("sandbox", None, True),
+        ("sandbox", {"runtimes": ["runc"]}, True),
+        ("presidio,sandbox", {"runtimes": ["runc", "runsc"]}, False),
+    ],
+    ids=["no sandbox asked", "no report yet", "no gVisor reported", "gVisor reported"],
+)
+def test_saving_the_sandbox_is_refused_until_the_server_has_reported_gvisor(
+    monkeypatch: pytest.MonkeyPatch, value: str, report: object, said: bool
+) -> None:
+    """At save, from the deploy step's last report, so the switch is never on where the sandbox
+    cannot start. Delete this and the owner switches on a sandbox the next release silently does
+    not start."""
+    import asyncio
+
+    from brain.ops import setting_store
+    from brain.ops.overlays import OBSERVED_KEY, runtime_problem
+
+    async def held(session: object, namespace: str) -> dict[str, object]:
+        del session
+        assert namespace == "overlay"
+        return {} if report is None else {OBSERVED_KEY: _Row(report)}
+
+    monkeypatch.setattr(setting_store, "read_namespace", held)
+    sentence = asyncio.run(runtime_problem(object(), value))  # type: ignore[arg-type]
+    assert bool(sentence) is said
+    if said:
+        assert sentence.startswith("This server cannot run the script sandbox yet")
+
+
+def test_the_sandbox_s_compose_file_is_the_contract_s_service_under_gvisor_with_its_limits() -> (
+    None
+):
+    """Held against the contract's own constants and the budget, not against itself. Delete this
+    and the compose file can name another port than the one the client dials, start the executor
+    with a network, or start either on docker's own runtime."""
+    from brain.ops.sandbox import SANDBOX_PORT, SANDBOX_SERVICE
+
+    raw = yaml.safe_load((REPO / "docker-compose.sandbox.yml").read_text(encoding="utf-8"))
+    front = raw["services"][SANDBOX_SERVICE]
+    executor = raw["services"]["script-sandbox-executor"]
+    assert front["expose"] == [str(SANDBOX_PORT)]
+    assert front["networks"] == ["sandbox"]
+    assert raw["networks"]["sandbox"]["internal"] is True
+    assert executor["network_mode"] == "none"
+    assert "networks" not in executor
+    for body in (front, executor):
+        assert body["runtime"] == "runsc"
+        assert body["read_only"] is True
+        assert body["cap_drop"] == ["ALL"]
+        assert body["command"][:3] == ["python", "-m", "brain.ops.sandbox_runner"]
+    assert front["command"][3:] == ["front", "/jobs"]
+    assert executor["command"][3:] == ["executor", "/jobs", "/work"]

@@ -81,8 +81,8 @@ empty page rather than into the empty actor filter `AuditFilter` reads as everyb
 `ACTIVITY_IN_A_DEPARTMENT_IS_WHAT_ITS_PEOPLE_DID` and
 `NARROWED_TO_NOBODY_IS_AN_EMPTY_PAGE_AND_NEVER_THE_EMPTY_FILTER`. No agent is in this path, so
 `E_run` is not asked: the reach is the reader's own, and it is the one the view was built with.
-**Nothing calls it on a request path yet**, and nothing in `src` reads the directory's members
-for a department to hand it; the caller owes both.
+`brain.company_routes` is the request path, and it reads the department's members off the
+directory's own people read and narrows them to the people this reader may be named.
 
 **M33.1.2.1 asks to publish and retire global agents, and until 2026-09-08 only retiring
 existed.** `brain.agents.lifecycle` held enable, disable, archive and transfer_ownership, and
@@ -100,9 +100,10 @@ agent and never what it reaches: `AUDIENCE_IS_NOT_AUTHORITY` is the distinction,
 that asked for the grant-writing capability here would be asserting the opposite.
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock; `now`
-is a parameter for the reason `brain.ops.limits` gives about policy that owns a client. No
-console screen exists behind any of these, exactly as `brain.console.screens` says of its own
-registry; what is claimed is the disclosure decision, which is the whole content of each.
+is a parameter for the reason `brain.ops.limits` gives about policy that owns a client. The
+estate, all activity and company consumption are read through `brain.company_routes` and drawn
+on the console's company pages; what this module holds is the disclosure decision behind each,
+and the route copies its answer.
 
 Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.1, M33.1.2.2
 Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5, M33.1.1.2
@@ -111,7 +112,7 @@ Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5, M33.1.1.2
 from __future__ import annotations
 
 import enum
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
@@ -120,7 +121,7 @@ from typing import Final
 from brain.agents.lifecycle import AGENT_PUBLICATION_CAPABILITY, PUBLICATION_LEVEL
 from brain.agents.model import AgentRecord
 from brain.audit.ledger import AuditEntry
-from brain.audit.view import DEFAULT_PAGE_SIZE, AuditFilter, AuditPage, AuditView
+from brain.audit.view import DEFAULT_PAGE_SIZE, AuditFilter, AuditPage, AuditRow, AuditView
 from brain.console.govern import Placed
 from brain.console.reads import StewardNotice, permitted, self_grants
 from brain.console.screens import SCREENS, Axis, Lens, screen
@@ -462,6 +463,8 @@ def company_activity(
     criteria: AuditFilter | None = None,
     limit: int = DEFAULT_PAGE_SIZE,
     cursor: str | None = None,
+    newest_first: bool = False,
+    shows: Callable[[AuditRow], bool] | None = None,
 ) -> AuditPage:
     """All activity, narrowed by the estate's department and person filters (M33.1.1.2).
 
@@ -475,6 +478,11 @@ def company_activity(
     Actors named in `criteria` are intersected with the lens rather than replacing it, so a
     caller cannot widen a department page by naming somebody outside it, and an intersection
     of nobody reads as a department where nothing happened.
+
+    `newest_first` and `shows` are `AuditView.page`'s own direction and search, handed through so
+    the company screen walks and searches the ledger exactly as the Audit screen does. The view
+    asks `shows` of a visible row and of nothing else, so a search can only narrow what the lens
+    has already narrowed.
 
     Returns one page with no total, which is `AuditPage`'s own refusal.
     """
@@ -495,6 +503,8 @@ def company_activity(
         ),
         limit=limit,
         cursor=cursor,
+        newest_first=newest_first,
+        shows=shows,
     )
     return AuditPage() if nobody else page
 

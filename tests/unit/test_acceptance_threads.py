@@ -249,7 +249,7 @@ def test_a_follow_up_without_its_thread_s_passages_fails_the_follow_up_check(
     Delete this and M9.2.3 closes on a check that a thread with no memory passes."""
     from brain import api_routes
 
-    async def forgetful(state: Any, asking: Any, ask: Any) -> None:
+    async def forgetful(state: Any, asking: Any, ask: Any, registry: Any = None) -> None:
         return None
 
     monkeypatch.setattr(api_routes, "follow_up_for", forgetful)

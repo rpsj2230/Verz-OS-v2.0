@@ -323,6 +323,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/sign-in-links": {},
   "/service-accounts": {},
   "/audit": {},
+  "/company/activity": {},
   // One subject's page pages, searches, filters and orders the ledger narrowed to that subject.
   "/audit/subject/:kind/:id": {},
   // Its access changes view reads the ledger only for the header's newest entry.
