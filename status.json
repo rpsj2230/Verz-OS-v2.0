@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T06:24:13.126101+00:00",
-  "commit": "f5984cd2",
-  "commit_subject": "The console's reports and long lists get install checks: the landing screen, usage, unanswered questions, the canaries, erasure and a paged list (#365)",
+  "generated_at": "2026-10-06T06:57:48.395696+00:00",
+  "commit": "a363086b",
+  "commit_subject": "A turn's context is assembled in one place for both answer paths, named in the trace, and what a person says for one conversation is kept for it alone (#441)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
