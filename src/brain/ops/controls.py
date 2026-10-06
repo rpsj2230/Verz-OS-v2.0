@@ -633,7 +633,14 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="resolution_calibration",
-        symbols=("brain.resolution.calibration:due", "brain.resolution.calibration:drift"),
+        # Since 2026-10-06 (M14.4.4). The worker's schedule starts `run_calibration_now`, which
+        # fits the install's candidate pairs and keeps the fit as a setting until a reviewer
+        # promotes it on the Possible duplicates screen; `due` is what keeps a run from fitting
+        # twice in one week.
+        symbols=(
+            "brain.resolution.calibration_store:run_calibration_now",
+            "brain.resolution.calibration:due",
+        ),
         guards=(
             "that the weights deciding whether two records are the same person stay fitted "
             "to the data as it is now rather than as it was when they were trained"
@@ -646,7 +653,7 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=CALIBRATION_PERIOD,
         cadence_from="brain.resolution.calibration:CALIBRATION_PERIOD",
         severity=Severity.NOTICED,
-        invoked_by=Invocation.NOTHING,
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="entity_resolution",

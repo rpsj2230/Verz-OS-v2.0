@@ -327,7 +327,7 @@ install's own hour.
 | `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `in_process` |
 | `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
 | `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `in_process` |
-| `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |
+| `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `in_process` |
 | `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `in_process` |
 | `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `in_process` |
 | `evening_digest` | that whoever the install chose hears each evening what the build closed, reopened and left overdue, in the one conversation they chose | `in_process` |
@@ -350,8 +350,9 @@ means no call site of any kind. `in_process` means another module calls it, and 
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
 `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue`,
 `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`,
-`model_health_probes`, `acceptance_run`, `escalation_expiry` and `entity_resolution` it is: the
-general worker ticks the control schedule and starts all fourteen.
+`model_health_probes`, `acceptance_run`, `escalation_expiry`, `entity_resolution` and
+`resolution_calibration` it is: the general worker ticks the control schedule and starts all
+fifteen.
 The token renewal renews the worker's own vault token twice a day once less than half its period
 is left, and the application renews its own from inside its own process on the same rule, because
 a vault token is renewed only by whoever holds it; a `lite` install has no worker and no worker
