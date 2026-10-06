@@ -96,6 +96,10 @@ SAFE_ATTRIBUTES: Final[frozenset[str]] = frozenset(
         "abstained",
         "capability",
         "channel",
+        # Which parts of a turn's context a model was shown, and why the rest were not: part
+        # names and reasons from `brain.gate.turn_context`'s closed vocabulary, never contents.
+        "context_included",
+        "context_left_out",
         "environment",
         "latency_ms",
         "model",

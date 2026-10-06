@@ -18,7 +18,7 @@
  * **Signing in again sends `prompt=login`, and an ordinary sign-in does not**, which is
  * `auth/session.A_STRONGER_SIGN_IN_HAS_TO_ASK_AGAIN`.
  *
- * Task ids: M27.9.2
+ * Task ids: M27.9.2, M27.15.66
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";

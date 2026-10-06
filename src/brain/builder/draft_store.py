@@ -22,7 +22,7 @@ model pin and whether the agent is switched on are the agent's and not its manif
 them is written, except that an agent the install now finds incomplete is switched off, which is
 `brain.agents.install.AN_INCOMPLETE_INSTALL_IS_DISABLED_RATHER_THAN_SELECTABLE` applied to a change.
 
-Task ids: M27.11.6
+Task ids: M27.11.6, M13.7.4
 """
 
 from __future__ import annotations
@@ -147,6 +147,7 @@ def act_of(row: ManifestActRow) -> Act:
         at=row.at,
         widened=row.widened,
         for_department=row.for_department,
+        channels=tuple(row.channels or ()),
     )
 
 
@@ -173,6 +174,7 @@ def act_values(draft_id: str, act: Act) -> dict[str, Any]:
         "actor_id": act.actor_id,
         "widened": act.widened,
         "for_department": act.for_department,
+        "channels": list(act.channels),
         "at": act.at,
     }
 

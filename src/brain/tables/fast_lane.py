@@ -49,7 +49,18 @@ Rejected: a `pattern` column beside the template, for the shapes a template cann
 There is no such thing as a bounded caller-supplied pattern, and the lane it would run in has
 nothing downstream able to notice a wrong answer.
 
-Task ids: M6.1.1
+**A rule may belong to a department, since `0199` (M6.5.1).** `department` is null for a rule
+the whole install asks with, which is every rule written before it, and a department's slug for
+a rule only that department's askers are answered by. It is read by `brain.gate.rule_store` to
+choose which rules an asker's question is matched against, and never by the matcher, which is
+why it is not in `brain.gate.fast_lane.DECLARED_FIELDS`. **One live rule per template per
+department**, so two departments writing the same words each have their rule and neither makes
+the other's questions fall through: a rule the install asks with and a department's rule in the
+same words are both matched for that department's askers, and only for them, which is the
+fall-through `brain.gate.fast_lane` chooses over picking one. See
+`brain.gate.rule_store.A_DEPARTMENTS_RULE_ANSWERS_ITS_OWN_ASKERS_ALONE`.
+
+Task ids: M6.1.1, M6.5.1
 """
 
 from __future__ import annotations
@@ -66,6 +77,7 @@ from brain.core.fast_path import (
     SLOT_OPEN,
 )
 from brain.db import Base, SoftDeleteMixin, TimestampMixin
+from brain.knowledge.search import SLUG_SQL_PATTERN
 
 #: The object-name grammar, which every name column here is held to. Sixty characters,
 #: matching `brain.core.envelope.Entity.entity` and `proj.record`'s own columns, so a name
@@ -113,6 +125,11 @@ LITERAL_IS_LONG_ENOUGH = (
 #: hold a hole and enough literal text, and one over the ceiling is a corpus.
 TEMPLATE_LENGTH = f"length(template) BETWEEN {MIN_TEMPLATE_CHARS} AND {MAX_TEMPLATE_CHARS}"
 
+#: A department's slug, or nothing for a rule the whole install asks with. The SQL form of
+#: `brain.core.department.SLUG_PATTERN`, which `brain.knowledge.search` converts once for every
+#: department column so a `(?:` is never handed to SQLAlchemy as text.
+DEPARTMENT_IS_A_SLUG = f"department IS NULL OR department ~ '{SLUG_SQL_PATTERN}'"
+
 
 class FastPathRuleRow(TimestampMixin, SoftDeleteMixin, Base):
     """`gate.fast_path_rule`. One fast-lane question shape, as configuration (M6.1.1).
@@ -155,6 +172,13 @@ class FastPathRuleRow(TimestampMixin, SoftDeleteMixin, Base):
     #: Who added it. See the module docstring: a rule answers with no model in the loop.
     created_by: Mapped[str] = mapped_column(String(CREATED_BY_CHARS), nullable=False)
 
+    #: The department whose askers this rule answers, or None for the whole install (`0199`).
+    department: Mapped[str | None] = mapped_column(String(NAME_CHARS), nullable=True)
+
+    #: The tier-two learning this rule was promoted from, or None for a rule a person wrote
+    #: (`0206`). Fixed on a live rule with its words.
+    learned_from: Mapped[str | None] = mapped_column(String(26), nullable=True)
+
     __table_args__ = (
         CheckConstraint(f"rule_id ~ '{OBJECT_NAME_PATTERN}'", name="rule_id_is_a_name"),
         CheckConstraint(f"slot ~ '{OBJECT_NAME_PATTERN}'", name="slot_is_a_name"),
@@ -169,15 +193,20 @@ class FastPathRuleRow(TimestampMixin, SoftDeleteMixin, Base):
         CheckConstraint(SLOT_OPENS_BEFORE_IT_CLOSES, name="template_hole_is_the_right_way_round"),
         CheckConstraint(SLOT_IS_THE_NAME_IN_THE_TEMPLATE, name="template_names_the_declared_slot"),
         CheckConstraint(LITERAL_IS_LONG_ENOUGH, name="template_is_not_all_hole"),
-        # One live rule per template. Deliberately weaker than the matcher, which compares
-        # templates with whitespace collapsed and case folded, so this refuses the exact
-        # duplicate and the matcher still refuses the pair that differ only in spacing. A
-        # constraint that tried to be as strong would need the matcher's normalisation in
-        # SQL, which is the second implementation this repository keeps refusing to write.
+        CheckConstraint(DEPARTMENT_IS_A_SLUG, name="department_is_a_slug"),
+        # One live rule per template per department (`0199`; one per template from `0019`).
+        # Deliberately weaker than the matcher, which compares templates with whitespace
+        # collapsed and case folded, so this refuses the exact duplicate and the matcher still
+        # refuses the pair that differ only in spacing. A constraint that tried to be as strong
+        # would need the matcher's normalisation in SQL, which is the second implementation this
+        # repository keeps refusing to write.
+        # Nulls not distinct, so a rule the whole install asks with is still one per template.
         Index(
-            "uq_fast_path_rule_template_live",
+            "uq_fast_path_rule_template_department_live",
             "template",
+            "department",
             unique=True,
+            postgresql_nulls_not_distinct=True,
             postgresql_where=text("deleted_at IS NULL"),
         ),
         {"schema": "gate"},

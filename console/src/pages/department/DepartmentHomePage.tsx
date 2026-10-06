@@ -16,20 +16,26 @@
  * **No count of people.** The people listed are the ones this reader may see; a figure of them would
  * read as the department's size. The questions figures are Usage's own totals for the department.
  *
+ * **Its budget against time and what it knows are the head's own reads**
+ * (`department/departmentFigures.ts`): the API answers them for the person who leads the department
+ * and refuses everybody else with the one 404, so a department admin who leads nothing is shown
+ * neither block, as with every other block a route refuses.
+ *
  * Removed from the old page: the "Scope" chip of short names, the sentence listing what the design
  * draws and no route serves, the lede explaining where each card came from, and every card's
  * trailing "on this other screen" paragraph (each block's heading links there now).
  *
- * Task ids: M27.7.29, M27.16.1
+ * Task ids: M27.7.29, M27.16.1, M33.2.1.3, M33.2.1.4
  */
 
-import { Bot, Building2, FileText, History, Inbox, LayoutDashboard, SearchX, Settings2, Users } from "lucide-react";
+import { Bot, Building2, FileText, Gauge, History, Inbox, LayoutDashboard, LibraryBig, SearchX, Settings2, Users } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { ApiFailure } from "../../api/errors";
 import { useResource, type Resource } from "../../api/useResource";
 import {
   Advanced,
+  Chip,
   DetailHeader,
   DetailPage,
   EmptyState,
@@ -39,6 +45,7 @@ import {
   FailureState,
   KpiStrip,
   LoadingState,
+  Note,
   NotOffered,
   PageHeader,
   SectionCard,
@@ -74,6 +81,16 @@ import {
   departmentHomeAddress,
   type DepartmentHomeView,
 } from "./departmentHome";
+import {
+  BAND_WORDS,
+  COVERAGE_BANDS,
+  departmentCoverageApiPath,
+  departmentPaceApiPath,
+  paceWords,
+  periodLabel,
+  readCoverage,
+  readPace,
+} from "./departmentFigures";
 
 export { DEPARTMENT_HEADING, DEPARTMENT_PATH } from "./departmentHome";
 
@@ -89,6 +106,12 @@ export const AGENTS_HEADING = "Agents";
 export const KNOWLEDGE_HEADING = "Knowledge";
 export const GAPS_HEADING = "Questions nobody could answer";
 export const QUEUES_HEADING = "Your queues";
+export const PACE_HEADING = "Budget against time";
+export const COVERAGE_HEADING = "What it knows";
+export const NO_CEILING = "No budget is set for this department.";
+export const AHEAD_OF_PACE = "Spending ahead of time";
+export const NO_COVERAGE = "No document you may read is counted for this department.";
+export const UNREADABLE = "The answer could not be read.";
 export const HISTORY_HEADING = "History";
 export const NO_PERSON = "Nobody you may see is listed in this department.";
 export const NO_AGENT = "No agent is listed for you.";
@@ -165,6 +188,8 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
   const roster = useResource<unknown>(ROSTER_API_PATH);
   const documents = useResource<unknown>(departmentDocumentsApiPath(slug));
   const questions = useResource<unknown>(QUESTIONS_API_PATH);
+  const pace = useResource<unknown>(departmentPaceApiPath(slug));
+  const coverage = useResource<unknown>(departmentCoverageApiPath(slug));
   const usageBody = usage.data === null ? null : readUsage(usage.data);
   const line = usageBody?.departments?.find((one) => one.department === slug) ?? null;
   const asked = line?.questions ?? usageBody?.questions ?? null;
@@ -271,6 +296,68 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
                   </li>
                 ))}
               </ul>
+            );
+          }}
+        </Block>
+        <Block
+          title={PACE_HEADING}
+          lede="Each budget in force, against how much of its period has gone."
+          icon={<Gauge aria-hidden />}
+          answer={pace}
+          loading="Loading its budget."
+        >
+          {() => {
+            const body = readPace(pace.data);
+            if (body === null) {
+              return <p className="m-0 text-[13px] text-dim">{UNREADABLE}</p>;
+            }
+            const unrecorded = body.not_recorded[0];
+            if (unrecorded !== undefined) {
+              return <Note>{unrecorded.why}</Note>;
+            }
+            return body.paces.length === 0 ? (
+              <p className="m-0 text-[13px] text-dim">{NO_CEILING}</p>
+            ) : (
+              <FactList>
+                {body.paces.map((one) => (
+                  <Fact key={one.period} label={periodLabel(one.period)}>
+                    <span className="flex flex-wrap items-center gap-2">
+                      {paceWords(one)}
+                      {one.ahead ? <Chip tone="requested">{AHEAD_OF_PACE}</Chip> : null}
+                    </span>
+                  </Fact>
+                ))}
+              </FactList>
+            );
+          }}
+        </Block>
+        <Block
+          title={COVERAGE_HEADING}
+          lede="The documents you may read here, by when each was last checked."
+          icon={<LibraryBig aria-hidden />}
+          answer={coverage}
+          loading="Loading what it knows."
+        >
+          {() => {
+            const body = readCoverage(coverage.data);
+            if (body === null) {
+              return <p className="m-0 text-[13px] text-dim">{UNREADABLE}</p>;
+            }
+            if (body.unread !== "") {
+              return <Note>{body.unread}</Note>;
+            }
+            const area = body.areas[0];
+            return area === undefined ? (
+              <p className="m-0 text-[13px] text-dim">{NO_COVERAGE}</p>
+            ) : (
+              <FactList>
+                <Fact label="Documents">{String(area.items)}</Fact>
+                {COVERAGE_BANDS.map((band) => (
+                  <Fact key={band} label={BAND_WORDS[band]}>
+                    {String(area.by_freshness[band] ?? 0)}
+                  </Fact>
+                ))}
+              </FactList>
             );
           }}
         </Block>
