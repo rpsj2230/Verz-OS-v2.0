@@ -107,7 +107,7 @@ import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 from brain.ops.leases import SealedSecret
 from brain.ops.secrets import Lease, SecretRef, SecretsUnavailableError, VaultRole
@@ -313,6 +313,10 @@ def assert_static_path(path: str) -> None:
         raise SecretsUnavailableError(msg)
 
 
+#: The media type kv version 2 takes a patch in (RFC 7396).
+MERGE_PATCH: Final = "application/merge-patch+json"
+
+
 class OpenBaoVault:
     """Issues and revokes leases against a running OpenBao.
 
@@ -342,12 +346,23 @@ class OpenBaoVault:
     __str__ = __repr__
 
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._request(method, path, body)
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        *,
+        content_type: str = "application/json",
+    ) -> dict[str, Any]:
+        """`_call` with the body's media type named, which only a kv patch needs to change."""
         url = f"{self._address}/v1/{path.lstrip('/')}"
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(url, data=data, method=method)  # noqa: S310  scheme checked in __init__
         request.add_header("X-Vault-Token", self._token)
         if data is not None:
-            request.add_header("Content-Type", "application/json")
+            request.add_header("Content-Type", content_type)
         try:
             with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
                 raw = response.read()
@@ -496,6 +511,28 @@ class OpenBaoVault:
         data = payload.get("data")
         return _instant(data.get("created_time")) if isinstance(data, dict) else None
 
+    def patch_static_kv(self, path: str, fields: Mapping[str, str]) -> None:
+        """Merge these fields into a slot that already holds a version, under `STATIC_PREFIX` only.
+
+        kv version 2's PATCH, sent as a JSON merge patch, which the vault admits on the `patch`
+        capability alone: no `read` is needed and none is granted to the one role that calls this,
+        so a token that writes a rotated refresh token back cannot read the token it replaces. See
+        `brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`.
+        A slot that holds nothing answers 404, which is raised: a patch never creates a slot. Not
+        retried, for `write_static_kv`'s reason. Returns nothing it was handed.
+        """
+        assert_static_path(path)
+        if path.startswith(TEMPLATE_KEY_PREFIX):
+            msg = f"{path!r} is written once and never written over"
+            raise SecretsUnavailableError(msg)
+        mount, _, rest = path.partition("/")
+        self._request(
+            "PATCH",
+            f"{mount}/data/{rest}",
+            {"data": dict(fields)},
+            content_type=MERGE_PATCH,
+        )
+
     def create_static_kv_once(self, path: str, fields: Mapping[str, str]) -> bool:
         """Put one slot's fields in only if the slot has never held a version: True when this call
         created it, False when the vault says a version is already there.
@@ -516,6 +553,27 @@ class OpenBaoVault:
                 return False
             raise
         return True
+
+    def remove_static_kv(self, path: str) -> None:
+        """Remove one slot and every version it ever held, under `STATIC_PREFIX` only.
+
+        kv version 2's DELETE on `<mount>/metadata/<rest>`, which destroys every version and the
+        slot's record, so nothing an `undelete` could bring back is left: what erasing a person
+        asks of the refresh tokens their own consents bought
+        (`brain.ops.erasure_store.ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`). A slot that
+        holds nothing is already removed, so a 404 is not an error and a second call changes
+        nothing. Refuses the template key, which is never written over and never removed here.
+        """
+        assert_static_path(path)
+        if path.startswith(TEMPLATE_KEY_PREFIX):
+            msg = f"{path!r} is written once and never removed"
+            raise SecretsUnavailableError(msg)
+        mount, _, rest = path.partition("/")
+        try:
+            self._call("DELETE", f"{mount}/metadata/{rest}")
+        except VaultRefusedError as refused:
+            if refused.status != 404:
+                raise
 
     def static_kv_version(self, path: str) -> StaticVersion | None:
         """The slot's current version, or None when it holds nothing.

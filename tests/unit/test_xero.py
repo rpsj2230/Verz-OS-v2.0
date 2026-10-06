@@ -756,14 +756,14 @@ def test_a_mapping_nothing_classifies_is_refused(monkeypatch: pytest.MonkeyPatch
 def test_the_amount_owing_is_restricted_and_reachable_only_by_its_own_capability() -> None:
     """**Said plainly, because the brief asks for it.** `amount_due` is money, it is the
     field the permission canaries protect, and it is RESTRICTED: returnable to somebody
-    holding `read:invoice.amount_due` and never stored anywhere.
+    holding `read:xero_invoice.amount_due` and never stored anywhere.
 
     Delete this and a classification of INTERNAL, which reads as harmless, puts an invoice
     total in front of everybody with any invoice grant."""
     rule = xero_field_policy().rule_for(ENTITY_INVOICE, "amount_due")
     assert rule is not None
     assert rule.classification is Classification.RESTRICTED
-    assert rule.required_capability == Capability(value="read:invoice.amount_due")
+    assert rule.required_capability == Capability(value="read:xero_invoice.amount_due")
     assert rule.required_capability.verb == "read"
 
 

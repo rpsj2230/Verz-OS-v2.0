@@ -161,7 +161,7 @@ from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final, get_type_hints
+from typing import Any, Final, Protocol, get_type_hints
 
 from brain.chat.turns import Turn, TurnKind
 from brain.connectors.contract import ConnectorHealth
@@ -187,8 +187,9 @@ from brain.core.scope import Scope
 from brain.gate.abstain import Abstention, AbstentionReason
 from brain.gate.context import TrafficClass
 from brain.gate.provenance import DEFAULT_HORIZON, Freshness, StalenessHorizon, assess_freshness
-from brain.knowledge.item import KnowledgeItem
+from brain.knowledge.item import KnowledgeState
 from brain.knowledge.search import Reach, reach_for
+from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.budgets import Allowance, BudgetLevel, BudgetRow
 from brain.ops.canaries import CanaryFinding
 from brain.ops.halt import Halt, HaltScope, HaltState
@@ -1221,7 +1222,33 @@ class CoverageRow:
     by_freshness: Mapping[Freshness, int]
 
 
-def _item_row(item: KnowledgeItem) -> dict[str, object]:
+class Covered(Protocol):
+    """What a coverage report reads of one document, which is everything but what it says.
+
+    `KnowledgeItem` satisfies it and so does `brain.knowledge.lifecycle.StoredItem`, the value
+    `know.item` is read as. **The report was written over `KnowledgeItem` alone, and that made
+    it unservable**: a `KnowledgeItem` refuses to construct without its text, `know.item` holds
+    no text on purpose, and so no route could build the input from the table without inventing
+    the corpus (`brain.estate_routes.FRESHNESS_NEEDS_A_WHOLE_DOCUMENT_AND_THE_ROW_HOLDS_NONE`).
+    Nothing here ever read the text. Rejected: a placeholder text on a `KnowledgeItem` built from
+    the row, which would be a document claiming to say something it does not, in a type whose
+    every other reader trusts the field.
+    """
+
+    @property
+    def visibility(self) -> KnowledgeVisibility: ...
+
+    @property
+    def state(self) -> KnowledgeState: ...
+
+    @property
+    def owner_id(self) -> str: ...
+
+    @property
+    def verified_at(self) -> datetime | None: ...
+
+
+def _item_row(item: Covered) -> dict[str, object]:
     """One knowledge item in the shape `brain.knowledge.search.Reach.admits` evaluates.
 
     Built here rather than assumed, because that predicate is the audited one: it refuses a
@@ -1238,7 +1265,9 @@ def _item_row(item: KnowledgeItem) -> dict[str, object]:
     }
 
 
-def visible_items(items: Sequence[KnowledgeItem], reach: Reach) -> tuple[KnowledgeItem, ...]:
+def visible_items[CoveredT: Covered](
+    items: Sequence[CoveredT], reach: Reach
+) -> tuple[CoveredT, ...]:
     """The items this reach admits, in the order they were given (M27.2.5).
 
     `Reach.admits` decides it, which is the Python half of the same predicate the search
@@ -1248,7 +1277,7 @@ def visible_items(items: Sequence[KnowledgeItem], reach: Reach) -> tuple[Knowled
 
 
 def coverage(
-    items: Sequence[KnowledgeItem],
+    items: Sequence[Covered],
     reader: EntitlementSet,
     *,
     areas: Sequence[str],
@@ -1287,7 +1316,7 @@ def coverage(
 
 
 def freshness_of(
-    item: KnowledgeItem, *, now: datetime, horizon: StalenessHorizon = DEFAULT_HORIZON
+    item: Covered, *, now: datetime, horizon: StalenessHorizon = DEFAULT_HORIZON
 ) -> Freshness:
     """How current one item is, on the one freshness scale this repository has.
 

@@ -209,7 +209,7 @@
     "M27.14.1",
     "M27.15.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "ARC-A-013",
@@ -1883,7 +1883,7 @@
    "proof": [
     "M14.8.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 159: the ambiguity is named only when every matching record is one the reader may already read; with one hidden, the answer is the visible record's alone"
   },
   {
    "id": "ARC-A-110",
@@ -2902,7 +2902,7 @@
     "M27.7.29",
     "M2.3.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 160: only an unscoped stop stops one agent"
   },
   {
    "id": "ARC-A-171",
@@ -2920,7 +2920,7 @@
     "M39.7.2",
     "M10.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "FEAT-1.1",
@@ -3148,7 +3148,7 @@
     "M13.8.9",
     "M13.8.5"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "FEAT-2.3",
@@ -3976,7 +3976,7 @@
    "proof": [
     "M14.8.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 159: the ambiguity is named only when every matching record is one the reader may already read; with one hidden, the answer is the visible record's alone"
   },
   {
    "id": "FEAT-7.1",
@@ -6041,7 +6041,7 @@
    "proof": [
     "M10.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "ARC-B-069",
@@ -7843,7 +7843,7 @@
    "proof": [
     "M28.5.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "OWN-9",
@@ -8432,7 +8432,7 @@
    "proof": [
     "M12.4.9"
    ],
-   "decision": null
+   "decision": "needs-rupash 161: reach-only rehearsal until the agent runtime runs examples"
   },
   {
    "id": "OWN-45",
@@ -8933,7 +8933,7 @@
    "proof": [
     "M14.8.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 159: the ambiguity is named only when every matching record is one the reader may already read; with one hidden, the answer is the visible record's alone"
   },
   {
    "id": "OWN-77",
@@ -12273,7 +12273,7 @@
    "proof": [
     "M12.4.9"
    ],
-   "decision": null
+   "decision": "needs-rupash 161: reach-only rehearsal until the agent runtime runs examples"
   },
   {
    "id": "CON-60",
@@ -14355,7 +14355,7 @@
    "proof": [
     "M27.15.12"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "DEF-08",
@@ -15170,7 +15170,7 @@
    "proof": [
     "M1.8.8"
    ],
-   "decision": null
+   "decision": "needs-rupash 165: whether an administrator may set how a connected source's own permissions are followed, towards stricter only (A), or it stays fixed by the connector (B); open until answered"
   },
   {
    "id": "GAP2-19",
@@ -15670,7 +15670,7 @@
    "proof": [
     "M27.14.4"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "CONA-22",
@@ -16266,7 +16266,7 @@
    "proof": [
     "M14.8.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 155: person join keys wait for the fingerprint decision"
   },
   {
    "id": "GAP3-03",
@@ -18568,8 +18568,8 @@
     "M10.2.7"
    ],
    "decision": "needs-rupash 118: B, store each linked person's Lark address so the card is sent straight away"
-   },
-   {
+  },
+  {
    "id": "OWN5-1",
    "source": "owner, 2026-09-30 (chat): the People page lists only him although the staff sync ran",
    "area": "Identity",
@@ -18619,6 +18619,20 @@
    ],
    "proof": [
     "M1.6.21"
+   ],
+   "decision": null
+  },
+  {
+   "id": "DEC-65",
+   "source": "needs-rupash 120, row 3 (decided 2026-10-05, Option A)",
+   "area": "Observability",
+   "requirement": "The trace ledger the owner gave memory to shows each model call: every run's masked trace reaches it once INSTALL_SERVICES switches it on, and nothing is sent anywhere when it is off.",
+   "leaves": [
+    "M32.1.2.6",
+    "M32.1.1.1"
+   ],
+   "proof": [
+    "M32.1.2.6"
    ],
    "decision": null
   }

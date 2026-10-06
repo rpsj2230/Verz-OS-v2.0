@@ -41,7 +41,7 @@ from alembic.operations import Operations
 from pydantic import ValidationError
 from sqlalchemy import Table, create_engine
 from sqlalchemy.pool import NullPool
-from sqlalchemy.schema import CreateIndex, CreateTable
+from sqlalchemy.schema import CreateIndex
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.fast_path import (
@@ -59,6 +59,7 @@ from brain.gate.fast_lane import (
     FAST_LANE_ROW_LIMIT,
     FastLaneAnswer,
     FastLaneError,
+    FastLaneUnresolved,
     FastPathRule,
     RowReader,
     RuleMatch,
@@ -76,6 +77,7 @@ from brain.knowledge.columns import ColumnRule, TableClassification
 from brain.knowledge.rows import RowQuery, RowTool, assert_no_sql_is_built_by_interpolation
 from brain.ops.migration_policy import check_all, check_file
 from brain.tables.fast_lane import FastPathRuleRow
+from tests.fixtures.amended_tables import created_ddl
 
 
 def respond(
@@ -88,11 +90,14 @@ def respond(
 ) -> FastLaneAnswer | None:
     """`brain.gate.fast_lane.respond`, run to completion from a synchronous test.
 
-    See `tests/unit/test_row_plane.py` for why this is `asyncio.run` and not a plugin.
+    See `tests/unit/test_row_plane.py` for why this is `asyncio.run` and not a plugin. No
+    ambiguity reader is handed over, so an unresolved name cannot come back here.
     """
-    return asyncio.run(
+    found = asyncio.run(
         _respond(question, rules=rules, readers=readers, entitlement=entitlement, now=now)
     )
+    assert not isinstance(found, FastLaneUnresolved)
+    return found
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -1321,17 +1326,24 @@ def test_the_migration_builds_the_table_the_model_declares() -> None:
     indexes are compared too: `SoftDeleteMixin` declares one that is easy to leave out, and
     the unique one is a constraint rather than a performance choice.
 
+    `0199` added a department and replaced the unique index with one per department, so the table
+    is compared as `0019` built it (`tests.fixtures.amended_tables`), the index both migrations
+    share is compared here, and the one `0199` replaced is held to its own test there.
+
     Delete this and the five template checks exist in Python and not in the database."""
     assert migration().TABLES == ("gate.fast_path_rule",)
     upgrade = squash(rendered("upgrade"))
-    assert squash(str(CreateTable(table()).compile(dialect=DIALECT))) in upgrade
+    assert squash(created_ddl(table(), DIALECT)) in upgrade
     indexes = sorted(table().indexes, key=lambda i: i.name or "")
     assert [i.name for i in indexes] == [
         "ix_gate_fast_path_rule_deleted_at",
-        "uq_fast_path_rule_template_live",
+        "uq_fast_path_rule_template_department_live",
     ]
-    for index in indexes:
-        assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in upgrade
+    assert squash(str(CreateIndex(indexes[0]).compile(dialect=DIALECT))) in upgrade
+    assert (
+        "CREATE UNIQUE INDEX uq_fast_path_rule_template_live ON gate.fast_path_rule (template)"
+        " WHERE deleted_at IS NULL"
+    ) in upgrade
 
 
 def test_the_database_checks_the_same_template_grammar_the_type_does() -> None:

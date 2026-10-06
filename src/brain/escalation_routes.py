@@ -123,23 +123,18 @@ def sendable() -> tuple[Channel, ...]:
 async def offered_skills(
     request: Request, agent: AgentRecord, *, caller: EntitlementSet, now: datetime
 ) -> tuple[ImportedSkill, ...]:
-    """The skills this agent runs with for this caller, read as the Skills screen reads its pins."""
-    from brain.gate.model_lane import AgentRun, skills_offered
-    from brain.ops.skill_store import StoredSkills
-    from brain.skill_routes import installs_of, pins_of
+    """The skills this agent runs with for this caller: the run `/answer` builds, through
+    `brain.api_routes.agent_run_of`, so an escalation and an answer read one set of pins."""
+    from brain.api_routes import agent_run_of
+    from brain.gate.model_lane import skills_offered
     from brain.tools.registry import ToolRegistry
 
-    sessions = sessions_of(request)
     registry = getattr(request.app.state, "tools", None)
-    if sessions is None or not isinstance(registry, ToolRegistry):
+    if sessions_of(request) is None or not isinstance(registry, ToolRegistry):
         return ()
-    async with sessions() as session:
-        pairs = (await session.execute(installs_of([agent.agent_id]))).all()
-    pins = tuple(pin for one, version in pairs for pin in pins_of(one, version, agent))
-    if not pins:
+    run = await agent_run_of(request.app.state, agent, registry)
+    if run is None or not run.pins:
         return ()
-    library = await StoredSkills(sessions).library()
-    run = AgentRun(record=agent, pins=pins, library=library, registry=registry)
     return skills_offered(run, caller=caller, now=now)
 
 
@@ -263,7 +258,7 @@ async def escalated(
         # vendor raises here would otherwise turn a true abstention into a fault.
         log.warning("escalation.not_made", error=type(exc).__name__)
         return answered
-    return with_sentence(answered, told)
+    return dataclasses.replace(with_sentence(answered, told), escalated=True)
 
 
 # ------------------------------------------------------------------------ the views

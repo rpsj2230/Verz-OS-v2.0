@@ -17,7 +17,7 @@
  * says it is not this reader's. It is mounted through the application's own route table, so its
  * view addresses are held too.
  *
- * Task ids: M27.7.29, M27.10.1, M27.16.1
+ * Task ids: M27.7.29, M27.10.1, M27.16.1, M33.2.1.3, M33.2.1.4
  */
 
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router-dom";
@@ -31,11 +31,16 @@ import {
 } from "../src/layout/navigationQuery";
 import {
   AGENTS_HEADING,
+  AHEAD_OF_PACE,
+  COVERAGE_HEADING,
   KNOWLEDGE_HEADING,
+  NO_CEILING,
   NOT_A_DEPARTMENT_CONSOLE,
+  PACE_HEADING,
   PROFILE_ELSEWHERE,
   USAGE_HEADING,
 } from "../src/pages/department/DepartmentHomePage";
+import { DEPARTMENT_COVERAGE_API_PATH, DEPARTMENT_PACE_API_PATH } from "../src/pages/department/departmentFigures";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { installRadixStubs } from "./support/radix";
 import {
@@ -466,6 +471,76 @@ describe("the Department page", () => {
       expect(rows[0]).toContain("Renamed");
       expect(rows[0]).toContain(sentinel("person"));
     });
+  });
+
+  /** The head's pace and coverage, as `brain.department_view_routes` sends them. */
+  const PACE = {
+    department: "maintenance",
+    paces: [
+      { period: "day", started_at: "2019-03-04T00:00:00Z", ends_at: "2019-03-05T00:00:00Z", spent_fraction: 0.9, elapsed_fraction: 0.5, ahead: true },
+      { period: "month", started_at: "2019-03-01T00:00:00Z", ends_at: "2019-04-01T00:00:00Z", spent_fraction: 0.25, elapsed_fraction: 0.4, ahead: false },
+    ],
+    not_recorded: [],
+  };
+
+  const COVERAGE = {
+    department: "maintenance",
+    areas: [{ area: "maintenance", items: 713, by_freshness: { live: 401, ageing: 211, stale: 67, unstated: 34 } }],
+    unread: "",
+  };
+
+  const HEAD = {
+    [`/api/v1${DEPARTMENT_PACE_API_PATH}`]: json(PACE),
+    [`/api/v1${DEPARTMENT_COVERAGE_API_PATH}`]: json(COVERAGE),
+  };
+
+  test("the head is shown each budget against time and what the department knows, as the API sent them", async () => {
+    // What breaks if this is deleted: the two blocks can compute a figure of their own, drop a band,
+    // or name the department by its short name, and nothing reading the page would notice.
+    const container = await departmentPage("/department", everything(HEAD));
+    const pace = block(container, PACE_HEADING)?.textContent ?? "";
+    expect(pace).toContain("90% of the budget spent, 50% of the day gone");
+    expect(pace).toContain("25% of the budget spent, 40% of the month gone");
+    expect(pace.split(AHEAD_OF_PACE)).toHaveLength(2);
+    const coverage = block(container, COVERAGE_HEADING)?.textContent ?? "";
+    for (const figure of ["713", "401", "211", "67", "34"]) {
+      expect(coverage).toContain(figure);
+    }
+    expect(coverage).not.toContain("maintenance");
+  });
+
+  test("a head's block the API refuses is left out, and the page's other blocks still draw", async () => {
+    // What breaks if this is deleted: a department admin who leads nothing is shown an empty budget
+    // block, which says the department has no budget when the API said the block is not theirs.
+    const refused = json({ message: "I could not find that.", trace_id: "t-4" }, 404);
+    const container = await departmentPage(
+      "/department",
+      everything({ [`/api/v1${DEPARTMENT_PACE_API_PATH}`]: refused, [`/api/v1${DEPARTMENT_COVERAGE_API_PATH}`]: refused }),
+    );
+    expect(block(container, PACE_HEADING)).toBeUndefined();
+    expect(block(container, COVERAGE_HEADING)).toBeUndefined();
+    expect(block(container, AGENTS_HEADING)).not.toBeUndefined();
+  });
+
+  test("the API's sentences stand in for a figure it could not send, and no fraction or band is drawn", async () => {
+    // What breaks if this is deleted: an install that records no cost shows the department as having
+    // spent nothing, and a coverage load that came back full is drawn as the figure.
+    const container = await departmentPage(
+      "/department",
+      everything({
+        [`/api/v1${DEPARTMENT_PACE_API_PATH}`]: json({ ...PACE, paces: [], not_recorded: [{ figure: "cost", why: sentinel("unpriced") }] }),
+        [`/api/v1${DEPARTMENT_COVERAGE_API_PATH}`]: json({ ...COVERAGE, areas: [], unread: sentinel("full") }),
+      }),
+    );
+    const pace = block(container, PACE_HEADING)?.textContent ?? "";
+    expect(pace).toContain(sentinel("unpriced"));
+    expect(pace).not.toContain("%");
+    const coverage = block(container, COVERAGE_HEADING)?.textContent ?? "";
+    expect(coverage).toContain(sentinel("full"));
+    expect(coverage).not.toContain("713");
+
+    const none = await departmentPage("/department", everything({ ...HEAD, [`/api/v1${DEPARTMENT_PACE_API_PATH}`]: json({ ...PACE, paces: [] }) }));
+    expect(block(none, PACE_HEADING)?.textContent ?? "").toContain(NO_CEILING);
   });
 
   test("a company administrator who opens the address is sent to Departments", async () => {

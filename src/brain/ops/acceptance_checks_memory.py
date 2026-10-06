@@ -157,7 +157,6 @@ async def memory_app(
     from fastapi import FastAPI
 
     from brain.gate.model_lane import DocumentSearchTool
-    from brain.gate.rule_store import load_rules
     from brain.knowledge.document_tools import searcher
     from brain.knowledge.row_store import SessionRowSource
     from brain.models.calls import ModelCalls
@@ -166,11 +165,6 @@ async def memory_app(
     from brain.ops.trace_sink import CountingTraceSink
     from brain.tools.startup import build_registry
 
-    try:
-        rules = await load_rules(h.sessions)
-    except Exception:
-        # The lifespan's choice for a rule table that cannot be read: an empty rule set.
-        rules = ()
     app = FastAPI()
     state = app.state
     state.settings = h.settings
@@ -178,7 +172,9 @@ async def memory_app(
     state.tools = build_registry(
         source=h.settings.tool_source, records=SessionRowSource(h.sessions)
     )
-    state.fast_path_rules = rules
+    # The answer route reads the rule table itself on every question (M6.5.1), so nothing is
+    # handed to it here: a preloaded copy would be matched beside the live one, twice.
+    state.fast_path_rules = ()
     state.trace_sink = CountingTraceSink()
     state.request_recorders = (TelemetryRecorder(h.sessions),) if recorded else ()
     if model is not None:

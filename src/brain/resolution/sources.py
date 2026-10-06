@@ -37,7 +37,8 @@ THE_SOURCES_ARE_READ_OFF_THE_DECLARATIONS: Final = (
 
 #: A connector that must always declare a record for resolution. An accounting system's contact
 #: is a client, so if discovery stops finding this one it has stopped finding all of them.
-ANCHOR: Final = ("xero", "contact")
+#: Xero's entity names its source since `brain.agents.binding.AN_ENTITY_NAMES_ONE_SOURCE`.
+ANCHOR: Final = ("xero", "xero_contact")
 
 
 def resolved_entities(

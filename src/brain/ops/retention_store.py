@@ -237,6 +237,8 @@ ATTRIBUTED: Final[Mapping[str, Store]] = MappingProxyType(
     {
         "obs.application_log": Store.TRACE,
         "obs.audit_entry": Store.AUDIT,
+        # `0209`: the second chain, of elevations alone, kept as the ledger is.
+        "obs.elevation_entry": Store.AUDIT,
         "obs.legal_hold": Store.AUDIT,
         "obs.request_telemetry": Store.LEDGER,
         "obs.trace_read": Store.AUDIT,
@@ -249,6 +251,7 @@ CLOCKS: Final[Mapping[str, str]] = MappingProxyType(
     {
         "obs.application_log": "at",
         "obs.audit_entry": "at",
+        "obs.elevation_entry": "at",
         "obs.legal_hold": "placed_at",
         "obs.request_telemetry": "received_at",
         "obs.trace_read": "at",

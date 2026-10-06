@@ -171,6 +171,7 @@ from brain.core.lane import Lane
 from brain.core.redaction import ChannelPayload, redact
 from brain.gate.abstain import (
     Abstention,
+    AbstentionReason,
     SearchScope,
     abstain_if_uncited,
     abstention_for_search,
@@ -184,7 +185,9 @@ from brain.gate.cache_key import CachedAnswer
 from brain.gate.compose import ComposedAnswer, TraceSink, compose
 from brain.gate.context import GateStep, Recorder
 from brain.gate.fast_lane import (
+    AmbiguityReader,
     FastLaneAnswer,
+    FastLaneUnresolved,
     FastPathRule,
     RowReader,
     match_rule,
@@ -201,7 +204,7 @@ from brain.gate.finish import (
     finish,
 )
 from brain.gate.live_records import LiveRecords, PartialRead
-from brain.gate.model_lane import ModelLane, draft
+from brain.gate.model_lane import ModelLane, draft, waiting_text
 from brain.gate.provenance import (
     SEED_HORIZONS,
     UNCITED_TEXT,
@@ -210,8 +213,14 @@ from brain.gate.provenance import (
     provenance_for,
 )
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
+from brain.gate.turn_context import ContextNote
 from brain.knowledge.rows import RowRecord, RowRequest
 from brain.models.metering import Meter, ModelRoute
+from brain.resolution.guardrails import (
+    REVIEWER_CAPABILITY,
+    UNRESOLVED_TEXT,
+    UnresolvedNotice,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -222,7 +231,10 @@ THE_ASKER_IS_NEVER_TOLD_WHICH_KIND_OF_NOTHING_HAPPENED = (
     "are facts about how this installation is configured and the last three are facts about "
     "its data, and a person who could tell them apart could map both by asking. The "
     "abstention vocabulary already carries the distinction for the audit log, which is the "
-    "only reader entitled to it."
+    "only reader entitled to it. One exception, and it is not a fact the asker lacked: records "
+    "the asker reads, which the registry says are more than one client, are named as ambiguous; "
+    "see fast_lane.NAMING_AMBIGUITY_ONLY_AMONG_RECORDS_THE_ASKER_READS. A withheld record never "
+    "reaches that branch, so this sentence holds for it unchanged."
 )
 
 #: Why the answer text is assembled from the payload rather than written by a model.
@@ -396,6 +408,13 @@ class Answered:
     #: by that path without the question's words and must be written down nowhere else, a
     #: person's thread included (M24.2.2, M9.1.1).
     referred: bool = False
+    #: True when the abstention was handed to a person named for a skill's queue and the asker
+    #: was told so (M8.3.1). A fact about what the asker was told, which the learning signal reads
+    #: as `brain.memory.signals.Signal.ESCALATED` once the exchange is kept (M16.2.4, M16.2.8).
+    escalated: bool = False
+    #: Which parts of the turn's context a model was shown and which were left out (M16.6.1), on
+    #: a question a model was asked about. Names only; `brain.ops.trace_store` keeps it.
+    context: ContextNote | None = None
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -470,6 +489,7 @@ async def answer_lane(
     live: LiveRecords | None = None,
     source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
     horizons: Horizons = SEED_HORIZONS,
+    ambiguity: AmbiguityReader | None = None,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -535,6 +555,7 @@ async def answer_lane(
             live=live,
             source_policies=source_policies,
             horizons=horizons,
+            ambiguity=ambiguity,
         )
         return outcome
     finally:
@@ -588,6 +609,7 @@ async def _outcome(
     live: LiveRecords | None = None,
     source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
     horizons: Horizons = SEED_HORIZONS,
+    ambiguity: AmbiguityReader | None = None,
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -661,7 +683,14 @@ async def _outcome(
 
     frames.append(stream.step(at_tool_input_start()))
     _enter(recorder, GateStep.INVOKE)
-    found = await respond(question, rules=rules, readers=readers, entitlement=entitlement, now=now)
+    found = await respond(
+        question,
+        rules=rules,
+        readers=readers,
+        entitlement=entitlement,
+        now=now,
+        ambiguity=ambiguity,
+    )
 
     # Emitted here rather than inside the branch below, and the reason is the second leak
     # found while writing this module's tests. `respond` returns None without reading when no
@@ -676,6 +705,12 @@ async def _outcome(
         # No rule matched, two did, or two records answered to one name. One sentence for all
         # three: see THE_ASKER_IS_NEVER_TOLD_WHICH_KIND_OF_NOTHING_HAPPENED.
         return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="no single rule"))
+    if isinstance(found, FastLaneUnresolved):
+        # Records the asker reads, which are more than one client (M14.6.5). Named as ambiguous
+        # and never combined: see fast_lane.NAMING_AMBIGUITY_ONLY_AMONG_RECORDS_THE_ASKER_READS.
+        return _unresolved(
+            stream, frames, gaps, found, entitlement=entitlement, scope=scope, now=now
+        )
 
     policy = policy_for(found, policies, source_policies)
     if policy is None:
@@ -848,27 +883,58 @@ async def _answered_by_model(
     only thing of the model's that reaches a frame.
     """
     frames.append(stream.step(at_tool_input_start()))
-    drafted = await draft(
-        question,
-        lane=model,
-        entitlement=entitlement,
-        scope=scope,
-        sink=sink,
-        now=now,
-        meter=meter,
-        trace_id=trace_id,
-        searching=calls.start,
-        entering=None if recorder is None else recorder.enter,
-        horizons=horizons,
-        using=calls.use,
-    )
+    if model.runtime is not None:
+        # The agent's tool loop, the one place a model is handed tools (M13.7.1). It returns
+        # what `draft` returns, so every frame below is the same code for both.
+        drafted = await model.runtime.drafted(
+            question,
+            lane=model,
+            scope=scope,
+            sink=sink,
+            now=now,
+            meter=meter,
+            trace_id=trace_id,
+            started=calls.start,
+            horizons=horizons,
+        )
+    else:
+        drafted = await draft(
+            question,
+            lane=model,
+            entitlement=entitlement,
+            scope=scope,
+            sink=sink,
+            now=now,
+            meter=meter,
+            trace_id=trace_id,
+            searching=calls.start,
+            entering=None if recorder is None else recorder.enter,
+            horizons=horizons,
+            using=calls.use,
+        )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:
         frames.append(stream.step(Progress.COMPOSING))
+    told = waiting_text(drafted.waiting)
     if isinstance(drafted.outcome, Abstention):
-        return _abstained(stream, frames, gaps, drafted.outcome)
+        if told:
+            waiting = _waiting(stream, frames, gaps, drafted.outcome, told)
+            return replace(waiting, context=drafted.context)
+        return replace(_abstained(stream, frames, gaps, drafted.outcome), context=drafted.context)
     said = "" if drafted.trimmed is None else drafted.trimmed.sentence()
-    return _answered(stream, frames, gaps, drafted.outcome, scope, drafted.provenance, said=said)
+    if told:
+        said = f"{said} {told}" if said else told
+    answered = _answered(
+        stream,
+        frames,
+        gaps,
+        drafted.outcome,
+        scope,
+        drafted.provenance,
+        said=said,
+        kept=not told,
+    )
+    return replace(answered, context=drafted.context)
 
 
 def _withheld_or_absent(
@@ -987,6 +1053,26 @@ def with_evidence_notice(text: str, provenance: Provenance) -> str:
     return f"{text} {said}" if said else text
 
 
+def _waiting(
+    stream: AnswerStream,
+    frames: list[str],
+    gaps: Sequence[Gap],
+    declined: Abstention,
+    told: str,
+) -> Answered:
+    """Close the stream with what the asker's own run held for a person, in the product's words.
+
+    The run read nothing it could answer from, so the abstention is still what the audit records,
+    and it is not what the asker is told: they are told what they asked to have prepared is
+    waiting. No text is kept for the cache, so nobody else is ever handed it. See
+    `brain.gate.model_lane.AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES`.
+    """
+    return Answered(
+        frames=(*frames, stream.text(_with_gaps(told, gaps)), stream.done()),
+        abstention=declined,
+    )
+
+
 def _abstained(
     stream: AnswerStream, frames: list[str], gaps: Sequence[Gap], declined: Abstention
 ) -> Answered:
@@ -1003,6 +1089,46 @@ def _abstained(
     notice = declined.for_asker()
     return Answered(
         frames=(*frames, stream.text(_with_gaps(notice.render(), gaps)), stream.done()),
+        abstention=declined,
+    )
+
+
+def unresolved_text(
+    found: FastLaneUnresolved, *, entitlement: EntitlementSet, now: datetime
+) -> str:
+    """The sentence an ambiguous name is answered with, and the review link for a reviewer.
+
+    The link is shown only to a reader holding the reviewer's capability over everything, and
+    only when a review item is open; everybody else is given the plain sentence, review item or
+    not, because whether one is open is reviewer state a non-reviewer must not learn.
+    """
+    scope = entitlement.scope_for(REVIEWER_CAPABILITY, now)
+    reviewer = scope is not None and scope.matches({})
+    if reviewer and found.review_ref is not None:
+        return UnresolvedNotice(review_ref=found.review_ref).render()
+    return UNRESOLVED_TEXT
+
+
+def _unresolved(
+    stream: AnswerStream,
+    frames: list[str],
+    gaps: Sequence[Gap],
+    found: FastLaneUnresolved,
+    *,
+    entitlement: EntitlementSet,
+    scope: SearchScope,
+    now: datetime,
+) -> Answered:
+    """Close the stream with the unresolved sentence. Recorded as records retrieved and not
+    answering, which is what happened: the records came back and none of them is the answer."""
+    text = unresolved_text(found, entitlement=entitlement, now=now)
+    declined = Abstention(
+        reason=AbstentionReason.RETRIEVED_BUT_NOT_ANSWERING,
+        scope=scope,
+        detail="the name belongs to more than one client the asker reads",
+    )
+    return Answered(
+        frames=(*frames, stream.text(_with_gaps(text, gaps)), stream.done()),
         abstention=declined,
     )
 

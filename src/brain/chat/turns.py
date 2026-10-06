@@ -253,6 +253,13 @@ class Correction:
     What is kept is the shape: which answer, what kind of wrong, and the references that
     answer used - so somebody can go and look at the same records the answer drew on. That
     is the useful half, and it is the half that carries no claim.
+
+    **What the person says is right is held somewhere else, and is still not a fact.** Since
+    M16.6.5 the correction route may carry those words, and they go to
+    `brain.knowledge.candidates`, a table of their own, as a proposal about the document the
+    corrected answer cited. They answer nothing until whoever may add a new version of that
+    document approves them, and nobody whose correction it holds may. This class stays without
+    the field, so nothing that reads a correction reads a claim.
     """
 
     answer_at: datetime

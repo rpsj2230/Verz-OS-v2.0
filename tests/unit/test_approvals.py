@@ -28,15 +28,21 @@ from brain.console.approvals import (
     card,
     card_gaps,
     decide,
+    request_for,
+    request_policy,
+    terms_not_data,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect, ToolDefinition
+from brain.core.redaction import LOCK_TEXT
 from brain.core.scope import Clause, Op, Scope
+from brain.gate.approval_request import RenderedRequest, render_request
 from brain.gate.leash import Action, ApprovalState, SuspendedAction, render_artefact
 
 NOW = datetime(2027, 3, 1, 9, 0, tzinfo=UTC)
 MAINTENANCE = "maintenance"
 WRITE_STATUS = "write:ticket.status"
+MAINTENANCE_ONLY = Scope(clauses=(Clause(field="department", op=Op.EQ, value=MAINTENANCE),))
 
 
 def an_action(*, row: dict[str, str] | None = None, status: str = "closed") -> Action:
@@ -108,24 +114,63 @@ def a_recorder() -> AuditRecorder:
 # --- what the approver is shown (M33.6.1.2) ----------------------------------------------
 
 
-def test_the_card_shows_the_artefact_exactly_as_it_was_rendered() -> None:
-    """M33.6.1.2. `SuspendedAction` keeps what the person was shown with the argument beside
-    it: an approval of a re-rendered artefact is an approval of something nobody read. This
-    is that carried through to the card.
-
-    Compared against the suspension's own field rather than against a string written here, so
-    a card that re-rendered from the action would fail even if the renderer agreed today.
-
-    Delete this and the card becomes a fresh render, and the day the renderer changes every
-    approval in flight is for something else."""
+def test_the_card_shows_the_action_at_the_approver_s_reach_and_never_the_requester_s_artefact() -> (
+    None
+):
+    """**M33.8.1, needs-rupash 14.** The approver holds the action's capability and not the read
+    of the status it sets, so the card locks the status, carries the rendering at the approver's
+    own principal and reach, and is not the requester's artefact; a reader holding the status's
+    read in the same department is shown the value. Delete this and the card can carry the
+    requester's rendering again, which is what it did from 2026-09-09 to 2026-10-06."""
     suspension = a_suspension()
+    approver = an_approver()
+    reading = approver.model_copy(
+        update={
+            "grants": (
+                *approver.grants,
+                Grant(capability=Capability(value="read:ticket.status"), scope=MAINTENANCE_ONLY),
+            )
+        }
+    )
 
-    shown = card(suspension, an_approver(), NOW)
+    shown = card(suspension, approver, NOW)
+    told = card(suspension, reading, NOW)
 
-    assert shown is not None
-    assert shown.artefact == suspension.artefact
+    assert shown is not None and told is not None
+    assert shown.request.text != suspension.artefact
+    assert f"status: {LOCK_TEXT}" in shown.request.text
+    assert "closed" not in shown.request.text
+    assert (shown.request.rendered_for, shown.request.ent_hash) == (
+        approver.principal_id,
+        approver.ent_hash(),
+    )
+    assert "status: closed" in told.request.text
     assert shown.suspension_id == suspension.id
     assert shown.runs_as == suspension.principal_id
+
+
+def test_only_the_product_s_own_terms_are_shown_whole_and_by_their_whole_definition() -> None:
+    """**`AN_ACTION_S_OWN_TERMS_ARE_NOT_DATA`, held as a closed set.** A promotion and a browsing
+    run show the product's own statement of their terms; every other action is rendered from its
+    arguments under its entity's classification, and a tool that borrows a promotion's name
+    without being one is rendered like any other. Delete this and the set can grow until an
+    agent's action is shown as the requester's artefact again."""
+    from brain.browsing.sessions import ACT_ON_SURFACE
+    from brain.knowledge.promotion import PROMOTION_TOOL
+
+    assert terms_not_data() == (PROMOTION_TOOL, ACT_ON_SURFACE)
+    promotion = a_suspension(action=an_action().model_copy(update={"tool": PROMOTION_TOOL}))
+    borrowed = a_suspension(
+        action=an_action().model_copy(
+            update={"tool": an_action().tool.model_copy(update={"name": PROMOTION_TOOL.name})}
+        )
+    )
+    approver = an_approver()
+
+    assert request_for(promotion, approver, NOW).text == promotion.artefact
+    shown = request_for(borrowed, approver, NOW).text
+    assert shown != borrowed.artefact
+    assert f"status: {LOCK_TEXT}" in shown
 
 
 def test_an_agent_s_action_offers_taking_over_and_a_person_s_own_request_does_not() -> None:
@@ -161,7 +206,11 @@ def test_an_agent_s_action_offers_taking_over_and_a_person_s_own_request_does_no
     assert persons is not None and persons.may_take_over is False
     assert (
         Card(
-            suspension_id="sus_3", artefact="x", runs_as="u", raised_at=NOW, expires_at=NOW
+            suspension_id="sus_3",
+            request=render_request(an_action(), an_approver(), request_policy(an_action()), NOW),
+            runs_as="u",
+            raised_at=NOW,
+            expires_at=NOW,
         ).may_take_over
         is False
     )
@@ -193,25 +242,15 @@ def test_the_card_has_no_field_a_tool_call_could_arrive_in() -> None:
     assert "Fake.args" in found[0]
 
 
-def test_a_card_with_nothing_on_it_cannot_be_constructed() -> None:
-    """An approver pressing approve on an empty card has approved whatever it was. The
-    suspension model already requires a non-empty artefact, so this is the second door: a
-    `Card` assembled by anything other than `card` cannot be blank either.
-
-    Whitespace as well as empty, because a renderer that produced nothing produces spaces
-    rather than an empty string.
-
-    Delete this and a card built by a future caller renders as an empty box with two buttons
-    under it."""
-    for nothing in ("", " ", "\n"):
-        with pytest.raises(ApprovalError, match="nothing on it"):
-            Card(
-                suspension_id="sus_1",
-                artefact=nothing,
-                runs_as="u_asker",
-                raised_at=NOW,
-                expires_at=NOW + timedelta(hours=1),
-            )
+def test_a_card_s_request_is_never_written_by_hand() -> None:
+    """A `Card` assembled by anything other than `card` still carries a request `render_request`
+    made, because a `RenderedRequest` refuses construction anywhere else, and every one names what
+    will happen on its first line. Delete this and a card can be given a request of a caller's
+    own, with the reach it claims to have been rendered at written beside it."""
+    with pytest.raises(ValueError, match="never written by hand"):
+        RenderedRequest(text="ticket.update_status on ticket", rendered_for="u", ent_hash="e")
+    rendered = render_request(an_action(), an_approver(), request_policy(an_action()), NOW)
+    assert rendered.text.splitlines()[0] == "ticket.update_status on ticket"
 
 
 def test_out_of_reach_already_decided_and_lapsed_are_one_answer() -> None:

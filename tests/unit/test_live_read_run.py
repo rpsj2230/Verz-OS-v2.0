@@ -48,7 +48,7 @@ from tests.unit.test_connector_sync_run import (
 #: Far outside any plausible wall clock. See `CLAUDE.md` on a fixture with a date in it.
 NOW: Final = datetime(2999, 1, 1, 9, 0, tzinfo=UTC)
 
-ONE_INVOICE: Final = FetchRequest(entity="invoice", filters=(("id", INVOICE_ID),), limit=1)
+ONE_INVOICE: Final = FetchRequest(entity="xero_invoice", filters=(("id", INVOICE_ID),), limit=1)
 
 
 def connection(name: str = "xero", *, digest: str | None = None) -> Connection:
@@ -102,7 +102,7 @@ def test_a_connected_record_is_read_live_under_a_key_borrowed_for_that_one_read(
 
     reply = fetch(found)
 
-    assert found.reads("xero", "invoice") is IdentityMode.SERVICE
+    assert found.reads("xero", "xero_invoice") is IdentityMode.SERVICE
     assert reply.outcome is CallOutcome.OK
     assert reply.rows is not None
     (row,) = reply.rows.records
@@ -122,12 +122,12 @@ def test_only_a_connected_source_with_a_live_lookup_is_read_live_and_only_its_en
     Delete this and a source nobody connected, or an entity its connector never said how to read,
     is asked for at question time and fails in front of the asker."""
     found, _, _ = sources(connection())
-    assert found.reads("xero", "contact") is IdentityMode.SERVICE
+    assert found.reads("xero", "xero_contact") is IdentityMode.SERVICE
     assert found.reads("xero", "payment") is None
     assert found.reads("freshdesk", "ticket") is None
 
     unconnected, _, _ = sources()
-    assert unconnected.reads("xero", "invoice") is None
+    assert unconnected.reads("xero", "xero_invoice") is None
     assert unconnected.source_for("xero", mode=IdentityMode.SERVICE, asker="p_priya") is None
 
 
@@ -169,7 +169,7 @@ def test_an_id_that_could_change_xeros_query_is_refused_and_nothing_is_called() 
     Delete this and an id from the index becomes a way to widen a query against the client's
     ledger."""
     found, keys, caller = sources(connection())
-    hostile = FetchRequest(entity="invoice", filters=(("id", 'x")||1==1||("'),), limit=1)
+    hostile = FetchRequest(entity="xero_invoice", filters=(("id", 'x")||1==1||("'),), limit=1)
 
     reply = fetch(found, hostile)
 
@@ -178,8 +178,8 @@ def test_an_id_that_could_change_xeros_query_is_refused_and_nothing_is_called() 
     assert isinstance(keys, Keys)
     assert [lease.closed for lease in keys.leases] == [[NOW]]
     with pytest.raises(xero.XeroError):
-        xero.XeroLiveLookup().arguments_for("invoice", 'x"')
-    assert xero.XeroLiveLookup().arguments_for("contact", "c-0447") == {
+        xero.XeroLiveLookup().arguments_for("xero_invoice", 'x"')
+    assert xero.XeroLiveLookup().arguments_for("xero_contact", "c-0447") == {
         "where": 'ContactID==Guid("c-0447")'
     }
 
@@ -220,3 +220,57 @@ def test_a_process_with_no_database_reads_nothing_live() -> None:
     Delete this and a process with no database fails every fast-path question on a connection read
     it cannot make."""
     assert live_records_for(None, None) is None
+
+
+# ------------------------------------------------------------- a field the source lost (M11.8.7)
+def test_the_lane_is_told_what_each_source_s_newest_read_lost_even_after_a_failed_attempt() -> None:
+    """The answer lane this process builds reads lost fields through `lost_by_source` over the
+    install's stored sync states, and that reads each source's newest read rather than its newest
+    attempt: Xero's newest read lost the invoice's status and a failed attempt came after, Freshdesk
+    was read to the end. Delete this and the lane can be built with nothing telling it what was
+    lost, or forget a lost field the moment a source has one bad minute."""
+    import asyncio
+    from datetime import UTC, datetime
+    from functools import partial
+
+    from brain.connectors.contract import HealthState
+    from brain.ops.connector_sync import (
+        READ_TO_THE_END,
+        SOURCE_UNREACHABLE,
+        SyncOutcome,
+        SyncState,
+        fields_lost_detail,
+    )
+    from brain.ops.connector_sync_store import StoredSyncStates
+    from brain.ops.live_read_run import live_records_for, lost_by_source
+
+    built = live_records_for(object(), None)  # type: ignore[arg-type]
+    assert built is not None
+    assert isinstance(built.lost, partial)
+    assert built.lost.func is lost_by_source
+    assert isinstance(built.lost.args[0], StoredSyncStates)
+
+    at = datetime(2999, 1, 1, tzinfo=UTC)
+    lost = fields_lost_detail(("invoice.status",))
+
+    def state(name: str, detail: str, synced: str) -> SyncState:
+        return SyncState(
+            connector=name,
+            finished_at=at,
+            outcome=SyncOutcome.FAILED if detail != synced else SyncOutcome.SYNCED,
+            health=HealthState.DEGRADED,
+            consecutive_failures=0,
+            next_attempt_at=at,
+            detail=detail,
+            last_synced_at=at,
+            synced_detail=synced,
+        )
+
+    class States:
+        async def states(self) -> dict[str, SyncState]:
+            return {
+                "xero": state("xero", SOURCE_UNREACHABLE, lost),
+                "freshdesk": state("freshdesk", READ_TO_THE_END, READ_TO_THE_END),
+            }
+
+    assert asyncio.run(lost_by_source(States())) == {"xero": frozenset({"invoice.status"})}
