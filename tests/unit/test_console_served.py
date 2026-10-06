@@ -189,6 +189,31 @@ def test_the_entry_document_is_never_cached(served: TestClient) -> None:
         assert got.headers.get("cache-control") == "no-store", path
 
 
+def test_the_entry_document_states_its_style_policy_and_keeps_inline_styles_from_itself(
+    served: TestClient,
+) -> None:
+    """Every console page arrives with the style policy, allowing styles from the console's own
+    origin and inline styles for its dialogs, and from nowhere else.
+
+    Delete this and the header can be lost, which states nothing, or tightened to refuse inline
+    styles, which the drawers' scroll lock needs; the browser harness would catch the second only
+    on a pull request that touches the console.
+    """
+    from brain.console_static import (
+        CONSOLE_STYLE_POLICY,
+        THE_CONSOLE_KEEPS_INLINE_STYLES_FOR_ITS_DIALOGS,
+    )
+
+    assert "'unsafe-inline'" in THE_CONSOLE_KEEPS_INLINE_STYLES_FOR_ITS_DIALOGS
+    for path in ("/", "/agents"):
+        policy = served.get(path).headers.get("content-security-policy", "")
+        directives = {
+            part.split()[0]: part.split()[1:] for part in policy.split(";") if part.strip()
+        }
+        assert directives == {"style-src": ["'self'", "'unsafe-inline'"]}, path
+    assert served.get("/").headers["content-security-policy"] == CONSOLE_STYLE_POLICY
+
+
 # --------------------------------------------------------------- nothing else is shadowed
 def test_an_api_path_still_routes_when_the_console_is_served(served: TestClient) -> None:
     """The gate answers, rather than the console's HTML. A fallback that swallowed this would

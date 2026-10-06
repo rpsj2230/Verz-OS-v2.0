@@ -19,6 +19,9 @@ name: Browser
 # day it does). The setup code is minted beside its instant exactly as the installer mints them.
 
 on:
+  # ITERATION ONLY, removed before the pull request opens.
+  push:
+    branches: [M27/w3-harness-console-proofs]
   pull_request:
     paths:
       - "console/**"
@@ -32,6 +35,7 @@ on:
       - "src/brain/setup_routes.py"
       - "src/brain/sign_in_routes.py"
       - "src/brain/navigation_routes.py"
+      - "src/brain/console_static.py"
       - "src/brain/identity/**"
       - "tests/fixtures/tls.py"
       - ".github/workflows/browser.yml"
