@@ -81,7 +81,8 @@ def grant(value: Capability | str) -> Grant:
 
 
 #: `u_admin` is the auditor, reading every kind, and may name people on the People screen.
-#: `u_narrow` reads principal entries only and may name nobody.
+#: `u_narrow` reads principal entries only and may name nobody. `u_admin_only` may name
+#: people on the People screen and holds no audit grant.
 #: `u_wide` holds the screen and no audit grant, so reads only the entries about themselves.
 #: `u_prefix` holds everything on the existence plane, which a bare capability check lets in.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
@@ -96,6 +97,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_prefix": (grant(SCREEN_READ), grant(EXISTENCE), grant("read:audit.*")),
     "u_elsewhere": (),
     "u_none": (),
+    "u_admin_only": (grant(SCREEN_READ), grant(CONFIGURATION), grant(PEOPLE_READ)),
 }
 
 
@@ -644,11 +646,11 @@ def test_a_history_the_reader_may_not_see_and_a_history_of_nobody_are_the_same_a
     """Delete this and the history becomes a way of asking whether somebody's reach has ever
     changed: a withheld history answered differently from an empty one. For a kind other than a
     person, both are the empty history; for a person, `nameable` decides first, and both are the
-    one 404 before the ledger is read."""
+    one 404 for a reader who may neither name nor audit them, before the ledger is read."""
     withheld = get(client, "u_wide", HISTORY, subject_kind="agent", subject_id="helper")
     nobody = get(client, "u_wide", HISTORY, subject_kind="agent", subject_id="nobody")
     person = get(client, "u_wide", HISTORY, subject_kind="principal", subject_id="u_narrow")
-    no_person = get(client, "u_admin", HISTORY, subject_kind="principal", subject_id="u_nobody")
+    no_person = get(client, "u_wide", HISTORY, subject_kind="principal", subject_id="u_nobody")
 
     assert withheld.json()["events"] == nobody.json()["events"] == []
     assert withheld.status_code == nobody.status_code == 200
@@ -691,24 +693,52 @@ def test_a_persons_history_shows_a_capability_granted_and_removed_under_its_gran
     assert {one["subject"] for one in ledger.calls} == {"principal:u_wide", "grant:g1"}
 
 
-def test_a_reader_who_may_not_name_the_person_is_answered_404_and_their_grants_are_never_read(
+def test_a_reader_who_may_neither_name_nor_audit_the_person_is_answered_404_unread(
     client: TestClient, ledger: Ledger, people: People
 ) -> None:
-    """`A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`. A reader who reads the
-    audit screen and not the People screen gets the one 404 about a person who exists, the same
-    answer as about one who does not, and neither `gate.grant_ids_of` nor the ledger is asked.
-    The positive sibling is the test above, where the auditor who may name them is answered.
-    Delete this and the function answers which grants were somebody's to a reader the People page
-    would not even show them to."""
-    people.grants["u_wide"] = ("g1",)
+    """`A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`. A reader who opens the
+    audit screen, holds no audit grant and may not name people gets the one 404 about a person who
+    exists, the same answer as about one who does not, and neither `gate.grant_ids_of` nor the
+    ledger is asked. Delete this and the function answers which grants were somebody's to a
+    reader who could neither be shown that person nor read a line about them."""
+    people.grants["u_narrow"] = ("g1",)
 
-    hidden = get(client, "u_narrow", HISTORY, subject_kind="principal", subject_id="u_wide")
-    missing = get(client, "u_narrow", HISTORY, subject_kind="principal", subject_id="u_nobody")
+    hidden = get(client, "u_wide", HISTORY, subject_kind="principal", subject_id="u_narrow")
+    missing = get(client, "u_wide", HISTORY, subject_kind="principal", subject_id="u_nobody")
 
     assert hidden.status_code == missing.status_code == 404
     assert refusal(hidden) == refusal(missing)
     assert people.asked == []
     assert ledger.calls == []
+
+
+def test_a_reader_who_may_name_the_person_is_answered_without_any_audit_grant(
+    client: TestClient, people: People
+) -> None:
+    """The People screen's own reader is admitted to a person they may name, and the function
+    is asked about them; what they are shown of each entry is still the view's decision, which
+    without an audit grant is nothing about somebody else. Delete this and the History tab opens
+    for nobody who holds the People read alone."""
+    answer = get(client, "u_admin_only", HISTORY, subject_kind="principal", subject_id="u_wide")
+
+    assert answer.status_code == 200, answer.text
+    assert people.asked == ["u_wide"]
+
+
+def test_an_auditor_who_may_not_name_the_person_is_still_answered(
+    client: TestClient, ledger: Ledger, people: People
+) -> None:
+    """**Not narrowing the auditor.** A reader whose audit grant covers entries about a person may
+    read that person's history without the People read, as they could read every entry about them
+    on the Activity screen, and the function is asked for them. Delete this and the History fix
+    takes a person's history away from the auditor who reads it today."""
+    people.grants["u_wide"] = ("g1",)
+
+    answer = get(client, "u_narrow", HISTORY, subject_kind="principal", subject_id="u_wide")
+
+    assert answer.status_code == 200, answer.text
+    assert people.asked == ["u_wide"]
+    assert "principal:u_wide" in {one["subject"] for one in ledger.calls}
 
 
 # ----------------------------------------------------------------------- the statement
