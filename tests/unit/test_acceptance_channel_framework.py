@@ -10,6 +10,7 @@ way that check exists to catch, and the check fails with its own sentence.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M10.1.2, M10.1.3, M10.1.4, M10.3.1, M10.3.2, M10.3.4, M10.5.7, M10.6.2
+Task ids: M27.13.1
 """
 
 from __future__ import annotations
@@ -36,7 +37,11 @@ LEAVES = {
     "every_adapter_serves_its_declared_capabilities_and_plans_by_them": ("M10.1.2",),
     "a_reply_above_a_channels_ceiling_is_refused_and_points_to_ask": ("M10.1.3",),
     "each_adapter_is_listed_and_its_health_follows_its_deliveries": ("M10.1.4",),
-    "a_code_minted_in_an_open_sign_in_binds_one_chat_account_once": ("M10.3.1", "M10.3.2"),
+    "a_code_minted_in_an_open_sign_in_binds_one_chat_account_once": (
+        "M10.3.1",
+        "M10.3.2",
+        "M27.13.1",
+    ),
     "a_new_device_replaces_the_old_and_unbinding_is_recorded": ("M10.3.4",),
     "an_api_key_is_answered_until_it_is_revoked": ("M10.5.7",),
     "a_whatsapp_webhook_is_accepted_only_under_its_app_secret": ("M10.6.2",),
