@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T08:40:57.844441+00:00",
-  "commit": "82e3a466",
-  "commit_subject": "Item 168 decided: A, accept both; the register rows name it (#463)",
+  "generated_at": "2026-10-06T08:48:48.238591+00:00",
+  "commit": "5defb8a2",
+  "commit_subject": "The Incidents screen exists: which connected sources are degraded now, since when, and what stops working (#456)",
   "total": 1596,
   "done": 680,
   "percent": 42.6,
