@@ -15170,7 +15170,7 @@
    "proof": [
     "M1.8.8"
    ],
-   "decision": null
+   "decision": "needs-rupash 165: whether an administrator may set how a connected source's own permissions are followed, towards stricter only (A), or it stays fixed by the connector (B); open until answered"
   },
   {
    "id": "GAP2-19",
