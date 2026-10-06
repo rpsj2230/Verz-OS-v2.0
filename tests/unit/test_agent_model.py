@@ -679,20 +679,20 @@ def test_a_ceiling_that_reads_documents_reaches_the_knowledge_plane() -> None:
 
 def test_a_field_write_in_a_ceiling_implies_no_write_to_the_record() -> None:
     """**The refusal that keeps the derivation from widening anything.** A ceiling that may set
-    a ticket's status must not gain `write:ticket`, which a record-level write tool could
+    a task's status must not gain `write:task`, which a record-level write tool could
     require. The read beside it is still derived, so a rule that derived nothing also fails.
 
     Delete this and a field write can quietly become a write to the whole record."""
-    ceiling = a_ceiling_holding("write:ticket.status", "read:ticket.subject")
+    ceiling = a_ceiling_holding("write:task.status", "read:task.subject")
     values = {grant.capability.value for grant in ceiling.grants}
     # A ceiling holding the write alone, and this line exists because a mutation survived
     # without it: the row read is spelled `read:` whatever verb it came from, so a field write
     # would derive a row READ, and the read beside the write above derived that row read anyway.
-    write_only = a_ceiling_holding("write:ticket.status")
+    write_only = a_ceiling_holding("write:task.status")
 
-    assert "write:ticket" not in values
-    assert "read:ticket" in values
-    assert {grant.capability.value for grant in write_only.grants} == {"write:ticket.status"}
+    assert "write:task" not in values
+    assert "read:task" in values
+    assert {grant.capability.value for grant in write_only.grants} == {"write:task.status"}
 
 
 def test_a_derived_row_read_confers_no_column_the_ceiling_does_not_name() -> None:

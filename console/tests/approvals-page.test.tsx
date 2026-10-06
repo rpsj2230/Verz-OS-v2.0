@@ -161,7 +161,7 @@ const ARTEFACT = `ticket.update_status on ticket\nagent: agent_test\neffect: wri
 function wireCard(id: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     suspension_id: id,
-    artefact: ARTEFACT,
+    request: ARTEFACT,
     runs_as: "u_asker_with_a_long_identifier_that_does_not_break_on_its_own",
     raised_at: "2019-03-04T09:00:00Z",
     expires_at: "2019-03-04T13:00:00Z",
@@ -346,7 +346,7 @@ describe("an approval card on a phone", () => {
     expect(card.declarations["min-width"]).toBe("0");
     expect(card.declarations["max-width"]).toBe("100%");
 
-    const artefact = baseRule(sheet, "approval-card__artefact");
+    const artefact = baseRule(sheet, "approval-card__request");
     expect(artefact.declarations["white-space"]).toBe("pre-wrap");
     expect(artefact.declarations["overflow-wrap"]).toBe("anywhere");
     expect(baseRule(sheet, "approval-card__value").declarations["overflow-wrap"]).toBe("anywhere");
@@ -358,7 +358,7 @@ describe("an approval card on a phone", () => {
     });
     const drawn = page(container).querySelector("ul.approval-list > li > article.approval-card");
     expect(drawn).not.toBeNull();
-    expect(drawn?.querySelector("pre.approval-card__artefact")?.textContent).toBe(ARTEFACT);
+    expect(drawn?.querySelector("pre.approval-card__request")?.textContent).toBe(ARTEFACT);
     const values = [...(drawn?.querySelectorAll("dd.approval-card__value") ?? [])];
     expect(values.map((value) => value.textContent)).toContain(name);
   });
@@ -376,7 +376,7 @@ describe("an approval card on a phone", () => {
     const drawn = page(container).querySelector("article.approval-card");
     expect(drawn).not.toBeNull();
     expect([...(drawn as Element).children].map((child) => child.getAttribute("class"))).toEqual([
-      "approval-card__artefact",
+      "approval-card__request",
       "approval-card__facts",
       "approval-card__decision",
       "approval-card__link",
@@ -435,7 +435,7 @@ describe("the approvals queue", () => {
     // What breaks if this is deleted: every refusal below is satisfied by a page that draws
     // nothing. The order is the API's, which put the soonest to lapse first.
     const { container } = await consoleAt(APPROVALS_ADDRESS, {
-      [QUEUE_API]: { body: { items: [wireCard("sus_b"), wireCard("sus_a", { artefact: "second" })] } },
+      [QUEUE_API]: { body: { items: [wireCard("sus_b"), wireCard("sus_a", { request: "second" })] } },
     });
 
     expect(container.querySelector("h1")?.textContent).toBe(APPROVALS_HEADING);
@@ -497,10 +497,10 @@ describe("the approvals queue", () => {
     const spaced = "  indented first line\nsecond";
     const answer = readApprovalQueue({
       items: [
-        wireCard("sus_1", { artefact: spaced }),
-        wireCard("sus_1", { artefact: "a second copy" }),
+        wireCard("sus_1", { request: spaced }),
+        wireCard("sus_1", { request: "a second copy" }),
         wireCard("", {}),
-        wireCard("no_artefact", { artefact: "   " }),
+        wireCard("no_artefact", { request: "   " }),
         wireCard("no_runs_as", { runs_as: undefined }),
         wireCard("bad_time", { expires_at: "not a time" }),
         wireCard("no_raised", { raised_at: null }),
@@ -510,7 +510,7 @@ describe("the approvals queue", () => {
       ],
     });
 
-    expect(answer?.cards.map((card) => [card.suspensionId, card.artefact])).toEqual([["sus_1", spaced]]);
+    expect(answer?.cards.map((card) => [card.suspensionId, card.request])).toEqual([["sus_1", spaced]]);
     expect(readApprovalCard(wireCard("sus_2"))?.runsAs).toBe(wireCard("sus_2")["runs_as"]);
   });
 
@@ -580,7 +580,7 @@ describe("the approvals queue", () => {
     const [held, sent] = [...page(container).querySelectorAll("article.approval-card")];
 
     expect([...(held as Element).children].map((child) => child.getAttribute("class"))).toEqual([
-      "approval-card__artefact",
+      "approval-card__request",
       "approval-card__facts",
       "approval-card__unsent",
       "approval-card__decision",
@@ -598,7 +598,7 @@ describe("the approvals queue", () => {
     // What breaks if this is deleted: the page and the routes drifting apart on a name, or a
     // route that started sending a card's call or state. The card's set is exact.
     const queue = declaredResponseSchema(QUEUE_ROUTE, "get");
-    const card = ["artefact", "expires_at", "may_take_over", "raised_at", "runs_as", "suspension_id", "unsent_because"];
+    const card = ["expires_at", "may_take_over", "raised_at", "request", "runs_as", "suspension_id", "unsent_because"];
 
     expect(declaredPropertyNames(queue)).toEqual(expect.arrayContaining(["items", "truncated"]));
     expect(declaredPropertyNames(declaredProperty(queue, "items"))).toEqual(card);
@@ -684,8 +684,8 @@ describe("deciding an approval", () => {
     // queue's second answer is what the API says after the decision, and the page draws it.
     const { container, idp } = await consoleAt(APPROVALS_ADDRESS, {
       [QUEUE_API]: [
-        { body: { items: [wireCard("sus_1"), wireCard("sus_2", { artefact: "second" })] } },
-        { body: { items: [wireCard("sus_2", { artefact: "second" })] } },
+        { body: { items: [wireCard("sus_1"), wireCard("sus_2", { request: "second" })] } },
+        { body: { items: [wireCard("sus_2", { request: "second" })] } },
       ],
       [`${QUEUE_API}/sus_1/decision`]: { body: { suspension_id: "sus_1", verdict: "approved" } },
     });

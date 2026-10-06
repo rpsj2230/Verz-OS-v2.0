@@ -366,10 +366,8 @@ def test_a_kind_the_search_ignores_fails_the_kind_check(
 
     original = api_routes.model_lane_for
 
-    def unnarrowed(
-        state: Any, agent: Any, registry: Any, kinds: Any = (), follow_up: Any = None
-    ) -> Any:
-        return original(state, agent, registry, follow_up=follow_up)
+    def unnarrowed(state: Any, run: Any, kinds: Any = (), follow_up: Any = None) -> Any:
+        return original(state, run, follow_up=follow_up)
 
     monkeypatch.setattr(api_routes, "model_lane_for", unnarrowed)
     assert "another kind" in _failed(install, KIND)
