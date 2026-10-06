@@ -23,8 +23,8 @@
 # a hand copy like this one: it is the generated merge of the ten files the full profile
 # composes (`brain.ops.compose.FULL_PROFILE_FILES`), written by `uv run python -m
 # brain.ops.compose`, and `tests/unit/test_compose.py` fails while it and that merge differ.
-# `full` means fourteen components in `brain.ops.wiring`, twenty-two containers, and a host
-# with 14976 MiB to spare, which `brain.ops.compose.host_mib_for` computes; more than the
+# `full` means fourteen components in `brain.ops.wiring`, twenty-three containers, and a host
+# with 15104 MiB to spare, which `brain.ops.compose.host_mib_for` computes; more than the
 # one machine this repository was measured on, and that is a sizing requirement rather than
 # a reason not to describe the profile.
 #

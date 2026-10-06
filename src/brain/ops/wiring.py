@@ -348,7 +348,11 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         # be pointed at one by a misconfiguration. Sharing would put the credential store
         # and the company records it protects in one blast radius.
         name="keycloak",
-        memory_mib=768,
+        # 1024 since 2026-10-06, measured rather than chosen: at 768 the kernel killed every
+        # fresh install's first start, with its server build in the same JVM and then without it,
+        # because creating Keycloak's schema on a new database is the peak and lasts one start.
+        # See `docker-compose.keycloak.yml`, which also moves the build into a one-shot.
+        memory_mib=1024,
         profiles=frozenset({"standard", "full"}),
         wiring=Wiring.NONE,
         ready_when="/health/ready answers UP, which is true only once the realm is imported",

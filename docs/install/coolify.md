@@ -166,6 +166,7 @@ without Coolify that network does not exist, and compose refuses to start the id
 
    | Service | Profiles |
    | --- | --- |
+   | `keycloak-build` | standard, full |
    | `keycloak-realm` | standard, full |
    | `record-matcher` | full |
    | `seaweedfs-init` | standard, full |
