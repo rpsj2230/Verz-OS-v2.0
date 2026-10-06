@@ -1883,7 +1883,7 @@
    "proof": [
     "M14.8.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 159: the ambiguity is named only when every matching record is one the reader may already read; with one hidden, the answer is the visible record's alone"
   },
   {
    "id": "ARC-A-110",
@@ -3976,7 +3976,7 @@
    "proof": [
     "M14.8.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 159: the ambiguity is named only when every matching record is one the reader may already read; with one hidden, the answer is the visible record's alone"
   },
   {
    "id": "FEAT-7.1",
@@ -8933,7 +8933,7 @@
    "proof": [
     "M14.8.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 159: the ambiguity is named only when every matching record is one the reader may already read; with one hidden, the answer is the visible record's alone"
   },
   {
    "id": "OWN-77",
@@ -16266,7 +16266,7 @@
    "proof": [
     "M14.8.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 155: person join keys wait for the fingerprint decision"
   },
   {
    "id": "GAP3-03",
