@@ -36,7 +36,7 @@ from alembic import op
 
 revision = "0210"
 # main's head at the time of writing. Re-pointed at whichever migration is the head when it lands.
-down_revision = "0207"
+down_revision = "0209"
 branch_labels = None
 depends_on = None
 
