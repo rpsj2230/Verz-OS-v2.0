@@ -30,7 +30,16 @@ import { readAgentWorkspace, type AgentWorkspaceAnswer } from "../src/pages/agen
 import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { leashRowId, readHeaderFacts, readProfile } from "../src/pages/agents/agentDetailQuery";
 import { COMPUTER_HEADING, takenOverWords } from "../src/pages/agents/AgentProfile";
-import { ANSWERS_NOWHERE, CHANGE_CHANNELS, CHANNELS_DONE, CHANNELS_QUESTION, SAVE_CHANNELS } from "../src/pages/agents/AgentChannels";
+import {
+  ANSWERS_NOWHERE,
+  CHANGE_CHANNELS,
+  CHANNELS_DONE,
+  CHANNELS_QUESTION,
+  GROUP_CHATS_TOO,
+  HOW_IT_ANSWERS,
+  SAVE_CHANNELS,
+} from "../src/pages/agents/AgentChannels";
+import { PROFILE_WORDS } from "../src/pages/agentLifecycleQuery";
 import { WHERE_IT_ANSWERS } from "../src/pages/agents/ChannelChoices";
 import { rungWords } from "../src/pages/agents/agentActions";
 import { VIEWS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
@@ -927,6 +936,7 @@ function lifecycleWire(overrides: Readonly<Record<string, unknown>> = {}): Recor
     ],
     channels_note: "An agent with no channel ticked answers nowhere: nobody can ask it anything until one is.",
     may_change_channels: true,
+    channel_rows: [],
     ...overrides,
   };
 }
@@ -994,6 +1004,28 @@ describe("where the agent answers", () => {
     await screen.findByText(CHANNELS_DONE);
     expect(channelPosts(mounted.idp)).toEqual([
       { path: CHANNELS_API, body: { channels: ["console", "whatsapp"], expected: ["console", "lark"] } },
+    ]);
+  });
+
+  test("each channel it answers on is listed with how it answers there and whether group chats are open to it", async () => {
+    // What breaks if this is deleted: M39.2.4.1's channel row, so the Profile names a channel and
+    // says nothing about whether an answer there is a card, text or files, or that it can join a
+    // group chat there; or a row for a channel it does not answer on, read as one it does.
+    const rows = [
+      { name: "lark", label: "Lark", enabled: true, profile: "card", group_installable: true },
+      { name: "whatsapp", label: "WhatsApp", enabled: false, profile: "plain", group_installable: false },
+    ];
+    const mounted = await profileWith({ body: lifecycleWire({ channel_rows: rows }) });
+    const card = await waitFor(() => {
+      const found = channelsCard(mounted.container);
+      if (found === null) {
+        throw new Error("no card");
+      }
+      return found;
+    });
+    const listed = within(card as HTMLElement).getByRole("list", { name: HOW_IT_ANSWERS });
+    expect([...listed.querySelectorAll("li")].map((one) => one.textContent)).toEqual([
+      `Lark: ${PROFILE_WORDS["card"]}. ${GROUP_CHATS_TOO}`,
     ]);
   });
 
@@ -1067,5 +1099,8 @@ describe("where the agent answers", () => {
       "channels",
       "expected",
     ]);
+    // Each channel row's fields, as `readChannelRows` reads them (M39.2.4.1): the array's items.
+    const row = declaredProperty(view, "channel_rows");
+    expect(declaredPropertyNames(row)).toEqual(["enabled", "group_installable", "label", "name", "profile"]);
   });
 });

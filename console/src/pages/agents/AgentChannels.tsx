@@ -19,7 +19,11 @@
  * open to the lifecycle authority only, and a steward who may switch channels and nothing else would
  * have found a menu of refusals with one live item.
  *
- * Task ids: M13.7.4
+ * Each channel it answers on with an adapter is also listed with how an answer is laid out there
+ * and whether it can be installed into group chats there, from the lifecycle view's channel rows
+ * (M39.2.4.1), which the API computes from the adapters' own declarations.
+ *
+ * Task ids: M13.7.4, M39.2.4.1
  */
 
 import { Radio } from "lucide-react";
@@ -35,6 +39,7 @@ import {
   agentChannelsApiPath,
   agentLifecycleApiPath,
   channelLabels,
+  PROFILE_WORDS,
   channelsBody,
   readLifecycle,
   readNotChanged,
@@ -52,6 +57,8 @@ export const CHANNELS_DONE = "Where it answers was changed";
 export const CHANNELS_NOT_CHANGED = "Nothing was changed";
 export const SAVE_CHANNELS = "Save";
 export const KEEP_CHANNELS = "Not now";
+export const HOW_IT_ANSWERS = "How it answers on each channel";
+export const GROUP_CHATS_TOO = "It can be installed into group chats there.";
 
 interface Refused {
   readonly failure: ApiFailure;
@@ -138,6 +145,18 @@ export function AgentChannels({ agentId }: { readonly agentId: string }) {
             ))}
           </div>
         )}
+        {shown.channelRows.some((row) => row.enabled) ? (
+          <ul aria-label={HOW_IT_ANSWERS} data-slot="agent-channel-rows" className="m-0 flex list-none flex-col gap-1 p-0 text-[13px] text-dim">
+            {shown.channelRows
+              .filter((row) => row.enabled)
+              .map((row) => (
+                <li key={row.name} className="[overflow-wrap:anywhere]">
+                  {`${row.label}: ${PROFILE_WORDS[row.profile] ?? PROFILE_WORDS["plain"] ?? ""}.`}
+                  {row.groupInstallable ? ` ${GROUP_CHATS_TOO}` : ""}
+                </li>
+              ))}
+          </ul>
+        ) : null}
       </div>
       <ConfirmDialog
         open={editing !== null}

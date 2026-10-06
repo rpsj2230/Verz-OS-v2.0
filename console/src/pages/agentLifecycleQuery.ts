@@ -65,6 +65,45 @@ export interface AgentLifecycle {
   /** The sentence that an agent with no channel ticked answers nowhere. */
   readonly channelsNote: string;
   readonly mayChangeChannels: boolean;
+  /** Each channel with an adapter this reader is offered, and how the agent answers there (M39.2.4.1). */
+  readonly channelRows: readonly ChannelRow[];
+}
+
+/** `ChannelRowView`: one adapter's channel, whether the agent answers there and how. */
+export interface ChannelRow {
+  readonly name: string;
+  readonly label: string;
+  readonly enabled: boolean;
+  /** `card`, `attachment` or `plain`, chosen from the adapter's own declaration. */
+  readonly profile: string;
+  readonly groupInstallable: boolean;
+}
+
+/** How an answer is laid out on a channel, in words. A profile the page does not know is said as text. */
+export const PROFILE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  card: "answers as cards with buttons",
+  attachment: "answers as text with files attached",
+  plain: "answers as plain text",
+});
+
+/** The rows out of a response body: only well-formed ones, in the API's order. */
+export function readChannelRows(value: unknown): readonly ChannelRow[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((one: unknown) => {
+    if (typeof one !== "object" || one === null) {
+      return [];
+    }
+    const row = one as Readonly<Record<string, unknown>>;
+    const name = said(row["name"]);
+    const label = said(row["label"]);
+    const profile = said(row["profile"]);
+    if (name === undefined || label === undefined || profile === undefined) {
+      return [];
+    }
+    return [{ name, label, enabled: row["enabled"] === true, profile, groupInstallable: row["group_installable"] === true }];
+  });
 }
 
 function said(value: unknown): string | undefined {
@@ -103,6 +142,7 @@ export function readLifecycle(payload: unknown): AgentLifecycle | null {
     channelChoices: readChannelChoices(fields["channel_choices"]),
     channelsNote: said(fields["channels_note"]) ?? "",
     mayChangeChannels: fields["may_change_channels"] === true,
+    channelRows: readChannelRows(fields["channel_rows"]),
   };
 }
 

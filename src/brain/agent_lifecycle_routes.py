@@ -138,7 +138,8 @@ from brain.automation_schedule_routes import NotChangedView
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.manifest import ManifestError, manifest_digest
 from brain.connectors.registry import ConnectorRegistry, ConnectorState, RegisteredConnector
-from brain.console.agent_tabs import channel_rows
+from brain.console.agent_tabs import AgentTabError, ChannelRow, channel_rows
+from brain.console.agent_tabs import enable as enable_channel
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -290,6 +291,24 @@ class ChannelChoiceView(BaseModel):
     label: str
 
 
+class AgentChannelRowView(BaseModel):
+    """One channel with an adapter this reader may see this agent on (M39.2.4.1).
+
+    `agent_tabs.ChannelRow` as the page reads it: whether the agent answers there, how an answer
+    is laid out there (`agent_tabs.rendering_profile`, chosen from the adapter's own declaration
+    and never configured) and whether the agent can be installed into a group chat there.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    enabled: bool
+    #: `agent_tabs.RenderProfile`: card, attachment or plain.
+    profile: str
+    group_installable: bool
+
+
 def channel_choices() -> list[ChannelChoiceView]:
     """Every channel an agent may answer on, in `Channel`'s order, none of them ticked."""
     return [
@@ -331,6 +350,8 @@ class LifecycleView(BaseModel):
     #: Its steward, or a holder of the lifecycle authority over its row. Presentation only: the
     #: route asks again. See `A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`.
     may_change_channels: bool = False
+    #: The channel rows `agent_tabs.channel_rows` offers this reader for this agent (M39.2.4.1).
+    channel_rows: list[AgentChannelRowView] = Field(default_factory=list)
 
 
 class ChannelsAsked(BaseModel):
@@ -774,16 +795,12 @@ A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED: Final = (
 
 
 def switchable_channels(record: AgentRecord, asked: Asking) -> frozenset[str]:
-    """The channels this reader may switch this agent on for. See the reason constant above."""
-    rows = channel_rows(
-        asked.reach,
-        record,
-        declared_channels(),
-        product_field_policy(),
-        enabled=(),
-        now=asked.now,
+    """The channels this reader may switch this agent on for: the rows `rows_for` offers, and the
+    two surfaces that answer in the asker's own session. See `SWITCHING_ON_IS_ONE_RULE`."""
+    return (
+        frozenset(row.channel.value for row in rows_for(record, asked))
+        | ANSWERED_IN_THE_ASKERS_OWN_SESSION
     )
-    return frozenset(row.channel.value for row in rows) | ANSWERED_IN_THE_ASKERS_OWN_SESSION
 
 
 #: What a switch onto a channel that cannot carry this agent's answers is told.
@@ -831,7 +848,50 @@ def lifecycle_view(found: FoundAgent, asked: Asking, key: str | None) -> Lifecyc
         channels=list(record.channels),
         channel_choices=channel_choices_for(record, asked),
         may_change_channels=may_change_channels(record, asked),
+        channel_rows=[
+            AgentChannelRowView(
+                name=row.channel.value,
+                label=AGENT_CHANNEL_LABELS.get(row.channel.value, row.channel.value),
+                enabled=row.enabled,
+                profile=row.profile.value,
+                group_installable=row.group_installable,
+            )
+            for row in rows_for(record, asked)
+        ],
     )
+
+
+def rows_for(record: AgentRecord, asked: Asking) -> tuple[ChannelRow, ...]:
+    """`agent_tabs.channel_rows` for this agent and this reader, with what it answers on now."""
+    return channel_rows(
+        asked.reach,
+        record,
+        declared_channels(),
+        product_field_policy(),
+        enabled=[one for one in Channel if one.value in record.channels],
+        now=asked.now,
+    )
+
+
+#: Why switching a channel on is asked of `agent_tabs.enable` and of nothing else (M39.2.4.1).
+SWITCHING_ON_IS_ONE_RULE: Final = (
+    "A channel with an adapter is switched on only where agent_tabs.enable admits it over the "
+    "rows agent_tabs.channel_rows offers this reader for this agent, which is the workspace's "
+    "own decision; the web console and a service key's API, which answer the asker in their own "
+    "session and declare no adapter, are admitted by name. Every other channel is refused. One "
+    "rule, so the page's boxes and the route cannot disagree about what may be switched on."
+)
+
+
+def may_switch_on(record: AgentRecord, asked: Asking, channels: frozenset[str]) -> bool:
+    """Whether every channel in `channels` may be switched on. See `SWITCHING_ON_IS_ONE_RULE`."""
+    rows = rows_for(record, asked)
+    for name in sorted(channels - ANSWERED_IN_THE_ASKERS_OWN_SESSION):
+        try:
+            enable_channel(rows, Channel(name))
+        except (AgentTabError, ValueError):
+            return False
+    return True
 
 
 def channel_choices_for(record: AgentRecord, asked: Asking) -> list[ChannelChoiceView]:
@@ -999,7 +1059,7 @@ async def change_agent_channels(
     if tuple(body.expected) != before.channels:
         return _not_changed(MOVED, IT_MOVED)
     switched_on = frozenset(body.channels) - frozenset(before.channels)
-    if not switched_on <= switchable_channels(before, asked):
+    if not may_switch_on(before, asked, switched_on):
         return _not_changed(REFUSED, CANNOT_CARRY_IT)
     after = answering_on(before, body.channels)
     if after.channels != before.channels and not await store.change_channels(
