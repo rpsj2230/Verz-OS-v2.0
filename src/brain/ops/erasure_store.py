@@ -430,6 +430,11 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A version retired or reinstated, and a skill taken off an agent (`0139`): `set_by` and
         # `detached_by` are actors, not owners, and each row is about a skill and an agent.
         "agent.skill_detachment",
+        # An approved skill version taken as a file, and a rehearsal of its examples (`0191`):
+        # `exported_by` and `rehearsed_by` are actors, and each row is about a skill version and
+        # an agent's reach to its tools, never about a person.
+        "agent.skill_export",
+        "agent.skill_rehearsal",
         "agent.skill_retirement",
         "agent.skill_review",
         # The bytes of a script a stored skill version carries (`0178`): about a skill, never a
