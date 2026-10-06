@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T07:30:29.698091+00:00",
-  "commit": "6479ba20",
-  "commit_subject": "Sessions, sign-in links, sign-in strength, the ledger, exports and service account keys are checked on the install (#358)",
+  "generated_at": "2026-10-06T07:48:55.518931+00:00",
+  "commit": "dddf0d1c",
+  "commit_subject": "The answer cache is keyed on the install's stored effective hash, so a changed leash, skill or connector no longer serves yesterday's answer (#446)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
