@@ -43,6 +43,8 @@ interface FormCase {
 
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
+  // An API's specification and mapping, the one form on Add an API, above its review list.
+  "src/pages/connectors/CustomConnectorsPage.tsx": [{ pattern: "/connectors/new-api", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
   // A memory's edit opens in place on My workspace, the first form on the page once opened.
   "src/pages/MyWorkspace.tsx": [{ pattern: "/me", opener: "Edit", index: 0, writes: true }],

@@ -223,6 +223,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.agent_lifecycle_routes:AgentLifecycles.version": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.live_principal": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.change": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.agent_lifecycle_routes:AgentLifecycles.change_channels": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         "brain.agent_lifecycle_routes:AgentLifecycles.create": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # An agent's drafts (0149): reads, and appends. A second save of the same body returns the
         # revision already kept, a second act on one revision is refused by its key, and a second
@@ -714,11 +717,38 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:PreparesWrite.call_for": Repeat.READS,
         "brain.connectors.declaration:PreparesWrite.differs": Repeat.READS,
         "brain.ops.connector_write_run:SourceSender.send": Repeat.ISSUES,
+        # Running an approved action with nobody present (M13.7.6). Every executor runs one
+        # approval through `brain.gate.leash.resume`, whose `run_real` keys it in the operation
+        # ledger by the approval's id, so a second run of the same approval is answered by the
+        # ledger and the far end is left as the first left it. The tools, the agent's standing and
+        # the requester's reach are reads.
+        "brain.ops.approved_runs:Executor.tools": Repeat.READS,
+        "brain.ops.approved_runs:Executor.run": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.approved_runs:Standings.standing": Repeat.READS,
+        "brain.ops.approved_runs:Reaches.load": Repeat.READS,
         # A POST to a source is one of two things (M11.7.1): a report asked for with a body, which
         # changes nothing, or a Google key file exchanged for a token, of which a second exists
         # until its hour ends and is never read. The stronger of the two is what is recorded.
         "brain.ops.connector_sync_run:SourcePoster.post": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.connectors.declaration:ScopedReading.token_scopes": Repeat.READS,
+        # M11.8.6: an OAuth source's consent is a declaration read; a rotated refresh token is
+        # patched over its own slot, so a second write leaves the slot as the first did; a consent
+        # is held and taken in this system's own table, and a refused one appends an attempt row.
+        "brain.connectors.declaration:ConsentedReading.consent": Repeat.READS,
+        "brain.ops.connector_sync_run:RotatesRefreshTokens.rotate": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.connector_sync_run:PatchesSlots.patch_static_kv": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.connector_sync_run:PatchesSlots.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.connector_consent:ConsentStates.issue": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_consent:ConsentStates.take": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_consent:ConsentHealth.latest": Repeat.READS,
+        "brain.ops.connector_consent:ConsentHealth.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # M11.8.6: removing a person's own refresh token slot on erasure leaves it removed however
+        # often it is asked; a slot already gone is removed as nothing.
+        "brain.ops.erasure_store:RemovesSlots.remove_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.connectors.declaration:LiveReport.entities": Repeat.READS,
         "brain.connectors.declaration:LiveReport.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveReport.request_for": Repeat.READS,

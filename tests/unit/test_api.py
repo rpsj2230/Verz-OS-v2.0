@@ -269,11 +269,11 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     answers a key it could not keep with the credential write's own `CredentialNotKeptView`, for
     that route's reason.
 
-    **An agent's lifecycle moves are the eighth to thirteenth, for their 409s.**
-    `brain.agent_lifecycle_routes` answers enable, disable, archive, transfer, duplicate and a
-    template install with the automations' own `NotChangedView` when the page's confirmation no
-    longer matches the row, or the move is refused in the domain's sentence (an archived agent
-    cannot be enabled), so the confirmation dialog can say why nothing changed.
+    **An agent's lifecycle moves are the eighth to fourteenth, for their 409s.**
+    `brain.agent_lifecycle_routes` answers enable, disable, archive, transfer, duplicate, a channel
+    switch and a template install with the automations' own `NotChangedView` when the page's
+    confirmation no longer matches the row, or the move is refused in the domain's sentence (an
+    archived agent cannot be enabled), so the confirmation dialog can say why nothing changed.
     `brain.agent_builder_routes` answers every write on a draft with the same body, for the same
     reason: a draft saved since, a publish that is not checked, an agent that moved.
 
@@ -296,6 +296,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     )
     from brain.agent_lifecycle_routes import (
         ARCHIVE_PATH,
+        CHANNELS_PATH,
         DISABLE_PATH,
         DUPLICATE_PATH,
         ENABLE_PATH,
@@ -337,6 +338,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
                 DISABLE_PATH,
                 ARCHIVE_PATH,
                 TRANSFER_PATH,
+                CHANNELS_PATH,
                 DUPLICATE_PATH,
                 INSTALL_PATH,
                 DRAFTS_PATH,

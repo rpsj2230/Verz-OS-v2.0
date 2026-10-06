@@ -114,6 +114,7 @@ async def installed_agent(
     allowed_tools: Sequence[str] = (),
     suffix: str = "",
     scope: Scope | None = None,
+    guardrails: Any = None,
     personal: bool = False,
 ) -> str:
     """An agent of acceptance_a installed from a template the check signs, with `overlay` set here.
@@ -157,6 +158,7 @@ async def installed_agent(
                 capabilities=tuple(Capability(value=one) for one in capabilities),
                 allowed_tools=tuple(allowed_tools),
             ),
+            **({} if guardrails is None else {"guardrails": guardrails}),
         ),
         key=key,
         signed_by=owner,

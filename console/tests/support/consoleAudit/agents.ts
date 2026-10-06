@@ -18,9 +18,16 @@ import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
 import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/agents/agentMemoryQuery";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
-import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
+import { agentChannelsApiPath, agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
 import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
+
+/** A channel switch pressed over HTTP against PostgreSQL: the row, and one ledger entry naming who. */
+const CHANNELS_PRESSED = t(
+  "test_agent_lifecycle_store",
+  "test_a_channel_switch_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person",
+  true,
+);
 
 /** Each lifecycle move pressed over HTTP against PostgreSQL: the row, and the ledger entry naming who. */
 const LIFECYCLE_PRESSED = t(
@@ -112,6 +119,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/archive", "agentMoveApiPath", agentMoveApiPath("quote-helper", "archive")),
     at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
     at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
+  ],
+  "src/pages/agents/AgentChannels.tsx agentChannelsApiPath(drawn.agentId)": [
+    at("POST /api/v1/agents/{agent_id}/channels", "agentChannelsApiPath", agentChannelsApiPath("quote-helper")),
   ],
 };
 
@@ -222,6 +232,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PRESSED,
     audit: LIFECYCLE_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_a_transfer_hands_the_agent_to_somebody_here_and_names_who_handed_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/channels": {
+    row: CHANNELS_PRESSED,
+    audit: CHANNELS_PRESSED,
+    behaviour: t("test_agent_lifecycle_routes", "test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_it"),
   },
   "POST /api/v1/agents/{agent_id}/duplicate": {
     row: LIFECYCLE_PRESSED,

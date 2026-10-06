@@ -312,6 +312,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/archive",
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
+      "/api/v1/agents/{agent_id}/channels",
       "/api/v1/agents/{agent_id}/learning",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agents/{agent_id}/budget",
@@ -448,9 +449,18 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/channels",
       "/channels/:name",
       "/channels/:name/:view",
+      // Where a vendor sends the person back after consenting to a source (M11.8.6).
+      "/connector-consent",
+      // An API's connector added from its specification, and reviewed by a second person (M11.7.8).
+      "/connectors/new-api",
     ],
     routes: [
       "/api/v1/connectors",
+      "/api/v1/connectors/{connector}/consent",
+      "/api/v1/connectors/consent/callback",
+      // A person's own accounts, listed and consented to from My workspace (M11.8.6).
+      "/api/v1/me/accounts",
+      "/api/v1/me/accounts/{connector}/consent",
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",
@@ -472,6 +482,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/console/channels",
       "/api/v1/console/channels/{name}",
       "/api/v1/console/channels/{name}/stats",
+      // An API's connector: submitted, changed and reviewed (M11.7.8).
+      "/api/v1/custom-connectors*",
     ],
     tables: [
       "auth.binding_code",
@@ -479,6 +491,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.channel_delivery",
       "ops.connector_connection",
       "ops.connector_sync",
+      // A consent started at a vendor, held until it is answered once (M11.8.6).
+      "ops.oauth_consent",
+      // A connector for a new API, as submitted, and who reviewed it (M11.7.8).
+      "ops.custom_connector",
       "proj.record",
       "proj.record_retired",
       "proj.source_epoch",
