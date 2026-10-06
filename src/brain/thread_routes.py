@@ -42,11 +42,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
+from brain.attribution import trace_of_request
 from brain.chat.remember import threads_of
 from brain.chat.thread_store import CONSOLE_SURFACE, StoredThreads, surfaces
 from brain.chat.threads import Thread
 from brain.chat.turns import CorrectionKind
 from brain.core.errors import Absent, Failed
+from brain.knowledge.candidate_store import propose
+from brain.knowledge.candidates import WORDS_CHARS
 from brain.knowledge.document_tools import DocumentRead, reader
 from brain.knowledge.item import ITEM_ID_PATTERN
 from brain.knowledge.row_store import SessionRowSource
@@ -106,11 +109,18 @@ class ThreadMessageView(BaseModel):
 
 
 class CorrectionAsked(BaseModel):
-    """A person saying the latest answer in their thread was wrong, and how. No words."""
+    """A person saying the latest answer in their thread was wrong, and how; and, if they choose,
+    what the right answer is (M16.6.5).
+
+    The words never reach the correction, which has no field for them. They are held as a
+    candidate about the document the answer cited, and change nothing until somebody who may
+    replace that document approves them: `brain.knowledge.candidates`.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: CorrectionKind
+    right_answer: str | None = Field(default=None, max_length=WORDS_CHARS)
 
 
 class CorrectionView(BaseModel):
@@ -250,6 +260,21 @@ async def correct_my_thread(
     )
     if kept is None:
         raise Absent(f"thread {thread_id!r} is not answerable for this caller")
+    if correction.right_answer and correction.right_answer.strip():
+        # Held as a candidate about the document the answer cited, in the person's own name, and
+        # told to nobody here: whether a candidate formed says which documents the answer cited
+        # are still theirs to read, which the correction's own reply does not say either.
+        sessions = request.app.state.db_sessions
+        await propose(
+            sessions,
+            SessionRowSource(sessions),
+            correction=kept,
+            thread_id=thread_id,
+            words=correction.right_answer,
+            reach=asked.reach,
+            now=asked.now,
+            trace_id=trace_of_request() or f"correction.{thread_id}",
+        )
     return CorrectionView(kind=kept.kind.value, at=kept.at)
 
 

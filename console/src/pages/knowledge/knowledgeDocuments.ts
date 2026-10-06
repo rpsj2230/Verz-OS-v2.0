@@ -31,6 +31,9 @@ export const LIBRARY_ADDRESS = "/library";
 /** Where captured solutions are decided, a tab of the Knowledge entry. */
 export const SOLUTIONS_ADDRESS = "/solutions";
 
+/** Where corrections carrying the right answer are reviewed, a tab of the Knowledge entry. */
+export const CORRECTIONS_ADDRESS = "/corrections";
+
 /** Where the list and one document's history are asked for, under the API base. */
 export const DOCUMENTS_API_PATH = "/knowledge/documents";
 export const VERIFICATIONS_API_PATH = "/knowledge/verifications";

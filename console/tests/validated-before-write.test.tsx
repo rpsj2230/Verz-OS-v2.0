@@ -245,6 +245,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The capture form is drawn in a drawer outside the page's main landmark, and a decision's form is " +
     "one per waiting solution. tests/knowledge-page.test.tsx submits the capture blank and a decision " +
     "with no review date, and holds that nothing is sent and each says what to fill in.",
+  "src/pages/knowledge/CorrectionsPage.tsx":
+    "A decision's form is one per opened correction, drawn only once the review has loaded. " +
+    "tests/knowledge-page.test.tsx rejects with no reason and approves with no review date, and holds " +
+    "that nothing is sent and each says what to fill in.",
   "src/pages/FirstRun.tsx":
     "The wizard's step forms move between steps and send nothing. Its one write is the review " +
     "screen's button after every step, and the API's problems are drawn beside the fields they " +

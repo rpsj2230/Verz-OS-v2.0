@@ -220,16 +220,25 @@ export const NOTHING_FOUND_IN_CONVERSATIONS = "None of your questions holds thos
 const SEARCH_FIELD_ID = "ask-search";
 
 /**
- * The control under an answer kept in a conversation, marking it wrong (M9.2.4). A kind and no
- * words: see `threadsQuery.ts` for why there is no field saying what the right answer was.
+ * The control under an answer kept in a conversation, marking it wrong (M9.2.4), and saying what
+ * is right if the person knows (M16.6.5). The kind is the note; the words, when given, are a
+ * proposal its document's steward decides: see `threadsQuery.ts`.
  */
 export const WAS_IT_WRONG = "Was this answer wrong?";
+export const WHAT_IS_RIGHT = "What is right? (optional)";
+export const WHAT_IS_RIGHT_HINT =
+  "Sent to whoever looks after the document this answer used. It changes nothing until they approve it.";
+/** The most a person may say is right, which is what the route takes. */
+export const RIGHT_ANSWER_CHARS = 2000;
 export const MARK_WRONG = "Mark it wrong";
 export const MARKED_WRONG = "Marked. Your conversation now notes that this answer was wrong.";
 export const NOT_MARKED = "That could not be marked. Nothing was changed.";
 
 /** The id tying the correction's kind to its label. */
 const CORRECTION_FIELD_ID = "ask-correction";
+
+/** The id tying what is right to its label. */
+const RIGHT_FIELD_ID = "ask-right-answer";
 
 /** The first kind offered. */
 const FIRST_CORRECTION: CorrectionKind = "wrong_fact";
@@ -356,6 +365,7 @@ export function Ask() {
   // Marking the answer on the page wrong: the kind chosen, and what the route said (M9.2.4).
   const [wrong, setWrong] = useState<CorrectionKind>(FIRST_CORRECTION);
   const [marked, setMarked] = useState<"" | "marked" | "failed">("");
+  const [right, setRight] = useState("");
 
   // This person's conversations. A list that did not come back is no panel rather than an error:
   // the question can still be asked, and it starts a conversation of its own.
@@ -417,6 +427,7 @@ export function Ask() {
       inFlight.current = controller;
       focusWasInTheForm.current = form.current?.contains(document.activeElement) ?? false;
       setMarked("");
+      setRight("");
       setAsking({ view: NOTHING_ASKED, busy: true, failure: null, traceId: "" });
 
       void (async () => {
@@ -597,7 +608,7 @@ export function Ask() {
                 void (async () => {
                   const sent = await request<unknown>(correctionPath(thread), {
                     method: "POST",
-                    body: { kind: wrong },
+                    body: right.trim() === "" ? { kind: wrong } : { kind: wrong, right_answer: right.trim() },
                   });
                   setMarked(sent.ok && readCorrection(sent.data) !== null ? "marked" : "failed");
                 })();
@@ -618,6 +629,20 @@ export function Ask() {
                   </option>
                 ))}
               </select>
+              <label className="ask__label" htmlFor={RIGHT_FIELD_ID}>
+                {WHAT_IS_RIGHT}
+              </label>
+              <textarea
+                id={RIGHT_FIELD_ID}
+                className="form-control"
+                maxLength={RIGHT_ANSWER_CHARS}
+                value={right}
+                aria-describedby={`${RIGHT_FIELD_ID}-hint`}
+                onChange={(changed) => setRight(changed.target.value)}
+              />
+              <p className="note" id={`${RIGHT_FIELD_ID}-hint`}>
+                {WHAT_IS_RIGHT_HINT}
+              </p>
               <button type="submit" className="button" disabled={marked === "marked"}>
                 {MARK_WRONG}
               </button>
