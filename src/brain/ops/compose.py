@@ -196,8 +196,8 @@ BASELINE_FILE: Final = "docker-compose.yml"
 #: `tests/unit/test_compose.py` compares every figure here against what the files say, in the
 #: shape `wiring.A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING` is held to.
 THE_FULL_PROFILE_IS_ONE_FILE: Final = (
-    "The full profile is 22 containers across 10 compose files, merged into "
-    "docker-compose.full.yml, reserving 14720 MiB, and it needs a host with 14976 MiB to "
+    "The full profile is 23 containers across 10 compose files, merged into "
+    "docker-compose.full.yml, reserving 15616 MiB, and it needs a host with 15872 MiB to "
     "spare. Nothing stops it being one file: 0 components are budgeted with no service, 0 "
     "services take something they need at startup from a bind mount that a stored compose "
     "resolves to nothing, seaweedfs is described once and named twice, and the 2 services "

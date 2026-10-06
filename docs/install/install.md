@@ -133,8 +133,8 @@ Three profiles, and the one to pick is the smallest that has what you need.
 | Profile | What it runs | Memory | Cores | Disk | Containers |
 | --- | --- | --- | --- | --- | --- |
 | `lite` | the application, the connection pooler, the database, the cache | 3968 MiB | 2 | 28 GiB | 4 |
-| `standard` | the above plus two workers, the file store, the identity provider, the inference server and the personal data analyser | 11008 MiB | 6 | 38 GiB | 14 |
-| `full` | the above plus the trace ledger, the automation canvas and the record matcher | 14976 MiB | 8 | 52 GiB | 22 |
+| `standard` | the above plus two workers, the file store, the identity provider, the inference server and the personal data analyser | 11904 MiB | 6 | 38 GiB | 15 |
+| `full` | the above plus the trace ledger, the automation canvas and the record matcher | 15872 MiB | 8 | 52 GiB | 23 |
 
 The memory figures are measured: they are the sum of every memory ceiling in the profile's
 compose files, plus what the profile budgets for a component that has no service yet (none,

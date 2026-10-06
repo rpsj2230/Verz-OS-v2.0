@@ -13,7 +13,7 @@
 #
 # | service        | cgroup | process-side          | why the gap |
 # |----------------|--------|-----------------------|-------------|
-# | keycloak       | 768M   | MaxRAMPercentage 70   | metaspace, code cache, GC structures, threads |
+# | keycloak       | 768M   | MaxRAMPercentage 50   | metaspace, code cache, GC structures, threads |
 # | keycloak-db    | 256M   | shared_buffers 64MB   | work_mem per sort, WAL buffers, the backends |
 #
 # A cgroup limit is enforced by the kernel killing the process, so it protects the
@@ -23,10 +23,16 @@
 # while collecting. `MaxRAMPercentage` reads the cgroup limit rather than the host, which is
 # why it is a percentage here and a fixed number in the Node services.
 #
-# 70 rather than 100 because the heap is not the process. Metaspace, the code cache, thread
-# stacks and the GC's own structures live outside it, and on a small Keycloak they are
-# comfortably 150 MiB. A heap sized at the whole cgroup is a container that dies under load
-# with a perfectly healthy heap.
+# 50 rather than 100 because the heap is not the process. Metaspace, the code cache, thread
+# stacks and the GC's own structures live outside it. A heap sized at the whole cgroup is a
+# container that dies under load with a perfectly healthy heap.
+#
+# **It was 70 until 2026-10-06, on an assumption that outside the heap was about 150 MiB.** The
+# browser harness measured otherwise. With the build moved out of the server (`keycloak-build`
+# below), an optimized first start at 70 per cent ran its changesets and imported the realm,
+# held 765 MiB of its 768M, and was killed once requests arrived. At 70 per cent the heap may
+# take 538 MiB, and what lives beside it is past 200 MiB once the realm is loaded, so the two
+# together are the whole cgroup. 50 per cent leaves 384 MiB beside a 384 MiB heap.
 #
 # ---------------------------------------------------------------------------------------
 # Its own database, and that is deliberate rather than lazy.
@@ -147,6 +153,66 @@ services:
         limits:
           memory: 128M
 
+  keycloak-build:
+    # **Keycloak's server build, done once, in its own container, before the server starts.**
+    # `start` without `--optimized` rebuilds the server for this configuration (Quarkus
+    # augmentation) in the same JVM that then runs 148 database changesets and imports the
+    # realm. On the browser harness's empty runners that one process was killed by the kernel in
+    # the server's 768M cgroup on three runs of four (`Memory cgroup out of memory: Killed process
+    # ... (java)`, anon-rss 763692 kB), and lowering the heap to 50 per cent did not help: the
+    # augmentation's classes live outside the heap, and the same kill came at 771712 kB. The
+    # restart policy hid it, because the second start found the build already done.
+    #
+    # So the build is this one-shot's whole job, under a limit of its own that is released when
+    # it exits, before the server starts, and the server runs `start --optimized` and never
+    # rebuilds. The build lands in the `keycloak-build` volume over `lib/quarkus`, which both
+    # containers mount, so the server finds it where `--optimized` looks.
+    #
+    # **It builds only when what it was built for changed.** Beside the build it writes a marker
+    # naming the distribution (a digest of the jar list the image ships) and every build-time
+    # option, and a deploy whose marker matches exits at once without starting a JVM, so the
+    # build's memory is paid on the first install and on a Keycloak upgrade, not on every
+    # release. The build-time options here and on `keycloak` below must be the same, which
+    # `tests/unit/test_keycloak_build.py` holds.
+    #
+    # Rejected: raising the server's own limit for a peak that lasts one start, and a
+    # second published image with the build baked in, which is cleaner and adds an image to
+    # every release (the follow-up, if boot time or the volume ever becomes the problem).
+    image: quay.io/keycloak/keycloak:26.0
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -eu
+        marker=/opt/keycloak/lib/quarkus/brain-build.txt
+        built_for="$$(ls /opt/keycloak/lib/lib/main | sha256sum | cut -d' ' -f1) KC_DB=$$KC_DB KC_HEALTH_ENABLED=$$KC_HEALTH_ENABLED KC_VAULT=$$KC_VAULT"
+        if [ -f "$$marker" ] && [ "$$(cat "$$marker")" = "$$built_for" ]; then
+          echo "keycloak-build: already built for this distribution and these options"
+          exit 0
+        fi
+        /opt/keycloak/bin/kc.sh build
+        printf '%s' "$$built_for" > "$$marker"
+        # The most this container held, from its own cgroup, so the limit below is checked
+        # against a measurement on every build rather than once.
+        echo "keycloak-build: built, peak $$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown) bytes"
+    environment:
+      # Build-time options. Every one is also on `keycloak`, with the same value.
+      KC_DB: postgres
+      KC_HEALTH_ENABLED: "true"
+      KC_VAULT: file
+      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40"
+    volumes:
+      - keycloak-build:/opt/keycloak/lib/quarkus
+    networks:
+      - identity
+    # 896M against a measured peak of 828 and 863 MiB (its cgroup's memory.peak, page cache
+    # included, on two harness runs at a 1024M limit). The build prints its own peak on every
+    # run, so a Keycloak upgrade that needs more says so in the deploy's log.
+    deploy:
+      resources:
+        limits:
+          memory: 896M
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     restart: unless-stopped
@@ -155,23 +221,22 @@ services:
         condition: service_healthy
       keycloak-realm:
         condition: service_completed_successfully
+      keycloak-build:
+        condition: service_completed_successfully
     # `start`, never `start-dev`. See the header.
     #
-    # **No `--optimized`, and the flag being wrong here was measured rather than reasoned.**
-    # `--optimized` tells Keycloak to skip its build step and use a configuration baked into
-    # the image, and the stock `quay.io/keycloak/keycloak:26.0` has no such build in it. It
-    # says so on every boot: "the following build time options have values that differ from
+    # **`--optimized`, and why it restart-looped once and does not now.** The flag tells
+    # Keycloak to skip its build and use the one it finds in `lib/quarkus`. The stock
+    # `quay.io/keycloak/keycloak:26.0` ships a build for its defaults, not for these options, and
+    # said so on every boot: "the following build time options have values that differ from
     # what is persisted - the new values will NOT be used until another build is run: kc.db,
-    # kc.health-enabled". Those two are the database and the readiness endpoint, so the
-    # container came up on a development file store with nothing answering on 9000, the
-    # healthcheck below never passed, and it restart-looped on Rupash's server on 2026-09-07.
-    #
-    # Without the flag Keycloak runs its own build at startup, which is why `start_period` in
-    # the healthcheck is 90 seconds rather than 30. The faster arrangement is a two-stage
-    # Dockerfile that runs `kc build` with these options and then `start --optimized`, which
-    # is worth doing when there is a reason to care about boot time and is a second image to
-    # build and publish. There is no such reason yet.
-    command: ["start", "--import-realm"]
+    # kc.health-enabled". So the container came up on a development file store with nothing
+    # answering on 9000 and restart-looped on Rupash's server on 2026-09-07, and the flag was
+    # removed. It is right now because `keycloak-build` above builds for exactly these options
+    # into the volume mounted over `lib/quarkus`, and this service starts only after it has.
+    # Without the flag, the build ran inside this container's first start and the kernel killed
+    # it for memory; see `keycloak-build`.
+    command: ["start", "--import-realm", "--optimized"]
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
@@ -225,9 +290,11 @@ services:
       KC_HOSTNAME_STRICT: "true"
       KC_HEALTH_ENABLED: "true"
       # The process-side cap. Reads the cgroup limit rather than the host; see the header
-      # for why it is 70 and not 100.
-      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40"
+      # for why it is 50, and why it is no longer 70.
+      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40"
     volumes:
+      # The build `keycloak-build` made for these options. See `--optimized` above.
+      - keycloak-build:/opt/keycloak/lib/quarkus
       # The stripped copy, written by `keycloak-realm` above, never the reviewed file.
       # Read-only: a container that could write here would let a change made by clicking
       # survive a restart, which is the drift `ops/keycloak/setup.sh` exists to prevent.
@@ -266,5 +333,6 @@ networks:
 
 volumes:
   keycloak-db:
+  keycloak-build:
   realm-import:
   keycloak-vault:
