@@ -39,7 +39,7 @@ from brain.learning_told import (
     SEND_EVERY,
     SIGNAL_WORDS,
     THE_MESSAGE_NAMES_A_LEARNING_AND_NEVER_WHAT_IT_SAYS,
-    THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_THEIR_OWN_PAGE,
+    THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_A_PAGE_EVERY_RECIPIENT_OPENS,
     THE_WEB_PROCESS_SENDS_IT_AND_IT_IS_NOT_A_CONTROL_YET,
     UNDO_PAGE,
     UNDO_PAGE_UNLINKED,
@@ -73,7 +73,7 @@ WEEK = covered_week(NOW, UTC)
 
 CLIENT_NAME = Capability(value="read:client.name")
 CLIENT_SALARY = Capability(value="read:client.salary")
-PAGE = "https://brain.example.invalid/me"
+PAGE = "https://brain.example.invalid/me/undo/"
 
 
 def reader(principal_id: str = "u_me", *, not_after: datetime | None = None) -> EntitlementSet:
@@ -262,8 +262,8 @@ def test_every_change_a_week_can_carry_and_every_signal_has_words() -> None:
 
 def test_the_message_names_each_learning_its_reason_and_where_to_undo_it() -> None:
     """**The positive case of the words.** The week's first and last day, then each learning's kind,
-    day, reason, what undoing it does, its memory and the page its Forget is on. Delete this and a
-    message can lose the undo while every other test passes."""
+    day, reason, what undoing it does, and the address of its own undo. Delete this and a message
+    can lose the undo while every other test passes."""
     replaced = learning("m_new", replaced_id="m_old", at=WEEK.covers_from + timedelta(days=3))
     alone = learning(
         "m_alone",
@@ -278,10 +278,9 @@ def test_the_message_names_each_learning_its_reason_and_where_to_undo_it() -> No
     assert "from 27 May to 2 June" in first
     assert lines == [
         "- How you like answers shaped, learnt on 30 May, because you asked again in other words. "
-        "Undoing it puts back what it replaced. Undo: Forget on memory m_new, on "
-        f"{PAGE}.",
+        f"Undoing it puts back what it replaced. Undo it at {PAGE}m_new.",
         "- A source to rank lower for you, learnt on 28 May. Undoing it stops it being used. "
-        f"Undo: Forget on memory m_alone, on {PAGE}.",
+        f"Undo it at {PAGE}m_alone.",
     ]
 
 
@@ -306,21 +305,26 @@ def test_the_message_carries_no_subject_reference_and_no_count() -> None:
     assert len(lines) == 2 and all(one.startswith("- ") for one in lines)
 
 
-def test_the_undo_page_is_the_consoles_own_workspace_page_whose_forget_is_the_persons_route() -> (
-    None
-):
-    """See `THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_THEIR_OWN_PAGE`. Held against the console's route
-    and the API route the page posts, rather than against itself. Delete this and a renamed page
-    leaves every message linking nowhere."""
+def test_the_digests_link_is_a_console_page_posting_the_grant_free_undo_route() -> None:
+    """See `THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_A_PAGE_EVERY_RECIPIENT_OPENS`. Held against the
+    console's route file and the path its page posts, which must be the mounted route that asks for
+    no grant (`tests/unit/test_mine_routes.py` holds that a person with none undoes there), rather
+    than against itself. Delete this and the digest can link a page that is not there, or one
+    posting Forget on My workspace, which a recipient without the member grant is refused."""
     from brain.api import API_PREFIX
-    from brain.mine_routes import router
+    from brain.mine_routes import LEARNING_UNDO_PATH, router
 
-    assert "Forget on their own page" in THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_THEIR_OWN_PAGE
-    route = (ROOT / "console" / "src" / "pages" / "MyWorkspace.route.tsx").read_text("utf-8")
-    query = (ROOT / "console" / "src" / "pages" / "myWorkspaceQuery.ts").read_text("utf-8")
-    [page] = re.findall(r'export const ownWork: OwnWorkEntry = \{ to: "([^"]+)"', route)
-    [posted] = re.findall(r'export const FORGET_API_PATH = "([^"]+)"', query)
-    assert page == UNDO_PAGE
+    assert "gated on authorship and on no grant" in (
+        THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_A_PAGE_EVERY_RECIPIENT_OPENS
+    )
+    pages = ROOT / "console" / "src" / "pages"
+    route = (pages / "LearningUndo.route.tsx").read_text("utf-8")
+    query = (pages / "learningUndoQuery.ts").read_text("utf-8")
+    [path] = re.findall(r'\{ path: "([^"]+)", element: <LearningUndo />', route)
+    [prefix] = re.findall(r'export const UNDO_PAGE_PREFIX = "([^"]+)"', query)
+    [posted] = re.findall(r'export const LEARNING_UNDO_API_PATH = "([^"]+)"', query)
+    assert f"/{path}" == f"{UNDO_PAGE}:memoryId" and prefix == UNDO_PAGE
+    assert posted == LEARNING_UNDO_PATH
     assert f"{API_PREFIX}{posted}" in {getattr(one, "path", "") for one in router.routes}
 
 
@@ -328,7 +332,7 @@ def test_the_undo_is_linked_at_the_installs_own_address_or_named_when_there_is_n
     """Delete this and an install with no public address sends a bare path no chat can open."""
     assert undo_page("https://brain.example.invalid/auth/callback") == PAGE
     assert undo_page("") == UNDO_PAGE_UNLINKED
-    assert UNDO_PAGE not in UNDO_PAGE_UNLINKED
+    assert UNDO_PAGE_UNLINKED.endswith(UNDO_PAGE) and not UNDO_PAGE_UNLINKED.startswith("/")
 
 
 # ------------------------------------------------------------------------ the figures

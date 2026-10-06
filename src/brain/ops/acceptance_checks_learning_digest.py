@@ -11,9 +11,10 @@ person. See `THE_WEEK_REACHES_A_CHANNEL_THE_CHECK_HOLDS`.
 
 **What the check proves.** A member of acceptance_a who formed a memory that week is sent one
 message, in their own Slack conversation, naming that memory with where its undo is, and the
-Forget it names marks it when pressed as them. A memory they formed under a grant since removed,
-and a colleague's memory, are named nowhere in it. A member of acceptance_b who formed nothing is
-sent nothing. A second run over the same week sends nothing more.
+undo it links marks it when pressed as them, though they hold no member grant. A memory they
+formed under a grant since removed, and a colleague's memory, are named nowhere in it. A member of
+acceptance_b who formed nothing is sent nothing. A second run over the same week sends nothing
+more.
 
 **What it does not prove**, stated: that the loop the application starts runs on the install, which
 is a property of the process and is logged on every pass, and that Slack accepts the message with
@@ -66,7 +67,10 @@ NAMED_OUTSIDE_REACH: Final = (
 )
 SENT_WITH_NOTHING_LEARNT: Final = "a person who formed nothing that week was sent a message"
 SENT_TWICE: Final = "a second run over the same week sent the week's message again"
-UNDO_DID_NOTHING: Final = "the Forget the week's message named did not mark the memory"
+UNDO_DID_NOTHING: Final = "the undo the week's message linked did not mark the memory"
+MEMBER_GRANT_HELD: Final = (
+    "the check's person held the member grant, so it could not show the undo works without it"
+)
 
 
 def _sent(kept: Any, before: int) -> list[tuple[str, str]]:
@@ -118,9 +122,10 @@ async def _on_slack(h: Harness, people: dict[str, str]) -> None:
     leaves=("M16.5.1",),
     sentence=(
         "A member of acceptance_a who formed a memory on Ask that week is sent one message in "
-        "their own Slack chat naming it with where to undo it, and its Forget marks it; a memory "
-        "formed under a grant since removed and a colleague's are named nowhere; a member of "
-        "acceptance_b who formed nothing is sent nothing; and a second run sends nothing more."
+        "their own Slack chat naming it with where to undo it, and that undo marks it without the "
+        "member grant; a memory formed under a grant since removed and a colleague's are named "
+        "nowhere; a member of acceptance_b who formed nothing is sent nothing; and a second run "
+        "sends nothing more."
     ),
 )
 async def a_persons_week_of_learning_is_told_once_with_its_undo(h: Harness) -> None:
@@ -128,13 +133,15 @@ async def a_persons_week_of_learning_is_told_once_with_its_undo(h: Harness) -> N
     from types import SimpleNamespace
 
     from brain.channels.slack import BOT_TOKEN, SIGNING_SECRET
+    from brain.console.reads import permitted
     from brain.gate.entitlement_store import StoredEntitlements
     from brain.govern_routes import retire_grant
-    from brain.learning_told import CoveredWeek, send_learning_digests, undo_page_here
+    from brain.learning_told import CoveredWeek, send_learning_digests, undo_link, undo_page_here
     from brain.locale import time_zone
     from brain.mailbox_read import request_for
+    from brain.member.shell import member_screen
     from brain.memory.digest import DIGEST_PERIOD
-    from brain.mine_routes import forgotten
+    from brain.mine_routes import MEMBER_HOME, forgotten
     from brain.ops.acceptance_checks import _HeldLedger, _Secret
     from brain.ops.acceptance_escalation import _Kept
     from brain.ops.memory_store import StoredMemoryRecords
@@ -188,14 +195,18 @@ async def a_persons_week_of_learning_is_told_once_with_its_undo(h: Harness) -> N
     [said] = mine
     if hidden in said or theirs in said:
         raise CheckFailedError(NAMED_OUTSIDE_REACH)
-    if f"memory {kept_memory}" not in said or page not in said:
+    if undo_link(page, kept_memory) not in said:
         raise CheckFailedError(NOT_NAMED_WITH_UNDO)
 
     again = await run()
     if _sent(kept, len(first)) or again.sent:
         raise CheckFailedError(SENT_TWICE)
 
+    # Undone as the person, who holds no member grant: the route the link's page posts asks for
+    # none, and its body is this function. `tests/unit/test_mine_routes.py` holds the route itself.
     member = await h.reach(placed.member)
+    if permitted(member_screen(MEMBER_HOME).read, member, at):
+        raise CheckFailedError(MEMBER_GRANT_HELD)
     undone = await forgotten(
         h.sessions,
         StoredMemoryRecords(h.sessions),

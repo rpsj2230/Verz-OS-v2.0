@@ -8,6 +8,7 @@
  */
 
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
+import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
 import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
@@ -22,6 +23,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
   ],
   "src/pages/MyWorkspace.tsx EDIT_API_PATH": [at("POST /api/v1/me/memory/edit", "EDIT_API_PATH", EDIT_API_PATH)],
+  "src/pages/LearningUndo.tsx LEARNING_UNDO_API_PATH": [
+    at("POST /api/v1/me/learning/undo", "LEARNING_UNDO_API_PATH", LEARNING_UNDO_API_PATH),
+  ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -50,6 +54,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     behaviour: t("test_mine_routes", "test_a_member_forgets_a_memory_formed_from_their_own_words"),
+  },
+  // The digest's undo is the same forget on the person's sign-in alone, through the same store, so
+  // the same database test follows it to the row, the ledger and the next recall.
+  "POST /api/v1/me/learning/undo": {
+    row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    behaviour: t("test_mine_routes", "test_a_person_holding_no_grant_at_all_undoes_what_was_learnt_from_them"),
   },
   "POST /api/v1/me/memory/edit": {
     row: t("test_memory_store", "test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next", true),

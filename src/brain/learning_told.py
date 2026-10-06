@@ -25,19 +25,28 @@ keyed by the week the run falls in. A run late on Sunday and the next early on M
 weeks with five days in common, and the same learning arrives twice with two undo links.
 
 **The message names a learning and never what it says.** Each item is the kind of change, the day,
-the kinds of signal that prompted it, what undoing it does, and the memory's id beside the page its
-undo is on. Not the memory's words: `brain.memory.digest.Learning` carries none by design, and a
-chat message is a copy of whatever it holds outside the reach check, read wherever the chat is
-open. The page shows the words at the reach the person holds when they open it. See
+the kinds of signal that prompted it, what undoing it does, and the address of its own undo, which
+carries the memory's id. Not the memory's words: `brain.memory.digest.Learning` carries none by
+design, and a chat message is a copy of whatever it holds outside the reach check, read wherever the
+chat is open. My workspace shows the words at the reach the person holds when they open it. See
 `THE_MESSAGE_NAMES_A_LEARNING_AND_NEVER_WHAT_IT_SAYS`.
 
-**The undo is the person's own Forget, and nothing new.** `POST /me/memory/forget` is the one undo a
-person has over a memory formed from their own words: `brain.console.own_things.delete_own_memory`
-decides it is theirs, `brain.ops.memory_store.StoredMemoryRecords.undo` writes what
-`brain.memory.digest.undo` decides under its lock, and a second press does nothing. Every item says
-which memory and links the page whose Forget button posts it. A chat has nothing that could answer a
-pressed control on a learning, so the form is the link for every channel, and the link is on every
-row rather than missing from some. See `THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_THEIR_OWN_PAGE`.
+**The undo is the person's own Forget, on a page every recipient can open.** Forget on My workspace
+is the one undo a person has over a memory formed from their own words, but that page and its route
+open on the member grant, which a sign-in binding writes and an administrator can take away, so a
+digest linking it could link an undo its recipient is refused. Each item therefore links
+`/me/undo/<memory id>`, a console page that posts `brain.mine_routes.LEARNING_UNDO_PATH`: the same
+`forgotten` (`brain.console.own_things.delete_own_memory`, then
+`brain.ops.memory_store.StoredMemoryRecords.undo` under its lock, a second press doing nothing),
+gated on authorship and on no grant. Opening the page undoes nothing, so a chat unfurling the link
+presses nothing; Undo, confirmed, does. A chat has nothing that could answer a pressed control on a
+learning, so the form is the link for every channel, on every row. See
+`THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_A_PAGE_EVERY_RECIPIENT_OPENS`.
+
+**Which agent learnt each thing is not said yet.** The requirement names it, and a memory belonging
+to an agent, rather than to the person it ran for, is not built yet. The learning record's
+`agent_id` says which agent was running when a person's memory formed, which is not the same as the
+agent having learnt it, so it is not printed as though it were.
 
 **A week with nothing learnt sends nothing.** The evening digest is sent on a quiet day because a
 stall is the thing worth reading there; here an empty week is the system having learnt nothing from
@@ -114,12 +123,14 @@ THE_MESSAGE_NAMES_A_LEARNING_AND_NEVER_WHAT_IT_SAYS: Final = (
     "the reach they hold when they open it."
 )
 
-#: Why the undo is the person's own Forget and a link, on every row.
-THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_THEIR_OWN_PAGE: Final = (
-    "The one undo a person has over a memory formed from their own words is Forget on their own "
-    "page, which marks it under a lock and does nothing on a second press. Nothing answers a "
-    "control pressed in a chat on a learning, so every item names its memory and links that "
-    "page, on every row and every channel, rather than a button on some rows and none on others."
+#: Why the undo is the person's own Forget, on a page of its own, linked on every row.
+THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_A_PAGE_EVERY_RECIPIENT_OPENS: Final = (
+    "The undo is Forget for a memory formed from the person's own words, which marks it under a "
+    "lock and does nothing on a second press. It is linked as a page of its own whose route is "
+    "gated on authorship and on no grant, because My workspace opens on a grant an administrator "
+    "can take away and the digest goes to everybody the system learnt from. Nothing answers a "
+    "control pressed in a chat on a learning, so every item links its own undo, on every row and "
+    "every channel."
 )
 
 #: Why an empty week is not sent.
@@ -150,12 +161,12 @@ MOST_LEARNINGS_PER_PASS: Final = 5000
 #: The key each person's week is sent once under, with the week it covers after the dot.
 INTENT_PREFIX: Final = "learning_digest"
 
-#: Where a person's own Forget is: the console's My workspace page, which posts
-#: `/me/memory/forget` for the memory a person picks.
-UNDO_PAGE: Final = "/me"
+#: Where one learning's undo is in the console, with its memory's id after it. The page posts
+#: `brain.mine_routes.LEARNING_UNDO_PATH`.
+UNDO_PAGE: Final = "/me/undo/"
 
-#: What the page is called when the install names no public address to link it at.
-UNDO_PAGE_UNLINKED: Final = "My workspace in the console"
+#: Where the undo is said to be when the install names no public address to link it at.
+UNDO_PAGE_UNLINKED: Final = "the console's /me/undo/"
 
 #: The install setting whose first address is this install's public origin.
 PUBLIC_ADDRESS_SETTING: Final = "INSTALL_OIDC_REDIRECT_URIS"
@@ -167,9 +178,7 @@ OPENING: Final = (
 )
 
 #: One item.
-ITEM: Final = (
-    "- {what}, learnt on {day}{because}. {undoing} Undo: Forget on memory {memory_id}, on {page}."
-)
+ITEM: Final = "- {what}, learnt on {day}{because}. {undoing} Undo it at {link}."
 
 #: What pressing Forget does, by the correction it writes.
 UNDOING: Final[Mapping[Correction, str]] = MappingProxyType(
@@ -297,9 +306,13 @@ def item_text(item: MemoryItem, *, page: str, zone: tzinfo) -> str:
         day=_day(item.learned_at, zone),
         because=f", because {because}" if because else "",
         undoing=UNDOING[item.control_writes],
-        memory_id=item.memory_id,
-        page=page,
+        link=undo_link(page, item.memory_id),
     )
+
+
+def undo_link(page: str, memory_id: str) -> str:
+    """One learning's undo: the undo pages' address and the memory's id."""
+    return f"{page}{memory_id}"
 
 
 def digest_text(digest: WeeklyDigest, *, page: str, zone: tzinfo) -> str:
@@ -315,10 +328,10 @@ def digest_text(digest: WeeklyDigest, *, page: str, zone: tzinfo) -> str:
 
 
 def undo_page(redirect_uris: str) -> str:
-    """Where a person's Forget is: the install's origin and `UNDO_PAGE`, or the page's name.
+    """Where the undo pages are: the install's origin and `UNDO_PAGE`, or where they are said to be.
 
     The origin is the one every address this install hands out is built on, its first redirect
-    address. With none, the page is named rather than linked by a path a chat could not open.
+    address. With none, the console's path is named rather than linked as a bare path.
     """
     from brain.ops.lark_connect import install_origin
 
