@@ -59,6 +59,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.resolves import ResolvesAs
 from brain.core.scope import Scope
+from brain.resolution.calibration_store import weights_in_force
 from brain.resolution.canonical import EntityType, Identifier, IdentifierKind, SourceRef
 from brain.resolution.cascade import CascadeResult, Decision, Observation, Stage
 from brain.resolution.entities import profile_for, resolve_pair
@@ -289,7 +290,10 @@ class StoredMatching:
         """Compare each of these records with its candidates and settle or queue each pair."""
         if not refs:
             return Matched()
-        query = score_query(table=OBSERVATIONS, scope=Scope.unrestricted(), touching=refs)
+        weights = await weights_in_force(self._sessions)
+        query = score_query(
+            table=OBSERVATIONS, scope=Scope.unrestricted(), touching=refs, weights=weights
+        )
         async with self._sessions() as session:
             pairs = [
                 (
@@ -329,7 +333,7 @@ class StoredMatching:
                     )
             compared += 1
             result = resolve_pair(
-                observed[left], observed[right], profile_for(declared.entity_type)
+                observed[left], observed[right], profile_for(declared.entity_type), weights=weights
             )
             if result.decision is Decision.NOT_MATCHED:
                 continue
