@@ -59,6 +59,12 @@ again: an undo is the person's last word about it, and re-extracting it from the
 would undo the undo. Stating it again is the person speaking, so a stated memory is formed even so.
 See `A_CORRECTION_OUTRANKS_THE_NEXT_INFERENCE_AND_NOT_THE_NEXT_STATEMENT`.
 
+**A standing inference said again is confirmed rather than skipped (M16.7.2).** `propose_memories`
+names it in `Proposals.confirmed`, and the store stamps its `last_confirmed_at`, from which its
+decay then runs, with one ledger entry. Stated or inferred, the words said again are the person's,
+so either confirms an inference; a stated memory does not decay and has nothing to confirm. See
+`brain.memory.formation.A_MEMORY_SAID_AGAIN_REGAINS_WHAT_IT_WAS_FORMED_WITH`.
+
 **Where the answer lane calls it.** `brain.api_routes.answered_for`, after `brain.gate.answer.
 answer_lane` returns and outside it, since the route has the question, the person and the run's
 reach and the lane keeps none of them: `turn_of` builds the `Turn` from the outcome, and
@@ -67,7 +73,7 @@ a memory, which is almost every question, is decided by `worth_forming` before a
 opened, so forming a memory costs a question that asks nothing to be remembered nothing at all.
 Web and chat both answer through that one function, so a memory forms from either.
 
-Task ids: M16.1.2, M16.1.3, M38.2.2.4, M16.7.12
+Task ids: M16.1.2, M16.1.3, M38.2.2.4, M16.7.12, M16.7.2
 """
 
 from __future__ import annotations
@@ -329,6 +335,8 @@ class Proposals:
 
     formed: tuple[Proposed, ...]
     skipped: tuple[NotFormed, ...]
+    #: The standing inferences this turn said again, by id, each once, in the order said.
+    confirmed: tuple[str, ...] = ()
 
 
 # ------------------------------------------------------------------ the words
@@ -458,9 +466,15 @@ def propose_memories(
     }
     standing_keys = {key_of(one.statement) for one in held if one.memory_id in still}
     corrected_keys = {key_of(one.statement) for one in held if one.memory_id not in still}
+    inferred_standing = {
+        key_of(one.statement): one.memory_id
+        for one in held
+        if one.memory_id in still and one.kind is MemoryKind.ADAPTIVE
+    }
 
     formed: list[Proposed] = []
     skipped: list[NotFormed] = []
+    confirmed: list[str] = []
     seen: set[str] = set()
     for kind, statement in found:
         key = key_of(statement)
@@ -472,6 +486,9 @@ def propose_memories(
             continue
         if key in standing_keys or key in seen:
             skipped.append(NotFormed.ALREADY_REMEMBERED)
+            again = inferred_standing.get(key)
+            if again is not None and again not in confirmed:
+                confirmed.append(again)
             continue
         if kind is MemoryKind.ADAPTIVE and key in corrected_keys:
             skipped.append(NotFormed.CORRECTED)
@@ -499,7 +516,7 @@ def propose_memories(
                 statement=statement,
             )
         )
-    return Proposals(formed=tuple(formed), skipped=tuple(skipped))
+    return Proposals(formed=tuple(formed), skipped=tuple(skipped), confirmed=tuple(confirmed))
 
 
 def _held_id(one: Held) -> str:

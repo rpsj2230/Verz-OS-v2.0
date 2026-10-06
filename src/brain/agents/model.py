@@ -81,7 +81,7 @@ since it was written. Inventing a request pipeline here to give these a caller w
 second pipeline for the real one to be reconciled with later, which is the shape
 `brain.ops.automation_piece` refused for the same reason.
 
-Task ids: M13.1.1, M13.1.2, M13.1.3
+Task ids: M13.1.1, M13.1.2, M13.1.3, M13.8.1
 """
 
 from __future__ import annotations
@@ -241,6 +241,12 @@ class AgentAuthority(BaseModel):
     #: for an agent somebody configured and is deliberately not what a canvas flow gets.
     required_tools: frozenset[str] = frozenset()
     max_side_effect: SideEffect = SideEffect.NONE
+    #: The connectors this agent is bound to, as its template names them. A capability on an
+    #: entity a connector provides is in the ceiling only when that connector is named here, so
+    #: an empty list reaches no connected source at all. Compiled by `entitlement_ceiling`
+    #: through `brain.agents.binding.bound_capabilities` and decided nowhere else. See
+    #: `brain.agents.binding.AN_AGENT_READS_ONLY_THE_SOURCES_IT_NAMES`.
+    connectors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -511,8 +517,16 @@ def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
     read verbs only, by `records_implied_by`, and bound to the same scope as everything else.
     They confer no column: `covers` never lets `read:client` stand in for
     `read:client.contract_value`. See `A_COLUMN_A_CEILING_NAMES_IS_ON_A_ROW_THE_CEILING_ADMITS`.
+
+    **A capability on a connector's entity is kept only when the agent names that connector**
+    (M13.8.1). The connector list is compiled here, on the right-hand side of the one
+    intersection, and nowhere else decides connector access. Imported here rather than at the
+    top because `brain.tables.agent` imports this module and the binding reads the shipped
+    connector declarations. See `brain.agents.binding.AN_AGENT_READS_ONLY_THE_SOURCES_IT_NAMES`.
     """
-    declared = record.authority.capabilities
+    from brain.agents.binding import bound_capabilities
+
+    declared = bound_capabilities(record.authority.capabilities, record.authority.connectors)
     return EntitlementSet(
         principal_id=f"{CEILING_PRINCIPAL_PREFIX}{record.agent_id}",
         grants=tuple(

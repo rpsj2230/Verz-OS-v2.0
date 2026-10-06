@@ -55,6 +55,7 @@ from brain.agent_routes import (
     record_of,
     roster,
 )
+from brain.agents.binding import provider_of
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.model import AgentAudience, AgentViewer
 from brain.agents.template import (
@@ -180,7 +181,8 @@ def person(pid: str) -> Principal:
         kind=PrincipalKind.HUMAN,
         employment=Employment.STAFF,
         display_name=f"Person {pid}",
-        primary_department=DEPARTMENTS[pid],
+        # `.get`: a module borrowing this directory may add a reader who sits nowhere.
+        primary_department=DEPARTMENTS.get(pid),
     )
 
 
@@ -214,6 +216,7 @@ def agent_row(
     persona: str = "Answer briefly.",
     allowed_tools: tuple[str, ...] = (),
     capabilities: tuple[Capability, ...] = (),
+    connectors: tuple[str, ...] = (),
 ) -> AgentRow:
     return AgentRow(
         id=agent_id,
@@ -228,6 +231,7 @@ def agent_row(
         allowed_tools=list(allowed_tools),
         required_tools=[],
         max_side_effect=SideEffect.NONE.value,
+        connectors=list(connectors),
         created_by="u_builder",
         disabled_at=None,
         archived_at=None,
@@ -1412,8 +1416,12 @@ def test_a_run_that_could_return_the_most_sensitive_field_is_offered_fewer_surfa
     all, and a narrow caller is offered a surface their own run would be refused on."""
     policy = agent_routes.product_field_policy()
     sensitive = max(policy.rules, key=lambda rule: rule.classification.rank)
+    # Bound to the source that provides the field, which an agent must be to reach it at all.
+    source = provider_of(sensitive.entity)
     stored.agents["quote_helper"] = agent_row(
-        "quote_helper", capabilities=(sensitive.required_capability,)
+        "quote_helper",
+        capabilities=(sensitive.required_capability,),
+        connectors=() if source is None else (source,),
     )
     GRANTS["u_wide"] = (
         Grant(capability=sensitive.required_capability, scope=Scope.unrestricted()),

@@ -94,7 +94,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
             for key in ("usage", "budget", "skills", "connectors", "people")
         ),
         Grant(capability=INSTALL_AUTHORITY, scope=EVERYWHERE),
-        Grant(capability=Capability(value="read:invoice"), scope=EVERYWHERE),
+        Grant(capability=Capability(value="read:xero_invoice"), scope=EVERYWHERE),
     ),
     "u_narrow": (
         *PLANES,
@@ -153,7 +153,10 @@ class Held:
             (NOW - timedelta(days=20), "quota"),
         ]
         #: Kept ids per (source, entity), which a count admits only when the scope is not FALSE.
-        self.kept: dict[tuple[str, str], int] = {("xero", "invoice"): 5, ("xero", "contact"): 2}
+        self.kept: dict[tuple[str, str], int] = {
+            ("xero", "xero_invoice"): 5,
+            ("xero", "xero_contact"): 2,
+        }
         self.deliveries: list[tuple[str, str, datetime]] = [
             ("inbound", "accepted", NOW - timedelta(days=1)),
             ("outbound", "sent", NOW - timedelta(days=1)),
@@ -821,7 +824,7 @@ def test_the_statements_bound_what_they_read_and_narrow_before_the_bound() -> No
         channel_bindings(Channel.LARK, basis=Basis.OWN, caller_id="u_narrow").whereclause
     )
     nothing = EntitlementSet(principal_id="u_none", grants=())
-    assert "FALSE" in str(index_ids("xero", "invoice", nothing, NOW).compile())
+    assert "FALSE" in str(index_ids("xero", "xero_invoice", nothing, NOW).compile())
 
     reads_own = connector_live_reads("xero", NOW, basis=Basis.OWN, caller_id="u_narrow")
     reads_all = connector_live_reads("xero", NOW, basis=Basis.EVERYONE, caller_id="u_narrow")
@@ -916,25 +919,25 @@ def test_the_index_count_admits_only_ids_the_readers_row_scope_admits(database: 
         sql(
             database,
             "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at) "
-            "VALUES ('xero', 'invoice', %s, %s::jsonb, now())",
+            "VALUES ('xero', 'xero_invoice', %s, %s::jsonb, now())",
             source_id,
             f'{{"tenant_id": "{tenant}"}}',
         )
     one_tenant = EntitlementSet(
         principal_id="u_narrow",
         grants=(
-            Grant(capability=Capability(value="read:invoice"), scope=only("tenant_id", "t_a")),
+            Grant(capability=Capability(value="read:xero_invoice"), scope=only("tenant_id", "t_a")),
         ),
     )
     every_tenant = EntitlementSet(
         principal_id="u_admin",
-        grants=(Grant(capability=Capability(value="read:invoice"), scope=EVERYWHERE),),
+        grants=(Grant(capability=Capability(value="read:xero_invoice"), scope=EVERYWHERE),),
     )
     nothing = EntitlementSet(principal_id="u_none", grants=())
 
-    assert _rows(database, index_ids("xero", "invoice", one_tenant, NOW)) == [(2,)]
-    assert _rows(database, index_ids("xero", "invoice", every_tenant, NOW)) == [(3,)]
-    assert _rows(database, index_ids("xero", "invoice", nothing, NOW)) == [(0,)]
+    assert _rows(database, index_ids("xero", "xero_invoice", one_tenant, NOW)) == [(2,)]
+    assert _rows(database, index_ids("xero", "xero_invoice", every_tenant, NOW)) == [(3,)]
+    assert _rows(database, index_ids("xero", "xero_invoice", nothing, NOW)) == [(0,)]
 
 
 def test_the_channel_and_connector_statements_run_and_narrow_bindings_to_the_caller(

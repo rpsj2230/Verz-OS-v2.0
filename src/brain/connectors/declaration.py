@@ -102,11 +102,18 @@ and the settings a test or an acceptance check connects it with (`ConsoleForm.ex
 literal in a module or a test that every connector PR appended to, so every connector that landed
 put every other open one in conflict. See `A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS_OWN_FIXTURES`.
 
+**A source that is an MCP server's tools, or that only custom code can read, is a reading of its
+own shape (M11.1.2, M11.1.5).** `ToolReading` and `CodeReading` are the other two transports of
+`brain.connectors.transports`, read by one more typed branch of the same worker loop and the same
+live read; `Reading` is the four together. Neither reading holds a key or a socket: an MCP session
+and a custom connector's planned calls are made by the run, and a custom connector's code runs in
+a sandbox that is never handed the key (`brain.connectors.custom_code`).
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
 Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4, M11.6.1
-Task ids: M11.7.3, M11.7.1
+Task ids: M11.7.3, M11.7.1, M11.4.6, M11.9.15, M11.1.2, M11.1.5
 """
 
 from __future__ import annotations
@@ -125,10 +132,12 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.ask import AskRows
+from brain.connectors.change_signal import ChangeSubscription
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
@@ -141,7 +150,9 @@ from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
 if TYPE_CHECKING:
+    from brain.connectors.custom_code import PlannedCall
     from brain.gate.leash import Action
+    from brain.tools.run_skill import SandboxSpec
 
 # ------------------------------------------------------------------ written-down reasons
 #: The owner's rule, stated on 18 and 21 September and restated in every connector brief since.
@@ -263,6 +274,13 @@ class KeyScheme(enum.StrEnum):
     #: (https://developers.google.com/identity/protocols/oauth2/service-account). The key file is
     #: never sent: see `brain.connectors.google_token.A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER`.
     GOOGLE_SERVICE_ACCOUNT = "google_service_account"
+
+
+#: The schemes a key is sent in as it is, with no exchange first. An MCP or custom-code reading
+#: names one of these: only a REST reading says which scope a key file's token carries.
+SCHEMES_SENT_AS_THEY_ARE: Final = frozenset(
+    {KeyScheme.BEARER, KeyScheme.BASIC_KEY_AS_USER, KeyScheme.NONE}
+)
 
 
 # ---------------------------------------------------------------- connecting from the console
@@ -682,6 +700,53 @@ class ScopedReading(Protocol):
         ...
 
 
+# ------------------------------------------------------------- reading only what changed
+@runtime_checkable
+class ChangedSince(Protocol):
+    """A reading whose source can be asked for only what changed since an instant (M11.4.6).
+
+    Its own protocol beside `SourceReading` rather than two more methods on it, because most
+    sources this release reads cannot be asked that through the arguments of a page: Xero's is a
+    header, `If-Modified-Since`, and a reading passes arguments and never headers per call. A
+    reading that cannot is read to the end every time, which is a read of everything and the one
+    kind that may retire what it did not return
+    (`brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`).
+
+    The subscription travels with it because a cursor cannot see a deletion
+    (`brain.connectors.change_signal.A_CURSOR_CANNOT_SEE_A_DELETION`): a source asked only for
+    changes is still read whole once its subscription's reconciliation falls due, and that read
+    is where a removal is noticed.
+    """
+
+    def changed_since(self, entity: str, since: datetime) -> Mapping[str, str]:
+        """The arguments of the first page of what changed in one entity kind since `since`."""
+        ...
+
+    def subscription(self, entity: str) -> ChangeSubscription:
+        """How this source tells us one entity kind moved, with the reconciliation it owes."""
+        ...
+
+
+@runtime_checkable
+class BoundedWalk(Protocol):
+    """A reading whose walk may leave part of its source out at a bound of its own (M11.9.15).
+
+    Google Drive does not walk into a folder nested deeper than its depth bound, so a tree deeper
+    than that is walked to an end that is not the tree's. The worker asks a reading that is one of
+    these after each page, and a pass that left something out is reported as part of the source
+    left out (`brain.ops.connector_sync.READ_BUT_PART_LEFT_OUT`) and retires nothing
+    (`brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`):
+    a file in a folder the walk did not reach was not asked for, and is not therefore gone.
+    Optional, and asked with `isinstance`, so a reading whose walk has no bound of its own owes
+    nothing here.
+    """
+
+    def left_out(self, entity: str, asked: Mapping[str, str], body: Any) -> bool:
+        """Whether the walk, up to and including the page `asked` answered with `body`, has left
+        part of the source out."""
+        ...
+
+
 # ------------------------------------------------------------------ reading one record live
 #: Why a live lookup may name an operation of its own.
 A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
@@ -802,6 +867,117 @@ class ViewReading(Protocol):
     ) -> ProjectedRecord | None:
         """The index entry kept for one row, or None for a row with nothing to keep."""
         ...
+
+
+# ------------------------------------------------------------ an MCP server's tools, read
+@runtime_checkable
+class ToolReading(Protocol):
+    """How the worker and a question read a source that is an MCP server's tools (M11.1.2).
+
+    The worker's run opens one MCP session per attempt over the leased key, checks every tool
+    the reading calls is listed as it was pinned, and calls one declared tool per entity; the
+    reading only says which tool, with which arguments, and what its answer means. It holds no
+    key, no session and no socket, so it is tested with no server at all. See
+    `brain.connectors.mcp`, which argues the shape, and `brain.ops.mcp_session`, which talks.
+
+    **There is no method returning a document**, for `SourceReading`'s reason.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind the source projects, in the order a run reads them."""
+        ...
+
+    def refresh_interval(self) -> timedelta:
+        """How often a healthy source is read, which is the interval its freshness is judged by."""
+        ...
+
+    def key_scheme(self) -> KeyScheme:
+        """How the run sends this source's key. The reading never sees the key."""
+        ...
+
+    def endpoint(self, settings: Mapping[str, str]) -> str:
+        """The address of the MCP server this connection reads."""
+        ...
+
+    def pinned(self) -> Mapping[str, str]:
+        """Every remote tool this reading calls, with the digest of its definition as reviewed."""
+        ...
+
+    def tool_call(self, entity: str, source_id: str | None) -> tuple[str, Mapping[str, Any]]:
+        """The remote tool and arguments that list `entity`, or read the one record `source_id`."""
+        ...
+
+    def interpret_tool(
+        self, entity: str, result: Mapping[str, Any], *, fetched_at: str
+    ) -> PageReply:
+        """One `tools/call` result, as the declared field mapping reads it."""
+        ...
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """The index entry kept for one row, or None for a row with nothing to keep."""
+        ...
+
+
+# ------------------------------------------------------- custom code, run in a sandbox
+@runtime_checkable
+class CodeReading(Protocol):
+    """How the worker and a question read a source through custom code in a sandbox (M11.1.5).
+
+    The code plans calls and, where the connector needs it, interprets their answers; the host
+    makes every call with the leased key. Both runs go through `brain.tools.run_skill.ScriptRunner`
+    and neither is handed the key. See `brain.connectors.custom_code`, which argues the shape, and
+    `brain.ops.custom_code_run`, which runs it.
+
+    **There is no method returning a document**, for `SourceReading`'s reason.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind the source projects, in the order a run reads them."""
+        ...
+
+    def refresh_interval(self) -> timedelta:
+        """How often a healthy source is read, which is the interval its freshness is judged by."""
+        ...
+
+    def key_scheme(self) -> KeyScheme:
+        """How the host sends this source's key on a planned call. The code never sees the key."""
+        ...
+
+    def plan_spec(
+        self, entity: str, *, settings: Mapping[str, str], source_id: str | None
+    ) -> SandboxSpec:
+        """The sandboxed run that plans the calls listing `entity`, or reading one record."""
+        ...
+
+    def planned(self, output: str) -> tuple[PlannedCall, ...]:
+        """The calls a planning run printed, each on the declared egress allowlist, or a refusal."""
+        ...
+
+    def interpret_spec(self, entity: str, answers: tuple[bytes, ...]) -> SandboxSpec | None:
+        """The sandboxed run interpreting the answers, or None when the field mapping reads them."""
+        ...
+
+    def from_answers(self, entity: str, answers: tuple[Any, ...], *, fetched_at: str) -> PageReply:
+        """The decoded answers, read by the declared field mapping."""
+        ...
+
+    def from_output(self, entity: str, output: str, *, fetched_at: str) -> PageReply:
+        """An interpreting run's output, read by the declared field mapping."""
+        ...
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """The index entry kept for one row, or None for a row with nothing to keep."""
+        ...
+
+
+#: Every shape a connector's scheduled reading may take: a REST source's pages, a database's
+#: views, an MCP server's tools, or custom code in a sandbox. The four transports of
+#: `brain.connectors.transports`, each read by one typed branch of the one worker loop.
+Reading = SourceReading | ViewReading | ToolReading | CodeReading
 
 
 # ------------------------------------------------------------------ a write, granted apart
@@ -983,9 +1159,10 @@ class ConnectorDeclaration:
     console: ConsoleForm | None = None
     #: Why the console cannot connect this source yet. Empty exactly when `console` is set.
     not_from_the_console: str = ""
-    #: How the worker reads it on a schedule, or None when nothing does. A REST source's reading
-    #: or a database's views (`ViewReading`); see `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
-    reading: SourceReading | ViewReading | None = None
+    #: How the worker reads it on a schedule, or None when nothing does. A REST source's reading,
+    #: a database's views (`ViewReading`; see `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`), an MCP
+    #: server's tools (`ToolReading`) or custom code in a sandbox (`CodeReading`).
+    reading: Reading | None = None
     #: How one of its records is read live at question time, or None when none is.
     live: LiveLookup | None = None
     #: How the figures one of its records names are read live, or None when it has none (M11.7.1).
@@ -1001,6 +1178,14 @@ class ConnectorDeclaration:
     #: Its verified rate ceiling, or None when nobody has measured one. Named for this source, so
     #: `brain.ops.limits.connector_ceiling` finds it. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
     ceiling: ConnectorLimit | None = None
+    #: The prefix of every entity it names at connect time, for a source whose entities are not
+    #: known until an install connects it, so an agent's connector list can narrow them. See
+    #: `brain.agents.binding.discovered_prefixes`.
+    discovers: str = ""
+    #: Which of its records entity resolution reads, as what type, by which field, and whether
+    #: they carry money. Empty when none of its records is a company, a person or a project.
+    #: See `brain.connectors.resolves`.
+    resolves: tuple[ResolvesAs, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -1067,6 +1252,21 @@ class ConnectorDeclaration:
                         f"under. {A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
                     )
                     raise DeclarationError(msg)
+        resolved = [one.entity for one in self.resolves]
+        if len(resolved) != len(set(resolved)):
+            msg = f"connector {self.name!r} declares one entity for resolution twice"
+            raise DeclarationError(msg)
+        unread = (
+            ()
+            if self.reading is None
+            else tuple(sorted(set(resolved) - set(self.reading.entities())))
+        )
+        if unread:
+            msg = (
+                f"connector {self.name!r} declares {unread} for resolution and its reading keeps "
+                "no record of them, so nothing would ever be resolved"
+            )
+            raise DeclarationError(msg)
         if self.report is not None and self.reading is None:
             msg = (
                 f"connector {self.name!r} declares a report and no reading; a report is read with "

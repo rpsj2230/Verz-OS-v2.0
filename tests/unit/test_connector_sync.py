@@ -23,6 +23,7 @@ import pytest
 
 from brain.connectors import hubspot, xero
 from brain.connectors.contract import HealthState
+from brain.connectors.declaration import CodeReading, ToolReading
 from brain.connectors.manifest import ProjectedEntity, manifest_digest
 from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, ProjectedRecord
 from brain.connectors.throttle import RETRY_AFTER_WHEN_UNSTATED, CallOutcome
@@ -540,7 +541,7 @@ def test_the_control_runs_at_a_third_of_the_shortest_interval_any_reading_promis
 def rest_reading(name: str) -> SourceReading:
     """A shipped source's REST reading, which every source but a database's views has."""
     reading = READINGS[name]
-    assert not isinstance(reading, ViewReading), name
+    assert not isinstance(reading, ViewReading | ToolReading | CodeReading), name
     return reading
 
 
@@ -590,7 +591,8 @@ def test_no_reading_ever_contributes_the_authorisation_header() -> None:
     reading could keep. A database's views send no header at all, so they are not asked. Delete
     this and a reading could carry a credential header of its own."""
     for name, reading in READINGS.items():
-        if isinstance(reading, ViewReading):
+        if isinstance(reading, ViewReading | ToolReading | CodeReading):
+            # No reading of these builds a header: the run builds every one (`bare_headers`).
             continue
         headers = reading.call_headers(_settings(name))
         assert not {key.lower() for key in headers} & {"authorization", "cookie"}

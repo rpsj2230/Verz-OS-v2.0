@@ -1,0 +1,271 @@
+name: Browser
+
+# The console in a real browser against a furnished install (M27.10.6).
+#
+# Its own workflow rather than a job in `ci.yml`, for three reasons. It is the slowest thing the
+# repository runs (an image build, Keycloak's first start, then a browser walking every page), and
+# on the free plan's twenty concurrent jobs a pull request that touches no page should not queue
+# behind it. It runs every night whatever changed, because a page breaks through the API under it
+# as often as through its own code. And it is not a required check until a week of nightlies has
+# been clean: a harness that fails for its own reasons while it settles would teach people to
+# re-run it, which is the habit that makes a red result mean nothing once it is required.
+#
+# What it starts is the product's lite profile with the product's own identity provider file
+# (`docker-compose.lite.yml`, `docker-compose.keycloak.yml`), and `e2e/docker-compose.e2e.yml`
+# adds only what a runner lacks that a server has: a certificate, two people, and ports.
+#
+# **Every credential is minted here, for this run, and masked.** The fixture names the people and
+# holds no password or code secret (`brain.ops.browser_harness`, and the unit test that fails the
+# day it does). The setup code is minted beside its instant exactly as the installer mints them.
+
+on:
+  pull_request:
+    paths:
+      - "console/**"
+      - "e2e/**"
+      - "ops/keycloak/**"
+      - "docker-compose.lite.yml"
+      - "docker-compose.keycloak.yml"
+      - "Dockerfile"
+      - "src/brain/ops/browser_harness.py"
+      - "src/brain/ops/realm_import.py"
+      - "src/brain/setup_routes.py"
+      - "src/brain/sign_in_routes.py"
+      - "src/brain/navigation_routes.py"
+      - "src/brain/identity/**"
+      - "tests/fixtures/tls.py"
+      - ".github/workflows/browser.yml"
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.12.9"
+
+jobs:
+  browser:
+    name: Browser end to end
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_FILE: docker-compose.lite.yml:docker-compose.keycloak.yml:e2e/docker-compose.e2e.yml
+      APP_IMAGE: brain:e2e
+      BRAIN_ENV: production
+      KEYCLOAK_ADMIN: e2e-bootstrap
+      KEYCLOAK_HOSTNAME: https://keycloak.localhost:8443
+      INSTALL_OIDC_ISSUER: https://keycloak.localhost:8443/realms/brain
+      INSTALL_OIDC_REDIRECT_URIS: http://localhost:8000/auth/callback
+      E2E_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+
+      - name: Every credential this run needs, minted here and masked
+        run: |
+          mint() {
+            value=$(openssl rand -hex "$2")
+            echo "::add-mask::$value"
+            echo "$1=$value" >> "$GITHUB_ENV"
+          }
+          mint POSTGRES_PASSWORD 24
+          mint APP_ROLE_PASSWORD 24
+          mint KEYCLOAK_DB_PASSWORD 24
+          mint KEYCLOAK_ADMIN_PASSWORD 24
+          mint E2E_ADMIN_PASSWORD 18
+          mint E2E_READER_PASSWORD 18
+          mint E2E_ADMIN_CODE_SECRET 20
+          # The setup code and its instant, written together as the installer writes them.
+          mint BRAIN_SETUP_SECRET 32
+          echo "BRAIN_SETUP_ISSUED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: A certificate authority and Keycloak's certificate, for this run
+        run: |
+          uv run python -m tests.fixtures.tls "$RUNNER_TEMP/e2e-tls" keycloak.localhost localhost
+          echo "E2E_TLS_DIR=$RUNNER_TEMP/e2e-tls" >> "$GITHUB_ENV"
+
+      - name: The fixture's people and their minted credentials make a realm Keycloak imports
+        # Before the image is built: a refused fixture or an unset variable fails here in seconds
+        # rather than inside a one-shot container after a ten-minute build.
+        run: uv run python -m brain.ops.browser_harness realm e2e/fixtures/people.json ops/keycloak/realm-export.json > /dev/null
+
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image the way production builds it
+        # Reads the layer cache the deploy writes on main and writes none of its own: the cache is
+        # one shared allowance, and a branch's layers filling it would evict the ones every deploy
+        # reuses.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: brain:e2e
+          build-args: |
+            COMMIT_SHA=e2e
+          cache-from: type=gha
+
+      - name: Start the install
+        run: |
+          # The keycloak file joins the install's proxy network, which a server has and a runner
+          # does not.
+          docker network create coolify
+          docker compose up -d
+          ready() {
+            for i in $(seq 1 90); do
+              if curl -skf "$1" > /dev/null; then echo "ready: $1"; return 0; fi
+              sleep 4
+            done
+            echo "::error::not ready: $1"
+            return 1
+          }
+          ready http://localhost:8000/health/ready && ready https://localhost:8443/realms/brain/.well-known/openid-configuration || {
+            docker compose ps -a
+            docker compose logs --tail 80
+            exit 1
+          }
+          # Ready once is not ready: a container that dies comes back by its restart policy and
+          # answers again a minute later, and a browser arriving in that minute waits on nothing.
+          # So the start waits until nothing has restarted for thirty seconds, and a restart is
+          # reported with what the kernel said about it, because it is a finding about the
+          # install whether or not the harness can carry on past it.
+          for i in $(seq 1 10); do
+            before=$(docker inspect -f '{{.RestartCount}}' $(docker compose ps -aq) | awk '{ s += $1 } END { print s }')
+            sleep 30
+            after=$(docker inspect -f '{{.RestartCount}}' $(docker compose ps -aq) | awk '{ s += $1 } END { print s }')
+            [ "$before" = "$after" ] && break
+          done
+          ready https://localhost:8443/realms/brain/.well-known/openid-configuration
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}'
+          # The most each container has held since it started, from its own cgroup: a first
+          # start's peak is the figure a memory limit has to clear, and steady use is not it.
+          for id in $(docker compose ps -aq); do
+            name=$(docker inspect -f '{{.Name}}' "$id")
+            peak=$(cat "/sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' "$id").scope/memory.peak" 2>/dev/null || echo unknown)
+            echo "peak $name $peak"
+          done
+          # The identity provider's server build, where the stack has one: its own peak.
+          docker compose logs keycloak-build 2>/dev/null | tail -5 || true
+          restarted=$(docker inspect -f '{{.Name}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}' $(docker compose ps -aq) | grep -v ' restarts=0 ' || true)
+          if [ -n "$restarted" ]; then
+            echo "::warning::a container restarted during the start: $restarted"
+            sudo dmesg | grep -iE "oom|killed process|out of memory" | tail -20 || true
+          fi
+
+      - name: What the imported realm gives the console's token
+        # Read from Keycloak's own admin API with the bootstrap administrator this job minted,
+        # so a token the API refuses can be traced to the realm or to the API. Names and claim
+        # names only: no token, no credential.
+        run: |
+          kc=https://localhost:8443
+          admin=$(curl -skf "$kc/realms/master/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=admin-cli \
+            --data-urlencode "username=$KEYCLOAK_ADMIN" --data-urlencode "password=$KEYCLOAK_ADMIN_PASSWORD" | jq -r .access_token)
+          echo "::add-mask::$admin"
+          auth="Authorization: Bearer $admin"
+          client=$(curl -skf -H "$auth" "$kc/admin/realms/brain/clients?clientId=brain-console" | jq -r '.[0].id')
+          echo "console default scopes: $(curl -skf -H "$auth" "$kc/admin/realms/brain/clients/$client/default-client-scopes" | jq -c '[.[].name]')"
+          echo "realm default scopes: $(curl -skf -H "$auth" "$kc/admin/realms/brain/default-default-client-scopes" | jq -c '[.[].name]')"
+          echo "realm scopes and their mappers: $(curl -skf -H "$auth" "$kc/admin/realms/brain/client-scopes" | jq -c '[.[] | {name, mappers: [.protocolMappers[]?.name]}]')"
+          person=$(curl -skf -H "$auth" "$kc/admin/realms/brain/users?username=e2e-admin&exact=true" | jq -r '.[0].id')
+          echo "example token claim names: $(curl -skf -H "$auth" "$kc/admin/realms/brain/clients/$client/evaluate-scopes/generate-example-access-token?scope=openid&userId=$person" | jq -c '{aud, azp, scope, keys: keys}')"
+
+      - name: A realm imported with the old payload role mapping is repaired by the install script
+        # Puts this realm into the state an install that imported it between 2026-09-30 and the
+        # fix is in, shows the console's token losing its audience, runs the script such an
+        # install is told to run, and shows the audience back. Names and claim names only.
+        run: |
+          kc=https://localhost:8443
+          admin=$(printf '%s' "$KEYCLOAK_ADMIN_PASSWORD" | curl -skf "$kc/realms/master/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=admin-cli \
+            --data-urlencode "username=$KEYCLOAK_ADMIN" --data-urlencode "password@-" | jq -r .access_token)
+          echo "::add-mask::$admin"
+          call() { curl -skf -X "$1" -H "Authorization: Bearer $admin" -H "Content-Type: application/json" "$kc/admin/realms/brain$2" "${@:3}"; }
+          scope=$(call GET /client-scopes | jq -r '.[] | select(.name == "brain-identity") | .id')
+          client=$(call GET "/clients?clientId=brain-console" | jq -r '.[0].id')
+          person=$(call GET "/users?username=e2e-admin&exact=true" | jq -r '.[0].id')
+          role=$(call GET /roles/brain-langfuse-payload)
+          audience() { call GET "/clients/$client/evaluate-scopes/generate-example-access-token?scope=openid&userId=$person" | jq -c .aud; }
+          call DELETE "/clients/$client/scope-mappings/realm" -d "[$role]"
+          call POST "/client-scopes/$scope/scope-mappings/realm" -d "[$role]"
+          broken=$(audience)
+          echo "audience with the old mapping: $broken"
+          [ "$broken" = "null" ] || { echo "::error::the old mapping did not reproduce the fault"; exit 1; }
+          KC_URL=$kc KC_INSECURE=1 sh ops/keycloak/move-payload-role-mapping.sh
+          repaired=$(audience)
+          echo "audience after the script: $repaired"
+          [ "$repaired" = '"brain-api"' ] || { echo "::error::the script did not restore the audience"; exit 1; }
+
+      - name: The application's memory at rest, and sampling from here on
+        # A slow leak is a trend across nightly runs, so every run prints the same three
+        # snapshots and the series between them. See e2e/app-memory.sh.
+        run: |
+          sh e2e/app-memory.sh snapshot "at rest, before any browser"
+          sh e2e/app-memory.sh start
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install the harness and its browser
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Types (strict)
+        working-directory: e2e
+        run: npm run typecheck
+
+      - name: Every module in the browser
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: The application's memory after the specs and after a minute idle
+        if: always()
+        run: |
+          sh e2e/app-memory.sh snapshot "after the specs"
+          sleep 60
+          sh e2e/app-memory.sh snapshot "after a minute idle"
+          sh e2e/app-memory.sh report
+
+      - name: Nothing restarted while the browser used the install
+        # A container killed under load comes back by its restart policy, and a spec that
+        # happened to wait through it passes. So the run is judged at its end as well as at its
+        # start: no container restarted at any point, and the kernel killed nothing for memory.
+        if: always()
+        run: |
+          docker inspect -f '{{.Name}} restarts={{.RestartCount}}' $(docker compose ps -aq)
+          killed=$(sudo dmesg | grep -E "Memory cgroup out of memory|Killed process" || true)
+          [ -z "$killed" ] || { echo "$killed"; echo "::error::the kernel killed a process for memory during the run"; exit 1; }
+          restarted=$(docker inspect -f '{{.Name}} restarts={{.RestartCount}}' $(docker compose ps -aq) | grep -v ' restarts=0$' || true)
+          [ -z "$restarted" ] || { echo "::error::restarted during the run: $restarted"; exit 1; }
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}'
+
+      - name: What the install said, when anything failed
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker inspect -f '{{.Name}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} exit={{.State.ExitCode}}' $(docker compose ps -aq)
+          docker compose logs --tail 200 app keycloak keycloak-realm
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-report-${{ github.sha }}
+          path: e2e/playwright-report
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4
 """
 
 from __future__ import annotations
@@ -180,7 +180,7 @@ from brain.gate.badge_store import item_lookup_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
-from brain.gate.fast_lane import FastPathRule, RowReader
+from brain.gate.fast_lane import AmbiguityReader, FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
 from brain.gate.live_records import LiveRecords
@@ -221,8 +221,10 @@ from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
+from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.halt_store import Work, refusal_for
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
@@ -1078,6 +1080,16 @@ async def base_lane_of(state: Any) -> BaseLane:
     )
 
 
+def ambiguity_of(state: Any) -> AmbiguityReader | None:
+    """The registry's reader for an ambiguous name, or None on a process with no database."""
+    from brain.resolution.ambiguity_store import StoredAmbiguity
+
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return None
+    return StoredAmbiguity(sessions)
+
+
 def live_records_of(state: Any) -> LiveRecords | None:
     """What reads a connected source's records live for this process, or None where nothing can.
 
@@ -1164,19 +1176,53 @@ def model_lane_of(state: Any) -> ModelLane | None:
 DEFAULT_AGENT: Final = "brain"
 
 
+async def agent_run_of(
+    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+) -> AgentRun | None:
+    """The selected agent as its run carries it: its record, its skill pins and their library.
+
+    The pins are the Skills screen's own reading of the agent's install (`brain.skill_routes.
+    pins_of`, from `materialise`), and the library is read only when there is a pin to resolve.
+    A process with no database runs a stored agent with no pins, which is the only thing it could
+    read. See `AN_AGENT_RUNS_THE_SKILLS_IT_IS_ASSIGNED`.
+    """
+    if agent is None:
+        return None
+    sessions = getattr(state, "db_sessions", None)
+    if sessions is None:
+        return AgentRun(record=agent, pins=(), library=(), registry=registry)
+    # Imported here: `brain.skill_routes` serves routes that import this module.
+    from brain.ops.skill_store import StoredSkills
+    from brain.skill_routes import installs_of, pins_of
+
+    async with sessions() as session:
+        pairs = (await session.execute(installs_of([agent.agent_id]))).all()
+    pins = tuple(pin for one, version in pairs for pin in pins_of(one, version, agent))
+    library = await StoredSkills(sessions).library() if pins else ()
+    return AgentRun(record=agent, pins=pins, library=library, registry=registry)
+
+
+#: Why `/answer` reads the selected agent's skill pins on every question.
+AN_AGENT_RUNS_THE_SKILLS_IT_IS_ASSIGNED: Final = (
+    "Assigning a skill to an agent pins the agent to one version of it, and the pin is only worth "
+    "something if the agent's runs read it. Until 2026-10-06 this route handed every run no pins, "
+    "so a skill assigned on the Skills screen changed nothing any answer did. The pins are read "
+    "on each question, as the roster is, so a skill detached a moment ago is not offered."
+)
+
+
 def model_lane_for(
     state: Any,
-    agent: AgentRecord | None,
-    registry: ToolRegistry,
+    run: AgentRun | None,
     kinds: tuple[KnowledgeKind, ...] = (),
     follow_up: FollowUp | None = None,
 ) -> ModelLane | None:
-    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8),
-    searching only the kinds of knowledge the person narrowed the question to (M7.6.1), and
-    bringing what a continued thread brings (M9.2.3).
+    """The model step, carrying the selected agent's run when a stored one was chosen (M3.9.8,
+    M27.12.1), searching only the kinds of knowledge the person narrowed the question to (M7.6.1),
+    and bringing what a continued thread brings (M9.2.3).
 
-    The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
-    read on this route yet, so it runs with none. See `brain.gate.roster`.
+    The agent's tier, pinned model and skill pins reach the call through `AgentRun`, built by
+    `agent_run_of`. See `brain.gate.roster`.
     """
     lane = model_lane_of(state)
     if lane is None:
@@ -1187,9 +1233,9 @@ def model_lane_for(
         lane = replace(lane, search=narrowed_to(lane.search, kinds))
     if follow_up is not None:
         lane = replace(lane, follow_up=follow_up)
-    if agent is None:
+    if run is None:
         return lane
-    return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
+    return replace(lane, agent=run)
 
 
 async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
@@ -1375,20 +1421,35 @@ def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:15], 16)
 
 
+#: Why the answer key carries the epoch of every source its reader reaches.
+AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES: Final = (
+    "The cache is looked up before the question is answered, so which sources the answer will "
+    "read is not known yet; what is known is every source the reader reaches, and the answer can "
+    "read no other. So the key carries each of those sources' epochs, a source with none as zero. "
+    "A change "
+    "to any source the reader reaches makes the next lookup a miss, which is at worst a question "
+    "answered again when an unrelated source moved, and never an answer served after a source it "
+    "read moved."
+)
+
+
 def caching_of(
     state: Any,
     policies: Mapping[str, FieldPolicy],
     sources: Sequence[str],
-    epochs: Mapping[str, int] | None = None,
+    epochs: Mapping[str, int],
+    table_epochs: Mapping[str, int] | None = None,
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
     `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
-    uncacheable rather than a cached answer stale. `epochs` are the uploaded tables' versions
-    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`); no connector
-    source records one yet, so for those the answer's age bounds staleness.
+    uncacheable rather than a cached answer stale, and each carries its epoch from `epochs`
+    (M11.8.4): see `AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES`. `table_epochs` carries
+    the uploaded tables' versions
+    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`), so a new upload
+    moves the key as a connector's change does.
     """
     store: AnswerStore | None = getattr(state, "answer_store", None)
     if store is None:
@@ -1396,9 +1457,31 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        source_epochs=dict(epochs or {}),
+        source_epochs={
+            **{name: epochs.get(name, 0) for name in sorted(set(sources))},
+            **(table_epochs or {}),
+        },
         sources=frozenset(sources),
     )
+
+
+async def source_epochs_of(state: Any) -> Mapping[str, int]:
+    """Every source's epoch, for the answer cache's key, or none where nothing is cached.
+
+    Read only on a process with an answer store, because the epochs have no other reader on this
+    path, and from the database the worker advances them in
+    (`brain.tables.projection.SourceEpochRow`). A process with a store and no database has no
+    source that changes, so it keys on none.
+    """
+    if getattr(state, "answer_store", None) is None:
+        return {}
+    epochs: SourceEpochs | None = getattr(state, "source_epochs", None)
+    if epochs is None:
+        sessions = getattr(state, "db_sessions", None)
+        if sessions is None:
+            return {}
+        epochs = StoredSourceEpochs(sessions)
+    return await epochs.epochs()
 
 
 def sensitive_referrals_of(request: Request) -> SensitiveReferrals | None:
@@ -1567,6 +1650,34 @@ def asked_too_often(request: Request, verdict: StoreVerdict) -> JSONResponse:
     )
 
 
+#: Why a halted question is turned away before anything else is asked.
+A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING: Final = (
+    "A question from a person, or a department, somebody has stopped is refused first, before the "
+    "windows, the cache, the lanes and any model, in the one sentence brain.ops.halt writes, "
+    "which names the scope and never the reason or who stopped it. A store that cannot be read "
+    "refuses too, in its own sentence. It is a 503 with no Retry-After, because nobody can say "
+    "when a person will resume it."
+)
+
+
+@dataclass(frozen=True)
+class Halted:
+    """A question a halt refused, and the one sentence the person is told."""
+
+    told: str
+
+
+def halted_reply(request: Request, halted: Halted) -> JSONResponse:
+    """The 503 a halted question is, with no `Retry-After`.
+
+    See `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    """
+    body = ErrorBody(message=halted.told, trace_id=bound_trace_id(request))
+    return JSONResponse(
+        status_code=503, content=body.model_dump(), headers={"Cache-Control": "no-store"}
+    )
+
+
 @dataclass(frozen=True)
 class Answering:
     """Who a question is answered for: the person, the one reach, the channel and the instant.
@@ -1613,7 +1724,7 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
 
 async def answered_for(
     request: Request, recorder: Recorder, asking: Answering, ask: Question
-) -> Answered | StoreVerdict:
+) -> Answered | StoreVerdict | Halted:
     """One question answered for one person at one reach, or the window that refused it.
 
     The body of `answer`, taken out so a chat channel answers a bound person by the same code
@@ -1628,6 +1739,20 @@ async def answered_for(
         # discloses nothing about what exists. `brain.app.lifespan` builds one before it
         # yields.
         raise Failed("no tool registry on this process")
+
+    # Stopped, by a halt on everything, this person or their department, or a halt store that
+    # cannot be read. First of all, before any table is read for the lanes, so a database that
+    # cannot be read refuses in the halt's own words rather than failing in a lane. See
+    # `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    told = await refusal_for(
+        getattr(request.app.state, "db_sessions", None),
+        Work(
+            person=asking.principal.id,
+            department=asking.principal.primary_department or "",
+        ),
+    )
+    if told:
+        return Halted(told)
 
     # Uploaded classified tables (Classification screen) join the fast lane beside the
     # built-in rules, each column answered only to who may read it.
@@ -1691,6 +1816,7 @@ async def answered_for(
             request.app.state,
             policies,
             sources_at(registry, asking.reach, asking.now),
+            await source_epochs_of(request.app.state),
             tables.epochs,
         )
     )
@@ -1738,7 +1864,12 @@ async def answered_for(
         # called before ROUTE and PROJECT: a fast-lane question answers or abstains. The model
         # is shown what the asker said about themselves and may still recall (M16.6.3).
         model = (
-            model_lane_for(request.app.state, agent, registry, ask.kinds, follow_up)
+            model_lane_for(
+                request.app.state,
+                await agent_run_of(request.app.state, agent, registry),
+                ask.kinds,
+                follow_up,
+            )
             if front.calls_a_model
             else None
         )
@@ -1777,6 +1908,9 @@ async def answered_for(
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
             source_policies={**source_field_policies(registry), **base.source_policies},
+            # Which client each record a name matched is, so records the asker reads that are
+            # more than one client are named as ambiguous rather than guessed at (M14.6.5).
+            ambiguity=ambiguity_of(request.app.state),
         )
         # An abstention under a skill that declares a queue is handed to the person named for it,
         # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
@@ -1971,6 +2105,8 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     outcome = await answered_for(request, recorder, Answering.of(asked), ask)
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
+    if isinstance(outcome, Halted):
+        return halted_reply(request, outcome)
     thread = await remembered(request, Answering.of(asked), ask, outcome)
     return StreamingResponse(
         frames_of(outcome),

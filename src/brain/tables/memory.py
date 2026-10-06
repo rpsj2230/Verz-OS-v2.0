@@ -49,7 +49,7 @@ and that is somebody restating a thing rather than the system growing surer of i
 updated is a column that tells a reader something untrue, which is the argument
 `obs.audit_entry` and `agent.template_version` both make.
 
-Task ids: M16.1.2, M16.1.3
+Task ids: M16.1.2, M16.1.3, M16.7.2
 """
 
 from __future__ import annotations
@@ -221,6 +221,13 @@ class AdaptiveMemoryRow(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    #: When the person last said it again, stamped by the database, or null until they have.
+    #: Decay runs from here once it is set (M16.7.2); `0163` lets the application update this
+    #: column and no other, in the person's own name, and appends a ledger entry each time.
+    last_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     __table_args__ = (
