@@ -58,7 +58,14 @@ a `brain.connectors.declaration.ViewReading` is read here by one bounded read na
 record's id, as the user the slot keeps beside the password, and the lease is given back in the
 same `finally` as a REST source's.
 
+**An MCP server's tools and custom code are read by the worker's own path (M11.1.2, M11.1.5).**
+A connector whose reading is a `ToolReading` or a `CodeReading` is read here by one read narrowed
+to the record's id, through `brain.ops.mcp_session` or `brain.ops.custom_code_run`, exactly as the
+worker reads it, and refused with a constant sentence in a process given no way to post or no
+sandbox runner.
+
 Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
+Task ids: M11.1.2, M11.1.5
 """
 
 from __future__ import annotations
@@ -79,12 +86,14 @@ from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import (
     ChecksLiveFacts,
+    CodeReading,
     ConnectorDeclaration,
     DatabaseLogin,
     LiveLookup,
     PageReply,
     ReportCall,
     RoutedReading,
+    ToolReading,
     ViewReading,
     listed_under,
     shipped,
@@ -98,7 +107,7 @@ from brain.connectors.live_read import (
     LiveSource,
     LiveSources,
 )
-from brain.connectors.manifest import manifest_digest
+from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.slack_messages import CONNECTOR_NAME as SLACK
 from brain.connectors.throttle import CallOutcome, classify
@@ -115,21 +124,26 @@ from brain.ops.connector_sync_run import (
     SourceCaller,
     SourcePoster,
     WorkerConnectorKeys,
+    bare_headers,
     borrowed,
     call_headers,
     page_operation,
     presented,
 )
+from brain.ops.custom_code_run import read_once
+from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
 from brain.ops.lark_base_live import BaseSchema, with_base
 from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, wiki_host
 from brain.ops.lark_wiki_spaces import declared_spaces
 from brain.ops.leases import SealedSecret
 from brain.ops.live_records import SourceRecords
+from brain.ops.mcp_session import CallNotAnsweredError, open_session, read_entity
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.slack_messages_live import SlackPassages
 from brain.ops.webhook_delivery import SystemResolver
 from brain.tools.fetch import Fetchable, Resolver, UnsafeAddressError, assert_fetchable
+from brain.tools.run_skill import ScriptRunner
 
 log = structlog.get_logger(__name__)
 
@@ -150,6 +164,7 @@ NO_KEY_FOR_THE_READ: Final = "the source's key could not be borrowed for this re
 NOT_ONE_RECORD: Final = "the read did not name exactly one record by its id"
 ADDRESS_OR_SHAPE: Final = "the source's address or reply was not one this reads"
 NO_POSTER: Final = "this process was given no way to post, so no token or report could be asked for"
+NO_RUNNER: Final = "this process runs no sandbox, so a custom connector's code was not run"
 
 
 class ConnectedSources:
@@ -169,6 +184,8 @@ class ConnectedSources:
         clock: Callable[[], datetime],
         declarations: Mapping[str, ConnectorDeclaration] | None = None,
         poster: SourcePoster | None = None,
+        runner: ScriptRunner | None = None,
+        manifests: Callable[[str, Mapping[str, str]], ConnectorManifest] | None = None,
     ) -> None:
         self._connections = MappingProxyType(dict(connections))
         self._keys = keys
@@ -177,6 +194,8 @@ class ConnectedSources:
         self._clock = clock
         self._declarations = shipped() if declarations is None else declarations
         self._poster = poster
+        self._runner = runner
+        self._manifests = manifests
 
     def __repr__(self) -> str:
         return f"ConnectedSources(connected={sorted(self._connections)})"
@@ -238,7 +257,9 @@ class ConnectedSources:
             except ValueError:
                 return _refused(connection.connector, ADDRESS_OR_SHAPE)
         try:
-            manifest = manifest_for(connection.connector, connection.settings)
+            # Looked up at the read, so the console's own builder is the one in force then.
+            build = manifest_for if self._manifests is None else self._manifests
+            manifest = build(connection.connector, connection.settings)
         except (NotConnectableError, ConnectorContractError):
             return _refused(connection.connector, NOT_CONNECTABLE)
         if manifest_digest(manifest) != connection.digest:
@@ -254,6 +275,11 @@ class ConnectedSources:
                 if live is None:
                     return _refused(connection.connector, NOT_ONE_RECORD)
                 return self._read_view(connection, live, reading, lease, key, request, ids[0])
+            if isinstance(reading, ToolReading | CodeReading):
+                # An MCP server's tool, or custom code's planned calls, narrowed to the record.
+                if live is None:
+                    return _refused(connection.connector, NOT_ONE_RECORD)
+                return self._read_by_calls(connection, reading, key, request.entity, ids[0])
             try:
                 shown = presented(
                     reading,
@@ -363,6 +389,60 @@ class ConnectedSources:
         # The facts a lookup reads besides the record, where it reads any, as for a REST source.
         return LiveReply(outcome=page.call, rows=self._with_facts(live, request.entity, page.rows))
 
+    def _read_by_calls(
+        self,
+        connection: Connection,
+        reading: ToolReading | CodeReading,
+        key: str,
+        entity: str,
+        source_id: str,
+    ) -> LiveReply:
+        """One record of an MCP server's tools or of custom code, read while somebody waits.
+
+        The worker's reads of the same source, through the same `brain.ops.mcp_session` and
+        `brain.ops.custom_code_run`, with the record's id handed to the declared tool or to the
+        planning run; every call is admitted, because the live read's executor has already
+        admitted the question's read. The lease is `read_one`'s, closed in its `finally`.
+        """
+        headers = bare_headers(reading.key_scheme(), key)
+        fetched_at = self._clock().isoformat()
+        try:
+            if isinstance(reading, ToolReading):
+                if self._poster is None:
+                    return _refused(connection.connector, NO_POSTER)
+                session = open_session(
+                    reading,
+                    settings=connection.settings,
+                    headers=headers,
+                    poster=self._poster,
+                    resolver=self._resolver,
+                    admit=lambda: True,
+                )
+                page = read_entity(session, reading, entity, source_id, fetched_at=fetched_at)
+            else:
+                if self._runner is None:
+                    return _refused(connection.connector, NO_RUNNER)
+                page = read_once(
+                    reading,
+                    entity,
+                    source_id,
+                    settings=connection.settings,
+                    headers=headers,
+                    secret=key,
+                    runner=self._runner,
+                    caller=self._caller,
+                    poster=self._poster,
+                    resolver=self._resolver,
+                    admit=lambda: True,
+                    fetched_at=fetched_at,
+                )
+        except CallNotAnsweredError as failed:
+            return LiveReply(outcome=failed.call, retry_after_seconds=failed.retry_after)
+        except Exception:
+            # Broad, and the type is not kept, for `read_one`'s reason.
+            return _refused(connection.connector, ADDRESS_OR_SHAPE)
+        return LiveReply(outcome=page.call, rows=page.rows)
+
     def _read_report(
         self,
         connection: Connection,
@@ -435,8 +515,10 @@ class ConnectedSources:
     def _failed(self, declared: ConnectorDeclaration, answer: SourceAnswer) -> LiveReply | None:
         """The reply for an answer that was not an answer, or None when the source answered."""
         reading = declared.reading
-        # `_declared` admits no other, and a database's view makes no call: `_read_view` reads it.
-        assert reading is not None and not isinstance(reading, ViewReading)
+        # `_declared` admits no other, and a database's view makes no call: `_read_view` reads it,
+        # as `_read_by_calls` reads an MCP server's tools and custom code.
+        assert reading is not None
+        assert not isinstance(reading, ViewReading | ToolReading | CodeReading)
         call = classify(
             status=answer.status,
             timed_out=answer.timed_out,
@@ -587,7 +669,15 @@ def live_records_for(
     issuer = HttpsTokenIssuer()
 
     async def connected() -> LiveSources:
-        rows = await stored.connected()
+        # A source a halt stops is not read at question time either: it is left out, so the
+        # answer says it could not be reached, which is what a stopped source is. Every source
+        # is left out when the halts cannot be read. See `brain.ops.halt_store`.
+        halts = await read_state(sessions)
+        rows = [
+            one
+            for one in await stored.connected()
+            if not refusal_in(halts, Work(connector=one.connector))
+        ]
         sources = ConnectedSources(
             {one.connector: one for one in rows},
             keys=keys,

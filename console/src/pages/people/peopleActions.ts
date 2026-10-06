@@ -29,6 +29,10 @@ export type UnavailableAct = keyof typeof UNAVAILABLE;
 export const EDITED_AT_THE_SOURCE =
   "A person's name, department and employment come from the staff source or the identity provider, so they are changed there; a change made here would be overwritten by the next sync.";
 
+/** The same, on an install whose departments are managed on People (M1.6.19). */
+export const DEPARTMENT_SET_ON_PEOPLE =
+  "A person's name and employment come from the staff source or the identity provider, so they are changed there. Their department is set here: select them on People and press Move to a department.";
+
 /** A role grants nothing: said beside every role a person holds. */
 export const A_ROLE_GRANTS_NOTHING =
   "A role says what somebody is appointed to do on this platform. It grants nothing: what they may see is only what their grants say.";

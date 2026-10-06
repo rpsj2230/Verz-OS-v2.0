@@ -152,7 +152,7 @@ from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.memory.correction import Demotion, Supersession
 from brain.memory.digest import Learning
-from brain.memory.formation import place_of
+from brain.memory.formation import may_recall, place_of
 from brain.memory.review import agent_memory
 from brain.memory.tiers import Tier
 from brain.ops.jobs import hidden_count_fields
@@ -672,6 +672,39 @@ def may_undo(reach: EntitlementSet, learning: Learning, now: datetime) -> bool:
     return _in_reach(reach, UNDO_AUTHORITY, place, now)
 
 
+#: The key the review files learnings formed with no agent running under. Empty, so it sorts
+#: before every agent id and no agent can be named it: `brain.agents.model` requires two characters.
+CONVERSATIONS: Final = ""
+
+#: Why a learning formed in a plain conversation is on the review at all.
+A_CONVERSATION_LEARNING_IS_REVIEWED_AT_THE_CALLERS_OWN_REACH: Final = (
+    "A person asking Ask directly runs no stored agent, so what they asked to be remembered is "
+    "recorded with no agent, and a review built agent by agent never listed it: the Learning "
+    "screen stayed empty on an install where every question went to the default. Such a "
+    "learning is listed where recall admits it at the caller's own reach, which is the lens a "
+    "run with no agent answers at, and at the place the memory names; nothing about it is "
+    "widened by being listed."
+)
+
+
+def conversation_learnings(
+    learnings: Sequence[Learning], *, caller: EntitlementSet, now: datetime
+) -> tuple[Learning, ...]:
+    """The learnings formed with no agent running that this caller may be told of (M27.7.21).
+
+    Admitted by `brain.memory.formation.may_recall` at the caller's own reach and at the place the
+    memory names, which is what a run with no agent answers at. See
+    `A_CONVERSATION_LEARNING_IS_REVIEWED_AT_THE_CALLERS_OWN_REACH`.
+    """
+    return tuple(
+        one
+        for one in learnings
+        if one.agent_id is None
+        and may_recall(one.formation, caller, now=now, formed_confidence=one.formed_confidence)
+        is not None
+    )
+
+
 def learnings_in_view(
     *,
     records: Sequence[AgentRecord],
@@ -738,6 +771,14 @@ def learning_estate(
     ones: dict[str, Sequence[TierOneRow]] = {}
     twos: dict[str, Sequence[TierTwoRow]] = {}
     threes: dict[str, Sequence[TierThreeRouting]] = {}
+    # Learnings formed with no agent running, at the caller's own reach. Every one a conversation
+    # forms is a tier-one preference, so it is filed under tier one and nowhere else.
+    ones[CONVERSATIONS] = tier_one_rows(
+        conversation_learnings(learnings, caller=caller, now=now),
+        agent_id=None,
+        supersessions=marks,
+        demotions=marked_down,
+    )
     for agent_id, theirs in shown.items():
         ones[agent_id] = tier_one_rows(
             theirs, agent_id=agent_id, supersessions=marks, demotions=marked_down
@@ -751,7 +792,11 @@ def learning_estate(
                 continue
         threes[agent_id] = tuple(routed)
     return learning_review(
-        basis=basis, visible=shown.keys(), tier_one=ones, tier_two=twos, tier_three=threes
+        basis=basis,
+        visible=(CONVERSATIONS, *shown.keys()),
+        tier_one=ones,
+        tier_two=twos,
+        tier_three=threes,
     )
 
 

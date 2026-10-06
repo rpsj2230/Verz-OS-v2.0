@@ -29,10 +29,17 @@ permissions switched off since: a question naming it has its metadata read, and 
 never asked for
 (`brain.connectors.google_drive.A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`).
 
+**A tree wider and deeper than one pass is read whole over two, depth first (M11.9.15).** The
+second check's pin holds three subfolders, the first of them a chain as deep as a pass has pages,
+so the first pass stops inside that chain with the other two waiting on the path it saves. The
+next pass starts at the page the first did not ask, not at the pin, finishes the chain and then
+the two that waited, and leaves no place behind; every file is in the index once
+(`brain.connectors.google_drive.A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`).
+
 **The check steps aside where the install has Google Drive connected.** Connecting a source that
 is connected already is refused, for `A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN`'s reason.
 
-Task ids: M11.6.7
+Task ids: M11.6.7, M11.9.15
 """
 
 from __future__ import annotations
@@ -338,3 +345,97 @@ async def a_drive_folder_s_words_are_read_live_and_kept_nowhere(h: Harness) -> N
     # Nothing either read returned was kept anywhere.
     if await _search(h, canary) or await _search(h, kept_back):
         raise CheckFailedError("a file's words read live were found in a table")
+
+
+# ------------------------------------------- a wide tree read whole over two passes (M11.9.15)
+@check(
+    leaves=("M11.9.15",),
+    sentence=(
+        "A Google Drive folder made up for the check holds three subfolders, the first a chain as "
+        "deep as one pass has pages. The worker's first pass stops inside the chain and says so; "
+        "the next starts where it stopped, not at the pin, then lists the two that waited, and "
+        "leaves no place behind; every file is in the index once."
+    ),
+)
+async def a_drive_tree_wider_than_a_pass_is_read_whole_depth_first(h: Harness) -> None:
+    from sqlalchemy import func, select
+
+    from brain.connectors import google_drive
+    from brain.ops.acceptance_checks_change_signals import _connected, _read, _state, _Walked
+    from brain.ops.connector_sync import (
+        MAX_PAGES_PER_ENTITY,
+        READ_BUT_CUT_SHORT,
+        READ_TO_THE_END,
+        SyncOutcome,
+    )
+    from brain.tables.projection import ProjectedRecordRow
+
+    await h.found_departments()
+    pin = f"acceptance{secrets.token_hex(8)}"
+    chain = [f"fld{secrets.token_hex(8)}" for _ in range(MAX_PAGES_PER_ENTITY)]
+    waiting = [f"fld{secrets.token_hex(8)}" for _ in range(2)]
+    parents = [pin, *chain[:-1]]
+    folders = (
+        *(
+            _DriveFile(file_id=one, name=h.word(), mime_type=FOLDER_MIME, parent=parent)
+            for one, parent in zip(chain, parents, strict=True)
+        ),
+        *(
+            _DriveFile(file_id=one, name=h.word(), mime_type=FOLDER_MIME, parent=pin)
+            for one in waiting
+        ),
+    )
+    files = tuple(
+        _DriveFile(
+            file_id=f"txt{secrets.token_hex(8)}",
+            name=f"{h.word()}.txt",
+            mime_type=TEXT_MIME,
+            parent=folder,
+        )
+        for folder in (pin, *chain, *waiting)
+    )
+    connected = await _connected(
+        h,
+        google_drive.GOOGLE_DRIVE,
+        {
+            google_drive.FOLDER_SETTING: pin,
+            google_drive.DOMAIN_SETTING: f"{h.word().lower()}.example",
+            google_drive.DEPARTMENT_SETTING: A,
+            google_drive.STEWARD_SETTING: h.principal(A, "steward"),
+        },
+    )
+    keys = _KeyFiles(a_key_file())
+
+    first_drive = _Walked(_Drive(folder_id=pin, files=(*folders, *files)))
+    first = await _read(h, connected, first_drive, keys=keys, poster=first_drive)
+    if first.outcome is not SyncOutcome.SYNCED or first.detail != READ_BUT_CUT_SHORT:
+        raise CheckFailedError("a pass stopped at its page bound did not say it was cut short")
+    if first_drive.folders != [pin, *chain[: MAX_PAGES_PER_ENTITY - 1]]:
+        raise CheckFailedError("a pass did not walk the first subfolder down before the others")
+
+    second_drive = _Walked(_Drive(folder_id=pin, files=(*folders, *files)))
+    second = await _read(h, connected, second_drive, keys=keys, poster=second_drive)
+    if second_drive.folders != [chain[-1], *waiting]:
+        raise CheckFailedError(
+            "the next pass did not start where the first stopped and list the folders it left "
+            "waiting"
+        )
+    if second.outcome is not SyncOutcome.SYNCED or second.detail != READ_TO_THE_END:
+        raise CheckFailedError("the pass that carried on was not read to the end")
+    state = await _state(h, connected)
+    if state is None or state.read_state is None or state.read_state.walking is not None:
+        raise CheckFailedError("a walk read to its end left a place for the next pass")
+    ids = [one.file_id for one in (*folders, *files)]
+    held = (
+        await h.execute(
+            select(ProjectedRecordRow.source_id, func.count())
+            .where(
+                ProjectedRecordRow.source == google_drive.GOOGLE_DRIVE,
+                ProjectedRecordRow.source_id.in_(ids),
+                ProjectedRecordRow.deleted_at.is_(None),
+            )
+            .group_by(ProjectedRecordRow.source_id)
+        )
+    ).all()
+    if sorted(str(one) for one, _ in held) != sorted(ids) or any(n != 1 for _, n in held):
+        raise CheckFailedError("a tree read over two passes did not leave every file once")

@@ -45,13 +45,19 @@ from __future__ import annotations
 
 import dataclasses
 import enum
-from collections.abc import Mapping, Sequence
+import math
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from brain.memory.formation import HALF_LIFE_DAYS, RECALL_FLOOR
+from brain.memory.tiers import PROMOTION_AGREEMENT
+from brain.memory.turn import EXTRACTED_CONFIDENCE
 from brain.ops.admission import Budget, Resource, seed_budgets
 from brain.ops.limits import (
     DEFAULT_AGENT_PER_MINUTE,
@@ -81,15 +87,42 @@ A_TUNED_VALUE_REACHES_EVERY_PROCESS_WITHIN_A_MINUTE: Final = (
 #: The sentence a refusal of an unknown knob gives. Names nothing the install holds.
 NOT_A_KNOB: Final = "That is not a limit this screen changes."
 
+#: Why a setting can make learning slower or quicker to offer and never less supervised.
+NO_SETTING_MOVES_A_CHANGE_TO_A_LOWER_TIER: Final = (
+    "Which oversight a learned change needs is decided by what it would reach, in "
+    "`brain.memory.tiers.blast_radius`, which takes the change and nothing else. The learning "
+    "settings are a decay and a count: the decay decides how long an inference is recalled, the "
+    "count decides when a tier-two rule is offered to a person, and neither is read by the tier "
+    "map, so no figure saved on any install lets a change take effect with less agreement than "
+    "its reach needs."
+)
+
+#: Why an install check's reading of its own rows reaches no other request.
+A_READING_IS_LENT_TO_ONE_TASK_AND_NEVER_HELD: Final = (
+    "`reading` sets a context variable, which asyncio copies into each task when the task is "
+    "made, so the rows it lends are read by what the lending task calls and by nothing any other "
+    "request is doing. It is reset on the way out whatever happened. Holding the rows instead "
+    "would put a figure saved in a transaction that is about to be rolled back in front of every "
+    "request the process serves until the next reload."
+)
+
+#: The knob that sets how quickly an inferred memory fades, by name.
+INFERRED_HALF_LIFE: Final = "inferred_memory_half_life_days"
+
+#: The knob that sets how many independent agreements make a learned rule eligible for review.
+PROMOTION_AGREEMENT_KNOB: Final = "promotion_agreement"
+
 #: The namespace every row here sits under.
 TUNING_NAMESPACE: Final = "tuning"
 
 
 class KnobKind(enum.StrEnum):
-    """Whether a knob is a request window or a capacity budget."""
+    """Whether a knob is a request window, a capacity budget or a learning figure."""
 
     RATE = "rate"
     BUDGET = "budget"
+    #: How learning behaves. Names no window and no resource; the Learning screen lists these.
+    LEARNING = "learning"
 
 
 @dataclass(frozen=True)
@@ -310,12 +343,45 @@ KNOBS: Final[tuple[Knob, ...]] = (
         ),
         resource=Resource.TOKENS_PER_MINUTE,
     ),
+    Knob(
+        name=INFERRED_HALF_LIFE,
+        kind=KnobKind.LEARNING,
+        label="Days an inferred memory takes to lose half its weight",
+        unit="days",
+        default=round(HALF_LIFE_DAYS),
+        lowest=10,
+        highest=365,
+        bounds_because=(
+            "Below ten days, a memory inferred at the start of a week is no longer recalled by "
+            "the time that week's digest offers to undo it. Above a year, an inference about how "
+            "somebody works outlasts the way they work. A memory somebody states does not fade, "
+            "whatever this says."
+        ),
+    ),
+    Knob(
+        name=PROMOTION_AGREEMENT_KNOB,
+        kind=KnobKind.LEARNING,
+        label="Separate conversations that must agree before a learned rule is offered for review",
+        unit="conversations",
+        default=PROMOTION_AGREEMENT,
+        lowest=2,
+        highest=10,
+        bounds_because=(
+            "Below two, one conversation is enough, and one person's way of phrasing a question "
+            "becomes a rule offered for review. Above ten, a rule would need more evidence than "
+            "an agent needs to be trusted with less supervision, which changes more. A person "
+            "still approves every rule, whatever this says."
+        ),
+    ),
 )
 
 #: The knobs by name.
 KNOB_BY_NAME: Final[Mapping[str, Knob]] = MappingProxyType({one.name: one for one in KNOBS})
 
 _HELD: dict[str, int] = {}
+
+#: Rows one task lent itself with `reading`. None outside one, which is every request.
+_READING: ContextVar[Mapping[str, int] | None] = ContextVar("tuning_reading", default=None)
 
 
 # ------------------------------------------------------------------------ holding
@@ -337,6 +403,29 @@ def held() -> Mapping[str, int]:
     return MappingProxyType(dict(_HELD))
 
 
+@contextmanager
+def reading(saved: Mapping[str, int]) -> Iterator[None]:
+    """Read these rows instead of what the process holds, in this task and what it calls only.
+
+    For an install check that saved a figure in a transaction it will roll back and must ask the
+    product's own readers what they decide under it. See
+    `A_READING_IS_LENT_TO_ONE_TASK_AND_NEVER_HELD`.
+    """
+    token = _READING.set(MappingProxyType(dict(saved)))
+    try:
+        yield
+    finally:
+        _READING.reset(token)
+
+
+def _in_force(saved: Mapping[str, int] | None) -> Mapping[str, int]:
+    """The rows to read: the caller's, else the ones this task was lent, else the held ones."""
+    if saved is not None:
+        return saved
+    lent = _READING.get()
+    return _HELD if lent is None else lent
+
+
 def value(name: str, saved: Mapping[str, int] | None = None) -> int:
     """The value in force for one knob: saved and within bounds, or the product's default.
 
@@ -345,7 +434,7 @@ def value(name: str, saved: Mapping[str, int] | None = None) -> int:
     See `A_SAVED_VALUE_OUTSIDE_THE_BOUNDS_IS_NOT_USED`.
     """
     knob = KNOB_BY_NAME[name]
-    found = (_HELD if saved is None else saved).get(name)
+    found = _in_force(saved).get(name)
     if found is None or not knob.admits(found):
         return knob.default
     return found
@@ -354,8 +443,37 @@ def value(name: str, saved: Mapping[str, int] | None = None) -> int:
 def is_saved(name: str, saved: Mapping[str, int] | None = None) -> bool:
     """Whether a saved value is what is in force for this knob, rather than the default."""
     knob = KNOB_BY_NAME[name]
-    found = (_HELD if saved is None else saved).get(name)
+    found = _in_force(saved).get(name)
     return found is not None and knob.admits(found)
+
+
+def inferred_half_life_days(saved: Mapping[str, int] | None = None) -> float:
+    """How many days an inferred memory takes to lose half its weight, as in force now."""
+    return float(value(INFERRED_HALF_LIFE, saved))
+
+
+def promotion_agreement(saved: Mapping[str, int] | None = None) -> int:
+    """How many separate conversations must agree before a tier-two rule is offered for review."""
+    return value(PROMOTION_AGREEMENT_KNOB, saved)
+
+
+def inferred_lifetime_days(half_life_days: float) -> int:
+    """About how many days an inference is recalled for, from the day it forms, at a half-life.
+
+    An inference forms at `brain.memory.turn.EXTRACTED_CONFIDENCE` and stops being recalled when
+    it decays below `brain.memory.formation.RECALL_FLOOR`, so this is the number of half-lives
+    between the two, in days, rounded down: the last whole day it is still recalled.
+    """
+    return math.floor(half_life_days * math.log2(EXTRACTED_CONFIDENCE / RECALL_FLOOR))
+
+
+def lifetime_sentence(saved: Mapping[str, int] | None = None) -> str:
+    """What the half-life in force means for a person, in words, for the Learning screen."""
+    days = inferred_lifetime_days(inferred_half_life_days(saved))
+    return (
+        f"At the figure in force, an inferred memory stops being recalled about {days} days "
+        "after it forms. A memory somebody states does not fade."
+    )
 
 
 _RATE_KNOB: Final[Mapping[LimitScope, str]] = MappingProxyType(
@@ -450,3 +568,10 @@ async def load(session: AsyncSession) -> dict[str, int]:
 def knobs_of(kind: KnobKind) -> Sequence[Knob]:
     """The knobs of one kind, in the console's order."""
     return tuple(one for one in KNOBS if one.kind is kind)
+
+
+#: The kinds the Rate limits screen lists and sets. The Learning screen's are the rest.
+LIMIT_KINDS: Final[frozenset[KnobKind]] = frozenset({KnobKind.RATE, KnobKind.BUDGET})
+
+#: The kinds the Learning screen lists and sets.
+LEARNING_KINDS: Final[frozenset[KnobKind]] = frozenset({KnobKind.LEARNING})

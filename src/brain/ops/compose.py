@@ -196,8 +196,8 @@ BASELINE_FILE: Final = "docker-compose.yml"
 #: `tests/unit/test_compose.py` compares every figure here against what the files say, in the
 #: shape `wiring.A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING` is held to.
 THE_FULL_PROFILE_IS_ONE_FILE: Final = (
-    "The full profile is 22 containers across 10 compose files, merged into "
-    "docker-compose.full.yml, reserving 14720 MiB, and it needs a host with 14976 MiB to "
+    "The full profile is 23 containers across 10 compose files, merged into "
+    "docker-compose.full.yml, reserving 14848 MiB, and it needs a host with 15104 MiB to "
     "spare. Nothing stops it being one file: 0 components are budgeted with no service, 0 "
     "services take something they need at startup from a bind mount that a stored compose "
     "resolves to nothing, seaweedfs is described once and named twice, and the 2 services "
@@ -457,8 +457,69 @@ def databases_nothing_creates(
     return tuple(sorted(found))
 
 
-def deployment_mib(files: ComposeFiles) -> int:
-    """What this set of compose files reserves on a host, counting one container once.
+#: Why a one-shot a service waits for is not counted beside that service.
+A_ONE_SHOT_A_SERVICE_WAITS_FOR_NEVER_RUNS_BESIDE_IT: Final = (
+    "Compose starts a service only after every one-shot it waits for with "
+    "service_completed_successfully has exited, so that service and those one-shots are never in "
+    "memory at once: the host needs the larger of the two, not both. A one-shot waited for by "
+    "more than one service, or by none, is counted in full, and one-shots waiting together are "
+    "counted together, because nothing keeps them from running at the same time."
+)
+
+
+def _bodies(files: ComposeFiles, service: str) -> list[Mapping[str, Any]]:
+    """Every description of `service` in this set."""
+    return [
+        body
+        for name in described_services(files).get(service, ())
+        if isinstance(body := _services_in(files[name])[service], Mapping)
+    ]
+
+
+def _runs_once(files: ComposeFiles, service: str) -> bool:
+    """Whether `service` is a one-shot: a container meant to exit, with no restart policy."""
+    return any(str(body.get("restart", "")) == "no" for body in _bodies(files, service))
+
+
+def _waits_to_complete(files: ComposeFiles, service: str) -> set[str]:
+    """The services `service` starts only after they have exited successfully."""
+    found: set[str] = set()
+    for body in _bodies(files, service):
+        depends = body.get("depends_on")
+        if not isinstance(depends, Mapping):
+            # The list form waits only for a start, so it orders nothing about memory.
+            continue
+        for name, condition in depends.items():
+            if (
+                isinstance(condition, Mapping)
+                and condition.get("condition") == "service_completed_successfully"
+            ):
+                found.add(str(name))
+    return found
+
+
+def sequenced_one_shots(files: ComposeFiles) -> dict[str, tuple[str, ...]]:
+    """Each long-running service against the one-shots that run before it and never beside it.
+
+    See `A_ONE_SHOT_A_SERVICE_WAITS_FOR_NEVER_RUNS_BESIDE_IT`. A one-shot is grouped with the
+    service waiting for it only when that service is the one waiting, and is long-running.
+    """
+    waited_by: dict[str, set[str]] = {}
+    for service in declared_services(files):
+        for before in _waits_to_complete(files, service):
+            if before in declared_services(files) and _runs_once(files, before):
+                waited_by.setdefault(before, set()).add(service)
+    groups: dict[str, list[str]] = {}
+    for shot, waiters in waited_by.items():
+        if len(waiters) == 1:
+            (waiter,) = waiters
+            if not _runs_once(files, waiter):
+                groups.setdefault(waiter, []).append(shot)
+    return {waiter: tuple(sorted(shots)) for waiter, shots in sorted(groups.items())}
+
+
+def summed_mib(files: ComposeFiles) -> int:
+    """Every container's limit added together, as if all of them were in memory at once.
 
     Refuses a service with no memory limit rather than costing it at nothing, which is the
     same refusal `wiring.set_cost_mib` makes about a name nobody budgeted and for the same
@@ -469,8 +530,28 @@ def deployment_mib(files: ComposeFiles) -> int:
     is what the host has to honour if that is the description the flag order selects. A service
     named twice and described once is costed once, which is the same sentence with the second
     copy taken out of it.
+
+    Kept beside `deployment_mib` because the budget's arithmetic is a sum of components and is
+    compared with a sum (`tests/unit/test_compose.py` holds the two to one identity), while the
+    host's need is a peak.
     """
     return sum(_service_mib(files, service) for service in declared_services(files))
+
+
+def deployment_mib(files: ComposeFiles) -> int:
+    """The most this set of compose files holds on a host at once, counting one container once.
+
+    `summed_mib`, less what never coexists: each long-running service and the one-shots it waits
+    for are costed at the larger of the two rather than both
+    (`A_ONE_SHOT_A_SERVICE_WAITS_FOR_NEVER_RUNS_BESIDE_IT`). Until 2026-10-06 this was the plain
+    sum, which was right while every one-shot was small; Keycloak's server build is not, and the
+    sum would have published a host requirement 896 MiB above any moment the host lives through.
+    """
+    overlap = sum(
+        min(sum(_service_mib(files, shot) for shot in shots), _service_mib(files, waiter))
+        for waiter, shots in sequenced_one_shots(files).items()
+    )
+    return summed_mib(files) - overlap
 
 
 def service_mib(files: ComposeFiles, service: str) -> int:

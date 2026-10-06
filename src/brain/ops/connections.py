@@ -67,7 +67,10 @@ takes as `connection_limit` on the URL; fifteen for `brain-worker`, of which ten
 rather than chosen; five for `brain-parse-worker`, which configures no checkpointer at all.
 `db` admitted 97 against a declared demand of 20 and now stands at 50, so the spare figure
 this module reports has fallen from 77 to 47 and is at last a figure about the host rather
-than about the four services missing from it.
+than about the four services missing from it. On 2026-10-06 the pools per workload class
+(`brain.ops.class_pools`) added a second transaction pooler, and the spare figure did not move:
+it carries the twenty the first one did rather than twenty more. See
+`TWO_POOLERS_FOR_ONE_TRAFFIC_ARE_ONE_BUDGET`, which says what that does and does not cover.
 
 **Declaring a number is not the same as the number being true, and the half nobody can
 measure is the queue driver's.** Ten of `brain-worker`'s fifteen is
@@ -127,8 +130,9 @@ THE_POOLER_IS_WHAT_MAKES_THE_CEILING_SAFE: Final = (
     "MiB container. Worst case that is 512 + 100 * 16 = 2112 MiB, which is more than the "
     "container has, so the declared ceiling could not be honoured if anything ever reached "
     "it. Nothing does, because every client of it is bounded: PgBouncer holds two hundred "
-    "callers to twenty server connections, the four services that go round it are bounded at "
-    "thirty between them, and the worst case behind all fifty is 1312 MiB. The pooler is "
+    "callers to twenty server connections, the pools per class carry the same twenty when "
+    "traffic moves to them, the four services that go round both are bounded at thirty between "
+    "them, and the worst case behind all fifty is 1312 MiB. The pooler is "
     "therefore load-bearing rather than an optimisation, and so is every bound beside it: "
     "removing the pooler, or adding a fifth direct client with no bound of its own, turns a "
     "configuration nobody has questioned into an out-of-memory kill under load."
@@ -148,6 +152,20 @@ A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND: Final = (
     "SAFE is the other half of the same sentence: the application's declared ceiling costs "
     "more memory than its container has, and it is affordable only while real connections "
     "stay far below it."
+)
+
+#: Why the pools per class are counted inside the application's pooler's twenty, not beside it.
+TWO_POOLERS_FOR_ONE_TRAFFIC_ARE_ONE_BUDGET: Final = (
+    "The pools per workload class serve the callers the application's pooler served, moved: a "
+    "process uses one or the other, never both, and moves within a minute of the class pooler "
+    "being reported running or stopping. So the two are counted as one budget at the larger of "
+    "the two, which is what the database can be asked for by their callers. What that does not "
+    "cover, said rather than rounded away: in the minute a process moves, transactions it began "
+    "on the old pooler finish there while new ones start on the class pools, and a caller "
+    "nothing moves (a command run by hand, a migration through the pooler) stays on the old one. "
+    "Counting both in full instead would claim seventy connections against a database whose "
+    "memory is sized for fifty-six, which is a budget that refuses the design rather than "
+    "describing it."
 )
 
 #: What Postgres holds back for administrators, by default.
@@ -180,6 +198,12 @@ WORKER_CHECKPOINTER_CONNECTIONS: Final = 10
 #: `brain.ops.worker.AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` for the day this
 #: number turns out to be smaller than the truth.
 WORKER_QUEUE_CONNECTIONS: Final = 5
+
+#: What the class pooler may hold against the application's database, the three class pools
+#: together. Written as a figure here rather than imported, because this module reads no other
+#: module's policy; `tests/unit/test_class_pools.py` holds it equal to `brain.ops.class_pools.POOLS`
+#: and to the configuration that module renders.
+CLASS_POOLER_CONNECTIONS: Final = 20
 
 
 @dataclass(frozen=True)
@@ -254,6 +278,9 @@ class Client:
     #: True when this client connects as the owner or superuser of its database. See
     #: `RESERVED_CONNECTIONS_ONLY_RESERVE_FROM_SOMEBODY_ELSE`.
     connects_as_superuser: bool = False
+    #: Another client of the same database whose callers this one carries instead of it, so the
+    #: two are one budget counted at the larger. See `TWO_POOLERS_FOR_ONE_TRAFFIC_ARE_ONE_BUDGET`.
+    shares_with: str = ""
 
     def __post_init__(self) -> None:
         if self.pool_max < 1:
@@ -265,6 +292,9 @@ class Client:
             raise ValueError(msg)
         if self.replicas < 1:
             msg = f"{self.name!r} declares {self.replicas} replicas"
+            raise ValueError(msg)
+        if self.shares_with == self.name:
+            msg = f"{self.name!r} shares a budget with itself, which counts nothing"
             raise ValueError(msg)
         if not self.why.strip():
             msg = (
@@ -306,9 +336,10 @@ DATABASES: Final[tuple[Database, ...]] = (
 
 #: Everything that opens a connection to one of the databases above.
 #:
-#: Six rows, of which four were added on 2026-09-09 and none of the four is deployed yet. That
-#: is the point rather than a caveat: a bound chosen before a service starts is a decision, and
-#: the same bound chosen after it starts is an incident review. See `Client.why` on each.
+#: Seven rows: four added on 2026-09-09 before any of them was deployed, and the class pooler on
+#: 2026-10-06. That is the point rather than a caveat: a bound chosen before a service starts is a
+#: decision, and the same bound chosen after it starts is an incident review. See `Client.why` on
+#: each.
 CLIENTS: Final[tuple[Client, ...]] = (
     Client(
         name="pgbouncer",
@@ -319,6 +350,21 @@ CLIENTS: Final[tuple[Client, ...]] = (
             "mode is what makes it enough: twenty server connections serve two hundred "
             "callers, which is also why nothing behind the pooler is declared here as well"
         ),
+    ),
+    Client(
+        # M22.2.2. The pools per workload class, which split the twenty above three ways rather
+        # than adding twenty per class, and carry the traffic the row above carried. See
+        # `TWO_POOLERS_FOR_ONE_TRAFFIC_ARE_ONE_BUDGET`.
+        name="pgbouncer-classes",
+        database="db",
+        pool_max=CLASS_POOLER_CONNECTIONS,
+        why=(
+            "pools_for(20) from brain.ops.admission, twelve interactive, five background and "
+            "three batch, each bounded across logins by max_db_connections in the configuration "
+            "brain.ops.class_pools renders; held equal to that configuration by test. The same "
+            "callers as the application's pooler, moved, so it is the same budget as that row"
+        ),
+        shares_with="pgbouncer",
     ),
     Client(
         name="keycloak",
@@ -412,8 +458,17 @@ def client_named(name: str) -> Client | None:
 
 
 def demand_on(name: str) -> int:
-    """Connections every client of this database can hold open at once."""
-    return sum(one.demand() for one in clients_of(name))
+    """Connections every client of this database can hold open at once.
+
+    Clients that share a budget (`Client.shares_with`) are counted once, at the larger of them.
+    See `TWO_POOLERS_FOR_ONE_TRAFFIC_ARE_ONE_BUDGET`.
+    """
+    clients = clients_of(name)
+    shared: dict[str, int] = {}
+    for one in clients:
+        key = one.shares_with or one.name
+        shared[key] = max(shared.get(key, 0), one.demand())
+    return sum(shared.values())
 
 
 def headroom_on(name: str) -> int:
@@ -460,6 +515,14 @@ def connection_breaches() -> tuple[str, ...]:
             )
 
     for client in CLIENTS:
+        if client.shares_with and not any(
+            other.name == client.shares_with and other.database == client.database
+            for other in CLIENTS
+        ):
+            found.append(
+                f"{client.name!r} shares the budget of {client.shares_with!r}, which is not a "
+                f"declared client of {client.database!r}, so its connections are counted nowhere"
+            )
         if client.connects_as_superuser:
             found.append(
                 f"{client.name!r} connects to {client.database!r} as its superuser, so the "
