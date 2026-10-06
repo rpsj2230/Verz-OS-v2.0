@@ -80,6 +80,7 @@ import { AUTOMATIONS_TAB, automationGalleryApiPath } from "../automationGalleryQ
 import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
+import { AgentConversations } from "./AgentConversations";
 import { AgentMemory } from "./AgentMemory";
 import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabilitiesQuery";
 import { AgentDashboard, usePeriod } from "./AgentDashboard";
@@ -111,6 +112,7 @@ export const SKILLS_LABEL = "Skills";
 export const DAYS_LABEL = "Days since created";
 export const SPEND_NOT_RECORDED = "spend is not recorded, so the figure is left out rather than drawn as nought.";
 export const AUTOMATIONS_SECTION = "Automations";
+export const CONVERSATIONS_SECTION = "Conversations";
 
 /** The Memory section's key, as the API's strip spells it. */
 export const MEMORY_TAB = "memory";
@@ -125,6 +127,13 @@ export const EDIT_AS_DRAFT = "Edit as a draft";
 
 /** The settings tab's key, whose content is the Profile. */
 const SETTINGS_TAB = "settings";
+
+/**
+ * The Conversations section's key. Its content is the reader's own threads with this agent, which
+ * are theirs to read without any grant, so it is offered to anybody who can open the agent and not
+ * only where the workspace's tab strip lists it (`brain.agent_conversation_routes`).
+ */
+export const CONVERSATIONS_TAB = "conversations";
 
 /**
  * The line under the agent's name: what it is for, then where it sits and where it came from.
@@ -159,7 +168,10 @@ export function viewAddress(agentId: string, view: AgentView | string): string {
 }
 
 /** Which view an address opens, given the sections this reader may open. */
-export function viewFor(tab: string | undefined, sections: readonly string[]): AgentView | typeof AUTOMATIONS_TAB | typeof MEMORY_TAB {
+export function viewFor(
+  tab: string | undefined,
+  sections: readonly string[],
+): AgentView | typeof AUTOMATIONS_TAB | typeof MEMORY_TAB | typeof CONVERSATIONS_TAB {
   if (tab === "profile" || tab === "about") {
     return tab;
   }
@@ -168,6 +180,9 @@ export function viewFor(tab: string | undefined, sections: readonly string[]): A
   }
   if (tab === AUTOMATIONS_TAB && sections.includes(AUTOMATIONS_TAB)) {
     return AUTOMATIONS_TAB;
+  }
+  if (tab === CONVERSATIONS_TAB) {
+    return CONVERSATIONS_TAB;
   }
   if (tab === MEMORY_TAB && sections.includes(MEMORY_TAB)) {
     return MEMORY_TAB;
@@ -319,9 +334,12 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     const Icon = VIEW_ICONS[one];
     return { key: one, label: VIEW_LABELS[one], to: viewAddress(agentId, one), icon: <Icon aria-hidden /> };
   });
-  const menuSections = workspace.tabs
-    .filter((one) => SECTION_LABELS[one.tab] !== undefined)
-    .map((one) => ({ tab: one.tab, label: SECTION_LABELS[one.tab] ?? one.label }));
+  const menuSections = [
+    { tab: CONVERSATIONS_TAB, label: CONVERSATIONS_SECTION },
+    ...workspace.tabs
+      .filter((one) => SECTION_LABELS[one.tab] !== undefined)
+      .map((one) => ({ tab: one.tab, label: SECTION_LABELS[one.tab] ?? one.label })),
+  ];
   const subline = roleLine(facts, agent.lineage?.version);
 
   const header = (
@@ -386,7 +404,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     <DetailPage
       crumbs={[{ label: ROSTER_HEADING, to: ROSTER_ADDRESS }, { label: agent.displayName }]}
       header={header}
-      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB || view === MEMORY_TAB ? undefined : view} />}
+      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB || view === MEMORY_TAB || view === CONVERSATIONS_TAB ? undefined : view} />}
       beside={<SectionsMenu agentId={agentId} sections={menuSections} />}
     >
       {lifecycle.notice}
@@ -423,6 +441,11 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
         />
       ) : null}
       {view === "about" ? <AgentAbout agentId={agentId} profileAddress={viewAddress(agentId, "profile")} /> : null}
+      {view === CONVERSATIONS_TAB ? (
+        <SectionCard title={CONVERSATIONS_SECTION} lede="Your own conversations with this agent, wherever you asked, and how each run ended.">
+          <AgentConversations agentId={agentId} />
+        </SectionCard>
+      ) : null}
       {view === MEMORY_TAB ? <AgentMemory agentId={agentId} /> : null}
       {view === AUTOMATIONS_TAB ? (
         <SectionCard title={AUTOMATIONS_SECTION} lede="What this agent runs on a schedule, and what can be installed for it.">
