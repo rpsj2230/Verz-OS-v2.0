@@ -47,6 +47,7 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.errors import Absent
 from brain.core.principal import Employment, Principal, PrincipalKind
+from brain.core.redaction import LOCK_TEXT
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.leash import Action, ApprovalState, SuspendedAction, render_artefact
 from brain.identity.bearer import TokenAuthority
@@ -347,16 +348,49 @@ def test_the_queue_lapses_soonest_first_whatever_order_the_store_holds() -> None
     assert [one.suspension_id for one in shown.items] == ["a_soon", "b_soon", "a_later"]
 
 
-def test_a_suspension_that_does_not_make_a_card_is_absent_from_every_queue_and_takes_nothing_down(
+def test_a_suspension_whose_stored_artefact_is_blank_is_still_shown_from_its_action(
     client: TestClient, source: MemorySource
 ) -> None:
-    """An artefact of whitespace passes the suspension's length bound and is refused by `Card`.
-    It is absent, and the approval beside it is still offered.
-
-    Delete this and one bad row is a 500 for every approver in its department."""
+    """**M33.8.1.** An agent's action is shown rendered from the action at the approver's reach,
+    so its stored artefact, here whitespace, is never read and the row is offered like the one
+    beside it. Delete this and the card can go back to showing the stored artefact, which is the
+    requester's rendering."""
     source.held = [a_suspension("blank", artefact="   \n  "), a_suspension("m_1")]
 
-    assert queued(client, "u_narrow") == ["m_1"]
+    assert queued(client, "u_narrow") == ["blank", "m_1"]
+
+
+def test_a_card_that_cannot_be_built_is_absent_and_takes_nothing_down() -> None:
+    """A promotion whose stored statement is whitespace would be a card with nothing on it, which
+    `RenderedRequest` refuses; `shown_card` answers it as absent and still answers the promotion
+    beside it. Delete this and one bad row is a 500 for every approver in its department."""
+    from brain.approval_routes import shown_card
+    from brain.knowledge.promotion import PROMOTION_TOOL
+    from brain.knowledge.visibility import PROMOTION_CAPABILITY
+
+    def promotion(ident: str, statement: str) -> SuspendedAction:
+        action = an_action(MAINTENANCE).model_copy(update={"tool": PROMOTION_TOOL})
+        raised_at = datetime.now(UTC) - timedelta(hours=1)
+        return SuspendedAction(
+            id=ident,
+            trace_id="trace_test",
+            action=action,
+            principal_id="u_asker",
+            ent_hash="e" * 32,
+            artefact=statement,
+            action_digest=action.digest(),
+            raised_at=raised_at,
+            expires_at=raised_at + timedelta(hours=4),
+        )
+
+    approver = EntitlementSet(
+        principal_id="u_publisher",
+        grants=(Grant(capability=PROMOTION_CAPABILITY, scope=in_department(MAINTENANCE)),),
+    )
+    now = datetime.now(UTC)
+    assert shown_card(promotion("blank", "  \n "), approver, now) is None
+    shown = shown_card(promotion("p_1", "Make this document readable."), approver, now)
+    assert shown is not None and shown.request.text == "Make this document readable."
 
 
 # ----------------------------------------------------------------------- one approval
@@ -365,8 +399,9 @@ def test_a_suspension_that_does_not_make_a_card_is_absent_from_every_queue_and_t
 def test_an_approval_in_reach_opens_as_its_card_with_the_artefact_as_it_was_rendered(
     client: TestClient, source: MemorySource
 ) -> None:
-    """The card is the suspension's own stored artefact, whose reach it runs under, and when it
-    was raised and lapses.
+    """The card is the action rendered at the approver's own reach (M33.8.1), never the stored
+    artefact: `u_narrow` may change a ticket's status and not read it, so the status is locked.
+    Whose reach it runs under, and when it was raised and lapses, as stored.
 
     Delete this and every 404 below is satisfied by a route that refuses everybody."""
     held = a_suspension("m_1")
@@ -377,7 +412,9 @@ def test_an_approval_in_reach_opens_as_its_card_with_the_artefact_as_it_was_rend
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["suspension_id"] == held.id
-    assert body["artefact"] == held.artefact
+    assert body["request"] != held.artefact
+    assert f"status: {LOCK_TEXT}" in body["request"]
+    assert "artefact" not in body
     assert body["runs_as"] == held.principal_id
     assert datetime.fromisoformat(body["raised_at"]) == held.raised_at
     assert datetime.fromisoformat(body["expires_at"]) == held.expires_at
@@ -387,7 +424,7 @@ def test_an_approval_in_reach_opens_as_its_card_with_the_artefact_as_it_was_rend
 def test_an_approval_the_caller_may_not_decide_and_one_that_is_not_there_are_one_404_with_one_body(
     client: TestClient, source: MemorySource
 ) -> None:
-    """Out of reach, already decided, lapsed, without a card, and an id nothing holds all
+    """Out of reach, already decided, lapsed, and an id nothing holds all
     answer identically, and the sibling line proves the approver is answered.
 
     Delete this and the address bar enumerates the company's pending actions one id at a time."""
@@ -395,13 +432,11 @@ def test_an_approval_the_caller_may_not_decide_and_one_that_is_not_there_are_one
         a_suspension("f_1", department=FINANCE),
         a_suspension("decided", state=ApprovalState.APPROVED),
         a_suspension("lapsed", raised_ago=timedelta(hours=5), window=timedelta(hours=4)),
-        a_suspension("blank", artefact="   "),
     ]
 
     missing = get(client, "u_narrow", f"{APPROVALS}/nothing_here")
     refusals = [
-        get(client, "u_narrow", f"{APPROVALS}/{ident}")
-        for ident in ("f_1", "decided", "lapsed", "blank")
+        get(client, "u_narrow", f"{APPROVALS}/{ident}") for ident in ("f_1", "decided", "lapsed")
     ]
 
     assert missing.status_code == 404

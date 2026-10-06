@@ -38,11 +38,11 @@
 }
 
 /*
- * The artefact is shown as it was rendered, line breaks included, so `pre-wrap` rather than
+ * The request is shown as the API rendered it, line breaks included, so `pre-wrap` rather than
  * `pre`: `pre` keeps a long line long and makes the card scroll sideways, which on a phone is
  * the part of the action a person does not read before deciding.
  */
-.approval-card__artefact {
+.approval-card__request {
   margin: 0 0 var(--space-3);
   font-family: var(--font-mono);
   font-size: var(--text-sm);

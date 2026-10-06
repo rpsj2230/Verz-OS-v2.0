@@ -32,10 +32,14 @@ about anything they were not shown. See `APPROVALS_ARE_FILTERED_BEFORE_THEY_ARE_
 fields `Card` has, so the tool call `brain.console.approvals.AN_APPROVER_READS_WHAT_WILL_
 HAPPEN_AND_NOT_HOW` keeps off the card cannot come back one layer out, in a serialiser.
 
-**A suspension that does not make a card is absent for everybody.** `Card` refuses an artefact
-that is only whitespace, which `SuspendedAction` admits because its bound is a length. Raising
-that as a 500 would take the queue down for every approver over one row and, on the single
-card, tell an id that exists from one that does not. It is logged and absent, as
+**The request on the card is rendered at the reader's own reach (M33.8.1, needs-rupash 14).**
+`Card.request` is `brain.gate.approval_request.render_request` of the action at the reach the
+screen was asked at, so an argument that reader may not read is locked on the wire as it is on the
+card, and the requester's artefact never leaves the suspension.
+
+**A suspension that does not make a card is absent for everybody.** Raising a card that cannot be
+built as a 500 would take the queue down for every approver over one row and, on the single card,
+tell an id that exists from one that does not. It is logged and absent, as
 `brain.agent_routes.A_ROW_THAT_DOES_NOT_CONSTRUCT_IS_ABSENT_FOR_EVERYBODY` argues for agents.
 
 **A decision is written once because the row is held while it is taken.** `decide_once` locks
@@ -58,7 +62,7 @@ kept. See `brain.gate.suspension_store.THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW
 asked.** Approving and rejecting are what a phone needs, and since 2026-09-30 an agent's prepared
 action can also be taken over: the approver will do by hand what the card shows, the action does
 not run, and the takeover counts against that agent's rung on that target (M8.3.5, through
-`brain.gate.takeover_store`). What is handed over is the artefact the card already carries, which
+`brain.gate.takeover_store`). What is handed over is the request the card already carries, which
 is why this no longer waits; see `TAKING_OVER_HANDS_THE_APPROVER_THE_CARD_THEY_READ`. Amending
 still needs a replacement raised through the gate, and nothing raises one; see
 `AMENDING_WAITS_FOR_A_REPLACEMENT_RAISED_THROUGH_THE_GATE`. A rejection names one of
@@ -201,7 +205,7 @@ A_DECISION_IS_TAKEN_ON_A_HELD_ROW_AND_WRITTEN_ONCE: Final = (
 TAKING_OVER_HANDS_THE_APPROVER_THE_CARD_THEY_READ: Final = (
     "Taking over says a person will do by hand what an agent prepared, so the action does not run "
     "and the work is theirs. What they need to do it is what the agent would have done, which is "
-    "the artefact on the card they are reading, so nothing else has to exist first. It is "
+    "the request on the card they are reading, so nothing else has to exist first. It is "
     "recorded as its own verdict rather than as a rejection, and it counts against that agent's "
     "rung on that target, because an agent whose work keeps being done by hand is set too high."
 )
@@ -230,7 +234,7 @@ MAX_QUEUE_CARDS: Final = 200
 #: Why the queue has no act on several cards.
 AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD: Final = (
     "An approval lets one suspended action run, and the card is the statement of what it will do. "
-    "Approving several at once approves artefacts nobody read, and a rejection names its own "
+    "Approving several at once approves requests nobody read, and a rejection names its own "
     "reason, so each approval is decided from its own card."
 )
 
@@ -343,7 +347,9 @@ class ApprovalCardView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     suspension_id: str
-    artefact: str
+    #: `Card.request`'s text: the action rendered at this reader's reach, locked where they may
+    #: not read. Never the requester's artefact.
+    request: str
     runs_as: str
     raised_at: datetime
     expires_at: datetime
@@ -429,7 +435,7 @@ def card_view(shown: Card) -> ApprovalCardView:
     """One card under the wire names, which are `Card`'s own."""
     return ApprovalCardView(
         suspension_id=shown.suspension_id,
-        artefact=shown.artefact,
+        request=shown.request.text,
         runs_as=shown.runs_as,
         raised_at=shown.raised_at,
         expires_at=shown.expires_at,
@@ -447,8 +453,8 @@ def shown_card(
 ) -> Card | None:
     """The card this reach is shown for one suspension, or None, including when none can be built.
 
-    A suspension whose artefact is only whitespace is refused by `Card` itself, and that
-    refusal is absence here rather than a status. See the module note. `unsent` says, for the
+    A card that cannot be built is absence here rather than a status. See the module note.
+    `unsent` says, for the
     suspended action's tool, why approving it would send nothing (`unsent_of`).
     """
     because = "" if unsent is None else unsent(suspension.action.tool.name)
@@ -463,7 +469,7 @@ def shown_card(
 QUEUE: Final[Listing[ApprovalCardView]] = Listing(
     name="approvals",
     columns=(
-        Column("artefact", lambda row: row.artefact, search=True),
+        Column("request", lambda row: row.request, search=True),
         Column("runs_as", lambda row: row.runs_as, search=True, filter=True, sort=True),
         Column("suspension_id", lambda row: row.suspension_id, search=True),
         Column("raised_at", lambda row: row.raised_at, sort=True),

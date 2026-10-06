@@ -114,11 +114,13 @@ async def installed_agent(
     allowed_tools: Sequence[str] = (),
     suffix: str = "",
     scope: Scope | None = None,
+    personal: bool = False,
 ) -> str:
     """An agent of acceptance_a installed from a template the check signs, with `overlay` set here.
 
     The three rows `brain.agents.install_store.finish` writes, from its own row builders, and the
     instance row field by field as `brain.ops.acceptance_checks_skills._an_agent` writes it.
+    `personal` makes it seen by its owner alone rather than by acceptance_a.
     """
     from brain.agents.install_store import agent_values, version_values
     from brain.agents.model import AgentAudience
@@ -165,7 +167,11 @@ async def installed_agent(
     effective = materialise(
         signed,
         instance,
-        audience=AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A),
+        audience=(
+            AgentAudience(level=Visibility.PERSONAL, owner_id=owner)
+            if personal
+            else AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A)
+        ),
     )
     await h.execute(
         *h.attributed(owner),

@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**39 items are open: 162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**42 items are open: 165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,78 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 165. May an administrator choose how a connected source's own permissions are followed?
+
+**In plain terms:** some sources keep their own rules about who may see what (a shared folder, a
+private channel). For each connected source the Brain follows those rules in one of two ways: it asks
+the source about the person on every question, or it keeps a copy of the source's rule and checks it
+itself. Today which way is fixed by the connector as it was written, and the screen shows it. Your plan
+says an administrator *sets* it per connector (M33.5.1.3), and that choice was narrowed in the code
+without asking you. The Brain's own grants always apply as well, whichever way is used.
+
+**Option A: settable, but only towards stricter.** The screen offers the ways the connector supports,
+and an administrator may switch a source to a stricter one or off the source's rules altogether
+(leaving only the Brain's own grants); a way the connector cannot do is never offered. Each change is
+on the ledger.
+
+**Option B: keep it fixed by the connector.** The screen keeps saying which way it is, and changing it
+means a new version of the connector.
+
+**My recommendation:** A. It is what you asked for, and it can only ever make a source more careful.
+I will not build it until you answer.
+
+**What I need from you:** reply "165: A" or "165: B".
+
+## 164. Should your install scan uploaded files with an antivirus?
+
+**In plain terms:** every uploaded file is already checked for the shapes that attack a file reader
+(macros, scripts, broken archives), on every install. What no install has yet is an antivirus that
+recognises known malware. The Brain can use one (ClamAV, a free antivirus): set it on and every upload
+is scanned, and if the scanner is down an upload is refused rather than read unscanned. **But nothing
+in the product installs ClamAV yet**, so today the setting would point at nothing. One task waits on
+this (M7.1.3, a known test virus is refused).
+
+ClamAV holds its virus database in memory, commonly 1 to 1.5 GB; I would measure it on your server before you switch it on. Your server has roughly
+**376 MB** of its memory budget unclaimed after the sign-in service fix, so it does not fit today
+without taking memory from something else.
+
+**Option A: add ClamAV as an optional service, switched on later.** I build it the same way as the
+privacy detector (one word on Settings starts it, nothing changes until then), and you switch it on when
+item 120's memory work or a larger server makes room.
+
+**Option B: no antivirus.** Uploads keep the structural check only; the three checks are marked as not
+applying to your install, and the page says what that means: a known virus inside an ordinary document
+is not recognised.
+
+**My recommendation:** A. The build costs nothing on your server until it is switched on, and every
+other company that installs the Brain gets the choice too.
+
+**What I need from you:** reply "164: A" or "164: B".
+
+## 163. What stops tasks being proved on your install: one list
+
+**In plain terms:** a task is only counted as done once the install's own checks for it pass, on two runs.
+After the last count (#422), the checks below could not pass on your install, for reasons only you can
+change. Each line is one action and points to the item with its steps. Nothing here is new to decide.
+
+1. **Switch on the optional services (item 131, part 2).** On **Settings**, set *Optional services this
+   server runs* to `presidio,langfuse` and save. That starts the privacy detector and the trace ledger,
+   and the release then reports the per-kind connection pools. Unlocks 4 tasks. Item 131's server steps come first:
+   reply "131: do the server steps" and I do them.
+2. **Save a mail relay (items 131 and 132).** On **Notifications**, fill in *Email relay* once. Unlocks
+   2 tasks: Forgot password's email and the email channel.
+3. **Choose where uploaded documents are stored (item 122).** Unlocks 2 tasks.
+4. **Connect your own accounts (items 126 and 128).** 27 connector tasks and 4 channel tasks have passed
+   only on accounts made up for the check. Each closes once its source or channel is connected with your
+   own account, in item 126's order.
+5. **Add the bot to your digest group (item 127).** The evening digest has nowhere to go until then.
+   Unlocks 4 tasks.
+6. **Ask one real question in Lark** after item 127. Unlocks 1 task.
+7. **Antivirus: item 164.**
+
+**What I need from you:** nothing new; work down the list when you can, and tell me after each step so I
+run the checks again.
 
 ## 162. May a new agent be put on your website's chat widget?
 

@@ -900,7 +900,7 @@ def test_a_decided_card_is_patched_within_the_close_window_and_a_full_window_rai
     """`close_admitted` with the window's decision made outside: admitted, the card is disarmed and
     patched; refused, `CardStaleError` carries the disarmed card and the wait. And a decided body
     is refused for a card still armed. Delete this and the shared window's answer can be ignored."""
-    from brain.approval_cards import built, card_payload
+    from brain.approval_cards import built
     from brain.console.approvals import card as shown_for
 
     promotion = a_promotion("u_prefix")
@@ -911,7 +911,8 @@ def test_a_decided_card_is_patched_within_the_close_window_and_a_full_window_rai
     shown = shown_for(promotion, reach, now)
     assert shown is not None
     card = built(promotion, shown, reach=reach, channel=Channel.LARK)
-    assert card.payload == card_payload(shown)
+    [record] = card.payload.records
+    assert record["request"] == shown.request.text
     with pytest.raises(CardRefusedError, match="not closed"):
         render_decided(card)
     limit = card_limit(CardCall.CLOSE)
