@@ -690,6 +690,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # The model pin's check plans its stand-ins only on a hosted install, and this one keeps text
+    # at home; `tests/unit/test_acceptance_skill_pins.py` runs it with the hosted profile.
+    assert (
+        outcomes.pop("an_agent_s_pinned_model_is_tried_first_with_its_level_behind")[0] == NOT_RUN
+    )
     # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
     assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
     assert (
@@ -699,6 +704,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # runs them with the hosted profile and a vault the test answers for.
     for escalation_check in registered(("brain.ops.acceptance_escalation",)):
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
+    # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
+    assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     # No optional service is switched on here; `tests/unit/test_acceptance_services.py` switches
@@ -710,6 +717,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for ledger_check in (
         "the_trace_ledger_runs_as_its_five_services",
         "every_trace_ledger_service_runs_under_its_budgeted_limit",
+        "a_run_sent_to_the_ledger_is_found_there_with_its_model_call",
     ):
         assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
     # No class pooler runs here; `tests/unit/test_class_pools.py` stands a limited login in for

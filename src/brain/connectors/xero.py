@@ -255,7 +255,7 @@ MONEY_IS_ANSWERED_LIVE_AND_NEVER_STORED = (
     "the one number nobody forgives being wrong. It is not on the platform denylist, so "
     "nothing outside this module refuses it: declared as a status enum it passes all five "
     "clauses of the projectability test. The refusal is therefore here, by name, beside the "
-    "mapping that fetches it live for whoever holds read:invoice.amount_due."
+    "mapping that fetches it live for whoever holds read:xero_invoice.amount_due."
 )
 
 #: Why three declarations are checked against each other rather than reviewed separately.
@@ -305,8 +305,12 @@ MANIFEST_VERSION: Final = "1.0.0"
 
 BASE_URL: Final = "https://api.xero.com"
 
-ENTITY_INVOICE: Final = "invoice"
-ENTITY_CONTACT: Final = "contact"
+#: Named for the source, as HubSpot's and Laravel's are. Until 2026-10-06 these were "invoice" and
+#: "contact", which the demo source and Freshdesk also provide, so a capability on them could not
+#: say which source it reaches and an agent's connector list could not narrow it. See
+#: `brain.agents.binding.AN_ENTITY_NAMES_ONE_SOURCE`.
+ENTITY_INVOICE: Final = "xero_invoice"
+ENTITY_CONTACT: Final = "xero_contact"
 
 #: The one header this connector contributes to a call. Not `Authorization`: that is minted
 #: from a lease by whoever borrowed it, and nothing here ever sees it.
@@ -1036,7 +1040,7 @@ def projected_record(
 #: `amount_due` is RESTRICTED and it is the point of the table. It is the same
 #: classification the invariant suite already pins for `invoice.amount_due`, reached
 #: independently: it is money, it is what the permission canaries protect, and it is
-#: returnable to somebody holding `read:invoice.amount_due` while never being storable.
+#: returnable to somebody holding `read:xero_invoice.amount_due` while never being storable.
 #: `brain.core.field_policy` names that combination as the ordinary case rather than the
 #: exception, and this is one of them.
 #:
@@ -1050,19 +1054,32 @@ def projected_record(
 #: a deliberate act by whoever owns the policy.
 XERO_FIELD_RULES: Final[tuple[FieldRule, ...]] = (
     FieldRule.of(
-        ENTITY_INVOICE, "invoice_number", "read:invoice.invoice_number", Classification.INTERNAL
+        ENTITY_INVOICE,
+        "invoice_number",
+        f"read:{ENTITY_INVOICE}.invoice_number",
+        Classification.INTERNAL,
     ),
-    FieldRule.of(ENTITY_INVOICE, "contact_id", "read:invoice.contact_id", Classification.INTERNAL),
-    FieldRule.of(ENTITY_INVOICE, "status", "read:invoice.status", Classification.INTERNAL),
-    FieldRule.of(ENTITY_INVOICE, "due_date", "read:invoice.due_date", Classification.INTERNAL),
     FieldRule.of(
-        ENTITY_INVOICE, "amount_due", "read:invoice.amount_due", Classification.RESTRICTED
+        ENTITY_INVOICE, "contact_id", f"read:{ENTITY_INVOICE}.contact_id", Classification.INTERNAL
     ),
-    FieldRule.of(ENTITY_CONTACT, "name", "read:contact.name", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "status", "read:contact.status", Classification.INTERNAL),
-    FieldRule.of(ENTITY_CONTACT, "updated_at", "read:contact.updated_at", Classification.INTERNAL),
     FieldRule.of(
-        ENTITY_CONTACT, "tax_number", "read:contact.tax_number", Classification.RESTRICTED
+        ENTITY_INVOICE, "status", f"read:{ENTITY_INVOICE}.status", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_INVOICE, "due_date", f"read:{ENTITY_INVOICE}.due_date", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_INVOICE, "amount_due", f"read:{ENTITY_INVOICE}.amount_due", Classification.RESTRICTED
+    ),
+    FieldRule.of(ENTITY_CONTACT, "name", f"read:{ENTITY_CONTACT}.name", Classification.INTERNAL),
+    FieldRule.of(
+        ENTITY_CONTACT, "status", f"read:{ENTITY_CONTACT}.status", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "updated_at", f"read:{ENTITY_CONTACT}.updated_at", Classification.INTERNAL
+    ),
+    FieldRule.of(
+        ENTITY_CONTACT, "tax_number", f"read:{ENTITY_CONTACT}.tax_number", Classification.RESTRICTED
     ),
 )
 

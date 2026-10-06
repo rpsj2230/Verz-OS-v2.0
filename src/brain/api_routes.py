@@ -180,7 +180,7 @@ from brain.gate.badge_store import item_lookup_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
-from brain.gate.fast_lane import FastPathRule, RowReader
+from brain.gate.fast_lane import AmbiguityReader, FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
 from brain.gate.live_records import LiveRecords
@@ -1080,6 +1080,16 @@ async def base_lane_of(state: Any) -> BaseLane:
     )
 
 
+def ambiguity_of(state: Any) -> AmbiguityReader | None:
+    """The registry's reader for an ambiguous name, or None on a process with no database."""
+    from brain.resolution.ambiguity_store import StoredAmbiguity
+
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return None
+    return StoredAmbiguity(sessions)
+
+
 def live_records_of(state: Any) -> LiveRecords | None:
     """What reads a connected source's records live for this process, or None where nothing can.
 
@@ -1166,19 +1176,53 @@ def model_lane_of(state: Any) -> ModelLane | None:
 DEFAULT_AGENT: Final = "brain"
 
 
+async def agent_run_of(
+    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+) -> AgentRun | None:
+    """The selected agent as its run carries it: its record, its skill pins and their library.
+
+    The pins are the Skills screen's own reading of the agent's install (`brain.skill_routes.
+    pins_of`, from `materialise`), and the library is read only when there is a pin to resolve.
+    A process with no database runs a stored agent with no pins, which is the only thing it could
+    read. See `AN_AGENT_RUNS_THE_SKILLS_IT_IS_ASSIGNED`.
+    """
+    if agent is None:
+        return None
+    sessions = getattr(state, "db_sessions", None)
+    if sessions is None:
+        return AgentRun(record=agent, pins=(), library=(), registry=registry)
+    # Imported here: `brain.skill_routes` serves routes that import this module.
+    from brain.ops.skill_store import StoredSkills
+    from brain.skill_routes import installs_of, pins_of
+
+    async with sessions() as session:
+        pairs = (await session.execute(installs_of([agent.agent_id]))).all()
+    pins = tuple(pin for one, version in pairs for pin in pins_of(one, version, agent))
+    library = await StoredSkills(sessions).library() if pins else ()
+    return AgentRun(record=agent, pins=pins, library=library, registry=registry)
+
+
+#: Why `/answer` reads the selected agent's skill pins on every question.
+AN_AGENT_RUNS_THE_SKILLS_IT_IS_ASSIGNED: Final = (
+    "Assigning a skill to an agent pins the agent to one version of it, and the pin is only worth "
+    "something if the agent's runs read it. Until 2026-10-06 this route handed every run no pins, "
+    "so a skill assigned on the Skills screen changed nothing any answer did. The pins are read "
+    "on each question, as the roster is, so a skill detached a moment ago is not offered."
+)
+
+
 def model_lane_for(
     state: Any,
-    agent: AgentRecord | None,
-    registry: ToolRegistry,
+    run: AgentRun | None,
     kinds: tuple[KnowledgeKind, ...] = (),
     follow_up: FollowUp | None = None,
 ) -> ModelLane | None:
-    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8),
-    searching only the kinds of knowledge the person narrowed the question to (M7.6.1), and
-    bringing what a continued thread brings (M9.2.3).
+    """The model step, carrying the selected agent's run when a stored one was chosen (M3.9.8,
+    M27.12.1), searching only the kinds of knowledge the person narrowed the question to (M7.6.1),
+    and bringing what a continued thread brings (M9.2.3).
 
-    The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
-    read on this route yet, so it runs with none. See `brain.gate.roster`.
+    The agent's tier, pinned model and skill pins reach the call through `AgentRun`, built by
+    `agent_run_of`. See `brain.gate.roster`.
     """
     lane = model_lane_of(state)
     if lane is None:
@@ -1189,9 +1233,9 @@ def model_lane_for(
         lane = replace(lane, search=narrowed_to(lane.search, kinds))
     if follow_up is not None:
         lane = replace(lane, follow_up=follow_up)
-    if agent is None:
+    if run is None:
         return lane
-    return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
+    return replace(lane, agent=run)
 
 
 async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
@@ -1820,7 +1864,12 @@ async def answered_for(
         # called before ROUTE and PROJECT: a fast-lane question answers or abstains. The model
         # is shown what the asker said about themselves and may still recall (M16.6.3).
         model = (
-            model_lane_for(request.app.state, agent, registry, ask.kinds, follow_up)
+            model_lane_for(
+                request.app.state,
+                await agent_run_of(request.app.state, agent, registry),
+                ask.kinds,
+                follow_up,
+            )
             if front.calls_a_model
             else None
         )
@@ -1859,6 +1908,9 @@ async def answered_for(
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
             source_policies={**source_field_policies(registry), **base.source_policies},
+            # Which client each record a name matched is, so records the asker reads that are
+            # more than one client are named as ambiguous rather than guessed at (M14.6.5).
+            ambiguity=ambiguity_of(request.app.state),
         )
         # An abstention under a skill that declares a queue is handed to the person named for it,
         # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
