@@ -126,11 +126,16 @@ export const CANNOT_SAVE =
  * The object address is revoked as soon as the click has been dispatched, so nothing on the page
  * can reach the document after it is saved.
  */
-export function saveDocument(filename: string, document: string, into: Document): boolean {
+export function saveDocument(
+  filename: string,
+  document: string,
+  into: Document,
+  type = "application/x-ndjson",
+): boolean {
   if (typeof URL.createObjectURL !== "function") {
     return false;
   }
-  const address = URL.createObjectURL(new Blob([document], { type: "application/x-ndjson" }));
+  const address = URL.createObjectURL(new Blob([document], { type }));
   const link = into.createElement("a");
   link.href = address;
   link.download = filename;

@@ -375,6 +375,9 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                 pages=(
                     Page(label="Fields", to="/classification"),
                     Page(label="Possible duplicates", to="/duplicates"),
+                    # The fast-lane rules over a department's tables are written under the grants
+                    # its fields are changed under (`brain.rule_routes`), so they sit beside them.
+                    Page(label="Quick answers", to="/rules"),
                 ),
             ),
             _one("Artifacts", "/artifacts", "artifacts"),

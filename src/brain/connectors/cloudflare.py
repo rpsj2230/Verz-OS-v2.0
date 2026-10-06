@@ -1090,7 +1090,10 @@ class DnsChangeWrites:
     change that did not set the time to live does not fail because Cloudflare's is automatic.
     """
 
-    def call_for(self, action: Action) -> WriteCall:
+    def call_for(self, action: Action, *, settings: Mapping[str, str] | None = None) -> WriteCall:
+        # Cloudflare is reached at one address for every account, so the settings name nothing
+        # the call needs.
+        del settings
         change = dns_change_of(action)
         return WriteCall(
             operation=dns_change_operation(),

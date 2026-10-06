@@ -106,6 +106,9 @@ class ExportDataSet(enum.StrEnum):
     #: The grants and packs one reviewer may decide, with their last review, taken from the
     #: Access review screen (`brain.certification_export_routes`, `0146`). Always readable.
     ACCESS_CERTIFICATION = "access_certification"
+    #: A person's own conversation as they were shown it, taken from the thread itself
+    #: (`brain.thread_routes`, `0207`) as a subject access request in their own name.
+    CONVERSATION = "conversation_history"
 
 
 class ExportForm(enum.StrEnum):

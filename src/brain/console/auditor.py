@@ -88,6 +88,9 @@ from brain.ops.limits import DenialShape
 #: taken for a window. Read as a set rather than as four `if`s so the history and the test that
 #: pins it are one list, and so a ninth action added to `AuditAction` has to be classified
 #: deliberately rather than silently falling outside the history.
+#: The subject kind `0003` files a capability grant and its removal under.
+GRANT_KIND: Final = "grant"
+
 PERMISSION_ACTIONS: Final[frozenset[AuditAction]] = frozenset(
     {
         AuditAction.GRANT,
@@ -188,9 +191,15 @@ def permission_history(
     *,
     subject_kind: str,
     subject_id: str,
+    grants: frozenset[str] = frozenset(),
     limit: int = MAX_PAGE_SIZE,
 ) -> tuple[PermissionEvent, ...]:
     """Everything that changed what this subject may do, oldest first (M33.4.1.2).
+
+    `grants` is the ids of the subject's own capability grants, for a person: `0003` files a
+    capability grant and its removal under `grant:<id>` rather than under the person, so a
+    person's history is their own entries and their grants' entries together. Every one of them
+    still comes back through the view's own visibility decision.
 
     A narrowing of `AuditView.page` and nothing more: the actions are `PERMISSION_ACTIONS`,
     the subject is required, and every row comes back through the view's own visibility
@@ -216,7 +225,7 @@ def permission_history(
     page = view.page(
         AuditFilter(
             actions=frozenset(PERMISSION_ACTIONS),
-            subject_kinds=frozenset({subject_kind}),
+            subject_kinds=frozenset({subject_kind, GRANT_KIND} if grants else {subject_kind}),
         ),
         limit=limit,
     )
@@ -230,7 +239,8 @@ def permission_history(
             details=dict(row.details),
         )
         for row in page.rows
-        if row.subject_id == subject_id
+        if (row.subject_kind == subject_kind and row.subject_id == subject_id)
+        or (row.subject_kind == GRANT_KIND and row.subject_id in grants)
     )
 
 

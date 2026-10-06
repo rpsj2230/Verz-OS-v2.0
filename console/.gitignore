@@ -8,6 +8,8 @@
 src/api/generated/
 
 node_modules/
+# A symlink to a shared copy (a worktree) is not a directory, so the line above does not match it.
+node_modules
 dist/
 *.local
 

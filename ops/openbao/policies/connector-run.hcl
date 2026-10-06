@@ -1,6 +1,6 @@
 # What one connector run may do with the secrets vault, for as long as its token lives.
 #
-# Task ids: M31.3.2.2, M31.3.2.3, M31.3.2.4
+# Task ids: M31.3.2.2, M31.3.2.3, M31.3.2.4, M11.8.6
 #
 # No process holds this policy. The worker mints a child token carrying it and nothing else for each
 # attempt to read a connected source, against the connector-run token role the installer creates
@@ -13,6 +13,14 @@
 # reason worker.hcl used to give when the worker read these itself; the narrowing to the run's own
 # source is brain.ops.connector_sync_run.WorkerConnectorKeys, before the vault is asked.
 path "connector_keys/data/+" {
+  capabilities = ["read"]
+}
+
+# The refresh token a person's consent to a source bought (M11.8.6), read by the run that renews
+# that source's access, and nothing more: no write, so a run cannot replace it. A rotated token is
+# written back under connector-rotate.hcl, by a token of its own. One segment deeper than every key,
+# so it is named here on its own line rather than reached by the line above.
+path "connector_keys/data/oauth_refresh/+" {
   capabilities = ["read"]
 }
 
