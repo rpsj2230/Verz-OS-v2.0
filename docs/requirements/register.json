@@ -209,7 +209,7 @@
     "M27.14.1",
     "M27.15.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "ARC-A-013",
@@ -3148,7 +3148,7 @@
     "M13.8.9",
     "M13.8.5"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "FEAT-2.3",
@@ -14355,7 +14355,7 @@
    "proof": [
     "M27.15.12"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "DEF-08",

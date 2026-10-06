@@ -475,6 +475,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/connector-consent",
       // An API's connector added from its specification, and reviewed by a second person (M11.7.8).
       "/connectors/new-api",
+      "/incidents",
     ],
     routes: [
       "/api/v1/connectors",
@@ -490,6 +491,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/accept",
       "/api/v1/connectors/{connector}/steward",
       "/api/v1/console/connectors",
+      "/api/v1/console/incidents",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
       "/api/v1/console/connectors/{connector}/probe",
