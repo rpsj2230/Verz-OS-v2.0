@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T07:09:34.729869+00:00",
-  "commit": "c8f802c9",
-  "commit_subject": "The Audit log counts refusals by shape and redacted entries over other people's entries, and never the reader's own (#444)",
+  "generated_at": "2026-10-06T07:30:29.698091+00:00",
+  "commit": "6479ba20",
+  "commit_subject": "Sessions, sign-in links, sign-in strength, the ledger, exports and service account keys are checked on the install (#358)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
