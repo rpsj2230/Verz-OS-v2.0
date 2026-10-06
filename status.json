@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T00:07:59.595654+00:00",
-  "commit": "8226efdc",
-  "commit_subject": "A fresh install's console tokens carry their audience again: the payload role maps to the client, not to the scope everybody needs (#407)",
+  "generated_at": "2026-10-06T00:31:08.876693+00:00",
+  "commit": "0a8ec89e",
+  "commit_subject": "Every connected record is registered as an entity, compared with its candidates, and merged, held or put to a reviewer on a Resolution review screen (#406)",
   "total": 1592,
   "done": 603,
   "percent": 37.9,
