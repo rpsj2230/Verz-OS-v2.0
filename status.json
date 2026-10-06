@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T08:32:53.771486+00:00",
-  "commit": "a42d686a",
-  "commit_subject": "Item 170: which parts of an agent the builder lists as sections (#462)",
+  "generated_at": "2026-10-06T08:40:05.930456+00:00",
+  "commit": "ba409fff",
+  "commit_subject": "Connected sources are a section of the builder's form of their own, and the leaf's other three sections are named as questions for the owner (#458)",
   "total": 1596,
   "done": 680,
   "percent": 42.6,
