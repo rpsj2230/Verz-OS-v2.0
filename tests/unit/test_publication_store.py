@@ -5,7 +5,7 @@ publish's own stamps left out. The database half writes two signed versions of o
 drafts' acts as the superuser, reads the history back through `StoredPublications` as the
 application role, and holds what is served to `record_publish` over the two stored documents.
 
-Task ids: M20.4.6
+Task ids: M20.4.6, M20.4.1
 """
 
 from __future__ import annotations
@@ -167,3 +167,48 @@ def test_the_stored_history_is_record_publish_over_the_two_stored_versions() -> 
 
     assert len(history) == 2
     assert history[1] == expected(first, second)
+
+
+@pytest.mark.needs_db
+def test_the_canaries_are_red_only_when_their_newest_finished_run_failed() -> None:
+    """The newest finished run of the `canary_run` control decides: none, a pass after a failure
+    and a run still going are each not red, and a failure after a pass, or a failure alone, is
+    red; another control's failure is not the canaries'. Read as the application role.
+
+    Delete this and a publish is stopped by an old failure, or by another control's, or a red run
+    is read as green."""
+    from brain.builder.publication_store import canaries_are_red
+    from brain.db import normalise_database_url
+    from brain.session import make_app_engine, make_session_factory
+    from tests.fixtures.scratch_postgres import sql
+
+    def run(url: str, name: str, days: int, outcome: str | None) -> None:
+        started = AT + timedelta(days=days)
+        sql(
+            url,
+            "INSERT INTO ops.control_run (name, started_at, finished_at, outcome)"
+            " VALUES (%s, %s, %s, %s)",
+            name,
+            started,
+            None if outcome is None else started + timedelta(minutes=1),
+            outcome,
+        )
+
+    async def red(url: str) -> bool:
+        engine = make_app_engine(normalise_database_url(url))
+        try:
+            return await canaries_are_red(make_session_factory(engine))
+        finally:
+            await engine.dispose()
+
+    with at_head("brain_canaries_red") as url:
+        assert asyncio.run(red(url)) is False
+        run(url, "canary_run", 1, "ok")
+        run(url, "retention_sweep", 2, "failed")
+        assert asyncio.run(red(url)) is False
+        run(url, "canary_run", 3, "failed")
+        assert asyncio.run(red(url)) is True
+        run(url, "canary_run", 4, None)
+        assert asyncio.run(red(url)) is True
+        run(url, "canary_run", 5, "ok")
+        assert asyncio.run(red(url)) is False

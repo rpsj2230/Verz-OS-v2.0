@@ -44,6 +44,7 @@ from brain.core.scope import Scope
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.knowledge.search import PRINCIPAL_SETTING
+from brain.locale import currency_or_unset
 from brain.member.shell import DISCLOSURE_PREFIX
 from brain.memory.digest import Learning, Undo, undo
 from brain.memory.review import Edit, edit
@@ -328,6 +329,7 @@ def test_a_member_sees_what_they_asked_kept_and_were_given_and_nothing_of_anybod
             "ceiling_minor": 1000,
             "spent_minor": 300,
             "headroom_minor": 700,
+            "currency": currency_or_unset(),
             "alerts_crossed": [],
         }
     ]

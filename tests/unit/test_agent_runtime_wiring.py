@@ -3,7 +3,7 @@
 Over `brain.api_routes.agent_runtime_for`, `reach_again` and `answered_for`'s halted branch. The
 loop itself is `tests/unit/test_agent_runtime.py`.
 
-Task ids: M13.7.1, M13.8.2
+Task ids: M13.7.1, M13.8.2, M13.7.6
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
+from brain.gate.injection import AutonomyTier
+from brain.gate.leash import Leash, LeashEntry
 from brain.gate.runtime import AgentRuntime, RunHaltedError
 from brain.gate.screening import NOTHING_MATCHED
 from brain.identity.oidc import TokenRefusal, TokenRefusedError
@@ -228,3 +230,113 @@ def test_a_stopped_run_is_answered_as_a_halted_question(
     assert answered.status_code == 503
     assert answered.json()["message"] == "Stopped by an administrator."
     assert transport.sent == []
+
+
+# ------------------------------------------------------ a write the agent may ask for (M13.7.6)
+class _NoRows:
+    """What `session.execute(...)` returns for an agent with no install row."""
+
+    def one_or_none(self) -> None:
+        return None
+
+
+class _OneSession:
+    async def __aenter__(self) -> _OneSession:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    async def execute(self, statement: object) -> _NoRows:
+        del statement
+        return _NoRows()
+
+
+def _stored(*, suspensions: bool = True) -> Any:
+    """A request over a process with a database and, unless told not, a suspension store."""
+    from brain.gate.suspension_store import StoredSuspensions
+
+    sessions = cast(Any, lambda: _OneSession())
+    state = SimpleNamespace(
+        db_sessions=sessions,
+        suspensions=StoredSuspensions(sessions) if suspensions else None,
+    )
+    return cast(Any, SimpleNamespace(app=SimpleNamespace(state=state)))
+
+
+def _replying() -> AgentRecord:
+    from tests.unit.test_runtime_side_effects import DESK_AGENT, DESK_CAPABILITIES, REPLY, agent_for
+
+    return agent_for(
+        DESK_AGENT,
+        DESK_CAPABILITIES,
+        ("freshdesk.read_ticket", REPLY),
+        connectors=("freshdesk",),
+    )
+
+
+def test_an_agent_that_may_ask_for_a_write_is_handed_its_leash_and_a_place_to_hold_it() -> None:
+    """**`AN_AGENT_THAT_MAY_ASK_FOR_A_WRITE_IS_GIVEN_ITS_LEASH_AND_A_PLACE_TO_HOLD_IT`.** An agent
+    whose ceiling names the reply is handed side effects over the install's connections and its
+    suspension store, and the loop then offers it the write beside the read; an agent that names no
+    write is handed nothing, so it is run as it was. Delete this and the runtime can hold a write
+    in tests and in no process, which is the mechanism correct, tested and never called."""
+    from brain.ops.runtime_effects import ConnectorSideEffects
+    from tests.unit.test_runtime_side_effects import (
+        DESK_CAPABILITIES,
+        REPLY,
+        SUPPORT_SCOPE,
+        desk_registry,
+        holding,
+    )
+
+    reach = holding(*DESK_CAPABILITIES, principal="u_asker", scope=SUPPORT_SCOPE)
+    question = replace(asking(), reach=reach)
+    desk = desk_registry()
+
+    _, effects = asyncio.run(
+        api_routes.side_effects_for(_stored(), agent=_replying(), registry=desk)
+    )
+    leash = Leash(
+        entries=(
+            LeashEntry(
+                agent_id="support_desk",
+                target="ticket",
+                scope=Scope.unrestricted(),
+                rung=AutonomyTier.ASSISTED,
+            ),
+        )
+    )
+    runtime = api_routes.agent_runtime_for(
+        _stored(),
+        agent=_replying(),
+        asking=question,
+        registry=desk,
+        assessment=NOTHING_MATCHED,
+        leash=leash,
+        side_effects=effects,
+    )
+
+    assert isinstance(effects, ConnectorSideEffects)
+    assert isinstance(runtime, AgentRuntime) and runtime.side_effects is effects
+    assert runtime.leash == leash
+    assert REPLY in {one.name for one in desk.definitions()}
+    reading = agent("notes.read_note")
+    assert asyncio.run(
+        api_routes.side_effects_for(_stored(), agent=reading, registry=registry())
+    ) == (
+        Leash(),
+        None,
+    )
+
+
+def test_a_process_with_nowhere_to_hold_a_write_offers_none() -> None:
+    """With no database, or a database and no suspension store, an agent that names the reply is
+    handed no side effects and an empty leash, so the write is never offered and nothing is
+    prepared that cannot be held. Delete this and a process offers a write it can only fail."""
+    from tests.unit.test_runtime_side_effects import desk_registry
+
+    for request in (REQUEST, _stored(suspensions=False)):
+        assert asyncio.run(
+            api_routes.side_effects_for(request, agent=_replying(), registry=desk_registry())
+        ) == (Leash(), None)

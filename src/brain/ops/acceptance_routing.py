@@ -374,16 +374,15 @@ async def documented(h: Harness, provider: str, region: str) -> None:
 def roster_over(h: Harness) -> AgentRoster:
     """The stored agents `/answer` selects from, read through the check's transaction.
 
-    What `brain.app.agent_roster_for` installs, built here because nothing under src imports the
-    application: every agent row, and the ones that construct.
+    `brain.agent_roster.agent_roster_for`, the reader `brain.app` installs, over the check's own
+    sessions. It was a copy of that reader until 2026-09-29, when the reader began narrowing each
+    agent by its attached tools and the copy would have gone on handing a run the manifest's.
     """
-    from brain.agent_routes import every_agent, record_of
+    from brain.agent_roster import agent_roster_for
 
-    async def read() -> Sequence[Any]:
-        async with h.sessions() as session:
-            rows = (await session.execute(every_agent())).scalars().all()
-        return [one for one in (record_of(row) for row in rows) if one is not None]
-
+    read = agent_roster_for(h.sessions)
+    if read is None:  # pragma: no cover - the check always holds sessions
+        raise CheckFailedError("the check's sessions read no agents")
     return read
 
 

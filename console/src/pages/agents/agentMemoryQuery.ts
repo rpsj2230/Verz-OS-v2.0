@@ -19,6 +19,18 @@ export function memoryDeletionApiPath(agentId: string, memoryId: string): string
   return `${agentMemoryApiPath(agentId)}/${encodeURIComponent(memoryId)}/deletion`;
 }
 
+/** Where a learned rule is pressed to promote it, under the API base (M39.4.2.3). */
+export function promotionApiPath(memoryId: string): string {
+  return `/learning/${encodeURIComponent(memoryId)}/promote`;
+}
+
+/** Where a learned rule stands, in words. */
+export const PROMOTION_STATE_WORDS: Readonly<Record<string, string>> = {
+  held: "held for review",
+  awaiting_second: "waiting for a second person",
+  promoted: "promoted",
+};
+
 /** Where one memory is corrected, under the API base. */
 export function memoryEditApiPath(agentId: string, memoryId: string): string {
   return `${agentMemoryApiPath(agentId)}/${encodeURIComponent(memoryId)}/edit`;
@@ -58,6 +70,11 @@ export interface TierTwoItem {
   readonly evidence: readonly string[];
   readonly promoteReady: boolean;
   readonly learnedAt: string;
+  /** Where its learned rule stands; absent for a learning that holds no rule. */
+  readonly state?: string;
+  /** How many separate conversations would have used it; sent only to whoever may promote it. */
+  readonly agreeing?: number;
+  readonly promoteOffered: boolean;
 }
 
 export interface TierThreeItem {
@@ -182,7 +199,18 @@ export function readAgentMemory(payload: unknown): AgentMemory | null {
       if (memoryId === undefined || change === undefined || learnedAt === undefined) {
         return null;
       }
-      return { memoryId, change, learnedAt, evidence: words(one["evidence"]), promoteReady: one["promote_ready"] === true };
+      const state = said(one["state"]);
+      const agreeing = typeof one["agreeing"] === "number" ? one["agreeing"] : undefined;
+      return {
+        memoryId,
+        change,
+        learnedAt,
+        evidence: words(one["evidence"]),
+        promoteReady: one["promote_ready"] === true,
+        promoteOffered: one["promote_offered"] === true,
+        ...(state === undefined ? {} : { state }),
+        ...(agreeing === undefined ? {} : { agreeing }),
+      };
     }),
     ...(Array.isArray(tierThree)
       ? {

@@ -473,13 +473,13 @@ class AuditAction(enum.StrEnum):
     for every grant.
 
     Every existing member was tried, and BREAK_GLASS was the near miss. It is an authorisation,
-    and `brain.console.elevation.chain_findings` holds that a BREAK_GLASS entry in the main chain
-    is the separate chain collapsed into a name: the database has one ledger, so a trigger writing
-    BREAK_GLASS into it is that finding by construction. GRANT is the reach given, which the grant
-    row already records, and a request or a denial gives nothing; APPROVAL is a suspended action
-    decided, and a request for more access is not an agent's action. One member for the three
-    changes, requested, approved and denied, with the capability and the reason code in the
-    details, and the requester as the subject. Nine characters.
+    and BREAK_GLASS is the session the approval opens, which `0104` records separately; since
+    `0209` that entry is written to both chains as twins, which
+    `brain.console.elevation.chain_findings` holds to each other. GRANT is the reach given, which
+    the grant row already records, and a request or a denial gives nothing; APPROVAL is a
+    suspended action decided, and a request for more access is not an agent's action. One member
+    for the three changes, requested, approved and denied, with the capability and the reason
+    code in the details, and the requester as the subject. Nine characters.
 
     **ORGANISATION widened on 2026-09-17 to the structure the placements sit in, with no new
     member.** The Departments and teams screen creates, renames and retires departments and their

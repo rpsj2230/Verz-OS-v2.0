@@ -3,7 +3,7 @@
 Pure: `brain.gate.roster` over hand-built agent records, and `brain.gate.front.remember` over the
 chain's own output. The route-level proofs are in `tests/unit/test_answer_route_gate.py`.
 
-Task ids: M3.9.8, M3.5.2
+Task ids: M3.9.8, M3.5.2, M13.2.5
 """
 
 from __future__ import annotations
@@ -11,15 +11,24 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
+from brain.agents.template import EffectiveAgent, LeashRung, SignedManifest, SkillRef, materialise
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
-from brain.gate.cache_key import CachedAnswer
+from brain.gate.cache_key import CachedAnswer, key_for
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, open_trace
 from brain.gate.front import AgentSetup, Caching, Choosing, FrontHalf, remember, run_front_half
+from brain.gate.injection import AutonomyTier
 from brain.gate.roster import answer_roster, run_entitlement, setup_of, viewer_for
 from brain.knowledge.visibility import Visibility
+from tests.unit.test_agent_template import (
+    AUDIENCE,
+    SKILL_DIGEST,
+    _installed,
+    _manifest,
+    _signed,
+)
 
 #: Far from any wall clock, for the reason CLAUDE.md gives about fixtures with dates in them.
 NOW = datetime(2999, 1, 1, tzinfo=UTC)
@@ -243,3 +252,94 @@ def test_nothing_is_remembered_without_a_store() -> None:
     who = reach("read:client.name")
     front = _front("who owns Acme", caching, NOW, who)
     assert remember("who owns Acme", "Dana.", front=front, reach=who, caching=None, now=NOW) is None
+
+
+# --------------------------------------------- M13.2.5 the install's stored hash is the key
+def _manifest_with(
+    *,
+    leash: tuple[LeashRung, ...] = (),
+    skills: tuple[SkillRef, ...] | None = None,
+    connectors: tuple[str, ...] | None = None,
+) -> SignedManifest:
+    """The template tests' own manifest, signed, with only the named part changed."""
+    base = _manifest(leash=leash)
+    changes: dict[str, object] = {}
+    if skills is not None:
+        changes["skills"] = skills
+    if connectors is not None:
+        changes["connectors"] = connectors
+    return _signed(base.model_copy(update=changes))
+
+
+def _effective_of(signed: SignedManifest) -> EffectiveAgent:
+    return materialise(signed, _installed(signed), audience=AUDIENCE)
+
+
+def _key_through(effective: EffectiveAgent, *, with_install_hash: bool = True) -> str:
+    """The cache key `/answer` computes for one question through one materialised install.
+
+    The record and the stored hash go through `setup_of` exactly as the roster reads them, and
+    the key is the real one.
+    """
+    setup = setup_of(effective.record, TOOLS, effective.config_hash if with_install_hash else None)
+    return key_for("what is the retainer", "e" * 32, setup.config_hash, 4, {"laravel": 7})
+
+
+RAISED = (LeashRung(target="client.read_summary", scope=Scope(), rung=AutonomyTier.ASSISTED),)
+OTHER_SKILL = (SkillRef(name="other_playbook", digest=SKILL_DIGEST),)
+
+
+def test_a_changed_leash_or_skill_or_connector_moves_the_answer_cache_key() -> None:
+    """Each of the three changes, made on a manifest, gives a different key, and the unchanged
+    install gives the same one twice. The leash and the pinned skills are not on the agent
+    record at all, so only the install's stored hash can move the key for them.
+
+    Delete this and `/answer` can serve an answer cached before an agent's leash was raised, a
+    skill was assigned or a connector was switched, through the agent as it is now."""
+    base = _key_through(_effective_of(_manifest_with()))
+    assert _key_through(_effective_of(_manifest_with())) == base
+    assert _key_through(_effective_of(_manifest_with(leash=RAISED))) != base
+    assert _key_through(_effective_of(_manifest_with(skills=OTHER_SKILL))) != base
+    assert _key_through(_effective_of(_manifest_with(connectors=("hubspot",)))) != base
+
+
+def test_the_record_alone_does_not_see_a_leash_or_a_skill_so_the_install_hash_is_what_moves() -> (
+    None
+):
+    """Without the install's hash two agents whose leashes, or whose skills, differ hash the
+    same, which is the defect this leaf closes; with it they do not.
+
+    Delete this and the test above can pass on a fixture whose change is also visible on the
+    record, which would leave the install hash decorative."""
+    plain = _effective_of(_manifest_with())
+    for other in (
+        _effective_of(_manifest_with(leash=RAISED)),
+        _effective_of(_manifest_with(skills=OTHER_SKILL)),
+    ):
+        assert _key_through(plain, with_install_hash=False) == _key_through(
+            other, with_install_hash=False
+        )
+        assert _key_through(plain) != _key_through(other)
+
+
+def test_the_roster_keys_each_agent_on_its_own_install_hash_and_one_without_still_answers() -> None:
+    """Each agent's roster hash is `setup_of` over its own record and its own install hash, an
+    agent with no install row is in the roster hashed on its record alone, and the install hash
+    does change the roster's hash.
+
+    Delete this and the hashes are applied to the wrong agent, left off, or an agent without an
+    install drops out of the roster."""
+    one, two, bare = an_agent("one"), an_agent("two"), an_agent("bare")
+    roster = answer_roster(
+        (one, two, bare),
+        VIEWER,
+        channel=Channel.CONSOLE,
+        default=DEFAULT,
+        tool_names=TOOLS,
+        install_hashes={"one": "a" * 64, "two": "b" * 64},
+    )
+    assert roster.visible == {"brain", "one", "two", "bare"}
+    assert roster.agents["one"].config_hash == setup_of(one, TOOLS, "a" * 64).config_hash
+    assert roster.agents["two"].config_hash == setup_of(two, TOOLS, "b" * 64).config_hash
+    assert roster.agents["bare"].config_hash == setup_of(bare, TOOLS).config_hash
+    assert roster.agents["one"].config_hash != setup_of(one, TOOLS).config_hash

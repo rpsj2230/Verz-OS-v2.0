@@ -67,7 +67,7 @@ import base64
 import binascii
 import json
 import re
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final, Self
@@ -388,6 +388,45 @@ class AuditView:
         if scope is None:
             return False
         return scope.matches(_scope_row(entry))
+
+
+def may_audit(
+    reader: EntitlementSet,
+    *,
+    subject_kind: str,
+    subject_id: str,
+    actions: Iterable[AuditAction],
+    now: datetime,
+) -> bool:
+    """Whether this reader's audit reach covers entries about this subject, in its own name.
+
+    `AuditView._may_see`'s two ledger rules, asked of an entry about the subject that the subject
+    made: the reader is the subject, or their grant for the subject's kind admits such an entry
+    for one of `actions` in the scope it carries. A grant scoped to the people a department places
+    (`brain.identity.staff_sync`'s `actor_id IN ...`) therefore covers each of those people, and a
+    company-wide audit grant covers everybody. Used where a route must decide whether to read
+    anything about a subject before it has an entry to ask about.
+    """
+    if subject_kind == "principal" and subject_id == reader.principal_id:
+        return True
+    capability = CAPABILITY_BY_KIND.get(subject_kind)
+    if capability is None:
+        return False
+    scope = reader.scope_for(capability, now)
+    if scope is None:
+        return False
+    subject = f"{subject_kind}:{subject_id}"
+    return any(
+        scope.matches(
+            {
+                "action": one.value,
+                "subject_kind": subject_kind,
+                "subject": subject,
+                "actor_id": subject_id,
+            }
+        )
+        for one in actions
+    )
 
 
 # ------------------------------------------------------------------- internals

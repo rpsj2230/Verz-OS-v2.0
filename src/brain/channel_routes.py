@@ -185,6 +185,7 @@ from brain.ops.credentials import (
     CredentialsUnavailableError,
     VaultState,
 )
+from brain.ops.group_install_store import StoredGroupInstalls
 from brain.ops.idempotency import Intent, Issued, OperationLedger
 from brain.ops.lark_connect import install_origin
 from brain.ops.mail import (
@@ -579,6 +580,15 @@ def deliveries_of(request: Request) -> DeliveryRecords:
     if sessions is None:
         raise Failed("no database on this process")
     return StoredDeliveries(sessions)
+
+
+def group_installs_of(request: Request) -> StoredGroupInstalls | None:
+    """`app.state.group_installs` when a test put one there, the database otherwise, else None."""
+    found = getattr(request.app.state, "group_installs", None)
+    if isinstance(found, StoredGroupInstalls):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredGroupInstalls(sessions)
 
 
 def claims_of(request: Request) -> EventClaims:
@@ -1129,6 +1139,19 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
     assert record is not None
     if receipt.inbound is not None and receipt.inbound.press is not None:
         return await _pressed(request, wire, receipt, record, now)
+    if receipt.inbound is not None and receipt.inbound.room is not None:
+        # The bot joined or left a group chat: the room is noted for a group install and nothing
+        # is answered (M39.2.4.4). A process with no database notes nothing and says so in its log.
+        rooms = group_installs_of(request)
+        if rooms is not None:
+            await rooms.note(channel, receipt.inbound.room, now)
+        log.info(
+            "channel room changed",
+            channel=channel.value,
+            joined=receipt.inbound.room.joined,
+            noted=rooms is not None,
+        )
+        return JSONResponse(status_code=200, content=EventView(status=receipt.kind).model_dump())
     if receipt.inbound is not None and receipt.inbound.conversation is not None:
         # A chat vendor waits seconds, not the length of an answer, and posts the event again
         # when it hears nothing: so the reply is made after the answer to the vendor has gone.
