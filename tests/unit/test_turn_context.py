@@ -188,8 +188,8 @@ def test_only_the_assembler_reads_a_turns_recollections_and_only_prompt_of_build
     None
 ):
     """`ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`, held to the source: nothing under `src/brain`
-    calls `prompt_for` but `prompt_of`, nothing calls `assemble` outside the answer paths, and the
-    model lane's `draft` reads no recollection itself.
+    calls `prompt_for` but `prompt_of`, nothing calls `assemble` but the two answer paths (the
+    model lane's `draft` and the agent runtime's loop), and `draft` reads no recollection itself.
 
     Delete this and a second assembler can be written beside the first, with the trace naming
     the parts of one and the model shown the parts of the other."""
@@ -224,7 +224,7 @@ def test_only_the_assembler_reads_a_turns_recollections_and_only_prompt_of_build
                     callers[name].add(f"{module.removeprefix('brain.')}.{function.name}")
 
     assert callers["prompt_for"] == {"gate.model_lane.prompt_of"}
-    assert callers["assemble"] == {"gate.model_lane.draft"}
+    assert callers["assemble"] == {"gate.model_lane.draft", "gate.runtime._loop"}
     drafted = ast.unparse(ast.parse(inspect.getsource(model_lane.draft)))
     assert ".hints()" not in drafted
     assert turn_context.ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN
@@ -247,3 +247,52 @@ def test_a_note_s_attributes_survive_the_trace_mask_and_an_empty_one_adds_none()
         )
         assert dict(kept.attributes) == dict(note.attributes())
     assert ContextNote(included=(), left_out=()).attributes() == {}
+
+
+def test_the_agent_runtime_is_shown_the_same_assembled_parts_and_names_them() -> None:
+    """**The second answer path takes the same value.** An agent run with a hint and a session note
+    shows the model both in its user turn, built by `tool_loop_turn` from the assembled parts,
+    declares the hint as carried, and its answer names the parts with knowledge left out because
+    its tools read it.
+
+    Delete this and the runtime can go back to sending the bare question, so an agent's answer
+    forgets what the person said for this conversation while the model lane's remembers."""
+    from typing import Any
+
+    from brain.gate.abstain import SearchScope
+    from brain.models.disclosure import DataCategory
+    from brain.models.metering import Meter
+    from tests.unit.test_agent_runtime import ANSWER, CALL, NOW, setup
+    from tests.unit.test_answer_lane import Sink
+
+    class Said:
+        async def hints(self) -> tuple[str, ...]:
+            return ("Call me Sam SESSIONTEAL",)
+
+    made = setup([CALL, ANSWER])
+    lane = model_lane.ModelLane(
+        search=cast(Any, None),
+        model=made.model,
+        hints=FixedHints(("I prefer the figure first HINTAMBER",)),
+        session=Said(),
+    )
+    drafted = asyncio.run(
+        made.runtime.drafted(
+            "what does hosting cost",
+            lane=lane,
+            scope=SearchScope(),
+            sink=Sink(),
+            now=NOW,
+            meter=Meter(),
+            trace_id="t-runtime-context",
+            started=lambda: None,
+        )
+    )
+
+    first_user = made.model.shown[0][1].content
+    assert "HINTAMBER" in first_user and "SESSIONTEAL" in first_user
+    assert first_user.index("Question:") < first_user.index("HINTAMBER")
+    assert DataCategory.MEMORY_HINTS in made.model.categories[0]
+    assert drafted.context is not None
+    assert drafted.context.included == (Part.SESSION, Part.ASKER_MEMORY)
+    assert (Part.KNOWLEDGE, LeftOut.BY_TOOLS) in drafted.context.left_out

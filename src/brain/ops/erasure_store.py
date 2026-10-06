@@ -298,6 +298,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # person it is asked as; `0097` grants no way for a row to leave, so an erasure keeps these
         # and reports them kept, and a question asked as nobody is refused by the resolver.
         "ops.golden_question": "asked_as",
+        # One finished agent run, for the person it ran for (`0188`): counts and names from closed
+        # lists and nothing the run read. `0188` grants no way for a row to leave, so an erasure
+        # keeps these and reports them kept, as it does a question asked.
+        "ops.agent_run": "principal_id",
         "ops.operation": "principal_id",
         "ops.question_asked": "principal_id",
         # A sensitive question referred, for the person who asked it, and never what they asked

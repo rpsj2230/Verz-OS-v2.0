@@ -340,9 +340,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.manifest_revision",
       "agent.manifest_act",
       "agent.learning_pause",
+      "ops.agent_run",
     ],
     installation: [],
     gaps: [
+      {
+        what: "An agent's finished runs are recorded, how each ended and what it spent, and no screen lists them.",
+        because:
+          "ops.agent_run is written by brain.gate.runtime for operating the runtime and is not the record of what an agent did (brain.ops.agent_run_store.AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD); the agent's Dashboard draws spend from the usage routes, and a list of runs is a screen nobody has drawn yet.",
+      },
       {
         what: "A draft is written, checked and rehearsed on every install, and published only where the install holds a template signing key.",
         because: "brain.agent_builder_routes signs a published draft with the key brain.agent_lifecycle_routes installs with, and no setting holds one yet (brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN); publishing says so rather than signing with a weaker key.",

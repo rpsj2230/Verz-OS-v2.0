@@ -515,6 +515,28 @@ def _joined(
 # ------------------------------------------------------------------------------ the ports
 
 
+class ToolLoop(Protocol):
+    """An agent run that hands a model tools: `brain.gate.runtime.AgentRuntime`, and nothing else.
+
+    A protocol here rather than an import, because the runtime builds on this module's `Drafted`
+    and `evidence_of`, and the lane only needs to know there is a loop to hand the question to.
+    """
+
+    async def drafted(
+        self,
+        question: str,
+        *,
+        lane: ModelLane,
+        scope: SearchScope,
+        sink: TraceSink,
+        now: datetime,
+        meter: Meter,
+        trace_id: str,
+        started: Callable[[], None],
+        horizons: Horizons = SEED_HORIZONS,
+    ) -> Drafted: ...
+
+
 class PassageSearch(Protocol):
     """Where the passages a question may be answered from are found, at one reach."""
 
@@ -717,6 +739,9 @@ class ModelLane:
     #: What the person said for this conversation only, bound to the thread and the asker
     #: (M16.1.1), or None. Read by `brain.gate.turn_context.assemble` with the other parts.
     session: Recollection | None = None
+    #: The selected agent's tool loop, when its catalogue offers a tool beyond the passage search
+    #: (M13.7.1). The answer lane runs it in place of `draft`; see `brain.gate.runtime`.
+    runtime: ToolLoop | None = None
 
 
 #: Why a follow-up carries the person's earlier questions and the passages cited, and no answer.
@@ -928,13 +953,22 @@ def prompt_for(
     if session:
         parts.append(session_block(session))
     parts.append(f"Passages:\n\n{passages}")
-    asked_before = [one[:EARLIER_CHARS] for one in list(earlier)[-EARLIER_SHOWN:]]
+    asked_before = earlier_block(earlier)
     if asked_before:
-        listed = "\n".join(f"- {one}" for one in asked_before)
-        parts.insert(0, f"Earlier in this conversation the person asked:\n{listed}")
+        parts.insert(0, asked_before)
     if cards:
         parts.append(cards_block(cards))
     return lay_out(PREFIX, *parts, settings_for(Lane.ANSWER).instruction)
+
+
+def earlier_block(earlier: Sequence[str]) -> str:
+    """The person's own earlier questions in this thread, the newest `EARLIER_SHOWN`, each cut to
+    `EARLIER_CHARS`, or nothing. Never an earlier answer (M9.2.3)."""
+    asked_before = [one[:EARLIER_CHARS] for one in list(earlier)[-EARLIER_SHOWN:]]
+    if not asked_before:
+        return ""
+    listed = "\n".join(f"- {one}" for one in asked_before)
+    return f"Earlier in this conversation the person asked:\n{listed}"
 
 
 def prompt_of(parts: ContextParts) -> PromptLayout:
@@ -956,6 +990,25 @@ def prompt_of(parts: ContextParts) -> PromptLayout:
 
 #: The payload of a turn whose knowledge is read by tools rather than up front.
 _NO_PASSAGES: Final = ChannelPayload(records=())
+
+
+def tool_loop_turn(parts: ContextParts) -> str:
+    """The user turn a tool loop is shown for one turn's assembled context (M13.7.1, M16.6.1).
+
+    The blocks `prompt_for` shows, in its order and built by the same block functions, with no
+    passages and no skill cards: the loop reads knowledge through its tools, and its system turn
+    lists what it may call. So the same assembled parts reach a model on both answer paths. See
+    `brain.gate.turn_context.ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`.
+    """
+    blocks = [
+        earlier_block(parts.conversation),
+        f"Question:\n{parts.question[:MAX_QUESTION_CHARS]}",
+    ]
+    if parts.asker_memory:
+        blocks.append(hints_block(parts.asker_memory))
+    if parts.session:
+        blocks.append(session_block(parts.session))
+    return "\n\n".join(one for one in blocks if one)
 
 
 def categories_of(question: DataCategory, parts: ContextParts) -> tuple[DataCategory, ...]:
