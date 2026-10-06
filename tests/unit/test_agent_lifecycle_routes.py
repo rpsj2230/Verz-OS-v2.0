@@ -12,7 +12,7 @@ reach PostgreSQL is `tests/unit/test_agent_lifecycle_store.py`.
 Every agent is made by the product's own install flow from a signed manifest, rather than built as
 a record, so its ceiling is what binding against a tool registry made of it.
 
-Task ids: M27.11.6, M27.11.7
+Task ids: M27.11.6, M27.11.7, M13.7.4, M39.2.4.2
 """
 
 from __future__ import annotations
@@ -27,9 +27,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import brain.agent_lifecycle_routes as lifecycle_routes
 from brain.agent_lifecycle_routes import (
     ARCHIVE_PATH,
+    CANNOT_CARRY_IT,
     CANNOT_TAKE_IT,
+    CHANNELS_PATH,
     DISABLE_PATH,
     DUPLICATE_PATH,
     ENABLE_PATH,
@@ -48,8 +51,9 @@ from brain.agent_lifecycle_routes import (
     VERSION_PATH,
     AgentLifecycles,
     FoundAgent,
+    channel_choices,
 )
-from brain.agent_routes import TEMPLATE_SCREEN, record_of
+from brain.agent_routes import TEMPLATE_SCREEN, declared_channels, record_of
 from brain.agents.creation import AGENT_INSTALL_CAPABILITY, install_draft
 from brain.agents.install import InstallDraft, answer
 from brain.agents.install_store import Finished, prepared
@@ -73,6 +77,7 @@ from brain.core.entitlement import Capability, Grant
 from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.context import Channel
 from brain.gate.injection import AutonomyTier
 from brain.knowledge.visibility import Visibility
 from brain.ops.learning_signal_store import StoredLearningPauses
@@ -285,6 +290,22 @@ class Memory:
         self.changes.append(Change(before, after, actor_id, ent_hash, trace_id))
         return True
 
+    async def change_channels(
+        self,
+        before: AgentRecord,
+        after: AgentRecord,
+        *,
+        actor_id: str,
+        ent_hash: str,
+        trace_id: str,
+    ) -> bool:
+        if self.racing:
+            return False
+        held = self.agents[before.agent_id]
+        self.agents[before.agent_id] = replace(held, record=after)
+        self.changes.append(Change(before, after, actor_id, ent_hash, trace_id))
+        return True
+
     async def create(
         self,
         draft: InstallDraft,
@@ -356,6 +377,10 @@ def path(template: str, **values: object) -> str:
 
 def state_of(console: Console, agent_id: str) -> AgentState:
     return console.memory.agents[agent_id].record.state
+
+
+def channels_of(console: Console, agent_id: str) -> tuple[str, ...]:
+    return console.memory.agents[agent_id].record.channels
 
 
 def refusal(response: Any) -> tuple[int, str]:
@@ -447,8 +472,8 @@ def test_every_reason_a_caller_may_not_act_is_the_one_404_a_missing_agent_gets(
 ) -> None:
     """No authority, authority in another department, outside the audience, and a personal agent
     that is somebody else's: each is the status and sentence an agent that does not exist gets, on
-    every route that names an agent, and none of them wrote. A sign-in without a second factor is
-    a 404 too, in the weak sign-in's own sentence.
+    every route that names an agent, the channel switch included, and none of them wrote. A
+    sign-in without a second factor is a 404 too, in the weak sign-in's own sentence.
 
     Delete this and a route can answer "not yours" where the workspace answers "not found", which
     lets anybody holding a sign-in list the company's agents by trying slugs."""
@@ -471,6 +496,11 @@ def test_every_reason_a_caller_may_not_act_is_the_one_404_a_missing_agent_gets(
                 "u_admin",
                 path(DUPLICATE_PATH, agent_id=MISSING),
                 {"display_name": "Copy", "expected_hash": "a" * 64},
+            )
+        ),
+        "channels": refusal(
+            console.post(
+                "u_admin", path(CHANNELS_PATH, agent_id=MISSING), {"channels": [], "expected": []}
             )
         ),
     }
@@ -513,6 +543,14 @@ def test_every_reason_a_caller_may_not_act_is_the_one_404_a_missing_agent_gets(
                         "display_name": "Copy",
                         "expected_hash": console.memory.agents[agent_id].effective_hash,
                     },
+                    strong=strong,
+                )
+            ),
+            "channels": refusal(
+                console.post(
+                    pid,
+                    path(CHANNELS_PATH, agent_id=agent_id),
+                    {"channels": ["email"], "expected": list(channels_of(console, agent_id))},
                     strong=strong,
                 )
             ),
@@ -907,7 +945,8 @@ def test_installing_is_refused_in_the_gallerys_words_without_its_read_and_nothin
 
 
 def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> None:
-    """The state, the steward, the configuration hash a duplicate names, and both controls.
+    """The state, the steward, the configuration hash a duplicate names, the channels and every
+    control.
 
     Delete this and the console draws controls from a view that could say anything."""
     view = console.get("u_admin", path(LIFECYCLE_PATH, agent_id=COMPANY)).json()
@@ -921,6 +960,13 @@ def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> Non
         "may_change": True,
         "may_duplicate": True,
         "duplicate_unavailable": None,
+        "channels": list(console.memory.agents[COMPANY].record.channels),
+        # Every channel but the website widget, which declares nothing it can carry yet.
+        "channel_choices": [
+            one.model_dump() for one in channel_choices() if one.name != Channel.WIDGET.value
+        ],
+        "channels_note": NO_CHANNEL_ANSWERS_NOWHERE,
+        "may_change_channels": True,
     }
 
 
@@ -977,3 +1023,139 @@ def test_an_agents_learning_is_paused_and_resumed_by_who_may_switch_it_off(
     ]
     assert refusal(outside) == refusal(nobody) == refusal(missing)
     assert refusal(missing)[0] == 404
+
+
+# ------------------------------------------------------------------ channels (M13.7.4)
+def test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_it(
+    console: Console,
+) -> None:
+    """**A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS, the steward's half.** The
+    steward holds no lifecycle authority and still switches the agent's channels; the view says
+    so and the store is told who. Delete this and an existing agent can only be made answerable by
+    an administrator, which leaves every steward's new agent mute until somebody else acts."""
+    view = console.get("u_wide", path(LIFECYCLE_PATH, agent_id=SALES))
+    switched = console.post(
+        "u_wide",
+        path(CHANNELS_PATH, agent_id=SALES),
+        {"channels": ["lark", "console", "lark"], "expected": []},
+    )
+
+    assert view.status_code == 200
+    assert view.json()["may_change_channels"] is True
+    assert view.json()["channels"] == []
+    assert switched.status_code == 200, switched.text
+    assert switched.json()["channels"] == ["console", "lark"]
+    [change] = console.memory.changes
+    assert (change.before.channels, change.after.channels) == ((), ("console", "lark"))
+    assert change.actor_id == "u_wide"
+
+
+def test_an_administrator_over_the_row_switches_an_agent_s_channels(console: Console) -> None:
+    """The administrator's half: a holder of the lifecycle authority over the agent's row who is
+    not its steward. Delete this and the rule can narrow to the steward alone."""
+    switched = console.post(
+        "u_admin", path(CHANNELS_PATH, agent_id=COMPANY), {"channels": ["email"], "expected": []}
+    )
+
+    assert switched.status_code == 200, switched.text
+    assert console.memory.agents[COMPANY].record.channels == ("email",)
+
+
+def test_anybody_else_is_answered_as_if_the_agent_did_not_exist(console: Console) -> None:
+    """A reader who sees the agent and is neither its steward nor an administrator over it gets the
+    one 404 a missing agent gets, and nothing is written. Delete this and the route tells a reader
+    which agents exist by answering them differently."""
+    refused = console.post(
+        "u_wide", path(CHANNELS_PATH, agent_id=COMPANY), {"channels": ["email"], "expected": []}
+    )
+    missing = console.post(
+        "u_wide", path(CHANNELS_PATH, agent_id=MISSING), {"channels": ["email"], "expected": []}
+    )
+
+    assert refusal(refused) == refusal(missing)
+    assert refused.status_code == 404
+    assert console.memory.changes == []
+
+
+def test_a_channel_nothing_can_ask_on_is_refused_and_a_stale_page_writes_nothing(
+    console: Console,
+) -> None:
+    """A name that is not a channel a person can ask on is a 422, and a page that drew channels the
+    agent no longer has is a 409; neither writes. Delete this and the route can store a channel
+    nothing reads, or overwrite a switch somebody else just made."""
+    unknown = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["scheduler"], "expected": []},
+    )
+    stale = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["email"], "expected": ["lark"]},
+    )
+
+    assert unknown.status_code == 422
+    assert stale.status_code == 409
+    assert console.memory.changes == []
+
+
+def only_lark_is_declared(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A deployment whose one adapter is Lark, so the real `channel_rows` offers Lark alone."""
+    declared = declared_channels()
+    monkeypatch.setattr(
+        lifecycle_routes,
+        "declared_channels",
+        lambda: tuple(one for one in declared if one.channel is Channel.LARK),
+    )
+
+
+def test_a_channel_its_run_could_not_be_carried_on_is_not_switched_on_and_nothing_is_written(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED, the refusal (M39.2.4.2).**
+    WhatsApp is not among the channels `channel_rows` offers this reader for this agent, so a
+    switch onto it is the domain's refusal in its own sentence, and the boxes never offered it.
+    Delete this and the switch can turn an agent on for a surface that cannot carry what it may
+    answer, which is the offer the workspace refuses made anyway by a POST."""
+    only_lark_is_declared(monkeypatch)
+
+    view = console.get("u_admin", path(LIFECYCLE_PATH, agent_id=COMPANY)).json()
+    refused = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["lark", "whatsapp"], "expected": []},
+    )
+
+    assert [one["name"] for one in view["channel_choices"]] == ["console", "lark", "api"]
+    assert refused.status_code == 409
+    assert (refused.json()["outcome"], refused.json()["sentence"]) == (REFUSED, CANNOT_CARRY_IT)
+    assert console.memory.changes == []
+
+
+def test_a_channel_it_could_be_carried_on_is_switched_on_and_one_already_on_may_stay(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The positive sibling: Lark, which `channel_rows` offers, and the console, which answers the
+    asker in their own session, are switched on; and a channel already on that would not be
+    offered now (the widget) may stay on and be switched off, because only switching on is judged.
+    Delete this and the rule can refuse every switch, or strand an agent on a channel nobody may
+    now switch off."""
+    only_lark_is_declared(monkeypatch)
+    found = console.memory.agents[COMPANY]
+    console.memory.agents[COMPANY] = replace(found, record=answering_on(found.record, ["widget"]))
+
+    kept = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["widget", "lark", "console"], "expected": ["widget"]},
+    )
+    off = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["lark"], "expected": ["console", "lark", "widget"]},
+    )
+
+    assert kept.status_code == 200, kept.text
+    assert "widget" in [one["name"] for one in kept.json()["channel_choices"]]
+    assert off.status_code == 200, off.text
+    assert console.memory.agents[COMPANY].record.channels == ("lark",)

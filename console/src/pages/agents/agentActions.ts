@@ -13,6 +13,9 @@
  * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`); creating an
  * agent, editing one as a draft and changing its permissions through that draft arrived with
  * `brain.agent_builder_routes` the same day (`NewAgentPage.tsx`, `DraftStart.tsx`, `DraftPage.tsx`).
+ * Switching the channels an agent answers on arrived as `/agents/{id}/channels` on 2026-10-06 and is
+ * live on the Profile (`AgentChannels.tsx`); adding an agent to one group chat is a different act,
+ * a binding to a room rather than a channel, and is still a sentence.
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
  * `tests/agents-page.test.tsx` reads every sentence here against the API document: an act listed as
@@ -29,7 +32,7 @@
 export const UNAVAILABLE = Object.freeze({
   chatGroup: {
     reason: "Coming soon: adding an agent to a group chat.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(channels|groups)\b/,
+    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/groups\b/,
   },
   level: {
     reason: "Coming soon: changing who can find this agent.",
