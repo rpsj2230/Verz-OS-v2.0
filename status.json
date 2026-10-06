@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T02:44:27.518698+00:00",
-  "commit": "a982fb2d",
-  "commit_subject": "An approval is shown at its approver's own reach on the console and the Lark card, and the requester's values never reach them (#381)",
+  "generated_at": "2026-10-06T02:54:50.567398+00:00",
+  "commit": "590ef8ce",
+  "commit_subject": "Slack is proved on an install to answer a person and an agent bound to it the moment it is connected from the console (#388)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
