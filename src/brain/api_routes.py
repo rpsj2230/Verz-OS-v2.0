@@ -198,6 +198,7 @@ from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource
 from brain.gate.roster import (
     AgentRoster,
     AnswerRoster,
+    StoredAgents,
     answer_roster,
     run_entitlement,
     viewer_for,
@@ -1727,13 +1728,14 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
     channel they asked on, so an agent not enabled there is absent from this roster (M13.7.4).
     """
     read: AgentRoster | None = getattr(state, "agent_roster", None)
-    records = await read() if read is not None else ()
+    stored = await read() if read is not None else StoredAgents(records=())
     return answer_roster(
-        records,
+        stored.records,
         viewer_for(asked.principal),
         channel=asked.channel,
         default=default_agents(registry),
         tool_names=(one.name for one in registry.definitions()),
+        install_hashes=stored.install_hashes,
     )
 
 

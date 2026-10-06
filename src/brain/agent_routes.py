@@ -193,7 +193,7 @@ import enum
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, cast
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -267,7 +267,7 @@ from brain.core.scope import Scope
 from brain.gate.abstain import AutonomyBreaker
 from brain.gate.context import TrafficClass
 from brain.gate.leash import Leash
-from brain.gate.roster import viewer_for
+from brain.gate.roster import StoredAgents, viewer_for
 from brain.gate.takeover_store import TakeoverStandings
 from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
@@ -1597,6 +1597,40 @@ def workspace(
 def every_agent() -> Select[tuple[AgentRow]]:
     """Every stored agent. Filtered by audience afterwards, in Python, by the one predicate."""
     return select(AgentRow).order_by(AgentRow.id)
+
+
+def every_agent_with_install_hash() -> Select[tuple[AgentRow, str | None]]:
+    """Every stored agent beside its install's stored `effective_hash`, or None without an install.
+
+    One statement, so the agent and the hash `/answer` keys its cache on are one reading
+    (`brain.gate.roster`, M13.2.5). An outer join: an agent with no install row is still an agent.
+    """
+    joined = (
+        select(AgentRow, TemplateInstanceRow.effective_hash)
+        .outerjoin(TemplateInstanceRow, TemplateInstanceRow.id == AgentRow.id)
+        .order_by(AgentRow.id)
+    )
+    # A cast at the typing boundary: the column is NOT NULL, and an outer join makes it null.
+    return cast(Select[tuple[AgentRow, str | None]], joined)
+
+
+async def read_stored_agents(session: AsyncSession) -> StoredAgents:
+    """The agents `/answer` selects from, as one reading: the ones that construct, and their hashes.
+
+    A row that does not construct is left out, for `record_of`'s reason. Shared by the application
+    and by the install checks, so the roster a check reads is the one a question reads.
+    """
+    rows = (await session.execute(every_agent_with_install_hash())).all()
+    records: list[AgentRecord] = []
+    hashes: dict[str, str] = {}
+    for row, install_hash in rows:
+        record = record_of(row)
+        if record is None:
+            continue
+        records.append(record)
+        if install_hash is not None:
+            hashes[record.agent_id] = install_hash
+    return StoredAgents(records=records, install_hashes=hashes)
 
 
 def one_agent(agent_id: str) -> Select[tuple[AgentRow]]:

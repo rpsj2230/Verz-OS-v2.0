@@ -53,8 +53,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from brain.agent_routes import every_agent, record_of
-from brain.agents.model import AgentRecord
+from brain.agent_routes import read_stored_agents
 from brain.api import (
     ErrorBody,
     FailureBodyMiddleware,
@@ -93,7 +92,7 @@ from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
-from brain.gate.roster import AgentRoster
+from brain.gate.roster import AgentRoster, StoredAgents
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
 from brain.gate.takeover_store import StoredTakeovers
@@ -1058,10 +1057,9 @@ def agent_roster_for(
         return None
     factory = sessions
 
-    async def read() -> Sequence[AgentRecord]:
+    async def read() -> StoredAgents:
         async with factory() as session:
-            rows = (await session.execute(every_agent())).scalars().all()
-        return [one for one in (record_of(row) for row in rows) if one is not None]
+            return await read_stored_agents(session)
 
     return read
 
