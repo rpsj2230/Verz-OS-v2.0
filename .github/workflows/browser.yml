@@ -231,6 +231,12 @@ jobs:
         if: always()
         run: |
           docker inspect -f '{{.Name}} restarts={{.RestartCount}}' $(docker compose ps -aq)
+          # What each running container holds that the kernel cannot drop: anonymous memory from
+          # its cgroup's own accounting, beside the page cache that `docker stats` partly counts.
+          for id in $(docker compose ps -q); do
+            stat="/sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' "$id").scope/memory.stat"
+            echo "held $(docker inspect -f '{{.Name}}' "$id") anon=$(awk '$1 == "anon" { print $2 }' "$stat" 2>/dev/null) file=$(awk '$1 == "file" { print $2 }' "$stat" 2>/dev/null) peak=$(cat "${stat%memory.stat}memory.peak" 2>/dev/null)"
+          done
           killed=$(sudo dmesg | grep -E "Memory cgroup out of memory|Killed process" || true)
           [ -z "$killed" ] || { echo "$killed"; echo "::error::the kernel killed a process for memory during the run"; exit 1; }
           restarted=$(docker inspect -f '{{.Name}} restarts={{.RestartCount}}' $(docker compose ps -aq) | grep -v ' restarts=0$' || true)
