@@ -129,6 +129,7 @@ from brain.core.projection import MAX_LABEL_CHARS
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.leash import Action
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
+from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -1242,7 +1243,30 @@ GUIDE: Final = keyed(
 )
 
 
+#: Cloudflare's documented global ceiling, in its own unit: 1,200 calls per five minutes per user
+#: (https://developers.cloudflare.com/fundamentals/api/reference/limits/). The row below records it
+#: per minute, as every row does, at a fifth, which a sliding minute can never exceed over five.
+CLOUDFLARE_CALLS_PER_FIVE_MINUTES = 1_200
+
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="cloudflare",
+    per_minute=CLOUDFLARE_CALLS_PER_FIVE_MINUTES // 5,
+    raisable=False,
+    note=(
+        "1,200 requests per five minutes per user, across every token and the dashboard "
+        "(developers.cloudflare.com/fundamentals/api/reference/limits), recorded as 240 a "
+        "minute, so no five minutes can hold more than 1,200. Past it Cloudflare refuses "
+        "every call for five minutes with a 429. The ceiling is on the client's own user "
+        "rather than on our subscription, so no plan we can buy moves it. Separately, the "
+        "GraphQL Analytics API allows 300 queries per five minutes."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CLOUDFLARE,
     label="Cloudflare",
     guide=GUIDE,

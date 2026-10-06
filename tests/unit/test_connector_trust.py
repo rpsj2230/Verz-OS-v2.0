@@ -76,7 +76,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.ops.connectable import CONNECTABLE, manifest_for
 from brain.ops.connector_store import Connection
 from brain.ops.credentials import Held, VaultState
-from brain.ops.limits import SOURCE_CEILINGS, connector_ceiling
+from brain.ops.limits import connector_ceiling, source_ceilings
 from brain.ops.secrets import SecretRef, VaultRole
 
 #: Far outside any plausible wall clock, because what these tests are about is not the present.
@@ -97,7 +97,7 @@ CONNECTOR_READ: Final[Capability] = screen(THE_SCREEN).read.requires
 
 #: A source with a verified ceiling and one whose name nobody has measured. The first is read
 #: out of `brain.ops.limits` so the test moves with the table rather than pinning a name.
-MEASURED: Final[str] = SOURCE_CEILINGS[0].name
+MEASURED: Final[str] = source_ceilings()[0].name
 UNMEASURED: Final = "a_source_nobody_measured"
 
 
@@ -283,8 +283,8 @@ def test_a_ceiling_with_no_verified_daily_figure_says_so_rather_than_reporting_o
     somebody sizes a backfill against with nothing behind it. The source is found by asking
     `brain.ops.limits` which of its rows has no daily figure, rather than by naming one, so the
     test follows the table."""
-    without = next(one for one in SOURCE_CEILINGS if one.per_day is None)
-    with_daily = next(one for one in SOURCE_CEILINGS if one.per_day is not None)
+    without = next(one for one in source_ceilings() if one.per_day is None)
+    with_daily = next(one for one in source_ceilings() if one.per_day is not None)
 
     said = ceiling_in_words(a_manifest(ceiling=without.name))
     assert "no daily figure" in said

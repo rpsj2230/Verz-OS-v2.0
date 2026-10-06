@@ -17,6 +17,7 @@ Task ids: M27.11.2, M27.11.3, M27.15.19
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -32,12 +33,13 @@ from brain import directory_routes as routes
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
 from brain.audit.ledger import AuditChain
-from brain.audit.record import AuditRecorder, PrincipalStateChange
+from brain.audit.record import AuditRecorder, OrganisationChange, PrincipalStateChange
 from brain.console.reads import Plane, plane_capability
 from brain.core.entitlement import Capability, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Scope
 from brain.gate.admission import Assurance
+from brain.identity.departments_from import DEPARTMENTS_COME_FROM_THE_STAFF_LIST
 from brain.identity.standing import WHY_KEPT_OUT, KeptOut
 from brain.install import hold_saved
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
@@ -98,6 +100,8 @@ GRANTS: dict[str, tuple[Grant, ...]] = {
     "u_wide": (grant("read:grant"), grant(CONFIGURATION)),
     "u_narrow": (grant("read:grant"),),
     "u_prefix": (grant("approve:grant", IN_MAINTENANCE),),
+    # Names everybody and organises maintenance only: the reader a move must ask about each person.
+    "u_mover": (grant("read:grant"), grant("approve:grant", IN_MAINTENANCE), grant(CONFIGURATION)),
     "u_none": (),
 }
 
@@ -229,6 +233,8 @@ class Held:
             return Rows([])
         if text.startswith("INSERT INTO auth.principal"):
             return Rows([(LONG_AGO,)])
+        if text.startswith("UPDATE auth.principal"):
+            return Rows([])
         if "FROM auth.session" in text:
             wanted = set(params.get("principal_id_1", ()))
             return Rows([one for one in self.sessions if one[0] in wanted])
@@ -257,6 +263,8 @@ class Held:
             if "id_1" in params:
                 wanted_id = params["id_1"]
                 if isinstance(wanted_id, list | tuple):
+                    if "ORDER BY auth.principal.id" in text:
+                        return Rows(sorted(one for one in self.people if one[0] in wanted_id))
                     return Rows([one[:3] for one in self.people if one[0] in wanted_id])
                 return Rows([one for one in self.people if one[0] == wanted_id])
             return Rows(self.people)
@@ -961,3 +969,187 @@ def test_a_person_the_list_keeps_out_says_why_on_their_page_and_one_it_lets_in_s
     assert cara["kept_out"] == WHY_KEPT_OUT[KeptOut.TYPE_NOT_ALLOWED]
     assert bob["kept_out"] is None
     assert alone["kept_out"] is None and alone["person"]["staff_status"] is None
+
+
+# ------------------------------------------------------------ moving several people (M1.6.20)
+def move(c: TestClient, pid: str, body: Mapping[str, object]) -> Response:
+    response: Response = c.post(
+        f"{API_PREFIX}{routes.MOVING_PATH}", json=dict(body), headers=headers(pid)
+    )
+    return response
+
+
+def moves(held: Held) -> list[str]:
+    return [one for one in held.statements if one.startswith("UPDATE auth.principal")]
+
+
+def test_with_departments_from_the_staff_list_a_holder_is_told_so_and_nobody_moves(
+    client: TestClient, held: Held
+) -> None:
+    """The default: a person's department is the list's, so a move is refused in a sentence to a
+    caller holding the authority, and in the one refusal to a caller holding none, before the
+    database. The page offers no move. Delete this and a move made on People is undone by the next
+    sync, or the setting is told to a caller who holds nothing."""
+    before = hold_saved({"INSTALL_DEPARTMENTS_FROM": "staff_source"})
+    try:
+        holder = move(client, "u_admin", {"principal_ids": ["u_1"], "department": FINANCE})
+        nothing = move(client, "u_none", {"principal_ids": ["u_1"], "department": FINANCE})
+        page = get(client, "u_admin").json()
+    finally:
+        hold_saved(before)
+
+    sentence = DEPARTMENTS_COME_FROM_THE_STAFF_LIST
+    assert (holder.status_code, holder.json()["message"]) == (
+        404,
+        f"Nothing was changed: {sentence}.",
+    )
+    assert (nothing.status_code, nothing.json()["message"]) == (404, Absent.public_message)
+    assert held.statements == [] or not moves(held)
+    assert page["may_move"] is False
+
+
+def test_under_the_console_several_people_move_in_one_statement_and_one_already_there_is_not_moved(
+    client: TestClient, held: Held
+) -> None:
+    """Managed on People: the people named go to the department in one attributed statement, and
+    somebody already in it is not a move and is not listed. The page offers the move. Delete this
+    and a move can write nobody, write one statement per person, or record a move for somebody who
+    never moved."""
+    before = hold_saved({"INSTALL_DEPARTMENTS_FROM": "console"})
+    try:
+        answer = move(
+            client, "u_admin", {"principal_ids": ["u_3", "u_1", "u_2"], "department": FINANCE}
+        )
+        page = get(client, "u_admin").json()
+    finally:
+        hold_saved(before)
+
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["moved"] == ["u_1", "u_3"]
+    assert answer.json()["department"] == FINANCE
+    (statement,) = moves(held)
+    assert "primary_department='finance'" in statement
+    assert "'u_1', 'u_3'" in statement
+    assert any("brain.actor_id" in one for one in held.statements)
+    assert page["may_move"] is True
+
+
+def test_one_person_the_reader_may_not_organise_or_a_retired_department_moves_nobody(
+    client: TestClient, held: Held
+) -> None:
+    """All or nothing: `u_elsewhere` governs maintenance only, so a move of a finance person with
+    a maintenance one is refused whole, in the one refusal; a department no live row carries is
+    refused in its sentence; somebody who does not exist refuses the whole move. Delete this and a
+    reader can move people they do not govern, or half a selection moves."""
+    before = hold_saved({"INSTALL_DEPARTMENTS_FROM": "console"})
+    try:
+        mixed = move(
+            client, "u_elsewhere", {"principal_ids": ["u_1", "u_2"], "department": MAINTENANCE}
+        )
+        gone = move(client, "u_admin", {"principal_ids": ["u_1"], "department": "retired_dept"})
+        missing = move(client, "u_admin", {"principal_ids": ["u_1", "u_9"], "department": FINANCE})
+        own = move(client, "u_elsewhere", {"principal_ids": ["u_1"], "department": MAINTENANCE})
+    finally:
+        hold_saved(before)
+
+    assert (mixed.status_code, mixed.json()["message"]) == (404, Absent.public_message)
+    assert gone.status_code == 404
+    assert (
+        gone.json()["message"] == f"Nothing was changed: {routes.A_DEPARTMENT_NAMED_IS_NOT_LIVE}."
+    )
+    assert (missing.status_code, missing.json()["message"]) == (404, Absent.public_message)
+    assert (own.status_code, own.json()["moved"]) == (200, [])
+    assert moves(held) == []
+
+
+def test_a_person_the_reader_may_name_but_not_organise_is_not_moved_into_their_department(
+    client: TestClient, held: Held
+) -> None:
+    """`may_organise` about each person, not only `nameable`: `u_mover` sees everybody and
+    organises maintenance only, so moving Bob out of finance into maintenance is refused, and
+    somebody already in maintenance is answered as no move. Delete this and a reader who governs
+    one department can take people out of every other department they can see."""
+    before = hold_saved({"INSTALL_DEPARTMENTS_FROM": "console"})
+    try:
+        taken = move(client, "u_mover", {"principal_ids": ["u_2"], "department": MAINTENANCE})
+        theirs = move(client, "u_mover", {"principal_ids": ["u_1"], "department": MAINTENANCE})
+    finally:
+        hold_saved(before)
+
+    assert (taken.status_code, taken.json()["message"]) == (404, Absent.public_message)
+    assert (theirs.status_code, theirs.json()["moved"]) == (200, [])
+    assert moves(held) == []
+
+
+def test_people_moved_on_people_land_on_the_row_and_the_ledger_against_postgresql() -> None:
+    """**M1.6.20 on PostgreSQL, through the route, as the application role.** Two people moved to
+    maintenance in one press are both there, each with one `organisation` `moved` entry under the
+    caller naming maintenance, with the request's reach digest and trace; somebody already there is
+    not moved and gets no entry; and the chain verifies. Delete this and the move's statement and
+    `0170`'s trigger have never met each other, and a move can be recorded under nobody.
+    **Skips without a server.**"""
+    before_saved = hold_saved(
+        {"INSTALL_STAFF_SOURCE": "none", "INSTALL_DEPARTMENTS_FROM": "console"}
+    )
+    try:
+        with retirable("brain_directory_moves") as url:
+            if not has_pgvector(url):
+                pytest.skip("0170 sits on the whole chain, which runs only where pgvector is")
+            for slug, name in ((MAINTENANCE, "Maintenance"), (FINANCE, "Finance")):
+                sql(
+                    url,
+                    "INSERT INTO gate.scope (slug, predicate, label) VALUES (%s, %s::jsonb, %s)",
+                    slug,
+                    json.dumps({"department": slug}),
+                    f"All of {name.lower()}",
+                )
+                sql(
+                    url,
+                    "INSERT INTO gate.department (company_id, slug, name, scope_slug)"
+                    " VALUES ('company', %s, %s, %s)",
+                    slug,
+                    name,
+                    slug,
+                )
+            for pid, department in (("u_1", FINANCE), ("u_2", FINANCE), ("u_3", MAINTENANCE)):
+                sql(
+                    url,
+                    "INSERT INTO auth.principal (id, kind, employment, display_name,"
+                    " primary_department) VALUES (%s, 'human', 'staff', %s, %s)",
+                    pid,
+                    f"Person {pid}",
+                    department,
+                )
+            ledger_before = len(entries(url, "organisation"))
+
+            async def go(client: httpx.AsyncClient) -> tuple[int, dict[str, Any]]:
+                answer = await client.post(
+                    f"{API_PREFIX}{routes.MOVING_PATH}",
+                    json={"principal_ids": ["u_1", "u_2", "u_3"], "department": MAINTENANCE},
+                    headers=headers("u_admin"),
+                )
+                return answer.status_code, answer.json()
+
+            status, moved = pressed(url, GRANTS, go)
+            placed = sql(url, "SELECT id, primary_department FROM auth.principal ORDER BY id")
+            recorded = entries(url, "organisation")[ledger_before:]
+            chain = every_entry(url)
+    finally:
+        hold_saved(before_saved)
+
+    assert status == 200, moved
+    assert moved["moved"] == ["u_1", "u_2"]
+    assert [one for one in placed if one[0] in {"u_1", "u_2", "u_3"}] == [
+        ("u_1", MAINTENANCE),
+        ("u_2", MAINTENANCE),
+        ("u_3", MAINTENANCE),
+    ]
+    expected = AuditRecorder(
+        AuditChain(), actor_id="u_admin", ent_hash="0" * 32, trace_id="t", clock=lambda: LONG_AGO
+    ).organisation(change=OrganisationChange.MOVED, principal_id="u_1", department=MAINTENANCE)
+    assert sorted((one.actor_id, one.subject, dict(one.details)) for one in recorded) == [
+        ("u_admin", "principal:u_1", dict(expected.details)),
+        ("u_admin", "principal:u_2", dict(expected.details)),
+    ]
+    assert all(one.ent_hash != "0" * 32 and not one.trace_id.startswith("tx.") for one in recorded)
+    assert AuditChain(chain).verify() is None

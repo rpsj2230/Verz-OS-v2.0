@@ -34,12 +34,12 @@ the cost of a wrong resume is the incident continuing.
 **A stop button nothing consults is the fifth lie, and it is the one this module shipped
 with.** Every paragraph above was true of a value class that no code path asked anything:
 halts could be declared, validated, stored, reloaded and rendered on a screen, and every
-request was admitted anyway. `brain.ops.admission.decide` now asks, before it looks up a
-budget row, because that is the one function every piece of work passes through before any
-of it starts, and it is where `Effect.REFUSE_NEW` means something. It is handed a connector
-and nothing else, so a halt on a department, an agent or a person is still enforced nowhere:
-`ENFORCED_AXES` says which axes are real and `halt_gaps` reports a halt declared on one of
-the others rather than letting an administrator watch a compromised account keep working.
+request was admitted anyway. `brain.ops.admission.decide` asked first, and was handed a
+connector and nothing else, and every live caller handed it `NOTHING_HALTED`, so for a while
+the fifth lie was only better hidden. Since 2026-10-06 `brain.ops.halt_store` reads the table
+and every path that starts work asks it: an answer, an automation, a connector read. The
+agent axis is still asked by nothing, so `ENFORCED_AXES` says which axes are real and
+`halt_gaps` reports a halt declared on another rather than letting it read as working.
 
 **Reading fails closed, which is the opposite of everything else here.** Every cache in this
 system treats "I could not tell" as "carry on", because a cache that fails closed turns a
@@ -199,13 +199,15 @@ TARGETED: Final[frozenset[HaltScope]] = frozenset(
 
 #: The scopes something actually consults. Everything else is a halt that refuses nothing.
 #:
-#: `brain.ops.admission.decide` is the only call site, and an `AdmissionRequest` carries a
-#: resource, a lane, a traffic class and the connector the resource belongs to. It carries
-#: no principal, no department and no agent, so a halt on one of those axes can be declared
-#: and stored and in force and stop nothing at all. `halt_gaps` reports one, because the
-#: administrator declaring a halt on a compromised account is not in a position to go and
-#: read which call sites exist. Widen this set when a call site that knows the axis asks.
-ENFORCED_AXES: Final[frozenset[HaltScope]] = frozenset({HaltScope.EVERYTHING, HaltScope.CONNECTOR})
+#: `brain.ops.halt_store.refusal_in` is asked by every path that starts work: an answer names
+#: its person and their department, an automation the person it runs as and theirs, a connector
+#: read its connector, and `brain.ops.admission.decide` its connector too. Nothing that starts
+#: an agent's work names the agent yet, so a halt on one agent can be declared and stop nothing,
+#: and `halt_gaps` reports one, because the administrator declaring it is not in a position to go
+#: and read which call sites exist. Widen this set when a call site that knows the axis asks.
+ENFORCED_AXES: Final[frozenset[HaltScope]] = frozenset(
+    {HaltScope.EVERYTHING, HaltScope.CONNECTOR, HaltScope.DEPARTMENT, HaltScope.PERSON}
+)
 
 
 @dataclass(frozen=True)
@@ -513,8 +515,8 @@ def halt_gaps(halts: Sequence[Halt] = ()) -> tuple[str, ...]:
         if one.scope not in ENFORCED_AXES:
             gaps.append(
                 f"the {one.scope.value} halt {one.target or 'on everything'} is declared on "
-                "an axis nothing consults: admission is handed a connector and nothing else, "
-                "so this halt is in force in the store and refuses no request anywhere"
+                "an axis nothing consults: no path that starts work names it yet, so this halt "
+                "is in force in the store and refuses no request anywhere"
             )
 
     return tuple(gaps)

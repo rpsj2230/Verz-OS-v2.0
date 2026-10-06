@@ -64,7 +64,7 @@ checks and records in one watched transaction. `close_admitted` takes that decis
 asking again, so the window is asked exactly once whichever keeps it.
 
 Nothing here opens a connection and nothing here re-implements a limiter. The sliding window
-is `ops.limits`, the ceiling is the verified one in `ops.limits.SOURCE_CEILINGS`, and this
+is `ops.limits`, the ceiling is the verified one in `ops.limits.source_ceilings()`, and this
 module supplies the policy on top of them.
 
 Task ids: M10.2.3, M10.2.4
@@ -563,7 +563,7 @@ def assert_press_is_live(
 
 #: The connector whose verified ceiling every Lark call is budgeted against.
 #:
-#: `ops.limits.SOURCE_CEILINGS` records it as 100 requests a minute, fixed, with the vendor
+#: `ops.limits.source_ceilings()` records it as 100 requests a minute, fixed, with the vendor
 #: stating it cannot be raised. It is the only verified Lark figure this repository holds,
 #: and sizing a card budget against a higher number would be sizing against a number that
 #: does not exist. Read rather than restated, so raising the entry raises this too.
@@ -600,7 +600,7 @@ def card_ceiling_per_minute() -> int:
     ceiling = connector_ceiling(LARK_CONNECTOR)
     if ceiling is None:
         msg = (
-            f"{LARK_CONNECTOR} has no verified ceiling in ops.limits.SOURCE_CEILINGS; a card "
+            f"{LARK_CONNECTOR} has no verified ceiling in ops.limits.source_ceilings(); a card "
             "budget guessed here would be a number nobody checked"
         )
         raise CardRefusedError(msg)

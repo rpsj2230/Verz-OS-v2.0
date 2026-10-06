@@ -21,6 +21,7 @@ Task ids: M6.2.1, M6.2.2, M6.2.6
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict
 
 import pytest
 from hypothesis import example, given
@@ -52,6 +53,17 @@ pytestmark = pytest.mark.invariant
 
 NOW = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
 Q = "which clients have hosting expiring next month"
+
+
+class _Shape(TypedDict):
+    """The narrowing a retrieval key requires beside the reach: every kind, the default count."""
+
+    kinds: tuple[str, ...]
+    limit: int
+
+
+#: A question narrowed to nothing and asking for the search tool's default number of passages.
+SHAPE: _Shape = {"kinds": (), "limit": 10}
 
 #: A pool wide enough that two drawn subsets are usually different and sometimes identical,
 #: which is what makes the equivalence below testable in both directions.
@@ -149,8 +161,8 @@ def test_a_retrieval_key_is_never_shared_between_two_people(
     the retrieval key can be made to look like the answer key on the argument that the two
     should be consistent, and one person's drafts are retrieved for another.
     """
-    ours = retrieval_key(Q, reach("u_a", mine), departments=("web",), corpus_epoch=1)
-    yours = retrieval_key(Q, reach("u_b", theirs), departments=("web",), corpus_epoch=1)
+    ours = retrieval_key(Q, reach("u_a", mine), departments=("web",), corpus_epoch=1, **SHAPE)
+    yours = retrieval_key(Q, reach("u_b", theirs), departments=("web",), corpus_epoch=1, **SHAPE)
 
     assert ours != yours
 
@@ -259,7 +271,7 @@ def test_each_cache_addresses_its_own_keyspace_by_name_and_by_digest() -> None:
     """
     who = reach("u_a", frozenset({"read:client.name"}))
     plan = plan_key(Q, who, agent_config_hash="cfg")
-    retrieval = retrieval_key(Q, who, departments=("web",), corpus_epoch=0)
+    retrieval = retrieval_key(Q, who, departments=("web",), corpus_epoch=0, **SHAPE)
     answer = answer_key(Q, who, agent_config_hash="cfg", source_epochs={})
 
     assert plan.startswith("plan:")

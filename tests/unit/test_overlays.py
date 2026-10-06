@@ -10,7 +10,7 @@ the same `read_host` the server runs. The deploy hook that copies the script out
 Every date and figure here is a fixture of a host that does not exist, chosen so the arithmetic is
 easy to follow: an 8,192 MiB machine, never the owner's.
 
-Task ids: M32.2.1.1
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2
 """
 
 from __future__ import annotations
@@ -34,11 +34,15 @@ from brain.ops.overlays import (
     Host,
     Overlay,
     OverlayError,
+    Seen,
     main,
     mebibytes,
+    observation,
     plan,
     read_host,
+    read_seen,
     render,
+    seen_in,
     services_problem,
     switched_on,
     switched_on_here,
@@ -103,27 +107,41 @@ def test_an_overlay_cannot_name_a_container_the_budget_does_not_cost() -> None:
         Overlay(name="Probe", what="a probe", components=("seaweedfs",), files=("x.yml",))
 
 
+def _overlay_file(name: str) -> Path:
+    """A file an overlay names: the product's compose files at the root, the step's beside it."""
+    root = REPO / name
+    return root if root.exists() else REPO / "ops" / "deploy" / "overlays" / name
+
+
 @pytest.mark.parametrize("overlay", OVERLAYS, ids=lambda one: one.name)
 def test_each_overlay_s_files_describe_exactly_the_containers_it_is_costed_for(
     overlay: Overlay,
 ) -> None:
     """The files are what starts and the components are what is paid for, and the two are read
-    from different places, so they are compared. Every container the files describe carries the
-    limit the budget gives it, and every network a JOIN names is declared there and internal.
+    from different places, so they are compared after the files are merged as compose merges them.
+    Every long-running container is a costed component at its budgeted limit, a one-shot (restart
+    "no") is not costed because it exits but still carries a limit, and every network a JOIN names
+    is declared there and internal.
 
-    Delete this and a service can be added to the file and started on a server that was costed for
-    one fewer, or a JOIN can name a network the file never creates and the application never reach
+    Delete this and a service can be added to a file and started on a server that was costed for
+    one fewer, or a JOIN can name a network the files never create and the application never reach
     the service."""
-    described: dict[str, dict[str, object]] = {}
+    merged: dict[str, dict[str, object]] = {}
     networks: dict[str, dict[str, object]] = {}
     for name in overlay.files:
-        raw = yaml.safe_load((REPO / name).read_text(encoding="utf-8"))
-        described.update({svc: body for svc, body in raw["services"].items() if body})
+        raw = yaml.safe_load(_overlay_file(name).read_text(encoding="utf-8"))
+        for service, body in raw["services"].items():
+            merged.setdefault(service, {}).update(body or {})
         networks.update(raw.get("networks") or {})
-    assert sorted(described) == sorted(overlay.components)
+    described = {service: body for service, body in merged.items() if body}
+    running = sorted(svc for svc, body in described.items() if body.get("restart") != "no")
+    assert running == sorted(overlay.components)
     for svc, body in described.items():
-        limit = body["deploy"]["resources"]["limits"]["memory"]  # type: ignore[index]
-        assert str(limit) == f"{component(svc).memory_mib}M", svc
+        limit = str(body["deploy"]["resources"]["limits"]["memory"])  # type: ignore[index]
+        if svc in overlay.components:
+            assert limit == f"{component(svc).memory_mib}M", svc
+        else:
+            assert limit.endswith("M") and int(limit[:-1]) > 0, svc
     for network, services in overlay.joins:
         assert networks[network].get("internal") is True, network
         assert services
@@ -142,12 +160,20 @@ def test_the_image_carries_the_step_and_every_file_an_overlay_starts() -> None:
         if line.startswith("COPY ") and (parts := line.split())
     }
     target = "/app/ops/deploy/overlays"
-    assert copies[f"{target}/apply.sh"] == "ops/deploy/overlays/apply.sh"
-    for overlay in OVERLAYS:
-        for name in overlay.files:
-            assert copies[f"{target}/{name}"] == name
     ignored = (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert copies[f"{target}/"] == "ops/deploy/overlays/"
+    step = REPO / "ops" / "deploy" / "overlays"
+    for overlay in OVERLAYS:
+        for name in (*overlay.files, *overlay.prepare):
+            if (step / name).exists():
+                assert f"!ops/deploy/overlays/{name}" in ignored, name
+            else:
+                assert copies[f"{target}/{name}"] == name
     assert "!ops/deploy/overlays/apply.sh" in ignored
+    for mounted in ("ops/langfuse/clickhouse-memory.xml", "ops/seaweedfs/provision.sh"):
+        assert f"!{mounted}" in ignored
+        settled = mounted.removeprefix("ops/")
+        assert copies[f"{target}/settings/{settled}"] == mounted
 
 
 # ------------------------------------------------------------------ the server
@@ -244,14 +270,16 @@ def test_room_is_given_in_declaration_order_and_spent_as_it_is_given() -> None:
 
 
 def test_the_plan_tells_the_script_the_files_the_joins_and_what_to_say() -> None:
-    """The script reads three kinds of line and nothing else. Delete this and a renamed prefix
+    """The script reads six kinds of line and nothing else. Delete this and a renamed prefix
     starts nothing on the server with every Python test green."""
     host = _host(PRESIDIO.cost_mib)
     lines = render(plan((PRESIDIO,), host), host).splitlines()
 
     assert "FILE docker-compose.presidio.yml" in lines
     assert "JOIN pii app brain-worker" in lines
-    assert all(re.match(r"^(SAY|FILE|JOIN) ", one) for one in lines)
+    assert all(re.match(r"^(START|SAY|PREPARE|FILE|JOIN|WAIT) ", one) for one in lines)
+    assert "START presidio" in lines
+    assert "WAIT presidio-analyzer" in lines
     assert lines[0].startswith("SAY this server has ")
 
     nothing = render(plan((), host), host).splitlines()
@@ -327,6 +355,7 @@ case "$1" in
       [ -n "$line" ] || exit 1
       set -- $line
       case "$fmt" in
+        *compose.service*) echo "$3|$4|running|healthy" ;;
         *HostConfig.Memory*) echo "/$1|$2|$4" ;;
         *Networks*) echo "$6" | tr ',' '\n' ;;
         *compose.project*) echo "$2" ;;
@@ -337,6 +366,9 @@ case "$1" in
     awk '{ print $1 "|" $5 " / 7.8GiB" }' "$S/containers"
     exit 0 ;;
   exec)
+    case "$*" in
+      *observe*) cat > "$S/observed"; echo "SAY kept what the stub saw"; exit 0 ;;
+    esac
     cat > "$S/facts"
     cat "$S/plan"
     exit "$(cat "$S/plan_exit")" ;;
@@ -369,6 +401,8 @@ class Applied:
     connected: list[str]
     facts: str
     output: str
+    observed: str
+    prepared: str
 
 
 def apply(
@@ -379,11 +413,15 @@ def apply(
     compose_exit: int = 0,
     start_exit: int = 0,
     containers: tuple[str, ...] = INSTALL,
+    prepare_exit: int | None = None,
+    env_file: bool = False,
 ) -> Applied:
     """Run the real script once against the stub, with the planner answering `planned`.
 
     `start_exit` is what starting the services exits with and `compose_exit` what waiting for
-    them to report healthy exits with.
+    them to report healthy exits with. `prepare_exit` runs the step from a copy of its directory
+    holding a `langfuse.prepare.sh` stand-in that records its environment and exits with it, and
+    `env_file` puts an environment file where the step looks for one.
     """
     state = tmp_path / "state"
     bin_dir = tmp_path / "bin"
@@ -403,15 +441,34 @@ def apply(
         ("meminfo", "MemTotal:        8388608 kB\nMemFree:          100000 kB\n"),
     ):
         (state / name).write_text(text, encoding="utf-8", newline="\n")
+    script = SCRIPT
+    if prepare_exit is not None:
+        step = tmp_path / "step"
+        shutil.copytree(SCRIPT.parent, step)
+        (step / "langfuse.prepare.sh").write_text(
+            "#!/bin/sh\n"
+            'echo "$BRAIN_APP_PROJECT $BRAIN_OVERLAYS_SETTINGS $BRAIN_OVERLAYS_ENV'
+            ' $BRAIN_APP_CONTAINER"'
+            f' > "{state}/prepared"\n'
+            f"exit {prepare_exit}\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        script = step / "apply.sh"
+    settings = tmp_path / "settings"
+    settings.mkdir()
+    if env_file:
+        (settings / "overlays.env").write_text("A=1\n", encoding="utf-8", newline="\n")
     env = {
         **os.environ,
         "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
         "STUB_STATE": state.as_posix(),
         "BRAIN_OVERLAYS_MEMINFO": (state / "meminfo").as_posix(),
+        "BRAIN_OVERLAYS_SETTINGS": settings.as_posix(),
     }
     assert SH is not None
     done = subprocess.run(
-        [SH, SCRIPT.as_posix(), "app-u"],
+        [SH, script.as_posix(), "app-u"],
         env=env,
         capture_output=True,
         text=True,
@@ -419,12 +476,16 @@ def apply(
         check=False,
     )
     facts = state / "facts"
+    observed = state / "observed"
+    prepared = state / "prepared"
     return Applied(
         code=done.returncode,
         calls=(state / "calls").read_text(encoding="utf-8").splitlines(),
         connected=(state / "connected").read_text(encoding="utf-8").splitlines(),
         facts=facts.read_text(encoding="utf-8") if facts.exists() else "",
         output=done.stdout + done.stderr,
+        observed=observed.read_text(encoding="utf-8") if observed.exists() else "",
+        prepared=prepared.read_text(encoding="utf-8").strip() if prepared.exists() else "",
     )
 
 
@@ -456,7 +517,7 @@ def test_a_planned_service_is_started_as_its_own_project_and_the_app_and_worker_
     )
     assert waited == (
         f"compose -p u-overlays -f {here}/docker-compose.presidio.yml up -d --wait "
-        "--wait-timeout 300"
+        "--wait-timeout 300 presidio-analyzer"
     )
     assert sorted(ran.connected) == ["u-overlays_pii app-u", "u-overlays_pii brain-worker-u"]
     # Joined before the wait: the worker's acceptance run must not find itself off the network
@@ -563,3 +624,338 @@ def test_services_that_cannot_be_started_are_said_and_nothing_is_joined(tmp_path
     assert "could not start the optional services" in ran.output
     assert ran.connected == []
     assert not [one for one in ran.calls if "--wait" in one]
+
+
+# ------------------------------------------------------------------ the trace ledger's half
+LANGFUSE = BY_NAME["langfuse"]
+
+
+def _both(available: int) -> str:
+    host = _host(available)
+    return render(plan((PRESIDIO, LANGFUSE), host), host)
+
+
+def test_the_ledger_is_costed_as_its_five_services_and_prepared_before_it_starts() -> None:
+    """The ledger's plan names its preparation before its files and waits on its five services and
+    not on the one-shot that makes its bucket. Delete this and the ledger starts before its
+    secrets exist, or the step waits on a container that exits and calls the deploy a failure."""
+    assert LANGFUSE.cost_mib == 2304
+    lines = _both(PRESIDIO.cost_mib + LANGFUSE.cost_mib).splitlines()
+    start = lines.index("START langfuse")
+    own = lines[start:]
+    assert own.index("PREPARE langfuse.prepare.sh") < own.index("FILE docker-compose.langfuse.yml")
+    assert sorted(one for one in own if one.startswith("WAIT ")) == sorted(
+        f"WAIT {name}" for name in LANGFUSE.components
+    )
+    assert "WAIT langfuse-events-bucket" not in lines
+
+
+def test_the_detector_is_given_the_room_first_and_the_ledger_is_refused_when_it_does_not_fit() -> (
+    None
+):
+    """Item 120's order on a server with room for one of the two. Delete this and the ledger can
+    take the room the owner gave the detector."""
+    lines = _both(PRESIDIO.cost_mib + LANGFUSE.cost_mib - 1).splitlines()
+    assert "START presidio" in lines
+    assert "START langfuse" not in lines
+    assert any(
+        one.startswith("SAY the trace ledger and its file store (langfuse) needs") for one in lines
+    )
+
+
+def test_what_docker_reported_is_kept_for_the_release_and_read_back_only_for_it() -> None:
+    """The step's report, from docker's own format to the row and back. A report for another
+    release, or of a shape nobody wrote, reads as no report at all. Delete this and a check can
+    judge a release on what an earlier one ran, or on a row somebody typed."""
+    lines = [
+        f"langfuse-web|{512 * MIB}|running|healthy",
+        f"langfuse-events-bucket|{64 * MIB}|exited|",
+        "",
+        "|0|running|healthy",
+    ]
+    seen = read_seen(lines)
+    assert [one.service for one in seen] == ["langfuse-web", "langfuse-events-bucket"]
+    kept = observation(seen, commit="abc1234")
+    back = seen_in(kept, commit="abc1234")
+    assert back is not None
+    assert back["langfuse-web"] == Seen("langfuse-web", 512, "running", "healthy")
+    assert back["langfuse-events-bucket"].health == ""
+    assert seen_in(kept, commit="def5678") is None
+    assert seen_in({"commit": "abc1234", "services": "nope"}, commit="abc1234") is None
+    assert seen_in("nope", commit="abc1234") is None
+
+
+def test_a_report_that_cannot_be_kept_says_so_and_exits_non_zero(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With no database the report is not kept, and the step's journal says it. Delete this and a
+    lost report is silent, and the ledger's checks are not run for a reason nobody can see."""
+    import io
+    import sys
+
+    for name in ("DATABASE_URL", "BRAIN_MIGRATION_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(f"langfuse-web|{512 * MIB}|running|healthy\n"))
+
+    assert main(["observe"]) == 1
+    assert capsys.readouterr().out.startswith(
+        "SAY what the optional services are running was not kept"
+    )
+
+
+@pytestmark_sh
+def test_an_overlay_is_prepared_with_the_project_settings_and_environment_file_it_is_given(
+    tmp_path: Path,
+) -> None:
+    """The preparation is told where the settings and the secrets go, which project's database
+    to use and which container is the application's, and the services are composed with that
+    environment file. Delete this and the ledger starts with secrets interpolated as empty
+    strings, or the class pools' preparation has no application to ask for its configuration."""
+    ran = apply(tmp_path, planned=_both(10_000), prepare_exit=0, env_file=True)
+
+    assert ran.code == 0, ran.output
+    settings = (tmp_path / "settings").as_posix()
+    assert ran.prepared == f"u {settings} {settings}/overlays.env app-u"
+    [started] = [
+        one for one in ran.calls if one.startswith("compose ") and "--remove-orphans" in one
+    ]
+    assert f"--env-file {settings}/overlays.env" in started
+    assert "langfuse.attach.yml" in started
+
+
+@pytestmark_sh
+def test_an_overlay_whose_preparation_fails_is_left_out_and_nothing_running_is_removed(
+    tmp_path: Path,
+) -> None:
+    """The detector still starts, the ledger's files are not composed, and compose is not told to
+    remove orphans, so a ledger already running from an earlier deploy keeps running. Delete this
+    and a database that is briefly unreachable during a deploy takes the ledger down."""
+    ran = apply(tmp_path, planned=_both(10_000), prepare_exit=1)
+
+    assert ran.code == 0, ran.output
+    assert "langfuse is not started: its preparation did not finish" in ran.output
+    composed = [one for one in ran.calls if one.startswith("compose ")]
+    assert composed and all("docker-compose.langfuse.yml" not in one for one in composed)
+    assert all("--remove-orphans" not in one for one in composed)
+    assert all("down" not in one.split() for one in composed)
+
+
+@pytestmark_sh
+def test_with_the_only_overlay_unprepared_nothing_is_stopped(tmp_path: Path) -> None:
+    """A plan of the ledger alone whose preparation fails leaves no file to compose, which would
+    otherwise read as "nothing is switched on" and stop the project. Delete this and that is what
+    happens."""
+    host = _host(LANGFUSE.cost_mib)
+    running = (
+        *INSTALL,
+        "langfuse-web-1 u-overlays langfuse-web 536870912 300MiB u-overlays_default",
+    )
+    ran = apply(
+        tmp_path,
+        planned=render(plan((LANGFUSE,), host), host),
+        prepare_exit=1,
+        containers=running,
+    )
+
+    assert ran.code == 1
+    assert not [one for one in ran.calls if one.startswith("compose")]
+
+
+@pytestmark_sh
+def test_what_docker_says_of_the_overlays_is_handed_to_the_application_to_keep(
+    tmp_path: Path,
+) -> None:
+    """After the wait, each overlay container's service, limit, state and health goes to `observe`,
+    in the format `read_seen` reads. Delete this and the ledger's checks never have a report to
+    read, and are not run on every release."""
+    running = (*INSTALL, "presidio-1 u-overlays presidio-analyzer 1610612736 1.1GiB u-overlays_pii")
+    ran = apply(tmp_path, planned=_planned(PRESIDIO.cost_mib), containers=running)
+
+    assert ran.code == 0, ran.output
+    assert read_seen(ran.observed.splitlines()) == (
+        Seen("presidio-analyzer", 1536, "running", "healthy"),
+    )
+    assert "overlays: kept what the stub saw" in ran.output
+
+
+# ------------------------------------------------------------------ the ledger's preparation
+PREPARE_STUB = r"""#!/bin/sh
+S="$STUB_STATE"
+echo "$*" >> "$S/calls"
+case "$1" in
+  ps) [ -s "$S/db" ] && cat "$S/db"; exit 0 ;;
+  inspect) echo "u"; echo "u_default"; exit 0 ;;
+  exec)
+    case "$*" in
+      *POSTGRES_USER*) echo brain; exit 0 ;;
+      *POSTGRES_DB*) echo brain; exit 0 ;;
+      *psql*) cat >> "$S/sql"; exit 0 ;;
+    esac ;;
+esac
+exit 0
+"""
+
+SECRETS = {
+    "LANGFUSE_POSTGRES_PASSWORD": 64,
+    "LANGFUSE_CLICKHOUSE_PASSWORD": 64,
+    "LANGFUSE_S3_ACCESS_KEY_ID": 32,
+    "LANGFUSE_S3_SECRET_ACCESS_KEY": 64,
+    "LANGFUSE_NEXTAUTH_SECRET": 64,
+    "LANGFUSE_SALT": 64,
+    # Langfuse refuses an encryption key that is not 64 hexadecimal characters.
+    "LANGFUSE_ENCRYPTION_KEY": 64,
+}
+
+
+@dataclass
+class Prepared:
+    code: int
+    output: str
+    env: dict[str, str]
+    calls: list[str]
+    sql: str
+    settings: Path
+
+
+def prepare(tmp_path: Path, *, db: bool = True) -> Prepared:
+    """Run the real `langfuse.prepare.sh` from a copy of the step with the image's settings beside
+    it, against a stub docker whose database records the SQL it was handed."""
+    state = tmp_path / "state"
+    bin_dir = tmp_path / "bin"
+    step = tmp_path / "step"
+    settings = tmp_path / "settings"
+    for one in (state, bin_dir):
+        one.mkdir(exist_ok=True)
+    if not step.exists():
+        shutil.copytree(SCRIPT.parent, step)
+        for mounted in ("langfuse/clickhouse-memory.xml", "seaweedfs/provision.sh"):
+            (step / "settings" / mounted).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(REPO / "ops" / mounted, step / "settings" / mounted)
+    fake = bin_dir / "docker"
+    fake.write_text(PREPARE_STUB, encoding="utf-8", newline="\n")
+    fake.chmod(0o755)
+    (state / "db").write_text("db-u\n" if db else "", encoding="utf-8", newline="\n")
+    (state / "calls").write_text("", encoding="utf-8", newline="\n")
+    (state / "sql").write_text("", encoding="utf-8", newline="\n")
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
+        "STUB_STATE": state.as_posix(),
+        "BRAIN_OVERLAYS_SETTINGS": settings.as_posix(),
+        "BRAIN_OVERLAYS_ENV": (settings / "overlays.env").as_posix(),
+        "BRAIN_APP_PROJECT": "u",
+    }
+    assert SH is not None
+    done = subprocess.run(
+        [SH, (step / "langfuse.prepare.sh").as_posix()],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    kept = settings / "overlays.env"
+    return Prepared(
+        code=done.returncode,
+        output=done.stdout + done.stderr,
+        env=dict(
+            line.split("=", 1)
+            for line in (kept.read_text(encoding="utf-8").splitlines() if kept.exists() else [])
+        ),
+        calls=(state / "calls").read_text(encoding="utf-8").splitlines(),
+        sql=(state / "sql").read_text(encoding="utf-8"),
+        settings=settings,
+    )
+
+
+@pytestmark_sh
+def test_the_ledger_s_secrets_are_minted_on_the_server_once_and_kept_where_only_root_reads(
+    tmp_path: Path,
+) -> None:
+    """Every secret the ledger's compose file interpolates is minted, at the length its consumer
+    needs, into a file of mode 0600 in a directory of mode 0700, and a second deploy changes none
+    of them. Delete this and a redeploy rotates the database password under a running ledger, or
+    a secret lands somewhere another user on the server can read."""
+    import json
+    import stat
+
+    first = prepare(tmp_path)
+    assert first.code == 0, first.output
+    for name, length in SECRETS.items():
+        assert re.fullmatch(f"[0-9a-f]{{{length}}}", first.env[name]), name
+    assert first.env["LANGFUSE_PUBLIC_URL"] == "http://langfuse-web:3000"
+    assert first.env["BRAIN_APP_NETWORK"] == "u"
+    assert stat.S_IMODE((first.settings / "overlays.env").stat().st_mode) == 0o600
+    assert stat.S_IMODE(first.settings.stat().st_mode) == 0o700
+
+    access = json.loads((first.settings / "seaweedfs" / "s3.json").read_text(encoding="utf-8"))
+    [identity] = access["identities"]
+    assert identity["credentials"] == [
+        {
+            "accessKey": first.env["LANGFUSE_S3_ACCESS_KEY_ID"],
+            "secretKey": first.env["LANGFUSE_S3_SECRET_ACCESS_KEY"],
+        }
+    ]
+    assert sorted(identity["actions"]) == [
+        "List:langfuse-events",
+        "Read:langfuse-events",
+        "Write:langfuse-events",
+    ]
+
+    second = prepare(tmp_path)
+    assert second.code == 0, second.output
+    assert second.env == first.env
+    kept = (first.settings / "overlays.env").read_text(encoding="utf-8")
+    assert kept.count("BRAIN_APP_NETWORK=") == 1
+
+
+@pytestmark_sh
+def test_the_ledger_s_database_and_role_are_made_with_the_password_on_standard_input_only(
+    tmp_path: Path,
+) -> None:
+    """The role is created or has its password set, and the database is created once, by SQL
+    handed to psql on standard input, so the password is never an argument another process on the
+    server can list. Delete this and the password appears in `ps`, or the role keeps a password the
+    environment file no longer holds."""
+    ran = prepare(tmp_path)
+
+    assert ran.code == 0, ran.output
+    password = ran.env["LANGFUSE_POSTGRES_PASSWORD"]
+    assert f"PASSWORD '{password}'" in ran.sql
+    assert "ALTER ROLE langfuse WITH LOGIN PASSWORD" in ran.sql
+    assert "CREATE DATABASE langfuse OWNER langfuse" in ran.sql
+    assert "\\gexec" in ran.sql
+    assert not [one for one in ran.calls if password in one]
+    assert not [
+        one for one in ran.calls for value in ran.env.values() if len(value) == 64 and value in one
+    ]
+
+
+@pytestmark_sh
+def test_the_settings_files_the_ledger_mounts_are_put_in_place_and_never_overwritten(
+    tmp_path: Path,
+) -> None:
+    """Copied from the image when missing, left alone when an install has tuned them. Delete this
+    and either the column store starts with no memory ceiling of its own, or a deploy undoes an
+    administrator's tuning."""
+    first = prepare(tmp_path)
+    assert first.code == 0, first.output
+    tuned = first.settings / "langfuse" / "clickhouse-memory.xml"
+    assert tuned.read_bytes() == (REPO / "ops" / "langfuse" / "clickhouse-memory.xml").read_bytes()
+    assert (first.settings / "seaweedfs" / "provision.sh").exists()
+
+    tuned.write_text("<clickhouse><!-- tuned --></clickhouse>\n", encoding="utf-8")
+    prepare(tmp_path)
+    assert "tuned" in tuned.read_text(encoding="utf-8")
+
+
+@pytestmark_sh
+def test_a_server_with_no_database_for_the_ledger_refuses_to_prepare_it(tmp_path: Path) -> None:
+    """No running `db` in the application's project is a ledger with nowhere to keep its records,
+    and the preparation says so and exits non-zero, which leaves the ledger out of this deploy.
+    Delete this and the ledger starts and fails its migrations in a loop."""
+    ran = prepare(tmp_path, db=False)
+
+    assert ran.code == 1
+    assert "no running db service in u" in ran.output
+    assert ran.sql == ""

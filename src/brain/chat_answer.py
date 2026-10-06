@@ -65,7 +65,14 @@ from fastapi import Request
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.api_routes import Answering, Question, answered_for, field_policies, wiring_of
+from brain.api_routes import (
+    Answering,
+    Halted,
+    Question,
+    answered_for,
+    field_policies,
+    wiring_of,
+)
 from brain.attribution import trace_of_request
 from brain.channels.adapter import (
     BOT_ID,
@@ -394,6 +401,8 @@ class ChatAnswerer:
             decision = outcome.decision
             told = refusal_sentence(decision.binding, decision.retry_after_seconds)
             return ChatReply(told, ChannelPayload(), Classification.INTERNAL, False)
+        if isinstance(outcome, Halted):
+            return ChatReply(outcome.told, ChannelPayload(), Classification.INTERNAL, False)
         payload = outcome.composed.payload if outcome.composed is not None else ChannelPayload()
         text = chat_text(outcome)
         if payload.label and payload.label not in text:
