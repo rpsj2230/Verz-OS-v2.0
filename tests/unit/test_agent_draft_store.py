@@ -12,7 +12,7 @@ every ledger entry as an `AuditEntry`, and the chain verifies. A row naming some
 session is refused, and nothing can be changed or removed. **It skips without a server**, which is
 CI's to provide.
 
-Task ids: M27.11.6, M27.15.29, M27.15.31
+Task ids: M27.11.6, M27.15.29, M27.15.31, M20.1.3
 """
 
 from __future__ import annotations
@@ -139,8 +139,13 @@ def through_0149(database: str) -> Iterator[str]:
         yield url
 
 
-def pressed[T](url: str, presses: Callable[[httpx.AsyncClient], Awaitable[T]]) -> T:
-    """The application's own routes over this database as the application role."""
+def pressed[T](
+    url: str, presses: Callable[[httpx.AsyncClient], Awaitable[T]], *, coauthor: Any = None
+) -> T:
+    """The application's own routes over this database as the application role.
+
+    `coauthor` is the executor the co-author's routes call, a script in a test; none is the
+    process with no model."""
 
     async def go() -> T:
         built = app_engine(url)
@@ -151,6 +156,7 @@ def pressed[T](url: str, presses: Callable[[httpx.AsyncClient], Awaitable[T]]) -
             app.state.console_reads = None
             app.state.template_key = KEY
             app.state.tools = tools("ledger")
+            app.state.coauthor_calls = coauthor
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
                 return await presses(client)
@@ -417,4 +423,74 @@ def test_a_publish_sent_back_is_one_row_and_one_entry_and_makes_no_agent() -> No
         ) == [("u_prefix",)]
         last = publishes(url, f"agent:{agent_id}")[-1]
         assert (last.details["change"], last.actor_id) == ("declined", "u_prefix")
+        assert AuditChain(entries(url)).verify() is None
+
+
+def test_the_changes_a_co_author_proposed_are_taken_as_one_revision_and_asking_wrote_nothing() -> (
+    None
+):
+    """Asking the co-author writes no row and no entry; taking one of its changes writes exactly
+    one more revision, whose body holds the new persona, and one `saved` entry naming the author,
+    like a typed save; the model is asked once. **Skips without a server.**
+
+    Delete this and either coauthor route can stop reaching the table or the ledger while the route
+    tests over memory stay green."""
+    import json
+
+    from brain.agent_coauthor_routes import SUGGEST_PATH, TAKE_PATH
+    from tests.unit.test_agent_coauthor_routes import Scripted, persona_change, reply, taking
+
+    with through_0149("brain_agent_draft_coauthor") as url:
+        model = Scripted(reply(persona_change("Answer in one short sentence.")))
+
+        async def build(client: httpx.AsyncClient) -> tuple[str, str, int, int]:
+            draft = (await post(client, "u_admin", DRAFTS_PATH)).json()
+            draft_id = draft["draft_id"]
+            saved = await post(
+                client,
+                "u_admin",
+                SAVE_PATH.format(draft_id=draft_id),
+                {"document": a_document(), "base": draft["revision"]},
+            )
+            revision = saved.json()["revision"]
+            proposed = await post(
+                client,
+                "u_admin",
+                SUGGEST_PATH.format(draft_id=draft_id),
+                {"revision": revision, "ask": "make it shorter"},
+            )
+            assert proposed.status_code == 200, proposed.text
+            before = sql(
+                url,
+                "SELECT count(*) FROM agent.manifest_revision WHERE draft_id = %s",
+                uuid.UUID(draft_id),
+            )[0][0]
+            took = await post(
+                client,
+                "u_admin",
+                TAKE_PATH.format(draft_id=draft_id),
+                taking(proposed.json(), "persona"),
+            )
+            assert took.status_code == 200, took.text
+            return draft_id, draft["agent_id"], before, took.json()["revision"]
+
+        draft_id, agent_id, before, taken_as = pressed(url, build, coauthor=model)
+
+        assert before == 2 and taken_as == 3
+        [(body,)] = sql(
+            url,
+            "SELECT body FROM agent.manifest_revision WHERE draft_id = %s AND number = 3",
+            uuid.UUID(draft_id),
+        )
+        assert (body if isinstance(body, dict) else json.loads(body))["persona"] == (
+            "Answer in one short sentence."
+        )
+        steps = publishes(url, f"agent:{agent_id}")
+        assert [(one.details["change"], one.actor_id) for one in steps] == [
+            ("drafted", "u_admin"),
+            ("saved", "u_admin"),
+            ("saved", "u_admin"),
+            ("saved", "u_admin"),
+        ]
+        assert len(model.asked) == 1
         assert AuditChain(entries(url)).verify() is None
