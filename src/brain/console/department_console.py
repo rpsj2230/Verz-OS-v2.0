@@ -368,7 +368,15 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                     Page(label="Memory", to="/memory", key="memory"),
                 ),
             ),
-            _one("Fields and records", "/classification"),
+            # Part 2.2's D4 module holds `er.*` and "review merges", so the pairs waiting for a
+            # person to say whether two records are one are a tab of it rather than an entry.
+            Entry(
+                label="Fields and records",
+                pages=(
+                    Page(label="Fields", to="/classification"),
+                    Page(label="Possible duplicates", to="/duplicates"),
+                ),
+            ),
             _one("Artifacts", "/artifacts", "artifacts"),
         ),
     ),

@@ -34,6 +34,7 @@ def test_the_accounts_checks_are_listed_in_their_page_order() -> None:
         "the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own",
         MAIL,
         "the_staff_list_puts_every_active_person_on_people",
+        "people_moved_on_people_are_recorded_and_read_by_the_sync",
     ]
 
 

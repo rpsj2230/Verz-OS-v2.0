@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4
 """
 
 from __future__ import annotations
@@ -221,6 +221,7 @@ from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
+from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
 from brain.ops.halt_store import Work, read_state, refusal_in
@@ -1376,20 +1377,35 @@ def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:15], 16)
 
 
+#: Why the answer key carries the epoch of every source its reader reaches.
+AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES: Final = (
+    "The cache is looked up before the question is answered, so which sources the answer will "
+    "read is not known yet; what is known is every source the reader reaches, and the answer can "
+    "read no other. So the key carries each of those sources' epochs, a source with none as zero. "
+    "A change "
+    "to any source the reader reaches makes the next lookup a miss, which is at worst a question "
+    "answered again when an unrelated source moved, and never an answer served after a source it "
+    "read moved."
+)
+
+
 def caching_of(
     state: Any,
     policies: Mapping[str, FieldPolicy],
     sources: Sequence[str],
-    epochs: Mapping[str, int] | None = None,
+    epochs: Mapping[str, int],
+    table_epochs: Mapping[str, int] | None = None,
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
     `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
-    uncacheable rather than a cached answer stale. `epochs` are the uploaded tables' versions
-    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`); no connector
-    source records one yet, so for those the answer's age bounds staleness.
+    uncacheable rather than a cached answer stale, and each carries its epoch from `epochs`
+    (M11.8.4): see `AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES`. `table_epochs` carries
+    the uploaded tables' versions
+    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`), so a new upload
+    moves the key as a connector's change does.
     """
     store: AnswerStore | None = getattr(state, "answer_store", None)
     if store is None:
@@ -1397,9 +1413,31 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        source_epochs=dict(epochs or {}),
+        source_epochs={
+            **{name: epochs.get(name, 0) for name in sorted(set(sources))},
+            **(table_epochs or {}),
+        },
         sources=frozenset(sources),
     )
+
+
+async def source_epochs_of(state: Any) -> Mapping[str, int]:
+    """Every source's epoch, for the answer cache's key, or none where nothing is cached.
+
+    Read only on a process with an answer store, because the epochs have no other reader on this
+    path, and from the database the worker advances them in
+    (`brain.tables.projection.SourceEpochRow`). A process with a store and no database has no
+    source that changes, so it keys on none.
+    """
+    if getattr(state, "answer_store", None) is None:
+        return {}
+    epochs: SourceEpochs | None = getattr(state, "source_epochs", None)
+    if epochs is None:
+        sessions = getattr(state, "db_sessions", None)
+        if sessions is None:
+            return {}
+        epochs = StoredSourceEpochs(sessions)
+    return await epochs.epochs()
 
 
 def sensitive_referrals_of(request: Request) -> SensitiveReferrals | None:
@@ -1733,6 +1771,7 @@ async def answered_for(
             request.app.state,
             policies,
             sources_at(registry, asking.reach, asking.now),
+            await source_epochs_of(request.app.state),
             tables.epochs,
         )
     )

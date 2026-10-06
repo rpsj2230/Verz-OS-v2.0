@@ -181,6 +181,7 @@ from brain.connectors.manifest import (
     ToolDeclaration,
 )
 from brain.connectors.projection import ProjectedRecord, ProjectedValue, RefreshPromise
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import ID_TARGET, RestOperation, RestSpec, load_spec
 from brain.connectors.throttle import CallOutcome, ceiling_for, classify, retry_delay
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord
@@ -193,6 +194,7 @@ from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import ConnectorLimit, LimitDecision
 from brain.ops.secrets import SecretRef
+from brain.resolution.canonical import EntityType
 from brain.tools.fetch import Fetcher, Resolver
 
 # ------------------------------------------------------------------ written-down reasons
@@ -1690,5 +1692,14 @@ CONNECTOR: Final = ConnectorDeclaration(
     scopes=KeyScopes(
         request=("accounting.transactions.read", "accounting.contacts.read"),
         refuse=("any .write scope",),
+    ),
+    resolves=(
+        # An accounting contact is the client billed, and it carries the invoices.
+        ResolvesAs(
+            entity=ENTITY_CONTACT,
+            entity_type=EntityType.COMPANY,
+            fields={"name": "name"},
+            carries_money=True,
+        ),
     ),
 )

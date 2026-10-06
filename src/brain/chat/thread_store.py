@@ -44,7 +44,7 @@ See `SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS`.
 wrong and the answer's references, and `corrections` hands the learning signal one observation per
 note. See `A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.channels.adapter import ChannelCapabilities
+from brain.chat.attachments import ATTACHED, attached_reference
 from brain.chat.threads import Thread, ThreadMessage, as_turns, refs_as_json, refs_from_json
 from brain.chat.turns import Correction, CorrectionKind, RecordRef, record_correction
 from brain.core.field_policy import Classification
@@ -266,6 +267,45 @@ class StoredThreads:
                 return opened
         msg = "a fresh thread id was already taken, which a random UUID does not do"
         raise RuntimeError(msg)
+
+    async def attach(
+        self, principal_id: str, *, thread_id: str | None, attachment_id: str, now: datetime
+    ) -> str:
+        """Attach one document to this person's named thread, or to a new one (M12.3.6).
+
+        The id the attachment was written under, which is the one to continue with, for
+        `AN_ID_THAT_IS_NOT_YOURS_STARTS_A_NEW_THREAD`'s reason. A document already attached to the
+        thread is not attached a second time. The note names no file and holds the document as its
+        one reference: see `brain.chat.attachments`.
+        """
+        wanted = parsed_thread_id(thread_id)
+        async with self._sessions() as session, session.begin():
+            await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
+            held = await self._own(session, wanted)
+            if held is None:
+                held = await self._opened(session, principal_id, wanted, ATTACHED)
+            already = await session.execute(
+                sa.select(MessageRow.id)
+                .where(
+                    MessageRow.conversation_id == held,
+                    MessageRow.role == MessageRole.SYSTEM.value,
+                    MessageRow.body == ATTACHED,
+                    MessageRow.refs.contains(attached_reference(attachment_id)),
+                )
+                .limit(1)
+            )
+            if already.scalar_one_or_none() is None:
+                await session.execute(
+                    sa.insert(MessageRow).values(
+                        conversation_id=held,
+                        role=MessageRole.SYSTEM.value,
+                        channel=Channel.CONSOLE.value,
+                        body=ATTACHED,
+                        refs=attached_reference(attachment_id),
+                        created_at=now,
+                    )
+                )
+        return str(held)
 
     async def correct(
         self, principal_id: str, thread_id: str, kind: CorrectionKind, *, now: datetime
