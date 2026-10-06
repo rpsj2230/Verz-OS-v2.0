@@ -23,6 +23,7 @@ from brain.agents.attachments import (
     attached_tools,
     connectors_after_attach,
     connectors_after_detach,
+    connectors_after_publish,
     narrowed,
     opened_by,
     to_attach,
@@ -248,3 +249,16 @@ def test_a_connector_is_the_agents_own_list_and_opens_only_what_its_attacher_rea
     with pytest.raises(AttachmentError) as unnamed:
         connectors_after_detach(CONNECTOR, record=BOUND)
     assert str(unnamed.value) == NOT_ATTACHED
+
+
+def test_a_publish_applies_the_drafts_own_change_to_the_list_as_it_stands() -> None:
+    """**`A_PUBLISH_CHANGES_ONLY_THE_CONNECTORS_ITS_DRAFT_CHANGED`**, as a function of three lists.
+    A connector bound on the page while the draft was open stays; one unbound on the page while it
+    was open stays unbound even though the draft still names it; one the author took out goes;
+    one the author added arrives once. Delete this and a publish re-binds a source somebody
+    unbound a minute before it, or binds one twice."""
+    assert connectors_after_publish(("a", "late"), ("a",), ("a",)) == ("a", "late")
+    assert connectors_after_publish((), ("a",), ("a",)) == ()
+    assert connectors_after_publish(("a", "b"), ("a", "b"), ("b",)) == ("b",)
+    assert connectors_after_publish(("a",), ("a",), ("a", "new")) == ("a", "new")
+    assert connectors_after_publish(("a", "new"), ("a",), ("a", "new")) == ("a", "new")

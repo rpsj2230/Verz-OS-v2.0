@@ -64,6 +64,15 @@ AN_ATTACH_IS_CHECKED_AGAINST_THE_CEILING_AND_THE_PERSON: Final = (
     "could not reach themselves."
 )
 
+A_PUBLISH_CHANGES_ONLY_THE_CONNECTORS_ITS_DRAFT_CHANGED: Final = (
+    "An edit draft starts from the connectors the agent names now, and a publish applies the "
+    "draft's own change to the list as it stands when it is published. A connector bound on the "
+    "agent's page is therefore kept by a publish whose author never touched it, including one "
+    "bound while the draft was open, and only a connector the author took out of the draft is "
+    "unbound. Writing the draft's list over the agent's would unbind every page-bound connector "
+    "on every publish, silently to the author, who never saw it go."
+)
+
 A_CONNECTOR_IS_THE_AGENTS_OWN_LIST_AND_NOTHING_ELSE: Final = (
     "A connector attached to an agent is a name in the agent's own connectors column, which "
     "bound_capabilities compiles into its ceiling. There is no second record of it: a press on "
@@ -229,3 +238,19 @@ def connectors_after_detach(connector: str, *, record: AgentRecord) -> tuple[str
     if connector not in named:
         raise AttachmentError(NOT_ATTACHED)
     return tuple(one for one in named if one != connector)
+
+
+def connectors_after_publish(
+    current: Sequence[str], started: Sequence[str], drafted: Sequence[str]
+) -> tuple[str, ...]:
+    """The agent's connector list once an edit is published: the draft's own change, from the list
+    it started with to the one it ends with, applied to the list as it stands now.
+
+    So a publish takes away only what its author took out of the draft, and keeps a connector
+    bound on the page before the draft started or while it was open. See
+    `A_PUBLISH_CHANGES_ONLY_THE_CONNECTORS_ITS_DRAFT_CHANGED`.
+    """
+    removed = set(started) - set(drafted)
+    kept = [one for one in current if one not in removed]
+    added = [one for one in drafted if one not in started and one not in kept]
+    return (*kept, *added)
