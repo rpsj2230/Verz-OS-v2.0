@@ -100,6 +100,10 @@ from brain.artifact_routes import router as artifact_router
 # `brain.audit_routes`.
 from brain.audit_routes import router as audit_router
 
+# The Audit screen's refusal and redaction statistics, behind the same read and refusal, counted
+# over other people's entries in the reader's own view. See `brain.audit_statistics_routes`.
+from brain.audit_statistics_routes import router as audit_statistics_router
+
 # The automation gallery on an agent's Automations tab, and its one confirmed install. Its own
 # router because the write is: an `admin:` authority asked before the agent is read, a
 # confirmation recomputed on the server, and a row whose trigger writes the ledger entry.

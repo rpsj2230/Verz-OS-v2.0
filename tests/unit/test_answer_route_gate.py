@@ -26,6 +26,7 @@ from brain.core.scope import Scope
 from brain.gate.answer_cache import AGE_MARKER
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.finish import Finished
+from brain.gate.roster import StoredAgents
 from brain.gate.select import SelectionStage
 from brain.gate.streaming import STEP_LABELS, Progress
 from brain.knowledge.visibility import Visibility
@@ -104,9 +105,11 @@ def an_agent(
     )
 
 
-def roster_of(*records: AgentRecord) -> object:
-    async def read() -> Sequence[AgentRecord]:
-        return records
+def roster_of(*records: AgentRecord, hashes: dict[str, str] | None = None) -> object:
+    """A roster read; `hashes` is read at each question, so a test can change an install."""
+
+    async def read() -> StoredAgents:
+        return StoredAgents(records=records, install_hashes=hashes or {})
 
     return read
 
@@ -471,4 +474,29 @@ def test_an_answer_through_one_agent_is_not_served_through_another(
     installed(client, answer_store=Memory(), agent_roster=roster_of(an_agent("helper")))
     ask(client, agent=agent)
     ask(client, agent="helper" if not agent else "")
+    assert len(transport.sent) == 2
+
+
+def test_an_answer_cached_through_one_install_is_not_served_after_the_install_changes(
+    client: TestClient, transport: Scripted
+) -> None:
+    """The install's stored hash is in the cache key: with it unchanged the second asking is
+    served from the cache, and once a leash, a skill or a connector has moved it the same words
+    are computed again. The record the agent is read from does not change between the two.
+
+    Delete this and `/answer` keys the cache on the stored agent record alone, which holds no
+    leash and no skills, so an answer cached through yesterday's install is served through
+    today's.
+
+    Task ids: M13.2.5
+    """
+    hashes = {"helper": "a" * 64}
+    installed(
+        client, answer_store=Memory(), agent_roster=roster_of(an_agent("helper"), hashes=hashes)
+    )
+    ask(client, agent="helper")
+    ask(client, agent="helper")
+    assert len(transport.sent) == 1
+    hashes["helper"] = "b" * 64
+    ask(client, agent="helper")
     assert len(transport.sent) == 2

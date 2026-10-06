@@ -10,7 +10,10 @@
 #
 #   sh e2e/app-memory.sh start           begin sampling anon every five seconds
 #   sh e2e/app-memory.sh snapshot LABEL  the cgroup's anon and file, and each process's own
-#   sh e2e/app-memory.sh report          every sample taken so far
+#   sh e2e/app-memory.sh report          every sample taken so far, and the largest
+#
+# SERVICE names another compose service than `app` (the identity provider, say), whose samples
+# are kept in a file of their own. INTERVAL sets the seconds between samples (five by default).
 #
 # Reads only: the container's cgroup files on the runner and /proc inside the container.
 #
@@ -18,9 +21,10 @@
 
 set -eu
 
-SAMPLES="${RUNNER_TEMP:-/tmp}/app-anon.txt"
+SERVICE="${SERVICE:-app}"
+SAMPLES="${RUNNER_TEMP:-/tmp}/${SERVICE}-anon.txt"
 
-app=$(docker compose ps -q app)
+app=$(docker compose ps -q "$SERVICE")
 stat="/sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' "$app").scope/memory.stat"
 
 anon() {
@@ -30,13 +34,13 @@ anon() {
 case "${1:-}" in
   start)
     # Detached from the step that starts it, so it outlives that step's shell.
-    nohup sh "$0" sample > "$SAMPLES" 2>&1 &
+    SERVICE="$SERVICE" INTERVAL="${INTERVAL:-5}" nohup sh "$0" sample > "$SAMPLES" 2>&1 &
     echo "sampling the application's anon memory every 5 s from $(date +%s)"
     ;;
   sample)
     while :; do
       printf '%s %s\n' "$(date +%s)" "$(anon)"
-      sleep 5
+      sleep "${INTERVAL:-5}"
     done
     ;;
   snapshot)
@@ -58,8 +62,9 @@ for p in sorted(pathlib.Path("/proc").glob("[0-9]*"), key=lambda x: int(x.name))
 '
     ;;
   report)
-    echo "--- samples (unix seconds, anon bytes)"
+    echo "--- $SERVICE samples (unix seconds, anon bytes)"
     cat "$SAMPLES" 2>/dev/null || echo "no samples were taken"
+    echo "--- $SERVICE largest anon: $(awk '$2 > max { max = $2 } END { print max + 0 }' "$SAMPLES" 2>/dev/null) bytes"
     ;;
   *)
     echo "usage: sh e2e/app-memory.sh start | snapshot LABEL | report" >&2

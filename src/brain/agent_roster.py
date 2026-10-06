@@ -14,14 +14,11 @@ Task ids: M39.8.6
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.agent_routes import every_agent, record_of
+from brain.agent_routes import read_stored_agents
 from brain.agents.attachments import narrowed
-from brain.agents.model import AgentRecord
-from brain.gate.roster import AgentRoster
+from brain.gate.roster import AgentRoster, StoredAgents
 from brain.ops.attachment_store import changes_in
 
 
@@ -38,11 +35,13 @@ def agent_roster_for(
         return None
     factory = sessions
 
-    async def read() -> Sequence[AgentRecord]:
+    async def read() -> StoredAgents:
         async with factory() as session:
-            rows = (await session.execute(every_agent())).scalars().all()
-            records = [one for one in (record_of(row) for row in rows) if one is not None]
-            changes = await changes_in(session, (one.agent_id for one in records))
-        return [narrowed(one, changes) for one in records]
+            stored = await read_stored_agents(session)
+            changes = await changes_in(session, (one.agent_id for one in stored.records))
+        return StoredAgents(
+            records=[narrowed(one, changes) for one in stored.records],
+            install_hashes=stored.install_hashes,
+        )
 
     return read

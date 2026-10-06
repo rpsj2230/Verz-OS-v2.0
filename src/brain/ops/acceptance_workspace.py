@@ -2091,14 +2091,15 @@ async def an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them(h: Har
 
     async def carried() -> frozenset[str]:
         """What a run of the agent is handed now, as the answer route builds it."""
-        found = {one.agent_id: one for one in await roster()}.get(agent_id)
+        stored = await roster()
+        found = {one.agent_id: one for one in stored.records}.get(agent_id)
         if found is None:
             raise CheckFailedError("the check's agent was not in the answer route's roster")
-        return setup_of(found, names).ceiling.allowed_tools
+        return setup_of(found, names, stored.install_hashes.get(agent_id)).ceiling.allowed_tools
 
     async def reads_the_source() -> bool:
         """Whether a run's ceiling, as the answer route builds it, holds the connector's read."""
-        found = {one.agent_id: one for one in await roster()}.get(agent_id)
+        found = {one.agent_id: one for one in (await roster()).records}.get(agent_id)
         if found is None:
             raise CheckFailedError("the check's agent was not in the answer route's roster")
         return entitlement_ceiling(found).holds(Capability(value=sourced))

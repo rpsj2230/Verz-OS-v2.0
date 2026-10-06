@@ -35,6 +35,7 @@ from brain.ops import (
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_operations_console,
+    acceptance_people_console_2,
     acceptance_run,
 )
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
@@ -642,6 +643,7 @@ WRITTEN_BY_CHECKS = (
     "agent.action_verdict",
     "agent.supervision_pin",
     "agent.tool_attachment",
+    "ops.data_export",
 )
 
 
@@ -804,6 +806,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (
         NOT_RUN,
         acceptance_operations_console.NOTHING_HAS_FURNISHED_THIS_DATABASE,
+    )
+    # Nobody here has opened a console session with a second factor, so the realm's half is not
+    # run; `tests/unit/test_acceptance_people_console_2.py` records one and it passes.
+    assert outcomes.pop("a_second_factor_reported_by_the_realm_admits_administration") == (
+        NOT_RUN,
+        acceptance_people_console_2.NOBODY_HAS_SIGNED_IN_WITH_AN_AUTHENTICATOR,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before

@@ -6,23 +6,28 @@ Task ids: M33.4.1.2, M33.4.1.3
 from __future__ import annotations
 
 import inspect
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
-from brain.audit.view import AuditRow, AuditView
+from brain.audit.view import MAX_PAGE_SIZE, AuditRow, AuditView
 from brain.console.auditor import (
     A_COUNT_OF_REFUSALS_BY_NAME_IS_A_MAP_OF_WHAT_EXISTS,
+    A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM,
     NOTHING_COUNTS_WHAT_THE_READER_MAY_NOT_SEE,
     PERMISSION_ACTIONS,
+    RefusalStatistic,
     permission_history,
     redaction_statistics,
     refusal_statistics,
+    shapes_told,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
-from brain.ops.denial_alerts import ALERT_TEXT
+from brain.ops.denial_alerts import ALERT_TEXT, DenialPattern
+from brain.ops.denial_digest_run import patterns_from
 from brain.ops.limits import DenialShape
 
 NOW = datetime(2027, 4, 1, 10, 0, tzinfo=UTC)
@@ -186,6 +191,43 @@ def test_a_history_cannot_be_asked_for_without_naming_a_subject() -> None:
 
 # --- refusal and redaction statistics (M33.4.1.3) ---------------------------------------------
 
+#: The capability every denial below was refused, as `gate.record_denial` writes it.
+REFUSED = "read:client.name"
+
+
+def denied(
+    person: str, thing: str, capability: str = REFUSED
+) -> tuple[AuditAction, str, str, dict[str, str]]:
+    """A `deny` entry as the gate writes one: the person refused is the actor, the thing they
+    reached for is the subject, and the capability and the reason are the details."""
+    return (AuditAction.DENY, thing, person, {"capability": capability, "reason": "no_grant"})
+
+
+def assessed(*runs: tuple[str, int, int]) -> tuple[DenialPattern, ...]:
+    """Patterns built the way the digest builds them, from the grouped counts of the ledger:
+    person, refusals and different things reached for, all against `REFUSED`."""
+    return patterns_from(
+        [(person, REFUSED, refusals, targets) for person, refusals, targets in runs]
+    )
+
+
+def counted(
+    entries: tuple[AuditEntry, ...],
+    holder: EntitlementSet,
+    *,
+    shapes: Mapping[tuple[str, str], DenialShape],
+    limit: int = MAX_PAGE_SIZE,
+) -> tuple[RefusalStatistic, ...]:
+    """`refusal_statistics` over this holder's own view, told whose view it is."""
+    return refusal_statistics(
+        a_view(entries, holder), shapes=shapes, reader_id=holder.principal_id, limit=limit
+    )
+
+
+#: An auditor of entities who also holds the refused capability company-wide, so
+#: `denial_alerts.reach` admits them to every pattern below.
+TOLD = reader("read:audit.entity", REFUSED)
+
 
 def test_refusals_are_counted_by_shape_and_never_by_what_was_refused() -> None:
     """**M33.4.1.3 and the decision it turns on.** A refusal statistic broken down by
@@ -204,14 +246,13 @@ def test_refusals_are_counted_by_shape_and_never_by_what_was_refused() -> None:
     from brain.console.auditor import RefusalStatistic
 
     entries = a_chain(
-        (AuditAction.DENY, "principal:u_1", "u_1", {"reason_code": "no_grant"}),
-        (AuditAction.DENY, "principal:u_1", "u_1", {"reason_code": "no_grant"}),
-        (AuditAction.DENY, "principal:u_2", "u_2", {"reason_code": "no_grant"}),
+        denied("u_1", "entity:client_1"),
+        denied("u_1", "entity:client_2"),
+        denied("u_2", "entity:client_3"),
     )
-    shapes = {"u_1": DenialShape.ENUMERATION, "u_2": DenialShape.ACCESS_NEEDED}
-    view = a_view(entries, reader("read:audit.principal"))
+    shapes = shapes_told(assessed(("u_1", 9, 6), ("u_2", 9, 1)), TOLD, now=NOW)
 
-    found = refusal_statistics(view, shapes=shapes)
+    found = counted(entries, TOLD, shapes=shapes)
 
     assert {one.shape: one.occurrences for one in found} == {
         DenialShape.ACCESS_NEEDED: 1,
@@ -222,6 +263,48 @@ def test_refusals_are_counted_by_shape_and_never_by_what_was_refused() -> None:
     carried = set(RefusalStatistic.__dataclass_fields__)
     assert carried == {"shape", "occurrences", "reads_as"}
     assert not carried & {"capability", "object", "subject_id", "target"}
+
+
+def test_a_shape_is_matched_to_a_denial_by_the_person_refused_and_the_capability() -> None:
+    """**The defect this was rewritten for.** A `deny` entry's actor is the person refused and
+    its subject the thing reached for, and the digest assesses per person and capability. Until
+    2026-10-06 the statistic looked the shape up by the entry's subject, so no entry the gate
+    writes ever matched one and the page was empty on every install, while the tests, whose
+    entries named their own actor as their subject, passed. The patterns here come from the
+    digest's own `patterns_from`, so the producer is the real one.
+
+    Also the capability half: the same person refused a second capability that was not
+    assessed is not counted under the first one's shape.
+
+    Delete this and the lookup can go back to the subject with every test green."""
+    entries = a_chain(
+        denied("u_1", "entity:client_1"),
+        denied("u_1", "entity:client_2", capability="read:client.address"),
+    )
+    shapes = shapes_told(assessed(("u_1", 9, 6)), TOLD, now=NOW)
+
+    assert set(shapes) == {("u_1", REFUSED)}
+    found = counted(entries, TOLD, shapes=shapes)
+    assert [(one.shape, one.occurrences) for one in found] == [(DenialShape.ENUMERATION, 1)]
+
+
+def test_a_shape_is_told_only_to_a_reader_the_alert_would_reach() -> None:
+    """The assessment counts denials the reader may not see, so "enumeration" says somebody
+    reached for at least five different things. `denial_alerts.reach` decides who may hear
+    that, and a reader who does not hold the refused capability company-wide is not told the
+    shape even of denials they may read. The sibling holds it and is.
+
+    Delete this and the statistics page says more about a pattern than its alert would."""
+    entries = a_chain(denied("u_1", "entity:client_1"))
+    patterns = assessed(("u_1", 9, 6))
+    auditor_only = reader("read:audit.entity")
+
+    assert shapes_told(patterns, auditor_only, now=NOW) == {}
+    assert counted(entries, auditor_only, shapes=shapes_told(patterns, auditor_only, now=NOW)) == ()
+    assert [
+        one.occurrences
+        for one in counted(entries, TOLD, shapes=shapes_told(patterns, TOLD, now=NOW))
+    ] == [1]
 
 
 def test_a_refusal_this_reader_cannot_see_contributes_nothing_and_says_nothing() -> None:
@@ -236,19 +319,35 @@ def test_a_refusal_this_reader_cannot_see_contributes_nothing_and_says_nothing()
     Delete this and a residual line appears, which is the hidden count wearing the word
     'other'."""
     entries = a_chain(
-        (AuditAction.DENY, "principal:u_1", "u_1", {"reason_code": "no_grant"}),
-        (AuditAction.DENY, "agent:a_1", "u_2", {"reason_code": "no_grant"}),
+        denied("u_1", "entity:client_1"),
+        denied("u_1", "agent:a_1"),
     )
-    shapes = {"u_1": DenialShape.ENUMERATION, "a_1": DenialShape.ENUMERATION}
+    shapes = shapes_told(assessed(("u_1", 9, 6)), TOLD, now=NOW)
 
-    partial = refusal_statistics(a_view(entries, reader("read:audit.principal")), shapes=shapes)
-    whole = refusal_statistics(
-        a_view(entries, reader("read:audit.principal", "read:audit.agent")), shapes=shapes
+    partial = counted(entries, TOLD, shapes=shapes)
+    whole = counted(
+        entries, reader("read:audit.entity", "read:audit.agent", REFUSED), shapes=shapes
     )
 
     assert [one.occurrences for one in partial] == [1]
     assert [one.occurrences for one in whole] == [2]
     assert len(partial) == len(whole) == 1
+
+
+def test_every_page_of_the_view_is_counted_and_not_only_the_first() -> None:
+    """The statistic reads the view a page at a time until it ends, so it counts the window the
+    caller loaded. With a page of one and three denials, all three are counted. Delete this and
+    the count stops at the first page, which reads as a quiet week."""
+    entries = a_chain(
+        denied("u_1", "entity:client_1"),
+        denied("u_1", "entity:client_2"),
+        denied("u_1", "entity:client_3"),
+    )
+    shapes = shapes_told(assessed(("u_1", 9, 6)), TOLD, now=NOW)
+
+    found = counted(entries, TOLD, shapes=shapes, limit=1)
+
+    assert [one.occurrences for one in found] == [3]
 
 
 def test_a_shape_nobody_produced_is_absent_rather_than_reported_at_zero() -> None:
@@ -261,12 +360,13 @@ def test_a_shape_nobody_produced_is_absent_rather_than_reported_at_zero() -> Non
 
     Delete this and the page becomes a checklist of the ways people are refused."""
     entries = a_chain(
-        (AuditAction.DENY, "principal:u_1", "u_1", {"reason_code": "no_grant"}),
-        (AuditAction.DENY, "principal:u_3", "u_3", {"reason_code": "no_grant"}),
+        denied("u_1", "entity:client_1"),
+        denied("u_3", "entity:client_2"),
     )
-    found = refusal_statistics(
-        a_view(entries, reader("read:audit.principal")),
-        shapes={"u_1": DenialShape.ENUMERATION, "u_3": DenialShape.ORDINARY},
+    found = counted(
+        entries,
+        TOLD,
+        shapes={("u_1", REFUSED): DenialShape.ENUMERATION, ("u_3", REFUSED): DenialShape.ORDINARY},
     )
 
     assert [one.shape for one in found] == [DenialShape.ENUMERATION]
@@ -290,15 +390,31 @@ def test_a_denial_nobody_assessed_is_not_given_a_shape_here() -> None:
     Delete this and this module starts classifying denials, which is a second implementation
     of the one thing `denial_alerts` exists to decide."""
     entries = a_chain(
-        (AuditAction.DENY, "principal:u_1", "u_1", {"reason_code": "no_grant"}),
-        (AuditAction.DENY, "principal:u_9", "u_9", {"reason_code": "no_grant"}),
+        denied("u_1", "entity:client_1"),
+        denied("u_9", "entity:client_2"),
     )
-    found = refusal_statistics(
-        a_view(entries, reader("read:audit.principal")),
-        shapes={"u_1": DenialShape.ENUMERATION},
+    found = counted(
+        entries,
+        TOLD,
+        shapes={("u_1", REFUSED): DenialShape.ENUMERATION},
     )
 
     assert [(one.shape, one.occurrences) for one in found] == [(DenialShape.ENUMERATION, 1)]
+
+
+def a_redacted_row(actor: str, subject_kind: str, subject_id: str) -> AuditRow:
+    """An entry carrying two redacted details, as a person reads it."""
+    return AuditRow(
+        at=NOW,
+        action=AuditAction.GRANT,
+        actor_id=actor,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        # Two redacted fields on one entry, which is what separates a count of entries
+        # from a count of fields. With one, the two implementations agree and a mutation
+        # from the first to the second survives.
+        details={"capability": "<redacted>", "scope": "<redacted>"},
+    )
 
 
 def test_a_redaction_statistic_is_a_number_and_never_a_field_name() -> None:
@@ -313,17 +429,7 @@ def test_a_redaction_statistic_is_a_number_and_never_a_field_name() -> None:
     Delete this and the auditor's page publishes which fields are being withheld and how
     often."""
     rows = (
-        AuditRow(
-            at=NOW,
-            action=AuditAction.GRANT,
-            actor_id="u_admin",
-            subject_kind="principal",
-            subject_id="u_1",
-            # Two redacted fields on one entry, which is what separates a count of entries
-            # from a count of fields. With one, the two implementations agree and a mutation
-            # from the first to the second survives.
-            details={"capability": "<redacted>", "scope": "<redacted>"},
-        ),
+        a_redacted_row("u_admin", "principal", "u_1"),
         AuditRow(
             at=NOW,
             action=AuditAction.GRANT,
@@ -334,8 +440,43 @@ def test_a_redaction_statistic_is_a_number_and_never_a_field_name() -> None:
         ),
     )
 
-    assert redaction_statistics(rows) == 1
+    assert redaction_statistics(rows, reader_id="u_auditor") == 1
     assert inspect.signature(redaction_statistics).return_annotation in {"int", int}
+
+
+def test_a_reader_is_never_counted_the_refusals_or_redactions_on_their_own_entries() -> None:
+    """**The hidden-count rule, about the one person it must never be about.** An entry the
+    reader made and an entry about the reader are in their view because they are theirs, and a
+    count of the redactions or refusals on them tells the reader how much was kept from them.
+    So `u_auditor`, who reads the whole ledger, is counted none of their own denials, none of
+    the redactions on their own requests and none of those on entries about them.
+
+    The sibling is a second auditor reading the same ledger, for whom those entries are other
+    people's: they are counted, so the narrowing is about whose entries they are and not about
+    what they are. Delete this and an auditor's statistics page tells them how often they were
+    refused and how much of their own record was withheld."""
+    everything = reader("read:audit.*", REFUSED)
+    other = EntitlementSet(principal_id="u_other_auditor", grants=everything.grants)
+    entries = a_chain(
+        denied("u_auditor", "entity:client_1"),
+        denied("u_auditor", "entity:client_2"),
+        denied("u_1", "entity:client_3"),
+    )
+    patterns = assessed(("u_auditor", 9, 6), ("u_1", 9, 6))
+    own_rows = (
+        a_redacted_row("u_auditor", "entity", "client_1"),
+        a_redacted_row("u_admin", "principal", "u_auditor"),
+    )
+    others_rows = (a_redacted_row("u_admin", "principal", "u_2"),)
+
+    mine = counted(entries, everything, shapes=shapes_told(patterns, everything, now=NOW))
+    theirs = counted(entries, other, shapes=shapes_told(patterns, other, now=NOW))
+
+    assert [one.occurrences for one in mine] == [1]
+    assert [one.occurrences for one in theirs] == [3]
+    assert redaction_statistics((*own_rows, *others_rows), reader_id="u_auditor") == 1
+    assert redaction_statistics((*own_rows, *others_rows), reader_id="u_other_auditor") == 3
+    assert "withheld from them" in A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM
 
 
 def test_both_named_reasons_say_what_they_are_for() -> None:
