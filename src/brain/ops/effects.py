@@ -362,6 +362,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.knowledge.document_tools:RecordStore.get": Repeat.READS,
         "brain.knowledge.document_tools:RecordStore.set": Repeat.DERIVED_STATE,
         "brain.gate.compose:TraceSink.emit": Repeat.DERIVED_STATE,
+        # Which client each record a name matched is, read from the registry (M14.6.5).
+        "brain.gate.fast_lane:AmbiguityReader.current_entities": Repeat.READS,
+        "brain.gate.fast_lane:AmbiguityReader.open_review": Repeat.READS,
         # A mark typed in a chat, written by the console's own store (M16.6.4).
         "brain.channels.marks:AnswerMarks.mark": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.gate.finish:RequestRecorder.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

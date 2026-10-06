@@ -56,7 +56,7 @@ from brain.tables.projection import ProjectedRecordRow
 CHECK_ORDER: Final = 434
 
 HUBSPOT: Final = ("hubspot", "hubspot_company")
-XERO: Final = ("xero", "contact")
+XERO: Final = ("xero", "xero_contact")
 LARAVEL: Final = ("laravel", "laravel_client")
 #: The check-only company source that keeps a registration number. See the module docstring.
 REGISTERED: Final = ("hubspot", "acceptance_registered_company")

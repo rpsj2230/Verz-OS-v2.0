@@ -190,7 +190,7 @@ jobs:
           files=$(uv run python -m brain.ops.test_shards --shard ${{ matrix.shard }} --of ${{ strategy.job-total }})
           [ -n "$files" ] || { echo "::error::shard ${{ matrix.shard }} has no test files"; exit 1; }
           echo "shard ${{ matrix.shard }} of ${{ strategy.job-total }}: $(echo "$files" | wc -l) file(s)"
-          uv run pytest --cov --cov-report= --cov-fail-under=0 $files
+          uv run pytest --cov --cov-report= --cov-fail-under=0 --junitxml="$GITHUB_WORKSPACE/junit/shard-${{ matrix.shard }}.xml" $files
 
       - name: Migrations go forward, back, and forward again
         # A migration that cannot be reversed is a deploy with no way home. This runs the
@@ -230,6 +230,55 @@ jobs:
           # upload is refused and the re-run goes red for a reason that is not a test.
           overwrite: true
           retention-days: 7
+
+      - name: Keep this shard's test report for the selection shadow
+        # Whatever the tests did: a red shard's report is the one the shadow most needs.
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-shard-${{ matrix.shard }}
+          path: ${{ github.workspace }}/junit
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 7
+
+  # What an import-graph selection of the suite would have run, and whether it would have missed a
+  # failure the full shards found. It decides nothing: every shard above runs every file, this
+  # never fails the run, and its record is kept a month so a week of them is the evidence for or
+  # against switching the selection on. See brain.ops.test_selection.
+  selection_shadow:
+    name: Test selection shadow (decides nothing)
+    runs-on: ubuntu-latest
+    needs: [changes, tests]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: junit-shard-*
+          path: junit
+          merge-multiple: true
+      - name: What the selection would have run, and what it would have missed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          uv run python -m brain.ops.test_selection --base "$BASE" --head "$GITHUB_SHA" \
+            --junit junit --record "evidence/test-selection-${{ github.sha }}.json" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Keep the record, named for the commit
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-selection-shadow-${{ github.sha }}
+          path: evidence/test-selection-${{ github.sha }}.json
+          if-no-files-found: error
+          retention-days: 30
 
   # The Laravel executor against a real MySQL 8 server (M11.6.1): the one read this product makes of
   # a company's own database, run where a database exists rather than only over a recorded driver.

@@ -32,6 +32,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from brain.agents.binding import provider_of
 from brain.agents.model import (
     AUDIENCE_IS_NOT_AUTHORITY,
     AgentAudience,
@@ -185,7 +186,14 @@ def authority(
         capabilities=tuple(Capability(value=one) for one in capabilities),
         allowed_tools=tools,
         max_side_effect=effect,
+        connectors=sources_of(capabilities),
     )
+
+
+def sources_of(capabilities: tuple[str, ...]) -> tuple[str, ...]:
+    """The connectors providing these capabilities' entities, which an agent holding them names."""
+    named = (provider_of(Capability(value=one).noun) for one in capabilities)
+    return tuple(sorted({one for one in named if one is not None}))
 
 
 def record(
