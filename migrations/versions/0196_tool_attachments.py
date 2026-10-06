@@ -17,8 +17,9 @@ compiles into the agent's ceiling; a press on one writes that column. A row here
 would be a second store of the same fact, so `part` admits `tool` alone.
 
 **A connector moved on the agent row reaches the ledger through the agent row's own trigger.**
-`0137`'s `agent.record_agent_change` recorded the lifecycle and the audience and, by its own words,
-nothing that edits the ceiling. It is replaced here with one more movement: on an update that
+`agent.record_agent_change` as `0190` leaves it (`0137`'s, with the channels branch) records the
+lifecycle, the audience and the channels and, by `0137`'s own words, nothing that edits the
+ceiling. It is replaced here with one more movement: on an update that
 changes `connectors`, one `compose_change` entry per connector added or taken away, in the same
 shape a tool press writes, with the part `connector`. Whoever writes the column is recorded, the
 console's press and a builder publish and a statement at a prompt alike, which is the reason `0054`
@@ -28,7 +29,14 @@ statement nobody explained is still recorded and says so. Rejected: a second tri
 for the column, which `0105` did for the steward, because the change is to what the agent may
 reach and the agent's own trigger is where a reader of the ledger's `agent` subjects looks.
 
-**The downgrade restores `0137`'s function exactly** (`AS_SHIPPED_BEFORE`, held equal to it by
+**The function is `0190`'s, built the way `0190` builds it, and changed in two places**: the
+connectors' two declarations before the body and their branch before it returns. It is not a copy:
+`0190` reads `0137`'s text and adds its branch, and this reads `0190` and adds its own, so neither
+the channels branch nor anything `0137` argues can be lost between the two. Rejected: copying the
+eighty lines of PL/pgSQL, which is what this migration did when `0137` was the last definition, and
+which would have undone `0190`'s channels branch on any install applying both.
+
+**The downgrade restores `0190`'s function exactly** (`AS_SHIPPED_BEFORE`, held equal to it by
 `tests/unit/test_attachment_store.py`) and drops the table, its function and its trigger. The ledger
 entries stay.
 
@@ -39,6 +47,10 @@ Task ids: M39.8.6, M39.2.1.2, M39.1.1.3
 """
 
 from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+from types import ModuleType
 
 import sqlalchemy as sa
 from alembic import op
@@ -164,98 +176,30 @@ $$
 """
 )
 
-#: `0137`'s `agent.record_agent_change` as it shipped, which the downgrade puts back. Copied for the
-#: reason `0033` gives, and held equal to `0137`'s by `tests/unit/test_attachment_store.py`.
-AS_SHIPPED_BEFORE = """CREATE OR REPLACE FUNCTION agent.record_agent_change() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE
-    v_subject text := 'agent:' || NEW.id;
-    v_supplied text := NULLIF(current_setting('brain.actor_id', true), '');
-    v_actor text;
-    v_inferred boolean := false;
-    v_changes text[] := ARRAY[]::text[];
-    v_details jsonb;
-    v_seq bigint;
-    v_prev text;
-    v_entry text;
-    v_at timestamptz := now();
-    v_ent_hash text;
-    v_trace text;
-    v_written integer;
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        v_changes := v_changes || 'created'::text;
-        v_actor := NEW.created_by;
-    ELSE
-        IF OLD.disabled_at IS NOT NULL AND NEW.disabled_at IS NULL THEN
-            v_changes := v_changes || 'enabled'::text;
-        END IF;
-        IF OLD.disabled_at IS NULL AND NEW.disabled_at IS NOT NULL THEN
-            v_changes := v_changes || 'disabled'::text;
-        END IF;
-        IF OLD.archived_at IS NULL AND NEW.archived_at IS NOT NULL THEN
-            v_changes := v_changes || 'archived'::text;
-        END IF;
-        IF OLD.archived_at IS NOT NULL AND NEW.archived_at IS NULL THEN
-            v_changes := v_changes || 'unarchived'::text;
-        END IF;
-        IF OLD.visibility IS DISTINCT FROM NEW.visibility
-           OR OLD.department IS DISTINCT FROM NEW.department THEN
-            IF NEW.visibility = 'company' THEN
-                v_changes := v_changes || 'published'::text;
-            ELSE
-                v_changes := v_changes || 'audience_changed'::text;
-            END IF;
-        END IF;
-        v_actor := COALESCE(v_supplied, session_user::text);
-        v_inferred := v_supplied IS NULL;
-    END IF;
 
-    FOR i IN 1 .. COALESCE(array_length(v_changes, 1), 0) LOOP
-        v_details := jsonb_build_object('change', v_changes[i]);
-        IF v_inferred THEN
-            v_details := v_details || jsonb_build_object('actor', 'inferred');
-        END IF;
-        PERFORM pg_advisory_xact_lock(8274419004);
-        SELECT COALESCE(max(e.seq) + 1, 0) INTO v_seq FROM obs.audit_entry e;
-        SELECT COALESCE(
-            (SELECT e.entry_hash FROM obs.audit_entry e ORDER BY e.seq DESC LIMIT 1),
-            repeat('0', 64)
-        ) INTO v_prev;
-        v_ent_hash := COALESCE(
-            NULLIF(current_setting('brain.ent_hash', true), ''), repeat('0', 32)
-        );
-        v_trace := COALESCE(
-            NULLIF(current_setting('brain.trace_id', true), ''),
-            'tx.' || pg_current_xact_id()::text
-        );
-        v_entry := obs.audit_entry_hash(
-            v_seq, v_at, v_actor, 'agent', v_subject, v_ent_hash,
-            v_trace, v_details, v_prev
-        );
+def _channels_audit() -> ModuleType:
+    """`0190`, read from beside this file, as `0190` reads `0137`."""
+    path = Path(__file__).with_name("0190_agent_channels_audited.py")
+    spec = importlib.util.spec_from_file_location("m0190_agent_channels_audited", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-        MERGE INTO obs.audit_entry AS t
-        USING (SELECT v_seq AS seq) AS s
-           ON t.seq = s.seq
-        WHEN NOT MATCHED THEN
-            INSERT (seq, at, actor_id, action, subject, ent_hash, trace_id,
-                    details, prev_hash, entry_hash)
-            VALUES (v_seq, v_at, v_actor, 'agent', v_subject,
-                    v_ent_hash, v_trace, v_details, v_prev, v_entry);
 
-        GET DIAGNOSTICS v_written = ROW_COUNT;
-        IF v_written <> 1 THEN
-            RAISE EXCEPTION USING
-                MESSAGE = 'the ledger already holds seq ' || v_seq
-                          || '; the audit entry was not appended',
-                ERRCODE = 'restrict_violation',
-                HINT = 'an append that is discarded silently is the failure this refuses';
-        END IF;
-    END LOOP;
-    RETURN NULL;
-END;
-$$
-"""
+def as_0190_leaves_it() -> str:
+    """`agent.record_agent_change` as `0190` leaves it: `0137`'s text with the channels branch.
+
+    Built the way `0190` builds it, from `0137`'s text through `0190`'s own `replaced`, rather than
+    copied, so the function this replaces and the one its downgrade puts back are `0190`'s by
+    construction and cannot drift from it.
+    """
+    channels = _channels_audit()
+    return str(channels.replaced(channels._lifecycle_audit().AGENT_TRIGGER_FUNCTION))
+
+
+#: The function as `0190` leaves it, which the downgrade puts back.
+AS_SHIPPED_BEFORE = as_0190_leaves_it()
 
 #: The setting a writer names its reason in, and the code a write that named none is recorded with.
 #: Held equal to `brain.ops.attachment_store` by `tests/unit/test_attachment_store.py`.
@@ -266,99 +210,16 @@ UNEXPLAINED = "agent_row_changed"
 #: `brain.audit.record.INFERRED_ACTOR` by `tests/unit/test_attachment_store.py`.
 INFERRED = "inferred"
 
-#: `0137`'s function with one movement more: a connector added to or taken from the agent's list is
-#: one `compose_change` entry each, in the shape a tool press writes.
-AGENT_TRIGGER_FUNCTION = (
-    """CREATE OR REPLACE FUNCTION agent.record_agent_change() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE
-    v_subject text := 'agent:' || NEW.id;
-    v_supplied text := NULLIF(current_setting('brain.actor_id', true), '');
-    v_actor text;
-    v_inferred boolean := false;
-    v_changes text[] := ARRAY[]::text[];
-    v_details jsonb;
-    v_seq bigint;
-    v_prev text;
-    v_entry text;
-    v_at timestamptz := now();
-    v_ent_hash text;
-    v_trace text;
-    v_written integer;
-    v_connector text;
+#: The declarations the connectors branch needs, added to the function's own.
+CONNECTOR_DECLARATIONS = """    v_connector text;
     v_direction text;
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        v_changes := v_changes || 'created'::text;
-        v_actor := NEW.created_by;
-    ELSE
-        IF OLD.disabled_at IS NOT NULL AND NEW.disabled_at IS NULL THEN
-            v_changes := v_changes || 'enabled'::text;
-        END IF;
-        IF OLD.disabled_at IS NULL AND NEW.disabled_at IS NOT NULL THEN
-            v_changes := v_changes || 'disabled'::text;
-        END IF;
-        IF OLD.archived_at IS NULL AND NEW.archived_at IS NOT NULL THEN
-            v_changes := v_changes || 'archived'::text;
-        END IF;
-        IF OLD.archived_at IS NOT NULL AND NEW.archived_at IS NULL THEN
-            v_changes := v_changes || 'unarchived'::text;
-        END IF;
-        IF OLD.visibility IS DISTINCT FROM NEW.visibility
-           OR OLD.department IS DISTINCT FROM NEW.department THEN
-            IF NEW.visibility = 'company' THEN
-                v_changes := v_changes || 'published'::text;
-            ELSE
-                v_changes := v_changes || 'audience_changed'::text;
-            END IF;
-        END IF;
-        v_actor := COALESCE(v_supplied, session_user::text);
-        v_inferred := v_supplied IS NULL;
-    END IF;
+"""
 
-    FOR i IN 1 .. COALESCE(array_length(v_changes, 1), 0) LOOP
-        v_details := jsonb_build_object('change', v_changes[i]);
-        IF v_inferred THEN
-            v_details := v_details || jsonb_build_object('actor', 'inferred');
-        END IF;
-        PERFORM pg_advisory_xact_lock(8274419004);
-        SELECT COALESCE(max(e.seq) + 1, 0) INTO v_seq FROM obs.audit_entry e;
-        SELECT COALESCE(
-            (SELECT e.entry_hash FROM obs.audit_entry e ORDER BY e.seq DESC LIMIT 1),
-            repeat('0', 64)
-        ) INTO v_prev;
-        v_ent_hash := COALESCE(
-            NULLIF(current_setting('brain.ent_hash', true), ''), repeat('0', 32)
-        );
-        v_trace := COALESCE(
-            NULLIF(current_setting('brain.trace_id', true), ''),
-            'tx.' || pg_current_xact_id()::text
-        );
-        v_entry := obs.audit_entry_hash(
-            v_seq, v_at, v_actor, 'agent', v_subject, v_ent_hash,
-            v_trace, v_details, v_prev
-        );
-
-        MERGE INTO obs.audit_entry AS t
-        USING (SELECT v_seq AS seq) AS s
-           ON t.seq = s.seq
-        WHEN NOT MATCHED THEN
-            INSERT (seq, at, actor_id, action, subject, ent_hash, trace_id,
-                    details, prev_hash, entry_hash)
-            VALUES (v_seq, v_at, v_actor, 'agent', v_subject,
-                    v_ent_hash, v_trace, v_details, v_prev, v_entry);
-
-        GET DIAGNOSTICS v_written = ROW_COUNT;
-        IF v_written <> 1 THEN
-            RAISE EXCEPTION USING
-                MESSAGE = 'the ledger already holds seq ' || v_seq
-                          || '; the audit entry was not appended',
-                ERRCODE = 'restrict_violation',
-                HINT = 'an append that is discarded silently is the failure this refuses';
-        END IF;
-    END LOOP;
-
-    IF TG_OP = 'UPDATE' AND OLD.connectors IS DISTINCT FROM NEW.connectors THEN
+#: One `compose_change` entry per connector added to or taken from the agent's list, in the shape a
+#: tool press writes. Placed after every entry the function already appends, so an update moving the
+#: lifecycle, the audience, the channels and the connectors writes them in that order.
+CONNECTOR_BRANCH = (
+    """    IF TG_OP = 'UPDATE' AND OLD.connectors IS DISTINCT FROM NEW.connectors THEN
         FOR v_connector, v_direction IN
             SELECT one, 'attached' FROM unnest(NEW.connectors) AS one
              WHERE NOT one = ANY(OLD.connectors)
@@ -415,14 +276,28 @@ BEGIN
             END IF;
         END LOOP;
     END IF;
-    RETURN NULL;
-END;
-$$
 """.replace("__REASON_SETTING__", REASON_SETTING)
     .replace("__UNEXPLAINED__", UNEXPLAINED)
     .replace("__INFERRED__", INFERRED)
 )
 
+#: Where each addition goes: the declarations before the body begins, the branch before it returns.
+BEGINS = "BEGIN\n"
+RETURNS = "    RETURN NULL;\nEND;"
+
+
+def with_connectors(function: str) -> str:
+    """`0190`'s function with the connectors branch, and nothing else changed."""
+    assert function.count(BEGINS) == 1, "0190's function no longer has one BEGIN to declare before"
+    assert function.count(RETURNS) == 1, "0190's function no longer has one RETURN to branch before"
+    return function.replace(BEGINS, CONNECTOR_DECLARATIONS + BEGINS, 1).replace(
+        RETURNS, CONNECTOR_BRANCH + RETURNS, 1
+    )
+
+
+#: `0190`'s function with one movement more: a connector added to or taken from the agent's list is
+#: one `compose_change` entry each.
+AGENT_TRIGGER_FUNCTION = with_connectors(AS_SHIPPED_BEFORE)
 
 ATTACHMENT_TRIGGER = """
     CREATE TRIGGER tool_attachment_is_audited

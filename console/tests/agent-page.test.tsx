@@ -21,7 +21,7 @@
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { CompositionDiff } from "../src/components/CompositionDiff";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
@@ -30,6 +30,8 @@ import { readAgentWorkspace, type AgentWorkspaceAnswer } from "../src/pages/agen
 import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { leashRowId, readHeaderFacts, readProfile } from "../src/pages/agents/agentDetailQuery";
 import { COMPUTER_HEADING, takenOverWords } from "../src/pages/agents/AgentProfile";
+import { ANSWERS_NOWHERE, CHANGE_CHANNELS, CHANNELS_DONE, CHANNELS_QUESTION, SAVE_CHANNELS } from "../src/pages/agents/AgentChannels";
+import { WHERE_IT_ANSWERS } from "../src/pages/agents/ChannelChoices";
 import { rungWords } from "../src/pages/agents/agentActions";
 import { VIEWS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
 import { agentStatsApiPath } from "../src/pages/agents/agentStats";
@@ -43,7 +45,13 @@ import {
   backendTabOrder,
   membersOf,
 } from "./support/agentWorkspace";
-import { apiDocument, declaredProperty, declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
+import {
+  apiDocument,
+  declaredProperty,
+  declaredPropertyNames,
+  declaredRequestBodySchema,
+  declaredResponseSchema,
+} from "./support/openapi";
 import { backendEnumMembers, backendModelFields, backendPublicMessages } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
@@ -518,10 +526,12 @@ describe("the Profile", () => {
     // `agentActions.ts`, and pressing any of them leaves the address and the requests as they were.
     const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
     const inert = [...mounted.container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)];
-    // Three since 2026-09-29: adding a source and changing permissions start a draft of the agent
-    // now, a preview as a person is asked of its own route, and a rung is changed in the leash
-    // block, so none of the four is among these.
-    expect(inert.length).toBeGreaterThanOrEqual(3);
+    // Four since 2026-09-29: adding a source and changing permissions start a draft of the agent
+    // now, and a preview as a person is asked of its own route, so none of the three is among these.
+    // Since 2026-10-06 choosing where the agent answers is the live card `where the agent answers`
+    // below holds, and a rung is changed in the leash block, so adding it to a group chat and
+    // changing who can find it are what is left.
+    expect(inert.length).toBeGreaterThanOrEqual(2);
     const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
       (one) => one.textContent === "Change permissions",
     );
@@ -890,5 +900,172 @@ describe("moving between agents and views", () => {
     await go(mounted, "/agents/quote-helper/settings");
     expect(currentView(mounted.container)).toBe("Profile");
     expect(workspaceRequests(mounted.idp)).toEqual(["/api/v1/agents/quote-helper/workspace"]);
+  });
+});
+
+// ------------------------------------------------------------------------ where it answers
+
+const CHANNELS_LIFECYCLE_API = "/api/v1/agents/quote-helper/lifecycle";
+const CHANNELS_API = "/api/v1/agents/quote-helper/channels";
+
+/** `LifecycleView` on the wire, for the steward of an agent answering on the console and Lark. */
+function lifecycleWire(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    agent_id: "quote-helper",
+    display_name: "Quote Helper",
+    state: "enabled",
+    owner_id: "p_steward_one",
+    effective_hash: "a".repeat(64),
+    may_change: false,
+    may_duplicate: false,
+    duplicate_unavailable: null,
+    channels: ["console", "lark"],
+    channel_choices: [
+      { name: "console", label: "Web console" },
+      { name: "lark", label: "Lark" },
+      { name: "whatsapp", label: "WhatsApp" },
+    ],
+    channels_note: "An agent with no channel ticked answers nowhere: nobody can ask it anything until one is.",
+    may_change_channels: true,
+    ...overrides,
+  };
+}
+
+function channelPosts(idp: FakeIdp): { readonly path: string; readonly body: unknown }[] {
+  return idp.calls
+    .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname === CHANNELS_API)
+    .map((call) => ({ path: new URL(call.url, CONSOLE_ORIGIN).pathname, body: JSON.parse(String(call.init?.body ?? "null")) }));
+}
+
+function channelsCard(container: HTMLElement): Element | null {
+  return (
+    [...container.querySelectorAll('[data-slot="section-card"]')].find(
+      (card) => card.querySelector("h2")?.textContent === WHERE_IT_ANSWERS,
+    ) ?? null
+  );
+}
+
+async function profileWith(lifecycle: Answer, extra: Readonly<Record<string, Answer>> = {}): Promise<Mounted> {
+  const mounted = await consoleAt(
+    "/agents/quote-helper/profile",
+    agentAnswers("quote-helper", body(), { [CHANNELS_LIFECYCLE_API]: lifecycle, ...extra }),
+  );
+  await waitFor(() => {
+    if (!mounted.idp.urls.some((url) => new URL(url, CONSOLE_ORIGIN).pathname === CHANNELS_LIFECYCLE_API)) {
+      throw new Error("the channels have not been asked for");
+    }
+  });
+  return mounted;
+}
+
+describe("where the agent answers", () => {
+  test("the steward sees the channels it answers on and switches them through a confirmation that sends what was drawn", async () => {
+    // What breaks if this is deleted: the one live control for M13.7.4's switch, so a steward has no
+    // way to make an agent answer on WhatsApp, or a switch sent without the channels the card drew,
+    // so the route's stale-page check compares against a guess. The positive case of every refusal
+    // below.
+    const mounted = await profileWith(
+      { body: lifecycleWire() },
+      { [CHANNELS_API]: { body: lifecycleWire({ channels: ["console", "whatsapp"] }) } },
+    );
+    const card = await waitFor(() => {
+      const found = channelsCard(mounted.container);
+      if (found === null) {
+        throw new Error("no card");
+      }
+      return found;
+    });
+    expect([...card.querySelectorAll('[data-slot="agent-channels"] > :not(svg)')].map((chip) => chip.textContent)).toEqual([
+      "Web console",
+      "Lark",
+    ]);
+
+    fireEvent.click(within(card as HTMLElement).getByRole("button", { name: CHANGE_CHANNELS }));
+    const dialog = await screen.findByRole("alertdialog", { name: CHANNELS_QUESTION("Quote Helper") });
+    const box = (label: string) => within(dialog).getByRole("checkbox", { name: label }) as HTMLInputElement;
+    expect([box("Web console").checked, box("Lark").checked, box("WhatsApp").checked]).toEqual([true, true, false]);
+    expect(channelPosts(mounted.idp)).toEqual([]);
+
+    fireEvent.click(box("Lark"));
+    fireEvent.click(box("WhatsApp"));
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: SAVE_CHANNELS }));
+    });
+    await screen.findByText(CHANNELS_DONE);
+    expect(channelPosts(mounted.idp)).toEqual([
+      { path: CHANNELS_API, body: { channels: ["console", "whatsapp"], expected: ["console", "lark"] } },
+    ]);
+  });
+
+  test("a reader the route says may not switch them sees where it answers and no control", async () => {
+    // What breaks if this is deleted: a button offered to an administrator of something else, whose
+    // press the route refuses as the one 404 after they agreed to it.
+    const mounted = await profileWith({ body: lifecycleWire({ may_change_channels: false }) });
+    const card = await waitFor(() => {
+      const found = channelsCard(mounted.container);
+      if (found === null) {
+        throw new Error("no card");
+      }
+      return found;
+    });
+    expect(card.textContent).toContain("Lark");
+    expect(within(card as HTMLElement).queryByRole("button", { name: CHANGE_CHANNELS })).toBeNull();
+  });
+
+  test("a reader the lifecycle route refuses is shown no card, not an empty one", async () => {
+    // What breaks if this is deleted: a heading over nothing for a member of the audience, which says
+    // there is something about this agent they may not see. DENIED and ABSENT are one answer.
+    const mounted = await profileWith({ status: 404, body: { message: "No such agent." } });
+    await waitFor(() => {
+      expect(mounted.container.querySelector('[data-slot="agent-profile"]')).not.toBeNull();
+    });
+    expect(channelsCard(mounted.container)).toBeNull();
+  });
+
+  test("an agent on no channel says nobody can ask it, rather than drawing an empty row", async () => {
+    // What breaks if this is deleted: a mute agent drawn as a card with nothing in it, which a steward
+    // reads as a page still loading rather than an agent nobody can reach.
+    const mounted = await profileWith({ body: lifecycleWire({ channels: [] }) });
+    await waitFor(() => {
+      expect(channelsCard(mounted.container)?.textContent).toContain(ANSWERS_NOWHERE);
+    });
+  });
+
+  test("a stale page is the route's own sentence, and nothing is said to have changed", async () => {
+    // What breaks if this is deleted: a 409 drawn as done, so a steward believes a channel is off
+    // that somebody else has just switched back on.
+    const sentence = "This agent changed after you opened it, so nothing was changed. Look again and choose.";
+    const mounted = await profileWith(
+      { body: lifecycleWire() },
+      { [CHANNELS_API]: { status: 409, body: { outcome: "moved", sentence } } },
+    );
+    const card = await waitFor(() => {
+      const found = channelsCard(mounted.container);
+      if (found === null) {
+        throw new Error("no card");
+      }
+      return found;
+    });
+    fireEvent.click(within(card as HTMLElement).getByRole("button", { name: CHANGE_CHANNELS }));
+    const dialog = await screen.findByRole("alertdialog", { name: CHANNELS_QUESTION("Quote Helper") });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: SAVE_CHANNELS }));
+    });
+    await screen.findByText(sentence);
+    expect(screen.queryByText(CHANNELS_DONE)).toBeNull();
+  });
+
+  test("the card reads and sends exactly the fields the API document declares", () => {
+    // What breaks if this is deleted: a field renamed on one side, read as absent on the other, so the
+    // card shows an agent on no channel and offers a steward no button.
+    const view = declaredResponseSchema("/api/v1/agents/{agent_id}/lifecycle", "get");
+    expect(declaredPropertyNames(view)).toEqual(Object.keys(lifecycleWire()).sort());
+    expect(declaredPropertyNames(declaredResponseSchema("/api/v1/agents/{agent_id}/channels", "post"))).toEqual(
+      declaredPropertyNames(view),
+    );
+    expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/agents/{agent_id}/channels", "post"))).toEqual([
+      "channels",
+      "expected",
+    ]);
   });
 });

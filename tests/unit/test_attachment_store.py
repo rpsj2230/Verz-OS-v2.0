@@ -1,4 +1,4 @@
-"""`0196`'s copies held to the product's, and the agent row's trigger held to `0137`'s.
+"""`0196`'s copies held to the product's, and the agent row's trigger held to `0190`'s.
 
 A migration copies the values it needs rather than importing live code, for the reason `0009`
 gives, so each copy is a second statement of something the product also states and the two can
@@ -28,6 +28,12 @@ def lifecycle() -> ModuleType:
     return migration_module(VERSIONS / "0137_agent_lifecycle_audit.py")
 
 
+def as_0190_left_it() -> str:
+    """The function `0190` installs, computed from `0190` and `0137` here rather than by `0196`."""
+    channels = migration_module(VERSIONS / "0190_agent_channels_audited.py")
+    return str(channels.replaced(lifecycle().AGENT_TRIGGER_FUNCTION))
+
+
 def test_the_migrations_widths_and_vocabularies_are_the_tables() -> None:
     """Every width and pattern `0196` builds the table with is the model's, and the one part a row
     may be on is the model's `TOOL_ROWS_ONLY`. Delete this and the model accepts a value the
@@ -54,30 +60,33 @@ def test_the_migrations_widths_and_vocabularies_are_the_tables() -> None:
     assert built.PARTS == attachment.TOOL_ROWS_ONLY == "part = 'tool'"
 
 
-def test_the_downgrade_restores_0137s_function_exactly() -> None:
-    """`AS_SHIPPED_BEFORE` is `0137`'s function as it shipped, made replaceable and nothing else.
-    Delete this and a downgrade leaves a function that is neither the old one nor the new one,
-    and the ledger's agent entries change shape with nobody having decided they should."""
-    shipped_before = lifecycle().AGENT_TRIGGER_FUNCTION.replace(
-        "CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1
-    )
-    assert migration().AS_SHIPPED_BEFORE.strip() == shipped_before.strip()
+def test_the_downgrade_restores_0190s_function_exactly() -> None:
+    """`AS_SHIPPED_BEFORE` is the function `0190` installs, computed here from `0190` and `0137` and
+    not from `0196`. Delete this and a downgrade leaves a function that is neither the old one nor
+    the new one, or `0137`'s without the channels branch, and channel switches stop reaching the
+    ledger with nobody having decided they should."""
+    assert migration().AS_SHIPPED_BEFORE.strip() == as_0190_left_it().strip()
+    assert "OLD.channels IS DISTINCT FROM NEW.channels" in migration().AS_SHIPPED_BEFORE
 
 
-def test_the_replaced_function_keeps_every_line_of_0137s_and_adds_the_connectors() -> None:
-    """Every line of `0137`'s function is in the replacement, in its order, so each lifecycle
-    movement it recorded is still recorded; the replacement adds a `compose_change` entry for a
-    connector moved and nothing for the persona. Delete this and the replacement can drop
-    `archived` or `published` from the ledger while the connector half works perfectly."""
-    before = [one for one in migration().AS_SHIPPED_BEFORE.strip().splitlines() if one.strip()]
+def test_the_replaced_function_keeps_every_line_of_0190s_and_adds_the_connectors() -> None:
+    """Every line of `0190`'s function is in the replacement, in its order, so each lifecycle
+    movement and the channels switch it recorded is still recorded; the replacement adds a
+    `compose_change` entry for a connector moved and nothing for the persona. Delete this and the
+    replacement can drop `archived`, `published` or `channels_changed` from the ledger while the
+    connector half works perfectly."""
+    before = [one for one in as_0190_left_it().strip().splitlines() if one.strip()]
     after = migration().AGENT_TRIGGER_FUNCTION.splitlines()
     place = 0
     for line in before[1:]:
         place = after.index(line, place) + 1
     body = migration().AGENT_TRIGGER_FUNCTION
+    assert "'channels_changed'" in body
     assert "OLD.connectors IS DISTINCT FROM NEW.connectors" in body
     assert body.count("'compose_change'") == 2
     assert "persona" not in body
+    # The connectors are appended after every entry the function already writes.
+    assert body.index("'channels_changed'") < body.index("OLD.connectors IS DISTINCT")
 
 
 def test_the_migrations_copies_are_the_products() -> None:
