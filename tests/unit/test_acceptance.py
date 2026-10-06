@@ -687,6 +687,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # The model pin's check plans its stand-ins only on a hosted install, and this one keeps text
+    # at home; `tests/unit/test_acceptance_skill_pins.py` runs it with the hosted profile.
+    assert (
+        outcomes.pop("an_agent_s_pinned_model_is_tried_first_with_its_level_behind")[0] == NOT_RUN
+    )
     # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
     assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
     assert (
@@ -707,6 +712,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for ledger_check in (
         "the_trace_ledger_runs_as_its_five_services",
         "every_trace_ledger_service_runs_under_its_budgeted_limit",
+        "a_run_sent_to_the_ledger_is_found_there_with_its_model_call",
     ):
         assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
     # No class pooler runs here; `tests/unit/test_class_pools.py` stands a limited login in for

@@ -105,13 +105,15 @@ OTHER_TENANT: Final = "99999999-8888-7777-6666-555555555555"
 #: Where the stand-in resolver says every name is.
 PUBLIC: Final = "93.184.216.34"
 
-#: The tables a sync reads and writes.
+#: The tables a sync reads and writes, and the halts it asks first: without `ops.halt` the halts
+#: cannot be read, which stops every source, as `brain.ops.halt_store` means it to.
 SYNC_TABLES: Final = (
     "ops.connector_connection",
     "ops.connector_sync",
     "proj.record",
     "proj.record_retired",
     "proj.source_epoch",
+    "ops.halt",
 )
 
 #: What connecting through `StoredConnections.connect` reads besides the connection: the data
@@ -568,6 +570,41 @@ def test_a_declined_key_is_down_at_once_and_an_unreachable_source_backs_off_and_
     waits = [one[5] - one[6] for one in runs]
     interval = xero.RECONCILIATION_INTERVAL
     assert waits == [interval, interval * 2, interval * 4]
+
+
+@pytest.mark.needs_db
+def test_a_stopped_source_is_neither_called_nor_recorded_and_is_read_once_resumed() -> None:
+    """**A connector halt, on the scheduled read.** While the source is stopped the run calls it
+    not once and records no attempt, and counts it as stopped; once the stop is resumed the next
+    run reads it. Delete this and a source an administrator stopped for leaking rows goes on
+    being read on schedule with the screen saying it is stopped."""
+
+    def act(kind: str, reason: str, at: datetime) -> None:
+        sql(
+            url,
+            "INSERT INTO ops.halt (act, scope, target, actor_id, actor_role, reason, at)"
+            " VALUES (%s, 'connector', 'xero', 'u_admin', 'install administrator', %s, %s)",
+            kind,
+            reason,
+            at,
+        )
+
+    with a_database("brain_connector_sync_halted") as url:
+        connect(url)
+        act("halt", "the source is returning other tenants", NOW - timedelta(minutes=5))
+        stopped = Replay([answer_for("XERO-200-invoices"), NO_CONTACTS])
+        held = sync(url, stopped)
+        recorded = attempts(url)
+        act("resume", "the vendor fixed the tenant filter", NOW - timedelta(minutes=1))
+        resumed = Replay([answer_for("XERO-200-invoices"), NO_CONTACTS])
+        ran = sync(url, resumed)
+
+    assert stopped.calls == []
+    assert recorded == []
+    assert (held.held, held.read) == (1, 0)
+    assert "1 stopped by a halt" in held.summary()
+    assert (ran.held, ran.read) == (0, 1)
+    assert len(resumed.calls) == 2
 
 
 @pytest.mark.needs_db
