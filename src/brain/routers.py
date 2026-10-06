@@ -157,6 +157,10 @@ from brain.cited_document_routes import router as cited_document_router
 # may see. The same `asking` dependency, imported rather than re-declared.
 from brain.classification_routes import router as classification_router
 
+# The Super Admin's company pages: everything in the install, all activity and what the company
+# spent, each narrowed by `brain.console.global_surfaces`. See `brain.company_routes`.
+from brain.company_routes import router as company_router
+
 # The Compliance screen: a sensitive topic's named person and the referrals routed to them, the
 # processing register per connector, and breach cases with the PDPA clock, behind
 # `admin:compliance` over everything. See `brain.compliance_routes`.
