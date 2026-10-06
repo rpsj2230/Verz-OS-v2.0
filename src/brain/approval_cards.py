@@ -139,7 +139,7 @@ from brain.channels.inbound import (
     reply_intent,
 )
 from brain.channels.outbound import Delivered, Outgoing
-from brain.chat_answer import People, ask_link, people_of
+from brain.chat_answer import People, console_link, people_of
 from brain.console.approvals import Card
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
@@ -151,7 +151,6 @@ from brain.gate.resolve import resolve
 from brain.install import value_of
 from brain.ops.channel_store import ChannelRecord
 from brain.ops.idempotency import Intent
-from brain.ops.lark_connect import ASK_PATH
 from brain.ops.limit_store import ValkeyWindowStore
 from brain.ops.limits import LimitDecision, LimiterState, check
 from brain.tables.channel import DeliveryOutcome
@@ -419,8 +418,7 @@ def approvals_link() -> str:
     From the same address the chat's link to Ask is made from, so the two cannot disagree about
     where this install is.
     """
-    ask = ask_link()
-    return f"{ask.removesuffix(ASK_PATH)}{APPROVALS_PATH}" if ask.endswith(ASK_PATH) else ""
+    return console_link(APPROVALS_PATH)
 
 
 def where_to_decide(link: str) -> str:
