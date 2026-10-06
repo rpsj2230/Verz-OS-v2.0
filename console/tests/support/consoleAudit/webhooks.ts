@@ -7,10 +7,16 @@
  * Task ids: none
  */
 
-import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../../src/pages/webhooksQuery";
+import { REGISTER_API_PATH, replayApiPath, secretApiPath, switchOffApiPath, switchOnApiPath } from "../../../src/pages/webhooksQuery";
 import { at, audited, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 const WEBHOOK_LEDGER = audited("test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author");
+
+const SWITCHED_ON_AND_REPLAYED = t(
+  "test_webhook_store",
+  "test_switched_back_on_and_a_given_up_delivery_replayed_once_reach_the_rows",
+  true,
+);
 
 const A_WEBHOOK_IS_DELIVERED = t(
   "test_webhook_delivery",
@@ -25,6 +31,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/webhooks/WebhookActs.tsx switchOffApiPath(subscriberId)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off", "switchOffApiPath", switchOffApiPath("billing_bridge")),
+  ],
+  "src/pages/webhooks/WebhookActs.tsx switchOnApiPath(subscriberId)": [
+    at("POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-on", "switchOnApiPath", switchOnApiPath("billing_bridge")),
+  ],
+  'src/pages/webhooks/WebhookActs.tsx replayApiPath(subscriberId, delivery.replay ?? "")': [
+    at(
+      "POST /api/v1/webhooks/subscribers/{subscriber_id}/deliveries/{handle}/replay",
+      "replayApiPath",
+      replayApiPath("billing_bridge", "0123456789abcdef0123456789abcdef"),
+    ),
   ],
 };
 
@@ -43,5 +59,15 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_webhook_routes", "test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused"),
     audit: WEBHOOK_LEDGER,
     behaviour: t("test_webhook_store", "test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out", true),
+  },
+  "POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-on": {
+    row: t("test_webhook_routes", "test_switching_back_on_records_who_did_it_and_a_subscriber_already_on_is_refused"),
+    audit: SWITCHED_ON_AND_REPLAYED,
+    behaviour: SWITCHED_ON_AND_REPLAYED,
+  },
+  "POST /api/v1/webhooks/subscribers/{subscriber_id}/deliveries/{handle}/replay": {
+    row: t("test_webhook_routes", "test_a_delivery_given_up_is_replayed_once_by_the_name_the_screen_was_given"),
+    audit: SWITCHED_ON_AND_REPLAYED,
+    behaviour: SWITCHED_ON_AND_REPLAYED,
   },
 };

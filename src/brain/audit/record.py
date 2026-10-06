@@ -1277,8 +1277,8 @@ class AuditRecorder:
         return self._write(AuditAction.INSTRUCTIONS, subject("agent", agent_id), details)
 
     def webhook(self, *, subscriber_id: str, change: WebhookChange) -> AuditEntry:
-        """Record that a webhook subscriber was registered, had its secret replaced, or was switched
-        off (M27.8.12).
+        """Record that a webhook subscriber was registered, had its secret replaced, was switched
+        off or back on, or had a delivery given up replayed (M27.8.12, M27.15.44).
 
         Written in a deployed database by `0059`'s trigger on `ops.webhook_change`, one entry per
         change row, and held to this method's details by a test. The subject is the subscriber and
