@@ -42,7 +42,7 @@ from brain.ops.acceptance_run import Harness
 if TYPE_CHECKING:
     from pydantic import JsonValue
 
-    from brain.agents.model import AgentRecord
+    from brain.agents.model import AgentAudience, AgentRecord
 
 #: Where this module's checks stand on the Install page: after every module that was there before
 #: it. See `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
@@ -114,8 +114,12 @@ async def installed_agent(
     allowed_tools: Sequence[str] = (),
     suffix: str = "",
     scope: Scope | None = None,
+    audience: AgentAudience | None = None,
 ) -> str:
     """An agent of acceptance_a installed from a template the check signs, with `overlay` set here.
+
+    Seen by acceptance_a unless `audience` names another level, which is how
+    `brain.ops.acceptance_checks_agents` makes one agent at each of the three.
 
     The three rows `brain.agents.install_store.finish` writes, from its own row builders, and the
     instance row field by field as `brain.ops.acceptance_checks_skills._an_agent` writes it.
@@ -165,7 +169,8 @@ async def installed_agent(
     effective = materialise(
         signed,
         instance,
-        audience=AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A),
+        audience=audience
+        or AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A),
     )
     await h.execute(
         *h.attributed(owner),
