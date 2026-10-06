@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T15:23:51.356452+00:00",
-  "commit": "698398db",
-  "commit_subject": "The routing matrix written from the console, what each channel carries, a channel bound from the console, and the console's fonts and licences get their proof (#366)",
+  "generated_at": "2026-10-06T16:00:24.215603+00:00",
+  "commit": "f90bd597",
+  "commit_subject": "A Super Admin opens the whole company: everything in the install, all its activity and what it spent, each narrowed by department and by person (#443)",
   "total": 1596,
   "done": 680,
   "percent": 42.6,
