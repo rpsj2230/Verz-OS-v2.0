@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 from sqlalchemy import insert
 
+from brain.core.envelope import SideEffect
 from brain.core.scope import Scope
 from brain.ops.acceptance import (
     RESERVED_DEPARTMENTS,
@@ -141,7 +142,9 @@ def _entities_by_source(registry: ToolRegistry) -> dict[str, list[str]]:
     """Every source the registry reads rows from, with the entities its tools read, by name."""
     found: dict[str, list[str]] = {}
     for one in sorted(registry.definitions(), key=lambda d: d.name):
-        if one.source and one.entity:
+        # A tool that reads only: a connector's write names its source and its record's entity too,
+        # and counting it would list the entity twice.
+        if one.source and one.entity and one.side_effect is SideEffect.NONE:
             found.setdefault(one.source, []).append(one.entity)
     return dict(sorted(found.items()))
 

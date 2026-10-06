@@ -1,7 +1,7 @@
 ### The audit trail: who changed what, and when
 
 - **Screens:** `/audit`, `/audit/verify`, `/audit/trace`, `/audit/trace/:traceId`, `/audit/subject/:kind/:id`, `/audit/subject/:kind/:id/:view`, `/requirement-checks`
-- **Tables:** `obs.audit_entry`, `ops.sensitive_read`, `ops.requirement_check`, `agent.browser_session`, `obs.trace_step`, `obs.trace_read`
+- **Tables:** `obs.audit_entry`, `obs.elevation_entry`, `ops.sensitive_read`, `ops.requirement_check`, `agent.browser_session`, `obs.trace_step`, `obs.trace_read`
 - **Installation values:** none
 - **Measured here:** 7 routes, 1 called by no screen; 3 write routes, 2 with all three proofs; 0 gaps.
 

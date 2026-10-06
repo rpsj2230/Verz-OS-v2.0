@@ -80,10 +80,24 @@ async def _nothing(harness: Harness) -> None:
 def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every run of the suite here imports from a GitHub that does not answer, so no test in this
     file reaches the network; `tests/unit/test_acceptance_skills.py` fakes one that does."""
-    from brain.ops import acceptance_checks_skills
+    from brain.ops import acceptance_checks_skills, acceptance_workspace
+    from brain.ops.artifact_store import ARTIFACT_BUCKET
+    from brain.ops.object_store import S3Backend, StoreCredential
+    from brain.ops.storage import Backend, config_for
+    from tests.fixtures.fake_s3 import FakeS3
     from tests.unit.test_acceptance_skills import unreachable
 
     monkeypatch.setattr(acceptance_checks_skills, "_transport", unreachable)
+    # The artifact check's object store: the real client over a fake bucket, because this file
+    # runs with no vault and the product builds its store from the vault.
+    key = StoreCredential(access_key_id="brain-test-access", secret_access_key="brain-test")
+    fake = FakeS3(credential=key).holding(ARTIFACT_BUCKET, {})
+    backend = S3Backend(
+        config_for(Backend.SEAWEEDFS, endpoint_url="http://objects.example.test:8333"),
+        key,
+        transport=fake.transport(),
+    )
+    monkeypatch.setattr(acceptance_workspace, "artifact_backend", lambda h: (backend, "brain"))
 
 
 # ------------------------------------------------------------------------ the registry
@@ -602,6 +616,8 @@ WRITTEN_BY_CHECKS = (
     "obs.trace_read",
     "mem.mark",
     "agent.learning_pause",
+    # The signal log's check writes signals in its rolled-back transaction (`0197`).
+    "mem.signal",
     "ops.operation",
     "ops.budget_version",
     "gate.role_grant",
@@ -620,6 +636,13 @@ WRITTEN_BY_CHECKS = (
     "ops.question_asked",
     "ops.question_gap",
     "ops.erasure_request",
+    "agent.artifact",
+    "agent.artifact_change",
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
+    "agent.tool_attachment",
     "ops.data_export",
 )
 

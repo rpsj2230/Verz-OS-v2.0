@@ -89,8 +89,10 @@ from brain.ops.erasure_store import drain_erasure_queue, session_keys_for
 from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
+from brain.ops.openbao import OpenBaoVault
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, AtTime, Owed, owed, schedulable, time_of_day
+from brain.ops.secrets import VaultRole
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
@@ -449,13 +451,27 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
     On the worker's own connection, which is the database owner's: `brain.ops.erasure_store` refuses
     a connection row-level security narrows, because a row a policy hides is a row the erasure
     would neither count nor retire. `prepare_threshold=None` for the reason `retention_sweep` gives.
+    The vault is the worker's own, read from this process's settings, and removes the refresh tokens
+    a person's own consents bought (`brain.ops.erasure_store.
+    ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`); a worker with none says so in the report.
     """
+    settings = settings_from(process_environment())
+    vault: OpenBaoVault | None = None
+    if settings.vault_address and settings.vault_token:
+        try:
+            vault = OpenBaoVault(
+                settings.vault_address, settings.vault_token, role=VaultRole.WORKER
+            )
+        except ValueError:
+            vault = None
     # The cache this process's settings name, for the person's session memory (M16.1.1); none
     # configured is none kept. See the erasure store's reason constant about session memory.
-    valkey_url = settings_from(process_environment()).valkey_url
+    valkey_url = settings.valkey_url
     sessions = session_keys_for(valkey_url) if valkey_url else None
     with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
-        return drain_erasure_queue(conn, now=now, report_only=report_only, sessions=sessions)
+        return drain_erasure_queue(
+            conn, now=now, report_only=report_only, own_tokens=vault, sessions=sessions
+        )
 
 
 def canary_run(now: datetime, report_only: bool, database_url: str) -> str:
@@ -761,6 +777,39 @@ def evening_digest(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why approved actions run nothing in report-only mode.
+AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING: Final = (
+    "Running an approved action changes a system somebody else owns, so a run asked to only "
+    "report runs none and says so; the approvals stay approved, inside their windows."
+)
+
+
+def approved_actions(now: datetime, report_only: bool, database_url: str) -> str:
+    """Run every approved action that is waiting, each once, and say what the runs came to.
+
+    `brain.ops.approved_runs.run_approved_now` is the literal call the registry reads, with the
+    worker's vault for a write's own key. Declines in report-only mode, see
+    `AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING`, and takes the worker's event loop for
+    the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no approved action was run. "
+            f"{AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING}"
+        )
+    from brain.ops.approved_runs import run_approved_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_approved_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    ).summary()
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -894,6 +943,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
     # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
     Runner(name="evening_digest", run=evening_digest, workload=WorkloadClass.BATCH),
+    # Wired on 2026-10-06 with `gate.approved_to_run` (`0201`). See `brain.ops.approved_runs`.
+    Runner(name="approved_actions", run=approved_actions, workload=WorkloadClass.BACKGROUND),
 )
 
 
@@ -960,6 +1011,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return side_effect_resume(now, report_only, database_url)
         case "evening_digest":
             return evening_digest(now, report_only, database_url)
+        case "approved_actions":
+            return approved_actions(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

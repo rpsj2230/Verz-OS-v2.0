@@ -13,15 +13,18 @@
  * agent on have routes and work (the skill on the Skills page, where an approved skill is chosen, and
  * the hand-over through the page's confirmed lifecycle act); adding a source and changing permissions
  * are changes to the agent's manifest, so each starts a draft of the agent through the page's
- * confirmed Edit as a draft. Choosing channels, changing who can find it, previewing as a person,
- * changing a rung and browser use have no route and are `UnavailableAction`s with `agentActions.ts`'
- * sentences. Computer use is a sentence, because the product has nothing behind a switch.
+ * confirmed Edit as a draft. Where the agent answers is its own card (`AgentChannels.tsx`), switched
+ * by its steward or an administrator through a confirmation. A rung is changed, and supervision
+ * pinned and reviewed, in the leash block (`AgentLeash.tsx`) for a holder of the leash role.
+ * Changing who can find it and browser use have no route and are `UnavailableAction`s with
+ * `agentActions.ts`' sentences. Computer use is a sentence, because the product has nothing behind a
+ * switch.
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
  * principal ids and the template's id are how the system names them; the cards show names and
  * words, and `kit/parts.tsx`' `Advanced` holds the rest for a support request.
  *
- * Task ids: M27.10.2, M5.7.3, M27.11.6
+ * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -48,6 +51,11 @@ import type { AgentCapabilities } from "./agentCapabilitiesQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
 import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
+import { AgentLeash } from "./AgentLeash";
+import { AgentTools } from "./AgentTools";
+import { AgentChannels } from "./AgentChannels";
+import { AgentGroups } from "./AgentGroups";
+import { WHERE_IT_ANSWERS } from "./ChannelChoices";
 import { LeashPill } from "./pills";
 
 export const CAPABILITIES_HEADING = "Capabilities";
@@ -224,8 +232,7 @@ function Capabilities({
         <CapabilityRow
           icon={<Radio aria-hidden />}
           label="Channels"
-          add={<UnavailableAction size="icon-sm" icon={<span aria-hidden>+</span>} label="Choose where this agent answers" reason={UNAVAILABLE.chatGroup.reason} />}
-          note={<Note>The chats and email that could carry this agent's answers to you, not the ones switched on.</Note>}
+          note={<Note>The chats and email that could carry this agent's answers to you. The ones switched on are under {WHERE_IT_ANSWERS}.</Note>}
         >
           {channels.map((one) => (
             <Chip key={one.channel} mono>
@@ -287,6 +294,10 @@ function Permissions({
         <Fact label="Actions">{ceiling.tools}</Fact>
         <Fact label="At most">{ceiling.largestEffect}</Fact>
       </FactList>
+      <div className="mt-3">
+        <h3 className="m-0 mb-1 text-[13px] font-medium text-ink">Tools it carries</h3>
+        <AgentTools agentId={agentId} />
+      </div>
     </SectionCard>
   );
 }
@@ -385,7 +396,6 @@ function ModelAndAutonomy({
       <div id={LEASH_ANCHOR} className="mt-3 scroll-mt-24">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[13px] font-medium text-ink">Approval setting, by action</span>
-          <UnavailableAction size="xs" text="Change" label="Change an approval setting" reason={UNAVAILABLE.leash.reason} />
         </div>
         {profile.leash.length === 0 ? (
           <Note>It takes no action, so there is nothing for a person to approve.</Note>
@@ -418,6 +428,9 @@ function ModelAndAutonomy({
         )}
         <div className="mt-2">
           <Note>{RUNGS_EXPLAINED}</Note>
+        </div>
+        <div className="mt-3">
+          <AgentLeash agentId={agentId} unnamed={profile.leash.filter((one) => one.acts && !one.configured).map((one) => one.target)} />
         </div>
       </div>
     </SectionCard>
@@ -531,6 +544,8 @@ export function AgentProfile({
             onDetailsChanged={onDetailsChanged}
             onEditDraft={onEditDraft}
           />
+          <AgentChannels agentId={agent.agentId} />
+          <AgentGroups agentId={agent.agentId} />
           {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
           <Availability facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
           <Learning />

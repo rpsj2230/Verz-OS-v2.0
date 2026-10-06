@@ -16,7 +16,7 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { SECTIONS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
+import { CONVERSATIONS_SECTION, CONVERSATIONS_TAB, SECTIONS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
 import { HEADLINE_LABEL, MESSAGES_LABEL } from "../src/pages/agents/AgentDashboard";
 import {
   BUDGET_FORMAT,
@@ -278,11 +278,29 @@ describe("the sections beside the views", () => {
     expect(link.getAttribute("href")).toBe(viewAddress(AGENT, "automations"));
   });
 
-  test("a reader whose strip holds no drawn section is offered no Sections menu at all", async () => {
-    // The sibling: a menu with nothing in it is a heading over a count of hidden things.
+  test("a reader whose strip holds no drawn section is offered their own conversations and no other section", async () => {
+    // The sibling: a section the strip did not list is a section this reader may not open, so the
+    // menu names none of them. Conversations is the one item it always holds, because a person's
+    // own threads with an agent need no grant (`brain.agent_conversation_routes`), which is also
+    // why the menu is never a heading over nothing. What breaks if this is deleted: a section the
+    // reader's strip withholds listed beside the views, or the reader's own conversations reachable
+    // only by typing an address.
     const mounted = await consoleAt(`/agents/${AGENT}`, answers(statsWire(), workspaceWire(agentWire(), ["settings"])));
     const trigger = [...mounted.container.querySelectorAll("button")].find((one) => one.textContent?.includes(SECTIONS_LABEL));
-    expect(trigger).toBeUndefined();
+    expect(trigger).toBeDefined();
+    await act(async () => {
+      fireEvent.pointerDown(trigger as Element, { button: 0 });
+      fireEvent.click(trigger as Element);
+    });
+    const items = await waitFor(() => {
+      const found = [...document.querySelectorAll('[role="menuitem"]')];
+      if (found.length === 0) {
+        throw new Error("the Sections menu did not open");
+      }
+      return found;
+    });
+    expect(items.map((one) => one.textContent)).toEqual([CONVERSATIONS_SECTION]);
+    expect(items[0]?.getAttribute("href")).toBe(viewAddress(AGENT, CONVERSATIONS_TAB));
   });
 });
 

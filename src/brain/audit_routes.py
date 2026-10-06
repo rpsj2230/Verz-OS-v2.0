@@ -73,7 +73,18 @@ that subject in the statement, which is the subject's own page in the console. E
 the display names of the people on its own rows (`brain.people_names`), read after the view has
 decided which rows those are, so a name is never looked up for an entry the reader is not shown.
 
-Task ids: M27.7.13, M27.8.6, M24.1.2, M24.3.3, M27.16.1
+**A person's history is their entries and their grants' entries, for a reader who may name them or
+already audits them.** `0003` files a capability grant and its removal under `grant:<id>`, so a
+history read under `principal:<id>` alone never showed one. For a person the route first asks
+whether the People screen's own `nameable` admits the reader to them, or whether the reader's audit
+reach covers entries about them (`brain.audit.view.may_audit`, the view's own rule asked before
+there is an entry), and answers anybody admitted by neither with the one 404 before anything else
+is read. Only then does it ask `0200`'s `gate.grant_ids_of` which grants were theirs, removed ones
+included, and read those entries too, every one through the same view. An auditor who could read
+the person's entries yesterday still can; a reader who could neither be shown nor audit the person
+is told nothing. See `A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`.
+
+Task ids: M27.7.13, M27.8.6, M24.1.2, M24.3.3, M27.16.1, M33.4.1.2
 """
 
 from __future__ import annotations
@@ -87,7 +98,7 @@ import structlog
 from fastapi import APIRouter, Query, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import Select, literal, or_, select, tuple_
+from sqlalchemy import Select, literal, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
@@ -115,12 +126,15 @@ from brain.audit.view import (
     AuditRow,
     AuditView,
     cursor_after,
+    may_audit,
     position_of,
 )
-from brain.console.auditor import PERMISSION_ACTIONS, permission_history
+from brain.console.auditor import GRANT_KIND, PERMISSION_ACTIONS, permission_history
+from brain.console.organisation import Member, nameable
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
+from brain.directory_routes import member_of, one_person
 from brain.listing import MAX_SEARCH_CHARS, says_every_word, search_words
 from brain.people_names import names_for
 from brain.routing_routes import sessions_of
@@ -165,6 +179,19 @@ AUDIT_SCREEN: Final = "audit"
 
 #: The subject kind whose id is a person's principal id, and so has a name to show.
 PERSON_KIND: Final = "principal"
+
+#: Why a person's grants are looked up only after the People screen has admitted the reader.
+A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME: Final = (
+    "Which grants were a person's is read past the grant table's policy, by a function that "
+    "returns ids and nothing else. It is asked only for a reader the People screen would show "
+    "that person to, or whose audit reach already covers entries about them, which is the reach "
+    "the audit view applies to every entry. Anybody else is given the one 404 before anything is "
+    "read, so the function never answers about somebody the reader could neither be shown nor "
+    "audit."
+)
+
+#: The most grants of one person a history reads the entries of. A resource bound.
+MOST_GRANTS_READ: Final = 500
 
 #: The actions that record something happening within the permissions rather than a change to
 #: them: a refusal, a read of a declared record, and the vault answering a call.
@@ -459,6 +486,53 @@ def _refused_input(field: str, message: str) -> RequestValidationError:
     )
 
 
+@runtime_checkable
+class PersonGrants(Protocol):
+    """Who a person is, as the People screen asks about them, and which grants were theirs."""
+
+    async def person(self, principal_id: str) -> Member | None:
+        """The live person by id, or None, as `brain.directory_routes.one_person` reads one."""
+        ...
+
+    async def grant_ids(self, principal_id: str) -> tuple[str, ...]:
+        """The ids of their grants, live or removed, through `0200`'s `gate.grant_ids_of`."""
+        ...
+
+
+_GRANT_IDS: Final = text("SELECT grant_id FROM gate.grant_ids_of(:principal, :most)")
+
+
+class StoredPersonGrants:
+    """`PersonGrants` over the application's sessions."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def person(self, principal_id: str) -> Member | None:
+        async with self._sessions() as session:
+            row = (await session.execute(one_person(principal_id))).one_or_none()
+        return None if row is None else member_of(row)
+
+    async def grant_ids(self, principal_id: str) -> tuple[str, ...]:
+        async with self._sessions() as session, session.begin():
+            found = await session.execute(
+                _GRANT_IDS.bindparams(principal=principal_id, most=MOST_GRANTS_READ)
+            )
+            return tuple(str(one) for one in found.scalars().all())
+
+
+def person_grants_of(request: Request) -> PersonGrants:
+    """`app.state.person_grants` when something put one there, and the database otherwise, as
+    `ledger_of` arranges the ledger."""
+    found = getattr(request.app.state, "person_grants", None)
+    if isinstance(found, PersonGrants):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredPersonGrants(factory)
+
+
 def _not_answerable() -> Absent:
     """The one refusal this router makes. Names the screen, never an entry or the caller."""
     return Absent(f"the {AUDIT_SCREEN} screen is not answerable for this caller")
@@ -605,32 +679,51 @@ async def audit_history(
     if subject_kind not in SUBJECT_KINDS:
         raise _refused_input("subject_kind", "not a subject kind")
 
-    ledger = ledger_of(request)
-    criteria = AuditFilter(
-        actions=frozenset(PERMISSION_ACTIONS), subject_kinds=frozenset({subject_kind})
-    )
-    subject_ref = f"{subject_kind}:{subject_id}"
-    loaded: list[AuditEntry] = []
-    position: tuple[datetime, str] | None = None
-    read = 0
-    while read < READ_CEILING:
-        rows = await ledger.window(
-            criteria,
-            subject=subject_ref,
-            position=position,
-            newest_first=False,
-            limit=LOAD_CHUNK,
+    grants: frozenset[str] = frozenset()
+    if subject_kind == PERSON_KIND:
+        # See `A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`.
+        people = person_grants_of(request)
+        member = await people.person(subject_id)
+        named = member is not None and nameable([member], asked.reach, asked.now)
+        audited = may_audit(
+            asked.reach,
+            subject_kind=PERSON_KIND,
+            subject_id=subject_id,
+            actions=PERMISSION_ACTIONS,
+            now=asked.now,
         )
-        read += len(rows)
-        loaded.extend(entry for entry in (entry_from(row) for row in rows) if entry is not None)
-        if len(rows) < LOAD_CHUNK:
-            break
-        position = (rows[-1].at, rows[-1].entry_hash)
+        if not (named or audited):
+            log.info("history not answerable", principal=asked.caller.principal.id)
+            raise _not_answerable()
+        grants = frozenset(await people.grant_ids(subject_id))
+
+    ledger = ledger_of(request)
+    loaded: list[AuditEntry] = []
+    read = 0
+    for kind, one in ((subject_kind, subject_id), *((GRANT_KIND, g) for g in sorted(grants))):
+        criteria = AuditFilter(
+            actions=frozenset(PERMISSION_ACTIONS), subject_kinds=frozenset({kind})
+        )
+        position: tuple[datetime, str] | None = None
+        while read < READ_CEILING:
+            rows = await ledger.window(
+                criteria,
+                subject=f"{kind}:{one}",
+                position=position,
+                newest_first=False,
+                limit=LOAD_CHUNK,
+            )
+            read += len(rows)
+            loaded.extend(entry for entry in (entry_from(row) for row in rows) if entry is not None)
+            if len(rows) < LOAD_CHUNK:
+                break
+            position = (rows[-1].at, rows[-1].entry_hash)
 
     events = permission_history(
         AuditView(loaded, reader=asked.reach, now=asked.now),
         subject_kind=subject_kind,
         subject_id=subject_id,
+        grants=grants,
     )
     return PermissionHistoryView(
         subject_kind=subject_kind,

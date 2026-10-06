@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -785,6 +785,68 @@ async def audit_anchor_at(request: Request, seq: int) -> JSONResponse:
     # ledger lost entry N" from "this release has no such route", which is also a 404.
     digest = await digest_at(ledger, seq) if seq >= 0 else None
     return JSONResponse({"seq": seq, "head": digest}, headers={"cache-control": "no-store"})
+
+
+#: Where the elevation chain's head is published, beside the main ledger's (M33.7.1.3). Written
+#: out in each decorator too, because `brain.ops.controls.route_is_declared` reads the decorator's
+#: literal and a name there is a route it cannot see.
+ELEVATION_ANCHOR_PATH: Final = "/api/audit/elevation-anchor"
+
+
+@router.get("/api/audit/elevation-anchor", response_class=JSONResponse)
+async def elevation_anchor(request: Request) -> JSONResponse:
+    """The elevation chain's head, for the same outside store to record on its own (M33.7.1.3).
+
+    `brain.console.elevation.A_SECOND_CHAIN_IS_A_SECOND_ANCHOR_AND_NOT_A_STRONGER_LEDGER`: the one
+    thing a second chain buys is a head of its own, so a truncation of its few entries is caught
+    by its own anchor. The same disclosure as `audit_anchor`, a digest and a length, and the same
+    503 for a process that cannot see the table rather than an empty head.
+    """
+    from datetime import UTC, datetime
+
+    from brain.audit.anchor import Anchor
+    from brain.audit.chain_check import published_head
+    from brain.console.elevation import ELEVATION_CHAIN
+
+    chain = _elevation_sequence(request)
+    if chain is None:
+        return JSONResponse(
+            {"detail": "no ledger on this process"},
+            status_code=503,
+            headers={"cache-control": "no-store"},
+        )
+    head = await published_head(chain)
+    anchor = Anchor(chain=ELEVATION_CHAIN, seq=head.seq, head=head.head, taken_at=datetime.now(UTC))
+    return JSONResponse(anchor.to_public(), headers={"cache-control": "no-store"})
+
+
+@router.get("/api/audit/elevation-anchor/{seq}", response_class=JSONResponse)
+async def elevation_anchor_at(request: Request, seq: int) -> JSONResponse:
+    """The elevation chain's digest at one position, for the workflow's coverage check."""
+    from brain.audit.chain_check import digest_at
+
+    chain = _elevation_sequence(request)
+    if chain is None:
+        return JSONResponse(
+            {"detail": "no ledger on this process"},
+            status_code=503,
+            headers={"cache-control": "no-store"},
+        )
+    digest = await digest_at(chain, seq) if seq >= 0 else None
+    return JSONResponse({"seq": seq, "head": digest}, headers={"cache-control": "no-store"})
+
+
+def _elevation_sequence(request: Request) -> Any:
+    """`app.state.elevation_sequence` when a test put one there, the database otherwise."""
+    from brain.audit.chain_check import LedgerSequence, StoredLedgerSequence
+    from brain.routing_routes import sessions_of
+    from brain.tables.audit import ElevationEntryRow
+
+    found = getattr(request.app.state, "elevation_sequence", None)
+    if isinstance(found, LedgerSequence):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredLedgerSequence(sessions, ElevationEntryRow)
 
 
 def _ledger_sequence(request: Request) -> Any:

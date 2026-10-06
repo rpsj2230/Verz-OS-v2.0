@@ -46,6 +46,15 @@ export function switchOffApiPath(subscriberId: string): string {
   return `/webhooks/subscribers/${encodeURIComponent(subscriberId)}/switch-off`;
 }
 
+export function switchOnApiPath(subscriberId: string): string {
+  return `/webhooks/subscribers/${encodeURIComponent(subscriberId)}/switch-on`;
+}
+
+/** Where one delivery that was given up is replayed, by the name the API gave it on the page. */
+export function replayApiPath(subscriberId: string, name: string): string {
+  return `/webhooks/subscribers/${encodeURIComponent(subscriberId)}/deliveries/${encodeURIComponent(name)}/replay`;
+}
+
 /** The console address and the menu's label. */
 export const WEBHOOKS_PATH = "/webhooks";
 export const WEBHOOKS_LABEL = "Webhooks";
@@ -167,6 +176,8 @@ export const CHANGE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   registered: "Registered",
   secret_replaced: "Secret replaced",
   switched_off: "Switched off",
+  switched_on: "Switched back on",
+  replayed: "Delivery replayed",
 });
 
 /** What each field of the registration accepts, said under it before anything is sent. */
