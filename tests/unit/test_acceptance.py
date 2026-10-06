@@ -158,7 +158,10 @@ def test_the_first_two_modules_hold_their_checks_in_order() -> None:
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
     assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
-    assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == ("M1.8.3",)
+    assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == (
+        "M1.8.3",
+        "M33.2.1.2",
+    )
 
 
 def test_a_module_that_registers_checks_is_placed_or_refused_and_never_skipped() -> None:
