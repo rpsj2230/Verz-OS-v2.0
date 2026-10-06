@@ -281,8 +281,8 @@ def test_a_chat_channel_tells_a_halted_person_the_halt_s_sentence(
     from brain.core.principal import Employment, Principal, PrincipalKind
     from brain.gate.context import Channel
 
-    async def halted(*args: object) -> Halted:
-        del args
+    async def halted(*args: object, **keywords: object) -> Halted:
+        del args, keywords
         return Halted(CANNOT_CONFIRM)
 
     monkeypatch.setattr(chat_answer, "answered_for", halted)

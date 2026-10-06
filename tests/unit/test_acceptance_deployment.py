@@ -9,6 +9,7 @@ PostgreSQL at head. Each check is then broken the way it would break in practice
 its own sentence, and a process that is not a worker is told so by the three that read one.
 
 Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4, M32.2.1.3
+Task ids: M27.1.3, M27.1.4
 """
 
 from __future__ import annotations
@@ -43,6 +44,8 @@ LEAVES = {
         "M32.1.2.1",
         "M32.1.2.2",
         "M32.1.2.5",
+        "M27.1.3",
+        "M27.1.4",
     ),
     "the_scrub_meets_its_budget_on_this_install_s_processor": ("M32.2.2.4",),
     "singapore_identifiers_are_scrubbed_by_their_kind": ("M32.2.1.3",),
@@ -415,3 +418,20 @@ def test_the_singapore_check_fails_where_a_recogniser_or_the_scrub_is_broken(
             pii, "RECOGNISERS", tuple(one for one in pii.RECOGNISERS if one.kind is not gone)
         )
     assert ran(SINGAPORE) == (FAILED, reason)
+
+
+@pytest.mark.needs_db
+def test_the_trace_check_fails_when_a_trace_is_read_without_its_own_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The store admitting any realm role to a stored trace (M27.1.3): the read the check makes
+    without the separate role is answered, and the check says so. Delete this and the payload
+    store's separate role closes M27.1.3 on a check that a store open to everybody passes."""
+    from brain.ops import trace_store
+
+    monkeypatch.setattr(trace_store, "may_read_payloads", lambda roles: True)
+    check = mine()["a_run_s_trace_is_stored_masked_and_read_only_after_its_row"]
+    with at_head("brain_acceptance_deployment") as url:
+        assert run_checks(url, (check,)) == {
+            check.name: (FAILED, "a trace was read without the separate role")
+        }

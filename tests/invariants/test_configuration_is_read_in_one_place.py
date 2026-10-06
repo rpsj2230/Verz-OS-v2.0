@@ -25,6 +25,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -243,19 +244,63 @@ def test_the_import_probe_sees_the_application_when_it_is_imported() -> None:
     assert _imported_by("brain.app") == {"brain.app", "fastapi"}
 
 
+#: The one import of the application under `src` that serves it: the supervisor imports it once
+#: so its workers are forked with it already loaded (`brain.serve.NOTHING_LIVE_CROSSES_A_FORK`),
+#: inside the function that decides whether they may be, and nowhere at module level.
+SERVES_BY_PRELOADING: Final = ("src/brain/serve.py", "preload_for_fork")
+
+
+def _function_holding(tree: ast.AST, line: int) -> str:
+    """The name of the function whose body holds `line`, or "" at module level."""
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+            node.lineno <= line <= (node.end_lineno or node.lineno)
+        ):
+            return node.name
+    return ""
+
+
+def _refused_imports(where: str, tree: ast.AST) -> list[str]:
+    """Each import of the application in one module that `SERVES_BY_PRELOADING` does not admit."""
+    return [
+        f"{where}:{line}"
+        for line in imports_of_the_application(tree)
+        if (where, _function_holding(tree, line)) != SERVES_BY_PRELOADING
+    ]
+
+
 def test_no_module_under_src_imports_the_application_except_to_serve_it() -> None:
-    """Nothing under `src/brain` imports `brain.app`. `brain.serve` hands uvicorn the string
-    `"brain.app:app"`, which is how the application is served without being imported here.
+    """Nothing under `src/brain` imports `brain.app`, except `brain.serve` preloading it for its
+    workers. `brain.serve` otherwise hands uvicorn the string `"brain.app:app"`.
+
+    The one exception is the supervisor importing the application inside `preload_for_fork`, so
+    forked workers share it (`SERVES_BY_PRELOADING`); a module-level import there, or the same
+    import anywhere else, is still refused.
 
     Delete this and a module can import `Settings` from `brain.app` again through the
     re-export, which works, and costs every process that imports that module the application."""
     found = [
-        f"{path.relative_to(REPO).as_posix()}:{line}"
+        line
         for path in _modules()
-        for line in imports_of_the_application(ast.parse(path.read_text(encoding="utf-8")))
+        for line in _refused_imports(
+            path.relative_to(REPO).as_posix(), ast.parse(path.read_text(encoding="utf-8"))
+        )
     ]
 
     assert found == []
+
+
+def test_the_preloading_exception_admits_that_function_and_nothing_else() -> None:
+    """The exception above admits the import inside `preload_for_fork` and refuses it at module
+    level. Delete this and the exception can widen to the whole of `brain.serve`."""
+    serve, function = SERVES_BY_PRELOADING
+    inside = ast.parse(f"def {function}():\n    import brain.app\n")
+    module_level = ast.parse("import brain.app\n")
+    other_function = ast.parse("def elsewhere():\n    import brain.app\n")
+    assert _refused_imports(serve, inside) == []
+    assert _refused_imports(serve, module_level) == [f"{serve}:1"]
+    assert _refused_imports(serve, other_function) == [f"{serve}:2"]
+    assert _refused_imports("src/brain/other.py", inside) == ["src/brain/other.py:2"]
 
 
 @pytest.mark.parametrize(

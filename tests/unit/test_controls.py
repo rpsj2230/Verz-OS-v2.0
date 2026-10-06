@@ -841,11 +841,16 @@ def test_a_cadence_restated_from_a_cron_expression_is_said_out_loud() -> None:
     closing it means a cron parser in a module that ships.
     """
     lines = advisories()
-    assert any(
-        "audit_anchor's schedule is a cron expression" in line and "nothing compares" in line
-        for line in lines
-    )
-    assert [one.name for one in CONTROLS if one.schedule_file] == ["audit_anchor"]
+    for name in ("audit_anchor", "elevation_anchor"):
+        assert any(
+            f"{name}'s schedule is a cron expression" in line and "nothing compares" in line
+            for line in lines
+        )
+    # The elevation chain's anchor (M33.7.1.3) is read by the same workflow, on the same cron.
+    assert [one.name for one in CONTROLS if one.schedule_file] == [
+        "audit_anchor",
+        "elevation_anchor",
+    ]
 
 
 # ------------------------------------------------------------ a control that has not run

@@ -78,11 +78,10 @@ and nothing else, and `agent_tab_gaps` reports a parameter named like an overrid
 `brain.channels.adapter.Feature` had no member for it, and objected that adding one with
 nothing behind it would be a capability an adapter declares and nothing honours. That
 objection is answered rather than ignored: `Feature.GROUP_INSTALL` exists and
-`install_to_group` refuses on any surface that does not declare it. **No adapter declares it**,
-so the console offers group installation nowhere today, which is the honest state rather than
-an omission: none of the six adapters has a path for the conversation reference a vendor hands
-back, and inventing support a channel does not have is the failure that member was withheld to
-avoid.
+`install_to_group` refuses on any surface that does not declare it. **Lark declares it since
+`0205`**, when its wire began reading the bot's own joining and leaving events, which is the
+path for the conversation reference a vendor hands back; no other adapter has such a path, and
+inventing support a channel does not have is the failure that member was withheld to avoid.
 
 Rejected: an entitlement on a group install. Installing an agent into a room is not a grant to
 the room. Every answer there is still computed at `brain.channels.room.floor`, which is the

@@ -38,7 +38,7 @@ connector was missing.
 
 Scope: reads values and returns values. Nothing here opens a connection or writes anything.
 
-Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.1, M11.2.4, M27.15.8
+Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.1, M11.2.4, M27.15.8, M11.7.8
 """
 
 from __future__ import annotations
@@ -63,6 +63,7 @@ from brain.console.skill_library import LibrarySkill
 from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Op
 from brain.ops.connector_admin import may_connect_source
+from brain.ops.connector_catalogue import declarations
 from brain.ops.connector_store import Connection
 from brain.ops.connector_sync import READINGS, ProbeVerdict, SyncOutcome, SyncState, verdict_of
 from brain.ops.lark_connect import USES, Use
@@ -147,8 +148,8 @@ class SourceRow:
 
 
 def connect_from(name: str) -> ConnectFrom:
-    """Where a shipped source is connected. A name nothing ships is refused by the caller first."""
-    declared = shipped()[name]
+    """Where a source is connected. A name nothing declares is refused by the caller first."""
+    declared = declarations()[name]
     if declared.console is not None:
         return ConnectFrom.CONSOLE
     if name in LARK_SOURCES:
@@ -226,7 +227,7 @@ def source_rows(
     """
     live = {one.connector: one for one in admitted_connections(connections, reader, now)}
     rows: list[SourceRow] = []
-    for name, declared in shipped().items():
+    for name, declared in declarations().items():
         one = live.get(name)
         state = synced.get(name) if one is not None else None
         through_lark = name in lark_on and may_be_told_of(name, reader, now)

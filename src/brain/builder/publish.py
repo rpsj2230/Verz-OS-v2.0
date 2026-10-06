@@ -587,6 +587,7 @@ def decide(
     checks: Iterable[Check] = (),
     candidate_binding: AgentBinding | None = None,
     published_bindings: Iterable[AgentBinding] = (),
+    further_widenings: Iterable[str] = (),
     now: datetime,
 ) -> PublishDecision:
     """The whole gate, in the order the questions have to be asked.
@@ -599,8 +600,15 @@ def decide(
     There is no parameter here that could skip a check or force a publish past one, and
     `publish_gaps` reads this signature to say so. A gate with an override is a gate whose
     real policy is whoever holds the override.
+
+    `further_widenings` is what a caller found in the parts of an agent that are not an
+    entitlement, the tools it may call and the side effect it may have, which two ceilings of
+    capabilities cannot show. **It can only add**: it is joined to what the ceilings say and never
+    replaces it, so passing it cannot make a publish look narrower than the ceilings show, and
+    `publish_gaps` still refuses a parameter that could skip a check.
     """
-    widenings = widened_capabilities(before_ceiling, after_ceiling, now=now)
+    from_ceilings = widened_capabilities(before_ceiling, after_ceiling, now=now)
+    widenings = (*from_ceilings, *(one for one in further_widenings if one not in from_ceilings))
     refusals = list(blocking_failures(checks))
     if candidate_binding is not None:
         refusals.extend(binding_collisions(candidate_binding, published_bindings))
