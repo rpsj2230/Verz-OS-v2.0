@@ -399,8 +399,8 @@ def test_a_narrowed_question_reads_the_library_alone() -> None:
             passage_search=library,
             db_sessions=object(),
         )
-        narrowed = model_lane_for(state, None, None, kinds=(KnowledgeKind.FAQ,))  # type: ignore[arg-type]
-        whole = model_lane_for(state, None, None)  # type: ignore[arg-type]
+        narrowed = model_lane_for(state, None, kinds=(KnowledgeKind.FAQ,))
+        whole = model_lane_for(state, None)
 
         assert narrowed is not None and whole is not None
         assert narrowed.search == DocumentSearchTool(handler=handler, kinds=(KnowledgeKind.FAQ,))

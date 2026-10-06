@@ -244,7 +244,7 @@ def test_two_uploaded_price_lists_are_asked_in_the_same_words_and_the_check_s_ow
     price list silenced the first."""
     from brain.core.entitlement import EntitlementSet, Grant
     from brain.core.scope import Scope
-    from brain.gate.fast_lane import entities_served, match_rule, respond
+    from brain.gate.fast_lane import FastLaneAnswer, entities_served, match_rule, respond
     from brain.knowledge.classified_rows import QUESTION_SHAPES, label_of, lane_for, next_upload
     from brain.knowledge.columns import table_capability
 
@@ -266,7 +266,7 @@ def test_two_uploaded_price_lists_are_asked_in_the_same_words_and_the_check_s_ow
     found = asyncio.run(
         respond(question, rules=lane.rules, readers=lane.readers, entitlement=reader, now=NOW)
     )
-    assert found is not None and found.entity == ours.entity
+    assert isinstance(found, FastLaneAnswer) and found.entity == ours.entity
     assert [one.model_dump().get(tables.SELL_PRICE) for one in found.result.records] == ["QZ9"]
 
 

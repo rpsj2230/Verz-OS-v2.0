@@ -68,8 +68,8 @@ ONLY_THE_CHECK_S_OWN_GRANTS_ARE_ASSERTED_ON: Final = (
 )
 
 #: The capability the check's person grants themselves over the source's invoices. A field under
-#: `read:invoice.*`, which the source declares, so it reaches the source and no document.
-INVOICE_FIELD: Final = "read:invoice.total"
+#: `read:xero_invoice.*`, which the source declares, so it reaches the source and no document.
+INVOICE_FIELD: Final = "read:xero_invoice.total"
 
 #: The capability the check's person grants themselves over the knowledge in acceptance_a. A field
 #: under `read:knowledge`, so it reaches a document there and not the source.
@@ -110,12 +110,12 @@ async def a_steward_is_named_and_told_of_access_somebody_gave_themselves(h: Harn
     steward, granter = h.principal(A, "steward"), h.principal(B, "granter")
     only_the_source = Scope(clauses=(Clause(field="connector", op=Op.EQ, value=SOURCE),))
     await h.person(admin, department=A, grants=((INSTALL_AUTHORITY.value, only_the_source),))
-    await h.person(reader, department=A, grants=_in(A, "read:invoice.*"))
+    await h.person(reader, department=A, grants=_in(A, "read:xero_invoice.*"))
     await h.person(steward, department=A, grants=_in(A, *KNOWLEDGE_READS, KNOWLEDGE_UPLOAD.value))
     await h.person(
         granter,
         department=B,
-        grants=_in(A, REACH_AUTHORITY.value, "read:invoice.*", "read:knowledge.*"),
+        grants=_in(A, REACH_AUTHORITY.value, "read:xero_invoice.*", "read:knowledge.*"),
     )
 
     connections = StoredConnections(h.sessions)

@@ -2,8 +2,8 @@
  * One approval as a card a phone can read and decide: what will happen, whose reach it runs under,
  * when it was raised and when it lapses, and Approve and Reject below all of that.
  *
- * **Cards, not a table.** An approval is an artefact of several lines and four facts, and a row of
- * columns holding one is either wider than a phone or truncates the artefact, which is the part a
+ * **Cards, not a table.** An approval is a request of several lines and four facts, and a row of
+ * columns holding one is either wider than a phone or truncates the request, which is the part a
  * person is approving. `styles/approvals.css` states the phone as the base case and
  * `tests/approvals-phone.test.tsx` holds its rules, so the card's markup and classes are kept as
  * they were when the page around it moved to the kit.
@@ -120,7 +120,7 @@ export function ApprovalCard({
 }) {
   return (
     <article className="approval-card">
-      <pre className="approval-card__artefact">{card.artefact}</pre>
+      <pre className="approval-card__request">{card.request}</pre>
       <dl className="approval-card__facts">
         <dt className="approval-card__label">{RUNS_AS_LABEL}</dt>
         <dd className="approval-card__value">{nameOf(people, card.runsAs)}</dd>

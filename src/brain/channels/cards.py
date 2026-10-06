@@ -18,13 +18,22 @@ whoever can approve. That design *is* the gap. A junior asks, a manager with nar
 on that client approves, and the artefact hands the manager a value they could not look up.
 
 So `build_approval_card` refuses a `SuspendedAction` as an argument. It takes a
-`ChannelPayload` and the approver's own `EntitlementSet`, and refuses unless the payload was
-computed at the approver's reach - checked by comparing the caller's stated `ent_hash`
-against `approver.ent_hash()`, which is the same comparison `gate.context.GateContext` makes
-about its own pair. The channel still decides nothing about who may see what: the gate
-computes the approver's payload, and this refuses to render one computed for somebody else.
-What survives of the asker's request is the identifiers - `suspension_id` and
+`brain.gate.approval_request.RenderedRequest`, which only `render_request` can make, from the
+action at the reader's own entitlements, and the approver's own `EntitlementSet`, and refuses
+unless the request was rendered for that principal at that reach. The channel still decides
+nothing about who may see what: the gate renders the request, and this refuses one rendered for
+somebody else. What survives of the asker's request is the identifiers - `suspension_id` and
 `action_digest` - which bind the decision to one action and carry no values at all.
+
+**Until 2026-10-06 that guard was bypassed twice, and both bypasses are closed by shape.** The
+builder took a free-form `ChannelPayload`, and the requester's artefact arrived in it as a record
+value while the card's own fields, the ones a test pinned, held nothing of it. And it took the
+caller's statement of the reach the payload was computed at, which the caller made truthfully
+about a payload never computed there. So the builder now makes the payload itself, from the
+request and two facts, under the closed `CARD_PAYLOAD_KEYS`, and it takes no hash: the one it
+compares was computed by `render_request` from the reader it rendered for. See
+`brain.gate.approval_request.NO_CARD_CARRIES_A_FREE_FORM_RECORD_OF_REQUEST_CONTENT` and
+`NO_REACH_CHECK_COMPARES_A_VALUE_THE_CALLER_ASSERTS`.
 
 **A card that cannot be patched is not left standing.** Patching is rate limited by the
 vendor, and a stale approval card is one somebody acts on. Three things together, because no
@@ -89,6 +98,7 @@ from brain.core.redaction import (
     ChannelPayload,
     render_lock,
 )
+from brain.gate.approval_request import RenderedRequest
 from brain.gate.leash import DIGEST, IDENTIFIER, ApprovalState
 from brain.ops.limits import (
     MINUTE_SECONDS,
@@ -123,6 +133,15 @@ A_CARD_IS_BUILT_FOR_THE_PERSON_READING_IT: Final = (
     "junior's question approved by a manager with narrower reach must not hand the manager "
     "a value they could not look up themselves"
 )
+
+#: The keys of an approval card's one payload record, and the only ones. The request as its
+#: reader may see it, whose reach it would run under, and when it lapses. A test holds this list
+#: and every card's payload to it. See `brain.gate.approval_request.NO_CARD_CARRIES_A_FREE_FORM_
+#: RECORD_OF_REQUEST_CONTENT`.
+REQUEST_KEY: Final = "request"
+RUNS_AS_KEY: Final = "runs as"
+UNTIL_KEY: Final = "until"
+CARD_PAYLOAD_KEYS: Final[tuple[str, ...]] = (REQUEST_KEY, RUNS_AS_KEY, UNTIL_KEY)
 
 #: Why opens are capped below the ceiling.
 #:
@@ -411,8 +430,8 @@ def build_approval_card(
     card_id: str,
     suspension_id: str,
     action_digest: str,
-    payload: ChannelPayload,
-    body_ent_hash: str,
+    request: RenderedRequest,
+    runs_as: str,
     approver: EntitlementSet,
     raised_at: datetime,
     expires_at: datetime,
@@ -427,20 +446,31 @@ def build_approval_card(
     from the suspension is its id and its action digest, both of which are identifiers and
     neither of which is a value.
 
-    `body_ent_hash` is the caller's statement of whose reach `payload` was computed at, and
-    it is checked against the approver's own. The channel computes no entitlements and
-    redacts nothing - that is the gate's work and doing it twice would be a second opinion -
-    but it can refuse a payload the caller has told it was computed for the wrong person.
+    `request` is the action as `render_request` rendered it for one reader at one reach, and a
+    card is built only when that reader is this approver at their reach now. The channel
+    computes no entitlements and redacts nothing - that is the gate's work and doing it twice
+    would be a second opinion - and it takes no statement of a reach from its caller, so it
+    compares two values neither of which a caller wrote. The payload is made here, under
+    `CARD_PAYLOAD_KEYS`, so no caller can put a record of its own on a card.
 
     The surface refusals are delegated to `adapter.assert_can_send` rather than restated,
     so a card and a plain message cannot disagree about what a channel may carry.
     """
-    if body_ent_hash != approver.ent_hash():
+    if request.rendered_for != approver.principal_id or request.ent_hash != approver.ent_hash():
         msg = (
-            f"this body was computed at {body_ent_hash!r} and the approver's reach is "
-            f"{approver.ent_hash()!r}. {A_CARD_IS_BUILT_FOR_THE_PERSON_READING_IT}"
+            "this request was rendered for another reader or at another reach than the "
+            f"approver's. {A_CARD_IS_BUILT_FOR_THE_PERSON_READING_IT}"
         )
         raise CardRefusedError(msg)
+    payload = ChannelPayload(
+        records=(
+            {
+                REQUEST_KEY: request.text,
+                RUNS_AS_KEY: runs_as,
+                UNTIL_KEY: expires_at.isoformat(timespec="minutes"),
+            },
+        )
+    )
 
     assert_can_send(capabilities, payload, highest=highest)
     if not capabilities.supports(Feature.CARDS):
@@ -456,7 +486,7 @@ def build_approval_card(
         action_digest=action_digest,
         rendered_for=approver.principal_id,
         payload=payload,
-        ent_hash=body_ent_hash,
+        ent_hash=request.ent_hash,
         raised_at=raised_at,
         expires_at=expires_at,
     )

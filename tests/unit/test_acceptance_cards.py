@@ -47,6 +47,7 @@ TYPED = "typed_approve_decides_nothing_and_the_approver_gets_one_card"
 PRESSED = "a_card_press_decides_as_its_approver_alone_and_closes_the_card"
 POLICY = "group_chat_and_channel_policy_hold_on_one_install"
 RAISED = "a_raised_approval_is_sent_to_its_approver_s_kept_address"
+REACH = "an_approval_shows_at_its_approver_s_reach_and_their_press_alone"
 
 #: Each check and the leaves it proves.
 LEAVES = {
@@ -54,6 +55,7 @@ LEAVES = {
     PRESSED: ("M10.2.3", "M10.2.4"),
     POLICY: ("M10.7.4",),
     RAISED: ("M10.2.7", "M10.3.5"),
+    REACH: ("M33.8.1",),
 }
 
 #: What the database half hands the run: an issuer the gate is built for, and an address of the
@@ -79,7 +81,7 @@ def test_the_card_checks_are_in_the_suite_with_the_leaves_they_prove() -> None:
     check drops out of the suite with the Install page simply showing one fewer row."""
     assert MODULE in check_modules()
     assert {one.name: one.leaves for one in mine()} == LEAVES
-    assert [one.name for one in mine()] == [TYPED, PRESSED, POLICY, RAISED]
+    assert [one.name for one in mine()] == [TYPED, PRESSED, POLICY, RAISED, REACH]
 
 
 def test_the_cards_checks_are_listed_in_their_page_order() -> None:
@@ -87,7 +89,7 @@ def test_the_cards_checks_are_listed_in_their_page_order() -> None:
     since 2026-09-30, so a package adding a check edits its own file and never a list every
     package appends to. Delete this and a check can drop out of the module with the page simply
     listing one fewer row."""
-    assert checks_in(MODULE) == [TYPED, PRESSED, POLICY, RAISED]
+    assert checks_in(MODULE) == [TYPED, PRESSED, POLICY, RAISED, REACH]
 
 
 def test_every_leaf_the_card_checks_name_is_a_leaf_of_the_work_breakdown() -> None:
@@ -231,31 +233,27 @@ def test_a_card_offered_to_anybody_who_asks_fails_the_typed_check(
     head: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """With the Approvals screen's own question bypassed, the bystander and the asker are sent the
-    card too. Delete this and the check passes over an install that sends an approval's card to
-    people who could never decide it."""
-    from brain.approval_routes import shown_card
-    from brain.console.approvals import Card
-
-    def to_everybody(suspension: Any, reach: Any, now: datetime) -> Card | None:
-        del reach
-        return shown_card(suspension, _holding_it(suspension), now)
-
-    monkeypatch.setattr("brain.approval_cards.shown_card", to_everybody)
+    card too, each rendered at their own reach as a card must be (M33.8.1). Delete this and the
+    check passes over an install that sends an approval's card to people who could never decide
+    it."""
+    monkeypatch.setattr("brain.approval_cards.shown_card", _shown_to_anybody)
     assert run_checks(head, (by_name(TYPED),))[TYPED] == (
         FAILED,
         "somebody who may not decide was sent more than the sentence",
     )
 
 
-def _holding_it(suspension: Any) -> Any:
-    """A reach holding exactly the capability this suspension's action needs, everywhere."""
-    from brain.core.entitlement import Capability, EntitlementSet, Grant
-    from brain.core.scope import Scope
+def _shown_to_anybody(suspension: Any, reach: Any, now: datetime) -> Any:
+    """`shown_card` with the Approvals screen's own question skipped: a card for every reader,
+    rendered at that reader's reach, as a card must be (M33.8.1)."""
+    from brain.console.approvals import Card, request_for
 
-    required = Capability(value=suspension.action.tool.required_capability)
-    return EntitlementSet(
-        principal_id="acceptance.someone",
-        grants=(Grant(capability=required, scope=Scope.unrestricted()),),
+    return Card(
+        suspension_id=suspension.id,
+        request=request_for(suspension, reach, now),
+        runs_as=suspension.principal_id,
+        raised_at=suspension.raised_at,
+        expires_at=suspension.expires_at,
     )
 
 
@@ -417,14 +415,7 @@ def test_a_raise_that_sends_to_everybody_it_can_address_fails_the_raise_check(
     """With the Approvals screen's question skipped when a card is sent on a raise, the bystander
     whose address is kept is sent the card too, and the check says so. Delete this and the check
     passes over an install that sends an approval to people who could never decide it."""
-    from brain.approval_routes import shown_card
-    from brain.console.approvals import Card
-
-    def to_everybody(suspension: Any, reach: Any, now: datetime) -> Card | None:
-        del reach
-        return shown_card(suspension, _holding_it(suspension), now)
-
-    monkeypatch.setattr("brain.approval_cards.shown_card", to_everybody)
+    monkeypatch.setattr("brain.approval_cards.shown_card", _shown_to_anybody)
     assert run_checks(head, (by_name(RAISED),))[RAISED] == (
         FAILED,
         "the card was not sent to the approver's kept address alone",
@@ -448,4 +439,56 @@ def test_a_route_that_keeps_no_address_fails_the_raise_check(
     assert run_checks(head, (by_name(RAISED),))[RAISED] == (
         FAILED,
         "a bound person who wrote to the Brain had no address kept",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_card_that_shows_the_requester_s_artefact_fails_the_reach_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**The regression needs-rupash item 14 recorded, put back.** With the request drawn from the
+    stored artefact again, the narrow approver is shown the cost on the Approvals screen and on
+    the card, and the check says so. Delete this and the check passes over an install that shows
+    an approver a value they could not look up."""
+    from brain.gate.approval_request import render_terms
+
+    def the_artefact(suspension: Any, reader: Any, now: datetime) -> Any:
+        del now
+        return render_terms(suspension.artefact, reader)
+
+    monkeypatch.setattr("brain.console.approvals.request_for", the_artefact)
+    assert run_checks(head, (by_name(REACH),))[REACH] == (
+        FAILED,
+        "an approver was shown a field of the request they may not read",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_press_honoured_from_anybody_fails_the_reach_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With every presser's binding answered as the person the card names, the bystander's press
+    decides the approval, and the check says so. Delete this and the check passes over an install
+    where a card forwarded to a colleague is a card the colleague can decide."""
+    from types import SimpleNamespace
+
+    import brain.approval_cards as approval_cards
+    from brain.channels.cards import read_press_value as real
+
+    named: dict[str, Any] = {}
+
+    def reading(value: Any) -> Any:
+        named["press"] = real(value)
+        return named["press"]
+
+    async def anybody(self: Any, channel: Any, digest: str) -> Any:
+        del self, channel, digest
+        press = named.get("press")
+        return None if press is None else SimpleNamespace(principal_id=press.rendered_for)
+
+    monkeypatch.setattr(approval_cards, "read_press_value", reading)
+    monkeypatch.setattr(approval_cards.ApprovalCards, "_binding", anybody)
+    assert run_checks(head, (by_name(REACH),))[REACH] == (
+        FAILED,
+        "a press by somebody other than the card's reader decided it",
     )

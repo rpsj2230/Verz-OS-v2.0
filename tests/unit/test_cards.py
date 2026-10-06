@@ -11,12 +11,14 @@ Task ids: M10.2.3, M10.2.4
 from __future__ import annotations
 
 import dataclasses
+import inspect
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from brain.channels.adapter import ChannelCapabilities, DeliveryRefusedError, Feature
 from brain.channels.cards import (
+    CARD_PAYLOAD_KEYS,
     LARK_CONNECTOR,
     NOTHING_TO_SAY,
     ApprovalCard,
@@ -37,11 +39,13 @@ from brain.channels.cards import (
     render_card,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
-from brain.core.field_policy import Classification
-from brain.core.redaction import OPAQUE_LABEL, ChannelPayload, LockedField
+from brain.core.envelope import SideEffect, ToolDefinition
+from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+from brain.core.redaction import LOCK_TEXT, OPAQUE_LABEL, ChannelPayload, LockedField
 from brain.core.scope import Scope
+from brain.gate.approval_request import RenderedRequest, render_request
 from brain.gate.context import Channel
-from brain.gate.leash import ApprovalState
+from brain.gate.leash import Action, ApprovalState
 from brain.ops.limits import Limit, LimiterState, WindowState, connector_ceiling
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
@@ -74,15 +78,42 @@ def _caps(*features: Feature, **overrides: object) -> ChannelCapabilities:
     return ChannelCapabilities(**base)  # type: ignore[arg-type]
 
 
-def _payload(**fields: str) -> ChannelPayload:
-    return ChannelPayload(records=({"@entity": "client", "@id": "c_1", **fields},))
+#: The client's name and margin, each behind its own read, as a source would classify them.
+POLICY = FieldPolicy(
+    rules=(
+        FieldRule.of("client", "name", READ_NAME, Classification.INTERNAL),
+        FieldRule.of("client", "margin", READ_MARGIN, Classification.INTERNAL),
+    )
+)
+TOOL = ToolDefinition(
+    name="crm.update_client",
+    description="Change one client's record",
+    entity="client",
+    required_capability="write:client",
+    side_effect=SideEffect.WRITE,
+)
+
+
+def _action(**args: str) -> Action:
+    given = args or {"name": "SNM"}
+    return Action(
+        agent_id="agent_crm",
+        tool=TOOL,
+        target="client",
+        touched_fields=tuple(given),
+        args=given,
+    )
+
+
+def _request(reader: EntitlementSet, **args: str) -> RenderedRequest:
+    return render_request(_action(**args), reader, POLICY, NOW)
 
 
 def _card(
     *,
     approver: EntitlementSet | None = None,
     capabilities: ChannelCapabilities | None = None,
-    payload: ChannelPayload | None = None,
+    request: RenderedRequest | None = None,
     action_digest: str = DIGEST,
     expires_at: datetime = LATER,
 ) -> ApprovalCard:
@@ -91,8 +122,8 @@ def _card(
         card_id="card_1",
         suspension_id="susp_1",
         action_digest=action_digest,
-        payload=payload if payload is not None else _payload(name="SNM"),
-        body_ent_hash=approver.ent_hash(),
+        request=request if request is not None else _request(approver),
+        runs_as="u_junior",
         approver=approver,
         raised_at=NOW,
         expires_at=expires_at,
@@ -116,9 +147,9 @@ def test_an_approval_card_built_at_the_askers_reach_is_refused() -> None:
     computed at the asker's reach, so it can hold a value the approver could not look up
     themselves, and the card would hand it to them while they decide.
 
-    The check is a comparison of the reach the caller says the body was computed at against
-    the approver's own, which is the same comparison `gate.context.GateContext` makes about
-    its own pair.
+    The request carries the principal and the reach it was rendered at, both computed by
+    `render_request` from the reader it rendered for, and the builder compares them with the
+    approver's own; nothing it compares was written by its caller.
 
     Deleting this reopens the gap the whole approval path was waiting on, and it reopens it
     silently: the card looks right, and only the approver's own entitlements would say
@@ -126,19 +157,88 @@ def test_an_approval_card_built_at_the_askers_reach_is_refused() -> None:
     asker = _ents(READ_NAME, READ_MARGIN, principal_id="u_junior")
     approver = _ents(READ_NAME, principal_id="u_manager")
 
-    with pytest.raises(CardRefusedError, match="approver's reach"):
-        build_approval_card(
-            card_id="card_1",
-            suspension_id="susp_1",
-            action_digest=DIGEST,
-            payload=_payload(name="SNM", margin="0.34"),
-            body_ent_hash=asker.ent_hash(),
-            approver=approver,
-            raised_at=NOW,
-            expires_at=LATER,
-            capabilities=_caps(),
-        )
+    with pytest.raises(CardRefusedError, match="approver's"):
+        _card(approver=approver, request=_request(asker, name="SNM", margin="0.34"))
     assert asker.ent_hash() != approver.ent_hash()
+
+
+@pytest.mark.parametrize(
+    "rendered_for",
+    [
+        _ents(READ_NAME, READ_MARGIN, principal_id="u_manager"),
+        _ents(READ_NAME, principal_id="u_colleague"),
+    ],
+)
+def test_a_request_rendered_at_another_reach_or_for_another_person_is_refused(
+    rendered_for: EntitlementSet,
+) -> None:
+    """**`NO_REACH_CHECK_COMPARES_A_VALUE_THE_CALLER_ASSERTS`, both halves.** The approver's own
+    principal at a wider reach, and a colleague with exactly the approver's reach: each is refused,
+    the first by the reach it was rendered at and the second by whom it was rendered for. Delete
+    this and a card can be built from a request rendered while the approver held a grant they have
+    since lost, or from a colleague's, which is a card addressed to one person and read by
+    another."""
+    approver = _ents(READ_NAME, principal_id="u_manager")
+    with pytest.raises(CardRefusedError, match="approver's"):
+        _card(approver=approver, request=_request(rendered_for))
+
+
+def test_the_builder_takes_no_payload_and_no_hash_from_its_caller() -> None:
+    """**The two bypasses, closed by shape.** Until 2026-10-06 the builder took a free-form
+    `ChannelPayload` and the caller's statement of the reach it was computed at, and the
+    requester's artefact arrived in the payload with the approver's hash beside it. Its
+    parameters are now exactly these, none a payload and none a hash. Delete this and either
+    parameter can return, with the card's own fields still pinned below and the leak back."""
+    assert set(inspect.signature(build_approval_card).parameters) == {
+        "card_id",
+        "suspension_id",
+        "action_digest",
+        "request",
+        "runs_as",
+        "approver",
+        "raised_at",
+        "expires_at",
+        "capabilities",
+        "highest",
+    }
+
+
+def test_a_card_payload_holds_the_closed_keys_and_nothing_else() -> None:
+    """**`NO_CARD_CARRIES_A_FREE_FORM_RECORD_OF_REQUEST_CONTENT`.** One record, whose keys are
+    exactly the request as the approver may see it, whom it runs as and when it lapses, with no
+    lock list, no label and no other record; the list itself is held to these three words here
+    rather than to the module's constant. Delete this and a key can be added that carries the
+    requester's rendering again, inside a card whose own fields the test below still pins."""
+    approver = _ents(READ_NAME)
+    card = _card(approver=approver)
+
+    assert CARD_PAYLOAD_KEYS == ("request", "runs as", "until")
+    [record] = card.payload.records
+    assert record == {
+        "request": _request(approver).text,
+        "runs as": "u_junior",
+        "until": LATER.isoformat(timespec="minutes"),
+    }
+    assert (card.payload.locked, card.payload.label) == ((), "")
+
+
+def test_a_narrower_approver_is_shown_a_field_locked_and_never_its_value() -> None:
+    """**M33.8.1 on the card itself.** The requester can read the margin and the approver cannot:
+    the approver's card shows the name, shows the margin as the one lock, and carries the margin's
+    value nowhere in its payload; rendered for a reader holding both, the same action shows both.
+    Delete this and a card can be rendered at the right reach and still show what it should lock."""
+    narrow = _ents(READ_NAME, principal_id="u_manager")
+    wide = _ents(READ_NAME, READ_MARGIN, principal_id="u_director")
+
+    narrow_card = _card(approver=narrow, request=_request(narrow, name="SNM", margin="0.34"))
+    wide_card = _card(approver=wide, request=_request(wide, name="SNM", margin="0.34"))
+
+    [narrow_record] = narrow_card.payload.records
+    assert f"margin: {LOCK_TEXT}" in narrow_record["request"]
+    assert "name: SNM" in narrow_record["request"]
+    assert "0.34" not in str(narrow_card.payload.model_dump())
+    [wide_record] = wide_card.payload.records
+    assert "margin: 0.34" in wide_record["request"]
 
 
 def test_an_approval_card_built_at_the_approvers_reach_is_accepted() -> None:
@@ -193,22 +293,29 @@ def test_a_card_on_a_surface_that_does_not_do_cards_is_refused() -> None:
         _card(capabilities=_caps(Feature.EPHEMERAL))
 
 
-def test_a_card_whose_surface_cannot_render_a_label_is_refused() -> None:
+def test_a_card_is_sent_only_where_the_surface_may_carry_its_classification() -> None:
     """M10.1.5 reaching cards, which is where item 12 said it would be forgotten.
 
-    An approval card is exactly the template with a title, a body and three buttons and
-    nowhere obvious to put "nobody checked this". `assert_can_send` is delegated to rather
-    than restated, so a card and a plain message cannot disagree.
+    `assert_can_send` is delegated to rather than restated, so a card and a plain message
+    cannot disagree about what a channel may carry. A card's payload is made by the builder
+    and never carries an opaque label (the test above holds its keys), so what is left to
+    refuse here is a surface whose ceiling is below the card's classification.
 
-    Deleting this lets an unredacted payload be approved as though it were an answer."""
-    approver = _ents(READ_NAME)
-    opaque = ChannelPayload(records=({"@entity": "x", "@id": "1"},), label=OPAQUE_LABEL)
-
-    with pytest.raises(DeliveryRefusedError, match="cannot render a payload label"):
-        _card(approver=approver, payload=opaque, capabilities=_caps(can_carry_label=False))
-
-    card = _card(approver=approver, payload=opaque)
-    assert OPAQUE_LABEL in render_card(card)
+    Deleting this lets an approval go to a surface it may not be shown on."""
+    with pytest.raises(DeliveryRefusedError):
+        build_approval_card(
+            card_id="card_1",
+            suspension_id="susp_1",
+            action_digest=DIGEST,
+            request=_request(_ents(READ_NAME)),
+            runs_as="u_junior",
+            approver=_ents(READ_NAME),
+            raised_at=NOW,
+            expires_at=LATER,
+            capabilities=_caps(max_classification=Classification.PUBLIC),
+            highest=Classification.CONFIDENTIAL,
+        )
+    assert _card().payload.label == ""
 
 
 # ============================================================ pressing (M10.2.3)
