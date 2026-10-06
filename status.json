@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T14:30:36.200497+00:00",
-  "commit": "043a3003",
-  "commit_subject": "Operating the install from the console gets install checks: live runs and the queue, jobs, the tool switch, and a connected source's export and test (#355)",
+  "generated_at": "2026-10-06T15:23:51.356452+00:00",
+  "commit": "698398db",
+  "commit_subject": "The routing matrix written from the console, what each channel carries, a channel bound from the console, and the console's fonts and licences get their proof (#366)",
   "total": 1596,
   "done": 680,
   "percent": 42.6,
