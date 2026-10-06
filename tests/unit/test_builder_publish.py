@@ -603,3 +603,66 @@ def test_the_publish_gate_computes_no_reach_of_its_own() -> None:
     assert publish_gaps() == ()
     planted = "def f(caller, ceiling):\n    return caller.intersect(ceiling)\n"
     assert any("intersects two entitlement sets" in one for one in publish_gaps(source=planted))
+
+
+# --- widenings a ceiling cannot show (M20.4.4) --------------------------------------------------
+def test_a_widening_found_outside_the_ceilings_demotes_and_asks_for_a_second_person() -> None:
+    """**M20.4.4.** A tool the agent may now call or a side effect it may now have is a widening
+    two entitlement ceilings cannot show, and the caller says so through `further_widenings`: the
+    decision is then a demotion with two approvers, which is what a capability widening gets.
+
+    Delete this and a publish that only adds a tool keeps the rung it had and needs one approver,
+    because the gate only ever read the capabilities."""
+    unchanged = ceiling(("read:ticket.subject", Scope(clauses=())))
+    decision = decide(
+        agent_id=AGENT,
+        current_rung=AutonomyTier.AUTONOMOUS,
+        before_ceiling=unchanged,
+        after_ceiling=unchanged,
+        further_widenings=("ledger.read_invoice",),
+        now=NOW,
+    )
+    assert decision.widenings == ("ledger.read_invoice",)
+    assert decision.rung is AutonomyTier.SHADOW
+    assert decision.approvers == APPROVERS_FOR_A_WIDENING
+
+
+def test_further_widenings_only_add_to_what_the_ceilings_show() -> None:
+    """**M20.4.4.** A capability both the ceilings and the caller name is named once, and naming
+    nothing leaves the ceilings' own answer. The positive sibling: a publish that widens nothing
+    anywhere keeps its rung and needs one approver.
+
+    Delete this and a caller could pass a list that hides a capability the ceilings showed, or the
+    same name could be counted twice."""
+    before = ceiling(("read:ticket.subject", Scope(clauses=())))
+    after = ceiling(
+        ("read:ticket.subject", Scope(clauses=())), ("read:ticket.body", Scope(clauses=()))
+    )
+    both = decide(
+        agent_id=AGENT,
+        current_rung=AutonomyTier.AUTONOMOUS,
+        before_ceiling=before,
+        after_ceiling=after,
+        further_widenings=("read:ticket.body", "ledger.read_invoice"),
+        now=NOW,
+    )
+    assert both.widenings == ("read:ticket.body", "ledger.read_invoice")
+    none = decide(
+        agent_id=AGENT,
+        current_rung=AutonomyTier.AUTONOMOUS,
+        before_ceiling=before,
+        after_ceiling=after,
+        now=NOW,
+    )
+    assert none.widenings == ("read:ticket.body",)
+    quiet = decide(
+        agent_id=AGENT,
+        current_rung=AutonomyTier.AUTONOMOUS,
+        before_ceiling=before,
+        after_ceiling=before,
+        further_widenings=(),
+        now=NOW,
+    )
+    assert quiet.widenings == ()
+    assert quiet.rung is AutonomyTier.AUTONOMOUS
+    assert quiet.approvers == APPROVERS_FOR_AN_ORDINARY_PUBLISH

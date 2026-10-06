@@ -520,41 +520,38 @@ def test_a_halt_that_stops_running_work_and_admits_more_of_it_is_reported() -> N
     assert not halt_gaps([everything()])
 
 
-def test_a_halt_on_an_axis_nothing_consults_is_reported_as_refusing_nothing() -> None:
-    """**A halt in force that stops nothing is the fifth lie in its purest form.** Every path
-    that starts work asks `brain.ops.halt_store.refusal_in` with its person, department or
-    connector, and nothing that starts an agent's work names the agent, so a halt on one agent
-    is stored, listed, and obeyed by no code path at all. The administrator halting it is not
-    in a position to go and read which call sites exist, so the arrangement says so itself.
+def test_a_halt_on_an_axis_nothing_consults_is_reported_as_refusing_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**A halt in force that stops nothing is the fifth lie in its purest form.** Every axis is
+    asked today: an answer names its person, department and agent, an automation the same, a
+    connector read its connector, so `ENFORCED_AXES` is every `HaltScope` and an agent halt has no
+    gap. Taking the agent away from the set shows the report still fires for an axis nothing asks,
+    because the administrator declaring such a halt is not in a position to go and read which call
+    sites exist.
 
-    The assertions after the gap are what stop this being decoration: the claim `ENFORCED_AXES`
-    makes is checked against what `refusal_in` actually does, in both directions. An agent halt
-    refuses no work whatever it names, and a person halt refuses that person's.
+    The assertions on `refusal_in` check the claim against what is actually asked, in both
+    directions: an agent halt refuses that agent's work and admits another's.
 
-    Delete this and `ENFORCED_AXES` becomes a comment, and a halt declared on an agent reads as
-    in force on the screen while the agent keeps working."""
+    Delete this and `ENFORCED_AXES` becomes a comment, and a halt declared on an axis a new
+    `HaltScope` member adds reads as in force on the screen while that work carries on."""
+    import brain.ops.halt as halt_module
     from brain.ops.halt_store import Work, refusal_in
 
     agent = Halt(
         scope=HaltScope.AGENT, target="a_helper", declared_by="u_rupash", at=WHEN, reason=BECAUSE
     )
-    person = Halt(
-        scope=HaltScope.PERSON, target="u_someone", declared_by="u_rupash", at=WHEN, reason=BECAUSE
-    )
 
+    assert set(HaltScope) == ENFORCED_AXES
+    assert halt_gaps([agent]) == ()
+
+    monkeypatch.setattr(halt_module, "ENFORCED_AXES", ENFORCED_AXES - {HaltScope.AGENT})
     found = halt_gaps([agent])
-
     assert len(found) == 1, found
     assert "nothing consults" in found[0]
-    assert not halt_gaps([person])
 
-    assert HaltScope.AGENT not in ENFORCED_AXES
-    assert {HaltScope.PERSON, HaltScope.DEPARTMENT, HaltScope.CONNECTOR} <= ENFORCED_AXES
-
-    every_kind = Work(person="u_someone", department="sales", connector="xero")
-    assert refusal_in(in_force([agent]), every_kind) == ""
-    assert refusal_in(in_force([person]), Work(person="u_someone")) != ""
-    assert refusal_in(in_force([person]), Work(person="u_other")) == ""
+    assert refusal_in(in_force([agent]), Work(person="u_someone", agent="a_helper")) != ""
+    assert refusal_in(in_force([agent]), Work(person="u_someone", agent="a_other")) == ""
 
 
 def test_the_capability_that_stops_the_system_is_the_one_the_stop_screen_requires() -> None:

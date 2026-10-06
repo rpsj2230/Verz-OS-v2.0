@@ -39,6 +39,30 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  // The owner's rule (needs-rupash 38 (2)): stopping is one press, with no confirmation and no
+  // second signature, because a stop that can be held up by a dialog fails at the moment it is
+  // needed. It ends no work and loses none; resuming is the guarded act, and it is confirmed.
+  "src/pages/operations/StopControl.tsx HALTS_API_PATH":
+    "Stopping is the owner's one-press control: it starts nothing, loses nothing that is waiting, and is lifted by a resume, which is confirmed and needs a written reason.",
+  "src/pages/operations/StopPage.tsx HALTS_API_PATH":
+    "The same stop as the header's control, from the Stop screen's form: one press by the owner's rule, losing nothing, lifted by a confirmed resume with a written reason.",
+  "src/pages/rules/RulesPage.tsx TRY_API_PATH":
+    "Trying a quick answer writes nothing: brain.rule_routes.tried matches one question against the " +
+    "candidate at the tester's own reach and keeps no row, which tests/unit/test_rule_routes.py holds.",
+  "src/pages/rules/RulesPage.tsx RULES_API_PATH":
+    "Adding a quick answer ends and replaces nothing: a rule whose words are already live where it " +
+    "would answer is refused rather than replaced, because StoredRules.add writes nothing on a " +
+    "conflict, which tests/unit/test_rule_routes.py holds. A rule is taken out only by Retire, which " +
+    "is confirmed.",
+  "src/pages/connectors/CustomConnectorsPage.tsx DEFINITIONS_API_PATH":
+    "Submitting an API's definition keeps a new one waiting for a second person's review; nothing is " +
+    "read through it until it is approved, and it replaces no definition, which is the change route's, " +
+    "and that one is not sent from this page. tests/unit/test_custom_connector_store.py holds the " +
+    "definition waiting and tests/custom-connectors-page.test.tsx the form.",
+  "src/pages/skills/SkillForms.tsx rehearsalsPath(one.digest)":
+    "Rehearsing a waiting version's examples records a rehearsal and changes nothing any agent runs; nothing ends, changes or is removed.",
+  "src/pages/skills/SkillProfile.tsx exportPath(one.digest)":
+    "Exporting an approved skill version hands its package to the person as a file and records that it was taken; nothing on this install ends, changes or is removed.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
     "Adding a work email binds an address to a person who has none. It retires the staff list's " +
     "person for that address only when they have never signed in and hold nothing but what the sync " +
@@ -92,6 +116,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Deciding a solution is the answer to the question its card asks, as deciding an approval is: the " +
     "problem and the solution are drawn above the two buttons, approving adds a document and refusing " +
     "adds nothing, and both are recorded in the ledger.",
+  "src/pages/knowledge/CorrectionsPage.tsx correctionDecisionPath(review.candidateId)":
+    "Approving a correction adds a new version of its document and keeps the old one in its history; " +
+    "the dialog says so and shows who will read the words before anything is sent. Rejecting adds " +
+    "nothing to the document and keeps the reason. Both are recorded in the ledger under the reviewer, " +
+    "which tests/unit/test_acceptance_corrections.py holds.",
   "src/pages/knowledge/addForms.tsx LINKS_API_PATH":
     "Adding a page by its link writes a new item, and the same page added again to the same place is " +
     "the same item, because its reference is a digest of the bytes, the owner and the place, which " +
@@ -103,6 +132,12 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
+  "src/pages/CitedDocument.tsx retrievalUsesPath(followed.retrievalId)":
+    "Opening a cited document sends the place of the passage followed for the learning signal; it " +
+    "adds one position to a retrieval that names no document or person, so nothing is ended.",
+  "src/pages/Ask.tsx exportPath(thread)":
+    "Exporting a conversation hands the person their own thread as a file and records that it was " +
+    "taken; the thread and everything in it stay as they were, so nothing is ended.",
   "src/pages/Ask.tsx correctionPath(thread)":
     "Marking an answer wrong adds a note to the person's own conversation naming the kind; the " +
     "answer, its records and everything else in the thread stay as they were, so nothing is ended.",
@@ -158,9 +193,12 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/departments/StructureDrawers.tsx MEMBERSHIP_API_PATH":
     "Places somebody in a team. It ends nothing and changes nobody's access; taking them out is the " +
     "confirmed control beside their name.",
-  "src/pages/roles/RoleDrawers.tsx APPOINTMENT_API_PATH":
-    "Appoints somebody to a role. A role grant replaces nothing and grants no capability, and taking " +
-    "one away is the removal beside it, which is confirmed.",
+  "src/pages/roles/RoleDrawers.tsx nominating ? NOMINATIONS_API_PATH : APPOINTMENT_API_PATH":
+    "Either appoints somebody to a role or only proposes them for one; a nomination grants nothing, and a " +
+    "role grant replaces nothing and is removed by the confirmed control beside it.",
+  "src/pages/roles/RoleDrawers.tsx nominationDecisionApiPath(nomination.id)":
+    "Confirms a nomination into a role grant or declines it. A decline appoints nobody and a confirmation " +
+    "only adds a role, and taking a role grant away is the confirmed removal beside it.",
   "src/pages/roles/RoleDrawers.tsx DEPUTY_API_PATH":
     "Appoints a deputy for at most thirty days beside the standing holder, who keeps the role; the " +
     "deputy lapses on its own, and removing one is confirmed.",
@@ -205,6 +243,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
+  "src/components/MyAccounts.tsx myConsentPath(row.connector)":
+    "Connecting your own account ends and replaces nothing: it holds one consent for the person who " +
+    "pressed and sends them to the vendor's own page, where they agree or decline. Nothing is kept " +
+    "until the vendor answers, which tests/unit/test_connector_consent_routes.py holds.",
+  "src/components/ConnectSource.tsx consentPath(source.name)":
+    "Connecting with the vendor ends and replaces nothing: it holds one consent for the person who " +
+    "pressed and sends them to the vendor's own page, where they agree or decline. Nothing is kept " +
+    "until the vendor answers, which tests/unit/test_connector_consent_routes.py holds.",
   "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing in Lark and keeps nothing it read, which tests/unit/test_lark_connect.py " +
@@ -217,6 +263,13 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Editing a memory about yourself writes the new words beside the old and marks the old as " +
     "replaced; nothing is deleted, the old words stay in its history, and Forget on the new one " +
     "puts the old one back, which tests/unit/test_memory_store.py follows through PostgreSQL.",
+  'src/pages/AskAttach.tsx uploadPath(kind, "personal", "")':
+    "Attaching a file adds it as a new document at the person's own level, which only they may " +
+    "read; nothing existing is replaced or removed, and the upload route's own tests hold that it " +
+    "adds and never overwrites, which tests/unit/test_knowledge_routes.py follows.",
+  "src/pages/AskAttach.tsx ATTACHMENTS_API_PATH":
+    "Naming a document on one's own conversation adds a note to that thread and changes nothing " +
+    "else; naming it again adds nothing, which tests/unit/test_chat_attachments.py holds.",
   "src/pages/Ask.tsx MARK_API_PATH":
     "A mark is one bit against an answer the person was given, counted and read by nothing that " +
     "decides an answer, and a second mark replaces the first in the count, which " +

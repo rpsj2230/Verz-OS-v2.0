@@ -36,7 +36,13 @@ first check sends the worker a run of its own making, with one model call, throu
 the ledger by its trace id. The second is its sibling: on an install that has not switched the
 ledger on, no destination resolves and a send reaches nothing, which is the flag M32.1.1.4 names.
 
-Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M32.1.1.4
+**The script sandbox is proved on what three witnesses say, and each could be wrong alone.** The
+server's docker says both containers run under gVisor; the sandbox's own kernel, through its
+health answer, says gVisor and no network; and three scripts sent from the worker find no network,
+are stopped at a two-second time limit and at a 128 MiB memory limit. Rejected: the
+health answer alone, which is the sandbox describing itself.
+
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M32.1.1.4, M12.4.5
 """
 
 from __future__ import annotations
@@ -389,3 +395,144 @@ async def with_the_ledger_off_a_run_is_sent_nowhere(h: Harness) -> None:
     log.info("acceptance.ledger_off", destination=address is not None, sent=sent, asked=len(asked))
     if address is not None or sent or asked:
         raise CheckFailedError(A_DESTINATION_WITHOUT_A_LEDGER)
+
+
+# ------------------------------------------------------------------------ the script sandbox
+#: Said where the install has not switched the sandbox on.
+NO_SANDBOX_HERE: Final = (
+    "this install has not switched the script sandbox on: INSTALL_SERVICES does not name sandbox"
+)
+
+#: Said where the sandbox does not answer, or answers that it is not isolated.
+THE_SANDBOX_IS_NOT_ISOLATED: Final = (
+    "the script sandbox did not report that it runs under gVisor with no network, from its own "
+    "kernel, when asked from the worker"
+)
+
+#: Said where docker did not report both containers under gVisor.
+THE_SANDBOX_IS_NOT_UNDER_GVISOR: Final = (
+    "the server's docker did not report both of the script sandbox's containers running under "
+    "gVisor on this release"
+)
+
+#: Said where a script found a network, or a limit did not stop one.
+A_SANDBOX_LIMIT_DID_NOT_HOLD: Final = (
+    "a script run through the sandbox found a network, or ran past its time or memory limit; "
+    "the worker's log says which"
+)
+
+#: The probe that looks for a network: the sandbox's own front by name, which a container on the
+#: sandbox's network would reach, and nothing outside the server.
+PROBE_NETWORK: Final = """import socket
+reached = []
+for host, port in (("script-sandbox", 3100), ("app", 8000)):
+    try:
+        socket.create_connection((host, port), timeout=2).close()
+        reached.append(host)
+    except OSError:
+        pass
+print("network:reached" if reached else "network:none")
+"""
+
+#: The memory each probe is given: room for the interpreter to start, a quarter of what the
+#: memory probe asks for, so only a limit that holds stops it.
+PROBE_MEMORY_MIB: Final = 128
+
+#: A script that outlives its time limit, and one that outgrows its memory limit.
+PROBE_TIME: Final = "import time\ntime.sleep(30)\nprint('still here')\n"
+PROBE_MEMORY: Final = "block = bytearray(512 * 1024 * 1024)\nprint(len(block))\n"
+
+
+@check(
+    leaves=("M12.4.5",),
+    sentence=(
+        "The script sandbox this install has switched on runs under gVisor with no network, as "
+        "the server's docker and its own kernel both report, and scripts sent through it from the "
+        "worker find no network, are stopped at their time limit and are stopped at their memory "
+        "limit."
+    ),
+)
+async def the_sandbox_finds_no_network_and_stops_scripts_at_their_limits(
+    h: Harness,
+) -> None:
+    import hashlib
+
+    import httpx
+
+    from brain.ops.overlays import (
+        BY_NAME,
+        OBSERVED_KEY,
+        components_switched_on,
+        seen_in,
+        switched_on_here,
+    )
+    from brain.ops.sandbox import (
+        HEALTH_PATH,
+        RUN_PATH,
+        AnswerStatus,
+        RunAnswer,
+        RunLimits,
+        RunRequest,
+        SandboxHealth,
+        sandbox_address,
+    )
+    from brain.ops.setting_store import read_namespace
+
+    switched = switched_on_here()
+    if BY_NAME["sandbox"] not in switched:
+        raise CheckNotRunError(NO_SANDBOX_HERE)
+    address = sandbox_address(h.settings.sandbox_url, components_switched_on(switched))
+    if address is None:
+        raise CheckNotRunError(NO_SANDBOX_HERE)
+    async with h.sessions() as session:
+        held = await read_namespace(session, OBSERVED_KEY.split(".", 1)[0])
+    row = held.get(OBSERVED_KEY)
+    seen = None if row is None else seen_in(row.value, commit=h.settings.resolved_commit())
+    if seen is None:
+        raise CheckNotRunError(NOT_REPORTED_FOR_THIS_RELEASE)
+    if any(
+        name not in seen or seen[name].runtime != "runsc" for name in BY_NAME["sandbox"].components
+    ):
+        raise CheckFailedError(THE_SANDBOX_IS_NOT_UNDER_GVISOR)
+
+    def request(name: str, script: str, *, wall: int, memory: int) -> RunRequest:
+        body = script.encode()
+        return RunRequest(
+            run_id=f"acceptance-{h.run}-{name}",
+            skill="acceptance-check",
+            digest=hashlib.sha256(body).hexdigest(),
+            script=f"{name}.py",
+            files={f"{name}.py": body},
+            sha256={f"{name}.py": hashlib.sha256(body).hexdigest()},
+            limits=RunLimits(wall_clock_seconds=wall, memory_mib=memory, output_bytes=4096),
+        )
+
+    base = address.rstrip("/")
+    outcomes: dict[str, str] = {}
+    async with httpx.AsyncClient(timeout=ANALYSE_TIMEOUT_SECONDS + 30) as client:
+        try:
+            health = SandboxHealth.from_json((await client.get(base + HEALTH_PATH)).json())
+        except (httpx.HTTPError, ValueError):
+            raise CheckFailedError(THE_SANDBOX_IS_NOT_ISOLATED) from None
+        if not health.is_isolated:
+            raise CheckFailedError(THE_SANDBOX_IS_NOT_ISOLATED)
+        for name, script, wall, memory, wanted in (
+            ("network", PROBE_NETWORK, 20, PROBE_MEMORY_MIB, AnswerStatus.COMPLETED),
+            ("time", PROBE_TIME, 2, PROBE_MEMORY_MIB, AnswerStatus.TIMED_OUT),
+            ("memory", PROBE_MEMORY, 20, PROBE_MEMORY_MIB, AnswerStatus.MEMORY_EXCEEDED),
+        ):
+            try:
+                sent = await client.post(
+                    base + RUN_PATH, json=request(name, script, wall=wall, memory=memory).to_json()
+                )
+                answer = RunAnswer.from_json(sent.json())
+            except (httpx.HTTPError, ValueError):
+                outcomes[name] = "no answer"
+                continue
+            ok = answer.status is wanted and (
+                name != "network" or answer.output.strip() == "network:none"
+            )
+            outcomes[name] = "held" if ok else answer.status.value
+    log.info("acceptance.sandbox_limits", outcomes=outcomes)
+    if any(value != "held" for value in outcomes.values()):
+        raise CheckFailedError(A_SANDBOX_LIMIT_DID_NOT_HOLD)

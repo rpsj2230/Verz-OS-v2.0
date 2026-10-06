@@ -131,10 +131,12 @@ def test_the_scan_finds_the_deliveries_and_admits_each_by_the_door_or_the_guard(
     assert ("brain.gate.leash", "run_real", Admitted.THROUGH_THE_DOOR) in {
         (one.module, one.function, one.admitted) for one in calls
     }
-    # The automation step and the agent runtime's tool call, each behind `assert_no_side_effect`.
+    # The automation step and the agent runtime's two tool calls, a read it was asked for and the
+    # read of the record a proposed write is about, each behind `assert_no_side_effect`.
     assert guarded == {
         ("brain.ops.automation_piece", "run_step"),
         ("brain.gate.runtime", "_called"),
+        ("brain.gate.runtime", "_record_of"),
     }
     assert len([one for one in calls if one.admitted is Admitted.THROUGH_THE_DOOR]) >= len(
         DELIVERS_THROUGH_THE_DOOR

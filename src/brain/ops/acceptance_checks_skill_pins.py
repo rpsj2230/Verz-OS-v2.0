@@ -36,7 +36,7 @@ outsider in acceptance_b, loaded through the one resolver. See
 on demand, and `brain.tools.run_skill.SkillScriptTool` is registered nowhere. There is no run on
 an install that shows a card or a body, so there is nothing for a check to ask.
 
-Task ids: M12.2.7, M5.7.3, M28.2.1, M28.2.3
+Task ids: M12.2.7, M5.7.3, M28.2.1, M28.2.3, M13.2.5
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ async def _record(h: Harness, agent_id: str) -> AgentRecord:
     """The agent as `/answer`'s roster reads it on a question."""
     from brain.ops.acceptance_routing import roster_over
 
-    found = {one.agent_id: one for one in await roster_over(h)()}.get(agent_id)
+    found = {one.agent_id: one for one in (await roster_over(h)()).records}.get(agent_id)
     if found is None:
         raise CheckFailedError("the check's agent did not read back from the roster")
     return found
@@ -203,6 +203,86 @@ async def each_agent_runs_the_skill_version_it_is_pinned_to(h: Harness) -> None:
         raise CheckFailedError("a run was not handed the version its agent was moved to")
     if await _run_skills(h, app, kept, admin_reach) != [first.digest]:
         raise CheckFailedError("moving one agent's pin moved another agent's run")
+
+
+# -------------------------------------------- M13.2.5: the install hash keys the answer cache
+async def _roster_hash(h: Harness, principal_id: str, agent_id: str) -> str:
+    """The configuration hash `/answer` keys this agent's answers on, from the roster it reads."""
+    from brain.api_routes import Answering, roster_of
+    from brain.gate.admission import Assurance, admit
+    from brain.gate.context import Channel
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.ops.acceptance_routing import roster_over
+    from brain.tools.startup import build_registry
+
+    person = await StoredPrincipals(h.sessions).live_principal(principal_id)
+    if person is None:
+        raise CheckFailedError("a reserved person was not live in the directory")
+    roster = await roster_of(
+        SimpleNamespace(agent_roster=roster_over(h)),
+        Answering(
+            principal=person,
+            reach=admit(await h.reach(principal_id), Channel.CONSOLE, Assurance.AUTHENTICATED),
+            channel=Channel.CONSOLE,
+            now=h.now,
+        ),
+        build_registry(source=h.settings.tool_source, records=SessionRowSource(h.sessions)),
+    )
+    setup = roster.agents.get(agent_id)
+    if setup is None:
+        raise CheckFailedError("the check's agent was not in the roster its owner is answered from")
+    return setup.config_hash
+
+
+@check(
+    leaves=("M13.2.5",),
+    sentence=(
+        "An agent of acceptance_a is read from the roster `/answer` selects from, a skill is "
+        "approved and assigned to it, and the roster is read again: the hash the answer cache "
+        "is keyed on has not moved when the skill was only approved and has moved once it was "
+        "assigned, and the key built from the two hashes differs."
+    ),
+)
+async def an_assigned_skill_moves_the_key_an_answer_is_cached_under(h: Harness) -> None:
+    from brain.console.skill_library import added, decided, read_package
+    from brain.gate.cache_key import key_for
+    from brain.ops.acceptance_checks_skills import (
+        _administrator,
+        _an_agent,
+        _assign,
+        _named,
+        _skill_md,
+        _store,
+    )
+    from brain.ops.skill_store import StoredSkills
+
+    await h.found_departments()
+    admin = await _administrator(h, "keyed")
+    reach = await h.reach(admin)
+    agent = await _an_agent(h, admin, named="_keyed")
+    before = await _roster_hash(h, admin, agent)
+    first = added(read_package("SKILL.md", _skill_md(_named(h, "keyed"))), by=admin, at=h.now)
+    await _store(h, first, reach)
+    if not await StoredSkills(h.sessions).decide(
+        decided(first, reviewer=admin, approve=True, at=h.now),
+        ent_hash=reach.ent_hash(),
+        trace_id=h.trace_id,
+    ):
+        raise CheckFailedError("an administrator could not approve a skill they imported")
+    if await _roster_hash(h, admin, agent) != before:
+        raise CheckFailedError("approving a skill moved the key of an agent it was not assigned to")
+    await _assign(h, first.digest, agent, reach)
+    after = await _roster_hash(h, admin, agent)
+    if after == before:
+        raise CheckFailedError(
+            "assigning a skill left the key an answer is cached under where it was"
+        )
+    ent_hash = reach.ent_hash()
+    if key_for("the check's question", ent_hash, before, 1, {}) == key_for(
+        "the check's question", ent_hash, after, 1, {}
+    ):
+        raise CheckFailedError("two hashes that differ built one cache key")
 
 
 # ------------------------------------------------------------ M5.7.3: an agent's model pin

@@ -137,7 +137,7 @@ def _calls_in(module: str, function: str) -> set[str]:
 @pytest.mark.parametrize(
     ("module", "function", "asks"),
     [
-        ("brain.api_routes", "answered_for", {"refusal_for"}),
+        ("brain.api_routes", "answered_for", {"read_state", "refusal_in"}),
         ("brain.ops.automation_run_store", "run_one", {"read_state", "refusal_in"}),
         ("brain.ops.connector_sync_run", "sync_on", {"read_state", "refusal_in"}),
         ("brain.ops.live_read_run", "live_records_for", {"read_state", "refusal_in"}),
@@ -251,11 +251,17 @@ def test_the_fixed_stop_reason_passes_the_floor_a_written_one_must() -> None:
     assert halt.reason == STOPPED_FROM_THE_CONSOLE
 
 
-def test_an_agent_cannot_be_stopped_until_something_asks_its_axis() -> None:
-    """**M27.15.16.** The agent axis is asked by nothing yet, so a stop on it is refused before
-    anything is written rather than stored as a halt that refuses nothing. Delete this and the
-    screen can show an agent stopped while it keeps working."""
+def test_an_axis_nothing_asks_is_refused_before_anything_is_written(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**M27.15.16.** Every axis is asked today, so this takes one away: a stop on an axis nothing
+    asks is refused before anything is written rather than stored as a halt that refuses nothing.
+    Delete this and the day an axis is added to `HaltScope` and to nothing that starts work, the
+    screen can show it stopped while it keeps working."""
+    import brain.ops.halt_store as halt_store
+
     owner = reader("u_owner", Scope.unrestricted())
+    monkeypatch.setattr(halt_store, "ENFORCED_AXES", frozenset(set(HaltScope) - {HaltScope.AGENT}))
 
     with pytest.raises(HaltRefusedError, match="agent"):
         run(
@@ -270,6 +276,22 @@ def test_an_agent_cannot_be_stopped_until_something_asks_its_axis() -> None:
         )
 
 
+def test_an_agent_halt_stops_that_agent_s_work_and_no_other() -> None:
+    """**M13.7.3.** A halt on one agent refuses work that names it, whoever asks and from which
+    department, and admits another agent's work and work no agent does. `Work.agent` is optional,
+    so a caller that names no agent is unaffected. Delete this and an agent halt can stop
+    everybody's questions, or nothing."""
+    agent = Halt(
+        scope=HaltScope.AGENT, target="a_helper", declared_by="u_admin", at=NOW, reason=BECAUSE
+    )
+    state = in_force([agent])
+
+    assert refusal_in(state, Work(person="u_one", department="sales", agent="a_helper")) != ""
+    assert refusal_in(state, Work(person="u_two", department="web", agent="a_helper")) != ""
+    assert refusal_in(state, Work(person="u_one", department="sales", agent="a_other")) == ""
+    assert refusal_in(state, Work(person="u_one", department="sales")) == ""
+
+
 def test_a_chat_channel_tells_a_halted_person_the_halt_s_sentence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -281,8 +303,8 @@ def test_a_chat_channel_tells_a_halted_person_the_halt_s_sentence(
     from brain.core.principal import Employment, Principal, PrincipalKind
     from brain.gate.context import Channel
 
-    async def halted(*args: object) -> Halted:
-        del args
+    async def halted(*args: object, **keywords: object) -> Halted:
+        del args, keywords
         return Halted(CANNOT_CONFIRM)
 
     monkeypatch.setattr(chat_answer, "answered_for", halted)
@@ -536,7 +558,7 @@ def test_a_department_administrator_stops_their_own_department_and_nothing_else(
     assert [(one["scope"], one["target"]) for one in listed["halts"]] == [("department", "web")]
     assert listed["known"] is True
     assert listed["may_stop_everything"] is False
-    assert listed["not_asked_yet"] == ["agent"]
+    assert listed["not_asked_yet"] == []
     assert sql(database, "SELECT scope, target, actor_role FROM ops.halt") == [
         ("department", "web", "scoped administrator")
     ]
@@ -547,10 +569,10 @@ def test_a_resume_from_the_screen_needs_words_and_says_whose_stop_it_lifts(
     served: TestClient,
 ) -> None:
     """**M27.15.15.** A resume with no reason is a 422 naming why and lifts nothing; with one, it
-    lifts the halt and says another administrator's stop was overridden. An agent stop is a 422
-    too, since nothing asks that axis, and a resume outside the reader's department is the 404 an
-    address that does not exist is, saying nothing of what is stopped there. Delete this and the
-    screen's resume can be pressed through with nothing written."""
+    lifts the halt and says another administrator's stop was overridden, and a stop elsewhere, on
+    an agent, stands. A resume outside the reader's department is the 404 an address that does not
+    exist is, saying nothing of what is stopped there. Delete this and the screen's resume can be
+    pressed through with nothing written."""
     from tests.fixtures.console_http import get, post
 
     post(served, "u_admin", "/api/v1/halts", {"scope": "department", "target": "web"})
@@ -575,12 +597,13 @@ def test_a_resume_from_the_screen_needs_words_and_says_whose_stop_it_lifts(
         "/api/v1/halts/resume",
         {"scope": "department", "target": "finance", "reason": FIXED},
     )
-    assert (bare.status_code, agent.status_code) == (422, 422)
+    assert (bare.status_code, agent.status_code) == (422, 201)
     assert elsewhere.status_code == 404
-    assert [one["target"] for one in still] == ["web"]
+    assert sorted(one["target"] for one in still) == ["a_one", "web"]
     assert lifted.status_code == 200
     assert lifted.json()["overrides_somebody_else"] is True
-    assert get(served, "u_elsewhere", "/api/v1/halts").json()["halts"] == []
+    after = get(served, "u_elsewhere", "/api/v1/halts").json()["halts"]
+    assert [(one["scope"], one["target"]) for one in after] == [("agent", "a_one")]
 
 
 # ------------------------------------------------------------------ the answer route
@@ -707,3 +730,41 @@ def test_a_question_from_a_stopped_department_is_turned_away_and_its_own_alone(
     ).refusal()
     assert elsewhere.status_code == 200
     assert (here.status_code, here.json()["message"]) == (503, expected)
+
+
+@pytest.mark.needs_db
+def test_a_question_routed_to_a_stopped_agent_is_turned_away_and_another_agent_s_is_not(
+    database: str, client: TestClient, transport: Scripted
+) -> None:
+    """**M13.7.3 on the route.** The question is routed to the default agent: a stop on another
+    agent leaves it answered, and a stop on the default agent turns it away before any model, in
+    the agent halt's own sentence. Delete this and the route can ask the store without the agent
+    it chose, so an agent stop refuses no question."""
+    from brain.api_routes import DEFAULT_AGENT
+    from brain.ops.halt import Halt as Declared
+
+    owner = reader("u_owner", Scope.unrestricted())
+    engine, sessions = _sessions(database)
+
+    async def stopping(target: str) -> None:
+        await stop(sessions, owner, scope=HaltScope.AGENT, target=target, reason="", now=NOW)
+
+    try:
+        client.app.state.db_sessions = sessions  # type: ignore[attr-defined]
+        asyncio.run(stopping("a_somebody_else"))
+        elsewhere = _ask(client)
+        asyncio.run(stopping(DEFAULT_AGENT))
+        here = _ask(client)
+    finally:
+        asyncio.run(engine.dispose())
+
+    expected = Declared(
+        scope=HaltScope.AGENT,
+        target=DEFAULT_AGENT,
+        declared_by="u_owner",
+        at=NOW,
+        reason=STOPPED_FROM_THE_CONSOLE,
+    ).refusal()
+    assert elsewhere.status_code == 200
+    assert (here.status_code, here.json()["message"]) == (503, expected)
+    assert len(transport.sent) == 1

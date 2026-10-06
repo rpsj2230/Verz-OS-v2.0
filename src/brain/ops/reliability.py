@@ -1341,6 +1341,53 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
             "it twice. It merges nothing and holds no connection to this system's database"
         ),
     ),
+    FailureMode(
+        # Optional and off unless an install names it in `INSTALL_SERVICES` on a server whose
+        # docker has gVisor, so on most installs this row describes nothing that runs.
+        component="script-sandbox",
+        fails=(
+            "the sandbox's front is down, or answers 503 because the executor has not reported "
+            "in the last half minute, or reports a runtime that is not gVisor or a network that "
+            "is not none"
+        ),
+        presents_as=(
+            "a skill's script or a connector's custom code returns 'the sandbox did not answer' "
+            "and nothing else. Nothing else here is affected, which makes it look like one "
+            "skill misbehaving rather than the service being down"
+        ),
+        blocks=("skill scripts", "the code sandbox", "custom-code connectors"),
+        retry=RetryClass.SAFE,
+        response=(
+            "ask its /health on the sandbox network: 503 is a front that has heard nothing from "
+            "its executor, which is the row below. A script runs where there is no network and "
+            "reaches nothing outside its container, so running it again repeats the run and "
+            "nothing else, and the client retries nothing by itself. A runtime that is not "
+            "gVisor is not repaired by starting it anyway: the overlay is refused on a server "
+            "without that runtime (AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED), and an install "
+            "that never switched the service on has no sandbox and runs no script by design"
+        ),
+    ),
+    FailureMode(
+        component="script-sandbox-executor",
+        fails=(
+            "the executor, which has no network, stops writing its heartbeat to the job volume, "
+            "or a script runs it into its memory limit"
+        ),
+        presents_as=(
+            "the front is up and answers its port while its health reports 503 after half a "
+            "minute, and each run waits out its own limit and then reports that the sandbox "
+            "did not answer. A script over its memory ceiling is a run that ended "
+            "memory_exceeded, which is not this failure"
+        ),
+        blocks=("script-sandbox", "skill scripts", "the code sandbox", "custom-code connectors"),
+        retry=RetryClass.SAFE,
+        response=(
+            "restart the executor and read its heartbeat on the job volume for the runtime and "
+            "network it reports. A run it never took is lost with it and is asked again by a "
+            "person: it holds no credential and writes nothing outside its scratch memory, "
+            "which is gone with the container"
+        ),
+    ),
 )
 
 

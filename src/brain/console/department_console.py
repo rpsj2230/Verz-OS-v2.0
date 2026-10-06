@@ -285,7 +285,20 @@ def _one(label: str, to: str, key: str = "") -> Entry:
 COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
     Section(
         group=ModuleGroup.HOME,
-        entries=(_one("Dashboard", "/", "overview"),),
+        entries=(
+            _one("Dashboard", "/", "overview"),
+            # The Super Admin's view across the install (M33.1.1.1 to M33.1.1.3), served by
+            # `brain.company_routes`. No registry screen of its own: each tab opens on the reads
+            # its rows already sit behind, which is `brain.console.global_surfaces`' argument.
+            Entry(
+                label="Whole company",
+                pages=(
+                    Page(label="Everything", to="/company/estate"),
+                    Page(label="Activity", to="/company/activity"),
+                    Page(label="Consumption", to="/company/consumption"),
+                ),
+            ),
+        ),
     ),
     Section(
         group=ModuleGroup.PEOPLE,
@@ -375,6 +388,9 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                 pages=(
                     Page(label="Fields", to="/classification"),
                     Page(label="Possible duplicates", to="/duplicates"),
+                    # The fast-lane rules over a department's tables are written under the grants
+                    # its fields are changed under (`brain.rule_routes`), so they sit beside them.
+                    Page(label="Quick answers", to="/rules"),
                 ),
             ),
             _one("Artifacts", "/artifacts", "artifacts"),
@@ -400,10 +416,12 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
         entries=(
             _one("Runs and queue", "/runs", "runs"),
             _one("Background jobs", "/jobs"),
+            _one("Stop", "/stop", "halt"),
             Entry(
                 label="Logs and errors",
                 pages=(Page(label="Logs", to="/logs"), Page(label="Errors", to="/errors")),
             ),
+            _one("Incidents", "/incidents", "incidents"),
         ),
     ),
     Section(
@@ -489,7 +507,11 @@ DEPARTMENT_NAVIGATION: Final[tuple[Section, ...]] = (
         ),
         _one("Learning and memory", "/learning", "learning"),
     ),
-    department_section(ModuleGroup.OPERATIONS, _one("Runs and queue", "/runs", "runs")),
+    department_section(
+        ModuleGroup.OPERATIONS,
+        _one("Runs and queue", "/runs", "runs"),
+        _one("Stop", "/stop", "halt"),
+    ),
     # Not drawn in SCREEN 2 until item 48 was decided. See
     # `A_HEAD_READS_THEIR_PEOPLES_ACTIVITY_FROM_THEIR_OWN_CONSOLE`.
     department_section(ModuleGroup.GOVERNANCE, _one("Audit log", "/audit", "audit")),

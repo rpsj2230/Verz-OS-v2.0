@@ -46,12 +46,23 @@ def test_the_checks_are_listed_in_their_page_order() -> None:
 @pytest.mark.needs_db
 def test_on_a_real_database_an_attached_file_is_read_by_its_owner_alone() -> None:
     """**The check as the worker runs it, against PostgreSQL at head.** It passes, and every table
-    holds afterwards what it held before. Delete this and attaching a file can break on a real
-    schema with nothing on the install saying so."""
+    holds afterwards what it held before, the conversation and its notes included, since the check
+    attaches to a thread and records an answer in it. Delete this and attaching a file can break on
+    a real schema with nothing on the install saying so, or a check can leave a person's thread
+    behind on the owner's server."""
+    from tests.fixtures.scratch_postgres import sql
+
+    def chat(url: str) -> dict[str, int]:
+        # The names are this module's constants, never input.
+        return {
+            one: int(sql(url, f"SELECT count(*) FROM {one}")[0][0])  # noqa: S608
+            for one in ("chat.conversation", "chat.message")
+        }
+
     with at_head("brain_acceptance_attachments") as url:
-        before = counts(url)
+        before = counts(url), chat(url)
         outcome = run_checks(url, tuple(mine().values()))
-        after = counts(url)
+        after = counts(url), chat(url)
     assert outcome == {NAME: (PASSED, "")}
     assert after == before
 

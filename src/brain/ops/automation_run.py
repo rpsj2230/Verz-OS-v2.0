@@ -29,8 +29,10 @@ that then holds nothing, which reads as a quiet week rather than a stopped autom
 **A failure pauses at `agent_automations.FAILURES_BEFORE_PAUSE`, through `failure_pause`.** The
 threshold and the notice are that module's, so this module decides only how many consecutive
 failures a run brings the count to. What `failure_pause` also builds is a halt scoped to the agent,
-and it is not stored: `brain.ops.halt.ENFORCED_AXES` enforces no agent axis, so storing it would be
-a halt that reports itself in force and refuses nothing. See `automation_gaps` in that module.
+and this module does not store it: the pause is the scheduler forgetting the automation, which is
+what stops its next run. The agent axis has been enforced since M13.7.3, so storing the halt would
+now also refuse that agent's questions, which is a wider stop than a failing automation asked for
+and is left as a decision rather than made here. See `automation_gaps` in that module.
 
 **A slot runs once.** The run's id is derived from the automation and the instant it was due, so a
 second worker, a retried tick or a run whose transaction was rolled back and picked up again writes

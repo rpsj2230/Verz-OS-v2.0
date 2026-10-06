@@ -759,6 +759,16 @@ EARLIER_SHOWN: Final = 3
 EARLIER_CHARS: Final = 1_000
 
 
+#: Why a file attached to the thread is read by its tool, at the run's reach, and shown first.
+AN_ATTACHED_FILE_IS_READ_BY_ITS_TOOL_AT_THE_RUN_S_REACH: Final = (
+    "A file the person attached to their conversation is what they are asking about. It is read "
+    "through the registered chat.read_attachment handler, at the reach the answer runs at, which "
+    "for an agent is the person's narrowed by the agent's ceiling, and its passages go ahead of "
+    "the search's, through the same redactor every passage passes. A file the reach cannot read "
+    "contributes nothing, as any other passage the reader may not read."
+)
+
+
 @dataclass(frozen=True)
 class FollowUp:
     """What a question continuing a thread brings (M9.2.3). See
@@ -767,11 +777,17 @@ class FollowUp:
     `earlier` is the person's own earlier questions, oldest first. `cited` is the passages
     earlier answers cited that `brain.chat.turns.context_for` still admits, and `recall` reads
     them under the caller's reach, as `brain.knowledge.document_tools.recaller` does.
+
+    `attached` is the documents the person attached to the thread, in the order attached, and
+    `read_attached` reads one by its reference through the registered attachment tool (M12.3.6).
+    See `AN_ATTACHED_FILE_IS_READ_BY_ITS_TOOL_AT_THE_RUN_S_REACH`.
     """
 
     earlier: tuple[str, ...] = ()
     cited: tuple[str, ...] = ()
     recall: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
+    attached: tuple[str, ...] = ()
+    read_attached: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
 
 
 def with_recalled(
@@ -809,6 +825,28 @@ class Drafted:
     #: Which parts of the turn's context the model was shown and which were left out (M16.6.1),
     #: or None when no model was asked. Kept on the trace by `brain.ops.trace_store`.
     context: ContextNote | None = None
+    #: What the run held for a person, each as a phrase the asker may be told ("a reply to ticket
+    #: 4242"), in the order it was held. Empty beside every run that held nothing. See
+    #: `AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES`.
+    waiting: tuple[str, ...] = ()
+
+
+#: What an asker is told of an action their run prepared and a person has yet to decide.
+WAITING_FOR_A_PERSON: Final = "I have prepared {what} and it is waiting for a person to approve it."
+
+#: Why the sentence is the product's, built from the asker's own proposal, and kept off the cache.
+AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES: Final = (
+    "A run that held an action for a person ends by saying so to the person who asked, in the "
+    "product's words and not the model's, naming only what the asker themselves proposed: the "
+    "kind of action and the reference they gave. It names no approver, no reason and no "
+    "argument, replaces the abstention a run that read nothing would have ended with, and is "
+    "never kept for the next asker, because what one person's run held is that person's."
+)
+
+
+def waiting_text(waiting: Sequence[str]) -> str:
+    """One sentence for each action held, in order, from the product's own words."""
+    return " ".join(WAITING_FOR_A_PERSON.format(what=one) for one in waiting)
 
 
 #: Why a request too long for every model is answered from fewer passages, and says so.
@@ -1082,7 +1120,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
     for this reader and refused for any other.
     """
     cited: list[DocumentCitation] = []
-    for record in payload.records:
+    for position, record in enumerate(payload.records, start=1):
         document_id = record.get("document_id")
         if not isinstance(document_id, str) or not document_id:
             continue
@@ -1097,6 +1135,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
                     ),
                     source=payload.source,
                     fetched_at=str(record.get("updated_at") or ""),
+                    position=position,
                 )
             )
         except ValueError:
@@ -1180,6 +1219,12 @@ async def draft(
         # under this reach and go first. See the reason constant beside `FollowUp`.
         recalled = await follow_up.recall(follow_up.cited, entitlement=entitlement, now=now)
         found = with_recalled(recalled, found)
+    if follow_up is not None and follow_up.attached and follow_up.read_attached is not None:
+        # The files the person attached go first of all, the first attached first, each read
+        # through its tool at this reach. See the reason constant beside `FollowUp`.
+        for attachment in reversed(follow_up.attached):
+            read = await follow_up.read_attached(attachment, entitlement=entitlement, now=now)
+            found = with_recalled(read, found)
     # The redactor's own trace travels to the sink with the payload, so what it withheld is
     # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
     step(GateStep.REDACT)

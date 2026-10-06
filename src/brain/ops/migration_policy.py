@@ -183,6 +183,25 @@ class Finding:
         return f"{self.file}: {self.rule}, {self.detail}"
 
 
+#: A function a migration defines, from its CREATE to the end of its dollar-quoted body.
+_FUNCTION_DEFINITION = re.compile(
+    r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b.*?(\$\w*\$).*?\1", re.IGNORECASE | re.DOTALL
+)
+
+
+def _without_function_bodies(text: str) -> str:
+    """`text` with the body of every function it defines removed, so a trigger is not a data change.
+
+    Measured on 2026-10-06: `0209` defines a trigger function that appends a row to a second
+    ledger whenever an elevation is approved, and the data rule read that `INSERT INTO` as a
+    change to data the migration makes. It makes none: defining a function writes no row, and the
+    downgrade reverses it with `DROP FUNCTION`, which is exactly the property the rule protects.
+    **Only a definition is removed.** A `DO` block runs when the migration does, so an `INSERT`
+    inside one is still a data change and is still read.
+    """
+    return _FUNCTION_DEFINITION.sub("", text)
+
+
 def _without_prose(text: str) -> str:
     """`text` with docstrings and comments blanked, so a rule reads the code and not the argument.
 
@@ -603,7 +622,7 @@ def check_file(path: Path) -> list[Finding]:
     has_schema = bool(
         ADD_COLUMN.search(text) or DROP_COLUMN.search(text) or "op.create_table" in text
     )
-    if has_schema and DML.search(_without_prose(text)):
+    if has_schema and DML.search(_without_function_bodies(_without_prose(text))):
         findings.append(
             Finding(
                 name,

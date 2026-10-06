@@ -55,6 +55,18 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         told: UNBROKEN,
       },
+      "/api/v1/me/accounts": {
+        accounts: [{ connector: "xero", label: UNBROKEN, connected: false, told: "" }],
+        told: UNBROKEN,
+      },
     },
+  },
+  // The undo a weekly learning digest links. It asks nothing until Undo is confirmed, and draws the
+  // memory id from its own address, which must wrap.
+  "/me/undo/:memoryId": {
+    address: `/me/undo/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: {},
   },
 };

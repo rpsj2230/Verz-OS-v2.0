@@ -36,11 +36,21 @@ from brain.ops.webhook_store import (
     DeliveryLine,
     DispatcherLine,
     NoActiveSubscriberError,
+    NoSwitchedOffSubscriberError,
+    NothingToReplayError,
     Registered,
     SubscriberTakenError,
+    replay_handle,
 )
 from brain.tables.webhook_change import WebhookChange
-from brain.webhook_routes import SECRET_PATH, SUBSCRIBERS_PATH, SWITCH_OFF_PATH, WEBHOOKS_PATH
+from brain.webhook_routes import (
+    REPLAY_PATH,
+    SECRET_PATH,
+    SUBSCRIBERS_PATH,
+    SWITCH_OFF_PATH,
+    SWITCH_ON_PATH,
+    WEBHOOKS_PATH,
+)
 from tests.fixtures.http_client import Response
 from tests.fixtures.setting_rows import Result, Row
 from tests.unit.test_api_routes import (
@@ -136,6 +146,7 @@ class Records:
         self.registered_rows = list(registered)
         self.asked = 0
         self.writes: list[tuple[str, str, str]] = []
+        self.replays: list[tuple[str, str, str, str]] = []
         self.taken = False
         self.secret_times: list[datetime | None] = []
         self.line = DispatcherLine(None, None, None, None, paused=False)
@@ -207,6 +218,35 @@ class Records:
                 return
         raise NoActiveSubscriberError(subscriber_id)
 
+    async def switch_on(self, subscriber_id: str, *, actor: str, at: datetime) -> None:
+        self.asked += 1
+        for index, one in enumerate(self.registered_rows):
+            if one.subscriber.subscriber_id == subscriber_id and not one.subscriber.active:
+                self.registered_rows[index] = Registered(
+                    subscriber=subscriber(subscriber_id, active=True),
+                    created_at=one.created_at,
+                    deactivated_at=None,
+                    last_delivered_at=None,
+                    deliveries=one.deliveries,
+                    changes=one.changes,
+                )
+                self.writes.append(("switch_on", subscriber_id, actor))
+                return
+        raise NoSwitchedOffSubscriberError(subscriber_id)
+
+    async def replay(self, subscriber_id: str, handle: str, *, actor: str, at: datetime) -> None:
+        self.asked += 1
+        if ("replay", subscriber_id, handle) in [(w[0], w[1], w[3]) for w in self.replays]:
+            raise NothingToReplayError(subscriber_id)
+        for one in self.registered_rows:
+            if one.subscriber.subscriber_id == subscriber_id and any(
+                line.replay == handle for line in one.deliveries
+            ):
+                self.replays.append(("replay", subscriber_id, actor, handle))
+                self.writes.append(("replay", subscriber_id, actor))
+                return
+        raise NothingToReplayError(subscriber_id)
+
     async def dispatcher(self) -> DispatcherLine:
         self.asked += 1
         return self.line
@@ -226,6 +266,7 @@ def a_registered(subscriber_id: str = "billing_bridge") -> Registered:
                 occurred_at=LONG_AGO,
                 last_attempt_at=None,
                 reason="not sent: refused",
+                replay=replay_handle("evt-approval-1", subscriber_id),
             ),
         ),
         changes=(
@@ -377,6 +418,7 @@ def test_a_manager_sees_where_each_subscriber_points_whether_its_secret_is_held_
         "last_attempt_at",
         "reason",
         "next_attempt_at",
+        "replay",
     }
     assert [c["change"] for c in one["changes"]] == ["registered"]
     assert body["vault"] == VaultState.READY.value
@@ -551,6 +593,83 @@ def test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused(
     assert post(client, "u_admin", switch_off_path("billing_bridge")).status_code == 404
     assert post(client, "u_admin", switch_off_path("Not-An-Id")).status_code == 404
     assert len(records.writes) == 1
+
+
+def switch_on_path(subscriber_id: str) -> str:
+    return f"{API_PREFIX}{SWITCH_ON_PATH.format(subscriber_id=subscriber_id)}"
+
+
+def replay_path(subscriber_id: str, handle: str) -> str:
+    return f"{API_PREFIX}{REPLAY_PATH.format(subscriber_id=subscriber_id, handle=handle)}"
+
+
+def a_switched_off(subscriber_id: str = "billing_bridge") -> Registered:
+    one = a_registered(subscriber_id)
+    return Registered(
+        subscriber=subscriber(subscriber_id, active=False),
+        created_at=one.created_at,
+        deactivated_at=LONG_AGO,
+        last_delivered_at=None,
+        deliveries=one.deliveries,
+        changes=one.changes,
+    )
+
+
+def test_switching_back_on_records_who_did_it_and_a_subscriber_already_on_is_refused(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**M27.15.44's first half.** A switched-off subscriber is switched back on by a manager and
+    the change names them; switching on one that is on, an id with a slash in it, and a reader
+    without the authority are one refusal each. Delete this and a subscriber stays off for good,
+    or anybody signed in can start telling an outside address about the company again."""
+    records = Records((a_switched_off(),))
+    attach(app, records, Vault())
+    assert post(client, "u_none", switch_on_path("billing_bridge")).status_code == 404
+    first = post(client, "u_admin", switch_on_path("billing_bridge"))
+    assert first.status_code == 200
+    assert first.json()["change"] == "switched_on"
+    assert records.writes == [("switch_on", "billing_bridge", "u_admin")]
+    assert post(client, "u_admin", switch_on_path("billing_bridge")).status_code == 404
+    assert post(client, "u_admin", switch_on_path("Not-An-Id")).status_code == 404
+    assert len(records.writes) == 1
+
+
+def test_a_delivery_given_up_is_replayed_once_by_the_name_the_screen_was_given(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**M27.15.44's second half.** The screen offers a given-up delivery's replay name, a manager
+    replays it once and the change names them; the same name again, a made-up name and a reader
+    without the authority are one refusal each, and a name of no replay's shape never reaches the
+    store. Delete this and a delivery cannot be replayed, or one click re-sends it as often as
+    anybody presses."""
+    records = Records((a_registered(),))
+    attach(app, records, Vault())
+    listed = client.get(LISTING, headers=headers("u_admin")).json()
+    handle = listed["subscribers"][0]["deliveries"][0]["replay"]
+    assert handle == replay_handle("evt-approval-1", "billing_bridge")
+    assert post(client, "u_none", replay_path("billing_bridge", handle)).status_code == 404
+    first = post(client, "u_admin", replay_path("billing_bridge", handle))
+    assert first.status_code == 200
+    assert first.json()["change"] == "replayed"
+    assert post(client, "u_admin", replay_path("billing_bridge", handle)).status_code == 404
+    assert post(client, "u_admin", replay_path("billing_bridge", "0" * 32)).status_code == 404
+    asked = records.asked
+    assert post(client, "u_admin", replay_path("billing_bridge", "not-a-name")).status_code == 404
+    assert records.asked == asked, "a name of no replay's shape is refused before the store"
+    assert records.writes == [("replay", "billing_bridge", "u_admin")]
+
+
+def test_a_replay_name_says_nothing_of_the_event_it_names() -> None:
+    """The name a delivery is replayed by is a fixed-length digest that carries neither the event
+    id nor the subscriber's. Delete this and a name can be the event id, which an automation's run
+    shares with the record it is about, and the screen would carry a record id after all."""
+    from brain.ops.webhook_store import REPLAY_HANDLE_CHARS
+
+    handle = replay_handle("run_8f2c", "billing_bridge")
+    assert len(handle) == REPLAY_HANDLE_CHARS
+    assert "run_8f2c" not in handle and "billing" not in handle
+    assert handle != replay_handle("run_8f2c", "another_bridge")
+    assert handle == replay_handle("run_8f2c", "billing_bridge")
 
 
 def test_no_response_body_and_no_log_line_carries_the_secret(

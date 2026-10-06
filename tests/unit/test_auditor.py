@@ -110,6 +110,37 @@ def test_a_permission_history_is_the_four_actions_that_change_what_somebody_may_
     assert [one.action for one in beside] == [AuditAction.LEASH_CHANGE]
 
 
+def test_a_persons_history_holds_their_own_grants_entries_and_nobody_elses() -> None:
+    """**A capability grant is filed under the grant, not the person** (`0003`), so a person's
+    history is their own entries and the entries of the grants named as theirs, and a grant not
+    named is not shown even when its entry is in the view. The reader's audit reach still decides
+    each one: a reader of principal entries alone is shown none of the grant entries. Delete this
+    and a person's history can carry somebody else's grant, or one the reader could not have read
+    one at a time."""
+    entries = a_chain(
+        (AuditAction.GRANT, "grant:g1", "u_admin", {"capability": "read:client.name"}),
+        (AuditAction.GRANT, "principal:u_1", "u_admin", {"role": "member"}),
+        (AuditAction.GRANT, "grant:g2", "u_admin", {"capability": "read:client.cost"}),
+        (AuditAction.REVOKE, "grant:g1", "u_admin", {"capability": "read:client.name"}),
+    )
+    every_kind = a_view(entries, reader("read:audit.*"))
+    people_only = a_view(entries, reader("read:audit.principal"))
+
+    found = permission_history(
+        every_kind, subject_kind="principal", subject_id="u_1", grants=frozenset({"g1"})
+    )
+    narrow = permission_history(
+        people_only, subject_kind="principal", subject_id="u_1", grants=frozenset({"g1"})
+    )
+
+    assert [(one.action, one.subject_kind, one.subject_id) for one in found] == [
+        (AuditAction.GRANT, "grant", "g1"),
+        (AuditAction.GRANT, "principal", "u_1"),
+        (AuditAction.REVOKE, "grant", "g1"),
+    ]
+    assert [(one.subject_kind, one.subject_id) for one in narrow] == [("principal", "u_1")]
+
+
 def test_a_history_shows_only_entries_this_reader_could_have_read_one_at_a_time() -> None:
     """**The claim that makes this a filter rather than a second view.** A reader who cannot
     read an entry does not acquire it by asking for a history, and the way that is guaranteed

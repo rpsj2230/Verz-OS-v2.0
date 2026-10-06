@@ -30,6 +30,7 @@ ADDED_LATER: Mapping[str, tuple[str, ...]] = MappingProxyType(
             "max_tool_calls",
         ),
         "agent.manifest_act": ("channels",),
+        "gate.fast_path_rule": ("department", "learned_from"),
     }
 )
 

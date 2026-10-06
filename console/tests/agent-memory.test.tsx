@@ -12,8 +12,8 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { ABOUT_YOU_HEADING, CORRECTION_FORMAT, CORRECTION_NEEDED, NOTHING_REMEMBERED } from "../src/pages/agents/AgentMemory";
-import { agentMemoryApiPath, memoryDeletionApiPath, memoryEditApiPath, readAgentMemory } from "../src/pages/agents/agentMemoryQuery";
+import { ABOUT_YOU_HEADING, CORRECTION_FORMAT, CORRECTION_NEEDED, NOTHING_REMEMBERED, PROMOTE, PROMOTE_CONSEQUENCE } from "../src/pages/agents/AgentMemory";
+import { agentMemoryApiPath, memoryDeletionApiPath, memoryEditApiPath, promotionApiPath, readAgentMemory } from "../src/pages/agents/agentMemoryQuery";
 import { MEMORY_TAB, viewAddress } from "../src/pages/agents/AgentDetailPage";
 import { UNDO_API_PATH } from "../src/pages/learningQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -211,6 +211,36 @@ describe("the Memory section", () => {
     expect(JSON.parse(String(sent?.init?.body))).toEqual({ memory_id: "m1" });
   });
 
+  test("a learned rule offers Promote where the API said so, says how many agree, and is pressed from its confirmation", async () => {
+    // What breaks if this is deleted: M39.4.2.3's press drawn for a reader the route refuses, sent
+    // without asking, or its answer dropped so the presser cannot tell promoted from waiting.
+    const offered = memoryWire({
+      tier_two: [
+        { memory_id: "lr1", change: "fast_path_rule", evidence: [], promote_ready: true, learned_at: "2019-03-05T09:00:00Z", state: "held", agreeing: 3, promote_offered: true },
+        { memory_id: "lr2", change: "fast_path_rule", evidence: [], promote_ready: true, learned_at: "2019-03-05T09:00:00Z", state: "awaiting_second", promote_offered: false },
+      ],
+    });
+    const said = "The first step is taken. A different person who may promote rules here takes the second.";
+    const { container, idp } = await consoleAt(ADDRESS, {
+      ...answers(offered),
+      [`POST /api/v1${promotionApiPath("lr1")}`]: { body: { memory_id: "lr1", state: "awaiting_second", needs_two: true, said } },
+    });
+    const rows = [...container.querySelectorAll('[data-slot="tier-two"] li')];
+    expect(rows[0]?.textContent).toContain("3 separate conversations would have used it");
+    expect(rows[0]?.textContent).toContain("held for review");
+    expect(rows[1]?.textContent).toContain("waiting for a second person");
+    expect([...(rows[1]?.querySelectorAll("button") ?? [])]).toEqual([]);
+    expect(posts(idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click([...(rows[0]?.querySelectorAll("button") ?? [])].find((one) => one.textContent === PROMOTE) as Element);
+    });
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(PROMOTE_CONSEQUENCE);
+    expect(posts(idp)).toEqual([]);
+    await confirm(PROMOTE);
+    expect(posts(idp)[0]?.url).toContain(promotionApiPath("lr1"));
+    await waitFor(() => expect(container.querySelector('[role="status"]')?.textContent).toBe(said));
+  });
+
   test("an agent that remembers nothing says so, and a reader not sent tier three is shown none", async () => {
     // The siblings: empty lists read as one sentence, and null tier three draws nothing.
     const empty = memoryWire({ curated: [], extracted: [], about_you: [], history: [], tier_one: [], tier_two: [], tier_three: null });
@@ -227,6 +257,7 @@ describe("the Memory section", () => {
         "/api/v1/agents/{agent_id}/memory",
         "/api/v1/agents/{agent_id}/memory/{memory_id}/deletion",
         "/api/v1/agents/{agent_id}/memory/{memory_id}/edit",
+        "/api/v1/learning/{memory_id}/promote",
       ]),
     );
     const read = readAgentMemory({ curated: [{ memory_id: "m1" }, item("m2", "kept")], tier_three: null });

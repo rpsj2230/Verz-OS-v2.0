@@ -8,6 +8,8 @@
  */
 
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
+import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
+import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
 import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
@@ -18,13 +20,36 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/MyChannels.tsx myUnbindApiPath(row.channel)": [
     at("POST /api/v1/me/channels/{name}/unbind", "myUnbindApiPath", myUnbindApiPath("webhook")),
   ],
+  "src/components/MyAccounts.tsx myConsentPath(row.connector)": [
+    at("POST /api/v1/me/accounts/{connector}/consent", "myConsentPath", myConsentPath("xero")),
+  ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
   ],
   "src/pages/MyWorkspace.tsx EDIT_API_PATH": [at("POST /api/v1/me/memory/edit", "EDIT_API_PATH", EDIT_API_PATH)],
+  "src/pages/LearningUndo.tsx LEARNING_UNDO_API_PATH": [
+    at("POST /api/v1/me/learning/undo", "LEARNING_UNDO_API_PATH", LEARNING_UNDO_API_PATH),
+  ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/me/accounts/{connector}/consent": {
+    row: t(
+      "test_connector_consent",
+      "test_a_consent_is_answered_as_the_kind_it_was_started_as_and_the_kind_never_changes",
+      true,
+    ),
+    audit: {
+      notApplicable:
+        "Starting a person's own consent keeps no credential and changes no connection: it holds one " +
+        "ops.oauth_consent row for that person, which only they can take, once. The ledger entry is the " +
+        "refresh token's credential write when the vendor answers, which test_connector_consent_routes holds.",
+    },
+    behaviour: t(
+      "test_connector_consent_routes",
+      "test_a_reader_starts_their_own_consent_and_a_person_without_the_capability_is_refused_alike",
+    ),
+  },
   "POST /api/v1/me/channels/{name}/code": {
     row: t(
       "test_channel_binding",
@@ -50,6 +75,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     behaviour: t("test_mine_routes", "test_a_member_forgets_a_memory_formed_from_their_own_words"),
+  },
+  // The digest's undo is the same forget on the person's sign-in alone, through the same store, so
+  // the same database test follows it to the row, the ledger and the next recall.
+  "POST /api/v1/me/learning/undo": {
+    row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    behaviour: t("test_mine_routes", "test_a_person_holding_no_grant_at_all_undoes_what_was_learnt_from_them"),
   },
   "POST /api/v1/me/memory/edit": {
     row: t("test_memory_store", "test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next", true),
