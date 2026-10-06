@@ -53,14 +53,23 @@ stall is the thing worth reading there; here an empty week is the system having 
 somebody, and telling them so every Monday is a message trained into being ignored before the week
 it matters. See `A_WEEK_WITH_NOTHING_LEARNT_SENDS_NOTHING`.
 
-**The web process sends it, as it tells an asker their question expired.** The message goes through
-`brain.tell_later.tell`, which plans it to the person's own address on the channel they last wrote
-on, holds it to their reach at send time and sends it once; the channels' secrets and the mail relay
-are read under the application's role, which the worker does not hold. **It is not a control yet.**
-Registering one means widening `ops.control_run`'s name constraint, which is a migration, and no
-migration was given to this change; until then the loop is started with the application, like
-`brain.escalation_told`'s, and a week no process was running for is not sent. See
-`THE_WEB_PROCESS_SENDS_IT_AND_IT_IS_NOT_A_CONTROL_YET`.
+**The web process sends it, and the worker cannot: the mail relay is the application's.** The
+message goes through `brain.tell_later.tell`, which plans it to the person's own address on the
+channel they last wrote on, and that channel may be email. A chat channel's secret the worker could
+borrow per send (`brain.ops.channel_lease`, the `channel-send` policy), but the relay's password at
+`providers/mail_relay` is read under the application's role and no other:
+`ops/openbao/policies/application.hcl` says the application is the process that sends mail with it
+and nothing can mint one per message, and `worker.hcl` and `channel-send.hcl` each name the relay as
+the thing they leave out. A worker control would therefore reach every person who last wrote on Lark
+or Slack and silently nobody who last wrote by email. So the loop is started with the application,
+like `brain.escalation_told`'s, and every forked web worker runs it: **the operation ledger's key,
+the person and `learning_digest.<week>`, is what holds it to one message per person per week**, and
+two workers racing one week against PostgreSQL is a test. A week no web worker was running for is
+not sent. See `THE_WEB_PROCESS_SENDS_IT_BECAUSE_THE_MAIL_RELAY_IS_THE_APPLICATIONS`.
+
+Rejected: a worker control sending to chat channels only. Somebody reached only by email would never
+hear of the system learning from them, and nothing on any screen would say why. Rejected too:
+granting the worker the relay's password, which reverses a written security choice for one message.
 
 **A switch an administrator can turn off.** `LEARNING_DIGEST` is a row of `brain.ops.notices` and
 the sender asks `notice_is_on` before each pass, as every sender does.
@@ -140,13 +149,14 @@ A_WEEK_WITH_NOTHING_LEARNT_SENDS_NOTHING: Final = (
     "with nothing learnt that they may recall is sent nothing at all."
 )
 
-#: Why the web process sends it, and why it is not a scheduled control.
-THE_WEB_PROCESS_SENDS_IT_AND_IT_IS_NOT_A_CONTROL_YET: Final = (
-    "The message is told through brain.tell_later, whose channels' secrets and mail relay are read "
-    "under the application's role, which the worker does not hold, so the loop runs in the web "
-    "process as the expired-question telling does. A scheduled control needs ops.control_run's "
-    "names widened, which is a migration, so until one is written a week no process ran for is "
-    "not sent."
+#: Why the web process sends it, and the worker does not.
+THE_WEB_PROCESS_SENDS_IT_BECAUSE_THE_MAIL_RELAY_IS_THE_APPLICATIONS: Final = (
+    "A person is told on the channel they last wrote on, which may be email, and the mail relay's "
+    "password is read under the application's role and no other, by a written policy. A worker "
+    "control could borrow a chat channel's secret and could not send mail, so it would reach "
+    "everybody but the people reached by email. The loop therefore runs in every web worker, and "
+    "the operation ledger's key, the person and the week, holds it to one message per person per "
+    "week however many workers race."
 )
 
 # ------------------------------------------------------------------------ the figures

@@ -40,7 +40,7 @@ from brain.learning_told import (
     SIGNAL_WORDS,
     THE_MESSAGE_NAMES_A_LEARNING_AND_NEVER_WHAT_IT_SAYS,
     THE_UNDO_IS_THE_PERSONS_OWN_FORGET_ON_A_PAGE_EVERY_RECIPIENT_OPENS,
-    THE_WEB_PROCESS_SENDS_IT_AND_IT_IS_NOT_A_CONTROL_YET,
+    THE_WEB_PROCESS_SENDS_IT_BECAUSE_THE_MAIL_RELAY_IS_THE_APPLICATIONS,
     UNDO_PAGE,
     UNDO_PAGE_UNLINKED,
     UNDOING,
@@ -344,10 +344,21 @@ def test_a_process_asks_often_enough_to_send_on_the_first_day_of_the_week() -> N
     assert MOST_LEARNINGS_PER_PASS > 0
 
 
-def test_the_loop_says_why_it_is_the_web_processes_and_not_a_control() -> None:
-    """See `THE_WEB_PROCESS_SENDS_IT_AND_IT_IS_NOT_A_CONTROL_YET`. Delete this and the reason the
-    loop is not on the Scheduled jobs screen goes with the sentence."""
-    assert "which is a migration" in THE_WEB_PROCESS_SENDS_IT_AND_IT_IS_NOT_A_CONTROL_YET
+def test_only_the_application_may_read_the_mail_relay_so_the_web_process_sends_the_digest() -> None:
+    """See `THE_WEB_PROCESS_SENDS_IT_BECAUSE_THE_MAIL_RELAY_IS_THE_APPLICATIONS`, held against the
+    vault's own policies: the application's is the one that reads the relay's slot, by name or by a
+    wildcard. Delete this and the day a policy grants the worker the relay, the reason this is not a
+    worker control has stopped being true with nothing saying so."""
+    assert "the mail relay's password" in (
+        THE_WEB_PROCESS_SENDS_IT_BECAUSE_THE_MAIL_RELAY_IS_THE_APPLICATIONS
+    )
+    root = ROOT / "ops" / "openbao" / "policies"
+    readers = [
+        one.name
+        for one in sorted(root.glob("*.hcl"))
+        if re.search(r'path "providers/data/(mail_relay|\+)"', one.read_text("utf-8"))
+    ]
+    assert readers == ["application.hcl"]
 
 
 def test_a_summary_names_no_person_and_no_number() -> None:
@@ -599,3 +610,94 @@ def test_the_loader_reads_the_weeks_learnings_and_the_memories_already_marked() 
     assert every.marked == frozenset({"m_before"}) and not every.full
     assert [one.memory_id for one in newest.learnings] == ["m_alone"] and newest.full
     assert none == Loaded(learnings=(), marked=frozenset())
+
+
+@pytest.mark.needs_db
+def test_two_web_workers_racing_one_week_send_each_person_one_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The ledger key, across processes, against PostgreSQL.** Two web workers, each its own
+    application with its own connection to the operation ledger, run the same week at once through
+    the real `tell` and `deliver`, to a Slack whose every send is slow enough that the second
+    arrives while the first is still in flight. Each person is sent exactly one message, and the
+    two passes between them count one send per person. Delete this and the guarantee that makes a
+    loop in every forked web worker safe rests on a unit test with one process and a ledger in
+    memory. **Skips without a server.**"""
+    import json
+    import threading
+    import time as clock
+    from types import SimpleNamespace
+
+    from brain.channels.adapter import VendorAnswer
+    from brain.gate.context import Channel
+    from brain.mailbox_read import request_for
+    from brain.ops.channel_store import channel_secret_ref
+    from brain.settings import settings_from
+    from tests.unit.test_acceptance import at_head
+    from tests.unit.test_channel_pipeline import Deliveries, Records, Secrets, fresh_record
+    from tests.unit.test_tell_later import LastUsedBook
+
+    @dataclass
+    class SlowSlack:
+        """`ChannelTransport` that keeps every request, slowly, and answers as Slack accepts."""
+
+        sent: list[Any] = field(default_factory=list)
+        lock: threading.Lock = field(default_factory=threading.Lock)
+
+        def send(self, request: Any) -> VendorAnswer:
+            clock.sleep(0.3)
+            with self.lock:
+                self.sent.append(request)
+            return VendorAnswer(status=200, body=b'{"ok": true}')
+
+        def read(self, request: Any) -> VendorAnswer:
+            return VendorAnswer(connection_failed=True)
+
+    async def switched(session: Any, kind: NoticeKind) -> bool:
+        return True
+
+    async def loaded(sessions: Any, since: datetime, **kwargs: Any) -> Loaded:
+        return Loaded(learnings=LEARNT, marked=frozenset())
+
+    monkeypatch.setattr(learning_told, "notice_is_on", switched)
+    monkeypatch.setattr(learning_told, "learnings_since", loaded)
+    slack = SlowSlack()
+    secret = json.dumps({"signing_secret": "s" * 32, "bot_token": "xoxb-test"})
+
+    with at_head("brain_learning_told_race") as url:
+
+        def worker() -> FastAPI:
+            app = FastAPI()
+            state = app.state
+            state.settings = settings_from({"BRAIN_DATABASE_URL": url})
+            state.gate = SimpleNamespace(store=Readers())
+            state.channel_records = Records({Channel.SLACK: fresh_record(Channel.SLACK, tenant={})})
+            state.channel_addresses = LastUsedBook(
+                {"u_me": (Channel.SLACK, "UME0001"), "u_colleague": (Channel.SLACK, "UCOL0001")}
+            )
+            state.channel_secrets = Secrets({channel_secret_ref(Channel.SLACK).path: secret})
+            state.channel_transport = slack
+            state.channel_deliveries = Deliveries()
+            return app
+
+        async def race() -> list[Told]:
+            passes = [
+                send_learning_digests(
+                    request_for(one),
+                    Session,  # type: ignore[arg-type]
+                    now=NOW,
+                    zone=UTC,
+                    page=PAGE,
+                    readers=Readers(),
+                    week=WEEK,
+                )
+                for one in (worker(), worker())
+            ]
+            return list(await asyncio.gather(*passes))
+
+        told = asyncio.run(race())
+
+    sent_to = sorted(json.loads(bytes(one.body))["channel"] for one in slack.sent)
+    assert sent_to == ["UCOL0001", "UME0001"]
+    assert sum(one.sent for one in told) == 2
+    assert sum(one.already + one.undelivered for one in told) == 2
