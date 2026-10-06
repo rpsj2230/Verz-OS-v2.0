@@ -26,11 +26,14 @@ about every source the console connects, so those checks fill each source's form
 made up for the run (`FORMS`) and a source added to the console without a row there fails the
 first check rather than being skipped. See `A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN`.
 
-**Two checks write to the database and six do not.** The worker's read and the health it leaves,
-and the connect route's key, need the connection and attempt tables, and the notice needs two
-reserved people and their reach. Everything else is a function of declarations and recorded
-answers, so it runs on any install whatever its database holds, and `tests/unit/
-test_acceptance_connector_framework.py` runs those six with no database at all.
+**Three checks write to the database and six do not.** The worker's read and the health it leaves,
+and the connect route's key, need the connection and attempt tables, the notice needs two reserved
+people and their reach, and the lease check's reads are complete reads of everything, which retire
+what they did not return (`brain.ops.connector_sync.
+WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`), inside the check's transaction.
+Everything else is a function of declarations and recorded answers, so it runs on any install
+whatever its database holds, and `tests/unit/test_acceptance_connector_framework.py` runs those six
+with no database at all.
 
 **The retry is shown at two budgets, because at the live budget Xero's is never taken.** Xero states
 its wait in whole seconds, and a question's reads end by 1.6 seconds, so a stated second plus a
@@ -44,14 +47,17 @@ already unit tested that way; what an install has to show is that the executor i
 front of a real read, which only a read shows.
 
 Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1
-Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.3.4
+Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.3.4, M11.5.2
 """
 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import functools
 import json
 import math
+import re
 import secrets
 import threading
 import time
@@ -64,7 +70,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qs, urlsplit
 
 from brain.connectors.contract import FetchRequest, HealthState, identity_mode_default
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import CodeReading, ToolReading, ViewReading, shipped
 from brain.connectors.federation import CONNECTOR_TIMEOUT_MS, FEDERATION_TIMEOUT_MS, FailureReason
 from brain.connectors.live_read import (
     LIVE_READ_BUDGET_MS,
@@ -125,6 +131,8 @@ from brain.ops.secrets import MAX_LEASE
 
 if TYPE_CHECKING:
     from brain.connectors.manifest import ConnectorManifest
+    from brain.connectors.transports import SourceRecord
+    from brain.core.envelope import TypedResult
     from brain.ops.connector_sync import Attempt
     from brain.ops.connector_sync_run import ConnectorKeys, SourceCaller
     from brain.ops.openbao import RoleToken, StaticVersion
@@ -171,29 +179,14 @@ CONNECTED_ALREADY: Final = (
 )
 
 # ------------------------------------------------------------------------ the figures
-#: How each source the console connects is filled in, by name. See
-#: `A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN`.
+#: How each source the console connects is filled in, by name: its own declaration's
+#: `ConnectExample.fresh`, given the departments a check may write grants in, so a connector added
+#: is filled in here with nothing typed. See `A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN`.
 FORMS: Final[Mapping[str, Callable[[], dict[str, str]]]] = MappingProxyType(
     {
-        "freshdesk": lambda: {
-            "domain": f"acceptance-{secrets.token_hex(4)}.freshdesk.com",
-            "department": RESERVED_DEPARTMENTS[0],
-        },
-        "hubspot": lambda: {"portal_id": str(10**8 + secrets.randbelow(9 * 10**8))},
-        SOURCE: _settings,
-        "google_drive": lambda: {
-            "folder": f"acceptance{secrets.token_hex(8)}",
-            "domain": f"acceptance-{secrets.token_hex(4)}.example",
-            "department": RESERVED_DEPARTMENTS[0],
-            "steward": f"acceptance-steward-{secrets.token_hex(4)}",
-        },
-        "laravel": lambda: {
-            "schema": f"acceptance_{secrets.token_hex(4)}",
-            "client_rule": f"department = {RESERVED_DEPARTMENTS[0]}",
-            "user_rule": f"department in {', '.join(RESERVED_DEPARTMENTS)}",
-            "max_rows": "500",
-            "timeout_seconds": "10",
-        },
+        name: functools.partial(one.console.example.fresh, RESERVED_DEPARTMENTS)
+        for name, one in shipped().items()
+        if one.console is not None and one.console.example is not None
     }
 )
 
@@ -217,6 +210,12 @@ EARLIEST_FRACTION: Final = 0.9
 #: How long a silent source holds its call before the check releases it. Well past the budget, so
 #: only the executor's timeout can end the read on time.
 HOLD_SECONDS: Final = 5.0
+
+#: How many independent reads the fan-out step makes at once, and how long each is held. A fourth
+#: read needs the first, so the question's critical path is two holds long.
+FAN_OUT: Final = 3
+FAN_OUT_HOLD_SECONDS: Final = 0.2
+CRITICAL_PATH: Final = 2
 
 #: How many askers ask for one record at once. The leaf's twenty.
 HERD: Final = 20
@@ -374,6 +373,13 @@ def _form(name: str) -> dict[str, str]:
     return fill()
 
 
+def _typed(selector: str, value: str) -> bool:
+    """Whether a scope's selector is what was typed into one setting: the setting itself, a name
+    inside it (a database's `schema.v_client`), or one item of a list it holds (a domain)."""
+    items = [one.strip().lower().rstrip(".") for one in re.split(r"[\s,;]+", value)]
+    return selector in (value, *items) or selector.startswith(f"{value}.")
+
+
 def _credential(name: str) -> str:
     """A credential made up for the check in the shape this source takes it (M11.7.7).
 
@@ -398,6 +404,8 @@ def _credential(name: str) -> str:
             return json.dumps(
                 {"user": f"acceptance_{secrets.token_hex(4)}", "password": secrets.token_hex(16)}
             )
+        case CredentialShape.NONE:
+            return ""
 
 
 @dataclass
@@ -600,6 +608,8 @@ async def a_source_is_read_by_its_declaration_and_its_key_is_in_no_table(
     plan = plan_for(connected.connection, last=None, now=h.now)
     if plan.refused or not plan.due or plan.reading is None:
         raise CheckFailedError("the worker's plan would not read a source connected as declared")
+    if isinstance(plan.reading, ViewReading):
+        raise CheckFailedError("the source this check reads is not read over HTTP")
     answered = _Answering(_listed)
     read = await attempt(
         connected,
@@ -667,6 +677,8 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 
     rig = _rig(h)
     reading = READINGS[SOURCE]
+    if isinstance(reading, ViewReading | ToolReading | CodeReading):
+        raise CheckFailedError("the source this check reads is not read over HTTP")
     for entity in reading.entities():
         try:
             reading.operation(entity, settings=rig.settings, resolver=_Inside())
@@ -718,8 +730,8 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 @check(
     leaves=("M11.2.3",),
     sentence=(
-        "Each source the console connects is connected to the one organisation, account, "
-        "helpdesk, folder or database typed and admits no other, and the connect route refuses a "
+        "Each source the console connects is connected to the organisation, account, helpdesk, "
+        "folder, database or domains typed and admits no other, and the connect route refuses a "
         "selector of *, **, all or everything for it in that source's own words before any "
         "manifest is built."
     ),
@@ -739,10 +751,7 @@ async def a_source_is_connected_to_one_named_thing_and_never_to_everything(h: Ha
         named = [
             one
             for one in kind.settings
-            if all(
-                selector in (settings[one.name],) or selector.startswith(f"{settings[one.name]}.")
-                for selector in scope.selectors
-            )
+            if all(_typed(selector, settings[one.name]) for selector in scope.selectors)
         ]
         if not scope.selectors or len(named) != 1:
             raise CheckFailedError(
@@ -826,12 +835,13 @@ async def a_run_leases_its_key_and_the_next_run_reads_a_replaced_one(h: Harness)
 
 # ------------------------------------------ 5. whose key, how long, and once for many
 @check(
-    leaves=("M11.2.5", "M11.5.1", "M11.5.4"),
+    leaves=("M11.2.5", "M11.5.1", "M11.5.4", "M11.5.2"),
     sentence=(
-        "A live read of a Xero record runs only under the service key the source declares: one "
-        "asked under the asker's own credentials borrows no key and makes no call. A source that "
-        "does not answer is cut off at 800 ms and left out while another answers, inside the live "
-        "read budget, and twenty askers of one record at once make one call to it."
+        "A live Xero read runs only under the service key the source declares; one asked under "
+        "the asker's own credentials borrows no key and makes no call. A silent source is cut off "
+        "at 800 ms while another answers, in budget; three independent reads run at once and one "
+        "needing the first waits only for it; and twenty askers of one record at once make one "
+        "call to it."
     ),
 )
 async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
@@ -890,6 +900,9 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
     if not LIVE_READ_TIMEOUT_MS * EARLIEST_FRACTION <= elapsed_ms < LIVE_READ_BUDGET_MS:
         raise CheckFailedError("a read of a silent source did not end at its timeout in budget")
 
+    # M11.5.2: independent reads at once, and the question as long as its one critical path.
+    await _fan_out_takes_its_critical_path(rig, number)
+
     # M11.5.4: twenty askers of one record at once, and one call.
     def held(url: str) -> SourceAnswer:
         time.sleep(HERD_HOLD_SECONDS)
@@ -926,6 +939,43 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
             raise CheckFailedError("an asker of a record read once was answered with another")
 
 
+async def _fan_out_takes_its_critical_path(rig: _Rig, number: str) -> None:
+    """Three reads of three records with nothing between them, and a fourth that needs the first.
+
+    Each is held for `FAN_OUT_HOLD_SECONDS`. Run at once, the three end in about one hold and the
+    fourth one hold later, so the question takes two holds: its critical path. Made one after
+    another they take four, and the check refuses anything from three. The fourth's request is
+    built from the first's answer, so it cannot have been sent before that answer came.
+    """
+    ids = [str(uuid.uuid4()) for _ in range(FAN_OUT)]
+
+    def held(url: str) -> SourceAnswer:
+        time.sleep(FAN_OUT_HOLD_SECONDS)
+        return _listed(url, _invoice(next(one for one in ids if one in url), number))
+
+    def after_the_first(answered: Mapping[str, TypedResult[SourceRecord]]) -> FetchRequest:
+        if "record-0" not in answered:
+            raise CheckFailedError("a dependent read was built before the read it needs answered")
+        return _call(FAN_OUT, ids[FAN_OUT]).request
+
+    ids.append(str(uuid.uuid4()))
+    calls = (
+        *(_call(index, ids[index]) for index in range(FAN_OUT)),
+        dataclasses.replace(
+            _call(FAN_OUT, ids[FAN_OUT]), depends_on=("record-0",), derive=after_the_first
+        ),
+    )
+    started = time.monotonic()
+    fanned = await _ask(rig.sources(_Answering(held)), calls)
+    elapsed = time.monotonic() - started
+    if sorted(fanned.rows) != [f"record-{index}" for index in range(FAN_OUT + 1)]:
+        raise CheckFailedError("a read in a fan-out, or one waiting on another, was not answered")
+    if elapsed < CRITICAL_PATH * FAN_OUT_HOLD_SECONDS * EARLIEST_FRACTION:
+        raise CheckFailedError("a read that needs another was made before that one answered")
+    if elapsed >= (CRITICAL_PATH + 1) * FAN_OUT_HOLD_SECONDS:
+        raise CheckFailedError("independent live reads were made one after another, not at once")
+
+
 # ------------------------------------------------------ 6. the bucket and the ceiling
 @check(
     leaves=("M11.3.1", "M11.3.5"),
@@ -933,7 +983,7 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
         "Every connectable source's plan and live-read bucket follow its documented row in "
         "brain.ops.limits, and Xero's row states its daily figure in its own note; live reads past "
         "the bucket's burst are refused as quota with no call, and a source with no documented "
-        "row, HubSpot, Google Drive and Laravel today, is not read at all."
+        "row is not read at all."
     ),
 )
 async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> None:
@@ -953,8 +1003,9 @@ async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> Non
         plan = plan_for(connection, last=None, now=h.now)
         row = connector_ceiling(manifest.ceiling)
         if row is None:
-            # Refused for its missing ceiling, or before that for having no reading at all, which
-            # is Google Drive's and Laravel's case: either way it is not read.
+            # Refused for its missing ceiling, or before that for having no reading at all: either
+            # way it is not read. No source offered today lacks a row, and the branch stays for
+            # the next one that does.
             if plan.refused not in (NO_VERIFIED_CEILING, NO_READING):
                 raise CheckFailedError(
                     "a source with no documented ceiling was planned for reading"

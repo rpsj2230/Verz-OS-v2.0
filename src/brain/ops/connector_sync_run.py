@@ -32,9 +32,38 @@ Xero's `X-DayLimit-Remaining`, is what catches the calls other integrations made
 `brain.ops.webhook_delivery` sends through, for its reason: a name that answered outside to the
 check and inside to the connection is the ordinary way past the rule.
 
-**A page is written when it is read.** Each page's records are upserted in a transaction of their
-own before the next page is asked for, so a run that fails on page four keeps pages one to three,
-with the reading time each was read at.
+**A page is written when it is read, and the read's place moves with it.** Each page's records are
+upserted in a transaction of their own before the next page is asked for, so a run that fails on
+page four keeps pages one to three, with the reading time each was read at, and the attempt's row
+records that page four is where the next attempt starts (`brain.ops.connector_sync.
+A_READ_CUT_SHORT_CARRIES_ON_WHERE_IT_STOPPED`). The first page a read asks is the one
+`brain.ops.connector_sync.next_read` decides: where the last attempt stopped, the source's changes
+since the last complete read, or everything.
+
+**A page that changes what the index says advances the source's epoch in its own transaction**,
+and a complete read of everything retires, in one more, the rows it did not see. The comparison is
+with the live rows the page names, read in the same transaction just before they are written, so
+a page that only confirms them moves no epoch. See
+`brain.ops.connector_sync.A_CHANGED_READ_ADVANCES_ITS_SOURCE_S_EPOCH` and
+`WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
+
+**An entity listed under another is walked once under each parent this read kept (M11.7.3).**
+Cloudflare lists a DNS record only under its zone, so the zones are read first and the records then
+read zone by zone, each page named by the zone's id and its own (`walks`,
+`brain.connectors.declaration.ListedUnder`). Rejected: the parents read from the index the last run
+left, which would list records under a zone the source has since removed and miss one it added.
+**A read carried on over several attempts reads its parents from the index all the same, and that
+is not the rejected design**: the rows it reads are the ones this read wrote, since it began
+(`brain.ops.connector_sync_store.seen_since`), so a zone removed before the read is not among them
+and one added is, exactly as if the read had kept them in memory.
+
+**A pass cut short is carried on whatever shape its walk takes (M11.9.15).** The walk's place is the
+arguments of the page it would ask next, which a Drive walk fills with the folders still to list, a
+routed reading with its next route, and a walk under a parent with that parent's id; a walk ended
+by `MAX_PAGES_PER_ENTITY` stops its entity there, and the next attempt asks that page first. A pass
+that skipped something to reach its end, a routed server that did not answer or a folder past a
+`brain.connectors.declaration.BoundedWalk`'s bound, is partial and retires nothing. A database's
+views are read again from the start: see `brain.ops.connector_sync.A_VIEW_READ_IS_ONE_BOUNDED_READ`.
 
 **What is written is the minimal index and nothing else.** Every record passes
 `brain.ops.connector_sync.kept_fields` before its page is written, and the run hands nothing to the
@@ -43,12 +72,34 @@ document to `brain.knowledge.chunk_store.ingest_document`, which is a bulk sync 
 owner's rule and was removed with the leg that fed it. See
 `brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
 
+**A source that is views in a company's own database takes one typed branch of this loop
+(M11.6.1).** Its reading is a `brain.connectors.declaration.ViewReading`, so `_read_views` reads
+each view once, bounded, admitted by the same ceiling, written through the same `kept_fields` and
+recorded by the same `after_attempt`. The lease hands over the user the slot keeps beside the
+password, and the pair lives in a `DatabaseLogin` for the attempt and is dropped with the lease.
+See `brain.connectors.declaration.A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
+
+**A Google source's key file is exchanged for a token here, for the one attempt (M11.7.1).**
+`KeyScheme.GOOGLE_SERVICE_ACCOUNT` is presented as a bearer token that `mint_token` obtains from
+Google's own token endpoint with the key the lease holds, through `SourcePoster`, the same pinned
+connection a call to the source goes through. The token lives in the attempt's frame and goes when
+the attempt does; `authorization` refuses to build such a source's header from anything but the
+token, so the key file itself is never sent. See `brain.connectors.google_token`, which argues the
+exchange once for both Google sources.
+
+**An MCP server's tools and custom code take one typed branch too (M11.1.2, M11.1.5).** Both
+read one entity at a time by calls this module makes with the leased key, each admitted by the
+ceiling (`_read_by_calls`): an MCP session's posts (`brain.ops.mcp_session`), or the calls a
+custom connector's sandboxed code planned (`brain.ops.custom_code_run`), whose code never holds
+the key (`brain.connectors.custom_code.THE_KEY_NEVER_ENTERS_THE_SANDBOX`).
+
 Rejected: reading through `brain.tools.fetch.Fetcher`, which the connectors' own `connector_fetch`
 closures take. It carries no headers and no status, so a key cannot be sent through it and a 429
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.6.1, M11.7.3, M11.7.1
+Task ids: M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15, M11.1.2, M11.1.5
 """
 
 from __future__ import annotations
@@ -61,14 +112,40 @@ import ssl
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import Any, Final, Protocol
 from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.connectors.declaration import KeyScheme
+from brain.connectors.backfill import BackfillCursor
+from brain.connectors.contract import ConnectorContractError, FetchRequest
+from brain.connectors.custom_code import CustomCodeError, KeyInSandboxError
+from brain.connectors.declaration import (
+    BoundedWalk,
+    CodeReading,
+    DatabaseLogin,
+    KeyScheme,
+    ListedUnder,
+    PageReply,
+    Reading,
+    RoutedReading,
+    ScopedReading,
+    ToolReading,
+    ViewReading,
+    listed_under,
+)
+from brain.connectors.google_token import (
+    A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER,
+    MAX_TOKEN_ANSWER_BYTES,
+    AccessToken,
+    TokenNotIssuedError,
+    exchange,
+    token_from,
+)
+from brain.connectors.mcp import McpToolNotAsReviewedError
 from brain.connectors.projection import ProjectedRecord
-from brain.connectors.rest import MAX_RESPONSE_BYTES
+from brain.connectors.rest import MAX_RESPONSE_BYTES, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.ops.connectable import READING_ROLE
 from brain.ops.connector_lease import (
@@ -79,40 +156,68 @@ from brain.ops.connector_lease import (
 )
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
+    CODE_DID_NOT_COMPLETE,
+    KEY_KEPT_OUT,
     MAX_PAGES_PER_ENTITY,
     MAX_SECONDS_WAITING_IN_A_RUN,
     NO_KEY,
+    NO_KEY_FILE_EXCHANGE,
+    NO_SANDBOX,
     NO_VAULT,
+    NO_WAY_TO_POST,
     OWN_SHARE_SPENT,
     READ_BUT_CUT_SHORT,
+    READ_BUT_PART_LEFT_OUT,
     READ_TO_THE_END,
     READINGS,
     SHAPE_DISAGREED,
     SOURCE_ALLOWANCE_REFUSED,
+    TOOL_NOT_AS_REVIEWED,
+    TOOL_SAID_IT_FAILED,
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
     Attempt,
+    ReadPass,
+    ReadState,
     SourceReading,
     StoredValue,
     SyncOutcome,
     SyncPlan,
     SyncState,
     after_attempt,
+    after_the_read,
+    changed,
+    database_failure_detail,
     failure_detail,
     kept_fields,
+    next_read,
+    page_cursor,
+    page_to_ask,
     plan_for,
 )
 from brain.ops.connector_sync_store import (
     LiveConnection,
+    advance_epoch,
     attempt_row,
+    live_fields,
     read_live,
     read_states,
     record_upsert,
+    retire_unseen,
+    seen_since,
 )
-from brain.ops.credentials import KEY_FIELD
+from brain.ops.credentials import KEY_FIELD, USER_FIELD
+from brain.ops.custom_code_run import CodeRunFailedError, installed_runner, read_once
+from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import HttpsTokenIssuer, index_if_due
 from brain.ops.leases import SealedSecret
-from brain.ops.limits import LimiterState, check
+from brain.ops.limits import Limit, LimiterState, check
+from brain.ops.mcp_session import (
+    CallNotAdmittedError,
+    CallNotAnsweredError,
+    open_session,
+    read_entity,
+)
 from brain.ops.openbao import (
     CONNECTOR_KEY_PREFIX,
     OpenBaoVault,
@@ -122,7 +227,8 @@ from brain.ops.openbao import (
 )
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.ops.webhook_delivery import HTTPS_PORT, SystemResolver, _PinnedHTTPSConnection
-from brain.tools.fetch import Resolver, UnsafeAddressError
+from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
+from brain.tools.run_skill import ScriptRunner
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -149,33 +255,235 @@ class ConnectorKeyAbsentError(SecretsUnavailableError):
     """The vault answered and holds no key at this source's slot."""
 
 
-def authorization(scheme: KeyScheme, key: str) -> str:
+def authorization(scheme: KeyScheme, key: str | AccessToken) -> str:
     """The one header value a source's key is sent in, in the shape its reading names.
 
     Here and not on the reading, for `brain.connectors.declaration.
     A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`: this module already holds the key for
     one request, and a reading never does. A `match` over a closed enumeration, so a scheme added
     without a shape here fails mypy's exhaustiveness check rather than falling back to a bearer.
+
+    A Google source's header is built from an `AccessToken` and from nothing else, so a caller
+    that skipped `presented` sends nothing rather than the key file. See
+    `brain.connectors.google_token.A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER`.
     """
     match scheme:
         case KeyScheme.BEARER:
-            return f"Bearer {key}"
+            return f"Bearer {_plain(key)}"
         case KeyScheme.BASIC_KEY_AS_USER:
-            pair = base64.b64encode(f"{key}:X".encode()).decode("ascii")
+            pair = base64.b64encode(f"{_plain(key)}:X".encode()).decode("ascii")
             return f"Basic {pair}"
+        case KeyScheme.NONE:
+            return ""
+        case KeyScheme.GOOGLE_SERVICE_ACCOUNT:
+            if not isinstance(key, AccessToken):
+                raise ConnectorContractError(A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER)
+            return f"Bearer {key.value}"
 
 
-def call_headers(reading: SourceReading, settings: Mapping[str, str], key: str) -> dict[str, str]:
+def walks(
+    reading: SourceReading,
+    entity: str,
+    under: ListedUnder | None,
+    parents: Sequence[str],
+    *,
+    read: ReadPass,
+    walk: BackfillCursor,
+    settings: Mapping[str, str],
+) -> tuple[tuple[str | None, Mapping[str, str]], ...]:
+    """Where this attempt's walks of one entity start: where the read stopped, then the rest.
+
+    An entity listed on its own is walked once, from the page `page_to_ask` names: where an
+    earlier attempt of this read stopped, else its first page, its changes' first page, or a
+    routed reading's first route. One listed under another
+    (`brain.connectors.declaration.ListedUnder`) is walked once per parent this read kept, in the
+    order of the parents' ids, the parent's id laid into the path, and a parent that kept nothing
+    lists nothing under it. A walk carried on starts at the page it stopped at, under the parent
+    that page names, and goes on to every parent whose id comes after it. Each walk is bounded by
+    `MAX_PAGES_PER_ENTITY` on its own, so a zone with few records is never cut short by one with
+    many. See `brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`.
+    """
+    asked = page_to_ask(reading, read, walk, settings=settings)
+    if asked is None:
+        return ()
+    if under is None:
+        return ((None, asked),)
+    ordered = sorted(set(parents))
+    if not walk.cursor:
+        return tuple(
+            (parent_id, MappingProxyType({**asked, under.parameter: parent_id}))
+            for parent_id in ordered
+        )
+    stopped_under = asked.get(under.parameter, "")
+    first = page_to_ask(reading, read, replace(walk, cursor=""), settings=settings)
+    later: tuple[tuple[str | None, Mapping[str, str]], ...] = ()
+    if first is not None:
+        later = tuple(
+            (parent_id, MappingProxyType({**first, under.parameter: parent_id}))
+            for parent_id in ordered
+            if parent_id > stopped_under
+        )
+    return ((stopped_under, asked), *later)
+
+
+def _plain(key: str | AccessToken) -> str:
+    return key.value if isinstance(key, AccessToken) else key
+
+
+def call_headers(
+    reading: SourceReading, settings: Mapping[str, str], key: str | AccessToken
+) -> dict[str, str]:
     """Every header one call to a source carries: the connection's own, JSON, and the key.
 
     One function for a scheduled read and a test (`brain.ops.connector_probe_run`), so the two
-    calls a source sees from this install cannot come to differ in what they send.
+    calls a source sees from this install cannot come to differ in what they send. `key` is what
+    `presented` gave for this reading: the key itself, or the token a key file was exchanged for.
     """
+    sent = authorization(reading.key_scheme(), key)
     return {
         **reading.call_headers(settings),
         "Accept": "application/json",
-        "Authorization": authorization(reading.key_scheme(), key),
+        # A source that takes no key is sent no `Authorization` at all, not an empty one.
+        **({} if reading.key_scheme() is KeyScheme.NONE else {"Authorization": sent}),
     }
+
+
+@dataclass
+class Unleased:
+    """`KeyLease` for a source that takes no key: nothing is minted, read or revoked (M11.7.4)."""
+
+    def key(self) -> str:
+        return ""
+
+    def user(self) -> str:
+        # A source that takes no key keeps no user either; only a database's slot holds one.
+        raise ConnectorKeyAbsentError(NO_KEY)
+
+    def close(self, now: datetime) -> LeaseOutcome:
+        del now
+        return LeaseOutcome.NONE
+
+
+def borrowed(keys: ConnectorKeys, reading: Reading, ref: SecretRef, *, now: datetime) -> KeyLease:
+    """The lease one read holds: none for a source that takes no key, and the vault's otherwise.
+
+    A source whose record is published to anybody who asks has no slot to read, so asking the
+    vault for one would fail every read with a missing key and mint a run token for nothing. A
+    database's views are always read as a user with a password (M11.6.1), so a `ViewReading`, which
+    declares no key scheme, is always leased.
+    """
+    if not isinstance(reading, ViewReading) and reading.key_scheme() is KeyScheme.NONE:
+        return Unleased()
+    return keys.lease(ref, now=now)
+
+
+def page_operation(
+    reading: SourceReading,
+    entity: str,
+    page: Mapping[str, str],
+    *,
+    settings: Mapping[str, str],
+    resolver: Resolver,
+) -> RestOperation:
+    """The operation one page is read by: the reading's own, or a routed reading's for the page.
+
+    See `brain.connectors.declaration.A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER`.
+    """
+    if isinstance(reading, RoutedReading):
+        return reading.operation_for(entity, page, settings=settings, resolver=resolver)
+    return reading.operation(entity, settings=settings, resolver=resolver)
+
+
+def first_arguments(
+    reading: SourceReading, entity: str, *, settings: Mapping[str, str]
+) -> Mapping[str, str] | None:
+    """The first page's arguments: the connection's own first route for a routed reading."""
+    if isinstance(reading, RoutedReading):
+        return reading.first_route(entity, settings=settings)
+    return reading.first_page(entity)
+
+
+# ------------------------------------------------------------------ the token a key file buys
+
+
+class SourcePoster(Protocol):
+    """One POST to an address the rule checked, with these headers and this body, never following.
+
+    Beside `SourceCaller` rather than inside it, because only a source whose key is exchanged for a
+    token, or whose figures are asked for with a body, ever posts, and every other source's caller
+    owes nothing here.
+    """
+
+    def post(
+        self,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        max_bytes: int,
+    ) -> SourceAnswer:
+        """The answer, or a timeout or a failed connection. Never raises for the network."""
+        ...
+
+
+def mint_token(
+    key_file: str,
+    scopes: tuple[str, ...],
+    *,
+    poster: SourcePoster,
+    resolver: Resolver,
+    now: datetime,
+) -> AccessToken:
+    """A token for one read, from Google's token endpoint, with the key file the lease holds.
+
+    The address is Google's own constant, checked by the address rule like any source's, and the
+    answer is read by `brain.connectors.google_token.token_from`, which raises
+    `TokenNotIssuedError` with the kind of failure and nothing from the reply.
+    """
+    asked = exchange(key_file, scopes, now=int(now.timestamp()))
+    checked = assert_fetchable(asked.url, resolver)
+    answer = poster.post(
+        checked.url,
+        address=checked.address,
+        headers=dict(asked.headers),
+        body=asked.body,
+        max_bytes=MAX_TOKEN_ANSWER_BYTES,
+    )
+    return token_from(
+        status=answer.status,
+        body=answer.body,
+        timed_out=answer.timed_out,
+        connection_failed=answer.connection_failed,
+    )
+
+
+def presented(
+    reading: SourceReading,
+    key: str,
+    *,
+    poster: SourcePoster | None,
+    resolver: Resolver,
+    now: datetime,
+) -> str | AccessToken:
+    """What this reading's calls present: the key as it is, or the token its key file buys.
+
+    Raises `TokenNotIssuedError` when a token was needed and not issued, and when this process was
+    given no way to post for one; `UnsafeAddressError` when Google's address resolved inside this
+    network. A reading naming the Google scheme and no scope is refused before anything is sent.
+    See `brain.connectors.declaration.A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR`.
+    """
+    match reading.key_scheme():
+        case KeyScheme.BEARER | KeyScheme.BASIC_KEY_AS_USER | KeyScheme.NONE:
+            return key
+        case KeyScheme.GOOGLE_SERVICE_ACCOUNT:
+            if not isinstance(reading, ScopedReading):
+                raise TokenNotIssuedError(CallOutcome.REJECTED)
+            if poster is None:
+                raise TokenNotIssuedError(CallOutcome.UNAVAILABLE)
+            return mint_token(
+                key, reading.token_scopes(), poster=poster, resolver=resolver, now=now
+            )
 
 
 # ------------------------------------------------------------------------ the key
@@ -186,6 +494,14 @@ class KeyLease(Protocol):
 
     def key(self) -> str:
         """The key, or the `SecretsUnavailableError` saying why this attempt has none."""
+        ...
+
+    def user(self) -> str:
+        """The user name a database user's slot keeps beside its password, which is the key.
+
+        Raises the `SecretsUnavailableError` `key` would, or `ConnectorKeyAbsentError` for a slot
+        that keeps no user, which is every source whose credential is one key (M11.6.1).
+        """
         ...
 
     def close(self, now: datetime) -> LeaseOutcome:
@@ -235,11 +551,13 @@ class _Held:
         reader: RunKeyReader | None = None,
         expires_at: datetime | None = None,
         key: SealedSecret | None = None,
+        user: str = "",
     ) -> None:
         self._failure = failure
         self._reader = reader
         self._expires_at = expires_at
         self._key = key
+        self._user = user
         self._ended: LeaseOutcome | None = None
 
     def __repr__(self) -> str:
@@ -255,10 +573,18 @@ class _Held:
             raise ConnectorKeyAbsentError(NO_KEY)
         return self._key.reveal()
 
+    def user(self) -> str:
+        if self._failure is not None:
+            raise self._failure
+        if self._key is None or not self._user:
+            # A slot holding one key keeps no user, and `close` forgets the user with the key.
+            raise ConnectorKeyAbsentError(NO_KEY)
+        return self._user
+
     def close(self, now: datetime) -> LeaseOutcome:
         if self._ended is not None:
             return self._ended
-        reader, self._reader, self._key = self._reader, None, None
+        reader, self._reader, self._key, self._user = self._reader, None, None, ""
         if reader is None:
             self._ended = LeaseOutcome.NONE
             return self._ended
@@ -340,7 +666,16 @@ class WorkerConnectorKeys:
         if not isinstance(value, str) or not value.strip():
             absent_key = ConnectorKeyAbsentError(NO_KEY)
             return _Held(failure=absent_key, reader=reader, expires_at=expires_at)
-        return _Held(failure=None, reader=reader, expires_at=expires_at, key=SealedSecret(value))
+        # A database user's slot keeps the user beside the password (M11.6.1); every other slot
+        # keeps none, and `user` then says so rather than handing over an empty name.
+        named = fields.get(USER_FIELD)
+        return _Held(
+            failure=None,
+            reader=reader,
+            expires_at=expires_at,
+            key=SealedSecret(value),
+            user=named.strip() if isinstance(named, str) else "",
+        )
 
 
 def worker_connector_keys(address: str, token: str) -> WorkerConnectorKeys:
@@ -416,6 +751,47 @@ class HttpsSourceCaller:
     def get(
         self, url: str, *, address: str, headers: Mapping[str, str], max_bytes: int
     ) -> SourceAnswer:
+        return self._send("GET", url, address=address, headers=headers, max_bytes=max_bytes)
+
+    def send(
+        self,
+        method: str,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        max_bytes: int,
+    ) -> SourceAnswer:
+        """One approved change, with its body, to the checked address (M11.7.3). See
+        `brain.ops.connector_write_run`, the only caller, which sends a change a person approved."""
+        return self._send(
+            method, url, address=address, headers=headers, max_bytes=max_bytes, body=body
+        )
+
+    def post(
+        self,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        max_bytes: int,
+    ) -> SourceAnswer:
+        return self._send(
+            "POST", url, address=address, headers=headers, max_bytes=max_bytes, body=body
+        )
+
+    def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        max_bytes: int,
+        body: bytes | None = None,
+    ) -> SourceAnswer:
         parts = urlsplit(url)
         host = parts.hostname
         if parts.scheme != "https" or not host:
@@ -429,17 +805,19 @@ class HttpsSourceCaller:
             context=self._context,
         )
         try:
-            connection.request("GET", path, headers={**headers, "User-Agent": USER_AGENT})
+            connection.request(
+                method, path, body=body, headers={**headers, "User-Agent": USER_AGENT}
+            )
             answer = connection.getresponse()
-            body = answer.read(max_bytes + 1)
-            if len(body) > max_bytes:
+            read = answer.read(max_bytes + 1)
+            if len(read) > max_bytes:
                 # A body past the bound is not parsed as a truncated one, which would read as a
                 # shorter list; it is a source that did not answer in a shape this reads.
                 return SourceAnswer(status=answer.status, headers={}, body=b"")
             return SourceAnswer(
                 status=answer.status,
                 headers={key.lower(): value for key, value in answer.getheaders()},
-                body=body,
+                body=read,
             )
         except TimeoutError:
             return SourceAnswer(timed_out=True)
@@ -464,15 +842,25 @@ class SyncRun:
     #: What the switched-on Lark Base's index run did, or empty with no Base switched on. See
     #: `brain.ops.lark_base_index.IndexRun.summary`, which names no Base and no table.
     base: str = ""
+    #: Sources a halt stopped, which are not read and keep their place. See `brain.ops.halt_store`.
+    held: int = 0
 
     def summary(self) -> str:
         after = f"; {self.base}" if self.base else ""
-        if not (self.read or self.waiting or self.failed or self.not_due or self.cannot_be_read):
+        if not (
+            self.read
+            or self.waiting
+            or self.failed
+            or self.not_due
+            or self.cannot_be_read
+            or self.held
+        ):
             return f"no source is connected{after}"
+        stopped = f", {self.held} stopped by a halt" if self.held else ""
         return (
             f"{self.read} read, {self.waiting} waiting for a source's allowance, "
             f"{self.failed} failed, {self.not_due} not yet due, "
-            f"{self.cannot_be_read} that cannot be read{after}"
+            f"{self.cannot_be_read} that cannot be read{stopped}{after}"
         )
 
 
@@ -482,9 +870,29 @@ class _Reading:
 
     plan: SyncPlan
     started_at: datetime
+    #: The read this attempt makes or carries on, moved on page by page.
+    read: ReadPass
+    #: Where reading stood before this attempt, from the newest attempt that recorded it.
+    before: ReadState | None = None
     records: int = 0
     cut_short: bool = False
+    #: Whether the walk left part of the source out at a bound of its own. See
+    #: `brain.connectors.declaration.BoundedWalk`.
+    left_out: bool = False
     waited: float = 0.0
+
+
+def _state_after(one: _Reading, entities: Sequence[str]) -> ReadState | None:
+    """What this attempt leaves as the read's place: moved on, or as it found it.
+
+    An attempt that read no page and carried on nothing, a key the vault would not give, leaves the
+    state it found rather than a read begun at its own instant, so the cursor a later read of
+    changes asks from is never moved by an attempt that asked the source nothing.
+    """
+    carried = one.before is not None and one.before.walking is not None
+    if not one.read.walks and not carried:
+        return one.before
+    return after_the_read(one.before, one.read, entities)
 
 
 def _finish(
@@ -511,18 +919,76 @@ def _finish(
         retry_after_seconds=retry_after_seconds,
         records=one.records,
         cut_short=one.cut_short,
+        read_state=_state_after(one, reading.entities()),
     )
 
 
 async def _write_page(
     sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    entity: str,
     kept: Sequence[tuple[ProjectedRecord, Mapping[str, StoredValue]]],
-) -> None:
+) -> bool:
+    """Write one page's index rows, and advance the source's epoch if that changed any.
+
+    One transaction: the live rows the page names are read, the page is written over them, and
+    the epoch moves with them or not at all. See
+    `brain.ops.connector_sync.A_CHANGED_READ_ADVANCES_ITS_SOURCE_S_EPOCH`.
+    """
     if not kept:
-        return
+        return False
     async with sessions() as session, session.begin():
+        found = await session.execute(
+            live_fields(source, entity, [record.source_id for record, _ in kept])
+        )
+        held = {str(source_id): dict(fields) for source_id, fields in found.all()}
         for record, fields in kept:
             await session.execute(record_upsert(record, fields))
+        moved = changed(held, kept)
+        if moved:
+            await session.execute(advance_epoch(source))
+    return moved
+
+
+async def _parents(
+    sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    under: ListedUnder,
+    read: ReadPass,
+    kept_ids: Mapping[str, Sequence[str]],
+) -> tuple[str, ...]:
+    """Every record of `under.parent` this read kept, in this attempt or an earlier one of it.
+
+    A read begun in this attempt kept its parents in this attempt's memory; one carried on kept
+    some of them in an attempt that has ended, and those are the live index rows of the parent
+    seen since the read began. See
+    `brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`.
+    """
+    here = tuple(kept_ids.get(under.parent, ()))
+    async with sessions() as session:
+        found = await session.execute(seen_since(source, under.parent, read.started_at))
+        earlier = tuple(str(one) for one in found.scalars().all())
+    return tuple(sorted({*here, *earlier}))
+
+
+async def _retire(
+    sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    entities: Sequence[str],
+    before: datetime,
+) -> int:
+    """Retire what a complete read of everything did not see, and advance the epoch if it did.
+
+    See `brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
+    """
+    retired = 0
+    async with sessions() as session, session.begin():
+        for entity in entities:
+            # One row back per row retired: see `retire_unseen` for why it is not a row count.
+            retired += len((await session.execute(retire_unseen(source, entity, before))).all())
+        if retired:
+            await session.execute(advance_epoch(source))
+    return retired
 
 
 async def attempt(
@@ -536,15 +1002,20 @@ async def attempt(
     resolver: Resolver,
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
+    poster: SourcePoster | None = None,
+    runner: ScriptRunner | None = None,
 ) -> Attempt:
     """Read one connection under a lease taken for this attempt, and give it back at the end.
 
     The lease is closed in a `finally`, so an attempt that raised, or was cancelled, still gives its
-    run token back, and the row records how that went. See `brain.ops.connector_lease`.
+    run token back, and the row records how that went. See `brain.ops.connector_lease`. `poster` is
+    how a Google source's key file is exchanged for a token (`presented`); a source whose key is
+    sent as it is never uses it. `runner` is the sandbox a custom-code source's code runs in
+    (`brain.ops.custom_code_run.installed_runner`); every other source never uses it.
     """
-    manifest = plan.manifest
-    assert manifest is not None  # SyncPlan holds this for a runnable plan
-    lease = keys.lease(manifest.credential.ref, now=clock())
+    manifest, reading = plan.manifest, plan.reading
+    assert manifest is not None and reading is not None  # SyncPlan holds this for a runnable plan
+    lease = borrowed(keys, reading, manifest.credential.ref, now=clock())
     try:
         done = await _read_under(
             live,
@@ -556,6 +1027,8 @@ async def attempt(
             resolver=resolver,
             clock=clock,
             sleep=sleep,
+            poster=poster,
+            runner=runner,
         )
     finally:
         ended = lease.close(clock())
@@ -573,11 +1046,27 @@ async def _read_under(
     resolver: Resolver,
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
+    poster: SourcePoster | None,
+    runner: ScriptRunner | None = None,
 ) -> Attempt:
     """Read one connection to the end, or as far as it can be read, and say what that came to."""
     manifest, reading = plan.manifest, plan.reading
     assert manifest is not None and reading is not None  # SyncPlan holds this for a runnable plan
-    one = _Reading(plan=plan, started_at=clock())
+    started_at = clock()
+    before = None if previous is None else previous.read_state
+    try:
+        # A database's views keep no place: see `A_VIEW_READ_IS_ONE_BOUNDED_READ`. Neither do an
+        # MCP server's tools or custom code, which are read whole on every attempt.
+        read = (
+            ReadPass(started_at=started_at)
+            if isinstance(reading, ViewReading | ToolReading | CodeReading)
+            else next_read(reading, before, now=started_at)
+        )
+    except Exception:
+        # A subscription the reading could not build: everything is read, which asks for at
+        # least what any cursor would have and loses nothing.
+        read = ReadPass(started_at=started_at)
+    one = _Reading(plan=plan, started_at=started_at, read=read, before=before)
 
     def finish(
         outcome: SyncOutcome,
@@ -600,91 +1089,456 @@ async def _read_under(
         key = lease.key()
     except SecretsUnavailableError as unavailable:
         return finish(SyncOutcome.FAILED, key_detail(unavailable))
-    headers = call_headers(reading, live.connection.settings, key)
-    limiter = LimiterState()
-
-    for entity in reading.entities():
+    if isinstance(reading, ViewReading):
+        # A database's views: one bounded read per entity, as the user the slot keeps. See
+        # `brain.connectors.declaration.A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
         try:
-            operation = reading.operation(
-                entity, settings=live.connection.settings, resolver=resolver
+            login = DatabaseLogin(lease.user(), SealedSecret(key))
+        except SecretsUnavailableError as unavailable:
+            return finish(SyncOutcome.FAILED, key_detail(unavailable))
+        return await _read_views(
+            live,
+            one,
+            reading,
+            login,
+            finish=finish,
+            sessions=sessions,
+            resolver=resolver,
+            clock=clock,
+            sleep=sleep,
+        )
+    if isinstance(reading, ToolReading | CodeReading):
+        # An MCP server's tools, or custom code in a sandbox: one read per entity, each call
+        # admitted by the ceiling. See `_read_by_calls`.
+        return await _read_by_calls(
+            live,
+            one,
+            reading,
+            key,
+            finish=finish,
+            sessions=sessions,
+            caller=caller,
+            poster=poster,
+            runner=runner,
+            resolver=resolver,
+            clock=clock,
+        )
+    try:
+        shown = presented(reading, key, poster=poster, resolver=resolver, now=clock())
+    except UnsafeAddressError:
+        return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+    except TokenNotIssuedError as refused:
+        detail = (
+            NO_KEY_FILE_EXCHANGE
+            if poster is None
+            else failure_detail(refused.call, timed_out=refused.timed_out)
+        )
+        return finish(SyncOutcome.FAILED, detail, call=refused.call)
+    headers = call_headers(reading, live.connection.settings, shown)
+    limiter = LimiterState()
+    # The ids kept in this run, by entity, for an entity listed under each of them (M11.7.3).
+    kept_ids: dict[str, list[str]] = {}
+
+    settings = live.connection.settings
+    routed = isinstance(reading, RoutedReading)
+    entities = reading.entities()
+    for entity in entities:
+        walk = one.read.walk(plan.connector, entity)
+        if walk.exhausted:
+            # Read to its last page by an earlier attempt of this read.
+            continue
+        under = listed_under(reading, entity)
+        if isinstance(reading, RoutedReading) and not walk.cursor:
+            # What no server publishes is kept as that, without a call. See
+            # A_PAGE_MAY_BE_READ_FROM_ITS_OWN_SERVER. Once a read, at the start of its walk.
+            unrouted = reading.unrouted(entity, settings=settings, seen_at=clock())
+            await _write_page(
+                sessions,
+                plan.connector,
+                entity,
+                [(record, kept_fields(record, manifest)) for record in unrouted],
+            )
+            one.records += len(unrouted)
+        try:
+            parents: Sequence[str] = ()
+            if under is not None:
+                parents = await _parents(sessions, plan.connector, under, one.read, kept_ids)
+            starts = walks(
+                reading, entity, under, parents, read=one.read, walk=walk, settings=settings
             )
         except UnsafeAddressError:
-            # The specification's own server is checked when it is loaded, before any path is
-            # built, so a source whose name answers inside the network is refused here first.
             return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
         except Exception:
             return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
-        arguments: Mapping[str, str] | None = reading.first_page(entity)
-        pages = 0
-        while arguments is not None:
-            if pages >= MAX_PAGES_PER_ENTITY:
-                one.cut_short = True
-                break
-            decision = check(now=clock(), limits=plan.limits, state=limiter)
-            if not decision.allowed:
-                if one.waited + decision.retry_after_seconds > MAX_SECONDS_WAITING_IN_A_RUN:
+        if not starts:
+            # Nothing to list: no route, or no parent kept. The entity is read to its end.
+            one.read = one.read.advanced(replace(walk, cursor="", exhausted=True))
+            continue
+        stopped = False
+        for index, (parent_id, first) in enumerate(starts):
+            # Where the walk goes once this one ends: the next parent's first page, or nowhere.
+            then = starts[index + 1][1] if index + 1 < len(starts) else None
+            arguments: Mapping[str, str] | None = first
+            pages = 0
+            while arguments is not None:
+                try:
+                    operation = page_operation(
+                        reading, entity, arguments, settings=settings, resolver=resolver
+                    )
+                except UnsafeAddressError:
+                    # The specification's own server is checked when it is loaded, before any
+                    # path is built, so a source whose name answers inside the network is
+                    # refused here first.
+                    return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+                except Exception:
+                    return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+                if pages >= MAX_PAGES_PER_ENTITY:
+                    # The walk's place is the page not asked, so the next attempt asks it. See
+                    # A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE.
+                    one.cut_short = True
+                    stopped = True
+                    break
+                decision = check(now=clock(), limits=plan.limits, state=limiter)
+                if not decision.allowed:
+                    if one.waited + decision.retry_after_seconds > MAX_SECONDS_WAITING_IN_A_RUN:
+                        return finish(
+                            SyncOutcome.QUOTA,
+                            OWN_SHARE_SPENT,
+                            retry_after_seconds=decision.retry_after_seconds,
+                        )
+                    one.waited += decision.retry_after_seconds
+                    await sleep(decision.retry_after_seconds)
+                    continue
+                limiter = limiter.record(clock(), plan.limits)
+                try:
+                    checked = operation.prepare(arguments, resolver=resolver)
+                except UnsafeAddressError:
+                    return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+                except Exception:
+                    return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+                answer = caller.get(
+                    checked.url,
+                    address=checked.address,
+                    headers=headers,
+                    max_bytes=MAX_RESPONSE_BYTES,
+                )
+                read_at = clock()
+                call = classify(
+                    status=answer.status,
+                    timed_out=answer.timed_out,
+                    connection_failed=answer.connection_failed or answer.status is None,
+                )
+                said = answer.headers or {}
+                if call is CallOutcome.QUOTA:
                     return finish(
                         SyncOutcome.QUOTA,
-                        OWN_SHARE_SPENT,
-                        retry_after_seconds=decision.retry_after_seconds,
+                        SOURCE_ALLOWANCE_REFUSED,
+                        retry_after_seconds=reading.retry_after(said),
                     )
-                one.waited += decision.retry_after_seconds
-                await sleep(decision.retry_after_seconds)
-                continue
-            limiter = limiter.record(clock(), plan.limits)
-            try:
-                checked = operation.prepare(arguments, resolver=resolver)
-            except UnsafeAddressError:
-                return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
-            except Exception:
-                return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
-            answer = caller.get(
-                checked.url, address=checked.address, headers=headers, max_bytes=MAX_RESPONSE_BYTES
-            )
-            read_at = clock()
-            call = classify(
-                status=answer.status,
-                timed_out=answer.timed_out,
-                connection_failed=answer.connection_failed or answer.status is None,
-            )
-            said = answer.headers or {}
-            if call is CallOutcome.QUOTA:
+                if call in (CallOutcome.REJECTED, CallOutcome.UNAVAILABLE):
+                    if routed and isinstance(reading, RoutedReading):
+                        # One server failing is one page, not the source: the rest are still
+                        # read, the record keeps what an earlier read kept, and the run says it
+                        # stopped short of the whole list. The read is partial, so it retires
+                        # nothing: the record that server publishes was not asked for.
+                        one.cut_short = True
+                        try:
+                            following = reading.next_route(entity, arguments, settings=settings)
+                            after = following if following is not None else then
+                            walk = walk.advance(
+                                cursor="" if after is None else page_cursor(after),
+                                returned=0,
+                                exhausted=after is None,
+                            )
+                        except Exception:
+                            return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+                        one.read = replace(one.read.advanced(walk), partial=True)
+                        arguments = following
+                        continue
+                    return finish(
+                        SyncOutcome.FAILED,
+                        failure_detail(call, timed_out=answer.timed_out),
+                        call=call,
+                    )
+                try:
+                    body = json.loads(answer.body)
+                    reply = reading.interpret(
+                        operation,
+                        status=answer.status or 0,
+                        body=body,
+                        fetched_at=read_at.isoformat(),
+                    )
+                    if reply.call in REFUSED_INSIDE_AN_ANSWER:
+                        # A source that refuses inside an answered call, as Slack's `ok: false`
+                        # does, is read as the refusal it is and never as a page with no rows.
+                        return finish(
+                            SyncOutcome.FAILED, failure_detail(reply.call), call=reply.call
+                        )
+                    found = reply.rows
+                    if found is not None and under is not None and parent_id is not None:
+                        # Named by its parent's id and its own. See `A_RECORD_LISTED_UNDER_...`.
+                        found = under.named(found, parent_id)
+                    rows = [] if found is None else [r.model_dump() for r in found.records]
+                    kept: list[tuple[ProjectedRecord, Mapping[str, StoredValue]]] = []
+                    for row in rows:
+                        projected = reading.projected(entity, row, seen_at=read_at)
+                        if projected is not None:
+                            kept.append((projected, kept_fields(projected, manifest)))
+                            kept_ids.setdefault(entity, []).append(projected.source_id)
+                    returned = len(operation.project(body))
+                    following = (
+                        reading.next_route(entity, arguments, settings=settings)
+                        if isinstance(reading, RoutedReading)
+                        else reading.next_page(entity, arguments, body, returned)
+                    )
+                    after = following if following is not None else then
+                    # Refuses a next page that is the page just read, which is a loop.
+                    walk = walk.advance(
+                        cursor="" if after is None else page_cursor(after),
+                        returned=returned,
+                        exhausted=after is None,
+                    )
+                    skipped = isinstance(reading, BoundedWalk) and reading.left_out(
+                        entity, arguments, body
+                    )
+                except Exception:
+                    # Broad on purpose, and the type is not kept either: a refusal raised while
+                    # reading a row can quote the row. Nothing from this page was written.
+                    return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+                await _write_page(sessions, plan.connector, entity, kept)
+                one.records += len(kept)
+                one.read = one.read.advanced(walk)
+                if skipped:
+                    # The walk reached a bound of its own and left part of the source out. See
+                    # `brain.connectors.declaration.BoundedWalk`.
+                    one.cut_short = True
+                    one.left_out = True
+                    one.read = replace(one.read, partial=True)
+                pages += 1
+                arguments = following
+                if after is not None and reading.allowance_spent(said):
+                    return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
+            if stopped:
+                break
+
+    if one.read.retires(entities):
+        await _retire(sessions, plan.connector, entities, one.read.started_at)
+    detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
+    if one.left_out and one.read.complete(entities):
+        # A walk that ended having left part of the source out is not carried on by the next
+        # run, so it says what was left out rather than that the next run carries on.
+        detail = READ_BUT_PART_LEFT_OUT
+    return finish(SyncOutcome.SYNCED, detail)
+
+
+async def _read_views(
+    live: LiveConnection,
+    one: _Reading,
+    reading: ViewReading,
+    login: DatabaseLogin,
+    *,
+    finish: Callable[..., Attempt],
+    sessions: async_sessionmaker[AsyncSession],
+    resolver: Resolver,
+    clock: Callable[[], datetime],
+    sleep: Callable[[float], Awaitable[object]],
+) -> Attempt:
+    """Each view read once, bounded, admitted by the ceiling, and its index written (M11.6.1).
+
+    The REST loop's admission, write and outcome, with one read where that loop has pages: a
+    database does not page, and a read that reached its row cap is cut short, which the next run
+    reads again from the start. Every failure leaves one of `brain.ops.connector_sync`'s constant
+    sentences and never the database's own words, which can quote the statement.
+    """
+    manifest = one.plan.manifest
+    assert manifest is not None  # SyncPlan holds this for a runnable plan
+    limiter = LimiterState()
+    for entity in reading.entities():
+        decision = check(now=clock(), limits=one.plan.limits, state=limiter)
+        while not decision.allowed:
+            if one.waited + decision.retry_after_seconds > MAX_SECONDS_WAITING_IN_A_RUN:
                 return finish(
                     SyncOutcome.QUOTA,
-                    SOURCE_ALLOWANCE_REFUSED,
-                    retry_after_seconds=reading.retry_after(said),
+                    OWN_SHARE_SPENT,
+                    retry_after_seconds=decision.retry_after_seconds,
                 )
-            if call in (CallOutcome.REJECTED, CallOutcome.UNAVAILABLE):
-                return finish(
-                    SyncOutcome.FAILED,
-                    failure_detail(call, timed_out=answer.timed_out),
-                    call=call,
-                )
-            try:
-                body = json.loads(answer.body)
-                reply = reading.interpret(
-                    operation, status=answer.status or 0, body=body, fetched_at=read_at.isoformat()
-                )
-                rows = [] if reply.rows is None else [r.model_dump() for r in reply.rows.records]
-                kept: list[tuple[ProjectedRecord, Mapping[str, StoredValue]]] = []
-                for row in rows:
-                    projected = reading.projected(entity, row, seen_at=read_at)
-                    if projected is not None:
-                        kept.append((projected, kept_fields(projected, manifest)))
-                returned = len(operation.project(body))
-            except Exception:
-                # Broad on purpose, and the type is not kept either: a refusal raised while reading
-                # a row can quote the row. Nothing from this page was written.
-                return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
-            await _write_page(sessions, kept)
-            one.records += len(kept)
-            pages += 1
-            arguments = reading.next_page(entity, arguments, body, returned)
-            if arguments is not None and reading.allowance_spent(said):
-                return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
-
+            one.waited += decision.retry_after_seconds
+            await sleep(decision.retry_after_seconds)
+            decision = check(now=clock(), limits=one.plan.limits, state=limiter)
+        limiter = limiter.record(clock(), one.plan.limits)
+        read_at = clock()
+        try:
+            page = reading.read(
+                FetchRequest(entity=entity),
+                settings=live.connection.settings,
+                login=login,
+                resolver=resolver,
+                fetched_at=read_at.isoformat(),
+            )
+        except UnsafeAddressError:
+            return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+        except Exception:
+            # Broad and typeless, for the REST loop's reason: a refusal can quote the settings.
+            return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+        if page.call is CallOutcome.QUOTA:
+            # A database has no allowance to refuse; only an application's own answer can say so.
+            return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
+        if page.call in (CallOutcome.REJECTED, CallOutcome.UNAVAILABLE):
+            return finish(SyncOutcome.FAILED, database_failure_detail(page.call), call=page.call)
+        try:
+            rows = [] if page.rows is None else [r.model_dump() for r in page.rows.records]
+            kept: list[tuple[ProjectedRecord, Mapping[str, StoredValue]]] = []
+            for row in rows:
+                projected = reading.projected(entity, row, seen_at=read_at)
+                if projected is not None:
+                    kept.append((projected, kept_fields(projected, manifest)))
+        except Exception:
+            return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+        await _write_page(sessions, one.plan.connector, entity, kept)
+        one.records += len(kept)
+        one.cut_short = one.cut_short or page.call is CallOutcome.TRUNCATED
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
     return finish(SyncOutcome.SYNCED, detail)
+
+
+def bare_headers(scheme: KeyScheme, key: str) -> dict[str, str]:
+    """The headers an MCP or custom-code source's call carries: JSON, and the key in its scheme.
+
+    Their readings name a scheme sent as it is (`declaration.SCHEMES_SENT_AS_THEY_ARE`), so the
+    key is never exchanged first; a source taking no key is sent no `Authorization` at all.
+    """
+    if scheme is KeyScheme.NONE:
+        return {"Accept": "application/json"}
+    return {"Accept": "application/json", "Authorization": authorization(scheme, key)}
+
+
+class _Admission:
+    """The source's ceiling, asked before each call of a run that cannot wait inside itself.
+
+    An MCP session and a custom connector's planned calls are made in one synchronous step each,
+    so a call the ceiling does not admit is not waited for: the attempt ends as this install's
+    share spent, with the wait the ceiling named, and the next run reads the source again.
+    """
+
+    def __init__(self, limits: tuple[Limit, ...], clock: Callable[[], datetime]) -> None:
+        self._limits = limits
+        self._clock = clock
+        self._state = LimiterState()
+        self.retry_after: float | None = None
+
+    def __call__(self) -> bool:
+        decision = check(now=self._clock(), limits=self._limits, state=self._state)
+        if not decision.allowed:
+            self.retry_after = decision.retry_after_seconds
+            return False
+        self._state = self._state.record(self._clock(), self._limits)
+        return True
+
+
+async def _read_by_calls(
+    live: LiveConnection,
+    one: _Reading,
+    reading: ToolReading | CodeReading,
+    key: str,
+    *,
+    finish: Callable[..., Attempt],
+    sessions: async_sessionmaker[AsyncSession],
+    caller: SourceCaller,
+    poster: SourcePoster | None,
+    runner: ScriptRunner | None,
+    resolver: Resolver,
+    clock: Callable[[], datetime],
+) -> Attempt:
+    """Each entity of an MCP server's tools or of custom code, read once and written (M11.1.2).
+
+    The views loop's write and outcome, with the calls each read makes admitted one by one by the
+    source's ceiling (`_Admission`). An MCP source opens one session for the attempt and calls one
+    declared tool per entity (`brain.ops.mcp_session`); a custom-code source plans, is called and
+    is read per entity (`brain.ops.custom_code_run.read_once`, M11.1.5). Every failure leaves one
+    of `brain.ops.connector_sync`'s constant sentences and never the source's or the code's words.
+    """
+    manifest = one.plan.manifest
+    assert manifest is not None  # SyncPlan holds this for a runnable plan
+    if poster is None and isinstance(reading, ToolReading):
+        return finish(SyncOutcome.FAILED, NO_WAY_TO_POST)
+    if runner is None and isinstance(reading, CodeReading):
+        return finish(SyncOutcome.FAILED, NO_SANDBOX)
+    settings = live.connection.settings
+    headers = bare_headers(reading.key_scheme(), key)
+    admit = _Admission(one.plan.limits, clock)
+    try:
+        session = None
+        if isinstance(reading, ToolReading):
+            assert poster is not None  # refused above
+            session = open_session(
+                reading,
+                settings=settings,
+                headers=headers,
+                poster=poster,
+                resolver=resolver,
+                admit=admit,
+            )
+        for entity in reading.entities():
+            read_at = clock()
+            page: PageReply
+            if session is not None and isinstance(reading, ToolReading):
+                page = read_entity(session, reading, entity, None, fetched_at=read_at.isoformat())
+            else:
+                assert isinstance(reading, CodeReading) and runner is not None  # refused above
+                page = read_once(
+                    reading,
+                    entity,
+                    None,
+                    settings=settings,
+                    headers=headers,
+                    secret=key,
+                    runner=runner,
+                    caller=caller,
+                    poster=poster,
+                    resolver=resolver,
+                    admit=admit,
+                    fetched_at=read_at.isoformat(),
+                )
+            if page.call is not CallOutcome.OK or page.rows is None:
+                # Answered, and said it failed: never a page with no rows, and not a refused key.
+                return finish(SyncOutcome.FAILED, TOOL_SAID_IT_FAILED, call=page.call)
+            kept: list[tuple[ProjectedRecord, Mapping[str, StoredValue]]] = []
+            for row in (r.model_dump() for r in page.rows.records):
+                projected = reading.projected(entity, row, seen_at=read_at)
+                if projected is not None:
+                    kept.append((projected, kept_fields(projected, manifest)))
+            await _write_page(sessions, one.plan.connector, entity, kept)
+            one.records += len(kept)
+    except CallNotAdmittedError:
+        return finish(SyncOutcome.QUOTA, OWN_SHARE_SPENT, retry_after_seconds=admit.retry_after)
+    except CallNotAnsweredError as failed:
+        if failed.call is CallOutcome.QUOTA:
+            return finish(
+                SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED, retry_after_seconds=failed.retry_after
+            )
+        detail = failure_detail(failed.call, timed_out=failed.timed_out)
+        return finish(SyncOutcome.FAILED, detail, call=failed.call)
+    except UnsafeAddressError:
+        return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+    except McpToolNotAsReviewedError:
+        return finish(SyncOutcome.FAILED, TOOL_NOT_AS_REVIEWED)
+    except KeyInSandboxError:
+        return finish(SyncOutcome.FAILED, KEY_KEPT_OUT)
+    except CodeRunFailedError:
+        return finish(SyncOutcome.FAILED, CODE_DID_NOT_COMPLETE)
+    except CustomCodeError:
+        return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+    except Exception:
+        # Broad and typeless, for the REST loop's reason: a refusal can quote what was answered.
+        return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+    return finish(SyncOutcome.SYNCED, READ_TO_THE_END)
+
+
+#: What a connector's own `interpret` may read an answered call as instead of a page: the body said
+#: the key was refused, or the source was not able to answer. `TRUNCATED` is a page and is not here.
+REFUSED_INSIDE_AN_ANSWER: Final = frozenset(
+    {CallOutcome.REJECTED, CallOutcome.UNAVAILABLE, CallOutcome.QUOTA}
+)
 
 
 async def sync_on(
@@ -696,16 +1550,26 @@ async def sync_on(
     resolver: Resolver,
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
-    readings: Mapping[str, SourceReading] = READINGS,
+    readings: Mapping[str, Reading] = READINGS,
+    poster: SourcePoster | None = None,
+    runner: ScriptRunner | None = None,
 ) -> SyncRun:
-    """Every live connection that may be read and is due, read once, and each attempt recorded."""
+    """Every live connection that may be read and is due, read once, and each attempt recorded.
+
+    A source a halt stops, on itself or on everything, or every source when the halts cannot be
+    read, is not read and records no attempt, so it is due again the moment the halt is lifted.
+    """
+    halts = await read_state(sessions)
     async with sessions() as session, session.begin():
         live = await read_live(session)
         states = await read_states(session)
-    read = waiting = failed = not_due = cannot = 0
+    read = waiting = failed = not_due = cannot = held = 0
     for one in live:
+        if refusal_in(halts, Work(connector=one.connection.connector)):
+            held += 1
+            continue
         previous = states.get(one.id)
-        plan = plan_for(one.connection, last=previous, now=now, readings=readings)
+        plan = plan_for(one.connection, last=previous, now=now, readings=readings, runner=runner)
         if plan.refused:
             cannot += 1
             continue
@@ -722,6 +1586,8 @@ async def sync_on(
             resolver=resolver,
             clock=clock,
             sleep=sleep,
+            poster=poster,
+            runner=runner,
         )
         async with sessions() as session, session.begin():
             await session.execute(attempt_row(one.id, done))
@@ -732,7 +1598,12 @@ async def sync_on(
         else:
             failed += 1
     return SyncRun(
-        read=read, waiting=waiting, failed=failed, not_due=not_due, cannot_be_read=cannot
+        read=read,
+        waiting=waiting,
+        failed=failed,
+        not_due=not_due,
+        cannot_be_read=cannot,
+        held=held,
     )
 
 
@@ -769,6 +1640,8 @@ def run_connector_sync_now(
                 caller=caller,
                 resolver=resolver,
                 clock=_utc_now,
+                poster=caller,
+                runner=installed_runner(),
             )
             # The switched-on Lark Base's minimal index, on the same schedule and under the same
             # keys; it has no connection row, for `brain.ops.lark_base_index`'s reason.

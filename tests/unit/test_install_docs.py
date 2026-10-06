@@ -23,6 +23,7 @@ Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8, M34.3.3.2
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -30,17 +31,10 @@ import pytest
 import yaml
 
 from brain.connectors.contract import AccessMode, CredentialBinding
-from brain.connectors.freshdesk import manifest as freshdesk_manifest
-from brain.connectors.google_drive import DriveConnection
-from brain.connectors.google_drive import manifest as drive_manifest
-from brain.connectors.hubspot import HubSpotConnection, hubspot_manifest
-from brain.connectors.laravel import LaravelConnection, ReadBounds, laravel_manifest
+from brain.connectors.declaration import shipped
 from brain.connectors.lark_base import FieldBinding, FieldKind, LarkBaseTable
 from brain.connectors.lark_base import manifest as lark_base_manifest
-from brain.connectors.lark_wiki import SpaceDeclaration
-from brain.connectors.lark_wiki import manifest as lark_wiki_manifest
 from brain.connectors.manifest import ConnectorManifest, FieldShape, HotUse, PermissionSync
-from brain.connectors.xero import XeroConnection, xero_manifest
 from brain.core.scope import Clause, Op, Scope
 from brain.deployment.installer import PLAN, render
 from brain.deployment.installer import Step as InstallStep
@@ -53,7 +47,6 @@ from brain.deployment.requirements import (
     spec_for,
 )
 from brain.deployment.variables import parse_env
-from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.controls import control
 from brain.ops.install_docs import (
     A_BLANK_DEFAULT_AND_AN_EMPTY_ONE_ARE_THE_SAME_LINE_ON_A_SERVER,
@@ -109,6 +102,7 @@ from brain.ops.queue import DeployStep, StepKind
 from brain.ops.secrets import SecretRef, VaultRole
 from brain.ops.wiring import PROFILES, WiringError
 from brain.setup_wizard import WIZARD
+from tests.fixtures.cassettes import FILES
 
 REPO = Path(__file__).resolve().parents[2]
 GUIDES = REPO / "docs" / "install"
@@ -202,53 +196,19 @@ def lark_base_for(entity: str) -> ConnectorManifest:
 
 
 def manifests() -> tuple[ConnectorManifest, ...]:
-    """Every connector's manifest, built with placeholder deployment values.
+    """Every connector's manifest, as its own cassette file builds it for its tests.
 
-    Placeholders rather than any install's real ones, and it costs nothing: every field this
-    guide states is a property of the connector rather than of the deployment, so the selectors
-    below could be anything a scope accepts.
+    Read off `tests.fixtures.cassettes.FILES` rather than typed here since 2026-10-05: a typed list
+    was a line every connector PR edited. The values are placeholders rather than any install's
+    real ones, and it costs nothing: every field this guide states is a property of the connector
+    rather than of the deployment, so the selectors could be anything a scope accepts.
     """
-    return (
-        freshdesk_manifest(
-            domain="helpdesk.example.invalid",
-            credential=CredentialBinding(ref=ref("connectors/creds/freshdesk")),
-            visibility=VISIBILITY,
-        ),
-        drive_manifest(
-            DriveConnection(
-                folder_id="fld0447AbC-_x",
-                domain="example.invalid",
-                department="one",
-                steward_id="u_one",
-            ),
-            ref=ref("connectors/creds/google_drive"),
-        ),
-        hubspot_manifest(
-            HubSpotConnection(portal_id="12345678"), ref=ref("connectors/creds/hubspot")
-        ),
-        laravel_manifest(
-            LaravelConnection(
-                schema="portal", bounds=ReadBounds(max_rows=200, timeout_seconds=5.0)
-            ),
-            ref=ref("connectors/creds/laravel_readonly"),
-            visibility={"client": VISIBILITY, "user": VISIBILITY},
-        ),
-        lark_base_for("maintenance"),
-        lark_wiki_manifest(
-            spaces=(
-                SpaceDeclaration(
-                    space_id="spcOne",
-                    visibility=KnowledgeVisibility.of_department("one", owner_id="u_one"),
-                    owner_id="u_one",
-                ),
-            ),
-            credential=CredentialBinding(ref=ref("connectors/creds/lark_wiki")),
-        ),
-        xero_manifest(
-            XeroConnection(tenant_id="11111111-2222-3333-4444-555555555555"),
-            ref=ref("connectors/creds/xero"),
-        ),
-    )
+    return tuple(one.manifest() for one in FILES.values())
+
+
+def manifest_of(name: str) -> ConnectorManifest:
+    """One connector's manifest out of `manifests`, by its name."""
+    return next(one for one in manifests() if one.name == name)
 
 
 # --------------------------------------------------------------------- small guides to fail on
@@ -757,18 +717,15 @@ def test_a_port_row_with_too_few_cells_is_a_finding() -> None:
 
 
 # =================================================================== connector discovery
-def test_the_seven_connectors_are_discovered_from_the_package() -> None:
+def test_the_connectors_are_discovered_from_the_package() -> None:
     """Delete this and the guide is held to whatever list somebody handed the check, so a
-    connector added tomorrow is not a finding but a gap nobody notices."""
-    assert connector_modules(CONNECTOR_PACKAGE) == (
-        "freshdesk",
-        "google_drive",
-        "hubspot",
-        "laravel",
-        "lark_base",
-        "lark_wiki",
-        "xero",
-    )
+    connector added tomorrow is not a finding but a gap nobody notices. Compared with the
+    connectors the platform finds by importing the package (`shipped`), which is a second read of
+    it by another route, and anchored on Xero and Lark Wiki so a read finding nothing fails."""
+    found = connector_modules(CONNECTOR_PACKAGE)
+
+    assert found == tuple(shipped())
+    assert {"xero", "lark_wiki"} <= set(found)
 
 
 def test_a_module_with_no_manifest_builder_is_not_a_connector(tmp_path: Path) -> None:
@@ -820,7 +777,7 @@ def test_a_connector_with_no_manifest_handed_to_the_check_is_a_finding() -> None
 def test_a_manifest_for_a_module_that_does_not_exist_is_a_finding() -> None:
     """Delete this and a connector deleted from the package leaves its fixture behind, so the
     guide keeps a section for a source nobody can install."""
-    found = connector_gaps((), (manifests()[0],))
+    found = connector_gaps((), (manifest_of("freshdesk"),))
     assert found == ("freshdesk: a manifest for a connector this package has no module for",)
 
 
@@ -837,7 +794,7 @@ def test_a_connector_with_no_row_is_a_finding() -> None:
     it may read, which is the one question an install has to answer about a source."""
     found = integration_gaps(
         a_connector_guide("| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `x` |"),
-        manifests=(manifests()[0], manifests()[2]),
+        manifests=(manifest_of("freshdesk"), manifest_of("hubspot")),
     )
     assert any(one.startswith("hubspot: no row in the table") for one in found)
 
@@ -850,7 +807,7 @@ def test_a_row_for_a_connector_that_does_not_exist_is_a_finding() -> None:
             "| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |",
             "| `myspace` | `rest` | `wall` | `read_only` | `none` | `x` |",
         ),
-        manifests=(manifests()[0],),
+        manifests=(manifest_of("freshdesk"),),
     )
     assert any(one.startswith("myspace: a row for a connector") for one in found)
 
@@ -863,7 +820,7 @@ def test_a_connector_with_a_row_and_no_section_is_a_finding() -> None:
             "| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |",
             sections=(),
         ),
-        manifests=(manifests()[0],),
+        manifests=(manifest_of("freshdesk"),),
     )
     assert found == (
         "freshdesk: no section of its own, so the table names a connector the guide never "
@@ -880,7 +837,7 @@ def test_a_section_for_a_connector_that_does_not_exist_is_a_finding() -> None:
             "| `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |",
             sections=("freshdesk", "myspace"),
         ),
-        manifests=(manifests()[0],),
+        manifests=(manifest_of("freshdesk"),),
     )
     assert any(one.startswith("myspace: a section for a connector") for one in found)
 
@@ -903,7 +860,7 @@ def test_every_checked_cell_is_read_off_the_manifest(index: int, wrong: str, col
     cells = ["`freshdesk`", "`rest`", "`helpdesk`", "`read_only`", "`none`", "`freshdesk`"]
     cells[index] = wrong
     found = integration_gaps(
-        a_connector_guide("| " + " | ".join(cells) + " |"), manifests=(manifests()[0],)
+        a_connector_guide("| " + " | ".join(cells) + " |"), manifests=(manifest_of("freshdesk"),)
     )
     assert len(found) == 1
     assert found[0].startswith(f"freshdesk: {column} reads")
@@ -923,23 +880,26 @@ def test_a_connector_row_with_too_few_cells_is_a_finding() -> None:
 
 
 def test_a_connector_with_no_verified_ceiling_says_so_rather_than_leaving_a_cell_blank() -> None:
-    """Delete this and two of the seven have an empty cell in the ceiling column, which reads
-    as a cell somebody did not fill in rather than as a statement that nothing has measured
-    one."""
-    drive = manifests()[1]
-    assert drive.ceiling == ""
+    """Delete this and a connector shipped with no ceiling has an empty cell in the ceiling column,
+    which reads as a cell somebody did not fill in rather than as a statement that nothing has
+    measured one. Every connector shipping since Google Drive's ceiling was recorded has one, so
+    the case is built from a shipped manifest with its ceiling taken away, and the shipped ones are
+    held to naming their own."""
+    unmeasured = replace(manifest_of("freshdesk"), ceiling="")
     # The literal rather than NO_CEILING, which the guide's own cell is compared against: a
     # test asserting the constant against itself is green for every value it could hold.
-    assert ceiling_cell(drive) == "none measured"
+    assert ceiling_cell(unmeasured) == "none measured"
     assert NO_CEILING == "none measured"
-    assert ceiling_cell(manifests()[0]) == "freshdesk"
+    assert ceiling_cell(manifest_of("google_drive")) == "google_drive"
+    assert ceiling_cell(manifest_of("freshdesk")) == "freshdesk"
+    assert all(one.ceiling for one in manifests())
 
 
 # ================================================= the properties the guide's own claims rest on
 def test_every_connector_shipping_today_is_bound_read_only_and_claims_no_source_enforcement() -> (
     None
 ):
-    """The guide states both as facts about all seven. Delete this and a connector shipped with
+    """The guide states both as facts about all nine. Delete this and a connector shipped with
     a write binding, or claiming its source applies the asker's own permissions, changes what a
     client should grant and the page goes on saying otherwise. The row check would catch it as
     a cell mismatch; this says which direction the whole table is expected to point."""
@@ -1545,3 +1505,53 @@ def test_a_database_command_row_with_too_few_cells_is_a_finding() -> None:
         "a row with 1 cell(s) reads ('`create`',); every row states the command, how to run it "
         "and what it does",
     )
+
+
+# ================================================== the application's pooler, capped across logins
+def _transaction_pooler(name: str) -> dict[str, str]:
+    """The `pgbouncer` service's environment in one of the product's compose files."""
+    document = yaml.safe_load((REPO / name).read_text(encoding="utf-8"))
+    return {
+        key: str(value) for key, value in document["services"]["pgbouncer"]["environment"].items()
+    }
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "docker-compose.yml",
+        "docker-compose.full.yml",
+        "docker-compose.lite.yml",
+        "docker-compose.staging.yml",
+    ],
+)
+def test_the_application_s_pooler_is_capped_across_logins_at_its_own_pool(name: str) -> None:
+    """PgBouncer's `default_pool_size` is per login and database, and the application reaches the
+    pooler as `brain_app` and as the owner, so a pool of twenty can hold forty. Delete this and a
+    compose file can drop `MAX_DB_CONNECTIONS`, or set it apart from the pool, and the database's
+    connection budget counts half of what the pooler may open."""
+    environment = _transaction_pooler(name)
+    assert environment["MAX_DB_CONNECTIONS"] == environment["DEFAULT_POOL_SIZE"]
+
+
+def test_the_application_s_pooler_cap_is_the_figure_the_budget_counts() -> None:
+    """The cap is held to `brain.ops.connections`' row for the pooler, which is what the database's
+    max_connections is sized against. Delete this and the cap could be set to a figure the budget
+    never counted, which bounds the pooler at a number nobody planned for."""
+    from brain.ops.connections import CLIENTS
+
+    [row] = [one for one in CLIENTS if one.name == "pgbouncer"]
+    assert int(_transaction_pooler("docker-compose.yml")["MAX_DB_CONNECTIONS"]) == row.pool_max
+
+
+def test_the_operations_page_gives_an_older_install_the_line_that_caps_its_pooler() -> None:
+    """An install set up before the cap keeps Coolify's copy of the compose file, which a release
+    never edits, so the page says which line to add. Delete this and the page can lose the line,
+    or name a figure other than the one the product's own compose file carries, and an operator
+    following it caps the pooler at the wrong number or not at all."""
+    cap = _transaction_pooler("docker-compose.yml")["MAX_DB_CONNECTIONS"]
+    page = guide("operations.md")
+    start = page.index("## A known limit on an install set up before 2026-10-06")
+    section = page[start : page.index("\n## ", start + 1)]
+    assert f'MAX_DB_CONNECTIONS: "{cap}"' in section
+    assert "DEFAULT_POOL_SIZE" in section and "per login" in section

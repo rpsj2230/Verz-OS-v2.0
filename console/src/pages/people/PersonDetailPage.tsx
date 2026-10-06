@@ -192,6 +192,17 @@ function PersonAnswer({ principalId, view }: { readonly principalId: string; rea
   const onWritten = useCallback(() => {
     setVersion((count) => count + 1);
   }, []);
+  // Add work email's sentence, kept here because the overview is drawn again after the reload.
+  const [told, setTold] = useState("");
+  const onWorkEmail = useCallback(
+    (sentence: string, written: boolean) => {
+      setTold(sentence);
+      if (written) {
+        onWritten();
+      }
+    },
+    [onWritten],
+  );
 
   if (answer.failure !== null) {
     return <FailureState failure={answer.failure} />;
@@ -235,7 +246,7 @@ function PersonAnswer({ principalId, view }: { readonly principalId: string; rea
       }
       switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view} />}
     >
-      {view === "overview" ? <PersonOverview detail={detail} /> : null}
+      {view === "overview" ? <PersonOverview detail={detail} told={told} onWorkEmail={onWorkEmail} /> : null}
       {view === "access" ? <PersonAccess detail={detail} /> : null}
       {view === "grants" ? <PersonGrants detail={detail} onWritten={onWritten} /> : null}
       {view === "sessions" ? <PersonSessions detail={detail} /> : null}

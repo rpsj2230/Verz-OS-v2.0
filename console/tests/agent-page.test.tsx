@@ -29,6 +29,8 @@ import { FIGURES_FAILED } from "../src/components/kit/KpiStrip";
 import { readAgentWorkspace, type AgentWorkspaceAnswer } from "../src/pages/agentQuery";
 import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { leashRowId, readHeaderFacts, readProfile } from "../src/pages/agents/agentDetailQuery";
+import { takenOverWords } from "../src/pages/agents/AgentProfile";
+import { rungWords } from "../src/pages/agents/agentActions";
 import { VIEWS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
 import { agentStatsApiPath } from "../src/pages/agents/agentStats";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -338,7 +340,7 @@ describe("where the page is reachable", () => {
   test("an address naming a section this reader cannot open lands where the bare address does", async () => {
     // What breaks if this is deleted: a probe for a tab ("memory", "automations" for a reader without
     // it) that answers differently from an address with no tab, which tells the prober the tab exists.
-    const strip = stripWire().filter((one) => one["tab"] !== "automations");
+    const strip = stripWire().filter((one) => one["tab"] !== "automations" && one["tab"] !== "memory");
     const answers = agentAnswers("quote-helper", { ...body(), tabs: strip });
     const bare = await consoleAt("/agents/quote-helper", answers);
     const bareView = currentView(bare.container);
@@ -569,8 +571,50 @@ describe("the Profile", () => {
         maxSideEffect: "draft",
       },
       tools: [{ name: "ticket.draft_reply", description: "Draft a reply", sideEffect: "draft", withinCeiling: true }],
-      leash: [{ target: "ticket.draft_reply", rung: "assisted", configured: true, acts: true }],
+      leash: [{ target: "ticket.draft_reply", rung: "assisted", configured: true, acts: true, takenOverAt: [] }],
     });
+  });
+
+  test("an action people keep taking over is drawn at the rung it is held to, with the days behind it", async () => {
+    // What breaks if this is deleted: the Profile states a rung the agent is no longer held to
+    // (M8.3.5), or draws a lowered rung with nothing saying why or when it comes back. Two days
+    // alone lower nothing and still say when; an instant that is not one is not drawn.
+    const days = ["2019-03-02T10:00:00Z", "2019-03-03T10:00:00Z", "2019-03-04T10:00:00Z"];
+    const lowered = {
+      ...profileWire(),
+      leash: [
+        {
+          target: "ticket.draft_reply",
+          rung: "assisted",
+          rungs: ["assisted"],
+          configured: true,
+          acts: true,
+          entries: [],
+          lowered_to: "shadow",
+          taken_over_at: [...days, "not a day"],
+        },
+      ],
+    };
+    const read = readProfile({ profile: lowered });
+    expect(read?.leash[0]).toEqual({
+      target: "ticket.draft_reply",
+      rung: "assisted",
+      configured: true,
+      acts: true,
+      loweredTo: "shadow",
+      takenOverAt: days,
+    });
+
+    const mounted = await consoleAt(
+      "/agents/quote-helper/profile",
+      agentAnswers("quote-helper", { ...body(), profile: lowered }),
+    );
+    const row = mounted.container.querySelector(`#${leashRowId("ticket.draft_reply")}`);
+    expect(row?.textContent).toContain(takenOverWords("assisted", "shadow", days));
+    expect(row?.textContent).toContain(rungWords("shadow"));
+
+    expect(takenOverWords("assisted", undefined, days.slice(1))).toMatch(/^People did this themselves on /);
+    expect(takenOverWords("assisted", "shadow", days)).toContain(rungWords("assisted"));
   });
 });
 

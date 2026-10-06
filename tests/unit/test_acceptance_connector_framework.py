@@ -2,7 +2,9 @@
 
 The pure half holds the nine checks to the suite and to the leaves they were scoped to, runs the
 six that need no database against the install's own code, and then breaks the product one way per
-rule and watches the check that proves the rule fail with its own sentence: an address check that
+rule and watches the check that proves the rule fail with its own sentence, the lease check's two
+against a database, since its reads are complete reads of everything and retire what they did not
+return (M11.8.11): an address check that
 admits anything, an adapter that drops an argument it does not know instead of refusing it, a
 scope that admits everything, a vault token nobody judges, a key kept from the first read, a
 delegated read upgraded to the service key, an executor that waits past its timeout, a herd that is
@@ -19,7 +21,7 @@ run; and the notice check against a notice that names every source it failed.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1, M11.3.4
-Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5
+Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.5.2
 """
 
 from __future__ import annotations
@@ -53,6 +55,7 @@ LEAVES = {
         "M11.2.5",
         "M11.5.1",
         "M11.5.4",
+        "M11.5.2",
     ),
     "a_burst_is_paced_by_the_source_s_documented_ceiling": ("M11.3.1", "M11.3.5"),
     "failures_open_the_breaker_and_a_refusal_is_retried_in_budget": ("M11.3.2", "M11.3.3"),
@@ -64,7 +67,6 @@ LEAVES = {
 PURE = (
     "a_rest_read_is_built_from_a_spec_and_refused_before_a_call",
     "a_source_is_connected_to_one_named_thing_and_never_to_everything",
-    "a_run_leases_its_key_and_the_next_run_reads_a_replaced_one",
     "a_live_read_uses_the_service_key_ends_on_time_and_is_made_once",
     "a_burst_is_paced_by_the_source_s_documented_ceiling",
     "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
@@ -195,28 +197,19 @@ def test_the_scope_check_fails_when_a_selector_of_everything_is_accepted(
     )
 
 
-def test_the_lease_check_fails_when_a_widened_run_token_is_not_judged(
+@pytest.mark.needs_db
+def test_the_lease_check_fails_on_a_token_nobody_judged_or_a_key_kept_from_the_first_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """M11.2.2 broken: every token the vault mints is used, renewable or not. Delete this and a
-    run can read its key with a token that outlives the run, with the check green."""
+    """M11.2.2 broken: every token the vault mints is used, renewable or not. And M11.2.6 broken the
+    way it breaks in practice: a process keeps the key it first read, so a key replaced in the vault
+    is used only after a restart. Each fails the lease check with its own sentence. Against a
+    database since 2026-09-29, because each of the check's reads is a complete read of everything,
+    which retires what it did not return. Delete this and a run can read its key with a token that
+    outlives the run, or rotation can need a redeploy, with the check green."""
     import brain.ops.connector_sync_run as sync_run
 
-    monkeypatch.setattr(sync_run, "judge_minted", lambda **kwargs: "")
-    assert ran("a_run_leases_its_key_and_the_next_run_reads_a_replaced_one") == (
-        FAILED,
-        "a run token wider than the run role was not refused",
-    )
-
-
-def test_the_lease_check_fails_when_the_process_keeps_the_first_key_it_read(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """M11.2.6 broken the way it breaks in practice: a process keeps the key it first read, so a
-    key replaced in the vault is used only after a restart. Delete this and rotation can need a
-    redeploy with the check green."""
-    import brain.ops.connector_sync_run as sync_run
-
+    lease = mine()["a_run_leases_its_key_and_the_next_run_reads_a_replaced_one"]
     real = sync_run._Held.key
     first: list[str] = []
 
@@ -226,8 +219,16 @@ def test_the_lease_check_fails_when_the_process_keeps_the_first_key_it_read(
             first.append(value)
         return first[0]
 
-    monkeypatch.setattr(sync_run._Held, "key", kept)
-    assert ran("a_run_leases_its_key_and_the_next_run_reads_a_replaced_one") == (
+    with at_head("brain_acceptance_framework_lease") as url:
+        with monkeypatch.context() as patched:
+            patched.setattr(sync_run, "judge_minted", lambda **kwargs: "")
+            unjudged = run_checks(url, (lease,))
+        with monkeypatch.context() as patched:
+            patched.setattr(sync_run._Held, "key", kept)
+            stale = run_checks(url, (lease,))
+
+    assert unjudged[lease.name] == (FAILED, "a run token wider than the run role was not refused")
+    assert stale[lease.name] == (
         FAILED,
         "the next read did not send the key that replaced the last one",
     )
@@ -270,6 +271,44 @@ def test_the_live_read_check_fails_when_a_silent_source_is_waited_for(
     assert ran("a_live_read_uses_the_service_key_ends_on_time_and_is_made_once") == (
         FAILED,
         "a read of a silent source did not end at its timeout in budget",
+    )
+
+
+def test_the_live_read_check_fails_when_independent_reads_are_made_one_after_another(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M11.5.2 broken: the executor awaits each read of a wave before starting the next, so a
+    fan-out takes the sum of its reads rather than its critical path. Delete this and three
+    sources asked about one question are read in turn with the check green."""
+    import types
+
+    import brain.connectors.live_read as live_read
+
+    async def in_turn(*awaitables: Any) -> list[Any]:
+        return [await one for one in awaitables]
+
+    sequential = types.SimpleNamespace(**{**vars(asyncio), "gather": in_turn})
+    monkeypatch.setattr(live_read, "asyncio", sequential)
+    assert ran("a_live_read_uses_the_service_key_ends_on_time_and_is_made_once") == (
+        FAILED,
+        "independent live reads were made one after another, not at once",
+    )
+
+
+def test_the_live_read_check_fails_when_a_dependent_read_does_not_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M11.5.2's other half broken: the plan puts every read in one wave, ignoring what a read
+    waits on. Delete this and a read built from another's answer can be sent before that answer
+    exists with the check green, because only its timing would show it."""
+    from brain.connectors.federation import FanOutPlan
+
+    monkeypatch.setattr(
+        FanOutPlan, "waves", lambda self: (tuple(one.call_id for one in self.calls),)
+    )
+    assert ran("a_live_read_uses_the_service_key_ends_on_time_and_is_made_once") == (
+        FAILED,
+        "a read in a fan-out, or one waiting on another, was not answered",
     )
 
 

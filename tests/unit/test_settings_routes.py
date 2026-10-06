@@ -170,6 +170,7 @@ def test_the_screen_shows_every_setting_grouped_with_its_source_and_the_starter_
         "models",
         "lark",
         "staff",
+        "services",
     }
     settings = [row for group in body["groups"] for row in group["settings"]]
     assert all(row["label"] for row in settings)

@@ -1,6 +1,7 @@
 /**
- * The acts on one source that change something: edit its settings, replace its key and
- * disconnect it, plus Connect Lark and the export. Connecting a source is `SourceFlow.tsx`.
+ * The acts on one source that change something: edit its settings, replace its key, hand it to
+ * another steward and disconnect it, plus Connect Lark and the export. Connecting a source is
+ * `SourceFlow.tsx`.
  *
  * **Every write is sent from a confirmation.** Connecting ends in `components/ConnectSource.tsx`,
  * which first run uses too and which confirms in the API's words; editing, replacing a key and
@@ -20,7 +21,17 @@
  * **An edit sends the settings and never a key.** The API connects the source again with them as
  * one change and leaves the key alone, which the confirmation says.
  *
- * Task ids: M27.11.9, M11.7.7, M11.2.6
+ * **Allowing a write is the key drawer naming a grant, not a form of its own.** A source that can be
+ * allowed to change something (Cloudflare's approved DNS changes) declares a grant with a key of its
+ * own; `KeyDrawer` given that grant asks for the grant's key in the grant's words and sends
+ * `{ credential, grant }` to the same key route, which keeps it in the grant's slot and never the
+ * read key's. Rejected: a second drawer, which would be a second place for a key to be held or
+ * echoed. The drawer says whether the write is on now, from `writes_allowed`, and never the key.
+ * **A steward is named by person id, and the API decides whether they can be.** The drawer asks for
+ * the id and nothing else, and a person who cannot reach the source is refused in the API's one
+ * sentence, which is the same for somebody who is not here (M7.7.2).
+ *
+ * Task ids: M27.11.9, M11.7.7, M11.2.6, M11.7.3, M7.7.2
  */
 
 import { useState, type FormEvent } from "react";
@@ -34,8 +45,15 @@ import { Label } from "../../components/ui/label";
 import { SecretField, useSecret } from "../../components/ui/secret-field";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../../ui/FieldProblems";
-import { disconnectApiPath, readTold, type Connectable } from "../connectorsQuery";
-import { editApiPath, exportApiPath, exportFileName, keyApiPath, type SettingValue } from "./connectorSources";
+import { disconnectApiPath, readTold, type Connectable, type WriteGrant } from "../connectorsQuery";
+import {
+  editApiPath,
+  exportApiPath,
+  exportFileName,
+  keyApiPath,
+  stewardApiPath,
+  type SettingValue,
+} from "./connectorSources";
 import { ACT_LABELS } from "./connectorActions";
 import { LarkFlow, type LarkStart } from "./LarkFlow";
 
@@ -53,6 +71,18 @@ export const KEEP_CONNECTED = "Keep it connected";
 export const REVIEW_EDIT = "Review the change";
 export const REVIEW_KEY = "Review the key";
 export const KEY_SUPPLIED = "Supplied, and never shown again";
+export const NOT_ALLOWED = "The write was not allowed";
+/** What the drawer for a write grant says of it, before and after its key is given. */
+export const GRANT_OFF =
+  "Off. An approved change is not sent until a key for this write is given here. The read key is never used for it.";
+export const GRANT_ON = "On. A key for this write is held; a new one replaces it. The read key is unchanged.";
+export const STEWARD_DESCRIPTION = "Name who answers for this source from now on.";
+export const STEWARD_FIELD_LABEL = "New steward's person id";
+export const STEWARD_FIELD_HINT = "Somebody who can govern this source or read what it declares.";
+export const STEWARD_BLANK = "Enter the person id of the new steward.";
+export const NOT_HANDED = "The steward was not changed";
+export const REVIEW_STEWARD = "Review the change";
+export const KEEP_STEWARD = "Keep the current steward";
 
 /** Every name a setting's input answers to: its own, and its place in the body. */
 function settingNames(name: string): readonly string[] {
@@ -66,6 +96,9 @@ export type OpenAct =
   | { readonly act: "lark"; readonly start?: LarkStart | undefined }
   | { readonly act: "edit"; readonly source: string }
   | { readonly act: "key"; readonly source: string }
+  /** Allowing one of the source's writes, by the grant's name. */
+  | { readonly act: "grant"; readonly source: string; readonly grant: string }
+  | { readonly act: "steward"; readonly source: string }
   | { readonly act: "disconnect"; readonly source: string; readonly label: string };
 
 // --------------------------------------------------------------------------------- lark
@@ -226,6 +259,7 @@ export function EditDrawer({
 export function KeyDrawer({
   name,
   form,
+  grant,
   keyBlank,
   confirmation,
   keyHeld,
@@ -234,9 +268,11 @@ export function KeyDrawer({
 }: {
   readonly name: string;
   readonly form: Connectable;
+  /** The write this key allows, when it is a grant's key rather than the read key. */
+  readonly grant?: WriteGrant | undefined;
   /** The API's sentence for a blank key, said before the confirmation opens. */
   readonly keyBlank: string;
-  /** The API's sentence for what replacing a key agrees to. */
+  /** The API's sentence for what replacing a key, or allowing the grant, agrees to. */
   readonly confirmation: string;
   /** Whether the vault reports a key held now. Never what it is. */
   readonly keyHeld: boolean;
@@ -244,9 +280,11 @@ export function KeyDrawer({
   readonly onDone: (told: string) => void;
 }) {
   const secret = useSecret();
+  // What the field asks for: the grant's key in the grant's words, or the read key in the form's.
+  const asked = grant ?? form;
   // A key file or a database user is held until it is sent, as the connect form holds it; a key is
   // never held here at all. See `components/CredentialField.tsx`.
-  const shaped = form.credential_shape !== "key";
+  const shaped = asked.credential_shape !== "key";
   const [held, setHeld] = useState("");
   const [passwordPresent, setPasswordPresent] = useState(false);
   const [present, setPresent] = useState(false);
@@ -255,7 +293,7 @@ export function KeyDrawer({
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const problems: readonly FieldProblem[] = [...blank, ...(failure?.problems ?? [])];
-  const prefix = `key-${name}`;
+  const prefix = grant === undefined ? `key-${name}` : `grant-${name}-${grant.name}`;
   const described = problemAttributes(problems, prefix, "credential")["aria-describedby"];
 
   function ask(event: FormEvent<HTMLFormElement>): void {
@@ -270,7 +308,8 @@ export function KeyDrawer({
 
   function send(): void {
     // The key leaves the field in the same call that empties it, and goes into this body only.
-    const body = { credential: shaped ? credentialFor(form.credential_shape, held, secret) : secret.take() };
+    const credential = shaped ? credentialFor(asked.credential_shape, held, secret) : secret.take();
+    const body = grant === undefined ? { credential } : { credential, grant: grant.name };
     setHeld("");
     setPresent(false);
     setBusy(true);
@@ -294,8 +333,8 @@ export function KeyDrawer({
           onClose();
         }
       }}
-      title={`${KEY_TITLE}: ${form.label}`}
-      description={KEY_DESCRIPTION}
+      title={`${grant === undefined ? KEY_TITLE : grant.label}: ${form.label}`}
+      description={grant === undefined ? KEY_DESCRIPTION : keyHeld ? GRANT_ON : GRANT_OFF}
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={busy}>
@@ -308,38 +347,40 @@ export function KeyDrawer({
       }
     >
       <div className="flex min-w-0 flex-col gap-3">
-        {failure === null ? null : <FailureNotice failure={failure} title={NOT_REPLACED} fields={["credential"]} />}
+        {failure === null ? null : (
+          <FailureNotice failure={failure} title={grant === undefined ? NOT_REPLACED : NOT_ALLOWED} fields={["credential"]} />
+        )}
         <form id={prefix} className="flex flex-col gap-2" noValidate autoComplete="off" onSubmit={ask}>
           {shaped ? (
             <div className="flex flex-col gap-2">
-              <Label htmlFor={form.credential_shape === "database_user" ? `${prefix}-credential-user` : `${prefix}-credential`}>
-                {form.credential_label}
+              <Label htmlFor={asked.credential_shape === "database_user" ? `${prefix}-credential-user` : `${prefix}-credential`}>
+                {asked.credential_label}
               </Label>
               <CredentialField
-                shape={form.credential_shape}
+                shape={asked.credential_shape}
                 id={`${prefix}-credential`}
-                maxChars={form.credential_max_chars}
+                maxChars={asked.credential_max_chars}
                 value={held}
                 onChange={(value) => {
                   setHeld(value);
-                  setPresent(credentialGiven(form.credential_shape, value, passwordPresent));
+                  setPresent(credentialGiven(asked.credential_shape, value, passwordPresent));
                 }}
                 secret={secret}
                 onPasswordPresence={(typed) => {
                   setPasswordPresent(typed);
-                  setPresent(credentialGiven(form.credential_shape, held, typed));
+                  setPresent(credentialGiven(asked.credential_shape, held, typed));
                 }}
                 disabled={busy}
                 problemProps={problemAttributes(problems, prefix, "credential")}
               />
-              <p className="text-sm text-muted-foreground">{form.credential_hint}</p>
+              <p className="text-sm text-muted-foreground">{asked.credential_hint}</p>
             </div>
           ) : (
             <SecretField
               secret={secret}
-              label={form.credential_label}
+              label={asked.credential_label}
               stored={keyHeld}
-              description={form.credential_hint}
+              description={asked.credential_hint}
               disabled={busy}
               invalid={problems.some((one) => one.field === "credential")}
               onPresenceChange={setPresent}
@@ -351,15 +392,125 @@ export function KeyDrawer({
       </div>
       <ConfirmDialog
         open={pending}
-        question={`Replace the key for ${form.label}?`}
+        question={grant === undefined ? `Replace the key for ${form.label}?` : `${grant.label} for ${form.label}?`}
         consequence={confirmation}
         details={
           <FactList>
-            <Fact label={form.credential_label}>{KEY_SUPPLIED}</Fact>
+            <Fact label={asked.credential_label}>{KEY_SUPPLIED}</Fact>
           </FactList>
         }
-        confirmLabel={KEY_TITLE}
+        confirmLabel={grant === undefined ? KEY_TITLE : grant.label}
         cancelLabel={KEEP_AS_IS}
+        busy={busy}
+        onConfirm={() => {
+          send();
+        }}
+        onCancel={() => {
+          setPending(false);
+        }}
+      />
+    </Drawer>
+  );
+}
+
+// ------------------------------------------------------------------------------ steward
+
+/** Hand the source to another steward, confirmed first in the API's words (M7.7.2). */
+export function StewardDrawer({
+  name,
+  label,
+  confirmation,
+  onClose,
+  onDone,
+}: {
+  readonly name: string;
+  readonly label: string;
+  /** The API's sentence for what naming a steward agrees to. */
+  readonly confirmation: string;
+  readonly onClose: () => void;
+  readonly onDone: (told: string) => void;
+}) {
+  const [to, setTo] = useState("");
+  const [blank, setBlank] = useState<FieldProblem[]>([]);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [pending, setPending] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const problems: readonly FieldProblem[] = [...blank, ...(failure?.problems ?? [])];
+  const prefix = `steward-${name}`;
+  const inputId = `${prefix}-steward_id`;
+
+  function ask(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setFailure(null);
+    const found = to.trim() === "" ? [{ field: "steward_id", code: "blank", message: STEWARD_BLANK }] : [];
+    setBlank(found);
+    if (found.length === 0) {
+      setPending(true);
+    }
+  }
+
+  function send(): void {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(stewardApiPath(name), { method: "POST", body: { steward_id: to.trim() } });
+      setBusy(false);
+      setPending(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      onDone(readTold(result.data));
+    })();
+  }
+
+  return (
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) {
+          onClose();
+        }
+      }}
+      title={`${ACT_LABELS.steward}: ${label}`}
+      description={STEWARD_DESCRIPTION}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            {KEEP_STEWARD}
+          </Button>
+          <Button type="submit" form={prefix} disabled={busy}>
+            {REVIEW_STEWARD}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex min-w-0 flex-col gap-3">
+        {failure === null ? null : <FailureNotice failure={failure} title={NOT_HANDED} fields={["steward_id"]} />}
+        <form id={prefix} className="flex flex-col gap-2" noValidate autoComplete="off" onSubmit={ask}>
+          <Label htmlFor={inputId}>{STEWARD_FIELD_LABEL}</Label>
+          <Input
+            id={inputId}
+            name="steward_id"
+            type="text"
+            className="h-11 sm:h-9"
+            maxLength={128}
+            value={to}
+            disabled={busy}
+            {...problemAttributes(problems, prefix, "steward_id")}
+            onChange={(event) => {
+              setTo(event.target.value);
+            }}
+          />
+          <p className="m-0 text-[12.5px] leading-snug text-dim">{STEWARD_FIELD_HINT}</p>
+          <FieldProblems problems={problems} form={prefix} names="steward_id" />
+        </form>
+      </div>
+      <ConfirmDialog
+        open={pending}
+        question={`Hand ${label} to ${to.trim()}?`}
+        consequence={confirmation}
+        confirmLabel={ACT_LABELS.steward}
+        cancelLabel={KEEP_STEWARD}
         busy={busy}
         onConfirm={() => {
           send();

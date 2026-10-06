@@ -14,7 +14,7 @@ key behind, and each property it names fails it with its own sentence when the p
 the way that property would break.
 
 Task ids: M22.1.2, M22.4.1, M22.3.1, M22.3.2, M22.3.4
-Task ids: M22.1.3, M22.1.4, M22.1.5, M22.2.1, M22.2.3
+Task ids: M22.1.3, M22.1.4, M22.1.5, M22.2.1, M22.2.3, M22.1.1
 """
 
 from __future__ import annotations
@@ -40,7 +40,11 @@ ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_capacity"
 
 LEAVES = {
-    "budgets_and_windows_are_rows_saved_within_bounds_and_audited": ("M22.1.2", "M22.4.1"),
+    "budgets_and_windows_are_rows_saved_within_bounds_and_audited": (
+        "M22.1.2",
+        "M22.4.1",
+        "M22.1.1",
+    ),
     "the_rate_limits_screen_lists_the_windows_refusing_now": ("M22.4.1",),
     "capacity_is_sized_for_the_busiest_minute_and_its_first_limit": (
         "M22.3.1",
@@ -151,15 +155,19 @@ def test_on_a_real_database_the_capacity_checks_pass_or_say_why_not_and_leave_no
         ("bounds", "a value outside the product's bounds was not refused"),
         ("reload", "the reload every process runs did not read back what was saved"),
         ("budgets", "the budgets admission reads did not carry the saved row"),
+        ("unbudgeted", "a resource the product names has no global budget"),
+        ("unbound", "a request past its global budget was not refused"),
     ],
 )
 def test_the_rows_check_fails_when_the_product_is_broken_where_it_proves(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
-    """Three breaks, each one line of the product: bounds that admit anything, a reload that
-    reads an empty namespace, and budgets that never lay a saved row over the seed. Each fails the
-    check with its own sentence. Delete this and the check can pass with the property it names
+    """Five breaks, each one line of the product: bounds that admit anything, a reload that
+    reads an empty namespace, budgets that never lay a saved row over the seed, browser sessions
+    left with no global row, and admission that lets browser sessions past their row. Each fails
+    the check with its own sentence. Delete this and the check can pass with the property it names
     gone."""
+    import brain.ops.admission as admission
     import brain.ops.install_settings as install_settings
 
     if broken == "bounds":
@@ -171,8 +179,28 @@ def test_the_rows_check_fails_when_the_product_is_broken_where_it_proves(
             return {}
 
         monkeypatch.setattr(install_settings, "load_tuned", nothing)
-    else:
+    elif broken == "budgets":
         monkeypatch.setattr(tuning, "configured_budgets", lambda saved=None: seed_budgets())
+    elif broken == "unbudgeted":
+        configured = tuning.configured_budgets
+
+        def without_browsers(saved: Any = None) -> Any:
+            return tuple(
+                one
+                for one in configured(saved)
+                if one.resource is not admission.Resource.BROWSER_SESSIONS
+            )
+
+        monkeypatch.setattr(tuning, "configured_budgets", without_browsers)
+    else:
+        decide = admission.decide
+
+        def unbound(request: Any, budgets: Any, state: Any, **kwargs: Any) -> Any:
+            if request.resource is admission.Resource.BROWSER_SESSIONS:
+                state = admission.CapacityState()
+            return decide(request, budgets, state, **kwargs)
+
+        monkeypatch.setattr(admission, "decide", unbound)
     with at_head(f"brain_acceptance_capacity_{broken}") as url:
         outcome = run_checks(url, (saved_check(),), {})
     assert outcome[saved_check().name] == (FAILED, reason)

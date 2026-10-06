@@ -68,7 +68,13 @@ decision about one person, confirmed on the screen by somebody holding the autho
 a second release would be the same decision asked twice. See
 `A_FILED_REQUEST_IS_ALREADY_THE_DECISION`.
 
-Task ids: M27.7.24
+**A column that is how a person is reached is cleared, even on a row kept as the trail.** Retiring
+a row keeps it; a binding's Lark address (`0166`, needs-rupash 118) is not a record of what the
+person did but the way to reach them, so `CLEARED` names it and the executor nulls it on every row
+about the person, retired rows included, before the row's own rule runs. See
+`A_RETIRED_ROW_KEEPS_NO_ADDRESS`.
+
+Task ids: M27.7.24, M10.3.5
 """
 
 from __future__ import annotations
@@ -252,6 +258,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "gate.capability_pack_assignment": "principal_id",
         "gate.department_lead": "principal_id",
         "gate.elevation_request": "principal_id",
+        # A question handed to a person, in the asker's words (`0168`). `0168` grants no way for a
+        # row to leave, so an erasure keeps these and reports them kept, as it does a referral.
+        "gate.escalation": "asker_id",
         "gate.grants_version": "principal_id",
         "gate.review_decision": "principal_id",
         # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
@@ -266,6 +275,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "know.solution": "captured_by",
         "know.steward_task": "principal_id",
         "mem.adaptive": "principal_id",
+        # A helpful or unhelpful mark on an answer the person was given, and nothing they said
+        # (`0154`). `0154` grants no way for a row to leave, so an erasure keeps these and reports
+        # them kept.
+        "mem.mark": "principal_id",
         "mem.persistent": "principal_id",
         "obs.request_telemetry": "principal",
         # A budget's subject is a person, a department or an agent; only a person's id matches.
@@ -330,6 +343,9 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
 #: Tables in a PostgreSQL store no row of which is a person's own. See `AN_ACTOR_IS_NOT_AN_OWNER`.
 ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     {
+        # Whether an agent's runs may teach it, and why (`0154`): about an agent, and the person
+        # named is the steward who switched it, an actor and not an owner.
+        "agent.learning_pause",
         # An uploaded table and its rows (`0116`): a price list is the company's, and the people
         # named on the table row are the administrators who uploaded and marked it, actors and not
         # owners.
@@ -356,6 +372,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.skill_detachment",
         "agent.skill_retirement",
         "agent.skill_review",
+        # The bytes of a script a stored skill version carries (`0178`): about a skill, never a
+        # person.
+        "agent.skill_script",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.
         "agent.tool_definition",
@@ -367,6 +386,16 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "er.canonical",
         "er.identifier",
         "er.link",
+        # A merge and the unmerge reversing it (`0183`): `decided_by` and `performed_by` are actors,
+        # not owners, and each row is about two canonical entities, which hold no person's fields.
+        "er.merge",
+        "er.unmerge",
+        # A record's comparison keys, a blocked join key, and a pair waiting for a reviewer
+        # (`0182`, `0184`): digests, name keys and two source references, whose fields are the
+        # source record's and are erased with it there. `blocked_by` and `decided_by` are actors.
+        "er.observation",
+        "er.blocked_value",
+        "er.review_item",
         # Which directory group confers which role (`0109`): `created_by` is an actor, not an owner.
         "auth.group_role_rule",
         "gate.capability_pack",
@@ -411,6 +440,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # question no connected source covered is nobody's once the question ledger's row is gone.
         "ops.question_gap",
         "ops.report_refresh",
+        # A source's steward names the person who answers for it, an actor and not an owner, and
+        # the source itself is nobody's (`0167`), as `ops.connector_connection`'s actors are.
+        "ops.connector_steward",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",
@@ -426,12 +458,30 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.webhook_change",
         "ops.webhook_subscriber",
         "proj.record",
+        # A retired projected row keeps what `proj.record` kept, pointers and no principal, and a
+        # source's epoch is its name and a count: `0179` keeps no principal in either.
+        "proj.record_retired",
+        "proj.source_epoch",
         # A channel's record names the administrator who last switched it, an actor and not an
         # owner, and a delivery keeps a channel, an outcome and a reason and never a sender or a
         # message (`0114`), so neither is anybody's.
         "ops.channel",
         "ops.channel_delivery",
     }
+)
+
+#: Columns cleared on every row about the person, retired rows included, where the row itself is
+#: retired and kept: a value that is the person's own and must not outlive the erasure in a row the
+#: trail keeps. The Lark address a binding holds since `0166` (needs-rupash 118).
+CLEARED: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {"auth.principal_identity": ("channel_address",)}
+)
+
+#: Why a column is cleared on rows the erasure retires or finds retired.
+A_RETIRED_ROW_KEEPS_NO_ADDRESS: Final = (
+    "a retired row is kept as the trail of what happened and is readable by nobody, but an address "
+    "is how a person is reached rather than a record of what they did, so an erasure clears it on "
+    "every row about them, including rows retired before it ran"
 )
 
 #: Tables an erasure keeps on purpose, and why.
@@ -446,6 +496,8 @@ RETAINED: Final[Mapping[str, str]] = MappingProxyType(
         # 0150: who read a trace's payload, under the separate role, is the reader's accountability.
         "obs.trace_read": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
         "ops.halt": A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT,
+        # 0167: a grant somebody made to themselves is the record their stewards are told from.
+        "gate.self_grant": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
     }
 )
 
@@ -457,8 +509,10 @@ def declaration_gaps(
     through: Mapping[str, Through] = THROUGH,
     about_nobody: frozenset[str] = ABOUT_NOBODY,
     retained: Mapping[str, str] = RETAINED,
+    cleared: Mapping[str, tuple[str, ...]] = CLEARED,
 ) -> tuple[str, ...]:
-    """Every table in an erasable PostgreSQL store that is declared in no way, or in two.
+    """Every table in an erasable PostgreSQL store that is declared in no way, or in two, and a
+    table whose columns are cleared that names nobody.
 
     `tables` is handed in rather than read from `brain.db.metadata` here, for the reason
     `brain.ops.retention.store_gaps` takes its facts: a check that can only run against the
@@ -483,6 +537,8 @@ def declaration_gaps(
     for table, via in sorted(through.items()):
         if via.parent not in subjects:
             findings.append(f"{table} reaches a person through {via.parent}, which names nobody")
+    for table in sorted((set(cleared) & set(tables)) - set(subjects)):
+        findings.append(f"{table} has columns cleared on erasure and names nobody whose they are")
     return tuple(findings)
 
 
@@ -522,6 +578,7 @@ class PostgresEraser:
         through: Mapping[str, Through] = THROUGH,
         about_nobody: frozenset[str] = ABOUT_NOBODY,
         retained: Mapping[str, str] = RETAINED,
+        cleared: Mapping[str, tuple[str, ...]] = CLEARED,
         role: str = APPLICATION_ROLE,
     ) -> None:
         self.conn = conn
@@ -529,6 +586,7 @@ class PostgresEraser:
         self.through = through
         self.about_nobody = about_nobody
         self.retained = retained
+        self.cleared = cleared
         self.role = role
 
     # -------------------------------------------------------------------- the protocol
@@ -546,6 +604,9 @@ class PostgresEraser:
             with self.conn.transaction():
                 for table in tables:
                     rule = rules[table]
+                    # Before the row's own rule, and on every row about the person: see
+                    # `A_RETIRED_ROW_KEEPS_NO_ADDRESS`.
+                    self._clear(table, subject_id)
                     if rule.retire:
                         self._retire(table, subject_id)
                         retired += self._count(table, subject_id, retired=True)
@@ -659,6 +720,22 @@ class PostgresEraser:
             "UPDATE {table} SET deleted_at = statement_timestamp() "
             "WHERE {condition} AND deleted_at IS NULL"
         ).format(table=_identifier(table), condition=condition)
+        return self.conn.execute(query, params).rowcount
+
+    def _clear(self, table: str, subject_id: str) -> int:
+        """Null the columns `cleared` names on every row about the person, retired or not."""
+        columns = self.cleared.get(declared_as(table), ())
+        if not columns:
+            return 0
+        condition, params = self._whose(table, subject_id)
+        query = sql.SQL("UPDATE {table} SET {assignments} WHERE {condition}").format(
+            table=_identifier(table),
+            assignments=sql.SQL(", ").join(
+                sql.SQL("{column} = NULL").format(column=sql.Identifier(column))
+                for column in columns
+            ),
+            condition=condition,
+        )
         return self.conn.execute(query, params).rowcount
 
     def _delete(self, table: str, subject_id: str) -> int:

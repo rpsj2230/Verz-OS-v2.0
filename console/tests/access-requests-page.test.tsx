@@ -1,15 +1,24 @@
 /**
  * The Access requests page on the kit: a request is sent as the route declares it, the asker is
  * shown the API's own sentence and nothing else, the list is the requests addressed to the reader
- * named by who asked, and a request is marked handled only through its confirmation.
+ * named by who asked, and a request is marked handled only through its confirmation. Below them,
+ * the questions nothing answered that were handed to a person, as the API lists them (M8.3.2),
+ * and the access people gave themselves to what the reader stewards, as the API lists it (M7.7.2).
  *
- * Task ids: M4.3.4, M2.2.4, M27.16.1
+ * Task ids: M4.3.4, M2.2.4, M27.16.1, M8.3.2, M8.3.4, M7.7.2
  */
 
 import { fireEvent, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { ACCESS_REQUESTS_API_PATH, ACCESS_REQUESTS_PATH, ASK_HEADING, NOTHING_SENT } from "../src/pages/accessRequestsQuery";
 import { MARK_HANDLED } from "../src/pages/access-requests/AccessRequestsPage";
+import {
+  ESCALATIONS_API_PATH,
+  NOTHING_HANDED,
+  NOTHING_OF_YOURS,
+  type EscalationsAnswer,
+} from "../src/pages/access-requests/HandedToAPerson";
+import { NO_SELF_GRANTS, SELF_GRANTS_API_PATH, SELF_GRANTS_HEADING } from "../src/pages/access-requests/SelfGrantNotices";
 import { json, mountPage, settled, type Answer } from "./support/pageHarness";
 import { backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
@@ -20,6 +29,9 @@ const SEND = `POST /api/v1${ACCESS_REQUESTS_API_PATH}`;
 const REQUEST_ID = "11111111-2222-3333-4444-555555555555";
 const HANDLED = `POST /api/v1${ACCESS_REQUESTS_API_PATH}/${REQUEST_ID}/handled`;
 const REPLY = "REPLY-SENTINEL";
+const HANDED = `GET /api/v1${ESCALATIONS_API_PATH}`;
+const NOTICES = `GET /api/v1${SELF_GRANTS_API_PATH}`;
+const TOLD = "TOLD-SENTINEL";
 const ASKER = "u_asker_41f2";
 
 beforeAll(() => {
@@ -36,6 +48,51 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     requested_at: "2019-03-06T08:30:00Z",
     handled_at: null,
     ...overrides,
+  };
+}
+
+function escalations(): EscalationsAnswer {
+  return {
+    asked: [
+      {
+        escalation_id: "e-asked",
+        queue: "pricing",
+        question: "My own question about pricing",
+        raised_at: "2019-03-06T08:30:00Z",
+        expires_at: "2019-03-06T09:30:00Z",
+        expired: true,
+        said: "NOBODY-PICKED-IT-UP-SENTINEL",
+      },
+    ],
+    handed: [
+      {
+        escalation_id: "e-handed",
+        queue: "pricing",
+        asker_id: "u_asker_41f2",
+        asker_name: "Asha Asker",
+        question: "What does the premium plan cost for a charity?",
+        tried: ["answer.searched_at_the_askers_reach", "skill.quote_desk"],
+        needed: "Somebody who can quote outside the price list",
+        raised_at: "2019-03-06T08:30:00Z",
+        expires_at: "2019-03-06T12:30:00Z",
+        expired: false,
+      },
+    ],
+    told: "HANDED-TOLD",
+  };
+}
+
+function notice(): { at: string; person_id: string; person_name: string; pack: string; capabilities: string[]; reached: Record<string, string>[] } {
+  return {
+    at: "2019-03-06T08:30:00Z",
+    person_id: "u_granter_77",
+    person_name: "Grace Granter",
+    pack: "",
+    capabilities: ["read:invoice.*"],
+    reached: [
+      { kind: "source", object_id: "xero", label: "Xero" },
+      { kind: "document", object_id: "upload.a1", label: "Site handover" },
+    ],
   };
 }
 
@@ -157,6 +214,90 @@ describe("the Access requests page", () => {
   test("an empty list says nobody has sent a request", async () => {
     const { container } = await accessPage({ [LIST]: () => json(listed([])) });
     expect(container.textContent).toContain(NOTHING_SENT);
+  });
+
+  test("a question handed to the reader shows who asked, the question, what was tried and what is needed", async () => {
+    // What breaks if this is deleted: a handoff fetched and never drawn, or drawn without what is
+    // needed, which is the one line that tells the reader whether to pick it up (M8.3.2).
+    const { container } = await accessPage({
+      [LIST]: () => json(listed([])),
+      [HANDED]: () => json(escalations()),
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("Asha Asker");
+    });
+    const text = container.textContent;
+    expect(text).toContain("What does the premium plan cost for a charity?");
+    expect(text).toContain("Needed: Somebody who can quote outside the price list");
+    expect(text).toContain("skill.quote_desk");
+    expect(text).toContain("NOBODY-PICKED-IT-UP-SENTINEL");
+    expect(text).toContain("My own question about pricing");
+  });
+
+  test("with nothing handed either way, each list says so in one sentence and counts nothing", async () => {
+    // What breaks if this is deleted: two empty lists drawn as blank cards, or as numbers.
+    const { container } = await accessPage({
+      [LIST]: () => json(listed([])),
+      [HANDED]: () => json({ asked: [], handed: [], told: "TOLD" }),
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain(NOTHING_HANDED);
+    });
+    expect(container.textContent).toContain(NOTHING_OF_YOURS);
+  });
+
+  test("every field the handed-on lists read is a field the route declares", () => {
+    // What breaks if this is deleted: a renamed field in the route that the page goes on reading as
+    // empty, so a handoff loses its question or its asker is never told it expired.
+    const found = escalations();
+    expect(Object.keys(found).sort()).toEqual(backendModelFields("src/brain/escalation_routes.py", "EscalationsView").sort());
+    expect(Object.keys(found.asked[0] ?? {}).sort()).toEqual(backendModelFields("src/brain/escalation_routes.py", "AskedView").sort());
+    expect(Object.keys(found.handed[0] ?? {}).sort()).toEqual(backendModelFields("src/brain/escalation_routes.py", "HandedView").sort());
+  });
+
+  test("the access somebody gave themselves is listed with the steward's own things it reaches, each linked", async () => {
+    // What breaks if this is deleted: a steward's notices that are fetched and never drawn, or drawn
+    // without the thing they reach, which is the only part the steward can act on (M7.7.2).
+    const { container } = await accessPage({
+      [LIST]: () => json(listed([])),
+      [NOTICES]: () =>
+        json({
+          items: [notice()],
+          told: TOLD,
+        }),
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("Grace Granter");
+    });
+    const section = [...container.querySelectorAll("h2")].find((one) => one.textContent === SELF_GRANTS_HEADING)?.closest("section") ?? container;
+    expect(section.textContent).toContain(TOLD);
+    expect(section.textContent).toContain("read:invoice.*");
+    const links = [...section.querySelectorAll("a")].map((one) => [one.textContent, one.getAttribute("href")]);
+    expect(links).toEqual([
+      ["Source: Xero", "/connectors/xero"],
+      ["Document: Site handover", "/library/upload.a1"],
+    ]);
+  });
+
+  test("with no notice the section says so in one sentence and counts nothing", async () => {
+    // What breaks if this is deleted: an empty list drawn as a blank card, or as a number that says
+    // how much the reader was not told.
+    const { container } = await accessPage({
+      [LIST]: () => json(listed([])),
+      [NOTICES]: () => json({ items: [], told: TOLD }),
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain(NO_SELF_GRANTS);
+    });
+    expect(container.textContent).not.toMatch(/\b0 (grants|notices)\b/);
+  });
+
+  test("every field the notices read is a field the route declares", () => {
+    // What breaks if this is deleted: a renamed field in the steward's list that the page goes on
+    // reading as empty, so a notice silently drops its person or what it reaches.
+    expect(Object.keys(notice()).sort()).toEqual(backendModelFields("src/brain/stewardship_routes.py", "SelfGrantNoticeView").sort());
+    expect(Object.keys(notice().reached[0] ?? {}).sort()).toEqual(backendModelFields("src/brain/stewardship_routes.py", "ReachedView").sort());
+    expect(["items", "told"]).toEqual(backendModelFields("src/brain/stewardship_routes.py", "SelfGrantNoticesView").sort());
   });
 
   test("every field the page reads is a field the route declares", () => {

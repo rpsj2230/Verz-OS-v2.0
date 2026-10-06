@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 from brain.ops.credentials import SLOTS
-from brain.ops.limits import SOURCE_CEILINGS
+from brain.ops.limits import source_ceilings
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
 from brain.ops.secrets import VaultRole, policy_of
 
@@ -176,18 +176,40 @@ def test_the_loader_reads_the_directory_rather_than_a_list_of_names() -> None:
 
 
 # ------------------------------------------- a slot per connector and provider (M38.4.1.3)
-@pytest.mark.parametrize("connector", sorted(c.name for c in SOURCE_CEILINGS))
+def _keyless() -> frozenset[str]:
+    """Sources that take no key, which have a ceiling and nothing to keep: domains, whose RDAP
+    records are published."""
+    from brain.connectors.declaration import CredentialShape, shipped
+
+    return frozenset(
+        name
+        for name, one in shipped().items()
+        if one.console is not None and one.console.credential_shape is CredentialShape.NONE
+    )
+
+
+@pytest.mark.parametrize(
+    "connector", sorted(c.name for c in source_ceilings() if c.name not in _keyless())
+)
 def test_every_connector_the_code_knows_about_has_a_credential_slot(connector: str) -> None:
-    """Parametrised from `SOURCE_CEILINGS`, which is the closed list of sources this system
+    """Parametrised from `source_ceilings()`, which is the closed list of sources this system
     has measured a ceiling for. A connector in that list with no slot in the document is a
     connector whose scopes have not been argued about.
 
     That argument is cheap now and expensive later. Deleting this test means the scopes get
     decided during the hour somebody is trying to make the connector work, and "read and
     write, we can narrow it later" is the fastest thing to type in that hour.
+
+    Held to the key slot the installer defines and the document's key slot table since
+    2026-10-05, rather than to the prose table of leased `connectors/creds/` paths nothing reads:
+    the scopes are argued in the connector's own declaration now (`scopes`), and the key slot
+    table is held to them row for row by the test below.
     """
-    assert f"connectors/creds/{connector}" in _slot_paths(), (
-        f"{connector} has a measured rate limit and no credential slot"
+    from brain.ops.connector_slots import SLOT_SCOPES
+
+    assert connector in SLOT_SCOPES, f"{connector} has a measured rate limit and no credential slot"
+    assert SLOT_SCOPES[connector].path in _slot_paths(), (
+        f"{connector} has a measured rate limit and no row in the key slot table"
     )
 
 
@@ -289,9 +311,11 @@ def test_no_other_role_reaches_the_provider_engine() -> None:
 
 def test_the_worker_reads_each_model_provider_key_by_name_and_nothing_else() -> None:
     """M5.4.7: the worker probes providers, and a probe needs the provider's key, so it reads the
-    four model slots, each named, with read alone. Never `providers/data/+`, which would also read
-    the mail relay's password and every provider added from the console; never write, which would
-    let a process nobody watches replace the key every question uses; never metadata or delete.
+    four model slots, each named, with read alone, and the trace ledger's keys (M32.1.2.6), which
+    its install check sends a run to the ledger with. Never `providers/data/+`, which would also
+    read the mail relay's password and every provider added from the console; never write, which
+    would let a process nobody watches replace the key every question uses; never metadata or
+    delete.
     The names are held to `PROVIDER_SLOTS`, so a slot added there and not here is a provider the
     prober silently never probes, and one here and not there is a read nothing needs.
 
@@ -303,7 +327,13 @@ def test_the_worker_reads_each_model_provider_key_by_name_and_nothing_else() -> 
     providers = {
         path: sorted(caps) for path, caps in granted.items() if path.startswith("providers")
     }
-    assert providers == {f"providers/data/{one.slug}": ["read"] for one in PROVIDER_SLOTS}
+    from brain.ops.ledger_export import LEDGER_KEY_SLOT
+
+    ledger = "providers/data/" + LEDGER_KEY_SLOT.removeprefix("providers/")
+    assert providers == {
+        **{f"providers/data/{one.slug}": ["read"] for one in PROVIDER_SLOTS},
+        ledger: ["read"],
+    }
     assert "providers/data/mail_relay" not in providers
     for slot in PROVIDER_SLOTS:
         mount, _, rest = slot.path.partition("/")
@@ -589,3 +619,60 @@ def test_no_other_role_reaches_the_template_signing_engine() -> None:
     for name in ("worker", "connector-run", "browser-runner"):
         granted = _granted_paths((POLICIES / f"{name}.hcl").read_text(encoding="utf-8"))
         assert not [path for path in granted if path.startswith("template_signing")], name
+
+
+# ------------------------------------------------- the join-key pepper, created once (M14.7.3)
+def test_the_application_may_create_and_read_the_pepper_and_never_replace_it() -> None:
+    """One exact rule under the resolution engine: create, so the application puts the pepper into
+    an empty slot at the installer's step and at start, and read, so it hashes a value an
+    administrator enters to block it. No update, which is what kv version 2 asks for whenever the
+    slot already holds a version, so nothing this token does can replace the pepper; no delete,
+    patch or metadata, so its history cannot be erased from here; and no wildcard, so no second
+    slot beside it is writable. See
+    `brain.ops.join_key_pepper.THE_PEPPER_IS_CREATED_ONCE_AND_NEVER_WRITTEN_OVER`.
+
+    Delete this and `update` can be added in a debugging session, and a request can replace the
+    value every stored join key was hashed with, which unjoins every one of them silently."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    mount, _, rest = PEPPER_SLOT.partition("/")
+    resolution = {path: sorted(caps) for path, caps in granted.items() if path.startswith(mount)}
+    assert resolution == {f"{mount}/data/{rest}": ["create", "read"]}
+
+
+def test_the_worker_reads_the_pepper_and_may_neither_create_nor_replace_it() -> None:
+    """The worker hashes the identifiers of the source records it registers, so it reads the one
+    slot, and nothing more: a process nobody watches creating the pepper would be a second creator
+    racing the first, and one replacing it would unjoin every stored digest. Delete this and a copy
+    of the application's rule into the worker's policy reads as consistency."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
+    mount, _, rest = PEPPER_SLOT.partition("/")
+    resolution = {path: sorted(caps) for path, caps in granted.items() if path.startswith(mount)}
+    assert resolution == {f"{mount}/data/{rest}": ["read"]}
+
+
+def test_no_role_but_the_application_and_the_worker_reaches_the_resolution_engine() -> None:
+    """A connector run, a channel send and the browser runner hash no join key, and the deploy
+    token writes no secret value, so none of them names the engine. Delete this and the pepper can
+    be read by a token minted for one run against somebody else's system, or created by the token
+    every release runs as, which would change the deploy policy every install already running
+    cannot load by itself."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    mount = PEPPER_SLOT.split("/", 1)[0]
+    others = sorted(
+        set(POLICIES.glob("*.hcl"))
+        - {_policy_file(r) for r in (VaultRole.APPLICATION, VaultRole.WORKER)}
+    )
+    assert {one.stem for one in others} >= {
+        "connector-run",
+        "channel-send",
+        "browser-runner",
+        "deploy",
+    }
+    for path in others:
+        granted = _granted_paths(path.read_text(encoding="utf-8"))
+        assert not [rule for rule in granted if rule.startswith(f"{mount}/")], path.stem

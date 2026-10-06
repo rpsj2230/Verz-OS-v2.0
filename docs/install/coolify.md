@@ -47,6 +47,19 @@ computed from the compose files by that module and compared against this page on
 
 4. Save. Coolify now lists every variable the file names.
 
+**The optional services need no merge.** On an install that deploys with the pull timer
+(`ops/deploy/brain-deploy`), the services named on **Install, Settings** under *Optional
+services this server runs* (`INSTALL_SERVICES`: `presidio`, the personal data detector, and
+`langfuse`, the trace ledger and its file store) are started by every release beside Coolify's
+copy, as a compose project of their own, after the release measures the server's memory and finds
+room for them. The trace ledger's settings files, its seven secrets and its database are put in
+place by the release too: the secrets are minted on the server into
+`/opt/brain/settings/overlays.env`, which only root can read, and never leave it, except the
+ledger's two project keys, which the release hands to the application to keep in the vault so
+every run's masked trace reaches the ledger. The deploy's
+journal says what was started, what was refused for memory and why. Nothing is pasted into
+Coolify for them, and switching one off stops it at the next release with its data kept.
+
 The same merge is how an optional overlay reaches a Coolify install: the Cloudflare Tunnel's
 two files, `docker-compose.replica.yml`, or anything else this documentation composes with a
 second `-f`. Add them to the command above and paste the result. The two-host split in
@@ -155,6 +168,7 @@ without Coolify that network does not exist, and compose refuses to start the id
 
    | Service | Profiles |
    | --- | --- |
+   | `keycloak-build` | standard, full |
    | `keycloak-realm` | standard, full |
    | `record-matcher` | full |
    | `seaweedfs-init` | standard, full |

@@ -44,8 +44,12 @@ interface FormCase {
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
+  // A memory's edit opens in place on My workspace, the first form on the page once opened.
+  "src/pages/MyWorkspace.tsx": [{ pattern: "/me", opener: "Edit", index: 0, writes: true }],
   // The one form checks a published head; the ledger's filters are on the Audit log's own page.
   "src/pages/audit/VerifyPage.tsx": [{ pattern: "/audit/verify", index: 0, writes: true }],
+  // The one form names a trace and says why; sending it writes the row recording who read it.
+  "src/pages/audit/TracePage.tsx": [{ pattern: "/audit/trace", index: 0, writes: true }],
   // One column's editor (a rule, or a mark for an uploaded table), the one form on a table's page;
   // and on the module's first page, the naming form and then the upload.
   "src/pages/classification/ClassificationPage.tsx": [
@@ -107,12 +111,21 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/agents/AgentMemory.tsx":
+    "The one form corrects a memory, opened from its row in the Memory section at its own address, " +
+    "which no page case mounts. tests/agent-memory.test.tsx submits it blank and holds that nothing " +
+    "is sent and what to type is said beside it, and a correction is sent only from its confirmation.",
   "src/pages/compliance/ComplianceActs.tsx":
     "Naming a person, opening a case and each step of a case are forms inside drawers opened from the " +
     "Compliance views and a case's own page, outside the main landmark these cases read. Each says what " +
     "its fields take before anything is sent, and tests/compliance-page.test.tsx submits the naming, " +
     "the opening, the assessment and a notification blank and holds that no confirmation opens and " +
     "nothing is sent.",
+  "src/pages/compliance/EscalationQueues.tsx":
+    "Naming who answers for an escalation queue is a form inside a drawer opened from the Escalation " +
+    "queues view, outside the main landmark these cases read. It says what each field takes before " +
+    "anything is sent, and tests/compliance-page.test.tsx submits it blank and holds that no " +
+    "confirmation opens and nothing is sent.",
   "src/pages/retention/RetentionActs.tsx":
     "The hold, lift and erasure forms are inside drawers opened from the Legal holds and Erasure " +
     "requests views, outside the main landmark these cases read. Each says what its fields take before " +
@@ -127,6 +140,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The export form is inside the drawer opened from the Access review header, outside the main " +
     "landmark these cases read. tests/review-pages.test.tsx submits it blank and holds that no " +
     "confirmation opens, nothing is sent and the reason and the reference are each said to be needed.",
+  "src/pages/people/WorkEmail.tsx":
+    "The work email form is inside the Add work email drawer opened from a person's Overview, outside " +
+    "the main landmark these cases read. tests/people-access-pages.test.tsx submits it blank and holds " +
+    "that nothing is sent and what to type is said beside the field.",
   "src/pages/access-requests/AccessRequestsPage.tsx":
     "The ask form is inside the Ask for access drawer opened from the page header, outside the main " +
     "landmark these cases read. tests/access-requests-page.test.tsx submits it blank and holds that " +
@@ -194,6 +211,9 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
   "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/people/MoveDrawer.tsx": "Its one form opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. It is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says which department to choose.",
   "src/pages/people/PersonPlacements.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",

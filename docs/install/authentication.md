@@ -312,7 +312,9 @@ everything, written by first run and recorded in the ledger. They come in three 
   could grant anybody anything from the console. And `approve:knowledge.visibility`, which is
   approving a document for the whole company on the Approvals screen; nobody else on a fresh
   install holds it, and a grant is bounded by what its writer holds, so without it no document
-  could ever be published company-wide.
+  could ever be published company-wide. And `approve:knowledge.public`, which is marking a
+  document public so the website widget may answer from it; the first administrator grants it
+  onward scoped to a department, which is how a Department Admin decides for their own.
 - **Reading how the system is run**: every console screen's own read at the existence and
   configuration planes, the two plane capabilities themselves, the audit entries about
   governing the system, and the reads of the Routing and Classification pages. That says a thing
@@ -334,6 +336,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:credential` | running the system |
 | `admin:data_steward` | running the system |
 | `admin:department` | running the system |
+| `admin:entity_merge` | running the system |
 | `admin:erasure` | running the system |
 | `admin:export` | running the system |
 | `admin:feature` | running the system |
@@ -361,6 +364,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:webhook_subscriber` | running the system |
 | `approve:grant` | letting the second person in |
 | `approve:knowledge.visibility` | letting the second person in |
+| `approve:knowledge.public` | letting the second person in |
 | `read:agent` | reading how the system is run |
 | `read:artifact` | reading how the system is run |
 | `read:audit` | reading how the system is run |

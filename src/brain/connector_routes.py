@@ -72,6 +72,13 @@ a key is a credential write through `brain.ops.credentials.Credentials.keep`, re
 ledger by its own trigger, and leaves the connection alone. A source with no live connection is the
 one refusal for both, for a caller who may manage it and so can see the list.
 
+**A write a source can be allowed to make is a key of its own, given through the same key route
+(M11.7.3).** `POST /connectors/{connector}/key` naming a `grant` keeps that grant's key in its own
+slot (`brain.ops.credentials.connector_write_slot`) and never the read key's, which is the smallest
+extension of the key drawer the console already has; the screen lists each source's grants and
+which of them this install has given, and a grant is off until its key is given. See
+`brain.connectors.declaration.A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+
 **Testing a connection is asked for here and made by the worker.** Only the worker reads a source's
 key, so `POST /connectors/{connector}/probe` writes the asking down (`brain.ops.connector_probe`)
 under the authority an edit asks, and the worker makes one call on its next pass and records what it
@@ -88,7 +95,19 @@ module calling them with values of its own would be this repository holding a cl
 configuration. The identifiers arrive from the person connecting the source, and are kept in that
 install's database.
 
+**A source names its steward, set and changed here (M7.7.2).** `POST
+/connectors/{connector}/steward` names the person who answers for a source from now on, asked of the
+authority a connection asks.
+The person named must be here and able to reach the source, by governing it or by reading what it
+declares, for the rule the document hand-over applies: a steward nobody could act on the source for
+is a name on a page. See `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`. A source nobody named
+anybody for is stewarded by the data steward, or by whoever connected it, which is
+`brain.ops.stewardship_store.A_SOURCE_IS_STEWARDED_FROM_THE_MOMENT_IT_IS_CONNECTED`, and the
+source's page shows whoever that is.
+
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
+Task ids: M7.7.2
+Task ids: M11.7.3
 """
 
 from __future__ import annotations
@@ -102,7 +121,8 @@ from typing import Annotated, Final, cast
 import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import (
     _tool_registry,
@@ -118,7 +138,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute, Page
 from brain.api_routes import Asked, Asking
 from brain.audit.record import ConnectorChange
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.declaration import CredentialShape, shipped
+from brain.connectors.declaration import CredentialShape, WriteGrant, shipped
 from brain.connectors.manifest import ConnectorManifest, digest_input, manifest_digest
 from brain.connectors.registry import may_install
 from brain.console.connector_detail import (
@@ -169,7 +189,6 @@ from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.connectable import (
     CONNECTABLE,
-    MAX_SETTING_CHARS,
     NOT_FROM_THE_CONSOLE,
     NotConnectableError,
     SettingProblem,
@@ -180,6 +199,7 @@ from brain.ops.connectable import (
     settings_problems,
 )
 from brain.ops.connector_admin import (
+    ALLOWING_A_WRITE,
     CONNECTED,
     CONNECTING_A_SOURCE,
     DISCONNECTED,
@@ -189,12 +209,14 @@ from brain.ops.connector_admin import (
     KEY_REPLACED,
     KEY_SENTENCES,
     NO_KEY_IS_EXPORTED,
+    NO_SUCH_WRITE,
     NOTHING_TO_EDIT,
     REPLACING_A_KEY,
     SOURCE_FIELD,
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
+    WRITE_ALLOWED,
     connection_problems,
     credential_problems,
     may_connect_source,
@@ -228,12 +250,15 @@ from brain.ops.credentials import (
     Held,
     Kept,
     KeySlot,
+    Problem,
     VaultState,
     connector_key_slot,
+    connector_write_slot,
     key_file_problems,
     user_and_password,
 )
 from brain.ops.lark_connect import uses_switched_on
+from brain.ops.stewardship_store import NamedSteward, StoredStewardship
 from brain.routing_routes import sessions_of
 from brain.skill_routes import SkillLibrary
 
@@ -263,6 +288,38 @@ EXPORT_PATH: Final = SOURCE_PATH + "/export"
 PROBE_PATH: Final = CONNECTORS_PATH + "/{connector}/probe"
 PROBE_STATE_PATH: Final = SOURCE_PATH + "/probe"
 DRIFT_PATH: Final = SOURCE_PATH + "/drift"
+
+#: Where a source's steward is named (M7.7.2).
+STEWARD_PATH: Final = CONNECTORS_PATH + "/{connector}/steward"
+
+#: Why the person named must be able to reach the source.
+A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE: Final = (
+    "A steward answers for a source and is told when anybody grants themselves access to it. "
+    "Somebody who can neither govern the source nor read what it declares could do nothing about "
+    "either, so the person named must be here and hold one of the two."
+)
+
+#: What the steward form says for somebody the source cannot be handed to. One sentence for a
+#: person who is not here and one who cannot reach it, so the form does not tell who exists.
+STEWARD_REFUSED: Final = (
+    "That person cannot steward this source: name somebody who can govern it or read what it "
+    "declares."
+)
+
+#: What the steward form says when the person named already stewards it.
+ALREADY_STEWARD: Final = "That person already stewards this source."
+
+#: What the route says once a steward is named.
+STEWARD_NAMED: Final = (
+    "The new steward answers for this source from now on, and is told of access to it."
+)
+
+#: What naming a steward agrees to, which the page's confirmation says in these words.
+NAMING_A_STEWARD: Final = (
+    "The person you name answers for this source from now on, in place of its current steward, "
+    "and is the one told when anybody grants themselves access to what it holds. The change is "
+    "recorded in the audit trail."
+)
 
 #: The Install setting Connect Lark saves its switched-on uses under.
 LARK_USES_SETTING: Final = "INSTALL_LARK_USES"
@@ -333,6 +390,9 @@ class ConnectedView(BaseModel):
     next_sync_at: datetime | None
     #: What reading it came to, or why nothing reads it, in the worker's own words.
     sync: str
+    #: The write grants whose key this install has given (M11.7.3). Empty when none, or when the
+    #: vault could not be asked, which `key_held` being None already says.
+    writes_allowed: list[str] = []
 
 
 class CopyLineView(BaseModel):
@@ -386,6 +446,29 @@ class ConnectableView(BaseModel):
     may_connect: bool
     #: The screens of its connect flow, the form last. The same on every install.
     steps: list[GuideStepView]
+    #: The writes it can be allowed to make, each with a key of its own. Empty for most sources.
+    writes: list[WriteGrantView] = []
+
+
+class WriteGrantView(BaseModel):
+    """A write a source can be allowed to make, and the key it asks for (M11.7.3).
+
+    `brain.connectors.declaration.WriteGrant`, by field. The key is asked for through the same key
+    route as the read key, naming this grant, and kept in a slot of its own.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    credential_label: str
+    credential_hint: str
+    credential_shape: str
+    credential_max_chars: int
+    #: What an approver is told of a change this grant sends while its key is not given.
+    not_allowed: str
+    #: What giving the key agrees to, said before it is sent.
+    confirmation: str
 
 
 class NotConnectableView(BaseModel):
@@ -588,11 +671,16 @@ class ConnectorAcceptedView(BaseModel):
 
 
 class ConnectorKeyAsked(BaseModel):
-    """A replacement key. No length on the field, for `ConnectAsked`'s reason."""
+    """A replacement key, or a write grant's key when `grant` names one (M11.7.3).
+
+    No length on the field, for `ConnectAsked`'s reason. A grant's key goes to the grant's own
+    slot and never the read key's, and the read key is untouched.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     credential: str
+    grant: str | None = None
 
 
 class ConnectorEditedView(BaseModel):
@@ -731,6 +819,11 @@ class ConnectorSourceView(BaseModel):
     skills: list[ConnectorSkillView]
     confirm_edit: str
     confirm_key: str
+    #: Who answers for the source (M7.7.2), a principal id whose name is in `people`; empty while
+    #: it is not connected, or for a reader who may not be told it is.
+    steward: str = ""
+    #: What naming a steward agrees to, for the page's confirmation (M7.7.2).
+    confirm_steward: str = NAMING_A_STEWARD
 
 
 class ConnectorExportedConnectionView(BaseModel):
@@ -777,6 +870,26 @@ class ConnectorExportView(BaseModel):
     ceiling: str
     recorded: str
     history: list[ConnectorHistoryView]
+
+
+class SourceStewardAsked(BaseModel):
+    """Who is to steward the source, by their principal id."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    steward_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.@-]{1,128}$")
+
+
+class SourceStewardView(BaseModel):
+    """The steward named: who, their name where one is known, and when."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    steward_id: str
+    steward_name: str
+    named_at: datetime
+    told: str
 
 
 class ConnectorProbeView(BaseModel):
@@ -842,9 +955,12 @@ def evidence_view(one: EvidenceRow) -> EvidenceView:
     )
 
 
-def connected_view(one: ConnectedRow, *, may_disconnect: bool) -> ConnectedView:
+def connected_view(
+    one: ConnectedRow, *, may_disconnect: bool, writes_allowed: Sequence[str] = ()
+) -> ConnectedView:
     """One connection, copied field by field, for `TrustView`'s reason."""
     return ConnectedView(
+        writes_allowed=list(writes_allowed),
         name=one.name,
         connected_by=one.connected_by,
         connected_at=one.connected_at,
@@ -935,6 +1051,42 @@ def keys_held(store: Credentials, names: Sequence[str]) -> tuple[VaultState, dic
         return unavailable.state, {}
 
 
+def writes_held(store: Credentials, names: Sequence[str]) -> dict[str, list[str]]:
+    """The write grants whose key is held, by source, for the sources that declare any (M11.7.3).
+
+    Empty for a source whose grants hold no key and for every source when the vault is not
+    configured or could not answer.
+    """
+    if not store.configured:
+        return {}
+    try:
+        return {
+            name: [
+                grant.name
+                for grant in CONNECTABLE[name].writes
+                if store.held(connector_write_slot(name, grant.name)).held
+            ]
+            for name in names
+            if name in CONNECTABLE and CONNECTABLE[name].writes
+        }
+    except CredentialsUnavailableError:
+        return {}
+
+
+def write_grant_view(grant: WriteGrant) -> WriteGrantView:
+    """One write grant, by field."""
+    return WriteGrantView(
+        name=grant.name,
+        label=grant.label,
+        credential_label=grant.credential_label,
+        credential_hint=grant.credential_hint,
+        credential_shape=grant.credential_shape.value,
+        credential_max_chars=_credential_chars(grant.credential_shape),
+        not_allowed=grant.not_allowed,
+        confirmation=ALLOWING_A_WRITE,
+    )
+
+
 def _problems(found: Sequence[SettingProblem]) -> JSONResponse:
     told = ConnectorProblemsView(
         problems=[
@@ -980,7 +1132,7 @@ def _page(
                         name=one.name,
                         label=one.label,
                         hint=one.hint,
-                        max_chars=MAX_SETTING_CHARS,
+                        max_chars=one.max_chars,
                         blank=blank_sentence(one),
                     )
                     for one in kind.settings
@@ -988,13 +1140,10 @@ def _page(
                 credential_label=kind.credential_label,
                 credential_hint=kind.credential_hint,
                 credential_shape=kind.credential_shape.value,
-                credential_max_chars=(
-                    MAX_KEY_FILE_CHARS
-                    if kind.credential_shape is CredentialShape.KEY_FILE
-                    else MAX_CREDENTIAL_CHARS
-                ),
+                credential_max_chars=_credential_chars(kind.credential_shape),
                 may_connect=may_connect_source(reach, kind.name, now),
                 steps=[step_view(step) for step in kind.guide],
+                writes=[write_grant_view(one) for one in kind.writes],
             )
             for kind in CONNECTABLE.values()
         ],
@@ -1043,6 +1192,7 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     found: tuple[Connection, ...] = await records.connected()
     shown = admitted_connections(found, asked.reach, asked.now)
     vault, held = await asyncio.to_thread(keys_held, credentials, [one.connector for one in shown])
+    allowed = await asyncio.to_thread(writes_held, credentials, [one.connector for one in shown])
     sync = sync_records_of(request)
     synced = {} if sync is None or not shown else await sync.states()
     rows = connected_rows(shown, asked.reach, now=asked.now, held=held, vault=vault, synced=synced)
@@ -1050,12 +1200,27 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
         asked.reach,
         asked.now,
         connections=[
-            connected_view(one, may_disconnect=may_connect_source(asked.reach, one.name, asked.now))
+            connected_view(
+                one,
+                may_disconnect=may_connect_source(asked.reach, one.name, asked.now),
+                writes_allowed=allowed.get(one.name, ()),
+            )
             for one in rows
         ],
         vault=vault,
         evidence=evidence_views(rows),
     )
+
+
+def _credential_chars(shape: CredentialShape) -> int:
+    """The longest credential, or each half of a database user, a source's form accepts."""
+    match shape:
+        case CredentialShape.KEY_FILE:
+            return MAX_KEY_FILE_CHARS
+        case CredentialShape.NONE:
+            return 0
+        case CredentialShape.KEY | CredentialShape.DATABASE_USER:
+            return MAX_CREDENTIAL_CHARS
 
 
 def _person_is_live(request: Request) -> Callable[[str], Awaitable[bool]]:
@@ -1077,6 +1242,13 @@ def _person_is_live(request: Request) -> Callable[[str], Awaitable[bool]]:
         return await StoredPrincipals(sessions).live_principal(principal_id) is not None
 
     return is_live
+
+
+#: What the key routes say of a source that takes no key (M11.7.4).
+NO_KEY_TO_KEEP: Final = (
+    "This source takes no key: its records are published to anybody who asks, so nothing is kept "
+    "in the vault for it and there is nothing to replace."
+)
 
 
 async def keep_credential(
@@ -1116,6 +1288,8 @@ async def keep_credential(
             return await credentials.keep_fields(
                 slot, fields, actor=actor, trace_id=trace_id, ent_hash=ent_hash
             )
+        case CredentialShape.NONE:
+            raise CredentialProblemError((Problem(code="no_key", message=NO_KEY_TO_KEEP),))
 
 
 @router.post(CONNECTORS_PATH, response_model=ConnectorChangedView, responses=_WRITE_RESPONSES)
@@ -1132,13 +1306,14 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     )
     if found:
         return _problems(found)
+    kind = CONNECTABLE[body.connector]
     credentials = credentials_of(request)
-    if not credentials.configured:
+    # A source that takes no key keeps nothing in the vault, so an install with none may connect it.
+    if not credentials.configured and kind.credential_shape is not CredentialShape.NONE:
         return _not_kept(VaultState.ABSENT)
     records = records_of(request)
     if records is None:
         raise Failed("no database on this process")
-    kind = CONNECTABLE[body.connector]
     settings = given(kind, body.settings)
     manifest = kind.build(settings, key_reference(kind.name))
     digest = manifest_digest(manifest)
@@ -1149,6 +1324,8 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     written: list[datetime | None] = []
 
     async def keep_key() -> datetime | None:
+        if kind.credential_shape is CredentialShape.NONE:
+            return None
         kept = await keep_credential(
             credentials,
             slot,
@@ -1497,12 +1674,13 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
     if declared is None:
         raise _not_answerable("connector source")
     one = await _one_source(request, connector, asked)
+    steward = await steward_of(request, one.live) if one.live is not None and one.told_of else ""
     actors = {
         actor
         for entry in one.history
         for actor in (entry.connected_by, entry.disconnected_by)
         if actor
-    }
+    } | ({steward} if steward else set())
     return ConnectorSourceView(
         source=row_view(one.row),
         elsewhere=declared.not_from_the_console,
@@ -1521,6 +1699,7 @@ async def connector_source(request: Request, connector: str, asked: Asked) -> Co
         skills=await _skills_from(request, connector, asked) if one.told_of else [],
         confirm_edit=EDITING_A_SOURCE,
         confirm_key=REPLACING_A_KEY,
+        steward=steward,
     )
 
 
@@ -1584,6 +1763,90 @@ async def _live_connection(request: Request, connector: str) -> Connection | Non
     if records is None:
         raise Failed("no database on this process")
     return next((one for one in await records.connected() if one.connector == connector), None)
+
+
+def stewardship_of(request: Request) -> StoredStewardship | None:
+    """`app.state.stewardship` when something put one there, or the database, or None."""
+    found = getattr(request.app.state, "stewardship", None)
+    if isinstance(found, StoredStewardship):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredStewardship(sessions)
+
+
+async def steward_of(request: Request, live: Connection) -> str:
+    """Who stewards this connected source now. See `brain.ops.stewardship_store.source_steward`."""
+    store = stewardship_of(request)
+    if store is None:
+        return live.connected_by
+    return await store.steward_of(live.connector, connected_by=live.connected_by)
+
+
+async def may_steward(
+    sessions: async_sessionmaker[AsyncSession], principal_id: str, live: Connection, now: datetime
+) -> bool:
+    """Whether this person may steward this source. See
+    `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`.
+
+    Given the sessions rather than the request, so the install acceptance check asks the route's
+    own question rather than a copy of it.
+    """
+    from brain.knowledge_lifecycle_routes import entitlement_of
+
+    if await StoredPrincipals(sessions).live_principal(principal_id) is None:
+        return False
+    async with sessions() as session, session.begin():
+        theirs = await entitlement_of(session, principal_id, now)
+    if may_connect_source(theirs, live.connector, now):
+        return True
+    manifest = manifest_or_none(live)
+    declared = () if manifest is None else declared_capabilities(manifest)
+    return any(theirs.holds(Capability(value=one), now) for one in declared)
+
+
+@router.post(STEWARD_PATH, response_model=SourceStewardView, responses=_WRITE_RESPONSES)
+async def name_steward(
+    request: Request, connector: str, body: SourceStewardAsked, asked: Asked
+) -> JSONResponse:
+    """Name who answers for a connected source from now on (M7.7.2), or say why not.
+
+    Asked of the authority a connection asks, before anything is read. A source that is not
+    connected is the router's one refusal, as for an edit.
+    """
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("naming a steward not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("steward")
+    store = stewardship_of(request)
+    if store is None:
+        raise Failed("no database on this process")
+    live = await _live_connection(request, connector)
+    if live is None:
+        raise _not_answerable("steward")
+    if body.steward_id == await steward_of(request, live):
+        return _problems(
+            (SettingProblem(field="steward_id", code="unchanged", message=ALREADY_STEWARD),)
+        )
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    if not await may_steward(sessions, body.steward_id, live, asked.now):
+        return _problems(
+            (SettingProblem(field="steward_id", code="not_a_steward", message=STEWARD_REFUSED),)
+        )
+    actor = asked.reach.principal_id
+    named: NamedSteward = await store.name(
+        connector, body.steward_id, by=actor, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id()
+    )
+    log.info("source steward named", connector=connector, principal=actor)
+    names = await _people(request, (named.steward_id,))
+    answered = SourceStewardView(
+        connector=connector,
+        steward_id=named.steward_id,
+        steward_name=names.get(named.steward_id, ""),
+        named_at=named.named_at,
+        told=STEWARD_NAMED,
+    )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 
 
 @router.post(EDIT_PATH, response_model=ConnectorEditedView, responses=_WRITE_RESPONSES)
@@ -1788,6 +2051,26 @@ async def replace_key(
         raise _not_answerable("replace key")
     kind = CONNECTABLE.get(connector)
     shape = CredentialShape.KEY if kind is None else kind.credential_shape
+    slot = connector_key_slot(connector)
+    told = KEY_REPLACED
+    if body.grant is not None:
+        # A write grant's key: its own shape and its own slot, never the read key's (M11.7.3).
+        grant = next((one for one in (kind.writes if kind else ()) if one.name == body.grant), None)
+        if grant is None:
+            return _problems(
+                (SettingProblem(field="grant", code="unknown", message=NO_SUCH_WRITE),)
+            )
+        shape, slot, told = (
+            grant.credential_shape,
+            connector_write_slot(connector, grant.name),
+            WRITE_ALLOWED,
+        )
+    if shape is CredentialShape.NONE:
+        # Judged on the shape the slot asks for, so a keyless source's read key is refused and a
+        # write grant it declares would still be judged by its own shape (M11.7.4).
+        return _problems(
+            (SettingProblem(field="credential", code="no_key", message=NO_KEY_TO_KEEP),)
+        )
     found = credential_problems(shape, body.credential)
     if found:
         return _problems(found)
@@ -1800,7 +2083,7 @@ async def replace_key(
     try:
         kept = await keep_credential(
             credentials,
-            connector_key_slot(connector),
+            slot,
             shape,
             body.credential,
             actor=actor,
@@ -1811,10 +2094,8 @@ async def replace_key(
         return _problems(credential_problems(shape, body.credential))
     except CredentialsUnavailableError as unavailable:
         return _not_kept(unavailable.state)
-    log.info("source key replaced", connector=connector, principal=actor)
-    answered = ConnectorKeyReplacedView(
-        connector=connector, key_written_at=kept.set_at, told=KEY_REPLACED
-    )
+    log.info("source key replaced", connector=connector, principal=actor, grant=body.grant)
+    answered = ConnectorKeyReplacedView(connector=connector, key_written_at=kept.set_at, told=told)
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 
 

@@ -1,0 +1,73 @@
+# The connection pools per workload class, started beside the application by the release.
+#
+# One PgBouncer in transaction mode with three database entries, interactive, background and
+# batch, each pointing at the application's one database with its own pool, so a batch job
+# holding every connection its class has leaves the request path's connections where they are.
+# Why a second pooler rather than a change to the first, why it is always on, and when a process
+# uses it are in `brain.ops.class_pools`; how it is started is `brain.ops.overlays` and
+# `apply.sh` beside this file. It is composed as a project of its own, never inside the
+# application's, because on Coolify that project is the panel's copy of the compose file.
+#
+# **Its configuration is a file the release writes, not environment variables.** The image writes
+# one wildcard database with one pool size from its variables, which is the thing being replaced,
+# so `class-pools.prepare.sh` writes `pgbouncer.ini` from `brain.ops.class_pools.render_ini` on
+# every deploy and this file mounts it read-only; the image writes no configuration when one is
+# there. The owner's login reaches the image's own userlist through DB_USER and DB_PASSWORD, read
+# from the environment file the step keeps where only root can read it, which is how the
+# application's pooler is given the same login. Every other login, `brain_app` among them, is
+# admitted by the same pinned lookup that pooler runs.
+#
+# **It joins the network the application's database is on and nothing else of the application's**,
+# as the trace ledger's attach file does: the preparation names that network in BRAIN_APP_NETWORK,
+# the pooler reaches `db` over it, and the application and the worker reach the pooler on it by
+# its service name. `expose` and never `ports`: nothing off the server can reach it.
+#
+# **Memory: 32 MiB, argued rather than measured, and why it is safe to argue.** No docker runs
+# where this was written, so no `docker stats` figure exists for it. PgBouncer holds one packet
+# buffer per connection, `pkt_buf` at its default 4 KiB, and a small fixed state; two hundred
+# clients and twenty server connections are about 220 x 4 KiB, under 1 MiB, beside a process of a
+# few MiB. The application's pooler serves the same two hundred clients under a 128 MiB ceiling and
+# the session pooler serves twenty-four under 64, both chosen as ceilings with the same reasoning.
+# A quarter of the larger is three times what the arithmetic needs and is the figure
+# `brain.ops.wiring` costs it at; the first deploy's report (`brain.ops.overlays.observe`) carries
+# what docker says it holds, which is the measurement to replace this paragraph with.
+#
+# Task ids: M22.2.2
+
+services:
+  pgbouncer-classes:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    restart: unless-stopped
+    environment:
+      # The image writes these into its userlist as the owner's entry, and writes nothing else:
+      # with pgbouncer.ini already mounted it generates no configuration.
+      DB_USER: ${BRAIN_CLASS_POOL_OWNER:?the class pools preparation names the owner login}
+      DB_PASSWORD: ${BRAIN_CLASS_POOL_OWNER_PASSWORD:?the class pools preparation keeps the owner password}
+      # Read by the image to write the password as it is rather than as an MD5 hash, which a
+      # SCRAM configuration cannot use. The configuration file says the same.
+      AUTH_TYPE: scram-sha-256
+    volumes:
+      - ${BRAIN_CLASS_POOLS_INI:?the class pools preparation writes the configuration}:/etc/pgbouncer/pgbouncer.ini:ro
+    expose:
+      - "5432"
+    networks:
+      - default
+      - brain-app
+    deploy:
+      resources:
+        limits:
+          # Matches the `pgbouncer-classes` component in `brain.ops.wiring`.
+          memory: 32M
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -h 127.0.0.1 -p 5432 -U ${BRAIN_CLASS_POOL_OWNER} -d brain_interactive
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+networks:
+  brain-app:
+    external: true
+    name: ${BRAIN_APP_NETWORK:?the deploy step names the network the database of the application is on}

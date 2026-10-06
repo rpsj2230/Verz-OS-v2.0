@@ -22,9 +22,10 @@ import pytest
 
 import brain.connectors
 from brain.connectors.contract import AccessMode
-from brain.connectors.declaration import shipped
+from brain.connectors.declaration import CredentialShape, shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.write_verification import builds_a_manifest
+from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connectable import (
     CONNECTABLE,
     DECLARED_FORMS,
@@ -45,55 +46,28 @@ from brain.ops.credentials import CONNECTOR_NAME_PATTERN
 from brain.ops.limits import connector_ceiling
 from brain.ops.openbao import CONNECTOR_KEY_PREFIX
 from brain.ops.secrets import VaultRole
+from tests.fixtures.connector_examples import example_settings, identifier
 
 REPO: Final = Path(__file__).resolve().parents[2]
-SLOTS_DOC: Final = REPO / "ops" / "openbao" / "credential-slots.md"
-
-#: One identifier per connectable source, shaped as the source's own would be and naming nobody.
-#: It is the first setting each form asks for, and the one the source's scope is pinned to.
-IDENTIFIERS: Final = {
-    "xero": "11111111-2222-3333-4444-555555555555",
-    "hubspot": "12345678",
-    "freshdesk": "example.freshdesk.com",
-    "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
-    "laravel": "portal",
-}
-
-#: The settings after the first, for a source whose form asks for more than one.
-FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {
-    "freshdesk": {"department": "support"},
-    "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
-    "laravel": {
-        "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
-        "max_rows": "500",
-        "timeout_seconds": "10",
-    },
-}
-
-#: A source's key that carries no scopes, and the kind of key its slot row asks for and refuses.
-#: A Freshdesk key is an agent's and can do whatever that agent can; a Drive key file is a service
-#: account's, shared one folder as a viewer; a Laravel user holds SELECT on views, never on tables.
-KEY_KIND_WITHOUT_SCOPES: Final = {
-    "freshdesk": ("agent", "admin"),
-    "google_drive": ("viewer", "delegation"),
-    "laravel": ("select", "tables"),
-}
-
-#: The row a source's slot has in the leased-path table, where it is not the source's own name.
-SLOT_ROWS: Final = {"laravel": "laravel_readonly"}
 
 
 def in_scope(identifier: str, selectors: tuple[str, ...]) -> bool:
-    """Whether the scope names the identifier typed: as a selector, or as what each is inside, as
-    a database holds the views a Laravel connection names (`portal.v_client`)."""
-    return identifier in selectors or all(one.startswith(f"{identifier}.") for one in selectors)
+    """Whether the scope names the identifier typed: as a selector, as what each is inside, as
+    a database holds the views a Laravel connection names (`portal.v_client`), or as the list the
+    selectors are, as a domains connection's are."""
+    listed = tuple(one.strip() for one in identifier.split(","))
+    return (
+        identifier in selectors
+        or all(one.startswith(f"{identifier}.") for one in selectors)
+        or listed == selectors
+    )
 
 
 def settings_for(name: str, value: str | None = None) -> dict[str, str]:
-    """Every setting a source asks for, the first replaced by `value` when one is given."""
-    first = IDENTIFIERS[name] if value is None else value
-    return {CONNECTABLE[name].settings[0].name: first, **FURTHER_SETTINGS.get(name, {})}
+    """Every setting a source asks for, as its declaration's example gives them, the first
+    replaced by `value` when one is given."""
+    first = identifier(name) if value is None else value
+    return {**example_settings(name), CONNECTABLE[name].settings[0].name: first}
 
 
 def modules_that_build_a_manifest() -> set[str]:
@@ -136,33 +110,46 @@ def test_a_connectable_source_builds_a_manifest_under_its_own_name_bound_to_its_
     assert manifest.credential.ref.path == f"{CONNECTOR_KEY_PREFIX}{name}"
     assert manifest.credential.ref.role is VaultRole.WORKER is READING_ROLE
     assert manifest.credential.mode is AccessMode.READ_ONLY
-    assert in_scope(IDENTIFIERS[name], manifest.scope.selectors)
+    assert in_scope(identifier(name), manifest.scope.selectors)
     assert key_reference(name) == manifest.credential.ref
 
 
 @pytest.mark.parametrize("name", sorted(CONNECTABLE))
-def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(name: str) -> None:
-    """The scopes an administrator is told to request are the ones `credential-slots.md` argued for
-    that connector. Delete this and the form's hint drifts from the document, and the scope asked
-    for on install day is whichever one somebody last typed."""
-    row = next(
-        line
-        for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
-        if line.startswith(f"| `connectors/creds/{SLOT_ROWS.get(name, name)}`")
-    )
-    requested, refused = row.split("|")[3], row.split("|")[4]
-    scopes = re.findall(r"`([a-z.]+)`", requested)
-    hint = CONNECTABLE[name].credential_hint
+def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_asks_for(name: str) -> None:
+    """The scopes an administrator is told to request are the ones the source's vault slot is
+    defined with: its own declaration's `scopes`, which `brain.ops.connector_slots` defines the slot
+    from and `credential-slots.md`'s key slot table is held to (`test_vault_policies`). Delete this
+    and the form's hint drifts from the slot, and the scope asked for on install day is whichever
+    one somebody last typed.
 
-    if name in KEY_KIND_WITHOUT_SCOPES:
-        asked_for, never = KEY_KIND_WITHOUT_SCOPES[name]
-        assert not scopes
-        assert asked_for in requested.lower() and never in refused.lower()
-        assert asked_for in hint.lower() and never in hint.lower()
+    Read off the declaration since 2026-10-05, rather than off the prose table of leased paths
+    nothing reads, which every connector had to add a row to and every connector PR conflicted in.
+    """
+    hint = CONNECTABLE[name].credential_hint
+    if CONNECTABLE[name].credential_shape is CredentialShape.NONE:
+        # A source that takes no key has no slot and no scope; its hint says nothing is kept.
+        assert "nothing is kept" in hint
+        assert shipped()[name].scopes is None
         return
-    assert scopes
-    for scope in scopes:
-        assert scope in hint
+    scopes = shipped()[name].scopes
+
+    assert scopes is not None, f"{name} is offered and declares no scopes for its slot"
+    assert scopes.request and scopes.refuse
+    for scope in scopes.request:
+        assert scope in hint, scope
+
+
+def test_the_hint_check_reads_scopes_a_real_source_states() -> None:
+    """**The positive anchor.** Xero's hint names its two read scopes and Freshdesk's its agent key,
+    as each declares them. Delete this and a declaration whose scopes are empty, or a discovery that
+    found no offered source, would pass the parametrised check above by having nothing to check."""
+    xero_scopes = shipped()["xero"].scopes
+    freshdesk_scopes = shipped()["freshdesk"].scopes
+    assert xero_scopes is not None and freshdesk_scopes is not None
+    assert xero_scopes.request == ("accounting.transactions.read", "accounting.contacts.read")
+    assert "accounting.transactions.read" in CONNECTABLE["xero"].credential_hint
+    assert freshdesk_scopes.request == ("an agent API key with read access",)
+    assert "never an admin key" in CONNECTABLE["freshdesk"].credential_hint
 
 
 def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
@@ -184,16 +171,29 @@ def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
 
 
 def test_a_source_the_console_offers_is_one_this_install_reads() -> None:
-    """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every source offered today:
-    each has a reading or a live lookup, and a recorded ceiling. Delete this and the screen can
-    offer a connection that keeps its key and reads nothing, which is what Google Drive and
-    Laravel were until 2026-09-30, and HubSpot, which had a reading and no ceiling."""
+    """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`, over every declaration: a form
+    is offered exactly when it has a reading or a live lookup, a recorded ceiling, and an answer
+    on Ask. Delete this and the screen can offer a connection that keeps its key and reads
+    nothing, which is what Google Drive and Laravel were until 2026-09-30, and HubSpot, which had
+    a reading and no ceiling.
+
+    Computed from the declarations, `brain.ops.limits` and the Ask rows rather than typed as a
+    set since 2026-10-05, so a connector added is judged here with nothing edited. Xero being
+    offered and Lark's two not is the anchor that keeps a discovery finding nothing from passing."""
     declared = shipped()
-    assert set(CONNECTABLE) == {"freshdesk", "hubspot", "xero"}
-    for name in CONNECTABLE:
-        one = declared[name]
-        assert one.reading is not None or one.live is not None, name
-        assert connector_ceiling(name) is not None, name
+    expected = {
+        name
+        for name, one in declared.items()
+        if one.console is not None
+        and (one.reading is not None or one.live is not None)
+        and connector_ceiling(name) is not None
+        # `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`: and Ask answers from it.
+        and (name in CONNECTOR_ROW_ENTITIES or name in ANSWERED_BY_PASSAGES)
+    }
+
+    assert set(CONNECTABLE) == expected
+    assert {"xero", "freshdesk"} <= set(CONNECTABLE)
+    assert not {"lark_base", "lark_wiki"} & set(CONNECTABLE)
 
 
 def test_a_form_with_no_way_to_be_read_is_listed_and_not_offered() -> None:
@@ -212,9 +212,30 @@ def test_a_form_with_no_way_to_be_read_is_listed_and_not_offered() -> None:
     assert offers == {}
     assert (listed["xero"].why, listed["xero"].guide) == (THIS_INSTALL_CANNOT_READ_IT_YET, ())
 
-    unmeasured = dataclasses.replace(real, name="nowhere")
+    unmeasured = dataclasses.replace(real, name="nowhere", ceiling=None)
     offers, listed = offered({"nowhere": unmeasured})
     assert offers == {} and listed["nowhere"].why == THIS_INSTALL_CANNOT_READ_IT_YET
+
+
+def test_a_source_read_and_answerable_by_nothing_is_not_offered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_ASK_ANSWERS_FROM`, from both sides and both ways of
+    answering. Xero's declaration under Lark Base's name has a reading and a ceiling and nothing
+    Ask answers from, and is not offered; the same with the name among the passage readers is
+    offered, as Xero itself is through its classifications. Delete this and the screen can offer
+    a source that is read into the index and never answers a question, which HubSpot was."""
+    import brain.ops.connectable as connectable
+    from brain.connectors import lark_base, xero
+
+    read_only = dataclasses.replace(xero.CONNECTOR, name="lark_base", ceiling=lark_base.CEILING)
+    offers, listed = offered({"lark_base": read_only})
+    assert offers == {} and listed["lark_base"].why == THIS_INSTALL_CANNOT_READ_IT_YET
+
+    monkeypatch.setattr(connectable, "ANSWERED_BY_PASSAGES", frozenset({"lark_base"}))
+    offers, _ = offered({"lark_base": read_only})
+    assert set(offers) == {"lark_base"}
+    assert set(offered({"xero": xero.CONNECTOR})[0]) == {"xero"}
 
 
 # ------------------------------------------------------------------------- the refusals
@@ -226,7 +247,7 @@ def test_settings_that_build_have_no_problem_and_are_given_without_their_outer_w
 ) -> None:
     """The positive case every refusal below needs. Delete this and a judgement that refused every
     setting would pass the rest of the file."""
-    padded = settings_for(name, f"  {IDENTIFIERS[name]}\n")
+    padded = settings_for(name, f"  {identifier(name)}\n")
 
     assert settings_problems(CONNECTABLE[name], padded) == ()
     assert given(CONNECTABLE[name], padded) == settings_for(name)

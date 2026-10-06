@@ -55,6 +55,7 @@ from brain.agent_capability_routes import router as agent_capability_router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
+from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
 from brain.agent_model_routes import router as agent_model_router
@@ -186,6 +187,10 @@ from brain.erasure_routes import router as erasure_router
 # console can read. See `brain.error_routes`.
 from brain.error_routes import router as error_router
 
+# A question nothing answered, handed to the person named for its skill's queue, the caller's two
+# lists of them, and the naming form. See `brain.escalation_routes`.
+from brain.escalation_routes import router as escalation_router
+
 # The Knowledge, Learning and Memory screens. A router of its own because all three are the
 # estate-wide reads `brain.console.govern_estate` decides, and all three stand on a store
 # that is empty on every install today: each response says which of its facts has no source
@@ -223,6 +228,10 @@ from brain.govern_routes import router as govern_router
 # has written from them. See `brain.group_rule_routes`.
 from brain.group_rule_routes import router as group_rule_router
 
+# Stop: what is stopped, stop at once, and resume with a written reason, behind `admin:halt` in
+# a scope that matches what is stopped. See `brain.halt_routes` and `brain.ops.halt_store`.
+from brain.halt_routes import router as halt_router
+
 # The five install screens. A ninth router because what it answers about is the deployment
 # rather than the company's data: no name to guess, no row belonging to anybody, and no
 # session on four of the five. The same `asking` dependency, imported. See
@@ -241,6 +250,10 @@ from brain.knowledge_intake_routes import router as knowledge_intake_router
 # A stored document verified, handed over, replaced and proposed for the whole company, the
 # tasks each opens and captured solutions decided. See `brain.knowledge_lifecycle_routes`.
 from brain.knowledge_lifecycle_routes import router as knowledge_lifecycle_router
+
+# Whether a document is public for the website widget, read and changed from its detail page by a
+# person whose grant decides it for that document's department. See `brain.knowledge_public_routes`.
+from brain.knowledge_public_routes import router as knowledge_public_router
 
 # Adding a document to the knowledge layer from the Knowledge page, read by the text path and
 # placed where the uploader holds `admin:knowledge`. See `brain.knowledge_routes`.
@@ -316,6 +329,11 @@ from brain.report_routes import router as report_router
 # this install, recorded. See `brain.requirement_check_routes`.
 from brain.requirement_check_routes import router as requirement_check_router
 
+# The Resolution review screen: the pairs entity resolution could not settle, and a reviewer's
+# merge or rejection, behind `admin:entity_merge` over everything and the reach of both records.
+# See `brain.resolution_routes` and `brain.resolution.review_store`.
+from brain.resolution_routes import router as resolution_router
+
 # The retention report and the four writes that decide whether the sweep acts. A router of
 # its own because two of its writes are the only way a deletion is approved or suspended:
 # every write needs its authority over everything, and the report is shown whole to a
@@ -369,6 +387,10 @@ from brain.skill_routes import router as skill_router
 # somebody else holds a capability. See `brain.staff_source_routes`.
 from brain.staff_source_routes import router as staff_source_router
 
+# What the signed-in person is told as a steward: grants people made to themselves that reach a
+# document, source or agent they answer for. See `brain.stewardship_routes`.
+from brain.stewardship_routes import router as stewardship_router
+
 # Storage: the buckets the product keeps, each one's retention and why, and where the store
 # is, behind `admin:storage` over everything. Never an object's name. See
 # `brain.storage_routes`.
@@ -400,8 +422,9 @@ from brain.vault_routes import router as vault_router
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
 
-# The website widget's front door: a stranger's browser is handed a session that holds nothing, or
-# told why not, with no sign-in and the origin proved instead. See `brain.widget_routes`.
+# The website widget's front door: a stranger's browser is handed a session, or told why not, and
+# its questions are answered from knowledge marked public alone, with no sign-in and the origin
+# proved instead. See `brain.widget_routes`.
 from brain.widget_routes import router as widget_router
 
 

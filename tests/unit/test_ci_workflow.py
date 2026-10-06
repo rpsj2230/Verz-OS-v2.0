@@ -731,8 +731,10 @@ def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
     for name in ("static", "stack"):
         assert jobs[name].get("if") == gated, f"the {name} job is not gated on the kind of change"
     pull_request_only = PULL_REQUEST_ONLY
-    for name in ("tests", "console", "supply_chain", "handover"):
+    for name in ("tests", "handover"):
         assert jobs[name].get("if") == pull_request_only, f"the {name} job is not gated"
+    for name, output in PATH_SCOPED.items():
+        assert jobs[name].get("if") == path_scoped(output), f"the {name} job is not gated"
     docs_runs = "\n".join(str(step.get("run", "")) for step in jobs["docs"]["steps"])
     assert "python -m brain.requirements" in docs_runs
 
@@ -743,6 +745,20 @@ PULL_REQUEST_ONLY = (
     "${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}"
 )
 HANDOVER_JOB = "handover"
+
+#: The pull-request-only jobs that also read a filter of `brain.ops.ci_paths`, by its output.
+PATH_SCOPED = {
+    "console": "console",
+    "presidio": "presidio",
+    "supply_chain": "dependencies",
+    "vulnerabilities": "image",
+}
+
+
+def path_scoped(output: str) -> str:
+    """The gate on a pull-request-only job that runs only when its filter says the diff can
+    affect it."""
+    return PULL_REQUEST_ONLY[:-3] + f" && needs.changes.outputs.{output} == 'true' }}}}"
 
 
 def _first_line_at(lines: list[tuple[int, str]], starts: str) -> int:
@@ -895,8 +911,10 @@ def test_main_runs_the_deploy_gates_and_leaves_the_suite_to_the_pull_request() -
     back onto main and deploys queue again."""
     jobs = _workflow()["jobs"]
     pull_request_only = PULL_REQUEST_ONLY
-    for name in ("tests", "console", "presidio", "handover", "supply_chain", "vulnerabilities"):
+    for name in ("tests", "handover"):
         assert jobs[name].get("if") == pull_request_only, name
+    for name, output in PATH_SCOPED.items():
+        assert jobs[name].get("if") == path_scoped(output), name
     assert jobs["coverage"]["if"] == "${{ !cancelled() && github.event_name == 'pull_request' }}"
     for name in (
         "static",

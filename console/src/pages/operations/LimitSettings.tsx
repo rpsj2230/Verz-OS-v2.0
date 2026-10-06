@@ -8,7 +8,10 @@
  * controls are drawn only for a reader the answer says may change them; the API refuses without
  * the authority whatever this card drew.
  *
- * Task ids: M22.4.1, M22.1.2
+ * The same card is the Learning screen's settings (M16.6.8): `screen` names where the knobs are read
+ * and set and the words the card uses, and the API decides which knobs each screen lists.
+ *
+ * Task ids: M22.4.1, M22.1.2, M16.6.8
  */
 
 import { useState, type FormEvent } from "react";
@@ -22,26 +25,25 @@ import { FailureNotice } from "../../ui/FailureNotice";
 import {
   CHANGE_LIMIT,
   KEEP_LIMIT,
+  LIMITS_SCREEN,
   NOT_READ,
   READING_TUNING,
   SAVE_LIMIT,
-  TUNING_API_PATH,
-  TUNING_HEADING,
-  TUNING_LEDE,
   boundsWords,
   changeConsequence,
   changedSentence,
   figureProblem,
   figureWords,
+  knobPath,
   readTuning,
   sourceWords,
-  tunePath,
   type Knob,
+  type KnobScreen,
 } from "../tuningQuery";
 import { Line, WholeList } from "./parts";
 
-const COLUMNS: readonly EntityColumn<Knob>[] = [
-  { id: "label", header: "Limit", hideable: false, cell: (row) => row.label, text: (row) => row.label },
+const columnsFor = (named: string): readonly EntityColumn<Knob>[] => [
+  { id: "label", header: named, hideable: false, cell: (row) => row.label, text: (row) => row.label },
   {
     id: "value",
     header: "In force",
@@ -62,8 +64,8 @@ const COLUMNS: readonly EntityColumn<Knob>[] = [
   { id: "because", header: "Why those bounds", hidden: true, cell: (row) => row.bounds_because, text: (row) => row.bounds_because },
 ];
 
-export function LimitSettings() {
-  const answer = useResource<unknown>(TUNING_API_PATH);
+export function LimitSettings({ screen = LIMITS_SCREEN }: { readonly screen?: KnobScreen }) {
+  const answer = useResource<unknown>(screen.path);
   const [written, setWritten] = useState<unknown>(null);
   const [editing, setEditing] = useState<Knob | null>(null);
   const [typed, setTyped] = useState("");
@@ -78,21 +80,21 @@ export function LimitSettings() {
 
   if (answer.busy && written === null) {
     return (
-      <SectionCard title={TUNING_HEADING}>
+      <SectionCard title={screen.heading}>
         <LoadingState label={READING_TUNING} rows={3} />
       </SectionCard>
     );
   }
   if (answer.failure !== null && written === null) {
     return (
-      <SectionCard title={TUNING_HEADING}>
+      <SectionCard title={screen.heading}>
         <FailureNotice failure={answer.failure} />
       </SectionCard>
     );
   }
   if (body === null) {
     return (
-      <SectionCard title={TUNING_HEADING}>
+      <SectionCard title={screen.heading}>
         <Line>{NOT_READ}</Line>
       </SectionCard>
     );
@@ -113,7 +115,7 @@ export function LimitSettings() {
     const amount = Number(typed.trim());
     setBusy(true);
     void (async () => {
-      const result = await request<unknown>(tunePath(knob.name), {
+      const result = await request<unknown>(knobPath(screen.path, knob.name), {
         method: "PUT",
         body: { value: amount },
       });
@@ -134,10 +136,10 @@ export function LimitSettings() {
   return (
     <>
       <WholeList
-        title={TUNING_HEADING}
-        lede={`${TUNING_LEDE} ${body.in_force}`}
-        caption={TUNING_HEADING}
-        columns={COLUMNS}
+        title={screen.heading}
+        lede={`${screen.lede} ${body.in_force}`}
+        caption={screen.heading}
+        columns={columnsFor(screen.column)}
         rows={body.knobs}
         rowId={(row) => row.name}
         rowLabel={(row) => row.label}
@@ -164,7 +166,7 @@ export function LimitSettings() {
               )
             : undefined
         }
-        exportName="changeable-limits"
+        exportName={screen.exportName}
         empty={NOT_READ}
       />
       {editing === null ? null : (

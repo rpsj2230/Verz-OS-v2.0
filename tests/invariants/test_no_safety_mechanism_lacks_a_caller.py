@@ -66,7 +66,8 @@ KNOWN_ORPHANS = frozenset(
         # `denial_digest` left on 2026-09-28 for `WIRED_BUT_NOT_SCHEDULED`: see there.
         # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
-        "resolution_calibration",
+        # `resolution_calibration` left on 2026-10-06: the worker's schedule starts the weekly
+        # fit. See `SCHEDULED_BY_THE_WORKER`.
         # `queue_redrive` and `side_effect_resume` left on 2026-09-30: the worker's schedule
         # starts both through `brain.ops.recovery_run`. See `SCHEDULED_BY_THE_WORKER`.
         # `model_health_probes` left on 2026-09-22: the worker's schedule starts it. See
@@ -143,6 +144,15 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: `queue_redrive` and `side_effect_resume` joined on 2026-09-30 from `KNOWN_ORPHANS`:
 #: `brain.ops.recovery_run` re-drives what a dead worker or a transient failure left behind, and
 #: reads back an interrupted side effect where its connector can answer, listing the rest.
+#: `escalation_expiry` joined on 2026-09-30 the day it was registered (`0168`, M8.3.4), marking
+#: every handoff past its deadline expired through `brain.ops.escalation_store.run_expiry_now`.
+#:
+#: `evening_digest` joined on 2026-09-30 the day it was registered, sent once a day at the install's
+#: own hour to the conversation it chose, through `brain.ops.digest_run`.
+#:
+#: `entity_resolution` joined on 2026-10-06 the day it was registered (`0182`, M14.1), giving every
+#: record a connector declares for resolution its entity through
+#: `brain.resolution.registry_store.run_registry_now`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -161,6 +171,10 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "acceptance_run",
         "queue_redrive",
         "side_effect_resume",
+        "escalation_expiry",
+        "entity_resolution",
+        "evening_digest",
+        "resolution_calibration",
     }
 )
 

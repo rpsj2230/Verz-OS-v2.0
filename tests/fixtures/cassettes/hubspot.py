@@ -7,10 +7,15 @@ Task ids: M38.4.1.1, M38.4.1.2
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Final
 
 from brain.connectors import hubspot
 from brain.connectors.manifest import ConnectorManifest
+from brain.ops.idempotency import Verification
+from tests.fixtures.cassettes._read_back import READ_AT, PublicResolver, answered
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -82,7 +87,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "The absence of paging.next is the only end signal.",
         kind=Kind.PAGINATION,
         tools=("hubspot.read_companies",),
-        projects="client",
+        projects=hubspot.ENTITY_CLIENT,
         expect=Expect.MORE_TO_READ,
         origin=DOCUMENTED,
         reference=HUBSPOT_OBJECTS_DOC,
@@ -116,7 +121,7 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         why="A last page: no paging object. The email and phone arrive and nothing maps them.",
         kind=Kind.LIST,
         tools=("hubspot.read_contacts",),
-        projects="contact",
+        projects=hubspot.ENTITY_CONTACT,
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference="https://developers.hubspot.com/docs/api/crm/contacts",
@@ -148,7 +153,38 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         "must not carry it.",
         kind=Kind.LIST,
         tools=("hubspot.read_deals",),
-        projects="deal",
+        projects=hubspot.ENTITY_DEAL,
+        expect=Expect.ANSWERED,
+        origin=DOCUMENTED,
+        reference="https://developers.hubspot.com/docs/api/crm/deals",
+    ),
+    Cassette(
+        cid="HUBSPOT-200-deal",
+        source=SOURCE,
+        request=(
+            "GET /crm/v3/objects/deals/4471?properties=amount,closedate,dealname,dealstage,"
+            "hubspot_owner_id,pipeline"
+        ),
+        status=200,
+        body={
+            "id": "4471",
+            "properties": {
+                "dealname": "SNM website revamp",
+                "amount": "CANARY-CONTRACT-LIVE-9RT2M",
+                "dealstage": "contractsent",
+                "pipeline": "default",
+                "closedate": "2026-10-01T00:00:00.000Z",
+                "hubspot_owner_id": "9911",
+            },
+            "createdAt": "2026-06-01T08:00:00.000Z",
+            "updatedAt": "2026-09-05T10:00:00.000Z",
+            "archived": False,
+        },
+        why="One deal by its id, the object itself with no results envelope: what a question "
+        "reads live, so its amount is told while the asker waits and never kept. The list cannot "
+        "be narrowed to one id, so this is the call that holds the record.",
+        kind=Kind.READ,
+        tools=("hubspot.read_deals",),
         expect=Expect.ANSWERED,
         origin=DOCUMENTED,
         reference="https://developers.hubspot.com/docs/api/crm/deals",
@@ -222,6 +258,10 @@ RATE_LIMIT: Final = RateLimit(
 )
 
 
+#: A request for one record by its id, as a question's live read makes it.
+ONE_RECORD: Final = re.compile(r"/crm/v3/objects/(companies|contacts|deals)/[0-9]+(\?|$)")
+
+
 def _hubspot_entity(recorded: Cassette) -> str:
     if "/associations/" in recorded.request:
         return hubspot.ENTITY_ASSOCIATION
@@ -239,7 +279,12 @@ def replay(recorded: Cassette) -> Replayed:
     from tests.unit.test_hubspot import Resolver
 
     entity = _hubspot_entity(recorded)
-    operation = hubspot.operation_for(entity, resolver=Resolver())
+    one = ONE_RECORD.search(recorded.request)
+    operation = (
+        hubspot.one_record_operation(entity, resolver=Resolver())
+        if one
+        else hubspot.operation_for(entity, resolver=Resolver())
+    )
     reply = hubspot.interpret(
         operation, status=recorded.status, body=recorded.body, fetched_at=FETCHED_AT
     )
@@ -253,7 +298,10 @@ def replay(recorded: Cassette) -> Replayed:
         return Replayed(Expect.ABSENT)
     if entity == hubspot.ENTITY_ASSOCIATION:
         edges = hubspot.association_edges(
-            from_entity=hubspot.ENTITY_CLIENT, from_id="88", to_entity="contact", rows=tuple(rows)
+            from_entity=hubspot.ENTITY_CLIENT,
+            from_id="88",
+            to_entity=hubspot.ENTITY_CONTACT,
+            rows=tuple(rows),
         )
         return Replayed(Expect.ANSWERED if edges else Expect.ABSENT)
     kept = [hubspot.projected_record(entity, row, last_seen_at=SEEN_AT) for row in rows]
@@ -269,8 +317,55 @@ def manifest() -> ConnectorManifest:
     return built
 
 
+def _read_back_entity(recorded: Cassette) -> str:
+    """Which operation a HubSpot recording was made against, read off its request line."""
+    for fragment, entity in (
+        ("/associations/", hubspot.ENTITY_ASSOCIATION),
+        ("/contacts", hubspot.ENTITY_CONTACT),
+        ("/deals", hubspot.ENTITY_DEAL),
+    ):
+        if fragment in recorded.request:
+            return entity
+    return hubspot.ENTITY_CLIENT
+
+
+def read_back_answer(recorded: Cassette) -> Verification:
+    """One recording through HubSpot's read-back reading, by its own list or one-record read."""
+    build = (
+        hubspot.one_record_operation
+        if ONE_RECORD.search(recorded.request)
+        else hubspot.operation_for
+    )
+    operation = build(_read_back_entity(recorded), resolver=PublicResolver())
+    reply = hubspot.interpret(
+        operation, status=recorded.status, body=recorded.body, fetched_at=READ_AT
+    )
+    return answered(SOURCE, reply)
+
+
+#: How each recording this connector's read-back names is answered. Written here rather than
+#: read from the connector, so the expectation and the reading are two accounts that have to
+#: agree (`tests/unit/test_write_verification.py`).
+READ_BACK: Final[Mapping[str, Verification]] = MappingProxyType(
+    {
+        "HUBSPOT-200-empty": Verification.ABSENT,
+        "HUBSPOT-200-companies-page": Verification.FOUND,
+        "HUBSPOT-200-contacts": Verification.FOUND,
+        "HUBSPOT-200-deals": Verification.FOUND,
+        # One deal read by its id, through its own operation: it is there.
+        "HUBSPOT-200-deal": Verification.FOUND,
+        "HUBSPOT-200-associations": Verification.FOUND,
+        "HUBSPOT-429": Verification.INCONCLUSIVE,
+        "HUBSPOT-401": Verification.INCONCLUSIVE,
+    }
+)
+
+
 CASSETTE_FILE: Final = CassetteFile(
     source=SOURCE,
+    read_back=READ_BACK,
+    read_back_answer=read_back_answer,
+    wait_not_in_retry_after="no wait header documented; X-HubSpot-RateLimit-* state the allowance",
     cassettes=CASSETTES,
     rate_limit=RATE_LIMIT,
     replay=replay,

@@ -97,6 +97,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
+from brain.gate.abstain import EXPIRY_EVERY as ESCALATION_EXPIRY_EVERY
 from brain.identity.staff_sync import SYNC_INTERVAL
 from brain.knowledge.verification import DEFAULT_CADENCE
 from brain.models.health import PROBE_INTERVAL_SECONDS
@@ -608,8 +609,38 @@ CONTROLS: Final[tuple[Control, ...]] = (
         invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
+        name="escalation_expiry",
+        # Since 2026-09-30 (`0168`, M8.3.4). The worker's schedule starts `run_expiry_now`, which
+        # runs `expire_overdue` as the worker's login; the install acceptance check calls
+        # `expire_overdue` itself, inside its rolled-back transaction, rather than waiting a day.
+        symbols=(
+            "brain.ops.escalation_store:run_expiry_now",
+            "brain.ops.escalation_store:expire_overdue",
+        ),
+        guards=(
+            "that a question handed to a person does not stay open for ever once nobody picked "
+            "it up, and that the person who asked is told so"
+        ),
+        lost_silently=(
+            "The asker was told a person would look and goes on waiting. Nobody picked it up, and "
+            "nothing turns that into an event: the question silently stops existing, which is "
+            "the failure an expiry exists to make visible."
+        ),
+        every=ESCALATION_EXPIRY_EVERY,
+        cadence_from="brain.gate.abstain:EXPIRY_EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
         name="resolution_calibration",
-        symbols=("brain.resolution.calibration:due", "brain.resolution.calibration:drift"),
+        # Since 2026-10-06 (M14.4.4). The worker's schedule starts `run_calibration_now`, which
+        # fits the install's candidate pairs and keeps the fit as a setting until a reviewer
+        # promotes it on the Possible duplicates screen; `due` is what keeps a run from fitting
+        # twice in one week.
+        symbols=(
+            "brain.resolution.calibration_store:run_calibration_now",
+            "brain.resolution.calibration:due",
+        ),
         guards=(
             "that the weights deciding whether two records are the same person stay fitted "
             "to the data as it is now rather than as it was when they were trained"
@@ -622,7 +653,30 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=CALIBRATION_PERIOD,
         cadence_from="brain.resolution.calibration:CALIBRATION_PERIOD",
         severity=Severity.NOTICED,
-        invoked_by=Invocation.NOTHING,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="entity_resolution",
+        # Since 2026-10-06 (`0182`, M14.1). The worker's schedule starts `run_registry_now`, which
+        # reads the records connectors declare for resolution and gives each an entity, its names,
+        # its hashed join keys and its comparison row, then compares the records it read with
+        # their candidates (`brain.resolution.matching_store`, `0184`). Two records become one only
+        # by a merge, and on an install with unattended merging off, only by a person's.
+        symbols=("brain.resolution.registry_store:run_registry_now",),
+        guards=(
+            "that every record a connector declares for resolution is registered, so a merge, a "
+            "review and an answer that names one have something to point at"
+        ),
+        lost_silently=(
+            "New records stop being registered. Nothing fails: questions are answered as before, "
+            "and the only sign is that resolution knows nothing added since the last run."
+        ),
+        # Ten minutes, restated rather than imported for `connector_sync`'s reason: the store
+        # imports the tables, and the tables import this registry.
+        every=timedelta(minutes=10),
+        cadence_from="brain.resolution.registry_store:EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="queue_redrive",
@@ -956,6 +1010,30 @@ CONTROLS: Final[tuple[Control, ...]] = (
         cadence_from="brain.ops.acceptance_run:RUN_EVERY",
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="evening_digest",
+        # Added on 2026-09-30 with the owner's decision on where it goes (needs-rupash 125), and
+        # started by the worker's schedule from the day it was registered, once a day at the
+        # install's own hour rather than a day after the last run.
+        symbols=(
+            "brain.ops.digest:daily_digest",
+            "brain.ops.digest_delivery:deliver_digest",
+        ),
+        guards=(
+            "that whoever the install chose hears each evening what the build closed, reopened "
+            "and left overdue, and whether the wave still lands on its date, in the one "
+            "conversation they chose on any connected channel"
+        ),
+        lost_silently=(
+            "No digest arrives, and a quiet evening and a stopped digest look the same to the "
+            "person waiting for it. The Settings row says why when the channel is the cause; "
+            "a schedule that stopped says nothing anywhere else."
+        ),
+        every=_DAILY,
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+        daily_at="INSTALL_DIGEST_TIME",
     ),
 )
 

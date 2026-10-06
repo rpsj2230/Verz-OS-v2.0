@@ -28,10 +28,10 @@ Task ids: M11.7.7
 from __future__ import annotations
 
 import json
-import secrets
 from collections.abc import Callable, Mapping
 from typing import Final
 
+from brain.connectors.declaration import shipped
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
 from brain.ops.acceptance_checks_connector_framework import _credential, _form
 from brain.ops.acceptance_checks_connectors import _nothing_kept
@@ -44,6 +44,7 @@ CHECK_ORDER: Final = 270
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
+
 #: What the check does with a source the install has connected already.
 A_CONNECTED_SOURCE_IS_JUDGED_ONLY: Final = (
     "A source this install has connected is connected from the console already, and the store "
@@ -51,17 +52,17 @@ A_CONNECTED_SOURCE_IS_JUDGED_ONLY: Final = (
     "connect, edit or switch it off: the install's own connection is never touched."
 )
 
-#: What each source's edit changes, by name: a setting a person would change, and its new value.
-#: Made up for the run, in the shape the source's own connection accepts.
+#: What each source's edit changes, by name: a setting a person would change, and its new value,
+#: from the source's own declaration (`ConnectExample.edit`), made up for the run in the shape the
+#: source's own connection accepts.
 EDITS: Final[Mapping[str, tuple[str, Callable[[], str]]]] = {
-    "xero": ("tenant_id", lambda: "22222222-3333-4444-5555-" + secrets.token_hex(6)),
-    "hubspot": ("portal_id", lambda: str(10**8 + secrets.randbelow(9 * 10**8))),
-    "freshdesk": ("domain", lambda: f"acceptance-{secrets.token_hex(4)}.freshdesk.com"),
-    "google_drive": ("folder", lambda: f"acceptance{secrets.token_hex(8)}"),
-    "laravel": ("client_rule", lambda: "status in active, pending"),
+    name: (one.console.example.edit, one.console.example.edited)
+    for name, one in shipped().items()
+    if one.console is not None and one.console.example is not None
 }
 
-#: A credential in the wrong shape for each kind, which the connect route must refuse.
+#: A credential in the wrong shape for each kind that takes one, which the connect route must
+#: refuse. A source that takes no key ignores whatever is sent and keeps nothing.
 WRONG_SHAPE: Final = {
     "key": "two words",
     "key_file": json.dumps({"type": "authorized_user"}),
@@ -143,12 +144,15 @@ async def each_source_is_connected_edited_and_switched_off_in_the_console(
             kind, settings, is_live=is_live
         ):
             raise CheckFailedError("the connect route refused a source connected as its form asks")
-        wrong = [
-            (one.field, one.code)
-            for one in connection_problems(name, settings, WRONG_SHAPE[kind.credential_shape.value])
-        ]
-        if not wrong or {field for field, _ in wrong} != {"credential"}:
-            raise CheckFailedError("a credential in the wrong shape was not refused as the key")
+        if kind.credential_shape.value in WRONG_SHAPE:
+            wrong = [
+                (one.field, one.code)
+                for one in connection_problems(
+                    name, settings, WRONG_SHAPE[kind.credential_shape.value]
+                )
+            ]
+            if not wrong or {field for field, _ in wrong} != {"credential"}:
+                raise CheckFailedError("a credential in the wrong shape was not refused as the key")
         if (await h.execute(live(name))).scalar_one_or_none() is not None:
             continue  # See A_CONNECTED_SOURCE_IS_JUDGED_ONLY.
 

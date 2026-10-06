@@ -135,7 +135,7 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5, M15.4.2
+Task ids: M12.1.5, M15.4.2, M12.4.4
 """
 
 from __future__ import annotations
@@ -145,13 +145,23 @@ from types import MappingProxyType
 from typing import Final
 
 from brain import demo
+from brain.chat.attachments import attachment_definition, attachment_reader
 from brain.connectors.declaration import shipped
+from brain.gate.caches import CachedEmbedding
 from brain.knowledge.columns import PRICE_LIST, TableClassification
+from brain.knowledge.connector_figures import LiveFigures, figure_tools
 from brain.knowledge.connector_rows import CONNECTOR_ROW_DESCRIPTIONS, CONNECTOR_ROW_ENTITIES
-from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, knowledge_tools
+from brain.knowledge.document_tools import (
+    KNOWLEDGE_PIN,
+    KnowledgeCaches,
+    QuestionEmbedder,
+    RecordStore,
+    knowledge_tools,
+)
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
 from brain.tools.registry import ResultContract, ToolRegistry
+from brain.tools.website_check import WebsiteCheckTool, register_website_check
 
 #: Why the document plane is registered on every install that has rows, whatever it reads.
 THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE: Final = (
@@ -277,7 +287,9 @@ def description_for(source: str, entity: str) -> str:
     return {**ROW_TOOL_DESCRIPTIONS, **SOURCE_ROW_DESCRIPTIONS.get(source, {})}[entity]
 
 
-def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder | None:
+def question_embedder(
+    env: Mapping[str, str] | None = None, *, cache: RecordStore[CachedEmbedding] | None = None
+) -> QuestionEmbedder | None:
     """How this process embeds a question, or None when the install has declared no weights.
 
     None is an install whose knowledge search is text search, which is every install until its
@@ -296,11 +308,17 @@ def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder 
         return None
     from brain.ops.inference_client import make_client
 
-    return QuestionEmbedder(service=make_client(env=env), revision=revision)
+    return QuestionEmbedder(service=make_client(env=env), revision=revision, cache=cache)
 
 
 def build_registry(
-    *, source: str, records: RowSource | None = None, sources: Iterable[str] | None = None
+    *,
+    source: str,
+    records: RowSource | None = None,
+    sources: Iterable[str] | None = None,
+    figures: LiveFigures | None = None,
+    website: WebsiteCheckTool | None = None,
+    caches: KnowledgeCaches | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -319,6 +337,15 @@ def build_registry(
     under its own name and each classified by its own rules (M15.4.2); None means every shipped
     connector that brings classifications (`connector_row_sources`). The built-ins are registered
     once, under `source`, because the price list is the product's and not any system's.
+
+    `figures` is how a connected source's figures are read live for a range a tool names
+    (`brain.knowledge.connector_figures`, M11.7.1). With it and a row source, every shipped source
+    declaring a report gets its figure tool beside its row tool; without it none does, for the
+    reason a row tool is not registered without a row source.
+
+    `website` is the website check bound to its transport (`brain.ops.website_probe`). Absent,
+    the check is not registered, for the reason a row tool is not registered without a row
+    source: a tool in the catalogue that cannot reach a site would tell a person it is down.
 
     Returns frozen. A caller receiving an unfrozen registry could register into it after the
     whole-registry checks had run, which is the same as not running them.
@@ -349,14 +376,38 @@ def build_registry(
                 result_contract=ResultContract.TYPED,
                 scope=tool.scope,
             )
+        # A connected source's figures for a range a tool names, where its reads can be made.
+        if figures is not None:
+            classified = {name: owned.get(name, ()) for name in dict.fromkeys(others)}
+            for figure in figure_tools(classified):
+                registry.register(
+                    figure.definition(),
+                    figure.reader(records, figures),
+                    result_contract=ResultContract.TYPED,
+                    scope=figure.scope,
+                )
         # The document plane, for every source. See
         # `THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE`.
-        for definition, handler in knowledge_tools(records, question_embedder()):
+        embedder = question_embedder(cache=None if caches is None else caches.embeddings)
+        retrievals = None if caches is None else caches.retrievals
+        for definition, handler in knowledge_tools(records, embedder, retrievals):
             registry.register(
                 definition,
                 handler,
                 result_contract=ResultContract.TYPED,
                 scope=KNOWLEDGE_PIN,
             )
+        # A file a person attached to their own conversation, read at their reach (M12.3.6).
+        registry.register(
+            attachment_definition(),
+            attachment_reader(records),
+            result_contract=ResultContract.TYPED,
+            scope=KNOWLEDGE_PIN,
+        )
+
+    # The website check, where the caller handed it a transport (M12.4.4). Not tied to a row
+    # source: it reads a site, not a table.
+    if website is not None:
+        register_website_check(registry, website)
 
     return registry.freeze()

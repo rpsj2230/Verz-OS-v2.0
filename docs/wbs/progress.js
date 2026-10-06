@@ -59,6 +59,16 @@ const PROGRESS = {
     why: "built (M1/relay-to-sign-in): every release gives the sign-in realm the mail relay saved on Notifications, through the step that already signs in to Keycloak inside its container, writing only when the relay changed and leaving a realm with no relay alone; an install check compares the host the realm reported with the relay's. Not built: hiding Forgot password while no relay is set. Proved on the install when a release has run and a reserved person's Forgot password email arrives",
     updated: "2026-09-30",
   },
+  "M1.6.19": {
+    status: "READY FOR TESTING",
+    why: "built (M1/departments-from): Settings, under Staff, chooses where departments come from; managed on People the staff sync places and moves nobody; proved on the install with M1.6.21",
+    updated: "2026-09-30",
+  },
+  "M1.6.20": {
+    status: "READY FOR TESTING",
+    why: "built (M1/departments-from): People moves several people to a department at once, each move on the ledger under the mover (migration 0170); proved on the install with M1.6.21",
+    updated: "2026-09-30",
+  },
   "M1.6.16": {
     status: "READY FOR TESTING",
     why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
@@ -67,6 +77,21 @@ const PROGRESS = {
   "M1.6.17": {
     status: "READY FOR TESTING",
     why: "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
+    updated: "2026-09-30",
+  },
+  "M1.10.1": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3",
+    updated: "2026-09-30",
+  },
+  "M1.10.2": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
+    updated: "2026-09-30",
+  },
+  "M1.10.4": {
+    status: "READY FOR TESTING",
+    why: "built (M1/add-work-email): Add work email on a hand-made person's page binds their address and joins the staff list's person for it; proved on the install with M1.10.5",
     updated: "2026-09-30",
   },
   "M1.8.3": {
@@ -189,9 +214,19 @@ const PROGRESS = {
     why: "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (#296), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
     updated: "2026-09-30",
   },
+  "M10.5.4": {
+    status: "READY FOR TESTING",
+    why: "Telegram is connectable (M10/channel-telegram): saving the bot's username and token registers this install's events address with Telegram, updates carry a header made from the token, answers go out with sendMessage, and an install check; the owner's bot proves the vendor's half",
+    updated: "2026-09-30",
+  },
+  "M10.5.3": {
+    status: "READY FOR TESTING",
+    why: "WhatsApp is connectable (M10/channel-whatsapp): Meta's signature checked over the exact bytes, its GET check of the address answered for the verify token, a notification of several messages answered message by message, answers on a system user's access token, and an install check; the owner's number proves the vendor's half",
+    updated: "2026-09-30",
+  },
   "M10.6.1": {
-    status: "IN PROGRESS",
-    why: "the webhook, Lark, email, Slack and Teams wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams); Telegram and WhatsApp each come with their own package",
+    status: "READY FOR TESTING",
+    why: "all seven wires are live: webhook, Lark, email (a mailbox or Cloudflare), Slack, Teams, Telegram and WhatsApp (PR #105; L1, merged d426e3d3; #285; #296; #288; M10/channel-teams; M10/channel-telegram; M10/channel-whatsapp), each with its Connect steps and an install check",
     updated: "2026-09-30",
   },
   "M10.6.3": {
@@ -635,9 +670,9 @@ const PROGRESS = {
     updated: "2026-09-29",
   },
   "M7.7.2": {
-    status: "IN PROGRESS",
-    why: "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
-    updated: "2026-09-28",
+    status: "READY FOR TESTING",
+    why: "a steward for every document, source and agent, and the self-grant notice on Access requests (migration 0167): proved when the install check a_steward_is_named_and_told_of_access_somebody_gave_themselves passes after deploy",
+    updated: "2026-09-30",
   },
   "M7.7.3": {
     status: "IN PROGRESS",
@@ -683,6 +718,26 @@ const PROGRESS = {
     status: "IN PROGRESS",
     why: "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
     updated: "2026-09-28",
+  },
+  "M8.3.1": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.3.2": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.3.4": {
+    status: "READY FOR TESTING",
+    why: "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+    updated: "2026-09-30",
+  },
+  "M8.4.1": {
+    status: "READY FOR TESTING",
+    why: "escalation and sensitive topics (migration 0168): proved when both install checks in brain.ops.acceptance_escalation pass after deploy, and on a real channel once a queue's person is named on the Compliance screen",
+    updated: "2026-09-30",
   },
 };
 

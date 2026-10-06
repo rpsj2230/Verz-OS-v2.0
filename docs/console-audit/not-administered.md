@@ -14,9 +14,13 @@
 | `GET /api/v1/threads` | A person's own conversations on Ask, for them alone and never anybody else's; nothing in it for an administrator to manage. |
 | `GET /api/v1/threads/{thread_id}` | One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage. |
 | `GET /api/v1/threads/search` | A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage. |
+| `mem.mark` | The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark. |
 | `POST /api/v1/answer` | The answer lane behind Ask, which writes no row an administrator manages. |
+| `POST /api/v1/answer/mark` | A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads. |
 | `POST /api/v1/automation/tool-call` | Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part. |
 | `POST /api/v1/threads/{thread_id}/corrections` | A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage. |
+| `POST /api/v1/threads/attachments` | A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage. |
+| `POST /api/v1/widget/questions` | Where a website visitor's question is answered from knowledge marked public, which writes nothing; what is public is decided on each document's page, by the marking route. |
 | `POST /api/v1/widget/sessions` | Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting. |
 
 **Every write to a route no area claims, followed to the system.**
@@ -24,4 +28,5 @@
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
+| `POST /api/v1/answer/mark` | `/ask` | `test_a_person_marks_their_own_answer_and_no_other` in `tests/unit/test_learning_signal.py` (database, in CI) | Not applicable: A mark changes nothing the system does; the row is its own record, naming who marked which answer and when. | `test_a_person_marks_an_answer_they_were_given_with_one_action_and_no_words` in `tests/unit/test_answer_route_memory.py` |
 | `POST /api/v1/threads/{thread_id}/corrections` | `/ask` | `test_every_thread_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_threads.py` (database, in CI) | Not applicable: Marking an answer in one's own conversation wrong changes no setting and nobody's access; the note is kept in the asker's own thread. | `test_every_thread_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_threads.py` (database, in CI) |

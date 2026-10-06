@@ -1,6 +1,6 @@
 # What the background worker may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5, M5.4.7
+# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5, M5.4.7, M14.7.3
 #
 # The worker runs scheduled and queued work, so its runs are longer than a request and
 # nobody is watching them. Two differences from the application follow from that, and both
@@ -22,7 +22,7 @@ path "connectors/creds/lark_base" {
   capabilities = ["read"]
 }
 
-path "connectors/creds/laravel_readonly" {
+path "connectors/creds/laravel" {
   capabilities = ["read"]
 }
 
@@ -58,6 +58,22 @@ path "providers/data/moonshot" {
 }
 
 path "providers/data/deepseek" {
+  capabilities = ["read"]
+}
+
+# The trace ledger's project keys, read by the install check that sends one run to the ledger and
+# finds it there (brain.ops.acceptance_checks_services, M32.1.2.6), and by a worker that sends the
+# runs it answers. Read and nothing more: the application keeps them, with its own token, when the
+# release hands them over (brain.ops.ledger_export). One path, named, for the reason above.
+path "providers/data/trace_ledger" {
+  capabilities = ["read"]
+}
+
+# The join-key pepper, read to hash the identifiers of the source records the worker registers for
+# entity resolution (brain.ops.join_key_pepper). Read and nothing more: the application creates it
+# once, and a process nobody watches must not be able to create or replace the value every stored
+# digest depends on. One exact path, and no metadata: the worker has no screen to tell.
+path "resolution/data/pepper" {
   capabilities = ["read"]
 }
 

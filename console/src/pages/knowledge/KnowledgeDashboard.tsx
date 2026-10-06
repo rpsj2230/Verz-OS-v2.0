@@ -1,18 +1,20 @@
 /**
  * A document's Dashboard: what is recorded about it now, and what waits on the reader.
  *
- * Three cards and no more. Its review (the badge, the date, whether it is due, and Verify when the
- * API offered it), the reader's own open tasks on it, and where a request for the whole company has
- * got to. Each card says one thing and offers the one act that changes it; the figures across the
- * top are the header's and are not repeated here.
+ * Four cards and no more. Its review (the badge, the date, whether it is due, and Verify when the
+ * API offered it), the reader's own open tasks on it, where a request for the whole company has got
+ * to, and whether the website widget answers from it (`PublicMarkingCard`, which asks its own route).
+ * Each card says one thing and offers the one act that changes it; the figures across the top are
+ * the header's and are not repeated here.
  *
- * Task ids: M27.15.40, M7.4.4, M7.4.6
+ * Task ids: M27.15.40, M7.4.4, M7.4.6, M10.7.2
  */
 
 import { Link } from "react-router-dom";
 import { Fact, FactList, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { WORKS_AT, type DocumentAct } from "./knowledgeActions";
+import { PublicMarkingCard } from "./PublicMarkingCard";
 import { dayWords, promotionWords, verifiedWords, type DocumentPage, type TaskRow } from "./knowledgeDocuments";
 import { TaskList } from "./parts";
 
@@ -101,6 +103,8 @@ export function KnowledgeDashboard({
           )}
         </FactList>
       </SectionCard>
+
+      <PublicMarkingCard itemId={document.itemId} title={document.title} />
     </div>
   );
 }

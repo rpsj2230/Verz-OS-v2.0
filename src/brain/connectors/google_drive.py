@@ -54,12 +54,18 @@ called `shared_with` or `permission_ids` fails the first time anybody builds one
 not the same check as `ProjectedEntity`'s: that one guards projected *field names* and never
 sees a dataclass here, and this one guards the dataclasses and never sees a manifest.
 
-**A file whose sharing could not be determined is refused, not defaulted.** Drive returns
-`permissions` only when a caller asks for it and only when the credential may see it, so
-"the field was not there" is a routine outcome and both defaults are wrong: defaulting to
-the folder's level publishes a file whose sharing nobody read, and defaulting to personal
-hides a document while nothing anywhere reports it. See
-`UNDETERMINED_SHARING_IS_REFUSED_RATHER_THAN_DEFAULTED`.
+**A file whose sharing could not be determined is refused at the knowledge layer's door, and
+read as the folder's where it is read live.** Drive returns `permissions` only when a caller asks
+for it and only to a caller that may share the file, which a service account holding Viewer on
+the folder may not (Google's File reference, read 2026-09-30), so "the field was not there" is the
+ordinary answer for this connector rather than a rare one. The door into the knowledge layer
+(`DriveConnection.knowledge_visibility`, which nothing calls) still refuses such a file rather
+than defaulting it, for `UNDETERMINED_SHARING_IS_REFUSED_RATHER_THAN_DEFAULTED`'s reason. The
+minimal index and the live read keep and read it as the folder's, because the folder is the grant
+(`A_DRIVE_PERMISSION_IS_NOT_A_PERMISSION_HERE`), and a file Drive does show as shared by link or
+outside the company is never read. The owner decided that narrowing (needs-rupash 135, decided:
+A): see `WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT`, and `sharing_admits_a_read` is the
+one function it lives in.
 
 **A file id is the identity; a path is not.** Files are renamed, moved between folders and
 edited, and only the id survives all three. So nothing here stores a path, `folder_id`
@@ -137,7 +143,10 @@ carries its own size ceiling, and choosing silently would decide what the compan
 procedures look like to a model. So `media_type_for` refuses them by name. **This is a real
 gap rather than a design: most of what sits in a company's Drive is native, and this
 connector indexes none of it.** The remedy is a reviewed export table, one row per native
-type, and it is not written here.
+type, and it is not written here. What this rejects is a format chosen for a parser. A live
+passage is another thing: a Google Doc is exported as plain text for the one question that needs
+it (`text_url_for`), which is the document's words without its layout, and nothing is parsed,
+embedded or kept. Sheets and Slides are not read at all.
 
 *Projecting nothing at all, on the grounds that Drive is files.* The content is knowledge
 and goes to the knowledge layer, which is why there is no `document` projection here. The
@@ -172,13 +181,61 @@ Scope: domain logic. Nothing here opens a socket, resolves a name, reads a clock
 credential. The page reader, the scanner, the fetched-at stamp and every interval are
 parameters, for the reason `brain.models.routing.CircuitBreaker` gives about `now`.
 
-**This connector keeps a minimal index and reads every value live.** What it keeps of a
-file is its id, name, folder, type, revision, sharing state and dates; a file's content is
-read from Drive when a question needs it. `admit_from_drive` can carry a file's bytes to
-the knowledge layer's scan gate and nothing calls it: by the owner's rule a Drive body is
-read live and never embedded (`docs/needs-rupash.md` item 99), so the connector that wires
-it owes that decision first. It is declared as `CONNECTOR` at the foot of this module
-(`brain.connectors.declaration`).
+**This connector keeps a minimal index and reads every value live.** The worker lists the
+pinned folder's direct children into the index (`DriveReading`): each file's id, name, type,
+revision, modified time and sharing verdict, the pin it was reached through and the department it
+belongs to, and never an owner, a permission, a path or a word of its content. A question reads
+text live (`brain.ops.drive_passages`): the files whose names hold the question's words are read
+from Drive while the asker waits, each checked again first (`withheld_from_a_read`), and handed to
+the answer lane as a passage that nothing keeps. `admit_from_drive` can carry a file's bytes to
+the knowledge layer's scan gate and nothing calls it: by the owner's rule a Drive body is read
+live and never embedded (`docs/needs-rupash.md` item 99). It is declared as `CONNECTOR` at the
+foot of this module (`brain.connectors.declaration`).
+
+**A file locked narrower than its folder is never read, as a Wiki page restricted in Lark is
+not.** Drive's `inheritedPermissionsDisabled` says a file no longer takes its folder's sharing,
+which is how somebody keeps one document to fewer people inside a folder shared more widely. A
+Viewer can read that field, so the live read refuses such a file before it asks for a word of it,
+and the department the folder was connected for is never told what the folder's own audience in
+Drive was not. See `A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`.
+
+**Everything under the pin is read, at every level, under the same rules.** Drive's query
+language reaches a folder's children and not its descendants, so the reading walks the tree one
+listing per folder (`DriveReading.next_page`), carrying where it is in the run's own page
+arguments, which never reach Drive. A subfolder locked narrower than its parent is not walked, so
+it and everything in it are left out; a shortcut is never followed, so nothing outside the tree is
+reached through one; and a folder already on the walk's path, or already waiting on it, is not
+entered again, so no loop of folders is walked twice. See
+`THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT`.
+
+**The walk goes depth first, and its place is a path rather than a queue.** A pass is bounded by
+the worker's pages and the documented ceiling, and one cut short says so and is carried on from
+where it stopped by the next: the page it would have asked is what the worker keeps as the walk's
+place (M11.9.15, `brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`). That
+place is the path from the pin down to the folder being listed, one `WalkFrame` a level: the
+folder, the token of its next page, and the subfolders of the page already read that are not yet
+entered. **What a place holds is bounded by the tree's depth and one page, and never by the
+tree's size**, so any tree, however wide, is read whole over as many passes as it takes, and the
+place is gone once the walk ends, so the next pass starts again at the pin. See
+`A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`.
+
+The breadth-first walk it replaced carried the folders still to list, and every folder queued so
+far, in the same arguments, and stopped queueing at two hundred folders. A carried-on place then
+grew with the tree, and a tree of more than two hundred folders was never read whole by any number
+of passes: the same folders past the bound were left out of every one. *Rejected:* re-asking a
+page to recover the subfolders still to enter, which keeps a level to its folder and its token at
+the price of one more listing for every subfolder; and keeping a set of folders already listed
+across passes, which is the growing queue again under another name. A place an earlier release
+saved in the breadth-first shape is still carried on (`walk_path`).
+
+**Depth is bounded, by Google's own figure, and a tree deeper than it is refused in words.** See
+`MAX_FOLDER_DEPTH`. A pass that meets a folder deeper than that does not enter it, says so through
+`DriveReading.left_out`, and is reported on connector health as part of the source left out
+(`brain.ops.connector_sync.READ_BUT_PART_LEFT_OUT`) and retires nothing, because a file in a
+folder it did not reach was not asked for.
+
+**Its ceiling is Google's documented quota at the dearest call a read makes.** See
+`THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL` and `brain.ops.limits`.
 
 **It is connected on the Connectors screen (M11.7.7).** The form asks for `DriveConnection`'s own
 four settings, the folder (its link or its id), the company's email domain, the department the
@@ -191,19 +248,23 @@ answerable person is typed as an id rather than chosen from the directory; the c
 routes refuse an id that names nobody live here (`Setting.names_a_person`), and a picker is the
 console's to add.
 
-Task ids: M11.6.7, M11.7.7
+Task ids: M11.6.7, M11.7.7, M11.9.15
 """
 
 from __future__ import annotations
 
 import enum
+import json
 import re
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+import secrets
+from collections.abc import Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, final
+from urllib.parse import urlencode
 
+from brain.connectors.ask import AskRows
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
     AccessMode,
@@ -217,13 +278,18 @@ from brain.connectors.contract import (
 )
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     CredentialShape,
+    KeyScheme,
+    KeyScopes,
+    PageReply,
     Recorded,
     Setting,
     SettingRefusedError,
 )
+from brain.connectors.google_token import GOOGLE_SCOPES_BASE_URL
 from brain.connectors.manifest import (
     PRINCIPAL_FIELD_RE,
     RESOLVED_ACL_RE,
@@ -235,7 +301,7 @@ from brain.connectors.manifest import (
     ProjectedField,
     ToolDeclaration,
 )
-from brain.connectors.projection import ProjectedValue
+from brain.connectors.projection import ProjectedRecord, ProjectedValue
 from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
@@ -252,8 +318,9 @@ from brain.knowledge.uploads import receive_upload
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.knowledge.visibility import admit_upload as admit_visibility_level
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
-from brain.ops.limits import MAX_BACKOFF_SECONDS
+from brain.ops.limits import MAX_BACKOFF_SECONDS, ConnectorLimit
 from brain.ops.secrets import SecretRef
+from brain.tools.fetch import Resolver
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the pin is a parameter type rather than a call anybody remembers to make first.
@@ -362,15 +429,54 @@ NOTHING_HERE_MAKES_A_DOCUMENT_SAFE_TO_READ = (
     "reviews a document before it answers questions."
 )
 
-#: Why this connector runs against no measured ceiling, said rather than implied.
-THERE_IS_NO_MEASURED_CEILING_HERE = (
-    "brain.ops.limits records verified figures for Xero, Freshdesk and Lark Base and none "
-    "for this source, and no live capture to derive one from either. So the manifest "
-    "declares no ceiling and throttle.limits_for refuses rather than inventing a number, "
-    "which is the correct refusal and is also a real gap: nothing paces this connector, so "
-    "twenty concurrent agent runs are twenty concurrent listings. The remedy is a measured "
-    "figure in brain.ops.limits, which the manifest then names; nothing in this module needs "
-    "to change when somebody records one."
+#: Why the ceiling is counted in the dearest call's units.
+THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL = (
+    "Google counts Drive calls in quota units rather than calls: 325,000 units a minute for one "
+    "user of one project, a listing costing 100, a metadata read 5 and a download 200. A ceiling "
+    "in calls has to hold whatever mix of calls a minute holds, so it is the allowance divided by "
+    "the dearest call a read makes, and no mix can then spend more than Google allows."
+)
+
+#: Why a file whose sharing Drive does not show is read as its folder's. needs-rupash 135.
+WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT = (
+    "Drive shows a file's permissions only to a caller that may share it, and the service "
+    "account is given Viewer on the folder so that its key can change nothing, so for most files "
+    "their sharing is not shown at all. Refusing every such file would read nothing; so a file "
+    "whose sharing Drive does not show is read as the folder's, the folder being the grant, and a "
+    "file Drive does show as shared by link or outside the company is never read. The owner "
+    "decided this, keeping the account a Viewer rather than giving it a role that shows every "
+    "file's sharing (needs-rupash 135, decided: A)."
+)
+
+#: Why the reading walks the tree, and what it never walks into.
+THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT = (
+    "The folder an administrator connected is everything under it, at every level. So the reading "
+    "lists the pin and then each subfolder it finds, under the same rules: a subfolder whose "
+    "inherited permissions are off, or shown as shared by link, is not walked, so it and "
+    "everything in it are left out; a shortcut is never followed, so nothing outside the tree is "
+    "reached through one; and a folder already on the walk's path, or waiting on it, is not "
+    "entered again, in this pass or in one that carries it on, so a loop of folders ends."
+)
+
+#: Why the walk's carried place is a path bounded by depth rather than a queue bounded by count.
+A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE = (
+    "A walk cut short is carried on from the place it saved, so what a place holds is what one "
+    "pass costs the next. A breadth-first queue holds every folder found and not yet listed, which "
+    "grows with the tree, and capping it leaves the same folders out of every pass for ever. A "
+    "depth-first path holds one level for each folder between the pin and the one being listed: "
+    "its id, its next page's token, and the subfolders of the page read that are not yet entered. "
+    "That is bounded by the depth and one page whatever the tree's size, so a tree of any width is "
+    "read whole over enough passes, and a walk that ends saves no place, so the next starts at the "
+    "pin."
+)
+
+#: Why a file whose inherited permissions are off is never read.
+A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ = (
+    "A file with its inherited permissions switched off no longer takes its folder's sharing: "
+    "somebody kept it to fewer people than the folder reaches. The department the folder was "
+    "connected for is the folder's audience here, so reading that file would tell them what "
+    "Drive keeps from some of them. It is refused before its text is asked for, as a Lark Wiki "
+    "page restricted below its space is."
 )
 
 #: The vendor facts here that a recording would settle and documentation cannot.
@@ -384,7 +490,8 @@ WHAT_A_RECORDING_WOULD_SETTLE = (
     "not a manager of the drive, which decides how often UNDETERMINED is the ordinary answer "
     "rather than the exception. And whether a 404 on a shortcut's target is shaped like a "
     "404 on a missing file, which is the one case where the ambiguity above is reached by "
-    "two different routes."
+    "two different routes. The third is now documented: Google's File reference says the "
+    "permissions list is returned only to a caller that may share the file."
 )
 
 
@@ -397,12 +504,24 @@ GOOGLE_DRIVE: Final = "google_drive"
 CONNECTOR_NAME: Final = GOOGLE_DRIVE
 
 #: The one entity kind. A file's metadata, never its contents.
-FILE: Final = "file"
+FILE: Final = "drive_file"
 
 #: This connector's own version. Moves when anything in the manifest moves, because an
 #: upgrade is recognised by a version change and a pinned digest disagreeing with a connector
 #: nobody upgraded is the failure `brain.connectors.registry` fails closed on.
-VERSION: Final = "1.0.0"
+VERSION: Final = "1.1.0"
+
+#: The ceiling this connector's reads are paced by, recorded in `brain.ops.limits`.
+CEILING_NAME: Final = GOOGLE_DRIVE
+
+#: Google's page of Drive API quotas, the ceiling's citation.
+LIMITS_URL: Final = "https://developers.google.com/workspace/drive/api/guides/limits"
+
+#: The one scope a Drive token carries. Read-only, and checked by `google_token.checked_scopes`.
+DRIVE_SCOPE: Final = f"{GOOGLE_SCOPES_BASE_URL}drive.readonly"
+
+#: How often the worker lists the folder into the index.
+READING_INTERVAL: Final = timedelta(hours=1)
 
 #: What the field mapping names its specification. A reference and not a document, for the
 #: reason `RestTransport.spec_ref` gives.
@@ -681,6 +800,58 @@ def classify_sharing(entries: Sequence[PermissionFact] | None, *, domain: str) -
     return SharingState.RESTRICTED
 
 
+def sharing_of(permissions: object, *, domain: str) -> SharingState:
+    """A file's sharing verdict read out of the `permissions` Drive returned, or UNDETERMINED.
+
+    The one producer of a `SharingState` from a response, so the reduction happens where the reply
+    is read and the list goes no further. Each entry becomes a `PermissionFact` or is counted as
+    unreadable: an entry of a kind Drive does not document, or a user or group grant carrying no
+    domain, which the sub-selection `SHARING_SELECTOR` does not promise a user grant carries.
+
+    **An unreadable entry makes a verdict of RESTRICTED undetermined, and never hides a wider
+    one.** A link grant or a foreign domain among the entries read is reported whatever else could
+    not be read, because the wider fact is the one that refuses a read; a file whose readable
+    entries are all inside the company and one entry is not readable is not known to be inside it.
+    An absent or empty list is `classify_sharing`'s own UNDETERMINED, which is what Drive answers a
+    caller that may not share the file (`WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT`).
+    """
+    if not isinstance(permissions, list) or not permissions:
+        return classify_sharing(None, domain=domain)
+    facts: list[PermissionFact] = []
+    unreadable = False
+    for entry in permissions:
+        kind_given = entry.get("type") if isinstance(entry, Mapping) else None
+        try:
+            kind = PermissionKind(str(kind_given))
+        except ValueError:
+            unreadable = True
+            continue
+        if kind is PermissionKind.ANYONE:
+            facts.append(PermissionFact(kind=kind))
+            continue
+        named = entry.get("domain") if isinstance(entry, Mapping) else None
+        if not isinstance(named, str) or not _DOMAIN_RE.match(named.casefold()):
+            unreadable = True
+            continue
+        facts.append(PermissionFact(kind=kind, domain=named.casefold()))
+    verdict = classify_sharing(facts or None, domain=domain)
+    if unreadable and verdict is SharingState.RESTRICTED:
+        return SharingState.UNDETERMINED
+    return verdict
+
+
+def sharing_admits_a_read(sharing: SharingState) -> bool:
+    """Whether a file of this verdict may be listed as readable and read live.
+
+    **The one function the owner's decision in needs-rupash 135 (decided: A) lives in.** A file
+    whose sharing Drive did not show is read as the folder's and a file shown as shared by link or
+    outside the company is never read (`WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT`);
+    were the service account given a role that shows every file's sharing, UNDETERMINED would
+    leave this set, and nothing else would change.
+    """
+    return sharing in (SharingState.RESTRICTED, SharingState.UNDETERMINED)
+
+
 # ------------------------------------------------------------ the connection (M11.2.3)
 @dataclass(frozen=True)
 class DriveConnection:
@@ -747,6 +918,32 @@ class DriveConnection:
             )
             raise DriveError(msg)
 
+    @classmethod
+    def from_settings(cls, settings: Mapping[str, str]) -> DriveConnection:
+        """The connection a stored row's settings describe, each setting refused by name.
+
+        Each is checked by the rule this class holds it to, one at a time, so a refusal names the
+        setting it is about; the connection is then built, which is the check that the four agree.
+        """
+        folder = folder_id_of(settings.get(FOLDER_SETTING, ""))
+        if not folder:
+            raise SettingRefusedError("not a Drive folder", setting=FOLDER_SETTING)
+        domain = settings.get(DOMAIN_SETTING, "").strip().casefold()
+        if not _DOMAIN_RE.match(domain):
+            raise SettingRefusedError("not a domain", setting=DOMAIN_SETTING)
+        department = settings.get(DEPARTMENT_SETTING, "").strip()
+        if not SLUG_RE.fullmatch(department):
+            raise SettingRefusedError("not a department", setting=DEPARTMENT_SETTING)
+        steward = settings.get(STEWARD_SETTING, "").strip()
+        if not _STEWARD_RE.match(steward):
+            raise SettingRefusedError("not a person's id", setting=STEWARD_SETTING)
+        try:
+            return cls(folder_id=folder, domain=domain, department=department, steward_id=steward)
+        except ConnectorContractError as refused:
+            # The other three were judged above, so what the connection refuses is the folder: a
+            # selector such as `all` passes the id's grammar and narrows nothing.
+            raise SettingRefusedError("not one folder", setting=FOLDER_SETTING) from refused
+
     def scope(self) -> ConnectorScope:
         """What this connector was connected to. One folder, named."""
         return ConnectorScope(resource_kind="folder", selectors=(self.folder_id,))
@@ -768,14 +965,19 @@ class DriveConnection:
     def visibility_predicate(self) -> Scope:
         """Drive's own permission model, reduced to a predicate that can be stored.
 
-        The folder, and deliberately nothing else. In Drive the folder is the unit anybody
-        actually shares, and the per-file part of the model is a resolved ACL by
-        construction, so the folder is the only half of it that can be carried as a predicate
-        at all. A row that is not in the pinned folder is visible to nobody, and the
-        narrowing by department comes from the caller's own entitlement at the gate rather
-        than from the row, which is what lets a mover get a different row set with no writes.
+        The folder and the department it was connected for, and deliberately nothing else. In
+        Drive the folder is the unit anybody actually shares, and the per-file part of the model
+        is a resolved ACL by construction, so the folder is the only half of it that can be
+        carried as a predicate at all. The department is this install's half: a row carries it,
+        so a grant of `read:drive_file` scoped to that department reaches the folder's rows and one
+        scoped elsewhere does not, and a mover gets a different row set with no writes.
         """
-        return Scope(clauses=(Clause(field="folder_id", op=Op.EQ, value=self.folder_id),))
+        return Scope(
+            clauses=(
+                Clause(field="folder_id", op=Op.EQ, value=self.folder_id),
+                Clause(field="department", op=Op.EQ, value=self.department),
+            )
+        )
 
     def knowledge_visibility(self, sharing: SharingState) -> KnowledgeVisibility:
         """The level a file from this folder is stored at (M11.6.7).
@@ -1189,6 +1391,9 @@ FILE_MAPPING: Final[tuple[FieldMapping, ...]] = (
     FieldMapping(target="parents", source_path="parents"),
     FieldMapping(target="drive_id", source_path="driveId"),
     FieldMapping(target="shortcut_target_id", source_path="shortcutDetails.targetId"),
+    #: Mapped, used by the live read and never kept. See
+    #: `A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`.
+    FieldMapping(target="locked", source_path="inheritedPermissionsDisabled"),
 )
 
 #: What the `fields` parameter asks Drive for, declared rather than derived from the mapping.
@@ -1205,6 +1410,7 @@ FILE_SELECTOR_ROOTS: Final[tuple[str, ...]] = (
     "driveId",
     "headRevisionId",
     "id",
+    "inheritedPermissionsDisabled",
     "mimeType",
     "modifiedTime",
     "name",
@@ -1953,14 +2159,21 @@ def projected_fields(
     in the way that matters, because `check_projection` refuses an over-long string, so a
     file with a long name would be dropped whole at ingest.
     """
-    if not sharing.is_known:
-        msg = (
-            f"this file's sharing is {sharing}, so there is no row to store: "
-            f"{UNDETERMINED_SHARING_IS_REFUSED_RATHER_THAN_DEFAULTED}"
-        )
-        raise DriveError(msg)
+    return fields_of(row, folder_id=connection.folder_id, sharing=sharing)
+
+
+def fields_of(
+    row: Mapping[str, Any], *, folder_id: str, sharing: SharingState
+) -> dict[str, ProjectedValue]:
+    """`projected_fields` over the pin alone, which is what the worker's reading holds.
+
+    **A verdict of UNDETERMINED is kept as that verdict**, and is no longer a refusal here: Drive
+    shows a Viewer no file's sharing, and the index is where a reviewer reads which files that
+    applies to. See `WHERE_DRIVE_SHOWS_NO_SHARING_THE_FOLDER_IS_THE_GRANT` (needs-rupash 135). The
+    door into the knowledge layer still refuses it (`DriveConnection.knowledge_visibility`).
+    """
     built: dict[str, ProjectedValue] = {
-        "folder_id": connection.folder_id,
+        "folder_id": folder_id,
         "sharing_state": sharing.value,
     }
     for name in projected_field_names():
@@ -2168,8 +2381,9 @@ def manifest(
     the honest statement is the same: somebody chose this, and choosing it is not the same as
     it having been enforced.
 
-    **`ceiling` is empty and that is deliberate rather than forgotten.** See
-    `THERE_IS_NO_MEASURED_CEILING_HERE`.
+    **`ceiling` names Google's documented quota**, recorded in `brain.ops.limits` under
+    `CEILING_NAME` at the dearest call a read makes. See
+    `THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL`.
 
     **Both tools declare SERVICE identity**, which is the honest reading of a shared service
     account: Drive is not enforcing any of our people's permissions on our behalf, so ours
@@ -2208,7 +2422,7 @@ def manifest(
             ),
         ),
         projections=(file_projection(connection),),
-        ceiling="",
+        ceiling=CEILING_NAME,
     )
 
 
@@ -2235,6 +2449,491 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
     except ConnectorContractError:
         return unreadable()
     return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not next_cursor(reply))
+
+
+# ---------------------------------------------------------- the worker's reading (M11.6.7)
+#: The run's own page arguments that carry the walk: the folder this page lists (empty for the
+#: pin), the path from the pin down to it, and whether a folder was left out at the depth bound.
+#: Read by `FolderListing.url_for` and `DriveReading.next_page`, and never sent.
+WALK_FOLDER: Final = "walk.folder"
+WALK_PATH: Final = "walk.path"
+WALK_LEFT_OUT: Final = "walk.left_out"
+
+#: The breadth-first walk's arguments: the folders still to list, and every folder queued. Read
+#: only to carry on a place an earlier release saved in that shape (`walk_path`), never written.
+BREADTH_FIRST_PENDING: Final = "walk.pending"
+BREADTH_FIRST_SEEN: Final = "walk.seen"
+
+#: The deepest a folder is walked below the pin, in levels: the pin's subfolders are level one.
+#: **Google's own limit, so the bound refuses nothing Google lets anybody build.** Both of Drive's
+#: guides give the same figure, read on 2026-10-06: a user's My Drive "can't contain more than 100
+#: levels of nested folders" (Create and populate folders), and neither can a folder in a shared
+#: drive (Manage shared drives), where Drive refuses a deeper create with
+#: `teamDriveHierarchyTooDeep`. The pin sits at a level of its own, so a tree under it is at most
+#: this deep and usually shallower. A smaller figure would refuse trees that exist; a larger one
+#: buys nothing Drive can hold, and is the length of the path a saved place may carry, so this is
+#: also the bound on what one pass hands the next. A tree deeper than it is one an older Drive
+#: allowed, or one Google's figure has moved for, and either way its deeper part is refused in
+#: words on connector health and never read in silence.
+MAX_FOLDER_DEPTH: Final = 100
+
+#: What one level of a stored path holds: its folder, its next page's token, the folders waiting.
+_LEVEL_PARTS: Final = 3
+
+
+def subfolders_to_walk(body: Any) -> tuple[str, ...]:
+    """The subfolders a listed page names that the walk goes into, in the order listed.
+
+    A folder only: a shortcut, even to a folder, is never followed. Not one locked narrower than
+    its parent, and not one shown as shared by link, so it and everything in it are left out. See
+    `THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT`.
+    """
+    listed = body.get("files") if isinstance(body, Mapping) else None
+    found: list[str] = []
+    for raw in listed if isinstance(listed, list) else []:
+        if not isinstance(raw, Mapping) or raw.get("mimeType") != FOLDER_MIME:
+            continue
+        folder_id = raw.get("id")
+        if not isinstance(folder_id, str) or not _FILE_ID_RE.match(folder_id):
+            continue
+        if raw.get("inheritedPermissionsDisabled") is True:
+            continue
+        granted = raw.get("permissions")
+        if isinstance(granted, list) and any(
+            isinstance(one, Mapping) and one.get("type") == PermissionKind.ANYONE.value
+            for one in granted
+        ):
+            continue
+        found.append(folder_id)
+    return tuple(found)
+
+
+@dataclass(frozen=True)
+class FolderListing(RestOperation):
+    """The tree under the pin, one folder a page, each row laid with the pin and a verdict.
+
+    The query, the field selector and the all-drives flags are the connection's own, so a page is
+    asked for by its cursor and the folder of the walk it lists, and a run cannot send a listing of
+    a folder the walk did not reach from the pin. Each row is checked against the folder listed as
+    it arrives (`assert_row_is_in_the_folder`, which refuses the page), carries the pin it was
+    reached through, and carries the verdict `sharing_of` reduced its permissions to; the
+    permissions go no further than this method.
+
+    `_listing` holds the folder the last address was built for, so the page that answers it is
+    checked against that folder; the worker builds a page's address and reads its answer before it
+    builds the next.
+    """
+
+    connection: DriveConnection | None = None
+    _listing: list[str] = field(default_factory=list, repr=False, compare=False)
+
+    def _pinned(self) -> DriveConnection:
+        if self.connection is None:
+            msg = "a folder listing is built for one connection and names none"
+            raise DriveError(msg)
+        return self.connection
+
+    def _listed(self) -> DriveConnection:
+        """The folder the current page lists, as a connection to it: the pin's, at first."""
+        pinned = self._pinned()
+        folder = self._listing[-1] if self._listing else pinned.folder_id
+        return pinned if folder == pinned.folder_id else replace(pinned, folder_id=folder)
+
+    def url_for(self, arguments: Mapping[str, str]) -> str:
+        walk = {WALK_FOLDER, WALK_PATH, WALK_LEFT_OUT, BREADTH_FIRST_PENDING, BREADTH_FIRST_SEEN}
+        unasked = sorted(set(arguments) - {PAGE_CURSOR_PARAMETER, *walk})
+        if unasked:
+            msg = (
+                f"a folder listing is asked for by its cursor and its walk alone and was given "
+                f"{unasked}; the query is the connection's. {SCOPE_AT_CONNECT_IS_THE_WHOLE_POINT}"
+            )
+            raise DriveError(msg)
+        pinned = self._pinned()
+        folder = arguments.get(WALK_FOLDER) or pinned.folder_id
+        if not _FILE_ID_RE.match(folder):
+            msg = "a folder of the walk is listed only when it is a Drive identifier"
+            raise DriveError(msg)
+        self._listing[:] = [folder]
+        request = ListingRequest(
+            connection=self._listed(),
+            cursor=arguments.get(PAGE_CURSOR_PARAMETER, ""),
+            page_size=MAX_PAGE_SIZE,
+            all_drives=True,
+        )
+        return super().url_for(request.as_arguments())
+
+    def project(self, body: Any) -> tuple[Mapping[str, Any], ...]:
+        pinned = self._pinned()
+        listed_in = self._listed()
+        rows = super().project(body)
+        listed = body.get("files") if isinstance(body, Mapping) else None
+        given = listed if isinstance(listed, list) else []
+        kept: list[Mapping[str, Any]] = []
+        for raw, row in zip(given, rows, strict=True):
+            assert_row_is_in_the_folder(listed_in, row)
+            permissions = raw.get("permissions") if isinstance(raw, Mapping) else None
+            sharing = sharing_of(permissions, domain=pinned.domain)
+            kept.append({**row, "folder_id": pinned.folder_id, "sharing_state": sharing.value})
+        return tuple(kept)
+
+
+def folder_listing(connection: DriveConnection) -> FolderListing:
+    """The listing of this connection's folder, bound to the file mapping."""
+    base = operation_for(Endpoint.LIST_FILES)
+    return FolderListing(
+        base_url=base.base_url,
+        operation=base.operation,
+        transport=base.transport,
+        connection=connection,
+    )
+
+
+def _assert_file(entity: str) -> None:
+    if entity != FILE:
+        msg = f"this connector reads {FILE!r} and was asked for {entity!r}"
+        raise DriveError(msg)
+
+
+@dataclass(frozen=True)
+class WalkFrame:
+    """One level of the walk's path: a folder the walk is inside, and how to carry it on.
+
+    `folder` is the folder (empty for the pin, whose id the arguments never carry), `page_after`
+    the token of its page after the one read, empty when that page was its last, and `waiting` the
+    subfolders that page named which the walk has not yet entered. The walk goes into the first of
+    them and keeps the rest here, so a level holds at most one page's subfolders. See
+    `A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`.
+    """
+
+    folder: str
+    page_after: str = ""
+    waiting: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.folder and not _FILE_ID_RE.match(self.folder):
+            raise DriveError("a level of the walk names a Drive folder or the pin")
+        if not all(_FILE_ID_RE.match(one) for one in self.waiting):
+            raise DriveError("a folder waiting on the walk is a Drive identifier")
+
+
+def walk_path(asked: Mapping[str, str]) -> tuple[WalkFrame, ...]:
+    """The path a page's arguments carry, from the pin down to the listed folder's parent.
+
+    A place an earlier release saved in the breadth-first shape names no path, and names the folders
+    it still had to list: they are carried on as the subfolders waiting at the pin's level, so the
+    pass that was under way is finished rather than lost. Raises `DriveError` for a path this module
+    did not write, because a path read wrongly is a tree read in part with nothing said.
+    """
+    held = asked.get(WALK_PATH, "")
+    if not held:
+        pending = tuple(asked.get(BREADTH_FIRST_PENDING, "").split())
+        return (WalkFrame(folder="", waiting=pending),) if pending else ()
+    try:
+        levels = json.loads(held)
+    except ValueError as unread:
+        raise DriveError("the walk's path is not one this reading wrote") from unread
+    if not isinstance(levels, list):
+        raise DriveError("the walk's path is a list of levels")
+    path: list[WalkFrame] = []
+    for level in levels:
+        if not (
+            isinstance(level, list)
+            and len(level) == _LEVEL_PARTS
+            and isinstance(level[0], str)
+            and isinstance(level[1], str)
+            and isinstance(level[2], list)
+            and all(isinstance(one, str) for one in level[2])
+        ):
+            raise DriveError("a level of the walk is a folder, a token and the folders waiting")
+        path.append(WalkFrame(folder=level[0], page_after=level[1], waiting=tuple(level[2])))
+    return tuple(path)
+
+
+def _page_of_the_walk(
+    folder: str, token: str, path: Sequence[WalkFrame], *, left_out: bool
+) -> Mapping[str, str]:
+    """The arguments of one page of the walk: its folder, its token, the path and the mark."""
+    arguments = {WALK_FOLDER: folder}
+    if token:
+        arguments[PAGE_CURSOR_PARAMETER] = token
+    if path:
+        arguments[WALK_PATH] = json.dumps(
+            [[one.folder, one.page_after, list(one.waiting)] for one in path],
+            separators=(",", ":"),
+        )
+    if left_out:
+        arguments[WALK_LEFT_OUT] = "1"
+    return MappingProxyType(arguments)
+
+
+def _folder_listed(folder: str, body: Any) -> str:
+    """The folder a page listed, learning the pin's id from the page where the arguments name none.
+
+    The pin's first page is asked with no arguments, so its id is not in them; every row of a page
+    names the folder it was listed from among its parents (`FolderListing.project` refuses a page
+    where one does not), so the one parent every row shares is the pin. Kept on the path, it is
+    what stops a folder that names the pin as a child from walking the pin again. Empty where the
+    page has no rows or the rows share no single parent, which leaves that one loop unguarded and
+    nothing else.
+    """
+    if folder:
+        return folder
+    listed = body.get("files") if isinstance(body, Mapping) else None
+    shared: set[str] | None = None
+    for raw in listed if isinstance(listed, list) else []:
+        parents = raw.get("parents") if isinstance(raw, Mapping) else None
+        if not isinstance(parents, list):
+            return ""
+        named = {one for one in parents if isinstance(one, str)}
+        shared = named if shared is None else shared & named
+    if shared is None or len(shared) != 1:
+        return ""
+    (pin,) = shared
+    return pin if _FILE_ID_RE.match(pin) else ""
+
+
+def walk_step(asked: Mapping[str, str], body: Any) -> tuple[Mapping[str, str] | None, bool]:
+    """The page the walk asks after this one, or None at its end, and whether the walk has left a
+    folder out at `MAX_FOLDER_DEPTH`, on this page or before it.
+
+    Depth first: into the first subfolder this page names that is not already on the path or
+    waiting on it, keeping this folder's next page and its other subfolders as a level of the path;
+    else this folder's next page; else back up the path to the nearest level with a subfolder
+    waiting or a page left. A subfolder deeper than `MAX_FOLDER_DEPTH` is not entered, and the mark
+    says so on every page after. See `A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`.
+    """
+    folder = _folder_listed(asked.get(WALK_FOLDER, ""), body)
+    path = list(walk_path(asked))
+    left_out = asked.get(WALK_LEFT_OUT, "") == "1"
+    token = next_cursor(Reply(status=200, body=body))
+    # The cycle guard: a folder on the path, or waiting at any level of it, is not entered again.
+    # The path travels in the arguments, so the guard holds across passes as well as within one.
+    on_path = {folder, *(one.folder for one in path), *(w for one in path for w in one.waiting)}
+    found = [one for one in dict.fromkeys(subfolders_to_walk(body)) if one not in on_path]
+    if found:
+        if len(path) + 1 > MAX_FOLDER_DEPTH:
+            left_out = True
+        else:
+            path.append(WalkFrame(folder=folder, page_after=token, waiting=tuple(found[1:])))
+            return _page_of_the_walk(found[0], "", path, left_out=left_out), left_out
+    if token:
+        return _page_of_the_walk(folder, token, path, left_out=left_out), left_out
+    while path:
+        level = path.pop()
+        if level.waiting:
+            path.append(replace(level, waiting=level.waiting[1:]))
+            following = _page_of_the_walk(level.waiting[0], "", path, left_out=left_out)
+            return following, left_out
+        if level.page_after:
+            following = _page_of_the_walk(level.folder, level.page_after, path, left_out=left_out)
+            return following, left_out
+    return None, left_out
+
+
+class DriveReading:
+    """The pinned folder, listed every hour into the minimal index and nothing else (M11.6.7).
+
+    A `declaration.ScopedReading`: its key is a service account's key file, exchanged for a token
+    carrying `DRIVE_SCOPE` for one run, and never sent. **A folder and a shortcut are listed and
+    not kept.** A folder is structure with no words, and a shortcut points anywhere, so its target
+    is kept only as the target's own row, when that is itself one of the folder's children (see
+    `A_SHORTCUT_IS_THE_WAY_OUT_OF_THE_FOLDER`).
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return (FILE,)
+
+    def refresh_interval(self) -> timedelta:
+        return READING_INTERVAL
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation:
+        # The address is Google's constant, checked when the call is prepared.
+        del resolver
+        _assert_file(entity)
+        return folder_listing(DriveConnection.from_settings(settings))
+
+    def key_scheme(self) -> KeyScheme:
+        return KeyScheme.GOOGLE_SERVICE_ACCOUNT
+
+    def token_scopes(self) -> tuple[str, ...]:
+        return (DRIVE_SCOPE,)
+
+    def first_page(self, entity: str) -> Mapping[str, str]:
+        _assert_file(entity)
+        return MappingProxyType({})
+
+    def next_page(
+        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
+    ) -> Mapping[str, str] | None:
+        """The rest of this folder, or the next folder of the walk, or None when the tree is done.
+
+        The walk is carried in the page arguments (`WALK_FOLDER`, `WALK_PATH`), so the reading
+        holds nothing between pages, and a pass the worker stopped is carried on from them. It goes
+        depth first, so what the arguments carry is bounded by `MAX_FOLDER_DEPTH` and one page
+        rather than by the tree (`walk_step`, `A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`).
+        """
+        del entity, returned
+        return walk_step(asked, body)[0]
+
+    def left_out(self, entity: str, asked: Mapping[str, str], body: Any) -> bool:
+        """Whether this pass has left a folder out at `MAX_FOLDER_DEPTH`, on this page or before.
+
+        A `declaration.BoundedWalk`: the worker reports such a pass as part of the source left out,
+        and it retires nothing.
+        """
+        _assert_file(entity)
+        return walk_step(asked, body)[1]
+
+    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
+        # Built for its refusal of settings that are not a folder; Google needs no header here.
+        DriveConnection.from_settings(settings)
+        return MappingProxyType({})
+
+    def interpret(
+        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
+    ) -> PageReply:
+        call = call_outcome(Reply(status=status, body=body))
+        if call is not CallOutcome.OK:
+            return PageReply(call=call, rows=None)
+        return PageReply(call=call, rows=operation.records(body, fetched_at=fetched_at))
+
+    def retry_after(self, headers: Mapping[str, str]) -> float | None:
+        stated = Reply(status=0, headers=headers).header("Retry-After").strip()
+        try:
+            seconds = float(stated)
+        except ValueError:
+            return None
+        return seconds if seconds > 0 else None
+
+    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
+        del headers
+        return False
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """One listed file's or walked folder's index entry, or None for what is not kept.
+
+        A shortcut is never kept, and nothing locked narrower than its parent is: a folder's row is
+        how the live read knows a file's parent is inside the tree, so a locked folder kept here
+        would let a file inside it be read.
+        """
+        _assert_file(entity)
+        try:
+            sharing = SharingState(str(row.get("sharing_state", "")))
+        except ValueError:
+            return None
+        file = file_from_row(row, sharing=sharing)
+        pin = row.get("folder_id")
+        if file is None or file.is_shortcut or not isinstance(pin, str):
+            return None
+        if row.get("locked") is True:
+            return None
+        if file.is_folder and sharing is SharingState.LINK:
+            return None
+        return ProjectedRecord(
+            source=GOOGLE_DRIVE,
+            entity=FILE,
+            source_id=file.file_id,
+            last_seen_at=seen_at,
+            fields=fields_of(row, folder_id=pin, sharing=sharing),
+        )
+
+
+# ---------------------------------------------------- reading a file's words live (M11.6.7)
+#: The one native type whose words are read: a Google Doc, exported as plain text.
+GOOGLE_DOC_MIME: Final = "application/vnd.google-apps.document"
+EXPORTED_AS: Final = "text/plain"
+
+#: Files whose bytes are already words, read as they are. Anything else is not read.
+READ_AS_TEXT: Final = frozenset({"text/plain", "text/markdown", "text/csv"})
+
+#: The most bytes read for one file's words. Google exports at most 10 MB; a body past this is
+#: answered as no body by the caller, so a longer file is not read rather than read in part.
+MAX_TEXT_BYTES: Final = 2_000_000
+
+#: The longest passage of one file shown to the model.
+PASSAGE_CHARS: Final = 4000
+
+
+class Withheld(enum.StrEnum):
+    """Why a file's words were not read, for an operator's log. Never told to the asker."""
+
+    OUTSIDE = "outside"
+    TRASHED = "trashed"
+    LOCKED = "locked"
+    SHARED_BEYOND = "shared_beyond"
+    NOT_WORDS = "not_words"
+
+
+def text_url_for(file_id: str, mime_type: str) -> str | None:
+    """Where a file's words are read from, or None for a type whose words are not read.
+
+    A Google Doc is exported as plain text; a file of a type in `READ_AS_TEXT` is read by its
+    content; nothing else is. The id is held to the grammar before it is laid into an address.
+    """
+    if not _FILE_ID_RE.match(file_id):
+        msg = "a file id is laid into an address only when it is a Drive identifier"
+        raise DriveError(msg)
+    if mime_type == GOOGLE_DOC_MIME:
+        return f"{BASE_URL}/drive/v3/files/{file_id}/export?{urlencode({'mimeType': EXPORTED_AS})}"
+    if mime_type in READ_AS_TEXT:
+        query = urlencode({"alt": "media", SUPPORTS_ALL_DRIVES: "true"})
+        return f"{BASE_URL}/drive/v3/files/{file_id}?{query}"
+    return None
+
+
+def metadata_url_for(file_id: str) -> str:
+    """Where one file's metadata is read live, with its sharing and its lock."""
+    return operation_for(Endpoint.GET_FILE).url_for(
+        {
+            "fileId": file_id,
+            FIELDS_PARAMETER: field_selector(Endpoint.GET_FILE),
+            SUPPORTS_ALL_DRIVES: "true",
+        }
+    )
+
+
+def withheld_from_a_read(
+    connection: DriveConnection,
+    row: Mapping[str, Any],
+    sharing: SharingState,
+    inside: Collection[str] = (),
+) -> Withheld | None:
+    """Why this file, read live a moment ago, may not have its words read, or None when it may.
+
+    Asked of what Drive says now, not of the index, which is an hour old at most: a file moved out
+    of the folder, binned, locked or shared outside the company since it was listed is refused
+    here. `row` is the file's metadata as `GET_FILE`'s mapping projects it, `sharing` is
+    `sharing_of` over its permissions, and `inside` is the folders the walk found under the pin,
+    so a file in one of them is inside the tree as a file in the pin is. The order is the rule:
+    where it is, whether it is in the bin, whether it is locked narrower than its folder
+    (`A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`), how it is shared
+    (`sharing_admits_a_read`), and last whether it has words to read.
+    """
+    parents = row.get("parents")
+    listed = tuple(str(one) for one in parents) if isinstance(parents, list) else ()
+    if not any(connection.admits(one) or one in inside for one in listed):
+        return Withheld.OUTSIDE
+    if row.get("trashed") is not False:
+        return Withheld.TRASHED
+    if row.get("locked") is True:
+        return Withheld.LOCKED
+    if not sharing_admits_a_read(sharing):
+        return Withheld.SHARED_BEYOND
+    file_id, mime_type = row.get(ID_TARGET), row.get("mime_type")
+    if not isinstance(file_id, str) or not isinstance(mime_type, str):
+        return Withheld.NOT_WORDS
+    if text_url_for(file_id, mime_type) is None:
+        return Withheld.NOT_WORDS
+    return None
+
+
+def words_of_a_body(body: bytes) -> str:
+    """A file's words as a passage: decoded, any byte-order mark dropped, cut to its length."""
+    return body.decode("utf-8", errors="replace").lstrip("\ufeff")[:PASSAGE_CHARS]
 
 
 # ------------------------------------------------- connecting from the console (M11.7.7)
@@ -2269,27 +2968,7 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     then built, which is the check that the four agree. A folder in a shared drive is not offered
     here yet: see the module docstring.
     """
-    folder = folder_id_of(settings.get(FOLDER_SETTING, ""))
-    if not folder:
-        raise SettingRefusedError("not a Drive folder", setting=FOLDER_SETTING)
-    domain = settings.get(DOMAIN_SETTING, "").strip().casefold()
-    if not _DOMAIN_RE.match(domain):
-        raise SettingRefusedError("not a domain", setting=DOMAIN_SETTING)
-    department = settings.get(DEPARTMENT_SETTING, "").strip()
-    if not SLUG_RE.fullmatch(department):
-        raise SettingRefusedError("not a department", setting=DEPARTMENT_SETTING)
-    steward = settings.get(STEWARD_SETTING, "").strip()
-    if not _STEWARD_RE.match(steward):
-        raise SettingRefusedError("not a person's id", setting=STEWARD_SETTING)
-    try:
-        connection = DriveConnection(
-            folder_id=folder, domain=domain, department=department, steward_id=steward
-        )
-    except ConnectorContractError as refused:
-        # The other three were judged above, so what the connection refuses is the folder: a
-        # selector such as `all` passes the id's grammar and narrows nothing.
-        raise SettingRefusedError("not one folder", setting=FOLDER_SETTING) from refused
-    return manifest(connection, ref=ref)
+    return manifest(DriveConnection.from_settings(settings), ref=ref)
 
 
 #: What the Connectors screen asks for. The key is a service account's key file, chosen as a file.
@@ -2312,7 +2991,8 @@ CONSOLE: Final = ConsoleForm(
             label="Email domain",
             hint=(
                 "The part after @ in your company's email addresses, such as yourcompany.com. A "
-                "file shared with anybody outside it is left out."
+                "file Google shows as shared outside it, or with anyone who has the link, is "
+                "never read."
             ),
             refused="That is not a domain. Type only the part after @, such as yourcompany.com.",
         ),
@@ -2350,6 +3030,22 @@ CONSOLE: Final = ConsoleForm(
     ),
     build=built_from_the_console,
     credential_shape=CredentialShape.KEY_FILE,
+    example=ConnectExample(
+        settings={
+            FOLDER_SETTING: "1AbCdEfGhIjKlMnOpQrStUv",
+            DOMAIN_SETTING: "example.com",
+            DEPARTMENT_SETTING: "operations",
+            STEWARD_SETTING: "u_steward",
+        },
+        fresh=lambda departments: {
+            FOLDER_SETTING: f"acceptance{secrets.token_hex(8)}",
+            DOMAIN_SETTING: f"acceptance-{secrets.token_hex(4)}.example",
+            DEPARTMENT_SETTING: departments[0],
+            STEWARD_SETTING: f"acceptance-steward-{secrets.token_hex(4)}",
+        },
+        edit=FOLDER_SETTING,
+        edited=lambda: f"acceptance{secrets.token_hex(8)}",
+    ),
 )
 
 
@@ -2404,7 +3100,10 @@ GUIDE: Final = keyed(
             text=(
                 "In Google Drive, right-click the one folder this system should read, choose "
                 "Share, paste the service account's email address and give it Viewer. Share "
-                "nothing else with it: one folder is what a connection reads."
+                "nothing else with it: one folder is what a connection reads. A viewer is not "
+                "shown how each file is shared, so every file in the folder is read as the "
+                "folder's; a file Google does show as shared outside your domain is left out, and "
+                "so is a file whose access was limited below the folder's."
             ),
             sketch=Sketch(
                 place="Google Drive",
@@ -2441,8 +3140,8 @@ GUIDE: Final = keyed(
                 "Paste the folder's link from Google Drive, type your company's email domain, the "
                 "short name of the department the folder belongs to and the id of the person "
                 "answerable for what it adds, choose the key file, then press Connect Google "
-                "Drive. Files are told to that department, and a file shared outside your domain "
-                "is left out."
+                "Drive. Files are told to that department, and so are the files of its "
+                "subfolders at every level."
             ),
             sketch=Sketch(
                 place="Company Brain",
@@ -2473,7 +3172,26 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="google_drive",
+    per_minute=1_625,
+    per_day=2_000_000,
+    note=(
+        "Google counts the Drive API in quota units: 325,000 a minute for one user of one "
+        "project, 1,000,000 for the project, and 400,000,000 a day before billing applies; a "
+        "listing costs 100 units, a metadata read 5 and a download 200 "
+        "(https://developers.google.com/workspace/drive/api/guides/limits, read 2026-09-30). "
+        "Recorded at the dearest call a read makes, 1,625 downloads a minute and 2,000,000 "
+        "calls a day, so no mix of calls spends more. A project owner may ask for more on the "
+        "Cloud console's Quotas page, so it can be raised."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=GOOGLE_DRIVE,
     label="Google Drive",
     guide=GUIDE,
@@ -2490,13 +3208,13 @@ CONNECTOR: Final = ConnectorDeclaration(
         ),
         findings=(DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE,),
     ),
-    recorded=Recorded(
-        tested=True,
-        not_replayed=(
-            "a file is kept only with a sharing state, which is reduced from the permissions "
-            "Drive returns; the connector has no function reading them out of a response, and "
-            "Google's documentation does not say whether a user grant carries the domain that "
-            "reduction needs, so only a live capture can settle it",
-        ),
+    recorded=Recorded(tested=True),
+    reading=DriveReading(),
+    # Its folder's files are read live as passages for the question's model step
+    # (`brain.ops.drive_passages`, M11.6.7), not classified.
+    ask=AskRows(by_passages=True),
+    scopes=KeyScopes(
+        request=("Viewer on the one folder shared with it",),
+        refuse=("domain-wide delegation",),
     ),
 )

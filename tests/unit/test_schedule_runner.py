@@ -285,10 +285,14 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     `brain.ops.recovery_run`: the queue's rows read through the driver, and the operation records
     read and settled one committed move at a time.
 
+    **Three on 2026-10-06**, when `resolution_calibration` was given the registry's candidate
+    pairs to fit and a setting to keep each fit in until a reviewer promotes it.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 4
+    assert len(found) == 3
+    assert not any("resolution_calibration" in one for one in found)
     assert not any("queue_redrive" in one for one in found)
     assert not any("side_effect_resume" in one for one in found)
     assert not any("denial_digest" in one for one in found)
@@ -481,11 +485,22 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     `brain.ops.recovery_run` calls `redrive`, `resume` and `verify_once`, so `queue_redrive` and
     `side_effect_resume` left the list together.
 
+    **And twenty-three controls on 2026-09-30, with two orphans still.** `escalation_expiry`
+    arrived already wired, with `gate.escalation`, and `evening_digest` later that day, with its
+    destination, its borrowed key and `brain.ops.digest_run`.
+
+    **And twenty-four controls on 2026-10-06, with two orphans still.** `entity_resolution`
+    arrived already wired, with `er.observation` and the join-key pepper.
+
+    **And to one later that day.** `start_control` calls the weekly fit's runner, so
+    `resolution_calibration` left the list.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 2
+    assert len(orphans()) == 1
+    assert "resolution_calibration" not in {one.name for one in orphans()}
     assert "queue_redrive" not in {one.name for one in orphans()}
     assert "side_effect_resume" not in {one.name for one in orphans()}
     assert "denial_digest" not in {one.name for one in orphans()}
@@ -496,7 +511,10 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
     assert "acceptance_run" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 21
+    assert "escalation_expiry" not in {one.name for one in orphans()}
+    assert "evening_digest" not in {one.name for one in orphans()}
+    assert "entity_resolution" not in {one.name for one in orphans()}
+    assert len(CONTROLS) == 24
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -535,6 +553,10 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "acceptance_run",
         "queue_redrive",
         "side_effect_resume",
+        "escalation_expiry",
+        "entity_resolution",
+        "evening_digest",
+        "resolution_calibration",
     }
 
 

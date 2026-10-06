@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4
 """
 
 from __future__ import annotations
@@ -213,6 +213,7 @@ from brain.knowledge.rows import (
     MAX_ROW_LIMIT,
     RowRequest,
     entity_capability,
+    is_row_tool,
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
@@ -220,10 +221,14 @@ from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
+from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.halt_store import Work, refusal_for
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
+from brain.ops.learning_signal_store import StoredMarks
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -232,10 +237,16 @@ from brain.ops.limits import (
     retry_after_header,
     retry_hint,
 )
-from brain.ops.live_read_run import base_schema_for, live_records_for, wiki_passages_for
+from brain.ops.live_read_run import (
+    base_schema_for,
+    live_records_for,
+    slack_passages_for,
+    wiki_passages_for,
+)
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
+from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
@@ -733,7 +744,7 @@ async def records(
         raise Failed("no tool registry on this process")
 
     classification = classification_for(entity)
-    matching = [d for d in registry.definitions() if d.entity == entity]
+    matching = [d for d in registry.definitions() if d.entity == entity and is_row_tool(d)]
     # `row_scope_for` and never a check written here. It is the same function `read_rows`
     # consults, so "does this caller reach rows of this kind" has one answer; the difference
     # is only that a route has to turn None into a status while a reader turns it into FALSE.
@@ -893,7 +904,9 @@ def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
     """
     readers: dict[tuple[str, str], RowReader] = {}
     for definition in registry.definitions():
-        if not definition.entity or not definition.source:
+        if not is_row_tool(definition):
+            # A figure tool shares its row tool's source and entity and takes a range; see
+            # `brain.knowledge.rows.is_row_tool`.
             continue
         # A cast at a boundary the registry keeps deliberately loose. It holds handlers of
         # two shapes and will go on doing so: `brain.tools.run_skill.handler` is synchronous
@@ -1137,6 +1150,14 @@ def model_lane_of(state: Any) -> ModelLane | None:
     )
     if wiki is not None:
         search = WithWiki(search, wiki)
+    # And a connected Google Drive folder, its files' words read live (M11.6.7).
+    drive = drive_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if drive is not None:
+        search = WithDrive(search, drive)
+    # And a connected Slack workspace, the asker's own channels read live (M11.7.5).
+    slack = slack_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if slack is not None:
+        search = Alongside(search, slack)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 
@@ -1162,8 +1183,10 @@ def model_lane_for(
     lane = model_lane_of(state)
     if lane is None:
         return None
-    if kinds and isinstance(lane.search, DocumentSearchTool):
-        lane = replace(lane, search=replace(lane.search, kinds=kinds))
+    if kinds:
+        # A question narrowed to kinds reads the library alone: a live source beside it holds no
+        # kind (`A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`).
+        lane = replace(lane, search=narrowed_to(lane.search, kinds))
     if follow_up is not None:
         lane = replace(lane, follow_up=follow_up)
     if agent is None:
@@ -1213,6 +1236,28 @@ A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH: Final = (
     "follow-up served from the cache would be the answer to the words asked fresh, and one kept "
     "there would answer the next person asking those words with another thread's context."
 )
+
+
+#: Why a question narrowed to kinds of knowledge reads the library alone.
+A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE: Final = (
+    "A question narrowed to kinds of knowledge (M7.6.1) is answered from those kinds in the "
+    "company's own library and nothing else: the Lark Wiki, a Google Drive folder and Slack read "
+    "live beside the library hold no kind, so they are left out of a narrowed question rather "
+    "than asked and shown. Each live source's wrapper names the search it was put beside as "
+    "`library`, and a narrowed question unwraps to it."
+)
+
+
+def narrowed_to(search: Any, kinds: tuple[KnowledgeKind, ...]) -> Any:
+    """The library's own search narrowed to `kinds`, unwrapped from every live source beside it.
+
+    See `A_NARROWED_QUESTION_READS_THE_LIBRARY_ALONE`. A search that is not the library's and wraps
+    none is handed back as it is.
+    """
+    inner = search
+    while not isinstance(inner, DocumentSearchTool) and hasattr(inner, "library"):
+        inner = inner.library
+    return replace(inner, kinds=kinds) if isinstance(inner, DocumentSearchTool) else search
 
 
 #: Why a question narrowed to kinds of knowledge skips the answer cache both ways.
@@ -1332,15 +1377,35 @@ def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:15], 16)
 
 
+#: Why the answer key carries the epoch of every source its reader reaches.
+AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES: Final = (
+    "The cache is looked up before the question is answered, so which sources the answer will "
+    "read is not known yet; what is known is every source the reader reaches, and the answer can "
+    "read no other. So the key carries each of those sources' epochs, a source with none as zero. "
+    "A change "
+    "to any source the reader reaches makes the next lookup a miss, which is at worst a question "
+    "answered again when an unrelated source moved, and never an answer served after a source it "
+    "read moved."
+)
+
+
 def caching_of(
-    state: Any, policies: Mapping[str, FieldPolicy], sources: Sequence[str]
+    state: Any,
+    policies: Mapping[str, FieldPolicy],
+    sources: Sequence[str],
+    epochs: Mapping[str, int],
+    table_epochs: Mapping[str, int] | None = None,
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
     `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
-    uncacheable rather than a cached answer stale.
+    uncacheable rather than a cached answer stale, and each carries its epoch from `epochs`
+    (M11.8.4): see `AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES`. `table_epochs` carries
+    the uploaded tables' versions
+    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`), so a new upload
+    moves the key as a connector's change does.
     """
     store: AnswerStore | None = getattr(state, "answer_store", None)
     if store is None:
@@ -1348,10 +1413,31 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        # No source records an epoch yet, so the key holds none and the TTL bounds staleness.
-        source_epochs={},
+        source_epochs={
+            **{name: epochs.get(name, 0) for name in sorted(set(sources))},
+            **(table_epochs or {}),
+        },
         sources=frozenset(sources),
     )
+
+
+async def source_epochs_of(state: Any) -> Mapping[str, int]:
+    """Every source's epoch, for the answer cache's key, or none where nothing is cached.
+
+    Read only on a process with an answer store, because the epochs have no other reader on this
+    path, and from the database the worker advances them in
+    (`brain.tables.projection.SourceEpochRow`). A process with a store and no database has no
+    source that changes, so it keys on none.
+    """
+    if getattr(state, "answer_store", None) is None:
+        return {}
+    epochs: SourceEpochs | None = getattr(state, "source_epochs", None)
+    if epochs is None:
+        sessions = getattr(state, "db_sessions", None)
+        if sessions is None:
+            return {}
+        epochs = StoredSourceEpochs(sessions)
+    return await epochs.epochs()
 
 
 def sensitive_referrals_of(request: Request) -> SensitiveReferrals | None:
@@ -1520,6 +1606,34 @@ def asked_too_often(request: Request, verdict: StoreVerdict) -> JSONResponse:
     )
 
 
+#: Why a halted question is turned away before anything else is asked.
+A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING: Final = (
+    "A question from a person, or a department, somebody has stopped is refused first, before the "
+    "windows, the cache, the lanes and any model, in the one sentence brain.ops.halt writes, "
+    "which names the scope and never the reason or who stopped it. A store that cannot be read "
+    "refuses too, in its own sentence. It is a 503 with no Retry-After, because nobody can say "
+    "when a person will resume it."
+)
+
+
+@dataclass(frozen=True)
+class Halted:
+    """A question a halt refused, and the one sentence the person is told."""
+
+    told: str
+
+
+def halted_reply(request: Request, halted: Halted) -> JSONResponse:
+    """The 503 a halted question is, with no `Retry-After`.
+
+    See `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    """
+    body = ErrorBody(message=halted.told, trace_id=bound_trace_id(request))
+    return JSONResponse(
+        status_code=503, content=body.model_dump(), headers={"Cache-Control": "no-store"}
+    )
+
+
 @dataclass(frozen=True)
 class Answering:
     """Who a question is answered for: the person, the one reach, the channel and the instant.
@@ -1566,7 +1680,7 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
 
 async def answered_for(
     request: Request, recorder: Recorder, asking: Answering, ask: Question
-) -> Answered | StoreVerdict:
+) -> Answered | StoreVerdict | Halted:
     """One question answered for one person at one reach, or the window that refused it.
 
     The body of `answer`, taken out so a chat channel answers a bound person by the same code
@@ -1581,6 +1695,20 @@ async def answered_for(
         # discloses nothing about what exists. `brain.app.lifespan` builds one before it
         # yields.
         raise Failed("no tool registry on this process")
+
+    # Stopped, by a halt on everything, this person or their department, or a halt store that
+    # cannot be read. First of all, before any table is read for the lanes, so a database that
+    # cannot be read refuses in the halt's own words rather than failing in a lane. See
+    # `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    told = await refusal_for(
+        getattr(request.app.state, "db_sessions", None),
+        Work(
+            person=asking.principal.id,
+            department=asking.principal.primary_department or "",
+        ),
+    )
+    if told:
+        return Halted(told)
 
     # Uploaded classified tables (Classification screen) join the fast lane beside the
     # built-in rules, each column answered only to who may read it.
@@ -1640,7 +1768,13 @@ async def answered_for(
     caching = (
         None
         if referral is not None or ask.kinds or follow_up is not None
-        else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
+        else caching_of(
+            request.app.state,
+            policies,
+            sources_at(registry, asking.reach, asking.now),
+            await source_epochs_of(request.app.state),
+            tables.epochs,
+        )
     )
 
     try:
@@ -1726,6 +1860,20 @@ async def answered_for(
             live=live_records_of(request.app.state),
             source_policies={**source_field_policies(registry), **base.source_policies},
         )
+        # An abstention under a skill that declares a queue is handed to the person named for it,
+        # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
+        # here because `brain.escalation_routes` sends through `brain.channel_routes`, which
+        # imports this module.
+        from brain.escalation_routes import escalated
+
+        answered = await escalated(
+            request,
+            answered,
+            agent=agent,
+            asking=asking,
+            question=address.question,
+            trace_id=recorder.trace_id,
+        )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own
             # lookup used (M3.5.2). A hit, a refusal and a fault carry no text and are not kept.
@@ -1773,6 +1921,74 @@ async def answered_for(
     )
 
     return answered
+
+
+# ------------------------------------------------------------------- a mark (M16.6.4)
+#: What a person is told once their mark is counted. The same sentence either way.
+MARK_COUNTED: Final = (
+    "Thank you. Your mark is counted against this answer; on its own it changes nothing the "
+    "system answers, and a correction you give is what a person reviews."
+)
+
+#: Why a mark changes nothing by itself.
+A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF: Final = (
+    "A helpful or unhelpful mark is one bit from one person about one answer, and acting on it "
+    "would let one click reorder what everybody is told. So it is stored against the answer's "
+    "trace and counted, and no retrieval, memory, rule, knowledge item or agent setting reads "
+    "it; what changes behaviour is a correction a person reviews."
+)
+
+
+class MarkAsked(BaseModel):
+    """One mark on one answer: the trace it ran under and whether it helped. Nothing else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trace_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    helpful: bool
+
+
+class MarkedView(BaseModel):
+    """What a mark came to: counted, and the one sentence a person is told."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    counted: bool
+    told: str
+
+
+def marks_of(state: Any) -> StoredMarks | None:
+    """Where marks are written: `app.state.answer_marks`, or the database's, or None."""
+    found = getattr(state, "answer_marks", None)
+    if isinstance(found, StoredMarks):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredMarks(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+@router.post("/answer/mark", response_model=MarkedView, responses=COMMON_RESPONSES)
+async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> MarkedView:
+    """Mark one answer the caller was given helpful or unhelpful, with one action (M16.6.4).
+
+    Written against the trace and counted, and read by nothing that decides an answer, which is
+    `A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF`. An answer given to somebody else, one that
+    never ran and one past `brain.ops.learning_signal_store.MARKABLE_FOR` are the one 404, which
+    is `A_MARK_IS_ON_AN_ANSWER_THE_MARKER_WAS_GIVEN`.
+    """
+    marks = marks_of(request.app.state)
+    if marks is None:
+        raise Failed("no database on this process")
+    counted = await marks.mark(
+        principal_id=asked.caller.principal.id,
+        trace_id=body.trace_id,
+        helpful=body.helpful,
+        now=asked.now,
+    )
+    if not counted:
+        log.info("mark not answerable", principal=asked.caller.principal.id)
+        raise Absent("that answer cannot be marked by this caller")
+    log.info("answer marked", principal=asked.caller.principal.id, helpful=body.helpful)
+    return MarkedView(counted=True, told=MARK_COUNTED)
 
 
 async def remembered(
@@ -1837,6 +2053,8 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     outcome = await answered_for(request, recorder, Answering.of(asked), ask)
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
+    if isinstance(outcome, Halted):
+        return halted_reply(request, outcome)
     thread = await remembered(request, Answering.of(asked), ask, outcome)
     return StreamingResponse(
         frames_of(outcome),

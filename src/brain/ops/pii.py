@@ -162,7 +162,7 @@ import enum
 import functools
 import math
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from types import MappingProxyType
@@ -244,6 +244,13 @@ class EntityKind(enum.StrEnum):
     #: naming the model or claiming a form, because the label is what a model downstream
     #: reads in place of the value and neither of those is true about the person.
     UNPATTERNED_NAME = "person_name"
+    #: The four the analyser finds and no pattern here does: see `PRESIDIO_KINDS`. Each is
+    #: produced only while the analyser answers, as `UNPATTERNED_NAME` is only while a model
+    #: does, and the rules underneath are what a scrub keeps when it does not.
+    CREDIT_CARD = "credit_card"
+    IBAN = "iban"
+    IP_ADDRESS = "ip_address"
+    URL = "url"
 
 
 @dataclass(frozen=True)
@@ -426,6 +433,24 @@ PRESIDIO_BUILT_INS: Final[tuple[BuiltIn, ...]] = (
     BuiltIn("URL", 0.5, "a URL frequently carries an identifier in a path segment"),
 )
 
+#: A known positive for each built-in, which the install's acceptance check sends to the analyser
+#: it runs (`brain.ops.acceptance_checks_services`). Each is a value published for exactly this
+#: use or one that identifies nobody: the card is the industry's test number, the IBAN is the one
+#: ISO 13616 prints as its example, the address is in the IPv6 range RFC 3849 reserves for
+#: documentation (IPv6 is why this entity is the analyser's and not a local pattern), the URL is
+#: on a domain RFC 2606 reserves, and the name is a made-up one in a sentence that reads as a
+#: name. None of them is anybody's data, and the analyser is our own container on an internal
+#: network, so a probe never leaves the server either way.
+PRESIDIO_PROBES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "PERSON": "Please send the signed copy to Margaret Thompson before Friday.",
+        "CREDIT_CARD": "The card on file is 4111111111111111.",
+        "IBAN_CODE": "Pay the invoice into GB82WEST12345698765432.",
+        "IP_ADDRESS": "The request came from 2001:db8::10 last night.",
+        "URL": "The form is at https://example.com/orders/123 for now.",
+    }
+)
+
 #: Entities Presidio ships that we deliberately do not enable. Recorded because an absence
 #: is otherwise indistinguishable from an oversight the next time somebody reads the list.
 PRESIDIO_DECLINED: Final[dict[str, str]] = {
@@ -433,6 +458,22 @@ PRESIDIO_DECLINED: Final[dict[str, str]] = {
     "NRP": "nationality and religion appear in ordinary business text and identify nobody here",
     "LOCATION": "a client's address is governed by the field policy, not by a text scrubber",
 }
+
+#: The kind each enabled built-in's spans are scrubbed as. Beside the built-ins rather than a
+#: field of `BuiltIn`, so a built-in somebody enables without one is a finding of
+#: `configuration_gaps` rather than a type error at import, and a span the analyser returns for
+#: an entity named nowhere here is refused by `brain.ops.egress.decode_analysis` rather than
+#: given a label nobody chose. `PERSON` is the one name with no fixed shape, which is the kind
+#: the entity model produces too, and `merge_detections` makes the two additive.
+PRESIDIO_KINDS: Final[Mapping[str, EntityKind]] = MappingProxyType(
+    {
+        "PERSON": EntityKind.UNPATTERNED_NAME,
+        "CREDIT_CARD": EntityKind.CREDIT_CARD,
+        "IBAN_CODE": EntityKind.IBAN,
+        "IP_ADDRESS": EntityKind.IP_ADDRESS,
+        "URL": EntityKind.URL,
+    }
+)
 
 #: The analyser's service name and port in `docker-compose.presidio.yml`. Product values, the
 #: same on every install, and held to that file by test rather than trusted.
@@ -451,20 +492,30 @@ AN_ANALYSER_ADDRESS_ON_LITE_IS_SOMEBODY_ELSES_HOST: Final = (
 )
 
 
-def deploys_presidio(profile: str) -> bool:
-    """Whether this profile budgets, and so deploys, the analyser."""
-    return any(one.name == PRESIDIO_SERVICE for one in components_for(profile))
+def deploys_presidio(profile: str, switched: Collection[str] = frozenset()) -> bool:
+    """Whether this install deploys the analyser: its profile budgets it, or it is switched on.
+
+    `switched` is the containers the install's optional services run
+    (`brain.ops.overlays.components_switched_on`), which is how an install whose profile does not
+    deploy the analyser runs it anyway once `INSTALL_SERVICES` names it.
+    """
+    return PRESIDIO_SERVICE in switched or any(
+        one.name == PRESIDIO_SERVICE for one in components_for(profile)
+    )
 
 
-def analyzer_address(profile: str, configured: str = "") -> str | None:
+def analyzer_address(
+    profile: str, configured: str = "", switched: Collection[str] = frozenset()
+) -> str | None:
     """Where this install sends text to be analysed, or None when it deploys no analyser.
 
     The configured value wins when there is one; otherwise the product's own service by name,
-    which resolves inside the compose project and nowhere else. None rather than a default on
-    `lite`, so a caller has to handle an absent analyser instead of dialling a name that does
-    not resolve. A value set on `lite` is refused at startup by `presidio_config_conflicts`.
+    which resolves on the network the analyser's compose file declares and nowhere else. None
+    rather than a default when nothing deploys it, so a caller has to handle an absent analyser
+    instead of dialling a name that does not resolve. A value set where nothing deploys it is
+    refused at startup by `presidio_config_conflicts`.
     """
-    if not deploys_presidio(profile):
+    if not deploys_presidio(profile, switched):
         return None
     return configured.strip() or f"http://{PRESIDIO_SERVICE}:{PRESIDIO_PORT}"
 
@@ -662,7 +713,14 @@ def configuration_gaps(
 
     findings: list[str] = []
     model_kinds = {declared.kind for declared in gliner_labels}
-    have = {r.kind for r in recognisers} | _KINDS_WITHOUT_OWN_RECOGNISER | model_kinds
+    analyser_kinds = {
+        PRESIDIO_KINDS[one.presidio_name]
+        for one in built_ins
+        if one.presidio_name in PRESIDIO_KINDS
+    }
+    have = (
+        {r.kind for r in recognisers} | _KINDS_WITHOUT_OWN_RECOGNISER | model_kinds | analyser_kinds
+    )
     for kind in kinds:
         if kind not in have:
             findings.append(f"{kind.value}: declared as a kind with no recogniser and no exemption")
@@ -674,6 +732,11 @@ def configuration_gaps(
             )
         if built_in.presidio_name in PRESIDIO_DECLINED:
             findings.append(f"{built_in.presidio_name}: both enabled and declined")
+        if built_in.presidio_name not in PRESIDIO_KINDS:
+            findings.append(
+                f"{built_in.presidio_name}: enabled with no kind to scrub it as, so its spans "
+                "would be refused"
+            )
 
     seen: set[str] = set()
     pattern_kinds = {r.kind for r in recognisers}

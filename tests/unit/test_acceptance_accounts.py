@@ -5,7 +5,7 @@ this file holds what the module registers, so a package adding a check to it edi
 and the Forgot password mail check's three outcomes, which need a relay and a record that run has
 not got.
 
-Task ids: M38.5.1, M40.7.1
+Task ids: M38.5.1, M40.7.1, M1.10.3
 """
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ def test_the_accounts_checks_are_listed_in_their_page_order() -> None:
         "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
         "the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own",
         MAIL,
+        "the_staff_list_puts_every_active_person_on_people",
+        "people_moved_on_people_are_recorded_and_read_by_the_sync",
     ]
 
 

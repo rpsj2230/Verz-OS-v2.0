@@ -48,14 +48,14 @@ component whose readiness nobody wrote down gets checked for liveness by default
 how a half-connected instance stays in rotation answering from whatever it can still
 reach. `Component` refuses to be constructed without it.
 
-**What this module concludes, and it is not comfortable.** Neither `standard` nor `full`
-fits on this host. Langfuse needs ClickHouse, ClickHouse's practical floor is a gigabyte,
-the identity provider was measured at 768, the inference server has to hold three models
-resident, and the existing stack has already committed 3712 MiB of roughly 6400.
-`budget_breaches` reports each overrun rather than the numbers being quietly rounded until
-they agree. The answer is a second host, a hosted trace ledger, or smaller weights on the
-inference server, and all three are decisions for Rupash rather than something to resolve
-by editing a constant here.
+**What this module concludes, re-measured on 2026-10-05.** Neither `standard` nor `full` fits
+on the owner's host, but `standard` is now short by 648 MiB rather than by 5,128, and what
+closes the gap is one container. Item 120's Option A took the neighbours' 6,016 MiB of
+reservations off the host, so wave 2 may spend 6,200 MiB where it had 1,720. The inference
+server is 3,072 of `standard`'s 6,848 and is the one thing that does not fit beside the
+personal data detector, which is why item 120 gives the room to the detector and to the trace
+ledger and leaves the model server waiting. `budget_breaches` still reports each overrun
+rather than the numbers being rounded until they agree.
 
 **The profile is a flag that refuses, not a word in a settings file.** `components_for`
 answers what a profile deploys, and that was the whole of it until a lite install could
@@ -70,27 +70,22 @@ as a Python constant is not a resource limit on anything. That is still the righ
 it is now satisfied from the other side: `docker-compose.langfuse.yml` carries the limits
 and `tests/unit/test_wiring.py` holds the two copies equal, so neither can move alone.
 
-Still not claimed: M32.1.1.1. The service set is written and has never been started, because
-there is no host it fits on. A compose file that has never run is a design.
-
-**That refusal is now arithmetic rather than a sentence, and the arithmetic is stricter than
-the one the profile check makes.** `budget_breaches("full")` reports an overrun and names the
-inference server as the largest thing in the profile, which is true and reads as an
-invitation: remove that container and the rest presumably fits. It does not.
+**The trace ledger's service set fits on its own now, and that is the change item 120 made.**
 `set_breaches` costs a named set against the whole of what wave 2 may spend with nothing else
-of ours deployed, and asked about the five services in `docker-compose.langfuse.yml` it
-answers 2304 MiB against 1720, over by 584, on the most generous host this system will ever
-offer them. See `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`. So the leaf is not
-blocked on which neighbour goes first; it is blocked on the three answers that paragraph above
-already names, and all three are Rupash's.
+of ours deployed. Asked on 2026-09-06 about the five services in `docker-compose.langfuse.yml`
+it answered 2304 MiB against 1720, over by 584, and the leaf was blocked on arithmetic. Asked
+on 2026-10-05 it answers 2304 against 6200 and returns nothing. That is the most generous host
+the set will ever be offered, so it is the condition for starting it and not the proof that it
+runs: M32.1.1.1 is claimed by an install check that sees it running, never by this file. See
+`A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`.
 
-Task ids: M32.1.1.4
+Task ids: M32.1.1.4, M32.1.2.6
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Literal
@@ -98,23 +93,34 @@ from typing import Final, Literal
 #: The machine, in mebibytes, as `free -m` reports it. Measured 2026-09-06 on the live host.
 HOST_TOTAL_MIB: Final = 11960
 
-#: What everything that is not this system already reserves on that machine, measured the
-#: same day with `docker inspect -f {{.HostConfig.Memory}}` over every running container.
+#: What everything that is not this system holds on that machine, in mebibytes.
 #:
-#: Three groups, and every one of them belongs to the owner's other project rather than to
-#: this one: the Dify stack at 3,712 MiB across ten containers, an older Langfuse at
-#: 1,280 MiB across two, and a v1 worker at 1,024 MiB. `docs/needs-rupash.md` item 25 lists
-#: them by name, because the whole value of this figure to the person who can act on it is
-#: knowing which containers to remove.
+#: **Re-measured on 2026-10-05, after `docs/needs-rupash.md` item 120 was decided as Option A.**
+#: The owner's other project's Dify stack (3,712 MiB across ten containers), its older Langfuse
+#: (1,280 MiB across two) and its v1 worker (1,024 MiB) were taken down that day, and together
+#: they were the whole of the 6,016 MiB this constant held from 2026-09-06. What is left beside
+#: this system reserves nothing at all: `docker inspect -f {{.HostConfig.Memory}}` reads 0 for
+#: all eight remaining neighbours (six belonging to the deployment panel, one other panel
+#: resource and one automation canvas).
+#:
+#: **So the figure is now what they use, with a margin, and not what they reserve.** The rule
+#: below was right while every neighbour that mattered carried a limit: a reservation is memory
+#: the kernel will hand over when asked, and free memory is only what is spare at an instant.
+#: An unlimited container turns that around. It reserves nothing and can take anything, so a
+#: reservation of 0 is not a claim that it needs nothing; it is the absence of a ceiling.
+#: Counting it at 0 would hand this system the memory those eight are using today. They used
+#: 1,389 MiB together on 2026-10-05 (`docker stats --no-stream`, the panel at 357, the
+#: automation canvas at 842, the other six at 189), and the floor is that rounded up to 1,536,
+#: which leaves 147 MiB, about a tenth, for them to grow before this budget is wrong. A
+#: neighbour that grows past that is the next re-measurement, not a reason to raise the margin.
 #:
 #: **Reservations rather than usage, and the distinction is the reason this constant exists
 #: rather than a reading of free memory.** Seven containers were deleted from this host on
 #: 2026-09-06 and available memory went from 6,319 MiB to 8,469 MiB, and this number did not
 #: move by a single mebibyte, because every container removed was one that reserved nothing.
-#: Free memory is what is spare at an instant. A reservation is memory the kernel will hand
-#: to a neighbour the moment it asks. Sizing against the first is how a stack runs all week
-#: and kills something on the day the neighbour gets busy.
-NEIGHBOUR_MIB: Final = 6016
+#: That still holds for every neighbour with a limit. The usage floor above is for the ones
+#: without one, and it is the only usage figure in this module.
+NEIGHBOUR_MIB: Final = 1536
 
 #: Why a service set is costed on its own and not only as part of a profile.
 #:
@@ -129,9 +135,10 @@ A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING: Final = (
     "else of ours deployed, is the most generous host this system will ever offer it. A set "
     "that is over budget there is over budget in every profile that runs it, whatever else "
     "is removed, so the answer cannot be reached by shrinking a neighbour. That is why the "
-    "trace ledger's refusal is not a statement about the inference server: the ledger is "
-    "2048 MiB of containers, 2304 with the object store it needs, and the whole of wave 2 "
-    "has 1720 MiB on this host."
+    "trace ledger's refusal on 2026-09-06 was not a statement about the inference server: the "
+    "ledger is 2048 MiB of containers, 2304 with the object store it needs, and the whole of "
+    "wave 2 had 1720 MiB on this host then. It has 6200 since the neighbours' reservations "
+    "went on 2026-10-05, and the same question answered yes."
 )
 
 #: What this system's declared limits may add up to on the shared host, in mebibytes.
@@ -157,7 +164,10 @@ A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING: Final = (
 #: past what the box could honour and nothing said so, because the only test on it re-derived
 #: it from itself. It is now `safe_headroom_mib()`, computed from the measurement below, so
 #: the number cannot drift from the machine without the recorded machine drifting too.
-HOST_HEADROOM_MIB: Final = 5688
+#:
+#: **10,168 since 2026-10-05**, when item 120's Option A took the neighbours' 6,016 MiB of
+#: reservations off the host and `NEIGHBOUR_MIB` became their 1,536 MiB usage floor.
+HOST_HEADROOM_MIB: Final = 10168
 
 #: The sum of `deploy.resources.limits.memory` across the four services in
 #: `docker-compose.yml`, which is what is deployed today. Asserted against that file by
@@ -296,6 +306,26 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         ),
     ),
     Component(
+        # The connection pools per workload class (`brain.ops.class_pools`, M22.2.2), in
+        # transaction mode like the application's pooler. In no profile's file list, because no
+        # profile's files start it: the release's overlay step does, on every install whatever its
+        # profile (`brain.ops.overlays`, the one overlay that is always on), and costs it there
+        # against the measured server. So `components_for` does not answer for it and
+        # `set_cost_mib` does. 32 MiB is argued rather than measured, in the header of
+        # `ops/deploy/overlays/class-pools.yml`: the application's pooler holds the same two
+        # hundred clients in a 128 MiB ceiling.
+        name="pgbouncer-classes",
+        memory_mib=32,
+        profiles=frozenset(),
+        # It reaches `db` straight, as the session pooler does; what it hands its own clients is
+        # transaction pooling, which is why nothing that needs session state is moved onto it.
+        wiring=Wiring.DIRECT,
+        ready_when=(
+            "pg_isready answers through the pooler for the interactive class's entry, which is "
+            "true once it accepts a client; a server connection is taken on the first query"
+        ),
+    ),
+    Component(
         name="seaweedfs",
         memory_mib=256,
         profiles=frozenset({"standard", "full"}),
@@ -318,7 +348,11 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         # be pointed at one by a misconfiguration. Sharing would put the credential store
         # and the company records it protects in one blast radius.
         name="keycloak",
-        memory_mib=768,
+        # 1024 since 2026-10-06, measured rather than chosen: at 768 the kernel killed every
+        # fresh install's first start, with its server build in the same JVM and then without it,
+        # because creating Keycloak's schema on a new database is the peak and lasts one start.
+        # See `docker-compose.keycloak.yml`, which also moves the build into a one-shot.
+        memory_mib=1024,
         profiles=frozenset({"standard", "full"}),
         wiring=Wiring.NONE,
         ready_when="/health/ready answers UP, which is true only once the realm is imported",
@@ -474,13 +508,14 @@ LITE_KEEPS_THE_AUDIT_LEDGER = (
 #: Read as a mapping so a missing role is named rather than counted. A tuple of four when the
 #: leaf says five is exactly the shape a reader skims past.
 #:
-#: **M32.1.1.1 is named here and deliberately not claimed.** `docker-compose.langfuse.yml`
-#: refuses it in its own header and the refusal is arithmetic: the five services cost 2304 MiB
-#: against the 1720 MiB the whole of wave 2 may spend, so the set has never been started
-#: anywhere, and a compose file that has never run is a design rather than a deployment. This
-#: was claimed on 2026-09-08 by somebody who had read the services block and not the header,
-#: and taken back the same hour. What is here is a property of the declaration, which is worth
-#: having on its own: it is the sizing claim M32.1.1.2 already rests on, extended to the set.
+#: **M32.1.1.1 is named here and is not claimed by it.** Until 2026-10-05 the refusal was
+#: arithmetic: the five services cost 2304 MiB against the 1720 MiB the whole of wave 2 might
+#: spend, so the set had never been started anywhere, and a compose file that has never run is
+#: a design rather than a deployment. It was claimed on 2026-09-08 by somebody who had read the
+#: services block and not the header, and taken back the same hour. The arithmetic now says yes
+#: (6200 MiB to spend), and the claim still belongs to an install check that sees the set
+#: running. What is here is a property of the declaration: it is the sizing claim M32.1.1.2
+#: rests on, extended to the set.
 TRACE_STACK_ROLES: Final[Mapping[str, str]] = MappingProxyType(
     {
         "web": "langfuse-web",
@@ -504,18 +539,25 @@ AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT: Final = (
 )
 
 
-def runs_trace_ledger(profile: str) -> bool:
-    """Whether this profile runs somewhere for spans to go.
+def runs_trace_ledger(profile: str, switched: Collection[str] = frozenset()) -> bool:
+    """Whether this install runs somewhere for spans to go: its profile, or its optional services.
 
     Derived from `COMPONENTS` rather than declared a second time. A profile gains a trace
     ledger by a component naming it, which is the same edit that puts it in the budget, so
-    the two cannot disagree.
+    the two cannot disagree. `switched` is the containers the install's optional services run
+    (`brain.ops.overlays.components_switched_on`): an install whose profile runs no ledger runs
+    one once `INSTALL_SERVICES` names it, and the setting is then the one source of where spans
+    go (`brain.ops.ledger_export`).
     """
     assert_known_profile(profile)
-    return any(c.name in TRACE_LEDGER for c in components_for(profile))
+    return bool(TRACE_LEDGER & set(switched)) or any(
+        c.name in TRACE_LEDGER for c in components_for(profile)
+    )
 
 
-def trace_config_conflicts(profile: str, values: dict[str, str]) -> tuple[str, ...]:
+def trace_config_conflicts(
+    profile: str, values: dict[str, str], switched: Collection[str] = frozenset()
+) -> tuple[str, ...]:
     """Trace destinations configured on an install that runs no trace ledger.
 
     **This is the profile flag doing something rather than describing something.** Without
@@ -533,7 +575,7 @@ def trace_config_conflicts(profile: str, values: dict[str, str]) -> tuple[str, .
     misconfiguration found one variable at a time is a sequence of restarts.
     """
     assert_known_profile(profile)
-    if runs_trace_ledger(profile):
+    if runs_trace_ledger(profile, switched):
         return ()
     return tuple(
         f"{setting} is set but profile {profile!r} runs no trace ledger, so these spans "

@@ -33,6 +33,12 @@ accept SQL and validate it, which sounds stricter and is weaker: a validator is 
 a parser that disagrees with the database's own parser is a bypass rather than a check. There
 is no string here that could carry `; DROP` because there is no string here that becomes SQL.
 
+**Two of the four now have a reader beside them (M11.1.2, M11.1.5).** `brain.connectors.mcp`
+reads an MCP server's declared tools through `brain.ops.mcp_session`, and
+`brain.connectors.custom_code` runs a custom module's plan and interpretation through the sandbox
+runner while the host makes every call with the key. Both stay out of this module for the reason
+above: what is declared here is checked at review, and what talks lives where it can be faked.
+
 Scope: domain logic. Nothing here opens a connection, reads a table or calls a source.
 
 Task ids: M11.1.2, M11.1.3, M11.1.4, M11.1.5
@@ -99,6 +105,11 @@ _VIEW_RE: Final = re.compile(r"^[a-z][a-z0-9_]{0,62}\.[a-z][a-z0-9_]{0,62}$")
 
 class TransportError(ConnectorContractError):
     """A transport was declared in a shape that cannot be installed."""
+
+
+def is_source_path(path: str) -> bool:
+    """Whether `path` is a plain dotted path a mapping may name. See `FieldMapping`."""
+    return bool(_SOURCE_PATH_RE.match(path))
 
 
 # ------------------------------------------------------------------ the typed contract

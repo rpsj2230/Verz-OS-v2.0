@@ -39,6 +39,11 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
+    "Adding a work email binds an address to a person who has none. It retires the staff list's " +
+    "person for that address only when they have never signed in and hold nothing but what the sync " +
+    "wrote, which the sync writes again; anything else is written only from the page's confirmation, " +
+    "which tests/people-access-pages.test.tsx and tests/unit/test_work_email.py hold.",
   "src/pages/people/PersonPreview.tsx agentPreviewApiPath(agent)":
     "Previewing a run through an agent for the person on the page writes nothing: it is the agent " +
     "Profile's own preview route, which asks the gate and keeps no row.",
@@ -53,6 +58,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/access-requests/AccessRequestsPage.tsx ACCESS_REQUESTS_API_PATH":
     "Sending a request for access ends and replaces nothing: it is addressed to whoever can decide " +
     "it, and the decision is a grant written on the Roles screen, which is where anything changes.",
+  "src/pages/audit/TracePage.tsx traceReadPath(id)":
+    "Reading a trace writes one row saying who read it and why, before the trace is answered, which " +
+    "tests/unit/test_trace_routes.py holds; it changes no trace and removes nothing, so there is " +
+    "nothing for a press to destroy.",
   "src/pages/audit/VerifyPage.tsx VERIFICATION_API_PATH":
     "Walking the ledger reads every entry and writes nothing: brain.audit_routes.verify_ledger stores no " +
     "report, which tests/unit/test_chain_check.py holds, so there is nothing for a press to destroy.",
@@ -204,6 +213,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)":
     "A test message is one product sentence to one destination, sent once per channel record and " +
     "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
+  "src/pages/MyWorkspace.tsx EDIT_API_PATH":
+    "Editing a memory about yourself writes the new words beside the old and marks the old as " +
+    "replaced; nothing is deleted, the old words stay in its history, and Forget on the new one " +
+    "puts the old one back, which tests/unit/test_memory_store.py follows through PostgreSQL.",
+  "src/pages/Ask.tsx MARK_API_PATH":
+    "A mark is one bit against an answer the person was given, counted and read by nothing that " +
+    "decides an answer, and a second mark replaces the first in the count, which " +
+    "tests/unit/test_learning_signal.py holds; it ends and replaces nothing.",
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
     "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
     "until they send it from their own chat. It ends only an older code of theirs for that channel " +

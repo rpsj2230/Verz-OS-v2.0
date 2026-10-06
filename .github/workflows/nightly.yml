@@ -1,0 +1,69 @@
+name: Nightly
+
+# What a pull request's path filters cannot see: a vulnerability advisory published overnight
+# changes nothing in the tree, so the scan a pull request runs only when a lock or the image
+# changes (`brain.ops.ci_paths`) runs here every night against main as well. The job is the pull
+# request's own, step for step, and `tests/unit/test_ci_paths.py` holds the two equal, so this is a
+# second schedule for one job rather than a second job. Named apart from CI on purpose: Deploy
+# listens for CI completing on main, and a nightly scan must never deploy anything.
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.12.9"
+
+jobs:
+  vulnerabilities:
+    name: Vulnerability scan, locks and image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Install Trivy from its signed package repository
+        run: |
+          sudo install -d -m 0755 /usr/share/keyrings
+          curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+            | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -q && sudo apt-get install -y -q trivy
+          trivy --version
+      - name: Scan every lock
+        # `.venv` is skipped because it is this runner's install of one lock, and the lock itself
+        # is what is scanned; scanning both reports every finding twice under two targets.
+        run: |
+          mkdir -p evidence
+          trivy fs --scanners vuln --list-all-pkgs --format json --skip-dirs .venv             --output evidence/trivy-locks.json .
+      - name: Build the image the way production builds it
+        run: docker build --build-arg COMMIT_SHA=ci-scan -t brain:scan .
+      - name: Scan the image
+        run: >-
+          trivy image --scanners vuln --list-all-pkgs --format json
+          --output evidence/trivy-image.json brain:scan
+      - name: No critical finding without a recorded exception
+        run: >-
+          uv run python -m brain.ops.vulnerabilities
+          --locks evidence/trivy-locks.json --image evidence/trivy-image.json
+      - name: Keep both scans, named for the commit
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerabilities-${{ github.sha }}
+          path: evidence/trivy-*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # M0.5.3. The migration round trip over a database shaped like an install rather than over
+  # whatever a test shard left. See `brain.ops.migration_shape`, which counts every table at head,
+  # one step back and head again, refuses a step back that lost a row it kept, and prints how many
+  # tables held a row when the rollback ran.

@@ -165,8 +165,13 @@ JITTER_FRACTION: Final = 0.1
 METRIC_RECORDS_KEPT: Final = 5_000
 
 #: The filter a live read of one record carries: the id its index row holds. A connector's
-#: `declaration.LiveLookup` maps it onto the source's own query; nothing else is ever filtered on.
+#: `declaration.LiveLookup` maps it onto the source's own query; nothing else is filtered on but
+#: the range below.
 RECORD_ID_FILTER: Final = "id"
+
+#: The second filter a live read may carry, and only for a source declaring a report: the one range
+#: a figure tool asked for, as `brain.connectors.date_range.DateWindow.text` writes it (M11.7.1).
+RANGE_FILTER: Final = "range"
 
 #: The detail a call carries when the question ran out of time before or while it waited.
 BUDGET_SPENT: Final = "the question's live read budget was spent"

@@ -30,6 +30,11 @@ export function personApiPath(principalId: string): string {
   return `${DIRECTORY_API_PATH}/${encodeURIComponent(principalId)}`;
 }
 
+/** Where a person's work email is added (`brain.directory_routes.WORK_EMAIL_PATH`, M1.10.4). */
+export function workEmailApiPath(principalId: string): string {
+  return `${personApiPath(principalId)}/work-email`;
+}
+
 export const GRANTS_API_PATH = "/govern/grants";
 export const REMOVAL_API_PATH = "/govern/grants/removal";
 export const SEVERAL_GRANTS_API_PATH = "/govern/grants/several";
@@ -215,6 +220,8 @@ export interface DirectoryFacts {
   readonly disabling?: string;
   /** With a staff list read: the sentence to pass on to somebody whose account the sync made. */
   readonly accountReady?: string;
+  /** Several people may be moved to a department (departments managed on People, M1.6.20). */
+  readonly mayMove: boolean;
 }
 
 export function readDirectoryFacts(payload: unknown): DirectoryFacts {
@@ -226,6 +233,7 @@ export function readDirectoryFacts(payload: unknown): DirectoryFacts {
     editable: body?.["editable"] === true,
     mayDisable: body?.["may_disable"] === true,
     mayAdd: body?.["may_add"] === true,
+    mayMove: body?.["may_move"] === true,
     ...(adding === undefined ? {} : { adding }),
     ...(disabling === undefined ? {} : { disabling }),
     ...(accountReady === undefined ? {} : { accountReady }),
@@ -269,6 +277,10 @@ export interface PersonDetail {
   readonly fromAPack?: string;
   /** Why the staff list keeps them from signing in or asking, in the API's words (M1.6.14). */
   readonly keptOut?: string;
+  /** Whether this reader may add their work email (M1.10.4). */
+  readonly mayAddWorkEmail: boolean;
+  /** Departments are managed on People on this install (M1.6.19). */
+  readonly departmentSetOnPeople: boolean;
 }
 
 function readPlacements(value: unknown): Placements {
@@ -354,6 +366,8 @@ export function readPersonDetail(payload: unknown): PersonDetail | null {
     editable: body["editable"] === true,
     mayDisable: body["may_disable"] === true,
     mayOrganise: body["may_organise"] === true,
+    mayAddWorkEmail: body["may_add_work_email"] === true,
+    departmentSetOnPeople: body["department_set_on_people"] === true,
     ...(disabling === undefined ? {} : { disabling }),
     ...(fromAPack === undefined ? {} : { fromAPack }),
     ...(keptOut === undefined ? {} : { keptOut }),

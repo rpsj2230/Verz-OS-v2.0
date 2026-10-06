@@ -23,7 +23,9 @@ import {
   REMOVAL_API_PATH,
   SEVERAL_GRANTS_API_PATH,
   transferApiPath as personTransferApiPath,
+  workEmailApiPath,
 } from "../../../src/pages/people/peopleQuery";
+import { MOVING_API_PATH } from "../../../src/pages/people/MoveDrawer";
 import { END_SESSION_API_PATH, END_SESSIONS_API_PATH } from "../../../src/pages/sessionsQuery";
 import { LINK_API_PATH, UNLINK_API_PATH } from "../../../src/pages/signInLinksQuery";
 import { at, audited, type Proofs, t, type WriteRoute } from "../auditClaims";
@@ -31,6 +33,12 @@ import { at, audited, type Proofs, t, type WriteRoute } from "../auditClaims";
 const GRANTS_PRESSED = audited("test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach");
 
 const SEVERAL_PRESSED = audited("test_a_grant_to_several_is_written_for_everybody_or_for_nobody_against_postgresql");
+
+const PEOPLE_MOVED = t(
+  "test_directory_routes",
+  "test_people_moved_on_people_land_on_the_row_and_the_ledger_against_postgresql",
+  true,
+);
 
 const PERSON_ADDED_BY_HAND = t(
   "test_directory_routes",
@@ -66,9 +74,15 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
   ],
   "src/pages/people/GrantDrawers.tsx DIRECTORY_API_PATH": [at("POST /api/v1/govern/directory", "DIRECTORY_API_PATH", DIRECTORY_API_PATH)],
+  "src/pages/people/MoveDrawer.tsx MOVING_API_PATH": [
+    at("POST /api/v1/govern/directory/department", "MOVING_API_PATH", MOVING_API_PATH),
+  ],
   "src/pages/people/PersonDetailPage.tsx disable ? DISABLE_API_PATH : ENABLE_API_PATH": [
     at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
     at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
+  ],
+  "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)": [
+    at("POST /api/v1/govern/directory/{principal_id}/work-email", "workEmailApiPath", workEmailApiPath("u_first")),
   ],
   "src/pages/people/PersonOverview.tsx transferApiPath(waiting.agentId)": [
     at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", personTransferApiPath("a_quotes")),
@@ -89,6 +103,24 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/govern/directory/{principal_id}/work-email": {
+    row: t("test_work_email", "test_the_list_person_who_holds_nothing_is_joined_retired_and_recorded", true),
+    audit: t("test_work_email", "test_the_list_person_who_holds_nothing_is_joined_retired_and_recorded", true),
+    behaviour: t(
+      "test_work_email",
+      "test_a_list_person_somebody_granted_something_is_joined_only_after_the_page_asks",
+      true,
+    ),
+  },
+  "POST /api/v1/govern/directory/department": {
+    row: PEOPLE_MOVED,
+    audit: PEOPLE_MOVED,
+    behaviour: t(
+      "test_directory_routes",
+      "test_a_person_the_reader_may_name_but_not_organise_is_not_moved_into_their_department",
+      false,
+    ),
+  },
   "POST /api/v1/govern/directory": {
     row: PERSON_ADDED_BY_HAND,
     audit: PERSON_ADDED_BY_HAND,

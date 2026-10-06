@@ -60,6 +60,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import cache
 from types import MappingProxyType
 from typing import Final, assert_never
 
@@ -423,59 +424,50 @@ class ConnectorLimit:
     note: str = ""
 
 
-SOURCE_CEILINGS: tuple[ConnectorLimit, ...] = (
-    ConnectorLimit(
-        name="xero",
-        per_minute=60,
-        per_day=5_000,
-        raisable=False,
-        note=(
-            "5,000 calls a day per tenant, shared with every other integration the client "
-            "runs, so our own share is smaller than the number suggests. The ceiling is on "
-            "the client's tenant rather than on our subscription, so there is no plan we "
-            "can buy that moves it. This is the ceiling a backfill reaches first."
-        ),
-    ),
-    ConnectorLimit(
-        name="freshdesk",
-        per_minute=100,
-        note=(
-            "100 / 400 / 700 a minute by plan, per account. Recorded at the lowest, because "
-            "sizing against a plan we may not hold produces 429s on the day of a downgrade. "
-            "Separately, search returns at most 300 records ever; see "
-            "FRESHDESK_SEARCH_MAX_RECORDS."
-        ),
-    ),
-    ConnectorLimit(
-        name="hubspot",
-        per_minute=100,
-        per_day=250_000,
-        note=(
-            "A private app may make 100 calls per 10 seconds, and the account 250,000 calls a day, "
-            "on the Free and Starter tiers; Professional and Enterprise allow 190 per 10 seconds "
-            "and 625,000 or 1,000,000 a day, and the API Limit Increase add-on raises both "
-            "(HubSpot's usage guidelines, read 2026-09-30, cited in brain.connectors.hubspot). "
-            "Recorded at the lowest tier, and the ten-second allowance as the minute's, so no "
-            "burst inside a minute can reach HubSpot's ten-second window."
-        ),
-    ),
-    ConnectorLimit(
-        name="lark_base",
-        per_minute=100,
-        raisable=False,
-        note=(
-            "100 requests a minute, fixed. Their documentation states it cannot be raised, "
-            "so it is 1.67 calls a second for the whole tenant permanently. Sizing against "
-            "a higher number is sizing against a number that does not exist."
-        ),
-    ),
+#: Why a source's ceiling is declared in its own module and found here, not listed here.
+A_CEILING_LIVES_WITH_ITS_CONNECTOR: Final = (
+    "Every source's ceiling was a row of one tuple in this module, so every connector added "
+    "edited it and every connector PR open at once conflicted with the others there. A ceiling "
+    "is a fact about one vendor, cited from that vendor's documentation, so it is declared as "
+    "`CEILING` in the connector's own module and carried on its declaration, and this module "
+    "finds them. It cannot import the declarations at load (they import this module, through "
+    "the throttle), so it finds them on first use. A source with no ceiling has none here, which "
+    "is what `connector_ceiling` answering None has always meant: nobody has measured one."
 )
 
-_BY_NAME: Mapping[str, ConnectorLimit] = MappingProxyType({c.name: c for c in SOURCE_CEILINGS})
+
+@cache
+def _discovered() -> Mapping[str, ConnectorLimit]:
+    """Every shipped connector's declared ceiling, by its name. Found once per process."""
+    # Imported here and not at the top: the declarations import this module.
+    from brain.connectors.declaration import shipped
+
+    return MappingProxyType(
+        {
+            declared.ceiling.name: declared.ceiling
+            for declared in shipped().values()
+            if declared.ceiling is not None
+        }
+    )
+
+
+#: A table put in place of the discovered one, or None to use what the connectors declare. Only a
+#: test sets it, to stand for a source nobody has measured; nothing in the product writes it.
+_BY_NAME: Mapping[str, ConnectorLimit] | None = None
+
+
+def ceilings_by_name() -> Mapping[str, ConnectorLimit]:
+    """Every verified source ceiling, by its name. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`."""
+    return _discovered() if _BY_NAME is None else _BY_NAME
+
+
+def source_ceilings() -> tuple[ConnectorLimit, ...]:
+    """Every verified source ceiling, in the order of the sources' names."""
+    return tuple(one for _, one in sorted(ceilings_by_name().items()))
 
 
 def connector_ceiling(connector: str) -> ConnectorLimit | None:
-    return _BY_NAME.get(connector)
+    return ceilings_by_name().get(connector)
 
 
 def source_limits(connector: str, *, principal_id: str) -> tuple[Limit, ...]:
@@ -677,7 +669,7 @@ def ceilings() -> tuple[Ceiling, ...]:
     expressible in this unit".
     """
     result: list[Ceiling] = []
-    for source in SOURCE_CEILINGS:
+    for source in source_ceilings():
         per_day, derived = effective_per_day(source)
         result.append(
             Ceiling(name=source.name, per_day=per_day, raisable=source.raisable, derived=derived)
@@ -1134,7 +1126,7 @@ def declared_windows(sources: Mapping[str, str] | None = None) -> tuple[Declared
         _declared("each agent", agent_limit("each agent")),
         _declared("each website with a chat widget", widget_mint_limit("each website")),
     ]
-    for ceiling in SOURCE_CEILINGS:
+    for ceiling in source_ceilings():
         if sources is not None and ceiling.name not in sources:
             continue
         called = ceiling.name if sources is None else sources[ceiling.name]

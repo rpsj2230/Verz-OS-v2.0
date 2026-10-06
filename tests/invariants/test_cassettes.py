@@ -114,7 +114,7 @@ def test_the_rate_limits_record_whether_they_can_be_raised() -> None:
 
 
 #: Sources whose cassette `RateLimit` records something other than a rate, and are therefore
-#: not comparable with `brain.ops.limits.SOURCE_CEILINGS` by raisability.
+#: not comparable with `brain.ops.limits.source_ceilings()` by raisability.
 #:
 #: Freshdesk is the only one and it is worth the exception. Its cassette entry is the
 #: 300-record search ceiling, which is a bound on a *result set* and genuinely cannot be
@@ -131,7 +131,7 @@ def test_the_recordings_and_the_operational_ceilings_agree_about_what_can_be_rai
     """**Two records of the same fact, and until this test nothing compared them.**
 
     `tests/fixtures/cassettes/` is what connectors are built against;
-    `brain.ops.limits.SOURCE_CEILINGS` is what the admission controller sizes budgets from.
+    `brain.ops.limits.source_ceilings()` is what the admission controller sizes budgets from.
     They disagreed about Xero for as long as both existed, and it surfaced only because one
     connector was written against both at once and its author noticed.
 
@@ -145,9 +145,9 @@ def test_the_recordings_and_the_operational_ceilings_agree_about_what_can_be_rai
     comparison is only meaningful where both records describe the same quantity.
 
     Delete this and the two drift again, quietly, in whichever direction somebody edits."""
-    from brain.ops.limits import SOURCE_CEILINGS
+    from brain.ops.limits import source_ceilings
 
-    operational = {ceiling.name: ceiling.raisable for ceiling in SOURCE_CEILINGS}
+    operational = {ceiling.name: ceiling.raisable for ceiling in source_ceilings()}
 
     disagreements = {
         source: (limit_for(source).raisable, operational[source])
@@ -232,10 +232,10 @@ def test_the_source_excluded_from_that_comparison_really_is_measuring_something_
     operational ceiling must be a rate. If either stops being true, the exemption is no
     longer justified and this fails rather than the comparison silently skipping a real
     contradiction."""
-    from brain.ops.limits import SOURCE_CEILINGS
+    from brain.ops.limits import source_ceilings
 
     recorded = limit_for("freshdesk")
-    ceiling = next(c for c in SOURCE_CEILINGS if c.name == "freshdesk")
+    ceiling = next(c for c in source_ceilings() if c.name == "freshdesk")
 
     assert "record" in recorded.per, f"the cassette now records {recorded.per!r}, not a result set"
     assert ceiling.per_minute, "the operational ceiling is no longer a rate per minute"
@@ -250,13 +250,14 @@ def test_the_freshdesk_ceiling_is_recorded_as_a_ceiling() -> None:
 
 
 #: Sources whose own documentation states the wait somewhere other than `Retry-After`, or not at
-#: all, with where. Listed rather than inferred: a recording that dropped the header to match a
-#: connector would otherwise pass as a vendor that never sends one.
+#: all, with where, as each source's own cassette file declares it. Listed in the files rather than
+#: inferred: a recording that dropped the header to match a connector would otherwise pass as a
+#: vendor that never sends one. Read off the files since 2026-10-05, when a map typed here was a
+#: line every connector PR edited.
 WAIT_NOT_IN_RETRY_AFTER: dict[str, str] = {
-    "hubspot": "no wait header documented; X-HubSpot-RateLimit-* state the allowance",
-    "lark_base": "x-ogw-ratelimit-reset",
-    "lark_wiki": "x-ogw-ratelimit-reset",
-    "google_drive": "none documented; Google asks for exponential backoff",
+    name: file.wait_not_in_retry_after
+    for name, file in FILES.items()
+    if file.wait_not_in_retry_after
 }
 
 
@@ -278,6 +279,7 @@ def test_a_retry_after_is_present_on_every_rate_limit_response() -> None:
             continue
         assert "Retry-After" in c.headers, f"{c.cid} is a 429 with no Retry-After"
     assert "Retry-After" in next(c for c in CASSETTES if c.cid == "XERO-429").headers
+    assert WAIT_NOT_IN_RETRY_AFTER["lark_base"] == "x-ogw-ratelimit-reset"
     assert exempted_and_seen, "no exempted source has a 429 recording, so the list checks nothing"
 
 

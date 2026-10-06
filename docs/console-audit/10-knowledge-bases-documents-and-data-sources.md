@@ -1,15 +1,16 @@
 ### Knowledge bases, documents and data sources
 
-- **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
-- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
+- **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/duplicates`, `/artifacts`
+- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
-- **Measured here:** 32 routes, 4 called by no screen; 16 write routes, 16 with all three proofs; 7 gaps.
+- **Measured here:** 43 routes, 6 called by no screen; 22 write routes, 22 with all three proofs; 7 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/classifications/{entity}` | `/classification/:entity`, `/classification/:entity/:column` |
 | `GET /api/v1/govern/artifacts` | `/artifacts` |
 | `GET /api/v1/govern/learning` | `/learning`, `/learning/:view` |
+| `GET /api/v1/govern/learning/settings` | **no screen** |
 | `GET /api/v1/govern/library` | **no screen** |
 | `GET /api/v1/govern/memory` | `/memory/:subject`, `/memory/:subject/:view` |
 | `GET /api/v1/knowledge/documents` | `/department`, `/library` |
@@ -17,15 +18,19 @@
 | `GET /api/v1/knowledge/items/{item_id}` | `/library/:itemId`, `/library/:itemId/:view` |
 | `GET /api/v1/knowledge/items/{item_id}/history` | `/library/:itemId/:view` |
 | `GET /api/v1/knowledge/items/{item_id}/passages` | `/library/:itemId/:view` |
+| `GET /api/v1/knowledge/items/{item_id}/public` | `/library/:itemId` |
 | `GET /api/v1/knowledge/solutions` | `/solutions` |
 | `GET /api/v1/knowledge/tasks` | `/library`, `/library/:itemId`, `/library/:itemId/:view` |
 | `GET /api/v1/knowledge/uploads/options` | `/library` |
 | `GET /api/v1/knowledge/uploads/queued/{ticket}` | **no screen** |
 | `GET /api/v1/records/{entity}` | `/records/:entity` |
 | `GET /api/v1/records/{entity}/access` | **no screen** |
+| `GET /api/v1/resolution/review` | `/duplicates` |
+| `GET /api/v1/resolution/review/{item_id}` | **no screen** |
+| `GET /api/v1/resolution/weights` | `/duplicates` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
-| `POST /api/v1/govern/learning/undo` | `/learning`, `/learning/:view` |
+| `POST /api/v1/govern/learning/undo` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/learning`, `/learning/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library/:itemId`, `/library/:itemId/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/steward` | `/library/:itemId`, `/library/:itemId/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/verification` | `/library/:itemId`, `/library/:itemId/:view` |
@@ -37,8 +42,14 @@
 | `POST /api/v1/knowledge/uploads` | `/library` |
 | `POST /api/v1/knowledge/uploads/queued` | `/library` |
 | `POST /api/v1/knowledge/verifications` | `/library` |
+| `POST /api/v1/me/memory/edit` | `/me` |
+| `POST /api/v1/me/memory/forget` | `/me` |
+| `POST /api/v1/resolution/review/{item_id}/decision` | `/duplicates` |
+| `POST /api/v1/resolution/weights/promote` | `/duplicates` |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
+| `PUT /api/v1/govern/learning/settings/{name}` | `/learning`, `/learning/:view`, `/limits` |
+| `PUT /api/v1/knowledge/items/{item_id}/public` | `/library/:itemId`, `/library/:itemId/:view` |
 
 - **Gap.** Which scanner checks an uploaded file, the structural check or ClamAV added to it, is an installation value and not a control; the Knowledge page says which one checks a file. Recorded: Whether a server can hold an antivirus's signature database is the owner's capacity decision, so brain.knowledge.scanners ships the structural check and reads INSTALL_KNOWLEDGE_SCANNER at every scan, which tests/unit/test_scanners.py holds.
 - **Gap.** A data source cannot be added from the console after setup; a document can, on the Knowledge page. Open leaf `M42.5.9`.
@@ -54,7 +65,7 @@
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review of a mark is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_a_mark_review_stores_nothing` in `tests/unit/test_classified_tables.py` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_the_only_writes_mounted_here_are_the_upload_and_the_mark` in `tests/unit/test_classification_routes.py` |
-| `POST /api/v1/govern/learning/undo` | `/learning`, `/learning/:view` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
+| `POST /api/v1/govern/learning/undo` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/learning`, `/learning/:view` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
 | `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library/:itemId`, `/library/:itemId/:view` | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
 | `POST /api/v1/knowledge/items/{item_id}/steward` | `/library/:itemId`, `/library/:itemId/:view` | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
 | `POST /api/v1/knowledge/items/{item_id}/verification` | `/library/:itemId`, `/library/:itemId/:view` | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
@@ -66,5 +77,11 @@
 | `POST /api/v1/knowledge/uploads` | `/library` | `test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_a_markdown_file_is_added_to_a_department_as_its_uploader` in `tests/unit/test_knowledge_routes.py` |
 | `POST /api/v1/knowledge/uploads/queued` | `/library` | `test_a_queued_file_is_read_by_the_worker_job_and_found_by_its_department` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_a_queued_files_ledger_entry_names_its_uploader_their_reach_and_its_trace` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_a_queued_file_is_kept_ticketed_and_queued_and_never_parsed_in_the_request` in `tests/unit/test_knowledge_intake_routes.py` |
 | `POST /api/v1/knowledge/verifications` | `/library` | `test_several_documents_are_verified_as_several_single_verifications` in `tests/unit/test_knowledge_documents_db.py` (database, in CI) | `test_several_documents_are_verified_as_several_single_verifications` in `tests/unit/test_knowledge_documents_db.py` (database, in CI) | `test_several_documents_are_verified_as_several_single_verifications` in `tests/unit/test_knowledge_documents_db.py` (database, in CI) |
+| `POST /api/v1/me/memory/edit` | `/me` | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_edits_a_memory_and_the_replacement_changes_the_words_and_nothing_else` in `tests/unit/test_mine_routes.py` |
+| `POST /api/v1/me/memory/forget` | `/me` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_forgets_a_memory_formed_from_their_own_words` in `tests/unit/test_mine_routes.py` |
+| `POST /api/v1/resolution/review/{item_id}/decision` | `/duplicates` | `test_a_reviewed_merge_moves_one_pointer_and_records_who_when_and_on_what` in `tests/unit/test_merge_store.py` (database, in CI) | `test_a_reviewed_merge_moves_one_pointer_and_records_who_when_and_on_what` in `tests/unit/test_merge_store.py` (database, in CI) | `test_on_a_real_database_the_review_check_passes_and_nothing_is_left_behind` in `tests/unit/test_acceptance_review.py` (database, in CI) |
+| `POST /api/v1/resolution/weights/promote` | `/duplicates` | `test_a_run_keeps_a_fit_nobody_scores_with_until_a_reviewer_promotes_it` in `tests/unit/test_calibration_store.py` (database, in CI) | `test_a_run_keeps_a_fit_nobody_scores_with_until_a_reviewer_promotes_it` in `tests/unit/test_calibration_store.py` (database, in CI) | `test_on_a_real_database_the_calibration_check_passes_and_nothing_is_left_behind` in `tests/unit/test_acceptance_calibration.py` (database, in CI) |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_applying_a_mark_stores_it_and_moves_the_epoch_when_a_derivation_changes` in `tests/unit/test_classified_tables.py` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_an_administrator_uploads_a_price_list_and_is_answered_its_classification` in `tests/unit/test_classified_tables.py` |
+| `PUT /api/v1/govern/learning/settings/{name}` | `/learning`, `/learning/:view`, `/limits` | `test_saving_a_half_life_writes_its_row_as_the_person_and_the_next_recall_decays_at_it` in `tests/unit/test_learning_settings.py` | `test_on_a_real_database_every_learning_check_passes_and_leaves_nothing_behind` in `tests/unit/test_acceptance_learning.py` (database, in CI) | `test_a_held_half_life_is_the_rate_every_recall_decays_an_inference_at` in `tests/unit/test_learning_settings.py` |
+| `PUT /api/v1/knowledge/items/{item_id}/public` | `/library/:itemId`, `/library/:itemId/:view` | `test_a_department_admin_marks_their_own_document_and_the_ledger_names_them` in `tests/unit/test_public_knowledge_db.py` (database, in CI) | `test_a_department_admin_marks_their_own_document_and_the_ledger_names_them` in `tests/unit/test_public_knowledge_db.py` (database, in CI) | `test_another_departments_admin_is_told_they_decide_for_their_own_only` in `tests/unit/test_public_knowledge_db.py` (database, in CI) |

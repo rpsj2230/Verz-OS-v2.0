@@ -183,6 +183,9 @@
     "M1.6.16",
     "M1.6.17",
     "M1.6.18",
+    "M1.6.19",
+    "M1.6.20",
+    "M1.6.21",
     "M1.7.1",
     "M1.8.1",
     "M1.8.2",
@@ -193,7 +196,12 @@
     "M1.8.7",
     "M1.8.8",
     "M1.8.9",
-    "M1.9.1"
+    "M1.9.1",
+    "M1.10.1",
+    "M1.10.2",
+    "M1.10.3",
+    "M1.10.4",
+    "M1.10.5"
    ],
    "leaf_texts": [
     "Realm setup script and exported realm config in the repo",
@@ -244,6 +252,9 @@
     "The staff sync gives each active person of an employment type the install allows a sign-in account, found by the source's identifier or work address before one is made and bound to their Brain person, and sends nobody anything: a person sets their password with Forgot password",
     "An account the sync made is closed on the next sync when its person leaves, is suspended or is of a type no longer allowed, which disables their Brain person and ends their sessions; an account a person made is linked and never closed",
     "Proved on the install: the staff sync makes an account for a reserved person with no email sent, Forgot password sets their password and then their second factor, and a reserved leaver's account is closed on the next sync",
+    "Departments come from the staff source or are managed on People, chosen on Settings; managed on People, the staff sync gives nobody a department, moves nobody, places nobody in a team or as a lead and offers no department to found, and a Starter pack follows the department People set",
+    "People moves several people to one department at once where departments are managed there, confirmed with everybody named, all of them or none, with the mover's authority over where each sits and where they go, and each move on the ledger under the mover",
+    "Proved on the install: with departments managed on People, reserved people moved together are in their new department, each move is on the ledger under the mover, and the next sync leaves them where they were put",
     "Every capability a served route or console screen requires is in the capability registry an install is furnished with and can be granted from the console, and a sweep fails the build when one is not",
     "A person marked as external cannot be saved without an end date, and on that date every grant, session and channel binding they hold stops working",
     "A service account or API key acts at its named owner's live reach narrowed by its own declared limit, holds no grant of its own, and stops working the moment its owner loses that reach or leaves",
@@ -254,7 +265,12 @@
     "Appointing one person as both Super Admin and Connector Admin shows a separation-of-duties warning that must be acknowledged with a reason, and the acknowledgement is recorded in the audit trail",
     "Every permissions requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
     "When the staff sync marks a person as a leaver, every agent they own is stopped and listed for transfer on the console until a new owner accepts it, which starts it again at no wider reach than before and records the change of owner in the audit ledger (owner decision 2026-09-21: stop rather than keep running)",
-    "A record's access view, showing who can see that record, opens only for someone who can already see it"
+    "A record's access view, showing who can see that record, opens only for someone who can already see it",
+    "Every active person on the staff list is a Brain person the console lists, places and grants before their first sign-in, made by the staff sync without the sign-in service and found by their work address's digest, so a later sign-in binds to that person and never makes a second one",
+    "Sync now on Staff sources runs the staff sync at once for somebody who may connect a source, one run at a time and recorded like a scheduled run, and the page says when the last and next scheduled runs are and what the run did",
+    "Proved on the install: after a staff sync, every active person on the staff list is on People, and Sync now fills People without waiting for the scheduled run",
+    "A person made by hand is given their work email on their People page by somebody who may grant them, and the staff list's person for the same address is joined into them: automatically when that person has never signed in and holds nothing the sync did not write, after a confirmation otherwise, never when they sign in with their own account, and never by a matching name",
+    "Proved on the install: the first administrator adds their work email on their own People page and the person the staff list made for it is no longer listed"
    ],
    "leaf_waves": {
     "M1.1.8": 3,
@@ -296,6 +312,16 @@
      "why": "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
      "updated": "2026-09-30"
     },
+    "M1.6.19": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/departments-from): Settings, under Staff, chooses where departments come from; managed on People the staff sync places and moves nobody; proved on the install with M1.6.21",
+     "updated": "2026-09-30"
+    },
+    "M1.6.20": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/departments-from): People moves several people to a department at once, each move on the ledger under the mover (migration 0170); proved on the install with M1.6.21",
+     "updated": "2026-09-30"
+    },
     "M1.8.3": {
      "status": "READY FOR TESTING",
      "why": "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",
@@ -310,6 +336,21 @@
      "status": "OPEN",
      "why": "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install",
      "updated": "2026-09-29"
+    },
+    "M1.10.1": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3",
+     "updated": "2026-09-30"
+    },
+    "M1.10.2": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/staff-are-people): Sync now on Staff sources asks the worker for the scheduled staff sync and the page says when it last and next runs; proved on the install with M1.10.3",
+     "updated": "2026-09-30"
+    },
+    "M1.10.4": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/add-work-email): Add work email on a hand-made person's page binds their address and joins the staff list's person for it; proved on the install with M1.10.5",
+     "updated": "2026-09-30"
     }
    }
   },
@@ -957,9 +998,9 @@
      "updated": "2026-09-28"
     },
     "M7.7.2": {
-     "status": "IN PROGRESS",
-     "why": "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
-     "updated": "2026-09-28"
+     "status": "READY FOR TESTING",
+     "why": "a steward for every document, source and agent, and the self-grant notice on Access requests (migration 0167): proved when the install check a_steward_is_named_and_told_of_access_somebody_gave_themselves passes after deploy",
+     "updated": "2026-09-30"
     },
     "M7.7.3": {
      "status": "IN PROGRESS",
@@ -1074,6 +1115,26 @@
      "status": "IN PROGRESS",
      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
      "updated": "2026-09-28"
+    },
+    "M8.3.1": {
+     "status": "READY FOR TESTING",
+     "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+     "updated": "2026-09-30"
+    },
+    "M8.3.2": {
+     "status": "READY FOR TESTING",
+     "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+     "updated": "2026-09-30"
+    },
+    "M8.3.4": {
+     "status": "READY FOR TESTING",
+     "why": "escalation (migration 0168): proved when the install check an_escalated_question_reaches_its_person_and_times_out passes after deploy",
+     "updated": "2026-09-30"
+    },
+    "M8.4.1": {
+     "status": "READY FOR TESTING",
+     "why": "escalation and sensitive topics (migration 0168): proved when both install checks in brain.ops.acceptance_escalation pass after deploy, and on a real channel once a queue's person is named on the Compliance screen",
+     "updated": "2026-09-30"
     }
    }
   },
@@ -1132,10 +1193,12 @@
     "M10.2.4",
     "M10.2.5",
     "M10.2.6",
+    "M10.2.7",
     "M10.3.1",
     "M10.3.2",
     "M10.3.3",
     "M10.3.4",
+    "M10.3.5",
     "M10.4.1",
     "M10.4.2",
     "M10.4.3",
@@ -1169,10 +1232,12 @@
     "Card patching within the rate limit, with a text fallback",
     "Ephemeral messages for per-viewer bodies",
     "Group and direct-message handling",
+    "An approval card is sent to each person who may decide it and is bound in Lark with an address kept, in their own chat with the bot, the moment the approval is raised, and nothing is sent for a binding with no address",
     "Outward-only binding: nonce minted in an authenticated web session",
     "Binding expiry and single use",
     "Unbound identity behaviour",
     "Unbinding and rebinding on device change",
+    "A linked person's Lark address is kept on their binding beside its fingerprint as personal data: kept when they bind or next write to the bot, cleared when the binding is retired and by an erasure, and never shown on a screen, logged or put in a URL",
     "Room envelope computed at the floor of everyone present",
     "Per-viewer body via the channel's ephemeral mechanism",
     "Degradation ladder ending at a web link where the gate re-runs",
@@ -1306,14 +1371,24 @@
      "why": "Teams is connectable (M10/channel-teams): Bot Framework tokens verified against Microsoft's published keys, the bot's App ID and the pinned tenant, answers in the chat on a token exchanged at the tenant's login, Connect Teams from an Azure Bot, and an install check; the owner's tenant proves the vendor's half",
      "updated": "2026-09-30"
     },
+    "M10.5.3": {
+     "status": "READY FOR TESTING",
+     "why": "WhatsApp is connectable (M10/channel-whatsapp): Meta's signature checked over the exact bytes, its GET check of the address answered for the verify token, a notification of several messages answered message by message, answers on a system user's access token, and an install check; the owner's number proves the vendor's half",
+     "updated": "2026-09-30"
+    },
+    "M10.5.4": {
+     "status": "READY FOR TESTING",
+     "why": "Telegram is connectable (M10/channel-telegram): saving the bot's username and token registers this install's events address with Telegram, updates carry a header made from the token, answers go out with sendMessage, and an install check; the owner's bot proves the vendor's half",
+     "updated": "2026-09-30"
+    },
     "M10.5.6": {
      "status": "READY FOR TESTING",
      "why": "email is connectable (#285) by reading an ordinary mailbox over IMAP, the first choice (#296), or by Cloudflare Email Routing; answers leave by the install's relay; install checks for both; the owner's real mail proves the vendor's half",
      "updated": "2026-09-30"
     },
     "M10.6.1": {
-     "status": "IN PROGRESS",
-     "why": "the webhook, Lark, email, Slack and Teams wires are live (PR #105; L1, merged d426e3d3; #285; #288; M10/channel-teams); Telegram and WhatsApp each come with their own package",
+     "status": "READY FOR TESTING",
+     "why": "all seven wires are live: webhook, Lark, email (a mailbox or Cloudflare), Slack, Teams, Telegram and WhatsApp (PR #105; L1, merged d426e3d3; #285; #296; #288; M10/channel-teams; M10/channel-telegram; M10/channel-whatsapp), each with its Connect steps and an install check",
      "updated": "2026-09-30"
     },
     "M10.6.3": {
@@ -1401,7 +1476,8 @@
     "M11.9.11",
     "M11.9.12",
     "M11.9.13",
-    "M11.9.14"
+    "M11.9.14",
+    "M11.9.15"
    ],
    "leaf_texts": [
     "Connector interface: capabilities, tools, health, credential binding",
@@ -1477,7 +1553,8 @@
     "Cloudflare, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
     "Google Workspace, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
     "Google Analytics, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
-    "Search Console, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it"
+    "Search Console, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "A connector pass cut short at its page or folder bound records where it stopped in the source's sync state, and the next pass starts from there rather than from the top, so a Drive tree or any source larger than one pass is read whole over several passes"
    ],
    "leaf_waves": {
     "M11.8.8": 3,
@@ -4031,6 +4108,7 @@
     "M32.1.2.3",
     "M32.1.2.4",
     "M32.1.2.5",
+    "M32.1.2.6",
     "M32.2.1.1",
     "M32.2.1.2",
     "M32.2.1.3",
@@ -4080,6 +4158,7 @@
     "Environment vocabulary fixed at first ingest and asserted against the database enum",
     "Separate Keycloak role for payload access",
     "Audit row written before every payload read",
+    "Every run's masked trace, model calls as generations, reaches the trace ledger the install switched on in INSTALL_SERVICES, and none is sent when it is off",
     "Presidio analyzer configured with the recognisers we need",
     "GLiNER for entities the default recognisers miss",
     "Singapore recognisers: NRIC, FIN, UEN, local phone formats",

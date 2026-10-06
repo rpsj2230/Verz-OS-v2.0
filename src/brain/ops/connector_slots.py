@@ -13,6 +13,12 @@ issues one. `OpenBaoVault.static_kv_defined` tells a defined slot from one that 
 `static_kv_version` tells an empty one from a filled one, so the Secrets vault screen can say
 "defined, empty" rather than one word for three states. See `A_SLOT_IS_DEFINED_BEFORE_IT_IS_FILLED`.
 
+**Each connector declares its own scopes (`ConnectorDeclaration.scopes`, and a write grant's on
+the grant), and the catalogue is read off the declarations (M11.1.6).** Until 2026-10-05 it was a
+table typed here, which every connector PR appended to; now a connector's scopes are argued in its
+own module, beside the hint that tells a person to ask for them, and only the staff list's slot,
+which no connector declares, is written here.
+
 **Every source has a row, connectable or not.** A source the console cannot connect today still has
 a connector in this build, and its scopes are cheapest to argue before the day it becomes
 connectable. `slot_gaps` holds the catalogue to `brain.ops.connectable`'s two lists in both
@@ -24,12 +30,16 @@ slot is defined here beside the connected sources' with scopes that cover every 
 service account named outright because it is the one kind whose account is a person-shaped login
 an administrator creates by hand. A slot per kind would be three slots nothing reads.
 
+**A write grant has a slot of its own, beside the read key's (M11.7.3).** Cloudflare's approved DNS
+changes are sent with a key that can edit DNS, kept at `connector_keys/cloudflare_dns_changes` and
+defined here like every other slot, so the read key's slot never has to hold a write permission.
+
 **The words go into a shell command, so their alphabet is closed.** `SAFE_SCOPE` admits letters,
 digits, spaces and `._:*,-`, and no quote, so the installer can single-quote a value without
 escaping anything. A scope that needs another character is a reason to change this constant and
 the installer's quoting together, deliberately.
 
-Task ids: M38.4.1.3, M1.6.6
+Task ids: M38.4.1.3, M1.6.6, M11.7.3, M11.1.6
 """
 
 from __future__ import annotations
@@ -40,8 +50,10 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
+from brain.connectors.declaration import CredentialShape, shipped
 from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE
-from brain.ops.credentials import connector_key_slot
+from brain.ops.credentials import connector_key_slot, connector_write_slot
+from brain.ops.openbao import CONNECTOR_KEY_PREFIX
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -89,59 +101,44 @@ class SlotScopes:
         return connector_key_slot(self.connector).path
 
 
-#: Every source's slot, by the source's name. The scopes are `credential-slots.md`'s, moved here.
+def write_slot_name(connector: str, grant: str) -> str:
+    """The catalogue's name for a write grant's slot, which is its path's last segment."""
+    return connector_write_slot(connector, grant).path.removeprefix(CONNECTOR_KEY_PREFIX)
+
+
+#: The staff list's slot, which no connector declares: see the module docstring.
+STAFF_LIST_SLOT: Final = SlotScopes(
+    STAFF_LIST,
+    request=(
+        "read on the staff directory only",
+        "for LDAP a service account that may bind and search and nothing more",
+    ),
+    refuse=(
+        "any write",
+        "for LDAP an administrator or an account that may reset passwords or groups",
+    ),
+)
+
+
+def _declared() -> dict[str, SlotScopes]:
+    """Every slot a shipped connector declares: its read key's, and each write grant's."""
+    found: dict[str, SlotScopes] = {}
+    for name, one in shipped().items():
+        if one.scopes is not None:
+            found[name] = SlotScopes(name, request=one.scopes.request, refuse=one.scopes.refuse)
+        for grant in one.writes:
+            if grant.scopes is not None:
+                slot = write_slot_name(name, grant.name)
+                found[slot] = SlotScopes(
+                    slot, request=grant.scopes.request, refuse=grant.scopes.refuse
+                )
+    return found
+
+
+#: Every source's slot, by the source's name: each connector's own `scopes` and its write grants',
+#: and the staff list's.
 SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
-    {
-        one.connector: one
-        for one in (
-            SlotScopes(
-                "freshdesk",
-                request=("an agent API key with read access",),
-                refuse=("an admin key, which can change SLAs and delete tickets",),
-            ),
-            SlotScopes(
-                "google_drive",
-                request=("Viewer on the one folder shared with it",),
-                refuse=("domain-wide delegation",),
-            ),
-            SlotScopes(
-                "hubspot",
-                request=("crm.objects.contacts.read", "crm.objects.deals.read"),
-                refuse=("crm.objects.*.write", "anything touching settings"),
-            ),
-            SlotScopes(
-                "laravel",
-                request=("SELECT on the allowlisted views only",),
-                refuse=("SELECT on tables", "any write"),
-            ),
-            SlotScopes(
-                "lark_base",
-                request=("bitable:app:readonly", "base:record:read"),
-                refuse=("base:record:write", "drive:drive"),
-            ),
-            SlotScopes(
-                "lark_wiki",
-                request=("wiki:wiki:readonly",),
-                refuse=("docs:document edit scopes",),
-            ),
-            SlotScopes(
-                STAFF_LIST,
-                request=(
-                    "read on the staff directory only",
-                    "for LDAP a service account that may bind and search and nothing more",
-                ),
-                refuse=(
-                    "any write",
-                    "for LDAP an administrator or an account that may reset passwords or groups",
-                ),
-            ),
-            SlotScopes(
-                "xero",
-                request=("accounting.transactions.read", "accounting.contacts.read"),
-                refuse=("any .write scope",),
-            ),
-        )
-    }
+    dict(sorted({STAFF_LIST: STAFF_LIST_SLOT, **_declared()}.items()))
 )
 
 
@@ -151,7 +148,16 @@ def slot_gaps() -> tuple[str, ...]:
     A source with no slot, a slot for no source, and a connectable source whose hint does not name
     a scope its slot asks for, each as a sentence. Empty is the only acceptable answer.
     """
-    known = set(CONNECTABLE) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST}
+    # A source that takes no key has no slot to define (M11.7.4): its records are published.
+    keyless = {
+        name for name, kind in CONNECTABLE.items() if kind.credential_shape is CredentialShape.NONE
+    }
+    writes = {
+        write_slot_name(name, grant.name): grant
+        for name, kind in CONNECTABLE.items()
+        for grant in kind.writes
+    }
+    known = (set(CONNECTABLE) - keyless) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST} | set(writes)
     found = [
         f"{name} has a connector and no credential slot"
         for name in sorted(known - set(SLOT_SCOPES))
@@ -168,6 +174,15 @@ def slot_gaps() -> tuple[str, ...]:
             f"{name}'s hint does not ask for {scope}"
             for scope in slot.request
             if scope not in kind.credential_hint
+        ]
+    for name, grant in sorted(writes.items()):
+        slot = SLOT_SCOPES.get(name)
+        if slot is None:
+            continue
+        found += [
+            f"{name}'s hint does not ask for {scope}"
+            for scope in slot.request
+            if scope not in grant.credential_hint
         ]
     return tuple(found)
 

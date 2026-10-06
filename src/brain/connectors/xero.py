@@ -139,12 +139,15 @@ from __future__ import annotations
 
 import enum
 import re
+import secrets
+import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.connectors.ask import AskEntity, AskRows, of_entity
 from brain.connectors.contract import (
     AccessMode,
     ConnectorContractError,
@@ -158,9 +161,11 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import (
+    ConnectExample,
     ConnectorDeclaration,
     ConsoleForm,
     KeyScheme,
+    KeyScopes,
     PageReply,
     Recorded,
     Setting,
@@ -176,6 +181,7 @@ from brain.connectors.manifest import (
     ToolDeclaration,
 )
 from brain.connectors.projection import ProjectedRecord, ProjectedValue, RefreshPromise
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import ID_TARGET, RestOperation, RestSpec, load_spec
 from brain.connectors.throttle import CallOutcome, ceiling_for, classify, retry_delay
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord
@@ -188,6 +194,7 @@ from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import ConnectorLimit, LimitDecision
 from brain.ops.secrets import SecretRef
+from brain.resolution.canonical import EntityType
 from brain.tools.fetch import Fetcher, Resolver
 
 # ------------------------------------------------------------------ written-down reasons
@@ -1595,7 +1602,24 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="xero",
+    per_minute=60,
+    per_day=5_000,
+    raisable=False,
+    note=(
+        "5,000 calls a day per tenant, shared with every other integration the client "
+        "runs, so our own share is smaller than the number suggests. The ceiling is on "
+        "the client's tenant rather than on our subscription, so there is no plan we "
+        "can buy that moves it. This is the ceiling a backfill reaches first."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CONNECTOR_NAME,
     label="Xero",
     guide=GUIDE,
@@ -1622,6 +1646,12 @@ CONNECTOR: Final = ConnectorDeclaration(
             "one. Paste it as one piece. It is kept in the vault and never shown again."
         ),
         build=built_from_the_console,
+        example=ConnectExample(
+            settings={"tenant_id": "11111111-2222-3333-4444-555555555555"},
+            fresh=lambda _: {"tenant_id": str(uuid.uuid4())},
+            edit="tenant_id",
+            edited=lambda: "22222222-3333-4444-5555-" + secrets.token_hex(6),
+        ),
     ),
     read_back=ReadBack(
         reading=classified_reading,
@@ -1637,4 +1667,39 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=XeroReading(),
     live=XeroLiveLookup(),
+    # Compiled from `XERO_FIELD_RULES`, so the capability a person needs to be told an invoice's
+    # amount is the one this connector's own policy names.
+    ask=AskRows(
+        scoped_by="tenant_id",
+        entities=(
+            AskEntity(
+                entity=ENTITY_INVOICE,
+                fields=of_entity(XERO_FIELD_RULES, ENTITY_INVOICE),
+                description=(
+                    "Look up Xero invoices by number: status, due date and the contact, and the "
+                    "amount due read live from Xero for a reader allowed it"
+                ),
+                named_by="invoice_number",
+            ),
+            AskEntity(
+                entity=ENTITY_CONTACT,
+                fields=of_entity(XERO_FIELD_RULES, ENTITY_CONTACT),
+                description="Look up Xero contacts by name: status and when they last changed",
+                named_by="name",
+            ),
+        ),
+    ),
+    scopes=KeyScopes(
+        request=("accounting.transactions.read", "accounting.contacts.read"),
+        refuse=("any .write scope",),
+    ),
+    resolves=(
+        # An accounting contact is the client billed, and it carries the invoices.
+        ResolvesAs(
+            entity=ENTITY_CONTACT,
+            entity_type=EntityType.COMPANY,
+            fields={"name": "name"},
+            carries_money=True,
+        ),
+    ),
 )

@@ -1,0 +1,55 @@
+# The trace ledger started beside an application it is not composed with.
+#
+# `docker-compose.langfuse.yml` is written to be merged into the application's own project, where
+# `db` is a service on the same default network. Started by the deploy step as a project of its
+# own (brain.ops.overlays), it is not, so this file joins the ledger's web and worker to the
+# network the application's database is on, which the step names in BRAIN_APP_NETWORK, and to
+# nothing else. ClickHouse, the cache and the file store stay on the ledger's own network.
+#
+# It also makes the one bucket the ledger writes its event payloads to,
+# `LANGFUSE_S3_EVENT_UPLOAD_BUCKET` in that file. The object store's own provisioning makes the
+# product's buckets and not this one, so this is a one-shot of its own, costed nowhere because it
+# exits, with a limit like every container on a shared host.
+#
+# Task ids: M32.1.1.1, M32.1.2.6
+
+services:
+  langfuse-web:
+    networks:
+      - default
+      - brain-app
+    # The ledger's own first start creates its organisation and project, with the project keys the
+    # release minted on the server, so nobody signs in to its console to make a key before spans
+    # can arrive (brain.ops.ledger_export). The identifiers are the product's, the same on every
+    # install; the keys are this server's.
+    environment:
+      LANGFUSE_INIT_ORG_ID: brain
+      LANGFUSE_INIT_ORG_NAME: Brain
+      LANGFUSE_INIT_PROJECT_ID: brain
+      LANGFUSE_INIT_PROJECT_NAME: Brain
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?minted by the release}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?minted by the release}
+  langfuse-worker:
+    networks:
+      - default
+      - brain-app
+  langfuse-events-bucket:
+    image: chrislusf/seaweedfs:3.80
+    restart: "no"
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        echo 's3.bucket.create -name langfuse-events' | weed shell -master seaweedfs:9333
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+networks:
+  brain-app:
+    external: true
+    name: ${BRAIN_APP_NETWORK:?the deploy step names the network the database of the application is on}

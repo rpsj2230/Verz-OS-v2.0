@@ -40,7 +40,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 
 import structlog
@@ -143,6 +143,28 @@ def employment_of(person: StaffRecord) -> Employment:
     return Employment.CONTRACTOR if person.employment_type in CONTRACTED else Employment.STAFF
 
 
+#: How long a contracted person the list brings in is engaged for, counted from the last run that
+#: still listed them. See `A_CONTRACTOR_ON_THE_LIST_STAYS_ENGAGED_WHILE_LISTED`.
+CONTRACTED_ENGAGEMENT_LASTS: Final = timedelta(days=90)
+
+#: Why a contracted person has an end date the source did not give, and why it keeps moving.
+A_CONTRACTOR_ON_THE_LIST_STAYS_ENGAGED_WHILE_LISTED: Final = (
+    "auth.principal refuses a contractor with no end date (bounded_engagement_expires), because "
+    "an unbounded contractor is how a permission model rots, and no staff source says when a "
+    "contract ends. So a contracted person the sync makes is engaged for "
+    "CONTRACTED_ENGAGEMENT_LASTS, and every run that still lists them active moves that end on "
+    "by the same span, never back: it lapses only once the list has stopped naming them for that "
+    "long. A date an administrator set later than that is left as it is."
+)
+
+
+def engaged_until(person: StaffRecord, now: datetime) -> datetime | None:
+    """The end date a person the sync makes starts with: a span from now for a contractor."""
+    if employment_of(person) is Employment.CONTRACTOR:
+        return now + CONTRACTED_ENGAGEMENT_LASTS
+    return None
+
+
 async def _bound(session: AsyncSession, channel: Channel, digest: str) -> str | None:
     found = (
         await session.execute(
@@ -165,11 +187,15 @@ async def person_for(
     actor: str,
     now: datetime,
     trace_id: str,
+    place: bool = True,
 ) -> str:
     """The Brain person behind this account, made and bound if there is none. Returns their id.
 
     Found by the account's sign-in link first, then by the address's email binding; made only when
     neither exists. The sign-in link is written by `SignInBindings.bind`, the screen's own write.
+    A person made is placed in the department the list names when `place`, and in none when
+    departments are managed on People
+    (`brain.identity.departments_from.UNDER_THE_CONSOLE_THE_SYNC_MOVES_NOBODY`).
     """
     email_digest = digest_of(person.work_address)
     async with sessions() as session, session.begin():
@@ -189,10 +215,13 @@ async def person_for(
                     id=principal_id,
                     kind="human",
                     employment=employment_of(person).value,
+                    not_after=engaged_until(person, now),
                     display_name=person.display_name,
                     primary_department=registered_by_name(departments).get(
                         department_key(person.department)
-                    ),
+                    )
+                    if place
+                    else None,
                 )
             )
         if mailbox is None:
@@ -243,6 +272,7 @@ async def provide_accounts(
     absent_is_gone: bool,
     trial: bool = False,
     keep_open: frozenset[str] = frozenset(),
+    place: bool = True,
 ) -> AccountRun:
     """Plan the accounts this roster supports and carry the plan out, unless this is a trial.
 
@@ -308,6 +338,7 @@ async def provide_accounts(
                 actor=actor,
                 now=now,
                 trace_id=trace_id,
+                place=place,
             )
         for linked in plan.to_link:
             if linked.needs_marking:
@@ -327,6 +358,7 @@ async def provide_accounts(
                 actor=actor,
                 now=now,
                 trace_id=trace_id,
+                place=place,
             )
         for account in plan.to_enable:
             await reopen(fetch, realm, bearer, account)

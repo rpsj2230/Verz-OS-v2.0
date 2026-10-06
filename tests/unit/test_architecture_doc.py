@@ -28,69 +28,55 @@ from brain.docs_routes import _needs_count
 
 ARCHITECTURE = Path(__file__).resolve().parents[2] / "docs" / "architecture.html"
 
-#: Words for the small numbers this sentence can plausibly carry. A count is written out in
-#: prose here rather than as a digit, so the test has to know both forms.
-#: The count is written as a word in the document, so this is how the two are compared.
-#:
-#: It stopped at ten, and the eleventh open question turned the comparison into a `KeyError`
-#: rather than a readable failure. A table that runs out is a check that stops working at a
-#: number nobody chose, and the failure it produces names the table rather than the drift.
-WORDS = {
-    0: "none",
-    1: "one",
-    2: "two",
-    3: "three",
-    4: "four",
-    5: "five",
-    6: "six",
-    7: "seven",
-    8: "eight",
-    9: "nine",
-    10: "ten",
-    11: "eleven",
-    12: "twelve",
-    13: "thirteen",
-    14: "fourteen",
-    15: "fifteen",
-    16: "sixteen",
-    17: "seventeen",
-    18: "eighteen",
-    19: "nineteen",
-    20: "twenty",
-}
+#: A count is written out in prose in the document rather than as a digit, so the test has to
+#: know both forms. It was a table, and the table ran out three times: at ten, at twenty (the
+#: twenty-first open question, 2026-10-05) and at thirty (the thirty-first, 2026-10-06), each time
+#: turning the comparison into a `KeyError` that named the table rather than the drift. A table
+#: that runs out is a check that stops working at a number nobody chose, so the words are now
+#: worked out for any count instead. Nought is written as `ZERO_WORD`, as the document says it.
+ZERO_WORD = "none"
+
+_UNITS = (
+    "",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+)
+_TENS = ("", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety")
 
 
-#: Words for a screen count, which is a larger number than an open-question count and is
-#: written out in prose in the same way. Separate from `WORDS` rather than merged into it,
-#: because the two sentences are about different things and a shared table would make a
-#: change to one look like a change to the other.
-#:
-#: It stops where the console plausibly stops. A fortieth screen fails with a `KeyError`
-#: naming this table, which is the failure `WORDS` already records: a table that runs out is
-#: a check that stops working at a number nobody chose.
-WORDS_LARGE = {
-    **WORDS,
-    21: "twenty-one",
-    22: "twenty-two",
-    23: "twenty-three",
-    24: "twenty-four",
-    25: "twenty-five",
-    26: "twenty-six",
-    27: "twenty-seven",
-    28: "twenty-eight",
-    29: "twenty-nine",
-    30: "thirty",
-    31: "thirty-one",
-    32: "thirty-two",
-    33: "thirty-three",
-    34: "thirty-four",
-    35: "thirty-five",
-    36: "thirty-six",
-    37: "thirty-seven",
-    38: "thirty-eight",
-    39: "thirty-nine",
-    40: "forty",
-}
+def in_words(n: int) -> str:
+    """A count from 0 to 999 as the document writes it: "none", "seven", "thirty-one"."""
+    if n == 0:
+        return ZERO_WORD
+    if not 0 < n < 1000:
+        raise ValueError(f"{n} is outside the counts this document writes in words")
+    hundreds, rest = divmod(n, 100)
+    if rest < 20:
+        tail = _UNITS[rest]
+    else:
+        tens, units = divmod(rest, 10)
+        tail = _TENS[tens] + (f"-{_UNITS[units]}" if units else "")
+    if not hundreds:
+        return tail
+    head = f"{_UNITS[hundreds]} hundred"
+    return f"{head} and {tail}" if tail else head
 
 
 def _stated_open_questions() -> str:
@@ -114,7 +100,7 @@ def test_the_architecture_agrees_with_the_tracker_about_how_many_questions_are_o
     again, silently, and the person who reads it is the client."""
     actual = _needs_count()
 
-    assert _stated_open_questions() == WORDS[actual], (
+    assert _stated_open_questions() == in_words(actual), (
         f"the architecture says {_stated_open_questions()!r} open questions and there are {actual}"
     )
 
@@ -236,7 +222,7 @@ def test_the_architecture_agrees_with_the_console_about_how_many_screens_there_a
     the person who reads it is the client."""
     from brain.console.screens import SCREEN_COUNT
 
-    assert _stated_screen_count() == WORDS_LARGE[SCREEN_COUNT], (
+    assert _stated_screen_count() == in_words(SCREEN_COUNT), (
         f"the architecture says {_stated_screen_count()!r} screens and there are {SCREEN_COUNT}"
     )
 
@@ -280,7 +266,7 @@ def test_the_architecture_agrees_with_the_workspace_about_what_an_agent_is_made_
     system builds."""
     from brain.console.workspace import Part
 
-    assert _stated_part_count() == WORDS_LARGE[len(Part)], (
+    assert _stated_part_count() == in_words(len(Part)), (
         f"the architecture says an agent composes {_stated_part_count()!r} things and "
         f"`Part` names {len(Part)}"
     )
@@ -338,24 +324,52 @@ def test_the_architecture_agrees_with_the_register_about_how_much_is_unwired() -
     Delete this and the document goes on describing a state the code has left."""
     from brain.ops.controls import orphans
 
-    assert (
-        _stated("data-unwired-controls", "how many controls nothing calls") == WORDS[len(orphans())]
+    assert _stated("data-unwired-controls", "how many controls nothing calls") == in_words(
+        len(orphans())
     )
 
 
 def test_the_architecture_agrees_with_the_registry_about_how_many_tools_exist() -> None:
-    """The second number, and the one that will move first. Thirty-four console screens each
-    name the tool that answers them, and the registry holds what it holds. Read through
-    the same private helper `sweep_tool_registry` uses, in the way this file already reads
-    `docs_routes._needs_count`, so the document and the sweep cannot disagree.
+    """The second number, and the one that moves first. The console's screens each name the tool
+    that answers them, and the registry holds what it holds. Read through the same private helper
+    `sweep_tool_registry` uses, in the way this file already reads `docs_routes._needs_count`, so
+    the document and the sweep cannot disagree.
 
-    Compared against the registry rather than a number here, so the second tool moves this
-    sentence.
+    **Stated as a comparison rather than typed as a number since 2026-10-05.** Every connector adds
+    row tools, so a typed count was a line every connector change edited, and two connector changes
+    open at once conflicted in it. The sentence's claim is that the registry holds fewer tools than
+    the console has screens, and that claim is what is asserted, against `SCREEN_COUNT` and the
+    registry: the day the registry catches up, this fails and the sentence has to change.
 
-    Delete this and the document keeps saying one after the console is answering."""
+    Delete this and the document keeps saying the registry lags the console after it has caught up,
+    or names a figure nothing checks."""
+    from brain.console.screens import SCREEN_COUNT
     from brain.ops.sweeps import _registered_tool_names
 
+    registered = _registered_tool_names()
+    assert registered, "the registry was not read, so this compared nothing"
     assert (
-        _stated("data-registered-tools", "how many tools are registered")
-        == WORDS[len(_registered_tool_names())]
+        _stated("data-registered-tools", "how the registry compares with the screens")
+        == "fewer tools than there are screens"
     )
+    assert len(registered) < SCREEN_COUNT, (
+        f"the registry holds {len(registered)} tools and the console {SCREEN_COUNT} screens, so "
+        "the architecture's sentence saying it holds fewer is no longer true"
+    )
+
+
+def test_a_count_is_written_in_words_for_any_number_the_document_could_carry() -> None:
+    """The words are worked out, not looked up, so no count makes the comparison fail on a missing
+    entry. Delete this and a broken `in_words` (an off-by-one ten, a lost hyphen) is caught only on
+    the day the count reaches the broken number, as the table was."""
+    assert [in_words(n) for n in (0, 7, 13, 20, 31, 45, 99, 100, 231)] == [
+        ZERO_WORD,
+        "seven",
+        "thirteen",
+        "twenty",
+        "thirty-one",
+        "forty-five",
+        "ninety-nine",
+        "one hundred",
+        "two hundred and thirty-one",
+    ]

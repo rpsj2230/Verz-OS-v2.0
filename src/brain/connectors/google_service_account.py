@@ -39,7 +39,7 @@ set and adds a dependency, its transitive dependencies and a release schedule fo
 lines. Rejected: a person's refresh token from the setup wizard's sign-in, which reads the
 directory as that person and stops the night they leave or change their password.
 
-Task ids: M1.6.5
+Task ids: M1.6.5, M11.7.1
 """
 
 from __future__ import annotations
@@ -159,13 +159,12 @@ def _checked_admin(admin: str) -> str:
     return given.casefold()
 
 
-def kept_value(admin: str, key_file: str) -> str:
-    """What the vault keeps for this key file and administrator, or a refusal in words.
+def key_of(key_file: str) -> tuple[str, rsa.RSAPrivateKey]:
+    """The service account's address and private key out of a key file, or a refusal in words.
 
-    See `THE_VAULT_KEEPS_THE_KEY_AND_NOTHING_ELSE_IN_THE_FILE`. The refusals never repeat the
-    file, which holds the private key.
+    Shared with `brain.connectors.google_token`, which reads a connected source's key file the same
+    way and keeps nothing of it. The refusals never repeat the file, which holds the private key.
     """
-    who = _checked_admin(admin)
     if len(key_file) > MAX_KEY_FILE_CHARS:
         msg = "That is longer than a service account key file. Paste the file's contents alone."
         raise ServiceAccountKeyError(msg)
@@ -191,10 +190,21 @@ def kept_value(admin: str, key_file: str) -> str:
     if not isinstance(key, rsa.RSAPrivateKey):
         msg = "The key file's key is not an RSA key, which is what Google issues."
         raise ServiceAccountKeyError(msg)
-    numbers = key.private_numbers()
-    if numbers.public_numbers.e != PUBLIC_EXPONENT or key.key_size < MIN_KEY_BITS:
+    if key.private_numbers().public_numbers.e != PUBLIC_EXPONENT or key.key_size < MIN_KEY_BITS:
         msg = "The key file's key is not one Google issues. Download a new JSON key."
         raise ServiceAccountKeyError(msg)
+    return email, key
+
+
+def kept_value(admin: str, key_file: str) -> str:
+    """What the vault keeps for this key file and administrator, or a refusal in words.
+
+    See `THE_VAULT_KEEPS_THE_KEY_AND_NOTHING_ELSE_IN_THE_FILE`. The refusals never repeat the
+    file, which holds the private key.
+    """
+    who = _checked_admin(admin)
+    email, key = key_of(key_file)
+    numbers = key.private_numbers()
     primes = PRIME_SEPARATOR.join((_encoded(numbers.p), _encoded(numbers.q)))
     return SEPARATOR.join((who, email, primes))
 
@@ -240,24 +250,45 @@ def _segment(value: Mapping[str, Any] | bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
+def signed_assertion(
+    *,
+    issuer: str,
+    key: rsa.RSAPrivateKey,
+    scopes: Sequence[str],
+    now: int,
+    subject: str | None,
+) -> str:
+    """One RS256-signed claim set for Google's token endpoint, as `subject` or as the issuer.
+
+    `subject` is the person a delegated account acts as, which only the directory's reading
+    names; a connected source's service account reads as itself and passes None, so the claim set
+    carries no `sub` at all (`brain.connectors.google_token`). `now` is seconds since the epoch,
+    handed in so a test is not a clock. The assertion lives `ASSERTION_SECONDS`.
+    """
+    header = {"alg": "RS256", "typ": "JWT"}
+    claims: dict[str, str | int] = {
+        "iss": issuer,
+        "scope": " ".join(scopes),
+        "aud": GOOGLE_EXCHANGE_URL,
+        "iat": now,
+        "exp": now + ASSERTION_SECONDS,
+    }
+    if subject is not None:
+        claims["sub"] = subject
+    signing_input = f"{_segment(header)}.{_segment(claims)}"
+    signature = key.sign(signing_input.encode("ascii"), padding.PKCS1v15(), hashes.SHA256())
+    return f"{signing_input}.{_segment(signature)}"
+
+
 def assertion(account: ServiceAccount, *, now: int, scopes: Sequence[str] = SCOPES) -> str:
     """The signed claim set Google exchanges for a token: RS256, as the administrator.
 
     `now` is seconds since the epoch, handed in so a test is not a clock. The assertion lives
     `ASSERTION_SECONDS`, well inside Google's hour.
     """
-    header = {"alg": "RS256", "typ": "JWT"}
-    claims = {
-        "iss": account.client_email,
-        "sub": account.admin,
-        "scope": " ".join(scopes),
-        "aud": GOOGLE_EXCHANGE_URL,
-        "iat": now,
-        "exp": now + ASSERTION_SECONDS,
-    }
-    signing_input = f"{_segment(header)}.{_segment(claims)}"
-    signature = account.key.sign(signing_input.encode("ascii"), padding.PKCS1v15(), hashes.SHA256())
-    return f"{signing_input}.{_segment(signature)}"
+    return signed_assertion(
+        issuer=account.client_email, key=account.key, scopes=scopes, now=now, subject=account.admin
+    )
 
 
 def token_request(account: ServiceAccount, *, now: int) -> Outbound:

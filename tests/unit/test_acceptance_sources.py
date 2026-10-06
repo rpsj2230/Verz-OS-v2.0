@@ -7,7 +7,7 @@ holds afterwards what it held before. Then it is run against the product broken 
 connected sources contributing no question shapes, a live read that is never made, and an index
 answer dated by the question rather than by its row. Each fails with its own sentence.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2, M15.4.2
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def test_the_sources_check_is_registered_with_the_leaves_it_proves() -> None:
     """Delete this and the check can close a leaf it does not exercise, or name an id no task
     has."""
     assert {name: one.leaves for name, one in mine().items()} == {
-        NAME: ("M11.6.5", "M11.6.2", "M11.4.9")
+        NAME: ("M11.6.5", "M11.6.2", "M11.4.9", "M15.4.2")
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
@@ -107,14 +107,16 @@ def test_on_a_real_database_a_connected_source_answers_and_nothing_is_left_behin
         ("live", "an invoice's amount was not read live for a reader granted it"),
         ("age", "an answer from a row read days ago did not say it may be old"),
         ("body", "a ticket's body was not read from the helpdesk when it was asked"),
+        ("kind", "a second source projecting invoices stopped Xero's from answering"),
     ],
 )
 def test_the_sources_check_fails_where_the_path_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
-    """Four breaks, one per property: every connector's questions offered whether it is connected
-    or not, a live reader that never reads, an index answer dated by the question, and a ticket's
-    live read that no longer takes its body. Each fails the check with its own sentence. Delete
+    """Five breaks, one per property: every connector's questions offered whether it is connected
+    or not, a live reader that never reads, an index answer dated by the question, a ticket's
+    live read that no longer takes its body, and the lane redacting by kind alone, so a second
+    source of invoices withholds Xero's amount. Each fails the check with its own sentence. Delete
     this and the check can pass with the property gone."""
     import brain.api_routes as api_routes
     import brain.knowledge.connector_rows as connector_rows
@@ -141,6 +143,14 @@ def test_the_sources_check_fails_where_the_path_is_broken(
             rows,
             "answered_as_of",
             lambda fetched, now: now.isoformat() if now is not None else "",
+        )
+    elif broken == "kind":
+        import brain.gate.answer as answer
+
+        monkeypatch.setattr(
+            answer,
+            "policy_for",
+            lambda found, policies, source_policies: policies.get(found.entity),
         )
     else:
         import brain.connectors.freshdesk as freshdesk

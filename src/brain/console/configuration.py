@@ -74,6 +74,7 @@ from typing import Final
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
+from brain.identity.departments_from import DepartmentsFrom
 from brain.identity.staff_accounts import NOBODY
 from brain.identity.staff_source import EmploymentType
 from brain.install import BY_NAME, INSTALLATION, Belongs, Setting, saved_values
@@ -177,6 +178,7 @@ class Section(enum.StrEnum):
     LARK = "lark"
     MESSAGES = "messages"
     CHECKS = "checks"
+    SERVICES = "services"
 
 
 #: The sections in the order the screen draws them: what an owner changes first, first.
@@ -195,6 +197,7 @@ SECTION_TITLES: Final[Mapping[Section, str]] = MappingProxyType(
         Section.LARK: "Lark",
         Section.MESSAGES: "Messages this install sends",
         Section.CHECKS: "Install checks",
+        Section.SERVICES: "Services on this server",
     }
 )
 
@@ -223,6 +226,7 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_STAFF_SOURCE": Section.STAFF,
         "INSTALL_STAFF_SOURCE_LOCATION": Section.STAFF,
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": Section.STAFF,
+        "INSTALL_DEPARTMENTS_FROM": Section.STAFF,
         "INSTALL_OBJECT_STORE_URL": Section.FILES,
         "INSTALL_OBJECT_STORE_PREFIX": Section.FILES,
         "INSTALL_OBJECT_STORE_BACKEND": Section.FILES,
@@ -235,6 +239,7 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": Section.CHECKS,
         "INSTALL_DIGEST_DESTINATION": Section.MESSAGES,
         "INSTALL_DIGEST_TIME": Section.MESSAGES,
+        "INSTALL_SERVICES": Section.SERVICES,
     }
 )
 
@@ -263,6 +268,7 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_STAFF_SOURCE": "Where the staff list comes from",
         "INSTALL_STAFF_SOURCE_LOCATION": "Where that staff list is",
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": "Employment types that may use the Brain",
+        "INSTALL_DEPARTMENTS_FROM": "Departments come from",
         "INSTALL_OBJECT_STORE_URL": "File store address",
         "INSTALL_OBJECT_STORE_PREFIX": "Folder in the file store",
         "INSTALL_OBJECT_STORE_BACKEND": "Kind of file store",
@@ -275,6 +281,7 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": "Public skills the install check imports",
         "INSTALL_DIGEST_DESTINATION": "Send the evening digest to",
         "INSTALL_DIGEST_TIME": "Time the evening digest is sent",
+        "INSTALL_SERVICES": "Optional services this server runs",
     }
 )
 
@@ -293,6 +300,8 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_LARK_CARD_APPROVALS",
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
         "INSTALL_DIGEST_TIME",
+        "INSTALL_SERVICES",
+        "INSTALL_DEPARTMENTS_FROM",
     }
 )
 
@@ -399,6 +408,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_STAFF_SOURCE": ("brain.identity.staff_source", "brain.ops.realm_import"),
     "INSTALL_STAFF_SOURCE_LOCATION": ("brain.identity.staff_source", "brain.ops.realm_import"),
     "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": ("brain.ops.staff_accounts_run",),
+    "INSTALL_DEPARTMENTS_FROM": ("brain.identity.departments_from",),
     "INSTALL_MODEL_PROFILE": ("brain.ops.model_service", "brain.app"),
     "INSTALL_MODEL_ENDPOINT": ("brain.knowledge.embed_policy",),
     "INSTALL_EMBEDDING_DIMENSIONS": ("brain.knowledge.search",),
@@ -419,6 +429,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_ACCEPTANCE_SKILL_SOURCE": ("brain.ops.acceptance_checks_skills",),
     "INSTALL_DIGEST_DESTINATION": ("brain.ops.digest_destination",),
     "INSTALL_DIGEST_TIME": ("brain.ops.digest_destination",),
+    "INSTALL_SERVICES": ("brain.ops.overlays",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.
@@ -677,6 +688,17 @@ def setting_problem(name: str, value: str) -> str:
         return _employment_types_problem(written)
     if name == "INSTALL_DIGEST_TIME":
         return _time_of_day_problem(written)
+    if name == "INSTALL_SERVICES":
+        from brain.ops.overlays import services_problem
+
+        return services_problem(written)
+    if name == "INSTALL_DEPARTMENTS_FROM" and written.strip().casefold() not in {
+        one.value for one in DepartmentsFrom
+    }:
+        return (
+            f"Choose {DepartmentsFrom.STAFF_SOURCE.value}, for the department the staff list "
+            f"names, or {DepartmentsFrom.CONSOLE.value}, to set departments on People."
+        )
     if name == "INSTALL_MODEL_PROFILE" and written not in MODEL_PROFILES:
         return (
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "

@@ -84,15 +84,18 @@ from brain.ops.connectable import (
     manifest_for,
 )
 from brain.ops.connector_admin import (
+    ALLOWING_A_WRITE,
     CONNECTED,
     CONNECTING_A_SOURCE,
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
     EDITED,
     KEY_REPLACED,
+    NO_SUCH_WRITE,
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
+    WRITE_ALLOWED,
 )
 from brain.ops.connector_probe import (
     TEST_WAITING,
@@ -118,6 +121,7 @@ from brain.ops.connector_sync import (
 )
 from brain.ops.credentials import KEY_FIELD, Credentials, VaultState
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
+from tests.fixtures.connector_examples import example_settings, identifier
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     AUDIENCE,
@@ -149,27 +153,6 @@ SECOND_FACTOR: Final[Mapping[str, object]] = {"amr": ["otp"]}
 
 #: Far outside any plausible wall clock. See `CLAUDE.md` on a fixture with a date in it.
 LONG_AGO: Final = datetime(2019, 1, 1, tzinfo=UTC)
-
-#: One identifier per connectable source, shaped as the source's own would be and naming nobody.
-IDENTIFIERS: Final[Mapping[str, str]] = {
-    "xero": "11111111-2222-3333-4444-555555555555",
-    "hubspot": "12345678",
-    "freshdesk": "example.freshdesk.com",
-    "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
-    "laravel": "portal",
-}
-
-#: The settings after the first that a source asks for, for the sources that ask for more than one.
-FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
-    "freshdesk": {"department": "support"},
-    "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
-    "laravel": {
-        "client_rule": "department = sales",
-        "user_rule": "department in sales, operations",
-        "max_rows": "500",
-        "timeout_seconds": "10",
-    },
-}
 
 
 def _grant(capability: Any, scope: Scope) -> Grant:
@@ -227,11 +210,11 @@ class NoDatabase:
 
 
 def settings_for(name: str) -> dict[str, str]:
-    """The settings a declared form takes, and none for a source with no form."""
+    """The settings a declared form takes, as its declaration's example gives them, and none for a
+    source with no form."""
     if name not in DECLARED_FORMS:
         return {}
-    first = DECLARED_FORMS[name].settings[0].name
-    return {first: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
+    return example_settings(name)
 
 
 def a_connection(
@@ -384,7 +367,7 @@ def hubspot_unmeasured(monkeypatch: pytest.MonkeyPatch) -> None:
     of one is shown on a source that had it taken away."""
     from brain.ops import limits
 
-    kept = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    kept = {name: one for name, one in limits.ceilings_by_name().items() if name != "hubspot"}
     monkeypatch.setattr(limits, "_BY_NAME", kept)
 
 
@@ -435,7 +418,7 @@ def test_a_reader_is_told_which_sources_are_connected_and_what_each_may_read(
     assert xero["trust"]["serving"] is False
     assert xero["trust"]["health"] == ""
     assert xero["trust"]["credential"] == KEY_HELD
-    assert IDENTIFIERS["xero"] in xero["trust"]["reaches"]
+    assert identifier("xero") in xero["trust"]["reaches"]
     assert xero["may_disconnect"] is False
     assert all(one["may_disconnect"] for one in get(client, "u_admin").json()["connectors"])
 
@@ -756,16 +739,20 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
     for one in body["connectable"]:
         keys = [step["key"] for step in one["steps"]]
         assert keys == [step.key for step in declared[one["name"]].guide]
+        # A source that takes no key (M11.7.4) asks for its settings alone.
+        key = [] if one["credential_shape"] == "none" else ["credential"]
         assert one["steps"][-1]["asks"] == [
             *(setting["name"] for setting in one["settings"]),
-            "credential",
+            *key,
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
     # Since 2026-09-30 (M11.7.7) no source is connected at the server: Lark's are Connect Lark's
-    # own, and Drive's and Laravel's forms wait until this install can read them, with no steps.
+    # own, and a declared form this install cannot read yet waits, with no steps.
     served = {one["name"]: one for one in body["not_connectable"]}
-    assert set(served) == {"lark_base", "lark_wiki", "google_drive", "laravel"}
-    assert served["google_drive"]["steps"] == served["laravel"]["steps"] == []
+    assert set(served) == set(NOT_FROM_THE_CONSOLE)
+    assert {"lark_base", "lark_wiki"} <= set(served)
+    for name in set(served) & set(DECLARED_FORMS):
+        assert served[name]["steps"] == [], name
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -783,11 +770,9 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
     assert [one["name"] for one in holder["connectors"]] == [
         one["name"] for one in without["connectors"]
     ]
-    assert {one["name"]: one["may_connect"] for one in narrow["connectable"]} == {
-        "xero": True,
-        "hubspot": False,
-        "freshdesk": False,
-    }
+    may = {one["name"]: one["may_connect"] for one in narrow["connectable"]}
+    assert may == {name: name == "xero" for name in CONNECTABLE}
+    assert (may["xero"], may["hubspot"]) == (True, False)
 
 
 # ------------------------------------------------------------------ what the vault said
@@ -858,7 +843,7 @@ def test_an_administrator_connects_a_source_and_its_key_is_kept_in_its_slot_and_
     store a digest of nothing, write the key somewhere nothing looks, or write it unrecorded."""
     records, vault, writes = Records(), Vault(), Recorded()
     attach(app, records, vault, writes)
-    sent = connection_body(settings={"tenant_id": f"  {IDENTIFIERS['xero']}\n"})
+    sent = connection_body(settings={"tenant_id": f"  {identifier('xero')}\n"})
     answered = post(client, "u_admin", LISTING, sent)
 
     assert answered.status_code == 200
@@ -1470,6 +1455,48 @@ def test_a_replaced_key_is_a_credential_write_and_changes_no_connection(
     attach(app, records, None)
     assert post(client, "u_admin", key_path("xero"), {"credential": KEY}).status_code == 409
     assert len(vault.written) == 1
+
+
+def test_a_write_grants_key_goes_to_its_own_slot_and_the_screen_says_the_write_is_allowed(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**A write is a grant of its own (M11.7.3).** The key route naming Cloudflare's DNS change
+    grant keeps the key in that grant's slot and never the read key's, recorded as a credential
+    write by the person, and says the write is now allowed; a grant the source does not declare is
+    a problem on the field, and nothing is written. The screen lists the grant on the form and says
+    which grants this install has given: none while the slot is empty, this one once it holds a
+    key. Delete this and the second key can land in the read key's slot, or the screen can say a
+    write is allowed that is not."""
+    records, vault, writes = ChangingRecords((a_connection("cloudflare"),)), Vault(), Recorded()
+    attach(app, records, vault, writes)
+    body = {"credential": KEY, "grant": "dns_changes"}
+
+    answered = post(client, "u_admin", key_path("cloudflare"), body)
+    unknown = post(client, "u_admin", key_path("cloudflare"), {**body, "grant": "zone_changes"})
+
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["told"] == WRITE_ALLOWED
+    assert vault.written == [("connector_keys/cloudflare_dns_changes", {KEY_FIELD: KEY})]
+    assert [one["slot"] for one in writes.records] == ["connector_keys/cloudflare_dns_changes"]
+    assert unknown.status_code == 422
+    assert [(one["field"], one["code"], one["message"]) for one in unknown.json()["problems"]] == [
+        ("grant", "unknown", NO_SUCH_WRITE)
+    ]
+    assert len(vault.written) == 1 and KEY not in answered.text
+    form = next(
+        one for one in get(client, "u_admin").json()["connectable"] if one["name"] == "cloudflare"
+    )
+    assert [one["name"] for one in form["writes"]] == ["dns_changes"]
+    assert "DNS Edit" in form["writes"][0]["credential_hint"]
+    assert form["writes"][0]["confirmation"] == ALLOWING_A_WRITE
+    empty = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    attach(app, records, held_vault())
+    held = next(
+        one for one in get(client, "u_admin").json()["connectors"] if one["name"] == "cloudflare"
+    )
+    assert (empty["writes_allowed"], held["writes_allowed"]) == ([], ["dns_changes"])
 
 
 # ------------------------------------------------------------------ testing a connection

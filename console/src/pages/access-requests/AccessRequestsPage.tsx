@@ -15,7 +15,13 @@
  * whether a request was stored or not; the page adds nothing that could tell the two apart. Asking
  * is not confirmed: a request ends and replaces nothing.
  *
- * Task ids: M4.3.4, M2.2.4, M27.16.1
+ * **Below the requests, the questions nothing answered that were handed to a person**
+ * (`HandedToAPerson.tsx`, M8.3.2, M8.3.4): the other way a person is told a question is theirs.
+ *
+ * **Below the requests, the access people gave themselves to what the reader stewards**
+ * (`SelfGrantNotices.tsx`, M7.7.2): the other way a steward is told about access to what they own.
+ *
+ * Task ids: M4.3.4, M2.2.4, M27.16.1, M8.3.2, M8.3.4, M7.7.2
  */
 
 import { Inbox, MoreHorizontal, Plus } from "lucide-react";
@@ -61,6 +67,8 @@ import {
   type AccessRequestRow,
 } from "../accessRequestsQuery";
 import { nameOf, peopleIn, Pill, whenWords } from "../review/parts";
+import { HandedToAPersonSection } from "./HandedToAPerson";
+import { SelfGrantNoticesSection } from "./SelfGrantNotices";
 
 export const MARK_HANDLED = "Mark handled";
 export const LEAVE_OPEN = "Leave it open";
@@ -337,7 +345,13 @@ export function AccessRequestsPage() {
         emptyTitle={NOTHING_SENT}
         emptyDescription={NOTHING_SENT_MORE}
         emptyIcon={<Inbox aria-hidden />}
-        footer={truncated ? <Note>{MORE_REQUESTS}</Note> : undefined}
+        footer={
+          <>
+            {truncated ? <Note>{MORE_REQUESTS}</Note> : null}
+            <HandedToAPersonSection />
+            <SelfGrantNoticesSection />
+          </>
+        }
       />
       <ConfirmDialog
         open={pending !== null}
