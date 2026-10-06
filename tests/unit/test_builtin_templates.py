@@ -97,7 +97,11 @@ def test_the_gallery_labels_a_signed_built_in_as_built_in_and_a_company_s_own_as
     made."""
     shipped = CATALOGUE[0]
     ours = shipped.model_copy(
-        update={"identity": shipped.identity.model_copy(update={"version": 2})}
+        update={
+            "identity": shipped.identity.model_copy(
+                update={"version": shipped.identity.version + 1}
+            )
+        }
     )
     on_file = gallery([one.manifest for one in signed_built_ins(KEY, AT)]).items
     assert len(on_file) == len(CATALOGUE)

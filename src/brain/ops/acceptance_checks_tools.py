@@ -519,6 +519,7 @@ async def _held(
     computes, so nothing here decides a rung.
     """
     from brain.agent_routes import Install, leash_of
+    from brain.agents.binding import provider_of
     from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord, tool_ceiling
     from brain.console.reach_view import run_reach
     from brain.core.entitlement import Capability
@@ -529,15 +530,20 @@ async def _held(
     from brain.knowledge.visibility import Visibility
 
     agent = f"acceptance_leash_{h.run}"
+    needs = Capability(value=tool.required_capability)
+    # Bound to the source providing the tool's entity, as an agent must be to reach it at all.
+    # See `brain.agents.binding.AN_AGENT_READS_ONLY_THE_SOURCES_IT_NAMES`.
+    source = provider_of(needs.noun)
     record = AgentRecord(
         agent_id=agent,
         display_name="Acceptance check leash",
         persona="An agent built by an install acceptance check and never asked anything.",
         audience=AgentAudience(level=Visibility.PERSONAL, owner_id=reach.principal_id),
         authority=AgentAuthority(
-            capabilities=(Capability(value=tool.required_capability),),
+            capabilities=(needs,),
             allowed_tools=frozenset({tool.name}),
             max_side_effect=tool.side_effect,
+            connectors=() if source is None else (source,),
         ),
         created_by=reach.principal_id,
     )

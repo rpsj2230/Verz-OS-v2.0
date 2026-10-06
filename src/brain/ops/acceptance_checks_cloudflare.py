@@ -310,7 +310,9 @@ async def _approved_change(
         h.principal(B, "dnsapprover"),
     )
     await _in(h, changer, A, WRITES, *READS[1:], "read:dns_record.content")
-    await _in(h, approver, A, WRITES)
+    # An approver is shown the change at their own reach (M33.8.1), so they hold the reads of
+    # the fields it sets, as the changer does; one without them is shown those fields locked.
+    await _in(h, approver, A, WRITES, *READS[1:], "read:dns_record.content")
     await _in(h, elsewhere, B, WRITES)
     reach = await h.reach(changer)
     change = cloudflare.DnsChange(
@@ -368,7 +370,7 @@ async def _approved_change(
     }
     stored = queued.get(held.id)
     card = None if stored is None else shown_card(stored, approving, h.now, unsent=unsent)
-    if stored is None or card is None or content not in card.artefact:
+    if stored is None or card is None or content not in card.request.text:
         raise CheckFailedError("a held DNS change was not on its department's approval queue")
     outsider = await _console(h, elsewhere, second_factor=True)
     theirs = await ReachedSuspensions(h.sessions, outsider, h.now).suspension(held.id)
