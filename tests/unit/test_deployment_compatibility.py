@@ -1105,3 +1105,46 @@ def test_a_restriction_on_a_column_this_migration_added_binds_nothing_the_last_r
         + ' schema="s")\n'
     )
     assert _verdicts(narrowing)[2:] == [Verdict.BREAKING] * 3
+
+
+def test_a_check_binding_only_a_word_the_last_release_could_not_write_is_not_a_narrowing() -> None:
+    """`A_RESTRICTION_ON_A_WORD_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING`, both ways.
+    Delete this and a state added together with its own invariant is refused as a narrowing, or the
+    rule passes a check over a word the previous release does write."""
+    widening = (
+        "    op.create_check_constraint(\"change\", \"t\", \"change IN ('a', 'b', 'c')\","
+        ' schema="s")\n'
+    )
+    before = (
+        '    op.create_check_constraint("change", "t", "change IN (\'a\', \'b\')", schema="s",'
+        " postgresql_not_valid=True)\n"
+    )
+    safe = _migration(
+        widening
+        + '    op.create_check_constraint("c_needs_x", "t", "change <> \'c\' OR x IS NOT NULL",'
+        ' schema="s")\n',
+        before,
+    )
+    assert Verdict.BREAKING not in _verdicts(safe)
+    assert "restriction on a word the previous release never writes" in _rules(changes_in(safe))
+    old_word = _migration(
+        widening
+        + '    op.create_check_constraint("a_needs_x", "t", "change <> \'a\' OR x IS NOT NULL",'
+        ' schema="s")\n',
+        before,
+    )
+    assert _verdicts(old_word)[-1] is Verdict.BREAKING
+    other_column = _migration(
+        widening
+        + '    op.create_check_constraint("c_needs_x", "t", "kind <> \'c\' OR x IS NOT NULL",'
+        ' schema="s")\n',
+        before,
+    )
+    assert _verdicts(other_column)[-1] is Verdict.BREAKING
+    other_table = _migration(
+        '    op.create_check_constraint("c_needs_x", "t", "change <> \'c\' OR x IS NOT NULL",'
+        ' schema="s")\n',
+        '    op.create_check_constraint("change", "u", "change IN (\'a\', \'b\')", schema="s",'
+        " postgresql_not_valid=True)\n",
+    )
+    assert _verdicts(other_table)[-1] is Verdict.BREAKING
