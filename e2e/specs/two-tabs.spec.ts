@@ -82,7 +82,9 @@ test("a second tab signs in from the first tab's session and both keep working",
   expect(await refreshedOpening(first, "/people"), "the first tab's refresh is accepted").toBe(200);
   await checkPage(first, firstSeen, "first tab after refreshing", info);
   reset(secondSeen);
-  expect(await refreshedOpening(second, "/people"), "the second tab's refresh is accepted").toBe(200);
+  // A page this tab has not opened yet, so it has to ask the API: a page it already holds is
+  // drawn from what it fetched before the clock moved, and nothing would need a token.
+  expect(await refreshedOpening(second, "/sign-in-links"), "the second tab's refresh is accepted").toBe(200);
   await checkPage(second, secondSeen, "second tab after refreshing", info);
   reset(firstSeen);
   await openFromMenu(first, "/sessions", PEOPLE);

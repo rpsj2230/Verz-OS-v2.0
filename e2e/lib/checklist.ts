@@ -34,8 +34,13 @@ export const API_ROUTE = /\/api\/v1\//;
 /**
  * An internal constant written out where a person can read it: three or more upper-case words
  * joined by underscores, the way this repository names its reason constants and settings.
+ *
+ * Except a setting the server's environment file holds (`BRAIN_...`). Where a page names one, it
+ * is telling the person who runs the server what to type, and the name is the instruction: the
+ * first run of this check found exactly that on the Staff sources page, which says which two
+ * settings to set when the install runs no vault.
  */
-export const INTERNAL_CONSTANT = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/;
+export const INTERNAL_CONSTANT = /\b(?!BRAIN_)[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/;
 
 /** The browser's own words when the page's content security policy refuses something. */
 export const POLICY_REFUSAL = /Content Security Policy/i;
