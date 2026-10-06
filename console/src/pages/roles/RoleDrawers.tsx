@@ -1,6 +1,7 @@
 /**
  * The writes on the Roles tab: appoint somebody to a role over a scope, appoint a deputy for up to
- * thirty days, remove a role, map a directory group to a role, and retire a mapping.
+ * thirty days, remove a role, map a directory group to a role, retire a mapping, and nominate
+ * somebody for a role for a third person to confirm or decline.
  *
  * **A person is chosen by name** (`access/PersonPicker`), never by typing a principal id, which is
  * what the old forms asked for. A scope is chosen from the Scopes screen's answer to this reader.
@@ -11,7 +12,12 @@
  * warning asks for an acknowledgement, which the form carries, and the API keeps it on the row and its
  * digest on the ledger (M1.8.7).
  *
- * Task ids: M27.11.3, M1.3.2, M1.3.3, M1.3.4, M1.1.5, M27.16.1
+ * **A nomination is the appointment form with a different address and no acknowledgement**
+ * (`AppointDrawer` with `nominating`): it proposes and grants nothing, so the separation of duties
+ * is acknowledged by the person who confirms it, in `NominationDecisionDrawer`, where the grant is
+ * written (M33.1.2.3).
+ *
+ * Task ids: M27.11.3, M1.3.2, M1.3.3, M1.3.4, M1.1.5, M27.16.1, M33.1.2.3
  */
 
 import { useCallback, useState, type FormEvent } from "react";
@@ -28,7 +34,9 @@ import {
   DEPUTY_DAYS,
   GROUP_RULES_API_PATH,
   GROUP_RULE_RETIREMENT_API_PATH,
+  NOMINATIONS_API_PATH,
   ROLE_REMOVAL_API_PATH,
+  nominationDecisionApiPath,
   ROLE_VALUES,
 } from "../governQuery";
 import { Field, FormProblem, NativeSelect, REASON_HINT, REASON_MAX } from "../access/formParts";
@@ -117,15 +125,22 @@ function ReasonField({
   );
 }
 
-/** Somebody appointed to a role, over a scope where the role needs one. */
+/** What the nominating form says about itself. */
+export const NOMINATING_DOES =
+  "A nomination proposes somebody for a role and grants nothing. A person with the grant decision over them confirms it into an appointment or declines it; nobody nominates themselves.";
+
+/** Somebody appointed to a role, over a scope where the role needs one, or nominated for one. */
 export function AppointDrawer({
   open,
   onOpenChange,
   onWritten,
+  nominating = false,
 }: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onWritten: () => void;
+  /** Propose rather than appoint: the nominations address, and no acknowledgement. */
+  readonly nominating?: boolean;
 }) {
   const [person, setPerson] = useState<PersonRow | null>(null);
   const [role, setRole] = useState("");
@@ -135,12 +150,13 @@ export function AppointDrawer({
   const [problems, setProblems] = useState<Partial<Record<"person" | "role" | "scope" | "reason", string>>>({});
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
+  const formId = nominating ? "nominate" : "appoint";
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const found: Partial<Record<"person" | "role" | "scope" | "reason", string>> = {};
     if (person === null) {
-      found.person = "Choose who to appoint.";
+      found.person = nominating ? "Choose who to nominate." : "Choose who to appoint.";
     }
     if (role === "") {
       found.role = "Choose the role.";
@@ -148,7 +164,9 @@ export function AppointDrawer({
       found.scope = `${roleWords(role)} is appointed over a scope; choose one.`;
     }
     if (reason.trim() === "") {
-      found.reason = "Say why they are appointed; the reason is kept with the appointment.";
+      found.reason = nominating
+        ? "Say why you propose them; the reason is kept with the nomination and the appointment."
+        : "Say why they are appointed; the reason is kept with the appointment.";
     }
     setProblems(found);
     if (Object.keys(found).length > 0 || person === null) {
@@ -159,11 +177,11 @@ export function AppointDrawer({
       role,
       reason: reason.trim(),
       ...(scope === "" ? {} : { scope_slug: scope }),
-      ...(acknowledgement.trim() === "" ? {} : { acknowledgement: acknowledgement.trim() }),
+      ...(nominating || acknowledgement.trim() === "" ? {} : { acknowledgement: acknowledgement.trim() }),
     };
     setBusy(true);
     void (async () => {
-      const result = await request<unknown>(APPOINTMENT_API_PATH, { method: "POST", body });
+      const result = await request<unknown>(nominating ? NOMINATIONS_API_PATH : APPOINTMENT_API_PATH, { method: "POST", body });
       setBusy(false);
       if (!result.ok) {
         setFailure(result.failure);
@@ -184,11 +202,11 @@ export function AppointDrawer({
     <Drawer
       open={open}
       onOpenChange={onOpenChange}
-      title="Appoint to a role"
-      description="A role says what somebody is appointed to do on this platform. It grants nothing."
-      footer={<Footer formId="appoint" verb="Appoint" busy={busy} onCancel={() => { onOpenChange(false); }} />}
+      title={nominating ? "Nominate for a role" : "Appoint to a role"}
+      description={nominating ? NOMINATING_DOES : "A role says what somebody is appointed to do on this platform. It grants nothing."}
+      footer={<Footer formId={formId} verb={nominating ? "Nominate" : "Appoint"} busy={busy} onCancel={() => { onOpenChange(false); }} />}
     >
-      <form id="appoint" noValidate className="flex flex-col gap-4" onSubmit={submit}>
+      <form id={formId} noValidate className="flex flex-col gap-4" onSubmit={submit}>
         <PersonPicker label="Person" chosen={person} onChoose={setPerson} problem={problems.person} />
         <Field label="Role" hint="Department admin and Approver are appointed over a scope." problem={problems.role} apiProblems={failure?.problems ?? []} names={["role"]}>
           {({ id, describedBy, invalid }) => (
@@ -213,6 +231,7 @@ export function AppointDrawer({
           />
         ) : null}
         <ReasonField value={reason} onChange={setReason} problem={problems.reason} apiProblems={failure?.problems ?? []} />
+        {nominating ? null : (
         <Field label="Acknowledgement" hint={`Optional. ${SEPARATION_NOTE}`} apiProblems={failure?.problems ?? []} names={["acknowledgement"]}>
           {({ id, describedBy, invalid }) => (
             <Textarea
@@ -227,6 +246,7 @@ export function AppointDrawer({
             />
           )}
         </Field>
+        )}
         {Object.keys(problems).length > 0 ? <FormProblem>Nothing has been sent: correct the fields marked above.</FormProblem> : null}
         {failure === null ? null : <FailureState failure={failure} />}
       </form>
@@ -502,5 +522,99 @@ export function EndDialog({ ending, onClose, onWritten }: { readonly ending: End
         onClose();
       }}
     />
+  );
+}
+
+/** What confirming a nomination does, said before it is sent. */
+export const CONFIRMING_DOES =
+  "Confirming appoints them to the role, in your name, with the reason the nomination gave. Declining ends the nomination and appoints nobody.";
+
+/** One nomination confirmed into an appointment or declined, by somebody who is neither person named. */
+export function NominationDecisionDrawer({
+  nomination,
+  onClose,
+  onWritten,
+}: {
+  /** The nomination being decided, with the words it is shown by, or null when the drawer is shut. */
+  readonly nomination: { readonly id: string; readonly label: string } | null;
+  readonly onClose: () => void;
+  readonly onWritten: () => void;
+}) {
+  const [acknowledgement, setAcknowledgement] = useState("");
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const send = (decision: "confirm" | "decline") => {
+    if (nomination === null) {
+      return;
+    }
+    const body = {
+      decision,
+      ...(decision === "confirm" && acknowledgement.trim() !== "" ? { acknowledgement: acknowledgement.trim() } : {}),
+    };
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(nominationDecisionApiPath(nomination.id), { method: "POST", body });
+      setBusy(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      setAcknowledgement("");
+      onClose();
+      onWritten();
+    })();
+  };
+
+  return (
+    <Drawer
+      open={nomination !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setFailure(null);
+          onClose();
+        }
+      }}
+      title="Decide a nomination"
+      description={CONFIRMING_DOES}
+      footer={
+        <>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => { send("decline"); }}>
+            Decline
+          </Button>
+          <Button type="submit" form="decide-nomination" disabled={busy}>
+            Confirm
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="decide-nomination"
+        noValidate
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          send("confirm");
+        }}
+      >
+        <p className="m-0 text-[13px] text-ink">{nomination?.label ?? ""}</p>
+        <Field label="Acknowledgement" hint={`Optional. ${SEPARATION_NOTE}`} apiProblems={failure?.problems ?? []} names={["acknowledgement"]}>
+          {({ id, describedBy, invalid }) => (
+            <Textarea
+              id={id}
+              aria-describedby={describedBy}
+              aria-invalid={invalid ? true : undefined}
+              maxLength={REASON_MAX}
+              value={acknowledgement}
+              onChange={(event) => {
+                setAcknowledgement(event.target.value);
+              }}
+            />
+          )}
+        </Field>
+        {failure === null ? null : <FailureState failure={failure} />}
+      </form>
+    </Drawer>
   );
 }

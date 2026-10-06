@@ -3,10 +3,12 @@
 - **Screens:** `/departments`, `/departments/:slug`, `/departments/:slug/:view`, `/department`, `/department/:view`
 - **Tables:** `gate.department`, `gate.team`, `gate.team_membership`, `gate.department_lead`
 - **Installation values:** `INSTALL_COMPANY_NAME`, `INSTALL_PRODUCT_NAME`, `INSTALL_LOGO_URL`, `INSTALL_ACCENT_COLOUR`
-- **Measured here:** 14 routes, 0 called by no screen; 12 write routes, 12 with all three proofs; 1 gaps.
+- **Measured here:** 16 routes, 0 called by no screen; 12 write routes, 12 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/console/department/coverage` | `/department` |
+| `GET /api/v1/console/department/pace` | `/department` |
 | `GET /api/v1/govern/departments` | `/department`, `/department/:view`, `/departments`, `/departments/:slug`, `/departments/:slug/:view`, `/scopes` |
 | `GET /api/v1/govern/departments/from-staff-source` | `/departments` |
 | `POST /api/v1/govern/departments` | `/department`, `/department/:view`, `/departments`, `/departments/:slug`, `/departments/:slug/:view`, `/scopes` |

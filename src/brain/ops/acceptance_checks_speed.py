@@ -8,8 +8,9 @@ the fast lane answers from rows with no model, that what streams to a person is 
 citations, then prose and never reasoning, and that every prompt starts with the same bytes.
 
 **A fast-lane rule is a row the check writes into `gate.fast_path_rule`, and it is read back by
-the install's own loader.** `brain.gate.rule_store.load_rules` is what the lifespan calls at start,
-so the rule the check asks is the rule a restart would load. What it answers from is a price list
+the install's own reader.** `brain.gate.rule_store.rules_for_asker` is what the answer route calls
+on every question (since M6.5.1; it was a load at start before), so the rule the check asks is the
+rule the next question is matched against. What it answers from is a price list
 the check uploads into acceptance_a through the Classification routes' own sequence, reused from
 `brain.ops.acceptance_checks_tables`, so the row the rule reads is a row a department uploaded.
 
@@ -24,9 +25,8 @@ makes is marked as its own (`brain.knowledge.rows.read_as_the_fast_lane`) and re
 The check answers an uploaded list's price on the lane, watches the lane's reads carry the mark,
 asks the install's row source who it reads as with the mark and without, and asks the database,
 as the role, for every table it answers from and a table in `know`, another schema and a write of
-each kind it must refuse. M6.5.1 needs a console
-surface for rules, which does not exist, and rules load only at start, so it is listed in the
-package's report rather than claimed.
+each kind it must refuse. M6.5.1, a department's administrator adding, testing and retiring a
+rule from the console, is proved by `brain.ops.acceptance_checks_dept_rules`.
 
 Task ids: M6.1.1, M6.1.2, M6.1.4, M6.1.6, M6.3.1, M6.3.2, M6.3.3, M6.3.4, M6.3.5, M6.4.2
 Task ids: M6.4.3, M6.4.4, M6.1.3
@@ -162,13 +162,10 @@ async def a_rule_on_a_list(h: Harness) -> RuleOnAList:
 
 
 async def rules_app(h: Harness, model: KeptPrompts) -> FastAPI:
-    """`brain.ops.acceptance_checks_memory.memory_app`, recording each request's row, with the
-    rules the install's own loader reads from the rule table in the check's transaction."""
-    from brain.gate.rule_store import load_rules
-
-    app = await memory_app(h, model, recorded=True)
-    app.state.fast_path_rules = await load_rules(h.sessions)
-    return app
+    """`brain.ops.acceptance_checks_memory.memory_app`, recording each request's row. The answer
+    route reads the rule table in the check's transaction on every question, so nothing is
+    handed to it."""
+    return await memory_app(h, model, recorded=True)
 
 
 async def asked_on(
@@ -252,9 +249,11 @@ async def a_rule_row_answers_on_the_fast_lane_with_no_model(h: Harness) -> None:
             created_by=h.actor,
         ),
     )
+    from brain.gate.rule_store import rules_for_asker
+
     stand_in = KeptPrompts()
     app = await rules_app(h, stand_in)
-    ids = {one.rule_id for one in app.state.fast_path_rules}
+    ids = {one.rule_id for one in await rules_for_asker(app.state, A)}
     if f"acceptance_{h.run}_rate" not in ids:
         raise CheckFailedError("a rule written as a row was not read by the install's loader")
 
@@ -471,6 +470,7 @@ async def the_fast_lane_reads_as_a_role_that_reaches_nothing_else(h: Harness) ->
 
     from brain.gate.context import Channel
     from brain.gate.fast_lane import respond
+    from brain.gate.rule_store import rules_for_asker
     from brain.knowledge.row_store import FAST_LANE_ROLE, SessionRowSource
     from brain.knowledge.rows import RowQuery, is_a_fast_lane_read, read_as_the_fast_lane
     from brain.ops.classification_store import classified_lane_of
@@ -497,7 +497,7 @@ async def the_fast_lane_reads_as_a_role_that_reaches_nothing_else(h: Harness) ->
 
     await respond(
         made.question(),
-        rules=(*app.state.fast_path_rules, *lane.rules),
+        rules=(*await rules_for_asker(app.state, A), *lane.rules),
         readers={pair: watched(reader) for pair, reader in lane.readers.items()},
         entitlement=await h.reach(made.reader),
         now=h.now,

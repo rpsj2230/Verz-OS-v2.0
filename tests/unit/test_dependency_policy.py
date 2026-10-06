@@ -3,7 +3,7 @@
 The network is asked only by CI's `Dependency audit` job; every test here hands the rules fixed
 facts, so what is tested is the decision and not whether PyPI answered today.
 
-Task ids: M0.5.7, M0.7.1
+Task ids: M0.5.7, M0.7.1, M27.15.79
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from brain.ops.dependency_policy import (
     ARCHIVED_ADDITION,
     COPYLEFT_ADDITION,
     IMAGE_TERMS,
+    NPM_LOCKS,
     OWNER_ALLOWED,
     STALE_AFTER,
     Component,
@@ -305,6 +306,18 @@ def test_no_image_on_the_list_needs_a_commercial_key() -> None:
 def test_the_real_tree_passes_the_offline_policy() -> None:
     """Delete this and the job goes red on arrival for a component the table forgot."""
     assert offline_findings(locked(REPO)).refused == []
+
+
+def test_every_console_dependency_is_read_and_its_licence_is_on_the_allowed_list() -> None:
+    """**M27.15.79.** The console's lock is one of the locks the policy reads, every package it
+    records is read with the licence it carries, and each of those passes the allowed list on
+    its own, so no console package is let through by being judged beside another. Delete this and
+    the console's lock can drop out of `NPM_LOCKS` with the CI step still green over the rest."""
+    assert "console/package-lock.json" in NPM_LOCKS
+    console = npm_locked((REPO / "console" / "package-lock.json").read_text(), "console")
+    assert console and all(one.licence for one in console)
+    assert {one.name for one in console} <= {one.name for one in locked(REPO)}
+    assert offline_findings(console).refused == []
 
 
 # ------------------------------------------------------------------------------ liveness

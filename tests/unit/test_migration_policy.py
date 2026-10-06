@@ -199,6 +199,34 @@ def test_prose_that_reads_like_sql_is_not_a_data_change(tmp_path: Path) -> None:
     assert "schema and data change in one migration" not in rules(check_file(p))
 
 
+def test_a_trigger_function_that_inserts_is_not_a_data_change_and_a_do_block_is(
+    tmp_path: Path,
+) -> None:
+    """Defining a function writes no row and `DROP FUNCTION` reverses it, so an `INSERT` in a
+    trigger body is not the one-way data half the rule exists for; a `DO` block runs with the
+    migration, so the same `INSERT` there still is. Delete this and either a migration that adds
+    an append-only ledger with a trigger is refused for what its trigger will do later, or the
+    exemption quietly widens to code that really does write data now."""
+    function = (
+        'FUNCTION_SQL = """\n'
+        "CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$\n"
+        'BEGIN\n    INSERT INTO t (c) VALUES (\'x\');\n    RETURN NULL;\nEND\n$$\n"""\n'
+    )
+    do_block = 'DO_SQL = """\nDO $$\nBEGIN\n    INSERT INTO t (c) VALUES (\'x\');\nEND\n$$\n"""\n'
+    schema = ["op.create_table('t', sa.Column('c', sa.String()))", "op.execute(FUNCTION_SQL)"]
+    harmless = write(tmp_path, function + migration(schema, ["op.drop_table('t')"]))
+    assert "schema and data change in one migration" not in rules(check_file(harmless))
+    running = write(
+        tmp_path,
+        do_block
+        + migration(
+            ["op.create_table('t', sa.Column('c', sa.String()))", "op.execute(DO_SQL)"],
+            ["op.drop_table('t')"],
+        ),
+    )
+    assert "schema and data change in one migration" in rules(check_file(running))
+
+
 def test_a_pure_data_migration_is_not_flagged(tmp_path: Path) -> None:
     """Data-only is allowed; it is the mixture that cannot be reversed by halves."""
     p = write(

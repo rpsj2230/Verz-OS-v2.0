@@ -53,8 +53,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from brain.agent_routes import every_agent, record_of
-from brain.agents.model import AgentRecord
+from brain.agent_roster import agent_roster_for
 from brain.api import (
     ErrorBody,
     FailureBodyMiddleware,
@@ -64,9 +63,10 @@ from brain.api import (
     status_sentence,
     unexpected_failure,
 )
-from brain.api_routes import GateWiring, passage_search_for, second_factor_needed
+from brain.api_routes import GateWiring, second_factor_needed
 from brain.attribution import trace_of_request
 from brain.audit.ledger import TRACE_ID
+from brain.automation_paused_told import keep_telling_paused_stewards
 from brain.automation_routes import AutomationWiring
 from brain.cache import (
     AsyncValkeyClient,
@@ -92,7 +92,6 @@ from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
-from brain.gate.roster import AgentRoster
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
 from brain.gate.takeover_store import StoredTakeovers
@@ -128,6 +127,7 @@ from brain.ops.class_pools import keep_following
 from brain.ops.connector_sync_store import ReadThroughSourceEpochs, StoredSourceEpochs
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start, keep_refreshing
+from brain.ops.custom_connector_store import refresh as refresh_catalogue
 from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
@@ -154,7 +154,6 @@ from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.template_key import TemplateKeyState, keep_trying, template_key_at_start
 from brain.ops.template_key import hold as hold_template_key
-from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.trace_store import Step, TraceRecorder
 from brain.ops.usage_store import UsageRecorder
@@ -175,6 +174,7 @@ from brain.readiness import (
     vault_answers,
     vault_configured,
 )
+from brain.reviewed_connectors import install_tools
 from brain.routers import ROUTERS
 from brain.session import (
     check_login_row_security,
@@ -190,6 +190,7 @@ from brain.session import (
 # process that needs a setting and not the application imports that instead. See
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
+from brain.tools.registry import ToolRegistry
 from brain.tools.startup import build_registry
 from brain.tools.website_check import WebsiteCheckTool
 
@@ -394,6 +395,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
     telling: asyncio.Task[None] | None = None
+    pausing: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -466,6 +468,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # An asker whose handed-on question expired is told in their own chat, by this process
         # because the worker holds no channel's token. See `brain.escalation_told`.
         telling = asyncio.create_task(keep_telling_expired_askers(app))
+        # A steward whose automation was paused for failing is told in their own chat, by this
+        # process for the same reason. See `brain.automation_paused_told`.
+        pausing = asyncio.create_task(keep_telling_paused_stewards(app))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -576,28 +581,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             retrievals=retrieval_cache(knowledge_client),
             embeddings=embedding_cache(knowledge_client),
         )
-    app.state.tools = build_registry(
-        source=settings.tool_source,
-        records=records,
-        figures=live if records else None,
-        website=website,
-        caches=knowledge_caches,
-    )
+    # The connectors a second person reviewed on this install are read before the registry is
+    # built, so their row tools are in it from the start (M11.7.8); a change after start rebuilds
+    # it through the same builder, where a declaration is next served
+    # (`brain.reviewed_connectors.current`).
+    await refresh_catalogue(app.state.db_sessions or None)
+
+    def tools() -> ToolRegistry:
+        return build_registry(
+            source=settings.tool_source,
+            records=records,
+            figures=live if records else None,
+            website=website,
+            caches=knowledge_caches,
+        )
+
+    app.state.build_tools = tools
+    await install_tools(app.state, tools())
     app.state.ready["tools"] = True
-    # Every call to a registered tool asks the switch table first, and each tool's catalogue row
-    # is written so a stop has a row to name. Never fatal: a catalogue row a switch needs is
-    # written by the switch itself. See `brain.tools.registry.ToolRegistry.govern`.
-    if app.state.db_sessions:
-        app.state.tools.govern(SessionSwitchSource(app.state.db_sessions))
-        try:
-            await record_catalogue(app.state.db_sessions, app.state.tools)
-        except Exception:
-            log.exception("tool catalogue could not be recorded")
-    # The passage search the answer lane's model step reads through: the registered document
-    # tool's own handler, so the reach is decided where the tool decides it. None without a row
-    # source, which is a lane that abstains on a question no rule answers. See
-    # `brain.api_routes.model_lane_of`.
-    app.state.passage_search = passage_search_for(app.state.tools)
     log.info(
         "tool registry frozen",
         tools=len(app.state.tools),
@@ -606,12 +607,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # The answer lane's two remaining pieces, and both are decisions rather than plumbing.
     #
-    # The rules are read once. A rule set fetched per request would put a database round trip
-    # in front of the lane whose entire purpose is answering without one, and refreshing on a
-    # timer would give two answers to one question inside a minute with nothing saying which
-    # rule set produced either. So a rule added or retired takes effect at the next restart,
-    # and the count below is where somebody wondering why their new rule does nothing finds
-    # out. See `rule_store.A_RULE_SET_THAT_CHANGES_MID_FLIGHT_GIVES_TWO_ANSWERS_TO_ONE_QUESTION`.
+    # The rules are not read here. The answer route reads the rule table on every question,
+    # for the asker's department and the whole install's, so a rule an administrator adds
+    # answers the next question rather than the next restart (M6.5.1). See
+    # `rule_store.A_RULE_ANSWERS_FROM_THE_NEXT_QUESTION`. `fast_path_rules` stays, empty, for
+    # the rules a test or a check hands the lane directly.
     #
     # The sink records that a trace happened and drops the payload, because the only
     # destination available today is the application log and a post-redaction payload there is
@@ -724,20 +724,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
-            app.state.fast_path_rules = await load_rules(app.state.db_sessions)
+            # Counted once for the startup log, and never held: what a question is matched
+            # against is read when it is asked. A table that cannot be read is said here too.
+            standing = await load_rules(app.state.db_sessions)
+            log.info("fast path rules standing", rules=len(standing), ids=rule_ids(standing))
         except Exception as exc:
-            # A rule table that cannot be read is an empty rule set, not a dead process. The
-            # lane abstains for every question, which is the same answer it gives when no rule
-            # matches, and the log line says which of the two this is. Refusing to start would
-            # take down `/records` and `/me` as well, over configuration that only one route
-            # reads.
             log.warning("fast path rules unavailable", error=type(exc).__name__)
-    log.info(
-        "fast path rules loaded",
-        rules=len(app.state.fast_path_rules),
-        ids=rule_ids(app.state.fast_path_rules),
-        refreshes="on restart",
-    )
 
     # The gate and the automation route, built only over a database: every store in both reads
     # it, and without one there is nothing a caller could be resolved against. The HTTP client
@@ -836,6 +828,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             telling.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await telling
+        if pausing is not None:
+            pausing.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pausing
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -1034,27 +1030,6 @@ def request_recorders_for(
         SensitiveReadRecorder(sessions),
         TraceRecorder(sessions, environment=environment, ship=ship),
     )
-
-
-def agent_roster_for(
-    sessions: async_sessionmaker[AsyncSession] | None,
-) -> AgentRoster | None:
-    """How `/answer` reads the stored agents, or None on a process with no database.
-
-    Every agent, as the Agents screen reads them; `brain.gate.roster.answer_roster` keeps the ones
-    the person asking may run. A row that does not construct is left out, for
-    `brain.agent_routes.record_of`'s reason.
-    """
-    if sessions is None:
-        return None
-    factory = sessions
-
-    async def read() -> Sequence[AgentRecord]:
-        async with factory() as session:
-            rows = (await session.execute(every_agent())).scalars().all()
-        return [one for one in (record_of(row) for row in rows) if one is not None]
-
-    return read
 
 
 def suspension_store_for(

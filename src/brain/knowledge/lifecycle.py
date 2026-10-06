@@ -403,6 +403,9 @@ class TaskKind(enum.StrEnum):
     PROMOTION_DECIDED = "promotion_decided"
     #: A solution this person captured was approved or refused.
     SOLUTION_DECIDED = "solution_decided"
+    #: A correction carrying the right answer proposes a new version of a document this person
+    #: stewards (M16.6.5). Closed by the decision, never by dismissing it. `0198` opens it.
+    CORRECTION_PROPOSED = "correction_proposed"
 
 
 #: The kinds a person may clear by saying they have read it. A review is cleared by verifying the
@@ -468,6 +471,11 @@ def task_sentence(task: StewardTask, *, title: str) -> str:
         case TaskKind.STEWARD_NAMED:
             return (
                 f"You are now the steward of {named}. You are asked when it falls due for review."
+            )
+        case TaskKind.CORRECTION_PROPOSED:
+            return (
+                f"A correction proposes a change to {named}. Review it, and approve it as a new "
+                "version or reject it with a reason."
             )
         case TaskKind.PROMOTION_DECIDED | TaskKind.SOLUTION_DECIDED:
             if task.outcome is None:

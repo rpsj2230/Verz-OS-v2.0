@@ -11,10 +11,11 @@
  * subscribers is sent no rows, so a subscriber that exists and one that does not read the same
  * here: "No subscriber here".
  *
- * **Every act whose route exists works; two are drawn and inert.** Replacing the signing secret and
- * switching off are confirmed in the API's words (`WebhookActs.tsx`). Switching back on and
- * replaying a delivery that was given up are `kit/UnavailableAction` with `webhookActions.ts`'
- * sentences, because neither can be recorded without a schema change (M27.15.44).
+ * **Every act works, confirmed in the API's words** (`WebhookActs.tsx`): replacing the signing
+ * secret and switching off while it is on, switching it back on while it is off, and replaying a
+ * delivery that was given up, from that delivery's row, by the name the API gave it rather than by
+ * its event id (`brain.ops.webhook_store.A_DELIVERY_IS_REPLAYED_BY_A_NAME_OF_ITS_OWN`). A delivery
+ * the API offers no name for has no replay control (M27.15.44).
  *
  * **People are named, never shown by id**; the ids are under Advanced.
  *
@@ -40,7 +41,6 @@ import {
   PageHeader,
   SectionCard,
   StatCard,
-  UnavailableAction,
   ViewSwitch,
   type DetailView,
   type EntityColumn,
@@ -60,8 +60,8 @@ import {
   type SubscriberRow,
   type WebhooksBody,
 } from "../webhooksQuery";
-import { ACT_LABELS, UNAVAILABLE } from "./webhookActions";
-import { ReplaceSecretDrawer, SwitchOffDialog } from "./WebhookActs";
+import { ACT_LABELS } from "./webhookActions";
+import { ReplaceSecretDrawer, ReplayDialog, SwitchOffDialog, SwitchOnDialog } from "./WebhookActs";
 import { NEVER_DELIVERED, WEBHOOKS_HEADING } from "./WebhooksPage";
 import { DeliveryPill, OFF_WORD, ON_WORD, SubscriberPill } from "./pills";
 
@@ -99,7 +99,7 @@ export function viewFor(tab: string | undefined): WebhookView {
   return tab === "profile" || tab === "about" ? tab : "dashboard";
 }
 
-type Open = "replace" | "switch_off" | null;
+type Open = "replace" | "switch_off" | "switch_on" | null;
 
 function deliveryColumns(): readonly EntityColumn<DeliveryRow>[] {
   return [
@@ -126,7 +126,7 @@ function changeColumns(page: WebhooksBody): readonly EntityColumn<ChangeRow>[] {
   ];
 }
 
-function Dashboard({ row }: { readonly row: SubscriberRow }) {
+function Dashboard({ row, onReplay }: { readonly row: SubscriberRow; readonly onReplay: (delivery: DeliveryRow) => void }) {
   return (
     <SectionCard title={DELIVERIES_HEADING}>
       {row.deliveries.length === 0 ? (
@@ -139,8 +139,18 @@ function Dashboard({ row }: { readonly row: SubscriberRow }) {
           rowId={(one) => `${one.occurred_at}-${one.kind}-${one.state}`}
           rowLabel={(one) => `${one.kind} at ${at(one.occurred_at)}`}
           rowActions={(one) =>
-            one.state === "exhausted" ? (
-              <UnavailableAction label={`${UNAVAILABLE.replay.label}: ${one.kind}`} text={UNAVAILABLE.replay.label} reason={UNAVAILABLE.replay.reason} />
+            typeof one.replay === "string" && one.replay !== "" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                aria-label={`${ACT_LABELS.replay}: ${one.kind}`}
+                onClick={() => {
+                  onReplay(one);
+                }}
+              >
+                {ACT_LABELS.replay}
+              </Button>
             ) : null
           }
           exportName={`${row.subscriber_id}-deliveries`}
@@ -214,11 +224,20 @@ function Profile({ row, page, onAct }: { readonly row: SubscriberRow; readonly p
               {ACT_LABELS.switchOff}
             </Button>
           ) : (
-            <UnavailableAction label={UNAVAILABLE.switchOn.label} text={UNAVAILABLE.switchOn.label} reason={UNAVAILABLE.switchOn.reason} />
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-8"
+              onClick={() => {
+                onAct("switch_on");
+              }}
+            >
+              {ACT_LABELS.switchOn}
+            </Button>
           )
         }
       >
-        <Line>{page.switching_off}</Line>
+        <Line>{row.active ? page.switching_off : page.switching_on}</Line>
       </SectionCard>
     </div>
   );
@@ -264,16 +283,22 @@ function SubscriberAnswer({ id, tab }: { readonly id: string; readonly tab: stri
   const [version, setVersion] = useState(0);
   const [told, setTold] = useState<string | null>(null);
   const [open, setOpen] = useState<Open>(null);
+  const [replaying, setReplaying] = useState<DeliveryRow | null>(null);
   const answer = useResource<unknown>(WEBHOOKS_API_PATH, version);
   const page = useMemo(() => (answer.data === null ? null : readWebhooks(answer.data)), [answer.data]);
   const done = useCallback((sentence: string) => {
     setOpen(null);
+    setReplaying(null);
     setTold(sentence);
     setVersion((count) => count + 1);
   }, []);
   const act = useCallback((next: Open) => {
     setTold(null);
     setOpen(next);
+  }, []);
+  const replay = useCallback((delivery: DeliveryRow) => {
+    setTold(null);
+    setReplaying(delivery);
   }, []);
 
   if (answer.failure !== null) {
@@ -321,7 +346,16 @@ function SubscriberAnswer({ id, tab }: { readonly id: string; readonly tab: stri
             </Button>
           </>
         ) : (
-          <UnavailableAction label={UNAVAILABLE.switchOn.label} text={UNAVAILABLE.switchOn.label} reason={UNAVAILABLE.switchOn.reason} />
+          <Button
+            size="sm"
+            variant="outline"
+            className="min-h-11 sm:min-h-8"
+            onClick={() => {
+              act("switch_on");
+            }}
+          >
+            {ACT_LABELS.switchOn}
+          </Button>
         )
       }
       figures={
@@ -342,7 +376,7 @@ function SubscriberAnswer({ id, tab }: { readonly id: string; readonly tab: stri
         header={header}
         switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view} />}
       >
-        {view === "dashboard" ? <Dashboard row={row} /> : null}
+        {view === "dashboard" ? <Dashboard row={row} onReplay={replay} /> : null}
         {view === "profile" ? <Profile row={row} page={page} onAct={act} /> : null}
         {view === "about" ? <About row={row} page={page} /> : null}
       </DetailPage>
@@ -366,6 +400,27 @@ function SubscriberAnswer({ id, tab }: { readonly id: string; readonly tab: stri
           onDone={done}
         />
       ) : null}
+      {open === "switch_on" ? (
+        <SwitchOnDialog
+          page={page}
+          subscriberId={row.subscriber_id}
+          onClose={() => {
+            setOpen(null);
+          }}
+          onDone={done}
+        />
+      ) : null}
+      {replaying === null ? null : (
+        <ReplayDialog
+          page={page}
+          subscriberId={row.subscriber_id}
+          delivery={replaying}
+          onClose={() => {
+            setReplaying(null);
+          }}
+          onDone={done}
+        />
+      )}
     </>
   );
 }

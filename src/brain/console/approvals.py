@@ -194,13 +194,16 @@ def terms_not_data() -> tuple[ToolDefinition, ...]:
 def request_policy(action: Action) -> FieldPolicy:
     """The field policy an approver's view of `action` is rendered under.
 
-    Its entity's classification, its own source's first. An entity nothing classifies is the
-    empty policy, under which every argument is locked.
+    Its entity's classification, its own source's first, and the fields its source's write grants
+    classify: `brain.tools.startup.field_policy_for`, the policy the action was decided under when
+    it was raised. Without the grants' fields a reply to a ticket was locked from every approver,
+    because the field it writes is classified by the grant that writes it and by no read, so the
+    person asked to approve the reply could not read it. An entity nothing classifies is the empty
+    policy, under which every argument is locked.
     """
-    from brain.tools.startup import classification_for
+    from brain.tools.startup import field_policy_for
 
-    found = classification_for(action.tool.entity, source=action.tool.source or None)
-    return found.policy() if found is not None else FieldPolicy(rules=())
+    return field_policy_for(action.tool.entity, source=action.tool.source or None)
 
 
 def request_for(

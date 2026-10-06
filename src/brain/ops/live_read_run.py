@@ -64,8 +64,12 @@ to the record's id, through `brain.ops.mcp_session` or `brain.ops.custom_code_ru
 worker reads it, and refused with a constant sentence in a process given no way to post or no
 sandbox runner.
 
+**A source consented to by OAuth is read live with access renewed by that read (M11.8.6)**, through
+the same `presented`; a refusal is the call's outcome, as a refused key's is, and a refresh token
+the vendor rotated is written back before the record is read.
+
 Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
-Task ids: M11.1.2, M11.1.5
+Task ids: M11.1.2, M11.1.5, M11.8.6, M11.7.8
 """
 
 from __future__ import annotations
@@ -76,6 +80,7 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
+from functools import partial
 from types import MappingProxyType
 from typing import Any, Final
 
@@ -96,7 +101,6 @@ from brain.connectors.declaration import (
     ToolReading,
     ViewReading,
     listed_under,
-    shipped,
 )
 from brain.connectors.google_token import TokenNotIssuedError
 from brain.connectors.live_read import (
@@ -114,9 +118,12 @@ from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import SourceRecord
 from brain.core.envelope import IdentityMode, TypedResult
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_catalogue import DECLARED
 from brain.ops.connector_store import Connection, StoredConnections
+from brain.ops.connector_sync import fields_lost_of
 from brain.ops.connector_sync_run import (
     ConnectorKeys,
+    Consenting,
     HttpsSourceCaller,
     KeyLease,
     RunTokenVault,
@@ -130,6 +137,7 @@ from brain.ops.connector_sync_run import (
     page_operation,
     presented,
 )
+from brain.ops.connector_sync_store import ConnectorSyncRecords, StoredSyncStates
 from brain.ops.custom_code_run import read_once
 from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
@@ -192,7 +200,9 @@ class ConnectedSources:
         self._caller = caller
         self._resolver = resolver
         self._clock = clock
-        self._declarations = shipped() if declarations is None else declarations
+        # The catalogue's live view, so a connector reviewed on this install is read live from
+        # the moment it is approved and not after it changes (M11.7.8).
+        self._declarations = DECLARED if declarations is None else declarations
         self._poster = poster
         self._runner = runner
         self._manifests = manifests
@@ -287,6 +297,7 @@ class ConnectedSources:
                     poster=self._poster,
                     resolver=self._resolver,
                     now=self._clock(),
+                    consenting=Consenting(connection.connector, connection.settings, self._keys),
                 )
             except UnsafeAddressError:
                 return _refused(connection.connector, ADDRESS_OR_SHAPE)
@@ -294,6 +305,9 @@ class ConnectedSources:
                 if self._poster is None:
                     return _refused(connection.connector, NO_POSTER)
                 return LiveReply(outcome=refused.call)
+            except SecretsUnavailableError:
+                # A consented source's refresh token the vault would not lend (M11.8.6).
+                return _refused(connection.connector, NO_KEY_FOR_THE_READ)
             # A source that takes no key is sent no `Authorization` at all (M11.7.4).
             headers = call_headers(reading, connection.settings, shown)
             if report is not None and request.entity in report.entities():
@@ -698,4 +712,21 @@ def live_records_for(
             clock=_utc_now,
         )
 
-    return SourceRecords(connected=connected, clock=_utc_now)
+    return SourceRecords(
+        connected=connected,
+        clock=_utc_now,
+        lost=partial(lost_by_source, StoredSyncStates(sessions)),
+    )
+
+
+async def lost_by_source(states: ConnectorSyncRecords) -> Mapping[str, frozenset[str]]:
+    """What each source's newest scheduled read found lost, for the answer lane (M11.8.7).
+
+    Read from the sentence of each source's newest read (`SyncState.synced_detail`), so a failed
+    attempt after it does not forget it. See
+    `brain.ops.live_records.A_SOURCE_THAT_LOST_A_FIELD_IS_ANSWERED_AS_DEGRADED`.
+    """
+    found = {
+        name: fields_lost_of(one.synced_detail) for name, one in (await states.states()).items()
+    }
+    return {name: fields for name, fields in found.items() if fields}

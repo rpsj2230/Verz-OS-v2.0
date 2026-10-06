@@ -340,6 +340,21 @@ def test_the_certification_report_is_not_taken_through_the_audit_trails_form() -
     assert ExportDataSet.ACCESS_CERTIFICATION.value in {one.key for one in CATALOGUE if one.runs}
 
 
+def test_a_persons_conversation_is_not_taken_through_an_administrators_form() -> None:
+    """A conversation runs, and is taken by the person who had it, on Ask (M33.3.1.3). Delete this
+    and an administrator naming it on the export form is answered with an audit trail export
+    filed as somebody's conversation, which is the bulk taking the catalogue says never happens."""
+    found = request_problems(
+        data_set=ExportDataSet.CONVERSATION.value,
+        reason=ExportReason.REGULATORY_REQUEST.value,
+        reason_reference="MATTER-2019/004",
+        since=LONG_AGO,
+        until=LONG_AGO + timedelta(days=1),
+    )
+    assert [(one.field.value, one.code) for one in found] == [("data_set", "not_available")]
+    assert ExportDataSet.CONVERSATION.value in {one.key for one in CATALOGUE if one.runs}
+
+
 def test_a_well_formed_request_has_no_problems() -> None:
     """The sibling every refusal above needs."""
     assert (

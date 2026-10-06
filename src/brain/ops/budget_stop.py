@@ -287,6 +287,26 @@ def next_period_start(period: BudgetPeriod, at: datetime, *, zone: ZoneInfo) -> 
     return following.replace(tzinfo=zone)
 
 
+def period_start(period: BudgetPeriod, at: datetime, *, zone: ZoneInfo) -> datetime:
+    """When the window containing `at` began, in the install's own time zone.
+
+    The other end of `next_period_start`, by the same window and the same zone, so the spend a
+    ceiling is judged against and the stop it opens cover one period exactly: a window summed in
+    UTC and stopped in the install's zone would count hours the stop never covers.
+    """
+    window = WINDOWS.get(period)
+    if window is None:
+        msg = (
+            f"a {period.value} ceiling has no window that begins, so there is no spend in one. "
+            f"{A_PER_RUN_CEILING_HAS_NO_NEXT_PERIOD_AND_A_STOP_ON_ONE_NEVER_ENDS}"
+        )
+        raise BudgetStopError(msg)
+    if at.tzinfo is None:
+        msg = "a naive instant has no zone to be floored in, so the boundary would be a guess"
+        raise BudgetStopError(msg)
+    return _start_of(at.astimezone(zone).replace(tzinfo=None), window).replace(tzinfo=zone)
+
+
 def boundary_gaps() -> tuple[str, ...]:
     """Every budget period whose boundary nothing here could compute, or would compute wrongly.
 
