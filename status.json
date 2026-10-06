@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T13:27:52.471063+00:00",
-  "commit": "960e4432",
-  "commit_subject": "A model's proposed write in an agent run is decided by the leash and held for a person, and the asker is told it is waiting (#466)",
+  "generated_at": "2026-10-06T14:30:36.200497+00:00",
+  "commit": "043a3003",
+  "commit_subject": "Operating the install from the console gets install checks: live runs and the queue, jobs, the tool switch, and a connected source's export and test (#355)",
   "total": 1596,
   "done": 680,
   "percent": 42.6,
