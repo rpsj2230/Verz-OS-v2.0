@@ -887,6 +887,9 @@ STARTER_PACK: Final = CapabilityPack(
         Capability(value="read:knowledge.document"),
         Capability(value="read:knowledge.title"),
         Capability(value="read:knowledge.updated_at"),
+        # A Lark Wiki page's own read, so a joiner reads the company's wiki as they read its
+        # library. See `brain.agents.binding.A_WIKI_PAGE_HAS_A_READ_OF_ITS_OWN`.
+        Capability(value="read:wiki_page"),
     ),
 )
 

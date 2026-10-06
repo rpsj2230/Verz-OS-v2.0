@@ -1178,6 +1178,14 @@ class ConnectorDeclaration:
     #: Its verified rate ceiling, or None when nobody has measured one. Named for this source, so
     #: `brain.ops.limits.connector_ceiling` finds it. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
     ceiling: ConnectorLimit | None = None
+    #: The prefix of every entity it names at connect time, for a source whose entities are not
+    #: known until an install connects it, so an agent's connector list can narrow them. See
+    #: `brain.agents.binding.discovered_prefixes`.
+    discovers: str = ""
+    #: Entities it provides that no reading, live lookup or manifest tool names, for a source read
+    #: by a module of its own, so an agent's connector list can narrow them. See
+    #: `brain.agents.binding.entities_of`.
+    provides: tuple[str, ...] = ()
     #: Which of its records entity resolution reads, as what type, by which field, and whether
     #: they carry money. Empty when none of its records is a company, a person or a project.
     #: See `brain.connectors.resolves`.
