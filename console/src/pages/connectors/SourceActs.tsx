@@ -1,6 +1,7 @@
 /**
- * The acts on one source that change something: edit its settings, replace its key and
- * disconnect it, plus Connect Lark and the export. Connecting a source is `SourceFlow.tsx`.
+ * The acts on one source that change something: edit its settings, replace its key, hand it to
+ * another steward and disconnect it, plus Connect Lark and the export. Connecting a source is
+ * `SourceFlow.tsx`.
  *
  * **Every write is sent from a confirmation.** Connecting ends in `components/ConnectSource.tsx`,
  * which first run uses too and which confirms in the API's words; editing, replacing a key and
@@ -26,8 +27,11 @@
  * `{ credential, grant }` to the same key route, which keeps it in the grant's slot and never the
  * read key's. Rejected: a second drawer, which would be a second place for a key to be held or
  * echoed. The drawer says whether the write is on now, from `writes_allowed`, and never the key.
+ * **A steward is named by person id, and the API decides whether they can be.** The drawer asks for
+ * the id and nothing else, and a person who cannot reach the source is refused in the API's one
+ * sentence, which is the same for somebody who is not here (M7.7.2).
  *
- * Task ids: M27.11.9, M11.7.7, M11.2.6, M11.7.3
+ * Task ids: M27.11.9, M11.7.7, M11.2.6, M11.7.3, M7.7.2
  */
 
 import { useState, type FormEvent } from "react";
@@ -42,7 +46,14 @@ import { SecretField, useSecret } from "../../components/ui/secret-field";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../../ui/FieldProblems";
 import { disconnectApiPath, readTold, type Connectable, type WriteGrant } from "../connectorsQuery";
-import { editApiPath, exportApiPath, exportFileName, keyApiPath, type SettingValue } from "./connectorSources";
+import {
+  editApiPath,
+  exportApiPath,
+  exportFileName,
+  keyApiPath,
+  stewardApiPath,
+  type SettingValue,
+} from "./connectorSources";
 import { ACT_LABELS } from "./connectorActions";
 import { LarkFlow, type LarkStart } from "./LarkFlow";
 
@@ -65,6 +76,13 @@ export const NOT_ALLOWED = "The write was not allowed";
 export const GRANT_OFF =
   "Off. An approved change is not sent until a key for this write is given here. The read key is never used for it.";
 export const GRANT_ON = "On. A key for this write is held; a new one replaces it. The read key is unchanged.";
+export const STEWARD_DESCRIPTION = "Name who answers for this source from now on.";
+export const STEWARD_FIELD_LABEL = "New steward's person id";
+export const STEWARD_FIELD_HINT = "Somebody who can govern this source or read what it declares.";
+export const STEWARD_BLANK = "Enter the person id of the new steward.";
+export const NOT_HANDED = "The steward was not changed";
+export const REVIEW_STEWARD = "Review the change";
+export const KEEP_STEWARD = "Keep the current steward";
 
 /** Every name a setting's input answers to: its own, and its place in the body. */
 function settingNames(name: string): readonly string[] {
@@ -80,6 +98,7 @@ export type OpenAct =
   | { readonly act: "key"; readonly source: string }
   /** Allowing one of the source's writes, by the grant's name. */
   | { readonly act: "grant"; readonly source: string; readonly grant: string }
+  | { readonly act: "steward"; readonly source: string }
   | { readonly act: "disconnect"; readonly source: string; readonly label: string };
 
 // --------------------------------------------------------------------------------- lark
@@ -382,6 +401,116 @@ export function KeyDrawer({
         }
         confirmLabel={grant === undefined ? KEY_TITLE : grant.label}
         cancelLabel={KEEP_AS_IS}
+        busy={busy}
+        onConfirm={() => {
+          send();
+        }}
+        onCancel={() => {
+          setPending(false);
+        }}
+      />
+    </Drawer>
+  );
+}
+
+// ------------------------------------------------------------------------------ steward
+
+/** Hand the source to another steward, confirmed first in the API's words (M7.7.2). */
+export function StewardDrawer({
+  name,
+  label,
+  confirmation,
+  onClose,
+  onDone,
+}: {
+  readonly name: string;
+  readonly label: string;
+  /** The API's sentence for what naming a steward agrees to. */
+  readonly confirmation: string;
+  readonly onClose: () => void;
+  readonly onDone: (told: string) => void;
+}) {
+  const [to, setTo] = useState("");
+  const [blank, setBlank] = useState<FieldProblem[]>([]);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [pending, setPending] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const problems: readonly FieldProblem[] = [...blank, ...(failure?.problems ?? [])];
+  const prefix = `steward-${name}`;
+  const inputId = `${prefix}-steward_id`;
+
+  function ask(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setFailure(null);
+    const found = to.trim() === "" ? [{ field: "steward_id", code: "blank", message: STEWARD_BLANK }] : [];
+    setBlank(found);
+    if (found.length === 0) {
+      setPending(true);
+    }
+  }
+
+  function send(): void {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(stewardApiPath(name), { method: "POST", body: { steward_id: to.trim() } });
+      setBusy(false);
+      setPending(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      onDone(readTold(result.data));
+    })();
+  }
+
+  return (
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) {
+          onClose();
+        }
+      }}
+      title={`${ACT_LABELS.steward}: ${label}`}
+      description={STEWARD_DESCRIPTION}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            {KEEP_STEWARD}
+          </Button>
+          <Button type="submit" form={prefix} disabled={busy}>
+            {REVIEW_STEWARD}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex min-w-0 flex-col gap-3">
+        {failure === null ? null : <FailureNotice failure={failure} title={NOT_HANDED} fields={["steward_id"]} />}
+        <form id={prefix} className="flex flex-col gap-2" noValidate autoComplete="off" onSubmit={ask}>
+          <Label htmlFor={inputId}>{STEWARD_FIELD_LABEL}</Label>
+          <Input
+            id={inputId}
+            name="steward_id"
+            type="text"
+            className="h-11 sm:h-9"
+            maxLength={128}
+            value={to}
+            disabled={busy}
+            {...problemAttributes(problems, prefix, "steward_id")}
+            onChange={(event) => {
+              setTo(event.target.value);
+            }}
+          />
+          <p className="m-0 text-[12.5px] leading-snug text-dim">{STEWARD_FIELD_HINT}</p>
+          <FieldProblems problems={problems} form={prefix} names="steward_id" />
+        </form>
+      </div>
+      <ConfirmDialog
+        open={pending}
+        question={`Hand ${label} to ${to.trim()}?`}
+        consequence={confirmation}
+        confirmLabel={ACT_LABELS.steward}
+        cancelLabel={KEEP_STEWARD}
         busy={busy}
         onConfirm={() => {
           send();

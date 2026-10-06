@@ -30,7 +30,6 @@ from brain.ops.limits import (
     MAX_BACKOFF_SECONDS,
     MINUTE_SECONDS,
     PRINCIPAL_FAIR_SHARE,
-    SOURCE_CEILINGS,
     VOLUME_MIN_OBSERVATIONS,
     DenialShape,
     Limit,
@@ -52,6 +51,7 @@ from brain.ops.limits import (
     principal_share_of,
     request_limits,
     search_completeness,
+    source_ceilings,
     source_limits,
 )
 
@@ -337,7 +337,7 @@ def test_the_source_ceilings_match_the_verified_table() -> None:
     """These are constraints, not guidance. Xero's 5,000 a day is the one a backfill reaches
     first; Lark Base's 100 a minute cannot be raised at any price. A number rounded up here
     is a number that produces 429s in production and looks right in review."""
-    by_name = {c.name: c for c in SOURCE_CEILINGS}
+    by_name = {c.name: c for c in source_ceilings()}
     assert by_name["xero"].per_minute == 60
     assert by_name["xero"].per_day == 5_000
     assert by_name["freshdesk"].per_minute == 100
@@ -363,7 +363,7 @@ def test_every_verified_source_reaches_the_bottleneck_ladder() -> None:
     """Omitting the sources with no published daily figure was the first version, and the
     ladder then showed one source, which reads as 'only Xero is a constraint' rather than
     'only Xero's constraint is expressible in this unit'."""
-    assert {c.name for c in ceilings()} == {c.name for c in SOURCE_CEILINGS}
+    assert {c.name for c in ceilings()} == {c.name for c in source_ceilings()}
 
 
 def test_a_day_window_is_a_day() -> None:
@@ -534,3 +534,39 @@ def test_a_person_on_an_interactive_channel_counts_towards_the_metrics() -> None
     assert counts_towards_metrics(PrincipalKind.HUMAN, TrafficClass.HUMAN_INTERACTIVE)
     assert counts_towards_metrics(PrincipalKind.HUMAN, TrafficClass.HUMAN_ASYNC)
     assert not counts_towards_metrics(PrincipalKind.SERVICE, TrafficClass.AUTOMATION)
+
+
+# ------------------------------------------------------------ a ceiling lives with its connector
+def test_a_source_s_ceiling_is_found_on_its_own_declaration() -> None:
+    """`A_CEILING_LIVES_WITH_ITS_CONNECTOR`. Every shipped connector's declared ceiling is the one
+    `connector_ceiling` answers for its name, and a source with none declared is answered None.
+    Delete this and the discovery can drop a source's ceiling, which turns it from measured into
+    unmeasured: the console stops offering it, and nothing else says why."""
+    from brain.connectors.declaration import shipped
+
+    declared = {name: one.ceiling for name, one in shipped().items() if one.ceiling is not None}
+    # The anchors, read from the vendors' documentation rather than from this module: Xero's
+    # 5,000 a day per tenant and Lark Base's fixed 100 a minute.
+    assert declared["xero"].per_day == 5_000
+    assert declared["lark_base"].per_minute == 100
+    for name, ceiling in declared.items():
+        assert connector_ceiling(name) is ceiling
+    # The Lark Wiki runs against Lark Base's ceiling and declares none of its own.
+    assert "lark_wiki" not in declared
+    assert connector_ceiling("lark_wiki") is None
+    assert {one.name for one in source_ceilings()} == set(declared)
+
+
+def test_a_declaration_carrying_another_source_s_ceiling_is_refused() -> None:
+    """A source is admitted by its own vendor's figure. Delete this and a connector can carry a
+    measured row from another source (Freshdesk's, say), so it is offered and paced against a
+    limit its vendor never stated, with `connector_ceiling` answering for it under its own name."""
+    from dataclasses import replace
+
+    from brain.connectors import freshdesk, xero
+    from brain.connectors.declaration import DeclarationError
+
+    with pytest.raises(DeclarationError):
+        replace(xero.CONNECTOR, ceiling=freshdesk.CEILING)
+    # Its own is accepted, so the refusal is about whose ceiling it is.
+    assert replace(xero.CONNECTOR, ceiling=xero.CEILING).ceiling is xero.CEILING

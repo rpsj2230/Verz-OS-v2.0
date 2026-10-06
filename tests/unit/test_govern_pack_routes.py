@@ -1116,10 +1116,13 @@ def test_the_migration_adds_the_version_the_triggers_and_both_vocabularies_and_g
     assert squash(migration.NARROWER_ACTIONS) == squash(earlier.WIDENED_ACTIONS)
     assert squash(migration.NARROWER_SUBJECTS) == squash(halted.WIDENED_SUBJECTS)
     assert migration.down_revision == before.revision
-    # The list `0150` replaces when it adds `browser_session`, and the enum's since then.
+    # The list `0150` replaces when it adds `browser_session`, which `0183` replaces when it adds
+    # `entity_unmerge`, and the enum's since then.
     browsing = migration_module(LABEL_MIGRATION.parent / "0150_trace_store_and_browser_session.py")
+    merges = migration_module(LABEL_MIGRATION.parent / "0183_entity_merges.py")
     assert squash(migration.WIDENED_ACTIONS) == squash(browsing.NARROWER_ACTIONS)
-    assert squash(browsing.WIDENED_ACTIONS) == squash(one_of("action", AuditAction))
+    assert squash(browsing.WIDENED_ACTIONS) == squash(merges.NARROWER_ACTIONS)
+    assert squash(merges.WIDENED_ACTIONS) == squash(one_of("action", AuditAction))
     assert squash(migration.WIDENED_SUBJECTS) == squash(f"subject ~ '{SUBJECT_PATTERN}'")
     assert check_file(LABEL_MIGRATION) == []
 

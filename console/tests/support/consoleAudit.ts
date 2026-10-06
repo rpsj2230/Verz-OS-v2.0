@@ -142,6 +142,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
       "/api/v1/access-requests*",
+      "/api/v1/stewardship/self-grants",
       "/api/v1/escalations",
       "/api/v1/govern/roles/holders",
       "/api/v1/govern/roles/appointment",
@@ -172,6 +173,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.role_grant",
       "auth.group_role_rule",
       "gate.break_glass_notice",
+      "gate.self_grant",
+      "ops.connector_steward",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -183,6 +186,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_STAFF_SOURCE_LOCATION",
       "INSTALL_BROKERED_CLIENT_ID",
       "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
+      "INSTALL_DEPARTMENTS_FROM",
     ],
     gaps: [
       {
@@ -308,6 +312,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/archive",
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
+      "/api/v1/agents/{agent_id}/learning",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agents/{agent_id}/budget",
       "/api/v1/agents/{agent_id}/capabilities",
@@ -320,6 +325,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
       "/api/v1/agents/{agent_id}/drafts",
+      "/api/v1/agents/{agent_id}/publications",
       "/api/v1/agent-drafts*",
       "/api/v1/builder/form",
     ],
@@ -333,6 +339,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.manifest_draft",
       "agent.manifest_revision",
       "agent.manifest_act",
+      "agent.learning_pause",
     ],
     installation: [],
     gaps: [
@@ -377,6 +384,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_category",
       "agent.skill_invocation",
       "agent.skill_retirement",
+      "agent.skill_script",
       "agent.skill_detachment",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
@@ -442,6 +450,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/key",
       "/api/v1/connectors/{connector}/probe",
       "/api/v1/connectors/{connector}/accept",
+      "/api/v1/connectors/{connector}/steward",
       "/api/v1/console/connectors",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
@@ -465,6 +474,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.connector_connection",
       "ops.connector_sync",
       "proj.record",
+      "proj.record_retired",
+      "proj.source_epoch",
       "er.alias",
       "er.canonical",
       "er.identifier",
@@ -524,6 +535,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/classification",
       "/classification/:entity",
       "/classification/:entity/:column",
+      "/duplicates",
       "/artifacts",
     ],
     routes: [
@@ -537,11 +549,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/knowledge/verifications",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
+      "/api/v1/govern/learning/settings*",
       "/api/v1/govern/memory",
+      "/api/v1/me/memory*",
       "/api/v1/records/{entity}",
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",
       "/api/v1/records/{entity}/access",
+      "/api/v1/resolution/review*",
+      "/api/v1/resolution/weights*",
     ],
     tables: [
       "know.item",
@@ -557,6 +573,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.artifact",
       "know.classified_table",
       "know.classified_row",
+      "er.review_item",
+      "er.merge",
+      "er.unmerge",
+      "er.observation",
+      "er.blocked_value",
     ],
     installation: [
       "INSTALL_VECTOR_STORE",
@@ -698,7 +719,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "The audit trail: who changed what, and when": {
-    screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
+    screens: [
+      "/audit",
+      "/audit/verify",
+      "/audit/trace",
+      "/audit/trace/:traceId",
+      "/audit/subject/:kind/:id",
+      "/audit/subject/:kind/:id/:view",
+      "/requirement-checks",
+    ],
     routes: ["/api/v1/audit*", "/api/v1/requirements/checks", "/api/v1/traces*"],
     tables: [
       "obs.audit_entry",
@@ -709,21 +738,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "obs.trace_read",
     ],
     installation: [],
-    gaps: [
-      {
-        what: "A run's trace graph is stored masked and read only under the payload role, and no screen reads it: the read route serves one to a holder of that role, and no page calls it for TraceGraph to draw.",
-        leaf: "M20.2.1",
-      },
-    ],
+    gaps: [],
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs"],
-    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview"],
+    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview", "/api/v1/halts*"],
     tables: ["ops.halt"],
     installation: [],
     gaps: [
       {
-        what: "The install cannot be stopped or resumed from the console: 0136 stores a halt and its resume, GET /api/v1/console/overview reads the halts in force, and no route or Stop control writes one yet.",
+        what: "The install cannot be stopped or resumed from the console yet: GET, POST /api/v1/halts and POST /api/v1/halts/resume stop and resume through brain.ops.halt_store, and no Stop screen or header control calls them.",
         leaf: "M27.12.4",
       },
     ],
@@ -784,6 +808,10 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "/signed-out": "The page a person lands on after signing out, which asks nothing and manages nothing.",
   "/*": "The page drawn for an address the console does not have, which manages nothing.",
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
+  "POST /api/v1/answer/mark":
+    "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
+  "mem.mark":
+    "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
   "POST /api/v1/widget/sessions":
     "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
   "POST /api/v1/widget/questions":
@@ -799,6 +827,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage.",
   "GET /api/v1/threads/{thread_id}":
     "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
+  "POST /api/v1/threads/attachments":
+    "A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":

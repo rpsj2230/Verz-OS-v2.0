@@ -270,6 +270,12 @@ FURNISHED_SETTING: Final = "starter.furnished"
 TEMPLATE_KEY_COMMAND: Final = "brain.ops.template_key"
 TEMPLATE_KEY_HELD_FLAG: Final = "--held"
 
+#: The module the join-key pepper step runs in the application container, and the flag that makes
+#: it read without writing. Both held equal to `brain.ops.join_key_pepper` by a test rather than
+#: imported, for `FURNISHED_SETTING`'s reason.
+PEPPER_COMMAND: Final = "brain.ops.join_key_pepper"
+PEPPER_HELD_FLAG: Final = "--held"
+
 #: The staff accounts client's step: the release's script, and the application's module and flag
 #: its done test asks. Held equal to `brain.ops.accounts_key` by a test rather than imported, for
 #: `FURNISHED_SETTING`'s reason.
@@ -995,6 +1001,33 @@ PLAN: Final[tuple[Step, ...]] = (
         already_done=(
             'test "${BRAIN_VAULT:-yes}" = "no" || docker compose $BRAIN_COMPOSE_FILES exec -T app '
             f"python -m {ACCOUNTS_KEY_COMMAND} {ACCOUNTS_KEY_HELD_FLAG}"
+        ),
+    ),
+    Step(
+        # After readiness, for the template key's reason below: the application creates the pepper
+        # itself when it starts and finds the slot empty, so on a healthy install this finds it
+        # held and is skipped, and it is here for the install whose start could not. The owner's
+        # decision (b) is that the installer creates it; this is that step, and the create runs in
+        # the application because the deploy token that applies every later release writes no
+        # secret value. The done test reads the slot and writes nothing.
+        name="keep this install's join-key pepper",
+        run=f"docker compose $BRAIN_COMPOSE_FILES exec -T app python -m {PEPPER_COMMAND}",
+        why=(
+            "entity resolution keeps every join key it compares, a registration number, a tax id "
+            "or a domain, only as a digest keyed with this install's own pepper, so the stored "
+            "digests cannot be reversed by guessing. The pepper is made once, from the server's "
+            "own random source, into a vault slot nothing can write over, because a new pepper "
+            "would unjoin every digest already stored. See brain.ops.join_key_pepper"
+        ),
+        on_failure=(
+            "the line above says why. If the vault refused, this release's policies are not in "
+            "force: ops/openbao/UNSEAL.md, under When a release's vault changes do not take, then "
+            "run this again; a second run never replaces a pepper the first one kept"
+        ),
+        changes=True,
+        already_done=(
+            'test "${BRAIN_VAULT:-yes}" = "no" || docker compose $BRAIN_COMPOSE_FILES exec -T app '
+            f"python -m {PEPPER_COMMAND} {PEPPER_HELD_FLAG}"
         ),
     ),
     Step(

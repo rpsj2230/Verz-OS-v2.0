@@ -16,7 +16,7 @@
  * themselves**: `tests/support/python.ts` reads field names out of `brain.connector_routes`, and
  * `tests/support/openapi.ts` the request bodies and paths the routes declare.
  *
- * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M42.6.5, M27.15.8, M11.3.4
+ * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M42.6.5, M27.15.8, M11.3.4, M7.7.2
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -34,12 +34,12 @@ import {
 } from "../src/pages/connectorsQuery";
 import { ACT_LABELS, UNAVAILABLE } from "../src/pages/connectors/connectorActions";
 import { LAST_LIVE_READ_LABEL, LIVE_READS_LABEL, NO_LIVE_READ, NOT_CONNECTED_TITLE } from "../src/pages/connectors/ConnectorDashboard";
-import { NO_AGENT } from "../src/pages/connectors/ConnectorProfile";
+import { NO_AGENT, STEWARD_LABEL } from "../src/pages/connectors/ConnectorProfile";
 import { TESTING_WORDS, VERDICT_WORDS } from "../src/pages/connectors/connectorProbe";
 import { CHECK_AGAIN, NOT_NOW } from "../src/pages/connectors/TestConnection";
 import { connectorAddress, readSourceRows } from "../src/pages/connectors/connectorSources";
 import { CONNECT_A_SOURCE, CONNECTORS_HEADING, NOT_AVAILABLE } from "../src/pages/connectors/ConnectorsPage";
-import { GRANT_OFF, GRANT_ON, KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY } from "../src/pages/connectors/SourceActs";
+import { GRANT_OFF, GRANT_ON, KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY, REVIEW_STEWARD, STEWARD_BLANK, STEWARD_FIELD_LABEL } from "../src/pages/connectors/SourceActs";
 import { ACCEPT, BEFORE, DRIFT_HEADING, NOW_DOES } from "../src/pages/connectors/DeclarationDrift";
 import { DECLARATION_CHANGED_WORDS } from "../src/pages/connectors/pills";
 import { AT_THE_SERVER, FROM_HERE, START } from "../src/pages/connectors/SourceFlow";
@@ -265,6 +265,8 @@ const XERO_DETAIL = {
   skills: [{ name: "invoice-chaser", version: "1.2.0", state: "approved" }],
   confirm_edit: sentinel("confirm-edit"),
   confirm_key: sentinel("confirm-key"),
+  steward: "u_admin",
+  confirm_steward: sentinel("confirm-steward"),
 };
 
 /** What changed in Xero's declaration, as `brain.connector_routes.DeclarationDriftView` sends it. */
@@ -845,6 +847,7 @@ describe("one source's page", () => {
       ACT_LABELS.edit,
       ACT_LABELS.key,
       grant.label,
+      ACT_LABELS.steward,
       ACT_LABELS.export,
       ACT_LABELS.disconnect,
     ]);
@@ -893,9 +896,58 @@ describe("one source's page", () => {
     expect(within(plain).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       ACT_LABELS.edit,
       ACT_LABELS.key,
+      ACT_LABELS.steward,
       ACT_LABELS.export,
       ACT_LABELS.disconnect,
     ]);
+  });
+
+  test("the profile names the source's steward, and handing it on is confirmed in the API's words and sends only the person", async () => {
+    // What breaks if this is deleted: a steward nobody can see on the page, a hand-over sent without
+    // a confirmation, or one whose body carries anything but the person named (M7.7.2).
+    const { container, idp } = await consoleAt(`${connectorAddress("xero")}/profile`);
+    const fact = [...container.querySelectorAll("dt")].find((one) => one.textContent === STEWARD_LABEL);
+    expect(fact?.nextElementSibling?.textContent).toBe("Ada Admin");
+
+    await choose(await openMenu("Manage this source"), ACT_LABELS.steward);
+    const drawer = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: REVIEW_STEWARD }));
+    });
+    expect(drawer.textContent).toContain(STEWARD_BLANK);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    fireEvent.change(within(drawer).getByLabelText(STEWARD_FIELD_LABEL), { target: { value: " u_next " } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: REVIEW_STEWARD }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(sentinel("confirm-steward"));
+    expect(posts(idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: ACT_LABELS.steward }));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toEqual([{ path: "/api/v1/connectors/xero/steward", body: { steward_id: "u_next" } }]);
+    });
+  });
+
+  test("a source the reader may not be told the steward of offers no hand-over", async () => {
+    // What breaks if this is deleted: a menu that offers to hand on a source whose steward the API
+    // did not send, which would be a form for a reader who may not name one.
+    await consoleAt(connectorAddress("xero"), {
+      ...ANSWERS,
+      "/api/v1/console/connectors/xero": { body: { ...XERO_DETAIL, steward: "" } },
+    });
+    const menu = await openMenu("Manage this source");
+    expect(within(menu).queryByText(ACT_LABELS.steward)).toBeNull();
+    expect(within(menu).getByText(ACT_LABELS.export)).toBeTruthy();
+  });
+
+  test("the steward's request body is the one the route declares", () => {
+    // What breaks if this is deleted: a renamed body field the route refuses as an unknown one.
+    expect(declaredPropertyNames(declaredRequestBodySchema("/api/v1/connectors/{connector}/steward", "post"))).toEqual(["steward_id"]);
+    expect(backendModelFields(ROUTES, "ConnectorSourceView")).toEqual(expect.arrayContaining(["steward", "confirm_steward"]));
   });
 
   test("the export reads the record and changes nothing", async () => {

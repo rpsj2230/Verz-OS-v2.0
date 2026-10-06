@@ -44,14 +44,14 @@ bao_ token lookup >/dev/null 2>&1 || fail "the vault refused the token this ran 
 
 # The engines, enabled where missing and never removed.
 ENGINES_NOW="$(bao_ secrets list)" || fail "the vault would not list its engines"
-for engine in providers webhooks connector_keys template_signing; do
+for engine in providers webhooks connector_keys template_signing resolution; do
   case "$ENGINES_NOW" in
     *"$engine/ "*) ;;
     *) if test "$CHECK_ONLY" = yes; then missing "the $engine engine"; else bao_ secrets enable -path="$engine" kv-v2 >/dev/null || fail "the vault would not enable the $engine engine"; fi ;;
   esac
 done
 ENGINES_NOW="$(bao_ secrets list)" || fail "the vault would not list its engines"
-for engine in providers webhooks connector_keys template_signing; do
+for engine in providers webhooks connector_keys template_signing resolution; do
   case "$ENGINES_NOW" in *"$engine/ "*) ;; *) test "$CHECK_ONLY" = yes || missing "the $engine engine" ;; esac
 done
 
@@ -177,4 +177,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 13 credential slots"
+say "in force: 5 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 13 credential slots"

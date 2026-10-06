@@ -73,6 +73,7 @@ from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
+from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.escalation import EscalationRow
 from brain.tables.fast_lane import FastPathRuleRow
@@ -100,6 +101,7 @@ from brain.tables.identity import (
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
 from brain.tables.learning import CorrectionRow, LearningRow
+from brain.tables.learning_signal import LearningPauseRow, MarkRow
 from brain.tables.manifest_draft import (
     ManifestActRow,
     ManifestDraftRow,
@@ -116,7 +118,7 @@ from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
-from brain.tables.projection import ProjectedRecordRow
+from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
 from brain.tables.question_gap import QuestionGapRow
 from brain.tables.requirement_check import RequirementCheckRow
 from brain.tables.resolution import (
@@ -125,6 +127,8 @@ from brain.tables.resolution import (
     EntityIdentifierRow,
     EntityLinkRow,
 )
+from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
+from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
@@ -138,10 +142,12 @@ from brain.tables.skill import (
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
+    SkillScriptRow,
 )
 from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
+from brain.tables.stewardship import ConnectorStewardRow, SelfGrantRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -410,9 +416,35 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    # 0154_answer_marks_and_learning_pause. Neither points at anything: a mark names a trace and
+    # a pause an agent by value, so each outlives what it names.
+    "mem.mark",
+    "agent.learning_pause",
     # 0168_escalation. Points at nothing: the asker, the named person, the agent and the skill are
     # values, so a handoff outlives all four.
     "gate.escalation",
+    # 0167_stewards_and_self_grants. Neither points at anything: a steward, a source and a
+    # grant are values, so each record outlives what it names.
+    "ops.connector_steward",
+    "gate.self_grant",
+    # 0179_record_lives_and_source_epochs. Points at nothing: a source is a value, and the epoch
+    # outlives any one connection of it, as `proj.record`'s rows do; a retirement names its record
+    # by value, because the live row it copied can serve again.
+    "proj.record_retired",
+    "proj.source_epoch",
+    # 0178_skill_scripts. A script points at the skill version whose digest covers its bytes.
+    "agent.skill_script",
+    # 0182_entity_registry_observations. None points at anything: each names a source record or a
+    # digest by value, so each outlives what it names.
+    "er.observation",
+    "er.blocked_value",
+    # 0183_entity_merges. A merge points at the two canonical entities it joined, and an unmerge at
+    # the merge it reverses, by the merge's own three columns so the pair cannot differ.
+    "er.merge",
+    "er.unmerge",
+    # 0184_entity_review_items. Points at nothing: the records and entities are values, so an item
+    # outlives a merge or an unmerge of what it names.
+    "er.review_item",
 )
 
 __all__ = [
@@ -432,6 +464,7 @@ __all__ = [
     "AutomationRunRow",
     "AutomationScheduleRow",
     "BindingCodeRow",
+    "BlockedValueRow",
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
@@ -448,6 +481,7 @@ __all__ = [
     "ClassifiedRecordRow",
     "ClassifiedTableRow",
     "ConnectorConnectionRow",
+    "ConnectorStewardRow",
     "ConnectorSyncRow",
     "ControlRunRow",
     "ConversationRow",
@@ -462,6 +496,8 @@ __all__ = [
     "EntityAliasRow",
     "EntityIdentifierRow",
     "EntityLinkRow",
+    "EntityMergeRow",
+    "EntityUnmergeRow",
     "ErasureOutcome",
     "ErasureRequestRow",
     "EscalationRow",
@@ -472,15 +508,18 @@ __all__ = [
     "GroupRoleRuleRow",
     "HaltRow",
     "KnowledgeItemRow",
+    "LearningPauseRow",
     "LearningRow",
     "LegalHoldRow",
     "ManifestActRow",
     "ManifestDraftRow",
     "ManifestRevisionRow",
+    "MarkRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",
     "ModelProviderRow",
+    "ObservationRow",
     "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",
@@ -500,12 +539,15 @@ __all__ = [
     "ResidencyConstraintRow",
     "RetentionReleaseRow",
     "RetentionReportRow",
+    "RetiredRecordRow",
     "ReviewDecisionRow",
+    "ReviewItemRow",
     "RoleGrantRow",
     "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",
+    "SelfGrantRow",
     "SensitiveReadRow",
     "SensitiveReferralRow",
     "ServiceAccountRow",
@@ -518,7 +560,9 @@ __all__ = [
     "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
+    "SkillScriptRow",
     "SolutionRow",
+    "SourceEpochRow",
     "SpendActualRow",
     "StaffMemberRow",
     "StaffSyncRunRow",

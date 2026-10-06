@@ -275,6 +275,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "know.solution": "captured_by",
         "know.steward_task": "principal_id",
         "mem.adaptive": "principal_id",
+        # A helpful or unhelpful mark on an answer the person was given, and nothing they said
+        # (`0154`). `0154` grants no way for a row to leave, so an erasure keeps these and reports
+        # them kept.
+        "mem.mark": "principal_id",
         "mem.persistent": "principal_id",
         "obs.request_telemetry": "principal",
         # A budget's subject is a person, a department or an agent; only a person's id matches.
@@ -339,6 +343,9 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
 #: Tables in a PostgreSQL store no row of which is a person's own. See `AN_ACTOR_IS_NOT_AN_OWNER`.
 ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     {
+        # Whether an agent's runs may teach it, and why (`0154`): about an agent, and the person
+        # named is the steward who switched it, an actor and not an owner.
+        "agent.learning_pause",
         # An uploaded table and its rows (`0116`): a price list is the company's, and the people
         # named on the table row are the administrators who uploaded and marked it, actors and not
         # owners.
@@ -365,6 +372,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.skill_detachment",
         "agent.skill_retirement",
         "agent.skill_review",
+        # The bytes of a script a stored skill version carries (`0178`): about a skill, never a
+        # person.
+        "agent.skill_script",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.
         "agent.tool_definition",
@@ -376,6 +386,16 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "er.canonical",
         "er.identifier",
         "er.link",
+        # A merge and the unmerge reversing it (`0183`): `decided_by` and `performed_by` are actors,
+        # not owners, and each row is about two canonical entities, which hold no person's fields.
+        "er.merge",
+        "er.unmerge",
+        # A record's comparison keys, a blocked join key, and a pair waiting for a reviewer
+        # (`0182`, `0184`): digests, name keys and two source references, whose fields are the
+        # source record's and are erased with it there. `blocked_by` and `decided_by` are actors.
+        "er.observation",
+        "er.blocked_value",
+        "er.review_item",
         # Which directory group confers which role (`0109`): `created_by` is an actor, not an owner.
         "auth.group_role_rule",
         "gate.capability_pack",
@@ -420,6 +440,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # question no connected source covered is nobody's once the question ledger's row is gone.
         "ops.question_gap",
         "ops.report_refresh",
+        # A source's steward names the person who answers for it, an actor and not an owner, and
+        # the source itself is nobody's (`0167`), as `ops.connector_connection`'s actors are.
+        "ops.connector_steward",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",
@@ -435,6 +458,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.webhook_change",
         "ops.webhook_subscriber",
         "proj.record",
+        # A retired projected row keeps what `proj.record` kept, pointers and no principal, and a
+        # source's epoch is its name and a count: `0179` keeps no principal in either.
+        "proj.record_retired",
+        "proj.source_epoch",
         # A channel's record names the administrator who last switched it, an actor and not an
         # owner, and a delivery keeps a channel, an outcome and a reason and never a sender or a
         # message (`0114`), so neither is anybody's.
@@ -469,6 +496,8 @@ RETAINED: Final[Mapping[str, str]] = MappingProxyType(
         # 0150: who read a trace's payload, under the separate role, is the reader's accountability.
         "obs.trace_read": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
         "ops.halt": A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT,
+        # 0167: a grant somebody made to themselves is the record their stewards are told from.
+        "gate.self_grant": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
     }
 )
 

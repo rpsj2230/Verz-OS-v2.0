@@ -89,6 +89,12 @@ def fresh(database: str) -> str:
         )
         for schema in SCHEMAS:
             conn.execute(f"GRANT USAGE ON SCHEMA {schema} TO brain_app")
+        # `0001`'s two statements about the fast lane, which a stamp at `0001` skips: the
+        # application may take the role, and the role may name what is in `proj`. Without them
+        # the fast lane, which reads as the role since `0162`, is refused on a scratch database
+        # and on no install.
+        conn.execute("GRANT brain_fastlane TO brain_app")
+        conn.execute("GRANT USAGE ON SCHEMA proj TO brain_fastlane")
     return scratch
 
 

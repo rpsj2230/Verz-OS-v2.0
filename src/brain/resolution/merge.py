@@ -177,14 +177,12 @@ AN_ID_ISSUED_BEFORE_A_MERGE_IS_STILL_A_CACHE_KEY = (
 
 #: The gap this module does not close, kept as a constant so it has to be deleted.
 NOTHING_HERE_IS_CALLED_BY_THE_RUNNING_SYSTEM = (
-    "No route, worker or job calls merge or unmerge. Nothing outside brain.resolution imports "
-    "this module, there is no er.merge_audit table and no migration creating one, no "
-    "pre-image is persisted anywhere, and no cache has ever been cleared by an Invalidation "
-    "this module produced. The call site that would have to exist is a resolver service that "
-    "holds the entity graph, calls cascade over a candidate pair, hands the result to "
-    "AutomaticMerge and writes the outcome's one pointer inside a transaction with the audit "
-    "row. That service is not in this repository. Everything here is callable and nothing "
-    "calls it, which is the same sentence cascade and normalise say about their own halves."
+    "brain.resolution.merge_store carries a merge and an unmerge out, one transaction each, with "
+    "the pointer, the er.merge or er.unmerge row and the pre-image together, and hands every "
+    "Invalidation to its surface. What still calls the store is the install acceptance check "
+    "and nothing else: no route, no review screen and no resolver service that holds the entity "
+    "graph, calls cascade over a candidate pair and hands the result to AutomaticMerge. Until "
+    "one does, no merge happens on an install except the ones a person or a check makes."
 )
 
 

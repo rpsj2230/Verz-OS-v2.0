@@ -71,7 +71,18 @@ from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
 
 import structlog
-from sqlalchemy import CompoundSelect, Select, func, insert, or_, select, text, union_all, update
+from sqlalchemy import (
+    CompoundSelect,
+    Select,
+    Update,
+    func,
+    insert,
+    or_,
+    select,
+    text,
+    union_all,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.dml import ReturningInsert, ReturningUpdate
@@ -380,6 +391,16 @@ def one_department(department: str) -> Select[tuple[Any]]:
     """The live department by slug, or nothing."""
     return select(DepartmentRow.id).where(
         DepartmentRow.slug == department, DepartmentRow.deleted_at.is_(None)
+    )
+
+
+def moving_people(principal_ids: Sequence[str], department: str) -> Update:
+    """Put these live people in `department`. Attributed by the caller, so `0170`'s trigger records
+    each move under whoever made it (M1.6.20)."""
+    return (
+        update(PrincipalRow)
+        .where(PrincipalRow.id.in_(list(principal_ids)), PrincipalRow.deleted_at.is_(None))
+        .values(primary_department=department)
     )
 
 

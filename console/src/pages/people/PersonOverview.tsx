@@ -43,7 +43,7 @@ import { Button } from "../../components/ui/button";
 import { agentAddress } from "../agents/AgentsPage";
 import { StatePill } from "../agents/pills";
 import { dayWords } from "../access/formParts";
-import { EDITED_AT_THE_SOURCE } from "./peopleActions";
+import { DEPARTMENT_SET_ON_PEOPLE, EDITED_AT_THE_SOURCE } from "./peopleActions";
 import { WorkEmail } from "./WorkEmail";
 import { useLifecycleActs } from "../agents/LifecycleActs";
 import { SecondFactorPill, StaffStatusPill, StandingPill } from "./pills";
@@ -216,7 +216,7 @@ export function PersonOverview({
   const { person, placements } = detail;
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <SectionCard title={ABOUT_HEADING} footer={<NotOffered>{EDITED_AT_THE_SOURCE}</NotOffered>}>
+      <SectionCard title={ABOUT_HEADING} footer={<NotOffered>{detail.departmentSetOnPeople ? DEPARTMENT_SET_ON_PEOPLE : EDITED_AT_THE_SOURCE}</NotOffered>}>
         {detail.keptOut === undefined ? null : <Note kind="not-yet">{detail.keptOut}</Note>}
         <FactList>
           <Fact label="Department">{placements.department?.name ?? person.departmentName ?? person.department ?? "Not placed"}</Fact>

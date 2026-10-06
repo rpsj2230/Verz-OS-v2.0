@@ -378,9 +378,9 @@
 
   "scopeMappings": [
     {
-      "clientScope": "brain-identity",
+      "client": "brain-console",
       "roles": ["brain-langfuse-payload"],
-      "_comment": "The one realm role a product token may carry. Without this and fullScopeAllowed false on brain-console, the payload role mapper would write every realm role the holder has, default-roles-brain among them, which is a claim nothing asked for."
+      "_comment": "The one realm role a product token may carry. Without this and fullScopeAllowed false on brain-console, the payload role mapper would write every realm role the holder has, default-roles-brain among them, which is a claim nothing asked for. Mapped to the client and never to a client scope: Keycloak applies a client scope that has role scope mappings only to a person holding one of those roles (DefaultClientSessionContext.isClientScopePermittedForUser), so mapping it to brain-identity dropped that whole scope, audience, subject and second factor included, for everybody who does not read traces. From 2026-09-30 to 2026-10-06 that was every console sign-in on a fresh install."
     }
   ],
 

@@ -228,6 +228,10 @@ from brain.govern_routes import router as govern_router
 # has written from them. See `brain.group_rule_routes`.
 from brain.group_rule_routes import router as group_rule_router
 
+# Stop: what is stopped, stop at once, and resume with a written reason, behind `admin:halt` in
+# a scope that matches what is stopped. See `brain.halt_routes` and `brain.ops.halt_store`.
+from brain.halt_routes import router as halt_router
+
 # The five install screens. A ninth router because what it answers about is the deployment
 # rather than the company's data: no name to guess, no row belonging to anybody, and no
 # session on four of the five. The same `asking` dependency, imported. See
@@ -325,6 +329,11 @@ from brain.report_routes import router as report_router
 # this install, recorded. See `brain.requirement_check_routes`.
 from brain.requirement_check_routes import router as requirement_check_router
 
+# The Resolution review screen: the pairs entity resolution could not settle, and a reviewer's
+# merge or rejection, behind `admin:entity_merge` over everything and the reach of both records.
+# See `brain.resolution_routes` and `brain.resolution.review_store`.
+from brain.resolution_routes import router as resolution_router
+
 # The retention report and the four writes that decide whether the sweep acts. A router of
 # its own because two of its writes are the only way a deletion is approved or suspended:
 # every write needs its authority over everything, and the report is shown whole to a
@@ -377,6 +386,10 @@ from brain.skill_routes import router as skill_router
 # the four govern screens make, and refusing instead would let a caller read off whether
 # somebody else holds a capability. See `brain.staff_source_routes`.
 from brain.staff_source_routes import router as staff_source_router
+
+# What the signed-in person is told as a steward: grants people made to themselves that reach a
+# document, source or agent they answer for. See `brain.stewardship_routes`.
+from brain.stewardship_routes import router as stewardship_router
 
 # Storage: the buckets the product keeps, each one's retention and why, and where the store
 # is, behind `admin:storage` over everything. Never an object's name. See
