@@ -172,7 +172,7 @@ def test_the_three_shared_names_are_named_for_their_sources() -> None:
 def _declared(name: str, *entities: str) -> Any:
     """A declaration reading `entities` and nothing else, as `entities_of` reads one."""
     reading = SimpleNamespace(entities=lambda: entities)
-    return SimpleNamespace(name=name, reading=reading, live=None, console=None)
+    return SimpleNamespace(name=name, reading=reading, live=None, console=None, provides=())
 
 
 def test_a_name_two_connectors_provide_is_refused() -> None:
@@ -189,6 +189,18 @@ def test_two_connectors_with_their_own_names_are_both_mapped() -> None:
     assert dict(
         binding.providers_of({"one": _declared("one", "a"), "two": _declared("two", "b")})
     ) == {"a": "one", "b": "two"}
+
+
+def test_a_wiki_page_is_bound_to_lark_wiki_and_the_library_read_is_not() -> None:
+    """Lark Wiki's pages are read by a module of its own under `read:wiki_page`, which no reading
+    names, so the declaration says it provides that entity. The library read stays unbound, because
+    it is the company's own documents. Delete this and an agent holding the library read reaches
+    the wiki whether or not it names Lark Wiki, which is the gap `0187` closed."""
+    reads = ("read:knowledge", "read:wiki_page")
+
+    assert binding.provider_of("wiki_page") == "lark_wiki"
+    assert held(entitlement_ceiling(agent(*reads))) == {"read:knowledge"}
+    assert held(entitlement_ceiling(agent(*reads, connectors=("lark_wiki",)))) == set(reads)
 
 
 def test_a_tool_declared_only_on_a_connectors_manifest_is_bound_to_it() -> None:
