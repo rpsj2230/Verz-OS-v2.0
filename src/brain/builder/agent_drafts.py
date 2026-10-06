@@ -60,7 +60,7 @@ a publish stores is signed with this install's own key or not at all. See
 
 Scope: domain logic. Nothing here opens a connection or reads a clock.
 
-Task ids: M27.11.6, M27.15.31
+Task ids: M27.11.6, M27.15.31, M13.7.4
 """
 
 from __future__ import annotations
@@ -181,6 +181,9 @@ class Act:
     widened: bool = False
     #: For a new agent: seen by the author's department rather than the author alone.
     for_department: bool = False
+    #: For a new agent: the channels its author ticked, which a second person's approval publishes
+    #: with, as it publishes with `for_department` (M13.7.4). Empty answers nowhere.
+    channels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

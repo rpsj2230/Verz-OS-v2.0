@@ -12,7 +12,7 @@
  * audit read the same words. A refusal is never one of them: it is the API's own sentence, read by
  * `readNotChanged`.
  *
- * Task ids: M27.11.6, M27.15.31
+ * Task ids: M27.11.6, M27.15.31, M13.7.4
  */
 
 export { readNotChanged } from "../agentAutomationsQuery";
@@ -152,6 +152,26 @@ export interface DraftActDone {
   readonly at: string;
 }
 
+/** One channel a new agent may be switched on for: `ChannelChoiceView`. */
+export interface ChannelChoice {
+  readonly name: string;
+  readonly label: string;
+}
+
+/** The channels the API offers, in its order; a malformed entry is left out, never guessed. */
+export function readChannelChoices(value: unknown): readonly ChannelChoice[] {
+  const found: ChannelChoice[] = [];
+  for (const one of Array.isArray(value) ? value : []) {
+    const fields = fieldsOf(one);
+    const name = said(fields?.["name"]);
+    const label = said(fields?.["label"]);
+    if (name !== undefined && label !== undefined) {
+      found.push({ name, label });
+    }
+  }
+  return found;
+}
+
 /** One draft: `AgentDraftView`. */
 export interface Draft {
   readonly draftId: string;
@@ -169,6 +189,10 @@ export interface Draft {
   readonly widened: readonly string[];
   readonly drawableTools: readonly string[];
   readonly publishUnavailable?: string;
+  /** For a new agent: the channels it may be switched on for, offered unticked. */
+  readonly channels: readonly ChannelChoice[];
+  /** The sentence that an agent with no channel ticked answers nowhere. */
+  readonly channelsNote: string;
 }
 
 export function readDraft(payload: unknown): Draft | null {
@@ -200,6 +224,8 @@ export function readDraft(payload: unknown): Draft | null {
     widened: words(fields["widened"]),
     drawableTools: words(fields["drawable_tools"]),
     ...(publishUnavailable === undefined ? {} : { publishUnavailable }),
+    channels: readChannelChoices(fields["channels"]),
+    channelsNote: said(fields["channels_note"]) ?? "",
   };
 }
 

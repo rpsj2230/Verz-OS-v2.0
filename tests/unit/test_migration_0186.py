@@ -91,6 +91,9 @@ def _agent_rows(url: str) -> None:
     )
     row = agent_values(effective.record)
     del row["connectors"]
+    # And the three 0189 adds after it.
+    for later in ("channels", "max_turns", "max_tool_calls"):
+        del row[later]
     engine = create_engine(url.replace("postgresql://", "postgresql+psycopg://", 1))
     try:
         with engine.begin() as conn:

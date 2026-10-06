@@ -538,7 +538,7 @@ async def _an_agent(
     """
     from brain.agents.install import settle
     from brain.agents.install_store import agent_values, version_values
-    from brain.agents.model import AgentAudience
+    from brain.agents.model import AgentAudience, answering_on
     from brain.agents.template import (
         ManifestAuthority,
         ManifestIdentity,
@@ -548,6 +548,7 @@ async def _an_agent(
         publish,
     )
     from brain.core.entitlement import Capability
+    from brain.gate.context import Channel
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -609,7 +610,8 @@ async def _an_agent(
             effective_hash=effective.config_hash,
             created_by=owner,
         ),
-        insert(AgentRow).values(**agent_values(record)),
+        # Asked on Ask, so switched on for the console, as a person making it would tick it.
+        insert(AgentRow).values(**agent_values(answering_on(record, (Channel.CONSOLE.value,)))),
     )
     return agent_id
 

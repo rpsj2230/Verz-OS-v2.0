@@ -123,7 +123,7 @@ async def installed_agent(
     `personal` makes it seen by its owner alone rather than by acceptance_a.
     """
     from brain.agents.install_store import agent_values, version_values
-    from brain.agents.model import AgentAudience
+    from brain.agents.model import AgentAudience, answering_on
     from brain.agents.template import (
         ManifestAuthority,
         ManifestIdentity,
@@ -134,6 +134,7 @@ async def installed_agent(
         publish,
     )
     from brain.core.entitlement import Capability
+    from brain.gate.context import Channel
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -190,7 +191,10 @@ async def installed_agent(
             effective_hash=effective.config_hash,
             created_by=owner,
         ),
-        insert(AgentRow).values(**agent_values(effective.record)),
+        # Switched on for the console, where the workspace asks it, as a person would tick it.
+        insert(AgentRow).values(
+            **agent_values(answering_on(effective.record, (Channel.CONSOLE.value,)))
+        ),
     )
     return agent_id
 
