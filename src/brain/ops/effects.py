@@ -402,6 +402,18 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.model_lane:ToolLoop.drafted": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.gate.runtime:ToolCaller.call": Repeat.ISSUES,
         "brain.gate.runtime:RunLog.record": Repeat.DERIVED_STATE,
+        # What lets a run hold a write for a person (M13.7.6): everything but `hold` is computed
+        # from what it is handed, and `hold` writes one row in this system's own table, in the
+        # asker's name, where a second write of the same suspension is refused by its key. Nothing
+        # a run is handed can send: see
+        # `brain.gate.runtime.RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON`.
+        "brain.gate.runtime:SideEffects.offers": Repeat.READS,
+        "brain.gate.runtime:SideEffects.target_of": Repeat.READS,
+        "brain.gate.runtime:SideEffects.propose": Repeat.READS,
+        "brain.gate.runtime:SideEffects.simulate": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.gate.runtime:SideEffects.policy_for": Repeat.READS,
+        "brain.gate.runtime:SideEffects.assessment_for": Repeat.READS,
+        "brain.gate.runtime:SideEffects.hold": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The items behind cited documents, read for their badges at the reader's reach.
         "brain.gate.model_lane:ItemLookup.items": Repeat.READS,
         "brain.gate.provenance:Cited.describe": Repeat.READS,
@@ -741,6 +753,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # through `run_real`. See `AN_EXECUTION_HANDED_TO_THE_LEASH_IS_HANDED_TO_THE_DOOR`.
         "brain.connectors.declaration:PreparesWrite.call_for": Repeat.READS,
         "brain.connectors.declaration:PreparesWrite.differs": Repeat.READS,
+        # Preparing a write a model asked for (M13.7.6): the connector builds the action a person
+        # approves from the model's arguments and the record the run read, and sends nothing. A
+        # preparer that can show what a simulated action would have returned does so from the action
+        # alone.
+        "brain.connectors.declaration:ProposesAction.target_of": Repeat.READS,
+        "brain.connectors.declaration:ProposesAction.action_for": Repeat.READS,
+        "brain.connectors.declaration:SimulatesAction.simulate": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.ops.connector_write_run:SourceSender.send": Repeat.ISSUES,
         # Running an approved action with nobody present (M13.7.6). Every executor runs one
         # approval through `brain.gate.leash.resume`, whose `run_real` keys it in the operation

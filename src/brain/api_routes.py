@@ -207,7 +207,7 @@ from brain.gate.roster import (
     viewer_for,
 )
 from brain.gate.rule_store import rules_for_asker
-from brain.gate.runtime import AgentRuntime, RunHaltedError, ToolRefusedError
+from brain.gate.runtime import AgentRuntime, RunHaltedError, SideEffects, ToolRefusedError
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
@@ -1922,6 +1922,46 @@ def reach_again(
     return again
 
 
+#: Why an agent's leash and a place to hold writes are read only for an agent that may ask for one.
+AN_AGENT_THAT_MAY_ASK_FOR_A_WRITE_IS_GIVEN_ITS_LEASH_AND_A_PLACE_TO_HOLD_IT: Final = (
+    "An agent whose ceiling names a write a connector prepares for a model is run with its own "
+    "stored leash and with the means to hold the writes it asks for, which `brain.gate.runtime` "
+    "decides by that leash and stores for a person. Every other agent is run as it was: with no "
+    "leash, because the only tools it is offered read, and with nothing that could hold a write."
+)
+
+
+async def side_effects_for(
+    request: Request, *, agent: AgentRecord, registry: ToolRegistry
+) -> tuple[Leash, SideEffects | None]:
+    """The leash a run is held to and what holds its writes, or an empty leash and nothing.
+
+    See `AN_AGENT_THAT_MAY_ASK_FOR_A_WRITE_IS_GIVEN_ITS_LEASH_AND_A_PLACE_TO_HOLD_IT`. Nothing is
+    read for an agent that names no such write, and a process with no database or no suspension
+    store has nowhere to hold one, so it offers none.
+    """
+    from brain.connectors.declaration import proposers
+    from brain.gate.runtime_effects import ConnectorSideEffects
+    from brain.gate.suspension_store import StoredSuspensions
+    from brain.ops.connector_catalogue import declarations
+    from brain.ops.connector_store import StoredConnections
+
+    sessions = getattr(request.app.state, "db_sessions", None)
+    store = getattr(request.app.state, "suspensions", None)
+    named = agent.authority.allowed_tools & set(proposers(declarations()))
+    if not named or sessions is None or not isinstance(store, StoredSuspensions):
+        return Leash(), None
+    # Imported here: `brain.agent_routes` serves routes that import this module.
+    from brain.agent_routes import install_for, install_of, leash_of
+
+    async with sessions() as session:
+        pair = (await session.execute(install_for(agent.agent_id))).one_or_none()
+    install = None if pair is None else install_of(pair[0], pair[1], agent)
+    return leash_of(install, registry), ConnectorSideEffects(
+        suspensions=store, connections=StoredConnections(sessions).connected
+    )
+
+
 def agent_runtime_for(
     request: Request,
     *,
@@ -1929,11 +1969,15 @@ def agent_runtime_for(
     asking: Answering,
     registry: ToolRegistry,
     assessment: RiskAssessment,
+    leash: Leash | None = None,
+    side_effects: SideEffects | None = None,
 ) -> AgentRuntime | None:
     """The tool loop for this agent and this asker, or None when the passage step serves it.
 
-    See `AN_AGENT_WITH_A_TOOL_BEYOND_THE_PASSAGE_SEARCH_RUNS_THE_LOOP`. The leash is empty in
-    this release: only tools that read are offered, and a read keeps whatever rung it is given.
+    See `AN_AGENT_WITH_A_TOOL_BEYOND_THE_PASSAGE_SEARCH_RUNS_THE_LOOP`. The leash is empty unless
+    the agent may ask for a write and was handed its own with `side_effects`: a tool that reads
+    keeps whatever rung it is given, and a write is decided by the leash and held for a person
+    (`side_effects_for`).
     """
     from brain.ops.agent_run_store import StoredAgentRuns
 
@@ -1950,17 +1994,19 @@ def agent_runtime_for(
             ),
         )
 
+    held = leash if leash is not None else Leash()
     runtime = AgentRuntime(
         record=agent,
         asker=asking.reach,
         registry=registry,
-        leash=Leash(),
+        leash=held,
         tools=RunToolCaller(registry),
         policy_for=policy_of(registry),
         reach_now=reach_again(request, asking),
         halted=halted,
         assessment=assessment,
         runs=None if sessions is None else StoredAgentRuns(sessions),
+        side_effects=side_effects,
     )
     try:
         invocation = invoke(
@@ -1969,7 +2015,7 @@ def agent_runtime_for(
             registry=registry,
             entitlement=run_entitlement(asking.reach, agent),
             ceiling=tool_ceiling(agent),
-            leash=Leash(),
+            leash=held,
             assessment=assessment,
             now=asking.now,
         )
@@ -2190,12 +2236,15 @@ async def answered_for(
         # The selected agent's tool loop, when its catalogue offers a tool the passage step does
         # not already read (M13.7.1). See `agent_runtime_for`.
         if model is not None and agent is not None:
+            held_leash, effects = await side_effects_for(request, agent=agent, registry=registry)
             runtime = agent_runtime_for(
                 request,
                 agent=agent,
                 asking=asking,
                 registry=registry,
                 assessment=front.screened,
+                leash=held_leash,
+                side_effects=effects,
             )
             if runtime is not None:
                 model = replace(model, runtime=runtime)
