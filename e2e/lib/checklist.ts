@@ -41,14 +41,15 @@ export const INTERNAL_CONSTANT = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/g;
 
 /**
  * Settings the server's environment file holds that a page may name, because naming one is telling
- * the person who runs the server what to type. The first run of the constant check found exactly
- * this on the Staff sources page, which says which two to set when the install runs no vault.
+ * the person who runs the server what to type. The constant check found exactly this on two
+ * pages: Staff sources, which says which two to set when the install runs no vault, and Version
+ * and updates, which says which one switches the release check on in the environment.
  *
  * Exact names rather than a prefix, so a leaked constant that happens to start the same way still
  * fails, and each is one the install guide's table of values defines
  * (`docs/install/configuration.md`), which a unit test holds it to.
  */
-export const OPERATOR_SETTINGS: readonly string[] = ["BRAIN_VAULT_ADDRESS", "BRAIN_VAULT_TOKEN"];
+export const OPERATOR_SETTINGS: readonly string[] = ["BRAIN_RELEASE_CHECK", "BRAIN_VAULT_ADDRESS", "BRAIN_VAULT_TOKEN"];
 
 /** The internal constants in a text, leaving out the settings an operator is told to type. */
 export function internalConstants(text: string): string[] {
