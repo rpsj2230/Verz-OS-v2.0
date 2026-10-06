@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T17:34:24.109136+00:00",
-  "commit": "4b7f54f4",
-  "commit_subject": "The Credentials screen gets an install check that writes every slot it offers into a vault of its own (#453)",
+  "generated_at": "2026-10-06T17:43:03.794953+00:00",
+  "commit": "73027b16",
+  "commit_subject": "The live-read tests no longer let their first read pay for a cold process out of its budget (#471)",
   "total": 1596,
   "done": 684,
   "percent": 42.9,
