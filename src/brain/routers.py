@@ -192,6 +192,10 @@ from brain.data_steward_routes import router as data_steward_router
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
 
+# A department head's budget against pace and their department's knowledge coverage, for the
+# person who leads it and the one 404 for everybody else. See `brain.department_view_routes`.
+from brain.department_view_routes import router as department_view_router
+
 # Send the evening digest to: the one setting naming a connected channel and a conversation in it,
 # chosen from what each channel offers now and saved as the Settings screen saves. See
 # `brain.digest_routes`.
