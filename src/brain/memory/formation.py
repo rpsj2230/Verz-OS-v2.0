@@ -156,6 +156,10 @@ A_MEMORY_SAID_AGAIN_REGAINS_WHAT_IT_WAS_FORMED_WITH = (
 #: over, whatever the client did with its window.
 SESSION_IDLE_SECONDS = 12 * 60 * 60
 
+#: The most statements one conversation's session memory holds (M16.1.1). A conversation's
+#: working context is a handful of sentences; more than this is a paste, and the oldest go first.
+MAX_SESSION_STATEMENTS = 8
+
 
 class MemoryKind(enum.StrEnum):
     """Where a memory lives, which decides what may be done to it.

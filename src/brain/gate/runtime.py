@@ -67,7 +67,7 @@ import inspect
 import json
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Final, Protocol
 
@@ -90,10 +90,18 @@ from brain.gate.effort import settings_for
 from brain.gate.injection import RiskAssessment, assess
 from brain.gate.invoke import Invocation, InvocationRefusedError, invoke
 from brain.gate.leash import Leash
-from brain.gate.model_lane import Drafted, ModelLane, evidence_of, routing_for
+from brain.gate.model_lane import (
+    Drafted,
+    ModelLane,
+    categories_of,
+    evidence_of,
+    routing_for,
+    tool_loop_turn,
+)
 from brain.gate.provenance import SEED_HORIZONS, Horizons
 from brain.gate.roster import run_entitlement
 from brain.gate.stop import StopReason
+from brain.gate.turn_context import ContextNote, ContextParts, assemble
 from brain.models.adapter import is_refusal
 from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverMessage, ProviderUnavailable, Role
@@ -382,6 +390,9 @@ class _Run:
     #: Results whose text read as steering a model, by `brain.gate.injection.assess`.
     steered: int = 0
     payloads: list[tuple[str, RedactedAnswer]] = field(default_factory=list)
+    #: The turn's assembled context once a model is going to be asked, so the answer and its
+    #: trace name the parts this run was shown (M16.6.1); None for a run refused before that.
+    context: ContextNote | None = None
 
 
 @dataclass(frozen=True)
@@ -456,7 +467,7 @@ class AgentRuntime:
                 run=run,
                 bounds=bounds,
             )
-            return drafted
+            return drafted if run.context is None else replace(drafted, context=run.context)
         finally:
             if self.runs is not None:
                 await self.runs.record(
@@ -508,9 +519,20 @@ class AgentRuntime:
         if not offered:
             return Drafted(outcome=nothing_retrieved(scope), asked=False), StopReason.REFUSED
 
+        # The turn's context from the one assembler the model lane uses (M16.6.1). Knowledge is
+        # read by the tools, so none is assembled up front, and the parts are named in the trace.
+        parts = await assemble(
+            question,
+            conversation=() if lane.follow_up is None else lane.follow_up.earlier,
+            session=lane.session,
+            task=(),
+            asker=lane.hints,
+            knowledge=None,
+        )
+        run.context = parts.note()
         messages: list[DriverMessage] = [
             DriverMessage(role=Role.SYSTEM, content=f"{PROTOCOL}\n\n{tools_block(offered)}"),
-            DriverMessage(role=Role.USER, content=question),
+            DriverMessage(role=Role.USER, content=tool_loop_turn(parts)),
         ]
         by_name = {one.name: one for one in offered}
         settings = settings_for(self.lane)
@@ -530,7 +552,7 @@ class AgentRuntime:
                     agent_version=lane.agent_version,
                     max_output_tokens=settings.max_output_tokens,
                     pin=self.record.model_pin,
-                    categories=self._categories(run),
+                    categories=self._categories(run, parts),
                 )
             except ProviderUnavailable as failed:
                 if failed.failure.refused:
@@ -617,11 +639,13 @@ class AgentRuntime:
             return StopReason.TIME_BOUND
         return None
 
-    def _categories(self, run: _Run) -> tuple[DataCategory, ...]:
-        """What the next prompt carries: the question, and records once a tool has returned any."""
+    def _categories(self, run: _Run, parts: ContextParts) -> tuple[DataCategory, ...]:
+        """What the next prompt carries: the question and the assembled parts, and records once a
+        tool has returned any."""
+        carried = categories_of(DataCategory.QUESTION, parts)
         if any(redacted.payload.records for _, redacted in run.payloads):
-            return (DataCategory.QUESTION, DataCategory.TOOL_RESULTS)
-        return (DataCategory.QUESTION,)
+            return (*carried, DataCategory.TOOL_RESULTS)
+        return carried
 
     def _ended(self, scope: SearchScope, run: _Run) -> Drafted:
         """A run stopped at a bound, told what a run that found nothing to say is told."""

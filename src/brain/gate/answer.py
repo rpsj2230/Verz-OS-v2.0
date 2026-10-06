@@ -213,6 +213,7 @@ from brain.gate.provenance import (
     provenance_for,
 )
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
+from brain.gate.turn_context import ContextNote
 from brain.knowledge.rows import RowRecord, RowRequest
 from brain.models.metering import Meter, ModelRoute
 from brain.resolution.guardrails import (
@@ -411,6 +412,9 @@ class Answered:
     #: was told so (M8.3.1). A fact about what the asker was told, which the learning signal reads
     #: as `brain.memory.signals.Signal.ESCALATED` once the exchange is kept (M16.2.4, M16.2.8).
     escalated: bool = False
+    #: Which parts of the turn's context a model was shown and which were left out (M16.6.1), on
+    #: a question a model was asked about. Names only; `brain.ops.trace_store` keeps it.
+    context: ContextNote | None = None
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -912,9 +916,12 @@ async def _answered_by_model(
     if drafted.asked:
         frames.append(stream.step(Progress.COMPOSING))
     if isinstance(drafted.outcome, Abstention):
-        return _abstained(stream, frames, gaps, drafted.outcome)
+        return replace(_abstained(stream, frames, gaps, drafted.outcome), context=drafted.context)
     said = "" if drafted.trimmed is None else drafted.trimmed.sentence()
-    return _answered(stream, frames, gaps, drafted.outcome, scope, drafted.provenance, said=said)
+    answered = _answered(
+        stream, frames, gaps, drafted.outcome, scope, drafted.provenance, said=said
+    )
+    return replace(answered, context=drafted.context)
 
 
 def _withheld_or_absent(
