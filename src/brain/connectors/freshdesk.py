@@ -1699,6 +1699,15 @@ MAX_REPLY_CHARS: Final = 10_000
 #: The action key the ticket a reply answers is carried under.
 TICKET_KEY: Final = "ticket"
 
+#: What a model names the text of its reply, which is the action's `REPLY_FIELD` once prepared.
+REPLY_ARGUMENT: Final = "body"
+
+#: The longest reply a model may ask for. Shorter than `MAX_REPLY_CHARS`, because a held action
+#: keeps the text it was shown in an artefact of at most 8,000 characters
+#: (`brain.gate.leash.SuspendedAction.artefact`), and a reply whose artefact does not fit would
+#: fail the run it was asked in rather than wait for a person.
+MAX_PROPOSED_REPLY_CHARS: Final = 7_000
+
 #: The field a reply writes on its ticket, classified by the grant that writes it (behind
 #: `read:ticket.reply`), because no record the index or a live read holds has it. See
 #: `brain.connectors.declaration.A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT`.
@@ -1714,6 +1723,22 @@ TICKET_REPLY_TOOL: Final = ToolDefinition(
         "customer by preparing it."
     ),
     entity=TICKET,
+    args_schema={
+        "type": "object",
+        "properties": {
+            TICKET_KEY: {
+                "type": "string",
+                "description": "The helpdesk's own id of the ticket being answered: digits only.",
+            },
+            REPLY_ARGUMENT: {
+                "type": "string",
+                "maxLength": MAX_PROPOSED_REPLY_CHARS,
+                "description": "The reply as plain text, for a person to read before it is sent.",
+            },
+        },
+        "required": [TICKET_KEY, REPLY_ARGUMENT],
+        "additionalProperties": False,
+    },
     required_capability=REPLY_CAPABILITY,
     side_effect=SideEffect.WRITE,
     identity_mode=IdentityMode.SERVICE,
@@ -1795,6 +1820,56 @@ def ticket_reply_of(action: Action) -> TicketReply:
     return TicketReply(ticket=action.row.get(TICKET_KEY, ""), body=action.args.get(REPLY_FIELD, ""))
 
 
+#: Why a reply a model asks for is built from the connection and the record, never from the model.
+A_MODEL_NAMES_A_TICKET_AND_A_REPLY_AND_NOTHING_ELSE: Final = (
+    "A model asking for a reply names the ticket and writes the text. The department an "
+    "approver's grant is matched against is the connection's own setting, the ticket must be "
+    "one the run's reach can read, and the id the held action carries is the one that record "
+    "has, so a model cannot move a reply to another department or another helpdesk by what it "
+    "writes."
+)
+
+
+class TicketReplyProposal:
+    """A reply an agent run asks for, as the action a person is asked to approve (M13.7.6).
+
+    See `A_MODEL_NAMES_A_TICKET_AND_A_REPLY_AND_NOTHING_ELSE`. The text is the model's and travels
+    whole, so the card an approver reads is the reply the customer would get; everything that
+    decides who may approve it is not.
+    """
+
+    @property
+    def tool(self) -> ToolDefinition:
+        return TICKET_REPLY_TOOL
+
+    def target_of(self, arguments: Mapping[str, str]) -> str:
+        ticket = arguments.get(TICKET_KEY, "")
+        # `fullmatch`, because the pattern's `$` also matches before a trailing line break, and
+        # this id is the one a model typed.
+        if not TICKET_ID.fullmatch(ticket):
+            msg = "a reply names its ticket by the helpdesk's own id, which is digits"
+            raise ConnectorContractError(msg)
+        return ticket
+
+    def action_for(
+        self,
+        arguments: Mapping[str, str],
+        *,
+        agent_id: str,
+        record: Mapping[str, Any],
+        settings: Mapping[str, str],
+    ) -> Action:
+        ticket = self.target_of(arguments)
+        if str(record.get("id", "")) != ticket:
+            msg = "a reply is prepared for the ticket that was read, and this is not that one"
+            raise ConnectorContractError(msg)
+        return prepare_ticket_reply(
+            TicketReply(ticket=ticket, body=arguments.get(REPLY_ARGUMENT, "")),
+            agent_id=agent_id,
+            department=settings.get(DEPARTMENT_SETTING, ""),
+        )
+
+
 class TicketReplyWrites:
     """How an approved reply is sent and how the ticket read back is judged (M11.8.12).
 
@@ -1847,6 +1922,7 @@ TICKET_REPLIES: Final = WriteGrant(
     ),
     not_allowed=THIS_INSTALL_HAS_NOT_ALLOWED_TICKET_REPLIES,
     prepares=TicketReplyWrites(),
+    proposes={TICKET_REPLY_TOOL.name: TicketReplyProposal()},
     fields=each_behind_its_own(TICKET, (REPLY_FIELD,)),
     scopes=KeyScopes(
         request=("an agent API key whose role may reply to tickets",),

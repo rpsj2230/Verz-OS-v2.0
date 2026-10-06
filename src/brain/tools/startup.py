@@ -89,6 +89,12 @@ the connector's own declaration, because `brain.connectors.declaration` is on th
 path and imports nothing from `brain.knowledge`, which `tests/invariants/test_minimal_index.py`
 holds.
 
+**A connector's write a model may ask for is registered beside the row tool that reads its
+record (M13.7.6).** `brain.tools.proposed_writes` registers each write a connector declares a
+preparer for, with a handler that refuses every call, so an agent's catalogue can offer it and a
+run can hold its call for a person; the only way it is sent is the approved action the worker
+carries out. Without a row source none is registered, for the reason no row tool is.
+
 **The row source is injected and there is no default.** `RowTool.reader` binds to a
 `RowSource`, and a builder that supplied its own would be a second path to data with its
 own idea of what may be seen, which is exactly what `channels.adapter.ChannelAdapter`
@@ -135,7 +141,7 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8
+Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8, M13.7.6
 """
 
 from __future__ import annotations
@@ -160,6 +166,7 @@ from brain.knowledge.document_tools import (
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
 from brain.ops.connector_catalogue import Derived, declarations
+from brain.tools.proposed_writes import register_proposed_writes
 from brain.tools.registry import ResultContract, ToolRegistry
 from brain.tools.website_check import WebsiteCheckTool, register_website_check
 
@@ -423,6 +430,9 @@ def build_registry(
             result_contract=ResultContract.TYPED,
             scope=KNOWLEDGE_PIN,
         )
+        # A connector's write a model may ask for, beside the row tool that reads its record. It
+        # can never be called: see `brain.tools.proposed_writes`.
+        register_proposed_writes(registry, declarations())
 
     # The website check, where the caller handed it a transport (M12.4.4). Not tied to a row
     # source: it reads a site, not a table.
