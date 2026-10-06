@@ -74,6 +74,7 @@ from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
+from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.escalation import EscalationRow
 from brain.tables.fast_lane import FastPathRuleRow
@@ -118,7 +119,7 @@ from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
-from brain.tables.projection import ProjectedRecordRow
+from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
 from brain.tables.question_gap import QuestionGapRow
 from brain.tables.requirement_check import RequirementCheckRow
 from brain.tables.resolution import (
@@ -127,6 +128,8 @@ from brain.tables.resolution import (
     EntityIdentifierRow,
     EntityLinkRow,
 )
+from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
+from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
@@ -140,6 +143,7 @@ from brain.tables.skill import (
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
+    SkillScriptRow,
 )
 from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
@@ -424,6 +428,24 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # grant are values, so each record outlives what it names.
     "ops.connector_steward",
     "gate.self_grant",
+    # 0179_record_lives_and_source_epochs. Points at nothing: a source is a value, and the epoch
+    # outlives any one connection of it, as `proj.record`'s rows do; a retirement names its record
+    # by value, because the live row it copied can serve again.
+    "proj.record_retired",
+    "proj.source_epoch",
+    # 0178_skill_scripts. A script points at the skill version whose digest covers its bytes.
+    "agent.skill_script",
+    # 0182_entity_registry_observations. None points at anything: each names a source record or a
+    # digest by value, so each outlives what it names.
+    "er.observation",
+    "er.blocked_value",
+    # 0183_entity_merges. A merge points at the two canonical entities it joined, and an unmerge at
+    # the merge it reverses, by the merge's own three columns so the pair cannot differ.
+    "er.merge",
+    "er.unmerge",
+    # 0184_entity_review_items. Points at nothing: the records and entities are values, so an item
+    # outlives a merge or an unmerge of what it names.
+    "er.review_item",
     # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
     # outlives both.
     "ops.agent_run",
@@ -447,6 +469,7 @@ __all__ = [
     "AutomationRunRow",
     "AutomationScheduleRow",
     "BindingCodeRow",
+    "BlockedValueRow",
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
@@ -478,6 +501,8 @@ __all__ = [
     "EntityAliasRow",
     "EntityIdentifierRow",
     "EntityLinkRow",
+    "EntityMergeRow",
+    "EntityUnmergeRow",
     "ErasureOutcome",
     "ErasureRequestRow",
     "EscalationRow",
@@ -499,6 +524,7 @@ __all__ = [
     "MessageRow",
     "ModelAttemptRow",
     "ModelProviderRow",
+    "ObservationRow",
     "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",
@@ -518,7 +544,9 @@ __all__ = [
     "ResidencyConstraintRow",
     "RetentionReleaseRow",
     "RetentionReportRow",
+    "RetiredRecordRow",
     "ReviewDecisionRow",
+    "ReviewItemRow",
     "RoleGrantRow",
     "RoutingChangeRow",
     "RoutingRungRow",
@@ -537,7 +565,9 @@ __all__ = [
     "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
+    "SkillScriptRow",
     "SolutionRow",
+    "SourceEpochRow",
     "SpendActualRow",
     "StaffMemberRow",
     "StaffSyncRunRow",

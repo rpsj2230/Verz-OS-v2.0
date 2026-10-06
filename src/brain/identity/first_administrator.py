@@ -320,6 +320,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:credential",
     "admin:data_steward",
     "admin:department",
+    "admin:entity_merge",
     "admin:erasure",
     "admin:feature",
     "admin:export",

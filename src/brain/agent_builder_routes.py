@@ -45,7 +45,7 @@ draft can be written, saved, checked and rehearsed meanwhile.
 **A new module rather than `brain.agent_lifecycle_routes`**, because that router moves an agent that
 exists and this one makes and changes one; they share its three questions and its 409 body.
 
-Task ids: M27.11.6, M27.15.31, M20.1.4, M13.7.4
+Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4
 """
 
 from __future__ import annotations
@@ -162,6 +162,7 @@ PUBLISH_PATH: Final = "/agent-drafts/{draft_id}/publish"
 APPROVE_PATH: Final = "/agent-drafts/{draft_id}/approve"
 DECLINE_PATH: Final = "/agent-drafts/{draft_id}/decline"
 EDIT_PATH: Final = "/agents/{agent_id}/drafts"
+PUBLICATIONS_PATH: Final = "/agents/{agent_id}/publications"
 
 #: How many hex characters of randomness follow a minted id's stem, as an install mints one.
 ID_SUFFIX_BYTES: Final = 3
@@ -948,6 +949,64 @@ async def edit_agent_as_draft(request: Request, agent_id: str, asked: Asked) -> 
         base_hash=found.effective_hash,
         document=seed(effective.manifest, agent_id),
         key=template_key_of(request),
+    )
+
+
+class PublicationView(BaseModel):
+    """One publish of an agent: who, when, which paths moved, the rung and who approved it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    published_by: str
+    published_at: datetime
+    #: The manifest paths that changed against the version before, names only.
+    paths: list[str]
+    rung: str
+    approvers: list[str]
+
+
+class PublicationsView(BaseModel):
+    """An agent's publish history, oldest first (M20.4.6)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    publications: list[PublicationView]
+
+
+@router.get(PUBLICATIONS_PATH, response_model=PublicationsView, responses=COMMON_RESPONSES)
+async def agent_publications(request: Request, agent_id: str, asked: Asked) -> PublicationsView:
+    """Every publish of one agent, computed from its stored versions (M20.4.6).
+
+    Asked as Edit as a draft asks: the capability, the agent's audience, then the capability over
+    its row, one 404 for all three. The record is `brain.builder.publish.publication_history`
+    over what `agent.template_version` keeps; nothing is written to serve it. See
+    `brain.builder.publish.THE_PUBLISH_RECORD_IS_READ_FROM_THE_VERSIONS`.
+    """
+    from brain.builder.publication_store import StoredPublications
+
+    _builds(asked)
+    found = await drafts_of(request).agent(agent_id)
+    if found is None or not visible(found.record, asked):
+        raise _no_draft_here(asked, "agent")
+    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+        raise _no_draft_here(asked, "scope")
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    history = await StoredPublications(sessions).history(agent_id)
+    return PublicationsView(
+        agent_id=agent_id,
+        publications=[
+            PublicationView(
+                published_by=one.actor_id,
+                published_at=one.at,
+                paths=list(one.paths),
+                rung=one.rung.name.lower(),
+                approvers=list(one.approvers),
+            )
+            for one in history
+        ],
     )
 
 

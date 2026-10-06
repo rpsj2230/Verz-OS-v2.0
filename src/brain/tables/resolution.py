@@ -52,9 +52,9 @@ observation made on 3 March was made.
 **UPDATE on `er.canonical` and `er.link`, and not on the other two.** The pointer is written by
 a merge and a record's membership can be corrected, which are the two things that legitimately
 change. An observation cannot. Note what that UPDATE grant costs: correcting a link overwrites
-the previous membership and nothing records what it was. That is M14.5.1's pre-image and it is
-not built; `brain.resolution.canonical.NOTHING_HERE_RECORDS_WHO_MERGED_OR_ON_WHAT_EVIDENCE`
-says the same about the merge itself.
+the previous membership and nothing records what it was. A merge's pre-image holds every link as
+it stood at the merge (`er.merge`, M14.5.1), which covers the merge and not a correction made
+outside one.
 
 **`er.resolved_alias` is a view rather than a table, and it is declared `security_invoker`.**
 See `THE_VIEW_HAS_TO_RUN_AS_THE_CALLER`: a PostgreSQL view runs as its owner by default and
@@ -218,8 +218,8 @@ class CanonicalEntityRow(Base):
     #: forwards to a row that is not there resolves to nothing at all.
     merged_into: Mapped[str | None] = mapped_column(String(ENTITY_ID_CHARS), nullable=True)
 
-    #: When it stopped being current. Never who, and never on what evidence: see
-    #: `canonical.NOTHING_HERE_RECORDS_WHO_MERGED_OR_ON_WHAT_EVIDENCE`.
+    #: When it stopped being current. Never who, and never on what evidence: those are the
+    #: `er.merge` row's whose `decided_at` is this instant.
     merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (

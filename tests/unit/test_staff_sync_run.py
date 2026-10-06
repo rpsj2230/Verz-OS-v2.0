@@ -180,8 +180,14 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Store:
     monkeypatch.setattr(staff_sync_run, "apply_standing", apply_standing)
 
     # The people step likewise; `tests/unit/test_staff_people_run.py` runs it against a database.
+    # Whether it places people is held by `test_staff_accounts_run.py`'s run under each setting.
     async def provide_people(
-        sessions: object, roster: Roster, *, now: datetime, trial: bool = False
+        sessions: object,
+        roster: Roster,
+        *,
+        now: datetime,
+        trial: bool = False,
+        place: bool = True,
     ) -> PeopleRun:
         held.people.append((tuple(one.work_address for one in roster.people), trial))
         return PeopleRun(made=2)
