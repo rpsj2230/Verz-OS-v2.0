@@ -1347,12 +1347,18 @@ def test_the_recovery_screen_accepts_no_write_and_no_route_offers_a_drill() -> N
 #: rehearsal added anywhere else, a recovery drill included, is still caught.
 AGENT_DRAFT_REHEARSAL = f"{API_PREFIX}{REHEARSE_PATH}"
 
+#: The second such address: rehearsing a skill version's examples (M12.3.4) checks that an agent holding
+#: it reaches every tool an example names, for the reviewer, and records the result against the
+#: version's digest. It restores nothing, runs no model and sends nothing. Let through by its exact
+#: path for the same reason as the one above.
+SKILL_VERSION_REHEARSAL = f"{API_PREFIX}/skills/{{digest}}/rehearsals"
+
 
 def _offers_a_drill(path: str, operations: Iterable[str]) -> bool:
     """Whether an address takes a write under a word a recovery drill would be called by."""
     return (
         bool(set(operations) - {"get"})
-        and path != AGENT_DRAFT_REHEARSAL
+        and path not in (AGENT_DRAFT_REHEARSAL, SKILL_VERSION_REHEARSAL)
         and any(word in path for word in ("drill", "rehears", "restore"))
     )
 

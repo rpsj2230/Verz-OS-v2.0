@@ -373,6 +373,8 @@ def test_every_table_with_a_source_and_an_entity_is_renamed_or_argued_for() -> N
         *module.NOT_REWRITTEN,
         "er.canonical",
         "er.review_item",
+        # Created by 0206, after this rename, so it only ever held the source-named entities.
+        "mem.learned_rule",
     }
 
 

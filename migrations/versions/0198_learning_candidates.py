@@ -426,7 +426,7 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "decided_by IS NULL OR decided_by <> raised_by", name="decided_by_somebody_else"
         ),
-        sa.UniqueConstraint("applied_item_id", name="applied_once"),
+        sa.UniqueConstraint("applied_item_id", name="uq_learning_candidate_applied_item_id"),
         schema="know",
     )
     op.create_index(

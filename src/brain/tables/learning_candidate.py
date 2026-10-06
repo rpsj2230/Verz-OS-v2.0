@@ -85,7 +85,7 @@ class LearningCandidateRow(TimestampMixin, Base):
         CheckConstraint(
             "decided_by IS NULL OR decided_by <> raised_by", name="decided_by_somebody_else"
         ),
-        UniqueConstraint("applied_item_id", name="applied_once"),
+        UniqueConstraint("applied_item_id"),
         Index(
             "ix_learning_candidate_one_pending_per_fix",
             "group_key",
