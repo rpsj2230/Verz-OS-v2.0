@@ -707,6 +707,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for ledger_check in (
         "the_trace_ledger_runs_as_its_five_services",
         "every_trace_ledger_service_runs_under_its_budgeted_limit",
+        "a_run_sent_to_the_ledger_is_found_there_with_its_model_call",
     ):
         assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
     # No class pooler runs here; `tests/unit/test_class_pools.py` stands a limited login in for

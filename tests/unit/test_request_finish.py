@@ -488,6 +488,15 @@ def test_a_wired_process_records_questions_and_one_with_no_database_records_noth
     assert isinstance(traces, TraceRecorder)
     assert traces.sessions is sessions
     assert traces.environment == "staging"
+    # M32.1.2.6: no ledger send unless the lifespan hands one over, and then that one.
+    assert traces.ship is None
+
+    def ship(trace_id: str, steps: object) -> None:
+        del trace_id, steps
+
+    *_, shipping = request_recorders_for(sessions, environment="staging", ship=ship)
+    assert isinstance(shipping, TraceRecorder)
+    assert shipping.ship is ship
 
 
 def test_the_recorder_writes_and_commits_the_question_it_was_handed() -> None:
