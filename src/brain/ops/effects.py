@@ -234,6 +234,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
         "brain.agent_lifecycle_routes:AgentLifecycles.create": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # An agent's upgrade: a read; an acceptance written by compare-and-set against the hash and
+        # version the page drew, so a second press finds the pin moved and writes nothing; and a
+        # decline, one insert that a second press finds already there.
+        "brain.agent_upgrade_routes:AgentUpgrades.read": Repeat.READS,
+        "brain.agent_upgrade_routes:AgentUpgrades.accept": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.agent_upgrade_routes:AgentUpgrades.decline": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # An agent's drafts (0149): reads, and appends. A second save of the same body returns the
         # revision already kept, a second act on one revision is refused by its key, and a second
         # publish finds the instance written or moved and writes nothing.

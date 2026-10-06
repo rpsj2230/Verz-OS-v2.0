@@ -38,11 +38,15 @@
  * across one agent's views and holds the Dashboard's period, so a trip to the Profile and back finds
  * the period where it was left and asks nothing again.
  *
+ * **A newer version of the agent's template** (`AgentUpgrade.tsx`) is drawn above the Profile for a
+ * reader the API lets act on the agent, and nothing at all for anybody else or for an agent already on
+ * the newest version.
+ *
  * **The Memory section** (`AgentMemory.tsx`) is at `/agents/{id}/memory` for a reader whose strip
  * holds it, which the API sends for every agent to a reader of the Memory tab. **The Artifacts
  * section** (`AgentArtifacts.tsx`) is at `/agents/{id}/artifacts` on the same terms.
  *
- * Task ids: M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
+ * Task ids: M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6, M13.4.2
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, MessageSquarePlus, Settings } from "lucide-react";
@@ -88,6 +92,7 @@ import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabili
 import { AgentDashboard, usePeriod } from "./AgentDashboard";
 import { daysSince, readHeaderFacts, readProfile, spendIsRecorded, type HeaderFacts } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
+import { AgentUpgrade } from "./AgentUpgrade";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { useDraftStart } from "./DraftStart";
 import { useLifecycleActs } from "./LifecycleActs";
@@ -436,6 +441,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           onAutomationsChanged={onChanged}
         />
       ) : null}
+      {view === "profile" ? <AgentUpgrade agentId={agentId} onChanged={onMoved} /> : null}
       {view === "profile" ? (
         <AgentProfile
           agent={agent}
