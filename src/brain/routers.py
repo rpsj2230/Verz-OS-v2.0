@@ -54,6 +54,10 @@ from brain.agent_artifact_routes import router as agent_artifact_router
 from brain.agent_builder_routes import router as agent_builder_router
 from brain.agent_capability_routes import router as agent_capability_router
 
+# One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
+# breaker reads, and the supervision pin and its reviews.
+from brain.agent_leash_routes import router as agent_leash_router
+
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
