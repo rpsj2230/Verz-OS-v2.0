@@ -46,6 +46,7 @@ from brain.agent_lifecycle_routes import (
     NOT_THE_VERSION_CONFIRMED,
     REFUSED,
     STARTS_DISABLED_AT_SHADOW,
+    SWITCHING_ON_IS_ONE_RULE,
     TRANSFER_PATH,
     UNAVAILABLE,
     VERSION_PATH,
@@ -70,6 +71,8 @@ from brain.agents.template import (
 )
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
+from brain.channels.adapter import Feature
+from brain.channels.lark import LARK_FEATURES
 from brain.connectors.registry import ConnectorRegistry
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
@@ -950,7 +953,12 @@ def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> Non
 
     Delete this and the console draws controls from a view that could say anything."""
     view = console.get("u_admin", path(LIFECYCLE_PATH, agent_id=COMPANY)).json()
+    rows = view.pop("channel_rows")
 
+    # The rows are the adapters' channels the boxes offer, each with its layout (M39.2.4.1).
+    offered = {one.name for one in channel_choices()} - {Channel.WIDGET.value}
+    assert rows and {one["name"] for one in rows} <= offered
+    assert {one["profile"] for one in rows} <= {"card", "attachment", "plain"}
     assert view == {
         "agent_id": COMPANY,
         "display_name": "Invoice desk",
@@ -1159,3 +1167,58 @@ def test_a_channel_it_could_be_carried_on_is_switched_on_and_one_already_on_may_
     assert "widget" in [one["name"] for one in kept.json()["channel_choices"]]
     assert off.status_code == 200, off.text
     assert console.memory.agents[COMPANY].record.channels == ("lark",)
+
+
+def test_the_lifecycle_view_carries_each_channel_row_with_its_profile_and_group_flag(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**M39.2.4.1.** The rows `agent_tabs.channel_rows` offers this reader for this agent, each
+    with whether it answers there, the layout its adapter declares and whether it can go into a
+    group chat there. Delete this and the agent's Profile shows a list of channel names with
+    nothing about what each one can carry or do."""
+    only_lark_is_declared(monkeypatch)
+    found = console.memory.agents[COMPANY]
+    console.memory.agents[COMPANY] = replace(found, record=answering_on(found.record, ["lark"]))
+
+    rows = console.get("u_admin", path(LIFECYCLE_PATH, agent_id=COMPANY)).json()["channel_rows"]
+
+    assert rows == [
+        {
+            "name": "lark",
+            "label": "Lark",
+            "enabled": True,
+            "profile": "card",
+            "group_installable": Feature.GROUP_INSTALL in LARK_FEATURES,
+        }
+    ]
+
+
+def test_a_channel_the_old_rule_refused_is_still_refused_by_the_one_rule(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`SWITCHING_ON_IS_ONE_RULE` is no wider than the rule it replaced: the widget, which declares
+    no adapter and is not the asker's own session, and WhatsApp, which `channel_rows` does not offer
+    on a deployment whose one adapter is Lark, are each refused in the one sentence and nothing is
+    written; the console and Lark, which both rules admit, are switched on. Delete this and the
+    route can admit a channel the boxes never offered."""
+    only_lark_is_declared(monkeypatch)
+
+    widget = console.post(
+        "u_admin", path(CHANNELS_PATH, agent_id=COMPANY), {"channels": ["widget"], "expected": []}
+    )
+    whatsapp = console.post(
+        "u_admin", path(CHANNELS_PATH, agent_id=COMPANY), {"channels": ["whatsapp"], "expected": []}
+    )
+    both = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["console", "lark"], "expected": []},
+    )
+
+    assert [not_changed(one) for one in (widget, whatsapp)] == [
+        (409, REFUSED, CANNOT_CARRY_IT),
+        (409, REFUSED, CANNOT_CARRY_IT),
+    ]
+    assert both.status_code == 200, both.text
+    assert console.memory.agents[COMPANY].record.channels == ("console", "lark")
+    assert "One rule" in SWITCHING_ON_IS_ONE_RULE
