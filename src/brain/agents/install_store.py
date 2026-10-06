@@ -183,6 +183,7 @@ def agent_values(record: AgentRecord) -> dict[str, Any]:
         "allowed_tools": sorted(record.authority.allowed_tools),
         "required_tools": sorted(record.authority.required_tools),
         "max_side_effect": record.authority.max_side_effect.value,
+        "connectors": list(record.authority.connectors),
         "created_by": record.created_by,
         "disabled_at": record.disabled_at,
         "archived_at": record.archived_at,
