@@ -40,6 +40,7 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, MutableMapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from functools import partial
 from typing import Final, Literal
 
 import httpx
@@ -131,6 +132,7 @@ from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.join_key_pepper import pepper_at_start
+from brain.ops.ledger_export import KeptKeys, LedgerShipper, destination_here
 from brain.ops.live_read_run import live_records_for
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.matrix_gate_run import InstallMatrixGate
@@ -154,7 +156,7 @@ from brain.ops.template_key import TemplateKeyState, keep_trying, template_key_a
 from brain.ops.template_key import hold as hold_template_key
 from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
-from brain.ops.trace_store import TraceRecorder
+from brain.ops.trace_store import Step, TraceRecorder
 from brain.ops.usage_store import UsageRecorder
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
@@ -618,8 +620,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # rules, because a lane with no sink cannot compose at all. A run's masked trace graph goes to
     # the payload store through `TraceRecorder` among the recorders below (M24.3.4).
     app.state.trace_sink = CountingTraceSink()
+    # The trace ledger, where `INSTALL_SERVICES` switched it on, is sent the same graph beside
+    # the request (M32.1.2.6). Where and with which keys are asked on every send, so a ledger
+    # switched on later, or keys a deploy handed over, are used without a restart.
+    app.state.ledger_shipper = LedgerShipper(
+        destination=partial(destination_here, settings.profile, settings.langfuse_host),
+        keys=KeptKeys(app.state.vault, clock=wall_clock),
+        clock=wall_clock,
+    )
     app.state.request_recorders = request_recorders_for(
-        app.state.db_sessions, environment=settings.env
+        app.state.db_sessions,
+        environment=settings.env,
+        ship=app.state.ledger_shipper.ship_beside,
     )
     # The stored agents `/answer` may select from, read once per question (M3.9.8).
     app.state.agent_roster = agent_roster_for(app.state.db_sessions)
@@ -996,6 +1008,7 @@ def request_recorders_for(
     sessions: async_sessionmaker[AsyncSession] | None,
     *,
     environment: str,
+    ship: Callable[[str, Sequence[Step]], None] | None = None,
 ) -> tuple[RequestRecorder, ...]:
     """What a finished request is recorded to on this process. See `brain.gate.finish`.
 
@@ -1019,7 +1032,7 @@ def request_recorders_for(
         GapRecorder(sessions),
         UsageRecorder(sessions),
         SensitiveReadRecorder(sessions),
-        TraceRecorder(sessions, environment=environment),
+        TraceRecorder(sessions, environment=environment, ship=ship),
     )
 
 

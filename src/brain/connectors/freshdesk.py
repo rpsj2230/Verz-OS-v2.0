@@ -280,7 +280,10 @@ CONNECTOR_NAME: Final = FRESHDESK
 #: `brain.core.field_policy` means: a policy is looked up by this string, and a tag nothing
 #: matches is withheld from everybody.
 TICKET: Final = "ticket"
-CONTACT: Final = "contact"
+#: Named for the source since 2026-10-06, because Xero also had a "contact" and a capability on a
+#: shared name cannot say which source it reaches. See
+#: `brain.agents.binding.AN_ENTITY_NAMES_ONE_SOURCE`.
+CONTACT: Final = "freshdesk_contact"
 
 #: This connector's own version, which moves when anything in the manifest moves. An upgrade
 #: is recognised by a version change, so editing a field mapping without touching this leaves

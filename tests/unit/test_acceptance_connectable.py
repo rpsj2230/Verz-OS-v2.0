@@ -1,14 +1,16 @@
 """The connectable-source acceptance checks: registered, passing on a real schema, and able to fail.
 
-The database half builds PostgreSQL to head and runs the nine checks as the worker would, then runs
+The database half builds PostgreSQL to head and runs the ten checks as the worker would, then runs
 them against the product broken where each proves something: the source's own half (its records
-answering nothing on Ask, a Drive file never read, Connect Lark's save switching no Base on), the
+answering nothing on Ask, a Drive file or a Slack channel never read, a Slack member matched to
+nobody, Connect Lark's save switching no Base on), the
 install half (a connector the install serves read as not serving, so no agent naming it installs
 ready), and the agent half (a run that ignores its agent's ceiling, so an agent bound to nothing
 answers from the source). Each fails with its own sentence, and every table the checks write holds
 afterwards what it held before.
 
-Task ids: M11.9.3, M11.9.4, M11.9.6, M11.9.7, M11.9.8, M11.9.10, M11.9.11, M11.9.13, M11.9.14
+Task ids: M11.9.3, M11.9.4, M11.9.5, M11.9.6, M11.9.7, M11.9.8
+Task ids: M11.9.10, M11.9.11, M11.9.13, M11.9.14
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ MODULE = "brain.ops.acceptance_checks_connectable"
 LEAVES = {
     "google_drive_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.3",
     "lark_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.4",
+    "slack_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.5",
     "freshdesk_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.6",
     "xero_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.7",
     "the_crm_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.8",
@@ -52,6 +55,7 @@ ROW_SOURCES = {
 
 DRIVE = "google_drive_is_ready_for_a_person_and_its_agent_once_connected"
 LARK = "lark_is_ready_for_a_person_and_its_agent_once_connected"
+SLACK = "slack_is_ready_for_a_person_and_its_agent_once_connected"
 
 
 def mine() -> dict[str, Check]:
@@ -78,7 +82,7 @@ def test_the_connectable_checks_are_listed_in_their_page_order() -> None:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_each_source_is_ready_for_a_person_and_an_agent() -> None:
-    """**The nine checks as the worker runs them, against PostgreSQL at head.** Each passes, and
+    """**The ten checks as the worker runs them, against PostgreSQL at head.** Each passes, and
     every table a check writes holds afterwards what it held before. Delete this and a source can
     be connected from the console and still need a server step before a person or an agent can
     use it, with nothing on the owner's install saying so."""
@@ -133,6 +137,49 @@ def test_a_drive_file_never_read_fails_the_drive_check(monkeypatch: pytest.Monke
 
 
 @pytest.mark.needs_db
+def test_a_slack_channel_never_read_fails_the_slack_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The source's half of M11.9.5: the passage reader never reads a channel's history from
+    Slack, so nobody is handed what was said. The Slack check fails at the person's question.
+    Delete this and Slack can be connected and indexed with no question ever answered from it."""
+    from brain.ops import slack_messages_live
+
+    def never(self: Any, *args: Any, **kwargs: Any) -> tuple[Any, ...]:
+        del self, args, kwargs
+        return ()
+
+    monkeypatch.setattr(slack_messages_live.SlackPassages, "read", never)
+    with at_head("brain_acceptance_connectable_slack") as url:
+        outcome = run_checks(url, (mine()[SLACK],))
+    assert outcome[SLACK] == (
+        FAILED,
+        "a permitted person's question was not answered from the source",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_slack_member_matched_to_nobody_fails_the_slack_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The console's half of M11.9.5: the person's work address bound on the People page is not
+    read back as theirs, so Slack cannot tell which member asked and hands them nothing. The Slack
+    check fails at the person's question. Delete this and the walk could pass with Slack matching
+    a person by something other than the work address bound on their People page."""
+    from brain.ops import slack_messages_live
+
+    async def nobody(sessions: Any, principal_id: str) -> tuple[str, ...]:
+        del sessions, principal_id
+        return ()
+
+    monkeypatch.setattr(slack_messages_live, "asker_digests", nobody)
+    with at_head("brain_acceptance_connectable_slack_nobody") as url:
+        outcome = run_checks(url, (mine()[SLACK],))
+    assert outcome[SLACK] == (
+        FAILED,
+        "a permitted person's question was not answered from the source",
+    )
+
+
+@pytest.mark.needs_db
 def test_a_lark_save_that_switches_no_base_on_fails_the_lark_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -161,7 +208,7 @@ def test_a_lark_save_that_switches_no_base_on_fails_the_lark_check(
 def test_a_source_the_install_reads_as_not_serving_fails_every_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The install half of all nine leaves: every connector an agent names read as not serving, as
+    """The install half of all ten leaves: every connector an agent names read as not serving, as
     `connectors_of` read every source before 2026-09-30, so an agent naming a source connected
     from the console does not install ready. Every check fails saying so. Delete this and an agent
     bound to a source could need its connector registered at the server first."""
@@ -187,7 +234,7 @@ def test_a_source_the_install_reads_as_not_serving_fails_every_check(
 def test_an_agent_whose_ceiling_drops_what_it_was_bound_to_fails_every_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The agent half of all nine leaves, the other way: an agent's ceiling built without the reads
+    """The agent half of all ten leaves, the other way: an agent's ceiling built without the reads
     its template names, so the agent bound to a source reaches nothing in it. Every check fails at
     the bound agent. Delete this and a check would pass with the bound agent's own answer never
     looked at, since the person's answer is the same words."""
@@ -209,7 +256,7 @@ def test_an_agent_whose_ceiling_drops_what_it_was_bound_to_fails_every_check(
 def test_a_run_that_ignores_its_agent_s_ceiling_fails_every_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The agent half of all nine leaves: a run computed at the caller's reach whatever the agent,
+    """The agent half of all ten leaves: a run computed at the caller's reach whatever the agent,
     so an agent bound to no source answers from it. Every check fails at the unbound agent. Delete
     this and a check would pass for an agent that answers because it ignores what it is bound to,
     which proves nothing about binding."""

@@ -79,13 +79,13 @@ the set will ever be offered, so it is the condition for starting it and not the
 runs: M32.1.1.1 is claimed by an install check that sees it running, never by this file. See
 `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`.
 
-Task ids: M32.1.1.4
+Task ids: M32.1.1.4, M32.1.2.6
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Literal
@@ -539,18 +539,25 @@ AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT: Final = (
 )
 
 
-def runs_trace_ledger(profile: str) -> bool:
-    """Whether this profile runs somewhere for spans to go.
+def runs_trace_ledger(profile: str, switched: Collection[str] = frozenset()) -> bool:
+    """Whether this install runs somewhere for spans to go: its profile, or its optional services.
 
     Derived from `COMPONENTS` rather than declared a second time. A profile gains a trace
     ledger by a component naming it, which is the same edit that puts it in the budget, so
-    the two cannot disagree.
+    the two cannot disagree. `switched` is the containers the install's optional services run
+    (`brain.ops.overlays.components_switched_on`): an install whose profile runs no ledger runs
+    one once `INSTALL_SERVICES` names it, and the setting is then the one source of where spans
+    go (`brain.ops.ledger_export`).
     """
     assert_known_profile(profile)
-    return any(c.name in TRACE_LEDGER for c in components_for(profile))
+    return bool(TRACE_LEDGER & set(switched)) or any(
+        c.name in TRACE_LEDGER for c in components_for(profile)
+    )
 
 
-def trace_config_conflicts(profile: str, values: dict[str, str]) -> tuple[str, ...]:
+def trace_config_conflicts(
+    profile: str, values: dict[str, str], switched: Collection[str] = frozenset()
+) -> tuple[str, ...]:
     """Trace destinations configured on an install that runs no trace ledger.
 
     **This is the profile flag doing something rather than describing something.** Without
@@ -568,7 +575,7 @@ def trace_config_conflicts(profile: str, values: dict[str, str]) -> tuple[str, .
     misconfiguration found one variable at a time is a sequence of restarts.
     """
     assert_known_profile(profile)
-    if runs_trace_ledger(profile):
+    if runs_trace_ledger(profile, switched):
         return ()
     return tuple(
         f"{setting} is set but profile {profile!r} runs no trace ledger, so these spans "

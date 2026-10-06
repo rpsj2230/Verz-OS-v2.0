@@ -39,7 +39,7 @@ CHECK_ORDER: Final = 436
 
 A: Final = RESERVED_DEPARTMENTS[0]
 HUBSPOT: Final = ("hubspot", "hubspot_company")
-XERO: Final = ("xero", "contact")
+XERO: Final = ("xero", "xero_contact")
 
 NOT_ON_THE_SCREEN: Final = "a pair waiting for a person was not on the reviewer's screen"
 NOT_IN_WORDS: Final = "a card's evidence was not a list of sentences without figures"

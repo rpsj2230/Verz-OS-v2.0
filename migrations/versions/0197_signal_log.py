@@ -38,7 +38,7 @@ install downgraded past this migration answers exactly as it did, and learns fro
 Task ids: M16.2.8, M9.2.4
 
 Revision ID: 0197
-Revises: 0170
+Revises: 0187
 """
 
 from __future__ import annotations
@@ -47,9 +47,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0197"
-# The single head of this branch when it was written (0170 revises 0184); re-pointed at whichever
+# The head of main when this was pushed (0187); re-pointed at whichever
 # migration is the head when it lands, since nothing here depends on anything after 0154.
-down_revision = "0170"
+down_revision = "0187"
 branch_labels = None
 depends_on = None
 
