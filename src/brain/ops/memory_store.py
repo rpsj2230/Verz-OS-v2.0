@@ -63,7 +63,14 @@ memories, read and decided by `brain.memory.recall.recall` at the run's reach an
 asker is now, whose statements a model is shown as hints. See
 `A_MODEL_IS_SHOWN_ONLY_WHAT_THE_ASKER_MAY_RECALL_ABOUT_THEMSELVES`.
 
-Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3, M16.7.13
+**An inference said again is stamped confirmed in the same transaction (M16.7.2).** What
+`propose_memories` names in `confirmed` is updated with `confirmation`, the one column `0163` lets
+the application touch, in the person's own name and under the turn's trace, and `0163`'s trigger
+appends one ledger entry for each. `formation_of` carries the stamp, so every reader decays the
+memory from it. Nothing else stamps it: a mark is written by `brain.ops.learning_signal_store`,
+which names no memory, so a helpful mark cannot confirm one (M16.7.4).
+
+Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3, M16.7.13, M16.7.2
 """
 
 from __future__ import annotations
@@ -74,11 +81,12 @@ from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
 
 import structlog
-from sqlalchemy import Insert, Select, func, insert, or_, select, text
+from sqlalchemy import Insert, Select, func, insert, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Scope
+from brain.knowledge.search import PRINCIPAL_SETTING
 from brain.memory.correction import Correction, Demotion, Supersession
 from brain.memory.digest import Learning, Undo, undo
 from brain.memory.formation import Formation, MemoryKind
@@ -437,6 +445,25 @@ class Formed:
 
     memory_ids: tuple[str, ...]
     skipped: tuple[NotFormed, ...]
+    #: The standing inferences the turn said again, stamped confirmed (M16.7.2).
+    confirmed: tuple[str, ...] = ()
+
+
+def confirmation(principal_id: str, memory_ids: Collection[str]) -> Any:
+    """Stamp these inferences of this person's confirmed, by the database's clock (M16.7.2).
+
+    The one column `0163` lets the application update, in the person's own name, which the policy
+    reads from `app.principal_id`, stamped `statement_timestamp()`, which is the only value the
+    policy admits. The ledger entry is `0163`'s trigger's, one per row the update moves.
+    """
+    return (
+        update(AdaptiveMemoryRow)
+        .where(
+            AdaptiveMemoryRow.id.in_(sorted(set(memory_ids))),
+            AdaptiveMemoryRow.principal_id == principal_id,
+        )
+        .values(last_confirmed_at=func.statement_timestamp())
+    )
 
 
 class StoredFormations:
@@ -485,9 +512,17 @@ class StoredFormations:
             for one in proposed.formed:
                 await session.execute(memory_row(one.learning, one.statement))
                 await session.execute(learning_row(one.learning))
+            if proposed.confirmed:
+                # In the person's own name and under the turn's trace, for the policy and the
+                # ledger entry `0163`'s trigger appends for each confirmation.
+                await session.execute(_set_config(PRINCIPAL_SETTING, turn.principal_id))
+                await session.execute(_set_config(TRACE_ID_SETTING, turn.trace_id))
+                await session.execute(_set_config(ENT_HASH_SETTING, turn.reach.ent_hash()))
+                await session.execute(confirmation(turn.principal_id, proposed.confirmed))
         return Formed(
             memory_ids=tuple(one.learning.memory_id for one in proposed.formed),
             skipped=proposed.skipped,
+            confirmed=proposed.confirmed,
         )
 
     async def after_turn(self, turn: Turn) -> Formed | None:
@@ -549,6 +584,7 @@ def formation_of(row: PersistentMemoryRow | AdaptiveMemoryRow) -> Formation:
         ent_hash=row.ent_hash,
         formed_at=row.formed_at,
         kind=MemoryKind(row.kind),
+        confirmed_at=row.last_confirmed_at if isinstance(row, AdaptiveMemoryRow) else None,
     )
 
 

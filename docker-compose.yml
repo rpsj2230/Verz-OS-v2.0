@@ -76,6 +76,7 @@ services:
       # profile that deploys it (`brain.ops.pii.analyzer_address`); startup refuses a value on
       # `lite`, which deploys none. See `docker-compose.presidio.yml`.
       BRAIN_PRESIDIO_URL: ${BRAIN_PRESIDIO_URL:-}
+      BRAIN_SANDBOX_URL: ${BRAIN_SANDBOX_URL:-}
       # This installation's own values, every one `brain.install.INSTALLATION` declares.
       INSTALL_COMPANY_NAME: ${INSTALL_COMPANY_NAME:-}
       INSTALL_PRODUCT_NAME: ${INSTALL_PRODUCT_NAME:-}

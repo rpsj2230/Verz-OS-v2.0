@@ -75,7 +75,7 @@ no runner registers no execution tool, which is the shape `brain.tools.startup` 
 row tool with no source: a tool that is present and cannot answer safely is worse than one
 that is absent.
 
-Task ids: M12.2.9
+Task ids: M12.2.9, M12.4.11
 """
 
 from __future__ import annotations
@@ -101,6 +101,7 @@ from brain.tools.skills import (
     execution_tool,
     resolve_pin,
     safe_archive_member,
+    script_sha256_of,
 )
 
 # ------------------------------------------------------------------ written-down reasons
@@ -122,6 +123,33 @@ A_SCRIPT_NEVER_WIDENS_REACH: Final = (
     "could hold a grant, a token or a tool list, and the process is handed an environment "
     "built from a closed set of names rather than the one this server is running under."
 )
+
+#: Said when a skill's scripts are not in its digest, so no approval covers their bytes.
+SCRIPT_BYTES_NOT_COVERED: Final = (
+    "this skill's scripts are named in its digest and their bytes are not, so no approval covers "
+    "what would run; add it again as a package holding each script it declares"
+)
+
+#: Said when a script's bytes no longer hash to what the approval covers.
+SCRIPT_CHANGED_SINCE_APPROVAL: Final = (
+    "a script's bytes no longer match the ones its skill was approved with, so it was not run"
+)
+
+
+def verify_script_bytes(spec: SandboxSpec, files: Mapping[str, bytes]) -> None:
+    """Refuse before anything runs unless every file is exactly the bytes the approval covers.
+
+    The runner's half of `brain.tools.skills.THE_DIGEST_COVERS_EVERY_SCRIPTS_BYTES`, and run by
+    the runner before it hands anything to a sandbox: the same set of paths the approval names, and
+    each one's sha256 recomputed from the bytes in hand. A runner that trusted the stored hash
+    instead of computing it would be checking the store against itself.
+    """
+    approved = dict(spec.script_sha256)
+    if not approved or set(files) != set(approved):
+        raise SkillScriptError(SCRIPT_CHANGED_SINCE_APPROVAL)
+    if any(script_sha256_of(content) != approved[path] for path, content in files.items()):
+        raise SkillScriptError(SCRIPT_CHANGED_SINCE_APPROVAL)
+
 
 #: Why the environment is assembled rather than filtered.
 THE_ENVIRONMENT_IS_BUILT_NEVER_INHERITED: Final = (
@@ -306,6 +334,9 @@ class SandboxSpec:
     leash: ScriptLeash = field(default_factory=ScriptLeash)
     network: Egress = Egress.DENIED
     reach_hash: str = ""
+    #: Each of the skill's scripts and the sha256 its approval covers. Not a capability: what a
+    #: runner checks the bytes it materialises against before anything executes (M12.4.11).
+    script_sha256: tuple[tuple[str, str], ...] = ()
 
 
 # --------------------------------------------------- what a sandbox must deny (M12.2.9)
@@ -598,6 +629,8 @@ def plan_run(
     including one an archive dropped there that nobody reviewed.
     """
     safe_archive_member(request.script)
+    if not skill.scripts_are_covered:
+        raise SkillScriptError(SCRIPT_BYTES_NOT_COVERED)
     if request.script not in skill.scripts:
         msg = (
             f"skill {skill.name!r} declares {list(skill.scripts)} and this run asked for "
@@ -609,6 +642,7 @@ def plan_run(
     return SandboxSpec(
         skill=skill.name,
         digest=skill.digest(),
+        script_sha256=skill.script_sha256,
         script=request.script,
         arguments=request.arguments,
         environment=build_environment(environment),

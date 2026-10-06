@@ -154,3 +154,52 @@ def test_a_blank_pass_through_is_accepted_only_for_a_setting_with_a_declared_def
     assert missing_settings(blank, {"INSTALL_OIDC_REALM", "INSTALL_OIDC_REDIRECT_URIS"}) == [
         "INSTALL_OIDC_REDIRECT_URIS is passed to keycloak-realm without being required"
     ]
+
+
+def _runtime_stage(dockerfile: str) -> list[str]:
+    """The Dockerfile's last stage, one instruction per entry, continuation lines joined."""
+    joined = dockerfile.replace("\\\n", " ")
+    lines = [
+        line.strip()
+        for line in joined.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    last_from = max(index for index, line in enumerate(lines) if line.upper().startswith("FROM "))
+    return lines[last_from:]
+
+
+def test_the_importer_s_volume_is_mounted_over_a_directory_its_user_owns() -> None:
+    """The image makes the importer's mount point and gives it to the user the image runs as.
+
+    A new named volume is owned by whoever owns the directory it is mounted over, and root owns
+    one the image never made. The importer runs as the image's user, so without this it is refused
+    writing the realm on every fresh install and Keycloak, which waits for it, never starts. The
+    browser harness found exactly that on its first run (M27.10.6). Delete this and the line in
+    the Dockerfile can go with every unit test green, because only an empty volume shows it.
+    """
+    import shlex
+
+    compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    mounts = [
+        str(volume).split(":")[1]
+        for volume in compose["services"][IMPORTER_SERVICE]["volumes"]
+        if str(volume).startswith("realm-import:")
+    ]
+    assert mounts == ["/out"]
+    mount = mounts[0]
+
+    stage = _runtime_stage((REPO / "Dockerfile").read_text(encoding="utf-8"))
+    users = [index for index, line in enumerate(stage) if line.upper().startswith("USER ")]
+    assert users, "the runtime stage names no user, so the importer would run as root"
+    user = stage[users[-1]].split()[1]
+    made = owned = -1
+    for index, line in enumerate(stage):
+        if not line.upper().startswith("RUN "):
+            continue
+        for part in line[4:].split("&&"):
+            argv = shlex.split(part)
+            if argv[:1] == ["mkdir"] and mount in argv[1:]:
+                made = index
+            if argv[:2] == ["chown", f"{user}:{user}"] and mount in argv[2:]:
+                owned = index
+    assert 0 <= made <= owned < users[-1], (made, owned, users[-1])

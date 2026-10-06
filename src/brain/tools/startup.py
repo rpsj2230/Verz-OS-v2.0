@@ -146,10 +146,17 @@ from typing import Final
 
 from brain import demo
 from brain.connectors.declaration import shipped
+from brain.gate.caches import CachedEmbedding
 from brain.knowledge.columns import PRICE_LIST, TableClassification
 from brain.knowledge.connector_figures import LiveFigures, figure_tools
 from brain.knowledge.connector_rows import CONNECTOR_ROW_DESCRIPTIONS, CONNECTOR_ROW_ENTITIES
-from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, knowledge_tools
+from brain.knowledge.document_tools import (
+    KNOWLEDGE_PIN,
+    KnowledgeCaches,
+    QuestionEmbedder,
+    RecordStore,
+    knowledge_tools,
+)
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
 from brain.tools.registry import ResultContract, ToolRegistry
@@ -279,7 +286,9 @@ def description_for(source: str, entity: str) -> str:
     return {**ROW_TOOL_DESCRIPTIONS, **SOURCE_ROW_DESCRIPTIONS.get(source, {})}[entity]
 
 
-def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder | None:
+def question_embedder(
+    env: Mapping[str, str] | None = None, *, cache: RecordStore[CachedEmbedding] | None = None
+) -> QuestionEmbedder | None:
     """How this process embeds a question, or None when the install has declared no weights.
 
     None is an install whose knowledge search is text search, which is every install until its
@@ -298,7 +307,7 @@ def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder 
         return None
     from brain.ops.inference_client import make_client
 
-    return QuestionEmbedder(service=make_client(env=env), revision=revision)
+    return QuestionEmbedder(service=make_client(env=env), revision=revision, cache=cache)
 
 
 def build_registry(
@@ -308,6 +317,7 @@ def build_registry(
     sources: Iterable[str] | None = None,
     figures: LiveFigures | None = None,
     website: WebsiteCheckTool | None = None,
+    caches: KnowledgeCaches | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -377,7 +387,9 @@ def build_registry(
                 )
         # The document plane, for every source. See
         # `THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE`.
-        for definition, handler in knowledge_tools(records, question_embedder()):
+        embedder = question_embedder(cache=None if caches is None else caches.embeddings)
+        retrievals = None if caches is None else caches.retrievals
+        for definition, handler in knowledge_tools(records, embedder, retrievals):
             registry.register(
                 definition,
                 handler,

@@ -18,7 +18,10 @@ was true when it was fetched. The tests that matter here are the ones asserting 
 is *still served* and *never silent*: either half on its own is a design somebody would
 recognise as wrong, and it is the pair that is easy to break one at a time.
 
-Task ids: M11.4.1, M11.4.9
+`0179` leaves `proj.record` as `0008` built it and adds two tables beside it: `proj.record_retired`,
+a retired row as it stood, and `proj.source_epoch`.
+
+Task ids: M11.4.1, M11.4.9, M11.8.11, M11.8.4
 """
 
 from __future__ import annotations
@@ -55,11 +58,14 @@ from brain.tables.projection import (
     LOCAL_ID_CHARS,
     SOURCE_ID_CHARS,
     ProjectedRecordRow,
+    RetiredRecordRow,
+    SourceEpochRow,
 )
 
 REPO = Path(__file__).resolve().parents[2]
 VERSIONS = REPO / "migrations" / "versions"
 MIGRATION = VERSIONS / "0008_projection.py"
+LIVES = VERSIONS / "0179_record_lives_and_source_epochs.py"
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
@@ -108,15 +114,15 @@ def hourly() -> RefreshPromise:
     return RefreshPromise(signal=ChangeSignal.UPDATED_SINCE, interval=HOURLY)
 
 
-def _migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("m0008", MIGRATION)
+def _migration(path: Path = MIGRATION) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(f"m{path.name[:4]}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def _rendered(direction: str) -> str:
+def _rendered(direction: str, path: Path = MIGRATION) -> str:
     """The SQL the migration emits, rendered without a database.
 
     Alembic's `--sql` mode driven in-process. It matters that the tests read this rather than
@@ -129,7 +135,7 @@ def _rendered(direction: str) -> str:
         opts={"as_sql": True, "output_buffer": buffer, "target_metadata": metadata},
     )
     with Operations.context(context):
-        getattr(_migration(), direction)()
+        getattr(_migration(path), direction)()
     return buffer.getvalue()
 
 
@@ -633,6 +639,58 @@ def test_the_migration_builds_the_table_the_model_declares() -> None:
     assert [i.name for i in indexes] == ["ix_proj_record_deleted_at", "ix_record_local_id_live"]
     for index in indexes:
         assert _squash(str(CreateIndex(index).compile(dialect=_DIALECT))) in upgrade
+
+
+def test_a_retirement_is_kept_as_the_model_declares_it_and_never_changed_or_removed() -> None:
+    """`proj.record_retired`, M11.8.11's record of a record gone, compared on rendered DDL with the
+    model, with its cap and name checks copied from `proj.record`'s, row-level security on, the
+    application allowed to read and insert and no more, and `proj.record` itself untouched, so the
+    previous release's upserts keep their conflict target through a deploy. Delete this and a
+    retirement can become editable, the copy can drift from the model, or the migration can take
+    `proj.record`'s key away again, which is what refused the previous release's every write."""
+    retired = RetiredRecordRow.__table__
+    assert isinstance(retired, Table)
+    upgrade = _squash(_rendered("upgrade", LIVES))
+    assert _squash(str(CreateTable(retired).compile(dialect=_DIALECT))) in upgrade
+    for index in retired.indexes:
+        assert _squash(str(CreateIndex(index).compile(dialect=_DIALECT))) in upgrade
+    lives = _migration(LIVES)
+    assert (lives.FIELDS_WITHIN_THE_CAP, lives.FIELDS_IS_AN_OBJECT) == (
+        FIELDS_WITHIN_THE_CAP,
+        "jsonb_typeof(fields) = 'object'",
+    )
+    assert "ALTER TABLE proj.record_retired ENABLE ROW LEVEL SECURITY" in upgrade
+    assert (
+        "CREATE POLICY record_retired_readable ON proj.record_retired FOR SELECT TO brain_app"
+        in upgrade
+    )
+    assert (
+        "CREATE POLICY record_retired_insertable ON proj.record_retired FOR INSERT TO brain_app"
+        in upgrade
+    )
+    assert "GRANT SELECT, INSERT ON proj.record_retired TO brain_app" in lives.GRANTS
+    assert not any("UPDATE ON proj.record_retired" in one for one in lives.GRANTS)
+    assert "proj.record " not in upgrade.replace("proj.record_retired", "")
+    assert (lives.revision, lives.down_revision) == ("0179", "0154")
+
+
+def test_the_source_epoch_table_is_built_as_the_model_declares_it_and_never_deleted_from() -> None:
+    """`proj.source_epoch`, M11.8.4's counter, compared on rendered DDL with the model, with
+    row-level security on, a policy for the application, and no DELETE grant: a counter that could
+    be removed could start again under an answer it once invalidated. Delete this and the counter
+    can be built wider than the model, or become deletable, with nothing noticing."""
+    epoch = SourceEpochRow.__table__
+    assert isinstance(epoch, Table)
+    upgrade = _squash(_rendered("upgrade", LIVES))
+    assert _squash(str(CreateTable(epoch).compile(dialect=_DIALECT))) in upgrade
+    lives = _migration(LIVES)
+    assert lives.TABLES == ("proj.record_retired", "proj.source_epoch")
+    assert "ALTER TABLE proj.source_epoch ENABLE ROW LEVEL SECURITY" in upgrade
+    assert "CREATE POLICY source_epoch_visible ON proj.source_epoch FOR ALL TO brain_app" in upgrade
+    assert "GRANT SELECT, INSERT, UPDATE ON proj.source_epoch TO brain_app" in lives.GRANTS
+    down = _squash(_rendered("downgrade", LIVES))
+    assert "DROP TABLE proj.source_epoch" in down
+    assert "DROP TABLE proj.record_retired" in down
 
 
 def test_the_migration_enables_row_level_security() -> None:

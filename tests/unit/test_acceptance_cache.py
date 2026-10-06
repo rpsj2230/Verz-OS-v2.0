@@ -219,9 +219,11 @@ def test_the_check_fails_when_an_upload_does_not_move_the_key(
 
     kept = api_routes.caching_of
 
-    def epochless(state: Any, policies: Any, sources: Any, epochs: Any = None) -> Any:
-        del epochs
-        return kept(state, policies, sources)
+    def epochless(
+        state: Any, policies: Any, sources: Any, epochs: Any = None, table_epochs: Any = None
+    ) -> Any:
+        del epochs, table_epochs
+        return kept(state, policies, sources, {}, {})
 
     monkeypatch.setattr(api_routes, "caching_of", epochless)
 
