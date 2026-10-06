@@ -34,6 +34,7 @@ from brain.app import Settings, create_app
 from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
 from brain.audit.view import MAX_PAGE_SIZE, AuditFilter
 from brain.audit_routes import entry_from, window
+from brain.console.organisation import Member
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -69,6 +70,7 @@ ENT = "0" * 32
 CANARY = "CANARY Value 4TQ9M"
 
 SCREEN_READ = screen("audit").read.requires
+PEOPLE_READ = screen("people").read.requires
 CONFIGURATION = plane_capability(Plane.CONFIGURATION)
 EXISTENCE = plane_capability(Plane.EXISTENCE)
 
@@ -78,11 +80,17 @@ def grant(value: Capability | str) -> Grant:
     return Grant(capability=capability, scope=Scope.unrestricted())
 
 
-#: `u_admin` is the auditor, reading every kind. `u_narrow` reads principal entries only.
+#: `u_admin` is the auditor, reading every kind, and may name people on the People screen.
+#: `u_narrow` reads principal entries only and may name nobody.
 #: `u_wide` holds the screen and no audit grant, so reads only the entries about themselves.
 #: `u_prefix` holds everything on the existence plane, which a bare capability check lets in.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
-    "u_admin": (grant(SCREEN_READ), grant(CONFIGURATION), grant("read:audit.*")),
+    "u_admin": (
+        grant(SCREEN_READ),
+        grant(CONFIGURATION),
+        grant("read:audit.*"),
+        grant(PEOPLE_READ),
+    ),
     "u_narrow": (grant(SCREEN_READ), grant(CONFIGURATION), grant("read:audit.principal")),
     "u_wide": (grant(SCREEN_READ), grant(CONFIGURATION)),
     "u_prefix": (grant(SCREEN_READ), grant(EXISTENCE), grant("read:audit.*")),
@@ -201,6 +209,30 @@ class Ledger:
         return chosen[:limit]
 
 
+@dataclass
+class People:
+    """A `brain.audit_routes.PersonGrants` in memory: who is a live person, which grants were
+    theirs, and every time somebody asked which grants were theirs."""
+
+    known: frozenset[str] = frozenset({"u_wide", "u_narrow", "u_admin"})
+    grants: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    asked: list[str] = field(default_factory=list)
+
+    async def person(self, principal_id: str) -> Member | None:
+        if principal_id not in self.known:
+            return None
+        return Member(
+            principal_id=principal_id,
+            display_name=f"Person {principal_id}",
+            department=None,
+            disabled=False,
+        )
+
+    async def grant_ids(self, principal_id: str) -> tuple[str, ...]:
+        self.asked.append(principal_id)
+        return self.grants.get(principal_id, ())
+
+
 def _wiring() -> GateWiring:
     return GateWiring(
         authority=TokenAuthority(
@@ -218,7 +250,12 @@ def ledger() -> Ledger:
 
 
 @pytest.fixture
-def client(ledger: Ledger) -> Iterator[TestClient]:
+def people() -> People:
+    return People()
+
+
+@pytest.fixture
+def client(ledger: Ledger, people: People) -> Iterator[TestClient]:
     # The router is included here as well as by `brain.app`, which is
     # `tests/unit/test_sign_in_routes.py`' arrangement: a route registered twice answers from the
     # same function, and this file tests the router whether or not that line is in the tree.
@@ -227,6 +264,7 @@ def client(ledger: Ledger) -> Iterator[TestClient]:
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         app.state.audit_ledger = ledger
+        app.state.person_grants = people
         yield c
 
 
@@ -601,15 +639,76 @@ def test_a_history_that_fills_a_page_says_so(client: TestClient, ledger: Ledger)
 
 
 def test_a_history_the_reader_may_not_see_and_a_history_of_nobody_are_the_same_answer(
-    client: TestClient,
+    client: TestClient, ledger: Ledger
 ) -> None:
     """Delete this and the history becomes a way of asking whether somebody's reach has ever
-    changed: a withheld history answered differently from an empty one."""
-    withheld = get(client, "u_wide", HISTORY, subject_kind="principal", subject_id="u_narrow")
-    nobody = get(client, "u_wide", HISTORY, subject_kind="principal", subject_id="u_nobody")
+    changed: a withheld history answered differently from an empty one. For a kind other than a
+    person, both are the empty history; for a person, `nameable` decides first, and both are the
+    one 404 before the ledger is read."""
+    withheld = get(client, "u_wide", HISTORY, subject_kind="agent", subject_id="helper")
+    nobody = get(client, "u_wide", HISTORY, subject_kind="agent", subject_id="nobody")
+    person = get(client, "u_wide", HISTORY, subject_kind="principal", subject_id="u_narrow")
+    no_person = get(client, "u_admin", HISTORY, subject_kind="principal", subject_id="u_nobody")
 
     assert withheld.json()["events"] == nobody.json()["events"] == []
     assert withheld.status_code == nobody.status_code == 200
+    assert person.status_code == no_person.status_code == 404
+    assert refusal(person) == refusal(no_person)
+    assert {one["subject"] for one in ledger.calls} <= {"agent:helper", "agent:nobody"}
+
+
+def test_a_persons_history_shows_a_capability_granted_and_removed_under_its_grant(
+    client: TestClient, ledger: Ledger, people: People
+) -> None:
+    """**The People History tab's defect, fixed.** `0003` files a capability grant and its removal
+    under `grant:<id>`, so a history read under the person alone never showed either. The person's
+    own grants, removed ones included, are read off `gate.grant_ids_of` and their entries shown
+    beside the person's own, oldest first; another person's grant is not. Delete this and a
+    person's History tab shows their role grants and never a capability they were given or lost."""
+    people.grants["u_wide"] = ("g1",)
+    ledger.rows = [
+        stored(one)
+        for one in chain_of(
+            [
+                (AuditAction.GRANT, "u_admin", "grant:g1", {"capability": "read:client.name"}),
+                (AuditAction.GRANT, "u_admin", "principal:u_wide", {"role": "member"}),
+                (AuditAction.GRANT, "u_admin", "grant:g2", {"capability": "read:client.cost"}),
+                (AuditAction.REVOKE, "u_admin", "grant:g1", {"capability": "read:client.name"}),
+            ]
+        )
+    ]
+
+    answer = get(client, "u_admin", HISTORY, subject_kind="principal", subject_id="u_wide")
+
+    assert answer.status_code == 200, answer.text
+    events = answer.json()["events"]
+    assert [(one["action"], one["details"].get("capability")) for one in events] == [
+        ("grant", "read:client.name"),
+        ("grant", None),
+        ("revoke", "read:client.name"),
+    ]
+    assert people.asked == ["u_wide"]
+    assert {one["subject"] for one in ledger.calls} == {"principal:u_wide", "grant:g1"}
+
+
+def test_a_reader_who_may_not_name_the_person_is_answered_404_and_their_grants_are_never_read(
+    client: TestClient, ledger: Ledger, people: People
+) -> None:
+    """`A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`. A reader who reads the
+    audit screen and not the People screen gets the one 404 about a person who exists, the same
+    answer as about one who does not, and neither `gate.grant_ids_of` nor the ledger is asked.
+    The positive sibling is the test above, where the auditor who may name them is answered.
+    Delete this and the function answers which grants were somebody's to a reader the People page
+    would not even show them to."""
+    people.grants["u_wide"] = ("g1",)
+
+    hidden = get(client, "u_narrow", HISTORY, subject_kind="principal", subject_id="u_wide")
+    missing = get(client, "u_narrow", HISTORY, subject_kind="principal", subject_id="u_nobody")
+
+    assert hidden.status_code == missing.status_code == 404
+    assert refusal(hidden) == refusal(missing)
+    assert people.asked == []
+    assert ledger.calls == []
 
 
 # ----------------------------------------------------------------------- the statement
