@@ -407,6 +407,10 @@ class Answered:
     #: by that path without the question's words and must be written down nowhere else, a
     #: person's thread included (M24.2.2, M9.1.1).
     referred: bool = False
+    #: True when the abstention was handed to a person named for a skill's queue and the asker
+    #: was told so (M8.3.1). A fact about what the asker was told, which the learning signal reads
+    #: as `brain.memory.signals.Signal.ESCALATED` once the exchange is kept (M16.2.4, M16.2.8).
+    escalated: bool = False
 
     def __post_init__(self) -> None:
         if not self.frames:

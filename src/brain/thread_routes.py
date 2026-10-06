@@ -42,6 +42,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
+from brain.attribution import trace_of_request
 from brain.chat.remember import threads_of
 from brain.chat.thread_store import CONSOLE_SURFACE, StoredThreads, surfaces
 from brain.chat.threads import Thread
@@ -246,7 +247,11 @@ async def correct_my_thread(
     caller's, does not exist or holds no answer is one 404.
     """
     kept = await _store(request).correct(
-        asked.caller.principal.id, thread_id, correction.kind, now=asked.now
+        asked.caller.principal.id,
+        thread_id,
+        correction.kind,
+        now=asked.now,
+        trace_id=trace_of_request(),
     )
     if kept is None:
         raise Absent(f"thread {thread_id!r} is not answerable for this caller")

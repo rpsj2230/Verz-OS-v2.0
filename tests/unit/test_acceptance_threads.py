@@ -73,6 +73,7 @@ def _answered(*evidence: Any, cached: bool = False, referred: bool = False) -> A
             from_cache=cached,
             provenance=provenance,
             referred=referred,
+            escalated=False,
         ),
     )
 

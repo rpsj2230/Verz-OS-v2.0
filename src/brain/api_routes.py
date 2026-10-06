@@ -2044,14 +2044,20 @@ async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> Marked
 
 
 async def remembered(
-    request: Request, asking: Answering, ask: Question, answered: Answered
+    request: Request,
+    asking: Answering,
+    ask: Question,
+    answered: Answered,
+    *,
+    trace_id: str | None = None,
 ) -> str | None:
     """Keep this exchange in the asker's thread, and say which thread (M9.1.1).
 
     `brain.chat.remember.remember` over this process's store, with the policies the answer was
     redacted under, which are what a stored answer's references are re-checked against. A
     failure to keep it is logged and the answer still goes out: the person asked a question, and
-    losing its transcript is not a reason to withhold the answer.
+    losing its transcript is not a reason to withhold the answer. `trace_id` is the request it was
+    answered on, which the learning signals written beside it name (M16.2.8).
     """
     from brain.chat.remember import remember, threads_of
 
@@ -2071,6 +2077,7 @@ async def remembered(
             answered=answered,
             policies=policies,
             now=asking.now,
+            trace_id=trace_id,
         )
     except Exception as exc:
         log.warning("thread.not_kept", error=type(exc).__name__)
@@ -2107,7 +2114,9 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
         return asked_too_often(request, outcome)
     if isinstance(outcome, Halted):
         return halted_reply(request, outcome)
-    thread = await remembered(request, Answering.of(asked), ask, outcome)
+    thread = await remembered(
+        request, Answering.of(asked), ask, outcome, trace_id=recorder.trace_id
+    )
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,

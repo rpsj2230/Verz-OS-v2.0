@@ -15,6 +15,7 @@
 | `GET /api/v1/threads/{thread_id}` | One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage. |
 | `GET /api/v1/threads/search` | A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage. |
 | `mem.mark` | The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark. |
+| `mem.signal` | What the system noticed about each answer a person was given, re-asked, corrected or handed to a person, by message id and never a word; read by that person and counted by kind, and no administrator manages one. |
 | `POST /api/v1/answer` | The answer lane behind Ask, which writes no row an administrator manages. |
 | `POST /api/v1/answer/mark` | A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads. |
 | `POST /api/v1/automation/tool-call` | Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part. |

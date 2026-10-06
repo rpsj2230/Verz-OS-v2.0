@@ -422,7 +422,7 @@ class ChatAnswerer:
             **tables.policies,
         }
         if keep:
-            await self._kept(person, inbound, asked, outcome, policies, now)
+            await self._kept(person, inbound, asked, outcome, policies, now, trace)
         return ChatReply(
             text,
             payload,
@@ -439,8 +439,12 @@ class ChatAnswerer:
         outcome: Answered,
         policies: Mapping[str, FieldPolicy],
         now: datetime,
+        trace_id: str,
     ) -> None:
-        """This exchange, in the person's thread for this chat. See `THIS_CHAT_IS_ONE_THREAD`."""
+        """This exchange, in the person's thread for this chat. See `THIS_CHAT_IS_ONE_THREAD`.
+
+        `trace_id` is the request it was answered on, which the learning signals kept beside it
+        name (M16.2.8)."""
         from brain.chat.remember import remember, threads_of
         from brain.chat.thread_store import chat_thread_id
 
@@ -460,6 +464,7 @@ class ChatAnswerer:
                 answered=outcome,
                 policies=policies,
                 now=now,
+                trace_id=trace_id,
             )
         except Exception as exc:
             # The reply still goes out: losing its transcript is no reason to withhold it.

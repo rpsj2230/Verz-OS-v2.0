@@ -44,7 +44,15 @@ See `SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS`.
 wrong and the answer's references, and `corrections` hands the learning signal one observation per
 note. See `A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6
+**The learning signals an exchange is evidence of are written with it** (M16.2.8): a question that
+asks the thread's last one again, a question handed to a person, and a correction, each to
+`mem.signal` through `brain.ops.signal_store.noticed` in the same transaction and in the asker's
+name, naming the answer it is about and never the words. See
+`A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`. Rejected: writing them from the answer route after the
+thread, which would need the thread's earlier question read a second time and the message ids
+handed back through every caller.
+
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6, M16.2.8
 """
 
 from __future__ import annotations
@@ -65,7 +73,8 @@ from brain.chat.threads import Thread, ThreadMessage, as_turns, refs_as_json, re
 from brain.chat.turns import Correction, CorrectionKind, RecordRef, record_correction
 from brain.core.field_policy import Classification
 from brain.gate.context import Channel
-from brain.memory.signals import Observation, Signal
+from brain.memory.signals import Observation, Signal, is_reask
+from brain.ops.signal_store import noticed
 from brain.tables.chat import TITLE_CHARS, ConversationRow, MessageRole, MessageRow
 
 # ------------------------------------------------------------------ written-down reasons
@@ -116,6 +125,14 @@ A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT: Final = (
     "and read by the learning signal as a contradiction. Nothing the person says the right "
     "answer is gets kept, because a chat box that could write facts would be a write path into "
     "the company's knowledge with no review, no scope and no provenance."
+)
+
+#: Why the re-ask is decided where the exchange is written, and nothing is copied to decide it.
+A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE: Final = (
+    "Whether a question asks an earlier one again needs both questions, and the one place both "
+    "already exist is the thread. So the comparison is made as the exchange is written, in the "
+    "asker's own session, and what is kept is a signal naming the earlier answer by its message "
+    "and never either question; the log never holds what it was shown to decide."
 )
 
 # ------------------------------------------------------------------------ the figures
@@ -179,12 +196,74 @@ class Exchange:
     question: str
     answer: str
     refs: tuple[RecordRef, ...] | None
+    #: Whether the person was told their question was handed to a person (M8.3.1), which is the
+    #: learning signal `brain.memory.signals.Signal.ESCALATED` about this answer.
+    escalated: bool = False
 
 
 def _title(question: str) -> str:
     """A thread's title: its first question, on one line, cut to the column."""
     one_line = " ".join(question.split())
     return one_line[:TITLE_CHARS]
+
+
+async def _reasked(
+    session: AsyncSession, held: uuid.UUID, question: str, now: datetime
+) -> uuid.UUID | None:
+    """The earlier answer in this thread that `question` asks again, or None.
+
+    The latest answer and the question it answered, read in the asker's own session, and the
+    verdict `brain.memory.signals.is_reask`'s: the same subject again, in different words, inside
+    its window from the answer. See `A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`.
+    """
+    latest = (
+        await session.execute(
+            sa.select(MessageRow.id, MessageRow.created_at)
+            .where(
+                MessageRow.conversation_id == held,
+                MessageRow.role == MessageRole.ASSISTANT.value,
+            )
+            .order_by(MessageRow.created_at.desc(), MessageRow.id.desc())
+            .limit(1)
+        )
+    ).first()
+    if latest is None:
+        return None
+    answer_id, answered_at = latest
+    earlier = (
+        await session.execute(
+            sa.select(MessageRow.body)
+            .where(
+                MessageRow.conversation_id == held,
+                MessageRow.role == MessageRole.USER.value,
+                MessageRow.created_at <= answered_at,
+            )
+            .order_by(MessageRow.created_at.desc(), MessageRow.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if earlier is None or not is_reask(earlier, question, apart=now - answered_at):
+        return None
+    return uuid.UUID(str(answer_id))
+
+
+async def _answer_at(
+    session: AsyncSession, held: uuid.UUID, answered_at: datetime
+) -> uuid.UUID | None:
+    """The answer in this thread written at `answered_at`, which is the one a correction names."""
+    found = (
+        await session.execute(
+            sa.select(MessageRow.id)
+            .where(
+                MessageRow.conversation_id == held,
+                MessageRow.role == MessageRole.ASSISTANT.value,
+                MessageRow.created_at == answered_at,
+            )
+            .order_by(MessageRow.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return None if found is None else uuid.UUID(str(found))
 
 
 class StoredThreads:
@@ -205,21 +284,33 @@ class StoredThreads:
         channel: Channel,
         exchange: Exchange,
         now: datetime,
+        trace_id: str | None = None,
     ) -> str:
         """Write one exchange to the named thread when it is this person's, or to a new one.
 
         The id the exchange was written under, which is the one to continue with. See
         `AN_ID_THAT_IS_NOT_YOURS_STARTS_A_NEW_THREAD`.
+
+        The learning signals this exchange is evidence of are written beside it, in the same
+        transaction and in this person's name: the earlier answer it re-asks, when it re-asks one,
+        and this answer handed to a person, when it was. See
+        `A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`.
+        `trace_id` is the request the exchange was answered on.
         """
         wanted = parsed_thread_id(thread_id)
         async with self._sessions() as session, session.begin():
             await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
             held = await self._own(session, wanted)
+            reasked = None
             if held is None:
                 held = await self._opened(session, principal_id, wanted, exchange.question)
+            else:
+                reasked = await _reasked(session, held, exchange.question, now)
             refs = list(UNREADABLE_REFS) if exchange.refs is None else refs_as_json(exchange.refs)
-            await session.execute(
-                sa.insert(MessageRow),
+            written = await session.execute(
+                sa.insert(MessageRow).returning(
+                    MessageRow.id, MessageRow.role, sort_by_parameter_order=True
+                ),
                 [
                     {
                         "conversation_id": held,
@@ -239,6 +330,24 @@ class StoredThreads:
                     },
                 ],
             )
+            answer = next(one for one, role in written.all() if role == MessageRole.ASSISTANT.value)
+            noticing: list[tuple[Signal, uuid.UUID]] = []
+            if reasked is not None:
+                noticing.append((Signal.REASKED, reasked))
+            if exchange.escalated:
+                noticing.append((Signal.ESCALATED, answer))
+            for signal, about in noticing:
+                await noticed(
+                    session,
+                    Observation(
+                        signal=signal,
+                        conversation_id=str(held),
+                        message_id=str(about),
+                        principal_id=principal_id,
+                        at=now,
+                    ),
+                    trace_id=trace_id,
+                )
         return str(held)
 
     async def _own(self, session: AsyncSession, wanted: uuid.UUID | None) -> uuid.UUID | None:
@@ -308,7 +417,13 @@ class StoredThreads:
         return str(held)
 
     async def correct(
-        self, principal_id: str, thread_id: str, kind: CorrectionKind, *, now: datetime
+        self,
+        principal_id: str,
+        thread_id: str,
+        kind: CorrectionKind,
+        *,
+        now: datetime,
+        trace_id: str | None = None,
     ) -> Correction | None:
         """Mark the latest answer in one of this person's threads as wrong (M9.2.4).
 
@@ -317,6 +432,9 @@ class StoredThreads:
         agent and references off the answer itself, and it is kept as a system note in the
         thread naming its kind and nothing the person said about it. See
         `A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`.
+
+        And it is written to the learning signal as a contradiction of the answer it corrects,
+        naming that answer's message, in the same transaction as the note (M16.2.3, M16.2.8).
         """
         found = await self.thread(principal_id, thread_id)
         if found is None:
@@ -325,7 +443,8 @@ class StoredThreads:
             correction = record_correction(as_turns(found), kind, principal_id=principal_id, at=now)
         except ValueError:
             return None
-        wanted = parsed_thread_id(found.thread_id)
+        # A thread read back from the table: its id is the conversation's own UUID.
+        wanted = uuid.UUID(found.thread_id)
         async with self._sessions() as session, session.begin():
             await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
             await session.execute(
@@ -338,6 +457,19 @@ class StoredThreads:
                     created_at=now,
                 )
             )
+            corrected = await _answer_at(session, wanted, correction.answer_at)
+            if corrected is not None:
+                await noticed(
+                    session,
+                    Observation(
+                        signal=Signal.CONTRADICTED,
+                        conversation_id=str(wanted),
+                        message_id=str(corrected),
+                        principal_id=principal_id,
+                        at=now,
+                    ),
+                    trace_id=trace_id,
+                )
         return correction
 
     async def corrections(self, principal_id: str) -> tuple[Observation, ...]:

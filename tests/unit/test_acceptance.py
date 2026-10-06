@@ -598,6 +598,8 @@ WRITTEN_BY_CHECKS = (
     "obs.trace_read",
     "mem.mark",
     "agent.learning_pause",
+    # The signal log's check writes signals in its rolled-back transaction (`0197`).
+    "mem.signal",
     "ops.operation",
     "ops.budget_version",
     "gate.role_grant",

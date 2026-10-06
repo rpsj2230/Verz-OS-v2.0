@@ -280,6 +280,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # them kept.
         "mem.mark": "principal_id",
         "mem.persistent": "principal_id",
+        # What was noticed about an answer the person was given, naming the message by id and never
+        # a word (`0197`). `0197` grants no way for a row to leave, so an erasure keeps these and
+        # reports them kept, as it does a mark.
+        "mem.signal": "principal_id",
         "obs.request_telemetry": "principal",
         # A budget's subject is a person, a department or an agent; only a person's id matches.
         "ops.budget_version": "subject",

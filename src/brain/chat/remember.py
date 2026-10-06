@@ -108,7 +108,12 @@ def exchange_of(
     # Read lazily: `brain.chat_answer` imports the answer route, which imports this module.
     from brain.chat_answer import chat_text
 
-    return Exchange(question=question, answer=chat_text(answered), refs=refs_of(answered, policies))
+    return Exchange(
+        question=question,
+        answer=chat_text(answered),
+        refs=refs_of(answered, policies),
+        escalated=answered.escalated,
+    )
 
 
 async def remember(
@@ -121,15 +126,25 @@ async def remember(
     answered: Answered,
     policies: Mapping[str, FieldPolicy],
     now: datetime,
+    trace_id: str | None = None,
 ) -> str | None:
-    """Write this exchange to the person's thread, and say which thread; None when none was."""
+    """Write this exchange to the person's thread, and say which thread; None when none was.
+
+    `trace_id` is the request it was answered on, which the learning signals the exchange is
+    evidence of name (M16.2.8).
+    """
     if threads is None:
         return None
     exchange = exchange_of(question, answered, policies)
     if exchange is None:
         return None
     return await threads.record(
-        principal_id, thread_id=thread_id, channel=channel, exchange=exchange, now=now
+        principal_id,
+        thread_id=thread_id,
+        channel=channel,
+        exchange=exchange,
+        now=now,
+        trace_id=trace_id,
     )
 
 
