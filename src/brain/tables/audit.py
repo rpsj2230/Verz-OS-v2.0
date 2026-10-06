@@ -260,3 +260,55 @@ class AuditEntryRow(Base):
         Index("uq_audit_entry_prev_hash", "prev_hash", unique=True),
         {"schema": "obs"},
     )
+
+
+#: The actions the elevation chain holds, and nothing else: `brain.console.elevation`'s
+#: `ELEVATION_ACTIONS`, written here as the table's own vocabulary and held equal to it by
+#: `tests/unit/test_elevation_chain.py`.
+ELEVATION_CHAIN_ACTIONS: tuple[AuditAction, ...] = (AuditAction.BREAK_GLASS,)
+
+#: Every elevation entry is about a session, `AuditRecorder.break_glass`'s subject, so the
+#: chain's grammar names that kind alone and does not move when `SUBJECT_KINDS` grows.
+ELEVATION_SUBJECT_PATTERN = f"^session:{_bare(IDENTIFIER)}$"
+
+
+class ElevationEntryRow(Base):
+    """`obs.elevation_entry`: the second chain, of elevations alone (M33.7.1.3).
+
+    The same columns, the same digest (`obs.audit_entry_hash`) and the same linearity as
+    `AuditEntryRow`, so `brain.audit.chain_check` walks it and `brain.audit.anchor` anchors it
+    exactly as it does the main ledger. What differs is what may be in it: one action, so its head
+    moves only when somebody is elevated, which is the whole of what a second chain buys
+    (`brain.console.elevation.A_SECOND_CHAIN_IS_A_SECOND_ANCHOR_AND_NOT_A_STRONGER_LEDGER`).
+    """
+
+    __tablename__ = "elevation_entry"
+
+    seq: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(ACTOR_ID_CHARS), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    subject: Mapped[str] = mapped_column(String(SUBJECT_CHARS), nullable=False)
+    ent_hash: Mapped[str] = mapped_column(String(ENT_HASH_CHARS), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(TRACE_ID_CHARS), nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    prev_hash: Mapped[str] = mapped_column(String(DIGEST_CHARS), nullable=False)
+    entry_hash: Mapped[str] = mapped_column(String(DIGEST_CHARS), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("seq >= 0", name="seq_non_negative"),
+        CheckConstraint(f"actor_id ~ '{IDENTIFIER}'", name="actor_id_shape"),
+        CheckConstraint(one_of("action", ELEVATION_CHAIN_ACTIONS), name="action"),
+        CheckConstraint(f"subject ~ '{ELEVATION_SUBJECT_PATTERN}'", name="subject_grammar"),
+        CheckConstraint(f"ent_hash ~ '{ENT_HASH}'", name="ent_hash_shape"),
+        CheckConstraint(f"trace_id ~ '{TRACE_ID}'", name="trace_id_shape"),
+        CheckConstraint(f"prev_hash ~ '{DIGEST}'", name="prev_hash_shape"),
+        CheckConstraint(f"entry_hash ~ '{DIGEST}'", name="entry_hash_shape"),
+        CheckConstraint("jsonb_typeof(details) = 'object'", name="details_object"),
+        CheckConstraint("entry_hash <> prev_hash", name="not_its_own_parent"),
+        Index("uq_elevation_entry_entry_hash", "entry_hash", unique=True),
+        Index("uq_elevation_entry_prev_hash", "prev_hash", unique=True),
+        {"schema": "obs"},
+    )

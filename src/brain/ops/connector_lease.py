@@ -42,7 +42,34 @@ Rejected: revoking the token straight after the key is read. The read is the onl
 exposure would be shorter, but "revoked when the run ends" would then be a claim about a moment that
 is not the run's end, and a run that fails before reading would still need the `finally`.
 
-Task ids: M31.3.2.3, M31.3.2.4
+**A rotated refresh token is written back by a second role, which can write it and read nothing
+(M11.8.6).** A vendor such as Xero issues a new refresh token with every renewal and voids the old
+one, so the read that renewed access has to keep the new token or the next read has none. The
+connector-run token reads keys and must not write one: a run that could write could replace a
+source's key with anything the source's answer said. So the write is a child token of its own,
+minted against the `connector-rotate` role per rotation, carrying the `connector-rotate` policy
+alone, which may `patch` a slot under `connector_keys/data/oauth_refresh/` and nothing else: no
+read, so it cannot read the token it replaces, no create, so it cannot make a slot, and no path a
+key is kept at. It is judged by `judge_minted` like a run token and revoked when the write ends.
+See `A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`. Rejected: the refresh token
+as a second field in the source's key slot, which no vault policy can split by field, so the role
+that writes it back could rewrite the client secret beside it.
+
+**A person's own refresh token is read by a third role, which only the application may mint
+(M11.8.6).** A source consented to by each person for themselves keeps one refresh token per
+person, and it may be read only for that person's own question. The vault cannot tell one person's
+read from another's: the application holds one token, and naming the person in a policy would mean
+an identity record per person inside the vault, which erasure would then have to find too. What the
+vault can hold is that **no read made with nobody present leases a person's token at all**: the
+`connector-person` policy reads `connector_keys/data/oauth_refresh/+/+` and nothing else, the
+`connector-run` policy's lines stop one segment short of it, and only the application's policy may
+mint the role. Which person's slot a question reads is then the code's, held by
+`brain.ops.connector_sync_run.PersonalKeys`, which builds the one reference from the asker and
+refuses every other. See `NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT`.
+Rejected: one more line on the run policy, which would let the worker's scheduled read lease every
+person's mailbox.
+
+Task ids: M31.3.2.3, M31.3.2.4, M11.8.6
 """
 
 from __future__ import annotations
@@ -72,6 +99,24 @@ A_RUN_LEASE_THE_VAULT_WIDENED_IS_GIVEN_BACK_UNUSED: Final = (
     "revokes a token that disagrees before anything is read with it."
 )
 
+#: Why a rotated refresh token is written back by a role of its own.
+A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT: Final = (
+    "A vendor that rotates refresh tokens voids the old one when it issues the new, so the read "
+    "that renewed access writes the new token back. The run token that read the old one reads "
+    "and never writes, and the write is made by a token minted per rotation against the "
+    "connector-rotate role, whose policy may patch a refresh token's slot and do nothing else: it "
+    "cannot read the token it replaces, create a slot, or reach a slot a key is kept in."
+)
+
+#: Why a person's refresh token is read under a role the worker cannot mint.
+NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT: Final = (
+    "A refresh token a person's own consent bought is read only under the connector-person role, "
+    "whose policy reaches a person's slot and nothing else and which only the application, "
+    "answering that person's question, may mint. The worker's scheduled read mints the "
+    "connector-run role, whose policy stops one segment short of every person's slot, so nothing "
+    "running with nobody present can read anybody's mailbox."
+)
+
 # ------------------------------------------------------------------------ the lease
 
 #: The token role the installer creates and the worker mints against.
@@ -87,6 +132,32 @@ RUN_LEASE_TTL: Final = timedelta(minutes=15)
 
 #: The token role's own ceiling, as the installer writes it. `MAX_LEASE`, one hour.
 RUN_ROLE_MAX_TTL_SECONDS: Final = int(MAX_LEASE.total_seconds())
+
+
+#: The token role a rotated refresh token is written back under, and its one policy, whose file is
+#: `ops/openbao/policies/connector-rotate.hcl`.
+ROTATE_TOKEN_ROLE: Final = "connector-rotate"  # noqa: S105
+ROTATE_POLICY: Final = "connector-rotate"
+
+#: How long a rotation token lives if nothing revokes it. A rotation is one write; five minutes
+#: bounds a token whose revocation was lost, as a channel send's does.
+ROTATE_LEASE_TTL: Final = timedelta(minutes=5)
+
+#: The rotate role's own ceiling, as the release writes it. `MAX_LEASE`, one hour.
+ROTATE_ROLE_MAX_TTL_SECONDS: Final = int(MAX_LEASE.total_seconds())
+
+
+#: The token role a person's own refresh token is read under, and its one policy, whose file is
+#: `ops/openbao/policies/connector-person.hcl`. See
+#: `NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT`.
+PERSON_TOKEN_ROLE: Final = "connector-person"  # noqa: S105
+PERSON_POLICY: Final = "connector-person"
+
+#: How long a person's read token lives if nothing revokes it: one question's read of one value.
+PERSON_LEASE_TTL: Final = timedelta(minutes=5)
+
+#: The person role's own ceiling, as the release writes it. `MAX_LEASE`, one hour.
+PERSON_ROLE_MAX_TTL_SECONDS: Final = int(MAX_LEASE.total_seconds())
 
 
 class LeaseOutcome(enum.StrEnum):

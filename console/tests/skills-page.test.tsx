@@ -15,7 +15,7 @@
  * sends it, and every path it sends to with the API document.
  *
  * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M42.6.4, M12.2.2, M12.3.2, M12.4.13
- * Task ids: M12.2.10
+ * Task ids: M12.2.10, M27.15.57
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -27,8 +27,9 @@ import { SKILLS_HEADING } from "../src/pages/Skills";
 import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
 import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
-import { IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
+import { FROM_ADDRESS, FROM_REPOSITORY, IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, FINDINGS_HEADING } from "../src/pages/skills/SkillProfile";
+import { EXPORT, exportedSentence, NOT_YET_REHEARSED, REHEARSAL_FAILED, REHEARSAL_PASSED, REHEARSE } from "../src/pages/skillsQuery";
 import { PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
 import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
 import { readHistory, readSkillDetail } from "../src/pages/skills/skillDetailQuery";
@@ -156,6 +157,10 @@ function version(overrides: Record<string, unknown> = {}): Record<string, unknow
     retired_at: null,
     retired_by: null,
     retirable: true,
+    exportable: false,
+    examples: [],
+    rehearsal: null,
+    rehearsable: false,
     submitted_by_name: "Iris Importer",
     reviewer_name: "Rex Reviewer",
     findings: [],
@@ -182,6 +187,7 @@ function skillsPage(library: Record<string, unknown>[], pins: Record<string, unk
     library,
     library_truncated: false,
     agents: [{ agent_id: "company_desk", display_name: "Company Desk" }],
+    rehearsal_agents: [{ agent_id: "company_desk", display_name: "Company Desk" }],
     may_add: true,
     registry_is_absent: false,
     categories: ["hosting"],
@@ -378,6 +384,35 @@ describe("the library list", () => {
   });
 });
 
+describe("importing from a repository", () => {
+  test("the import tab offers a GitHub repository first and an address second, with nothing saying only upload and paste", async () => {
+    // What breaks if this is deleted: M27.15.57. The interim sentence saying why only upload and
+    // paste are offered was for a release with no repository import; that import ships, so the tab
+    // must offer it, first, and no sentence may still say it is missing.
+    const { container } = await consoleAt("/skills", { [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) } });
+    pressed("Add a skill", container);
+    const tab = await waitFor(() => {
+      const found = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((one) => one.textContent === "Import");
+      if (found === undefined) {
+        throw new Error("the import tab has not arrived");
+      }
+      return found;
+    });
+    fireEvent.mouseDown(tab, { button: 0 });
+    const form = await waitFor(() => {
+      const found = document.querySelector<HTMLFormElement>('form[aria-label="Import a skill"]');
+      if (found === null) {
+        throw new Error("the import form has not arrived");
+      }
+      return found;
+    });
+    const choices = [...form.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    expect(choices.map((one) => one.closest("label")?.textContent)).toEqual([FROM_REPOSITORY, FROM_ADDRESS]);
+    expect(choices[0]?.checked).toBe(true);
+    expect(document.body.textContent).not.toMatch(/only upload and paste/i);
+  });
+});
+
 describe("importing a written procedure", () => {
   test("a procedure is judged before it is sent, sent as the file, and what was found is said after", async () => {
     // What breaks if this is deleted: a form that sends a .doc or nothing at all, a procedure sent
@@ -546,6 +581,103 @@ describe("one skill's page", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("Still running it until you detach it: Company Desk");
     });
+  });
+
+  test("exporting an approved version is one press that saves the package and says where it goes next", async () => {
+    // What breaks if this is deleted: an Export button that posts and saves nothing, one offered on
+    // a version the API says may not leave, or a file saved under a name other than the API's (M12.3.1).
+    const saved: string[] = [];
+    const created = URL.createObjectURL;
+    const revoked = URL.revokeObjectURL;
+    URL.createObjectURL = () => "blob:skill-package";
+    URL.revokeObjectURL = () => undefined;
+    const clicked = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    };
+    try {
+      const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ exportable: true })], [PIN], {
+        [`POST ${API}/skills/${DIGEST}/export`]: {
+          body: { file_name: `${NAME}-1.1.0.zip`, content: btoa("PK"), encoding: "base64", name: NAME, version: "1.1.0", digest: DIGEST },
+        },
+      }));
+
+      pressed(`${EXPORT} ${NAME} 1.1.0`, container);
+      await waitFor(() => {
+        expect(container.textContent).toContain(exportedSentence({ name: NAME, version: "1.1.0", file_name: `${NAME}-1.1.0.zip` }));
+      });
+      expect(sent.filter((one) => one.method === "POST").map((one) => one.path)).toEqual([`${API}/skills/${DIGEST}/export`]);
+      expect(saved).toEqual([`${NAME}-1.1.0.zip`]);
+      expect(document.querySelector('[role="alertdialog"], [role="dialog"]')).toBeNull();
+    } finally {
+      URL.createObjectURL = created;
+      URL.revokeObjectURL = revoked;
+      HTMLAnchorElement.prototype.click = clicked;
+    }
+
+    const plain = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ exportable: false })], [PIN]));
+    expect([...plain.container.querySelectorAll("button")].some((one) => one.getAttribute("aria-label")?.startsWith(EXPORT))).toBe(false);
+  });
+
+  test("a waiting version's examples are rehearsed through an agent in one press, and each outcome is shown with its limit", async () => {
+    // What breaks if this is deleted: a reviewer with no way to rehearse what approval waits for, a
+    // rehearsal sent without the agent, or a result read as more than it judged (M12.3.4).
+    const example = { task: "Is example.com due for renewal", expects: ["crm.read_client"] };
+    const waiting = version({ review: "pending", reviewable: true, examples: [example], rehearsable: true, rehearsal: null });
+    const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([waiting], [PIN], {
+      [`POST ${API}/skills/${DIGEST}/rehearsals`]: {
+        body: {
+          digest: DIGEST,
+          kind: "reach",
+          agent_id: "company_desk",
+          rehearsed_by: "u_admin",
+          at: "2019-03-06T09:00:00Z",
+          passed: true,
+          outcomes: [{ task: example.task, passed: true, missing: [] }],
+          limit: "It ran no model.",
+        },
+      },
+    }));
+
+    expect(container.textContent).toContain(NOT_YET_REHEARSED);
+    const form = container.querySelector<HTMLFormElement>(`form[aria-label^="${REHEARSE}"]`)!;
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(sent.some((one) => one.method === "POST" && one.path === `${API}/skills/${DIGEST}/rehearsals`)).toBe(true);
+    });
+    expect(sent.find((one) => one.method === "POST")?.body).toEqual({ agent_id: "company_desk" });
+    await waitFor(() => {
+      expect(container.textContent).toContain(`${REHEARSAL_PASSED}, rehearsing ${NAME}`);
+    });
+
+    const shown = await consoleAt(
+      `${skillAddress(NAME)}/profile`,
+      skillAnswers(
+        [
+          version({
+            review: "pending",
+            examples: [example, { task: "Open a ticket", expects: ["desk.read_ticket"] }],
+            rehearsal: {
+              digest: DIGEST,
+              kind: "reach",
+              agent_id: "company_desk",
+              rehearsed_by: "Alex Admin",
+              at: "2019-03-06T09:00:00Z",
+              passed: false,
+              outcomes: [
+                { task: example.task, passed: true, missing: [] },
+                { task: "Open a ticket", passed: false, missing: ["desk.read_ticket"] },
+              ],
+              limit: "It ran no model, so it did not judge any answer.",
+            },
+          }),
+        ],
+        [PIN],
+      ),
+    );
+    expect(shown.container.textContent).toContain("Could not reach desk.read_ticket");
+    expect(shown.container.textContent).toContain(`${REHEARSAL_FAILED}, rehearsed by Alex Admin`);
+    expect(shown.container.textContent).toContain("It ran no model, so it did not judge any answer.");
   });
 
   test("a retired version offers reinstating and no assignment", async () => {

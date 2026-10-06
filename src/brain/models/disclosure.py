@@ -42,6 +42,8 @@ class DataCategory(enum.StrEnum):
     GOLDEN_QUESTION = "golden_question"
     #: What the person asking said about themselves and may still recall, sent as hints.
     MEMORY_HINTS = "memory_hints"
+    #: Records an agent's tools read, redacted at the run's reach (`brain.gate.runtime`).
+    TOOL_RESULTS = "tool_results"
 
 
 #: What each category is called on the console and in the exported record.
@@ -53,6 +55,7 @@ TOLD: Final[Mapping[DataCategory, str]] = MappingProxyType(
         DataCategory.CHECK_SENTENCE: "The fixed provider-check sentence (no company data)",
         DataCategory.GOLDEN_QUESTION: "Golden questions asked before a routing change",
         DataCategory.MEMORY_HINTS: "What the person asking said about themselves, as hints",
+        DataCategory.TOOL_RESULTS: "Records an agent's tools read, redacted per asker",
     }
 )
 

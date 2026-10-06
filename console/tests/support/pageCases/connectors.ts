@@ -227,4 +227,51 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/console/connectors/xero/drift": DECLARATION_DRIFT,
     },
   },
+  // An API's connector submitted from its specification, and reviewed by a second person (M11.7.8):
+  // one definition waiting for this reader's review.
+  "/connectors/new-api": {
+    address: "/connectors/new-api",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/custom-connectors": {
+        definitions: [
+          {
+            name: "widgets_api",
+            label: UNBROKEN,
+            state: "unreviewed",
+            revision: 3,
+            department: UNBROKEN,
+            key_scheme: "bearer",
+            ceiling_per_minute: 60,
+            ceiling_per_day: null,
+            ceiling_cited: "https://vendor.example/limits",
+            entities: [
+              {
+                entity: "widget",
+                list_operation: UNBROKEN,
+                one_operation: null,
+                id_path: "id",
+                named_by: "code",
+                description: UNBROKEN,
+                fields: [
+                  { target: "code", source_path: "code", classification: "internal", kept: "label" },
+                ],
+              },
+            ],
+            document: null,
+            submitted_by: UNBROKEN,
+            submitted_at: "2019-03-06T08:30:00Z",
+            reviewed_by: null,
+            reviewable: true,
+            offered: false,
+          },
+        ],
+        classifications: ["public", "internal", "confidential", "restricted"],
+        shapes: ["identifier", "join_key", "status", "timestamp", "label"],
+        schemes: ["bearer", "basic_key_as_user", "none"],
+        review: UNBROKEN,
+      },
+    },
+  },
 };

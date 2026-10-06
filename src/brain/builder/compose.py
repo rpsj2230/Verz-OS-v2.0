@@ -14,13 +14,23 @@ server therefore derives the authority from the tools that were chosen, through
 on any of these types that would let the two be confused. See
 `AN_AUTHORED_LIST_IS_INTENT_AND_THE_TOOLS_ARE_THE_AUTHORITY`.
 
-**Seven sections, and every manifest path lands in exactly one** (M20.1.1). The sectioning is
+**Eight sections, and every manifest path lands in exactly one** (M20.1.1). The sectioning is
 the part of a form that is a decision rather than a rendering: which question a person is
 answering when they meet a field. A path in no section is a field nobody can edit and nobody
 reviews, and it goes missing without anything failing, which is why `SECTION_OF_PATH` is held
 against `brain.agents.template.MANIFEST_PATHS` by `compose_gaps` rather than by a reader.
 
-**The work breakdown's seven sections name no model section**, and `tier` is the path that
+**The work breakdown lists eleven sections and the manifest can hold eight of them.** Connectors
+were filed under knowledge until 2026-10-06, and are a section of their own now: what an agent is
+connected to is a different question from what rows it may read, and the leaf lists them apart.
+Channels, workflows and memory are not here, and the reason is the same for the three: a section
+edits manifest paths, a section with none is a heading with nothing under it
+(`test_no_section_is_a_heading_with_nothing_under_it`), and none of the three is a manifest path.
+Channels are decided per install at publish (`brain.agents.model.AgentRecord.channels`, M13.7.4),
+reachability and not authority, so a template that carried them would decide where every agent
+installed from it answers; workflows and memory have no path at all. Each is a question for the
+owner, not a gap to fill by adding a path: `needs-rupash` holds them. **The work breakdown's
+sections name no model section**, and `tier` is the path that
 exposes it. It is filed under the persona with the argument stated at `SECTION_OF_PATH`,
 because a tier is a statement about how an agent thinks rather than about what it may reach.
 That is a decision recorded rather than a path quietly left out.
@@ -131,7 +141,7 @@ class BuilderError(Exception):
 
 # --------------------------------------------------------------- the seven sections (M20.1.1)
 class Section(enum.StrEnum):
-    """The seven parts of the form, in the order M20.1.1 lists them.
+    """The eight parts of the form the manifest can hold, in the order M20.1.1 lists them.
 
     An enum rather than seven headings in a template, for the reason
     `brain.console.workspace.Part` is one: a section nothing enumerates has no exhaustiveness
@@ -143,6 +153,7 @@ class Section(enum.StrEnum):
     KNOWLEDGE = "knowledge"
     SKILLS = "skills"
     TOOLS = "tools"
+    CONNECTORS = "connectors"
     LEASH = "leash"
     TESTS = "tests"
 
@@ -152,7 +163,7 @@ class Section(enum.StrEnum):
 #: Pinned rather than computed at the call site, for the reason `brain.console.screens.
 #: SCREEN_COUNT` is: the interesting failure is a section disappearing in a refactor, and a
 #: test asserting `len(Section) == len(Section)` would not notice.
-SECTION_COUNT: Final = 7
+SECTION_COUNT: Final = 8
 
 #: Which section each manifest path is edited in. Exhaustive over `MANIFEST_PATHS`, checked.
 #:
@@ -181,7 +192,7 @@ SECTION_OF_PATH: Mapping[str, Section] = MappingProxyType(
         "placeholders": Section.PERSONA,
         "tier": Section.PERSONA,
         "authority.scope": Section.KNOWLEDGE,
-        "connectors": Section.KNOWLEDGE,
+        "connectors": Section.CONNECTORS,
         "skills": Section.SKILLS,
         "authority.allowed_tools": Section.TOOLS,
         "authority.capabilities": Section.TOOLS,

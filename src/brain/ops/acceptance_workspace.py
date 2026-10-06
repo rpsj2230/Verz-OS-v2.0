@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from brain.agents.model import AgentRecord
+    from brain.ops.storage import StorageBackend
 
 #: Where this module's checks stand on the Install page: after every module that was there before
 #: it. See `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
@@ -114,6 +115,7 @@ async def installed_agent(
     allowed_tools: Sequence[str] = (),
     suffix: str = "",
     scope: Scope | None = None,
+    guardrails: Any = None,
     personal: bool = False,
 ) -> str:
     """An agent of acceptance_a installed from a template the check signs, with `overlay` set here.
@@ -123,7 +125,7 @@ async def installed_agent(
     `personal` makes it seen by its owner alone rather than by acceptance_a.
     """
     from brain.agents.install_store import agent_values, version_values
-    from brain.agents.model import AgentAudience
+    from brain.agents.model import AgentAudience, answering_on
     from brain.agents.template import (
         ManifestAuthority,
         ManifestIdentity,
@@ -134,6 +136,7 @@ async def installed_agent(
         publish,
     )
     from brain.core.entitlement import Capability
+    from brain.gate.context import Channel
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -156,6 +159,7 @@ async def installed_agent(
                 capabilities=tuple(Capability(value=one) for one in capabilities),
                 allowed_tools=tuple(allowed_tools),
             ),
+            **({} if guardrails is None else {"guardrails": guardrails}),
         ),
         key=key,
         signed_by=owner,
@@ -190,7 +194,10 @@ async def installed_agent(
             effective_hash=effective.config_hash,
             created_by=owner,
         ),
-        insert(AgentRow).values(**agent_values(effective.record)),
+        # Switched on for the console, where the workspace asks it, as a person would tick it.
+        insert(AgentRow).values(
+            **agent_values(answering_on(effective.record, (Channel.CONSOLE.value,)))
+        ),
     )
     return agent_id
 
@@ -1249,3 +1256,960 @@ async def an_agents_automation_is_installed_started_run_and_removed(
         entitlements=StoredEntitlements(h.sessions),
     ):
         raise CheckFailedError("a removed automation ran again")
+
+
+# -------------------------------------------- 9. what an agent produced, kept and fetched back
+#: Why the artifact check fails on an install with no object store rather than skipping.
+AN_ARTIFACT_NEEDS_THE_INSTALLS_OWN_OBJECT_STORE: Final = (
+    "An artifact is bytes in the install's object store and a row pointing at them, so an install "
+    "that cannot reach its store cannot keep one, and the check says so rather than keeping the "
+    "bytes somewhere the product never looks."
+)
+
+
+def artifact_backend(h: Harness) -> tuple[StorageBackend | None, str]:
+    """The install's object store as the application builds it, and its prefix.
+
+    A function of its own so a test can hand the check a store: the database half of the tests
+    runs with no vault, and the product builds its store from the vault. See
+    `AN_ARTIFACT_NEEDS_THE_INSTALLS_OWN_OBJECT_STORE`.
+    """
+    from brain.ops.object_store import object_store_at_start
+
+    made = object_store_at_start(h.settings.vault_address, h.settings.vault_token)
+    return made.backend, made.prefix
+
+
+def tab_read_of_artifacts() -> str:
+    """The Artifacts tab's own read, which the steward holds."""
+    from brain.console.workspace import Tab, tab
+
+    return tab(Tab.ARTIFACTS).read.requires.value
+
+
+def report_cells(found: bytes) -> list[list[str]]:
+    """A kept report parsed back as rows of cells, so a value is found in its cell."""
+    import csv
+    import io
+
+    return list(csv.reader(io.StringIO(found.decode("utf-8"))))
+
+
+@check(
+    leaves=(
+        "M39.5.1.1",
+        "M39.5.1.2",
+        "M39.5.1.4",
+        "M39.5.1.5",
+        "M39.5.2.1",
+        "M39.5.2.2",
+        "M39.5.2.3",
+        "M39.5.2.4",
+        "M39.5.2.5",
+        "M39.8.4",
+        "M39.8.5",
+    ),
+    sentence=(
+        "A report over an uploaded price list, produced through an agent for two people, holds "
+        "the cost only for the one who may read it, keeps its run, version, reach and its most "
+        "sensitive input's window, and is fetched only while its requester holds what it drew on; "
+        "it is listed, filtered and counted, superseded rather than edited, and found as the "
+        "latest for a merged client by its person alone."
+    ),
+)
+async def an_agents_report_holds_what_its_reader_may_see_and_is_rechecked(
+    h: Harness,
+) -> None:
+    import asyncio
+    from functools import partial
+
+    from brain.agent_artifact_routes import may_read_artifacts_at, may_retire
+    from brain.console.agent_output import (
+        ARTIFACTS_SCREEN,
+        Artifact,
+        ArtifactError,
+        ArtifactInput,
+        ArtifactKind,
+        ArtifactState,
+        basis_over,
+        may_download,
+        provenance_for,
+        retention_class_for,
+        storage_summary,
+        visible_artifacts,
+    )
+    from brain.console.reach_view import run_reach
+    from brain.core.field_policy import Classification
+    from brain.govern_routes import retire_grant
+    from brain.knowledge.columns import column_capability, table_capability
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_checks_tables import (
+        PRICE_LIST_COLUMNS,
+        PRICE_LIST_HEADINGS,
+        _administrator,
+        _price_list,
+        _tables,
+        _upload,
+        price_list_csv,
+    )
+    from brain.ops.artifact_report import Records, produce_report
+    from brain.ops.artifact_store import ARTIFACT_BUCKET, StoredArtifacts, object_key
+    from brain.ops.retention import DataClass, horizon_for
+
+    await h.found_departments()
+    backend, prefix = await asyncio.to_thread(artifact_backend, h)
+    if backend is None:
+        raise CheckFailedError("this install is not connected to its object store")
+    store = StoredArtifacts(h.sessions, backend, prefix)
+
+    # A price list the product classifies, uploaded by a department's administrator.
+    admin = await _administrator(h)
+    prices = _price_list(h, "artifacts", PRICE_LIST_HEADINGS, PRICE_LIST_COLUMNS)
+    body = price_list_csv(
+        prices.headings, [[row[one] for one in prices.columns] for row in prices.rows]
+    )
+    uploaded, _ = await _upload(h, admin, prices, filename="prices.csv", content=body)
+    rows = await _tables(h).rows_of(uploaded)
+    entity = prices.entity
+    table = table_capability(entity)
+    cost, margin = column_capability(entity, "cost"), column_capability(entity, "margin")
+
+    steward, costing, pricing = (h.principal(A, one) for one in ("steward", "costing", "pricing"))
+    await h.person(steward, department=A, grants=_everywhere(tab_read_of_artifacts(), *_planes()))
+    await h.person(costing, department=A, grants=_in(A, table.value, cost.value, margin.value))
+    await h.person(pricing, department=A, grants=_in(A, table.value))
+    agent_id = await installed_agent(
+        h, steward, capabilities=(table.value, cost.value, margin.value), suffix="_artifacts"
+    )
+    record = await stored_agent(h, agent_id)
+    records = Records(
+        entity=entity,
+        rows=tuple(rows),
+        policy=uploaded.classification.policy(),
+        read_as=table,
+        source=entity,
+    )
+    # The rows the run read are its payload and its most sensitive input; the persona lasts longer.
+    inputs = (
+        ArtifactInput(
+            label="the price list rows the run read",
+            data_class=DataClass.PAYLOAD,
+            classification=Classification.RESTRICTED,
+        ),
+        ArtifactInput(
+            label="the agent's persona",
+            data_class=DataClass.BUSINESS_RECORD,
+            classification=Classification.INTERNAL,
+        ),
+    )
+    keys: list[str] = []
+
+    async def produced(
+        who: str, run: str, *, client_id: str = "", supersedes: str = ""
+    ) -> Artifact:
+        made = await produce_report(
+            store,
+            records,
+            caller=await h.reach(who),
+            agent=record,
+            agent_version="1",
+            run_id=f"{h.trace_id}-{run}",
+            inputs=inputs,
+            at=h.now,
+            client_id=client_id,
+            supersedes=supersedes,
+        )
+        key = object_key(prefix, made)
+        keys.append(key)
+        h.removes(partial(backend.delete_object, ARTIFACT_BUCKET, key))
+        return made
+
+    # Two clients of the check's own, one merged into the other.
+    kept_client, gone_client = f"acceptance_{h.run}_client", f"acceptance_{h.run}_merged"
+    await h.execute(
+        *h.attributed(steward),
+        *(
+            text(
+                "INSERT INTO er.canonical (entity_id, entity_type, created_by,"
+                " created_from_source, created_from_entity, created_from_source_id)"
+                " VALUES (:entity, 'company', :by, 'acceptance', 'acceptance', :entity)"
+            ).bindparams(entity=one, by=steward)
+            for one in (kept_client, gone_client)
+        ),
+        text(
+            "UPDATE er.canonical SET merged_into = :kept, merged_at = now() WHERE entity_id = :gone"
+        ).bindparams(kept=kept_client, gone=gone_client),
+    )
+
+    full = await produced(costing, "costing")
+    part = await produced(pricing, "pricing", client_id=gone_client)
+
+    # 1. Each file holds what its person may read through this agent, and no more (M39.5.1.4).
+    held: dict[str, list[list[str]]] = {}
+    for made in (full, part):
+        found = await store.one(made.artifact_id)
+        if found is None:
+            raise CheckFailedError("an artifact the check kept did not read back from its table")
+        held[made.artifact_id] = report_cells(await store.bytes_of(found))
+    costs = {row["cost"] for row in prices.rows} | {row["margin"] for row in prices.rows}
+    names = {row["name"] for row in prices.rows}
+    full_cells = {one for line in held[full.artifact_id][1:] for one in line}
+    part_cells = {one for line in held[part.artifact_id][1:] for one in line}
+    if not costs <= full_cells or not names <= full_cells:
+        raise CheckFailedError("a report for a person holding the cost did not hold the cost")
+    if costs & part_cells or not names <= part_cells:
+        raise CheckFailedError("a report for a person without the cost held the cost or margin")
+    if "cost" in held[part.artifact_id][0] or "notes" in held[full.artifact_id][0]:
+        raise CheckFailedError("a report named a column its person may never read")
+
+    # 2. The record: its run, version, person, reach and window (M39.5.1.1, M39.5.1.2).
+    costing_reach = await h.reach(costing)
+    named = (full.run_id, full.agent_version, full.caller_id, full.kind)
+    if named != (f"{h.trace_id}-costing", "1", costing, ArtifactKind.REPORT) or (
+        full.entitlement_hash != run_reach(costing_reach, record).ent_hash()
+    ):
+        raise CheckFailedError("an artifact did not name its run, version, person and reach")
+    window = horizon_for(DataClass.PAYLOAD).days
+    if (
+        full.data_class is not retention_class_for(inputs)
+        or full.data_class is not DataClass.PAYLOAD
+        or window is None
+        or f"/artifacts/{DataClass.PAYLOAD.value}/" not in keys[0]
+    ):
+        raise CheckFailedError("an artifact was not kept under its most sensitive input's class")
+
+    # 3. The list, its filters, its source and its figures, as the steward reads them (M39.5.2).
+    steward_reach = await h.reach(steward)
+    if not may_read_artifacts_at(steward_reach, h.now):
+        raise CheckFailedError("the agent's steward could not open its Artifacts section")
+    entries = await store.of_agent(agent_id)
+    listed = visible_artifacts(entries, steward_reach, h.now, agent_id=agent_id)
+    if {one.artifact_id for one in listed} != {full.artifact_id, part.artifact_id}:
+        raise CheckFailedError("the Artifacts section did not list what the agent produced")
+    only = visible_artifacts(entries, steward_reach, h.now, agent_id=agent_id, caller_id=pricing)
+    decks = visible_artifacts(
+        entries, steward_reach, h.now, agent_id=agent_id, kinds=(ArtifactKind.DECK,)
+    )
+    later = visible_artifacts(
+        entries, steward_reach, h.now, agent_id=agent_id, since=h.now + timedelta(seconds=1)
+    )
+    if [one.artifact_id for one in only] != [part.artifact_id] or decks or later:
+        raise CheckFailedError("a filter on the Artifacts section did not narrow the list")
+    shown = provenance_for(full, visible_sources=(entity,), visible_items=())
+    hidden = provenance_for(full, visible_sources=(), visible_items=())
+    if shown.sources != (entity,) or hidden.sources:
+        raise CheckFailedError("an artifact's source was not shown only to who may see it")
+    summary = storage_summary(
+        agent_id,
+        entries,
+        steward_reach,
+        basis=basis_over(ARTIFACTS_SCREEN, steward_reach, h.now),
+        now=h.now,
+    )
+    if (summary.count, summary.bytes_stored) != (2, full.bytes_stored + part.bytes_stored) or (
+        summary.expires_soonest_at != h.now + timedelta(days=window)
+    ):
+        raise CheckFailedError("the artifact count and storage did not match what was kept")
+
+    # 4. Its window, then who may fetch it back as they are now (M39.5.1.5, M39.8.4).
+    lasting = steward_reach.model_copy(update={"not_after": None})
+    inside, past = h.now + timedelta(days=window - 1), h.now + timedelta(days=window, minutes=1)
+    if not visible_artifacts(entries, lasting, inside, agent_id=agent_id) or visible_artifacts(
+        entries, lasting, past, agent_id=agent_id
+    ):
+        raise CheckFailedError("an artifact was listed past its window, or not inside it")
+    if may_download(full, steward_reach, h.now):
+        raise CheckFailedError("the steward could fetch a report whose cost they may not read")
+    pricing_reach = await h.reach(pricing)
+    if not may_download(full, costing_reach, h.now) or not may_download(part, pricing_reach, h.now):
+        raise CheckFailedError("the person a report was produced for could not fetch it")
+    await h.execute(*h.attributed(admin.principal_id), retire_grant(costing, cost.value))
+    if may_download(full, await h.reach(costing), h.now):
+        raise CheckFailedError("a report was fetched after its person lost the grant it drew on")
+
+    # 5. A new version supersedes and the steward archives; nothing is edited (M39.5.2.4).
+    newer = await produced(
+        pricing, "pricing-again", client_id=gone_client, supersedes=part.artifact_id
+    )
+    older = await store.one(part.artifact_id)
+    if (
+        older is None
+        or older.artifact.state is not ArtifactState.SUPERSEDED
+        or older.artifact.superseded_by != newer.artifact_id
+        or older.artifact.bytes_stored != part.bytes_stored
+    ):
+        raise CheckFailedError("a new version did not supersede the report it replaced")
+    asking = run_reach(pricing_reach, record)
+    latest = await store.latest_for(kept_client, ArtifactKind.REPORT, asking, h.now)
+    if latest is None or latest.artifact_id != newer.artifact_id:
+        raise CheckFailedError("the latest report for a client was not found through its merge")
+    if await store.latest_for(
+        kept_client, ArtifactKind.REPORT, run_reach(costing_reach, record), h.now
+    ):
+        raise CheckFailedError("the latest report for a client was given to somebody else")
+    if may_retire(newer, record, costing) or not may_retire(newer, record, steward):
+        raise CheckFailedError("an artifact could be retired by somebody other than who may")
+    await store.change(
+        newer.artifact_id,
+        to=ArtifactState.ARCHIVED,
+        by=steward,
+        ent_hash=steward_reach.ent_hash(),
+        trace_id=h.trace_id,
+    )
+    if await store.latest_for(kept_client, ArtifactKind.REPORT, asking, h.now):
+        raise CheckFailedError("an archived report was still the latest for its client")
+    if len(await store.of_agent(agent_id)) != 3:
+        raise CheckFailedError("superseding or archiving removed an artifact's row")
+
+    # 6. A client that resolves to nothing is refused, and its bytes are taken back.
+    try:
+        await produced(pricing, "nobody", client_id=f"acceptance_{h.run}_nobody")
+    except ArtifactError:
+        pass
+    else:
+        raise CheckFailedError("a report was kept against a client that names nobody")
+
+
+# ------------------------------------------------ 10. the leash, moved on evidence, and supervision
+#: The two tools the leash check governs: an ordinary write, and one that moves money.
+NOTE_TARGET: Final = "note.update"
+MONEY_TARGET: Final = "invoice.pay"
+
+
+def narrower_scope() -> Scope:
+    """The narrower scope the leash check sets a stricter rung in: one region of the rows."""
+    from brain.core.scope import Clause, Op
+
+    return Scope(clauses=(Clause(field="region", op=Op.EQ, value="north"),))
+
+
+def _leash_tools() -> tuple[Any, Any, Any]:
+    """A write tool, a money tool and the policy for the one field each touches."""
+    from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
+    from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+
+    write = ToolDefinition(
+        name="acceptance.update_note",
+        description="Update a note, for an install acceptance check",
+        entity="note",
+        required_capability="write:note.body",
+        side_effect=SideEffect.WRITE,
+        identity_mode=IdentityMode.DELEGATED,
+    )
+    money = ToolDefinition(
+        name="acceptance.pay_invoice",
+        description="Pay an invoice, for an install acceptance check",
+        entity="invoice",
+        required_capability="write:invoice.amount",
+        side_effect=SideEffect.MONEY,
+        identity_mode=IdentityMode.DELEGATED,
+    )
+    policy = FieldPolicy(
+        rules=(
+            FieldRule.of("note", "body", "read:note.body", Classification.INTERNAL),
+            FieldRule.of("invoice", "amount", "read:invoice.amount", Classification.CONFIDENTIAL),
+        )
+    )
+    return write, money, policy
+
+
+@check(
+    leaves=(
+        "M39.3.2.1",
+        "M39.3.2.2",
+        "M39.3.2.3",
+        "M39.3.2.4",
+        "M39.3.2.5",
+        "M39.8.2",
+        "M39.8.3",
+    ),
+    sentence=(
+        "One action runs simulated at Shadow, suspends at Assisted and proceeds at Autonomous "
+        "unless it touches money; the strictest overlapping entry wins; a department's leash "
+        "holder lowers at once and raises only on counted evidence, a money rise needing a second "
+        "person; a rejection trips the rung to Shadow naming its metric; every move is kept with "
+        "its evidence; and a pin below its bar extends."
+    ),
+)
+async def an_agents_leash_moves_on_evidence_and_its_pin_extends(h: Harness) -> None:
+    from brain.agent_leash_routes import may_move_leash
+    from brain.agents.leash_moves import (
+        THE_PROPOSER_CANNOT_CONFIRM,
+        LeashMove,
+        LeashMoveError,
+        Record,
+        breaker_for,
+        effective_leash,
+        held_while_supervised,
+        history,
+        lowering,
+        newest_by_key,
+        raising,
+        record_since,
+        rung_of,
+        tripping,
+    )
+    from brain.agents.model import entitlement_ceiling
+    from brain.agents.supervision import ShadowOutcome, ShadowPin, ShadowReview, review
+    from brain.audit.record import ApprovalVerdict
+    from brain.core.envelope import Entity, SideEffect, ToolDefinition, TypedResult
+    from brain.gate.injection import AutonomyTier, RiskAssessment
+    from brain.gate.leash import Action, Governed, Leash, Route, govern
+    from brain.ops.acceptance_checks import _HeldLedger, _in
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.leash_store import StoredLeash, simulated_only
+    from brain.tables.leash import MoveKind, PinOutcome
+
+    await h.found_departments()
+    steward, first, second = (h.principal(A, one) for one in ("steward", "leashing", "confirming"))
+    caps = ("write:note.body", "read:note.body", "write:invoice.amount", "read:invoice.amount")
+    await h.person(steward, department=A, grants=_everywhere(*caps))
+    for holder in (first, second):
+        await h.person(holder, department=A, grants=_in(A, "admin:leash"))
+    agent_id = await installed_agent(
+        h, steward, capabilities=caps, suffix="_leash", scope=Scope.unrestricted()
+    )
+    pinned_id = await installed_agent(
+        h, steward, capabilities=caps, suffix="_pinned", scope=Scope.unrestricted()
+    )
+    ceilings = {
+        one: entitlement_ceiling(await stored_agent(h, one)) for one in (agent_id, pinned_id)
+    }
+    record = await stored_agent(h, agent_id)
+    store = StoredLeash(h.sessions)
+    write, money, policy = _leash_tools()
+    caller = await h.reach(steward)
+    everywhere = Scope.unrestricted()
+    north = narrower_scope()
+    if not may_move_leash(await h.reach(first), record, h.now) or may_move_leash(
+        caller, record, h.now
+    ):
+        raise CheckFailedError("the leash could be moved by somebody other than its role's holder")
+
+    minutes = iter(range(1, 10_000))
+
+    def tick() -> Any:
+        """The check's own clock, a minute a step from an hour ago, so every row is in order."""
+        return h.now - timedelta(hours=1) + timedelta(minutes=next(minutes))
+
+    async def leash_for(agent: str) -> Leash:
+        state = await store.state(agent)
+        return held_while_supervised(
+            effective_leash(Leash(), state.moves),
+            agent,
+            None if state.pin is None else state.pin.outcome,
+        )
+
+    async def governed(
+        agent: str, tool: ToolDefinition, target: str, n: int, *, region: str, at: Any
+    ) -> Governed[Entity]:
+        """One action of `agent`, decided and routed by the gate at its leash as it stands."""
+        field = "body" if target == NOTE_TARGET else "amount"
+        return govern(  # the tools return nothing, so the entity type is the base one
+            Action(
+                agent_id=agent,
+                tool=tool,
+                target=target,
+                touched_fields=(field,),
+                row={"region": region},
+                args={field: f"{h.run}-{n}"},
+            ),
+            caller=caller,
+            agent_ceiling=ceilings[agent],
+            policy=policy,
+            leash=await leash_for(agent),
+            assessment=RiskAssessment(score=0, matched=()),
+            trace_id=f"{h.trace_id}-leash",
+            now=at,
+            simulate=lambda one: TypedResult[Entity](),
+            execute=lambda one: TypedResult[Entity](),
+            ledger=_HeldLedger(),
+        )
+
+    async def judged(
+        agent: str,
+        tool: ToolDefinition,
+        target: str,
+        verdicts: Sequence[ApprovalVerdict],
+        *,
+        region: str = "south",
+        at: Any = None,
+    ) -> None:
+        """An action per verdict through the gate as it stands, kept, and judged by the steward."""
+        for verdict in verdicts:
+            when = at if at is not None else tick()
+            done = await governed(agent, tool, target, next(minutes), region=region, at=when)
+            await store.record_action(done.record)
+            await store.give_verdict(
+                ShadowReview(
+                    agent_id=agent,
+                    action_digest=done.record.action_digest,
+                    verdict=verdict,
+                    reviewer_id=steward,
+                    at=when + timedelta(seconds=1),
+                )
+            )
+
+    async def pressed(
+        target: str,
+        scope: Scope,
+        to: AutonomyTier,
+        by: str,
+        effect: SideEffect,
+        *,
+        agent_id: str = agent_id,
+        at: Any = None,
+    ) -> LeashMove:
+        """A press on the leash, decided and kept as the move route decides and keeps it."""
+        state = await store.state(agent_id)
+        leash = effective_leash(Leash(), state.moves)
+        newest = newest_by_key(state.moves).get((agent_id, target, scope))
+        at = at if at is not None else tick()
+        if to < rung_of(leash, agent_id, target, scope):
+            move = lowering(
+                leash, agent_id=agent_id, target=target, scope=scope, to=to, by=by, at=at
+            )
+        else:
+            move = raising(
+                leash,
+                agent_id=agent_id,
+                target=target,
+                scope=scope,
+                to=to,
+                by=by,
+                at=at,
+                effect=effect,
+                record=record_since(
+                    agent_id,
+                    target,
+                    actions=state.actions,
+                    verdicts=state.verdicts,
+                    since=None if newest is None or not newest.moves_the_rung else newest.at,
+                ),
+                pending=newest,
+                supervision=None,
+            )
+        await store.move(
+            move, reason_code="acceptance_check", ent_hash=SET_UP_REACH, trace_id=h.trace_id
+        )
+        return move
+
+    async def route(tool: ToolDefinition, target: str, *, region: str = "south") -> Route:
+        done = await governed(agent_id, tool, target, next(minutes), region=region, at=tick())
+        return done.route
+
+    approved = [ApprovalVerdict.APPROVED] * 10
+
+    # 1. Shadow simulates; ten judged unchanged raise it to Assisted, which suspends (M39.3.2.2),
+    # and ten more to Autonomous, which proceeds for a tool touching no money (M39.8.3).
+    if await route(write, NOTE_TARGET) is not Route.SIMULATE:
+        raise CheckFailedError("an action with no leash entry was not simulated")
+    await judged(agent_id, write, NOTE_TARGET, approved)
+    up = await pressed(NOTE_TARGET, everywhere, AutonomyTier.ASSISTED, first, SideEffect.WRITE)
+    if up.kind is not MoveKind.RAISED or up.promotion is None or up.promotion.approver_id != first:
+        raise CheckFailedError("a rise on a clean record was not a raise naming its approver")
+    if await route(write, NOTE_TARGET) is not Route.SUSPEND:
+        raise CheckFailedError("an action at Assisted did not wait for a person")
+    try:
+        await pressed(NOTE_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.WRITE)
+    except LeashMoveError:
+        pass
+    else:
+        raise CheckFailedError("a rung rose again on the record that raised it last time")
+    await judged(agent_id, write, NOTE_TARGET, approved)
+    await pressed(NOTE_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.WRITE)
+    if await route(write, NOTE_TARGET) is not Route.EXECUTE:
+        raise CheckFailedError("an action at Autonomous touching no money did not proceed")
+
+    # 2. The strictest overlapping entry wins: a narrower scope at Assisted holds its rows there.
+    await pressed(NOTE_TARGET, north, AutonomyTier.ASSISTED, first, SideEffect.WRITE)
+    if await route(write, NOTE_TARGET, region="north") is not Route.SUSPEND:
+        raise CheckFailedError("a stricter narrower entry did not hold its rows at its rung")
+
+    # 3. Lowered at once, with no evidence asked for.
+    down = await pressed(NOTE_TARGET, everywhere, AutonomyTier.SHADOW, second, SideEffect.WRITE)
+    if down.kind is not MoveKind.LOWERED or await route(write, NOTE_TARGET) is not Route.SIMULATE:
+        raise CheckFailedError("a lowering did not take effect at once")
+
+    # 4. Money: a proposal, the proposer refused, a second person's raise naming both (M39.3.2.4),
+    # and even at Autonomous an action touching money waits for a person.
+    await judged(agent_id, money, MONEY_TARGET, approved)
+    proposal = await pressed(
+        MONEY_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.MONEY
+    )
+    if (
+        proposal.kind is not MoveKind.PROPOSED
+        or rung_of(await leash_for(agent_id), agent_id, MONEY_TARGET, everywhere)
+        is not AutonomyTier.SHADOW
+    ):
+        raise CheckFailedError("a money rise moved on one person's press")
+    try:
+        await pressed(MONEY_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.MONEY)
+    except LeashMoveError as refused:
+        if str(refused) != THE_PROPOSER_CANNOT_CONFIRM:
+            raise CheckFailedError(
+                "the proposer's confirmation was refused for another reason"
+            ) from None
+    else:
+        raise CheckFailedError("the person who proposed a money rise could confirm it")
+    both = await pressed(
+        MONEY_TARGET, everywhere, AutonomyTier.AUTONOMOUS, second, SideEffect.MONEY
+    )
+    names = None if both.promotion is None else both.promotion
+    if (
+        both.kind is not MoveKind.RAISED
+        or names is None
+        or (names.approver_id, names.second_approver_id) != (first, second)
+    ):
+        raise CheckFailedError("a money rise was not raised by a second person naming both")
+    if await route(money, MONEY_TARGET) is not Route.SUSPEND:
+        raise CheckFailedError("an action touching money proceeded without a person")
+
+    # 5. A rejection since the rise trips the money rung to Shadow, naming its metric (M39.3.2.3).
+    await judged(agent_id, money, MONEY_TARGET, [ApprovalVerdict.REJECTED])
+    state = await store.state(agent_id)
+    leash = effective_leash(Leash(), state.moves)
+    since = newest_by_key(state.moves)[(agent_id, MONEY_TARGET, everywhere)].at
+    trip = breaker_for(
+        rung_of(leash, agent_id, MONEY_TARGET, everywhere),
+        record_since(
+            agent_id, MONEY_TARGET, actions=state.actions, verdicts=state.verdicts, since=since
+        ),
+        at=tick(),
+    )
+    if trip is None:
+        raise CheckFailedError("a rejected action did not trip the rung it ran at")
+    await store.move(
+        tripping(
+            leash, agent_id=agent_id, target=MONEY_TARGET, scope=everywhere, trip=trip, by=steward
+        ),
+        reason_code="acceptance_check",
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+    )
+    if rung_of(await leash_for(agent_id), agent_id, MONEY_TARGET, everywhere) is not (
+        AutonomyTier.SHADOW
+    ):
+        raise CheckFailedError("a tripped breaker did not put the rung on Shadow")
+
+    # 6. Every move kept, oldest first, with its evidence, and each real one on the ledger.
+    state = await store.state(agent_id)
+    kept = history(state.moves)
+    expected = [
+        MoveKind.RAISED,
+        MoveKind.RAISED,
+        MoveKind.RAISED,
+        MoveKind.LOWERED,
+        MoveKind.PROPOSED,
+        MoveKind.RAISED,
+        MoveKind.TRIPPED,
+    ]
+    if [one.kind for one in kept] != expected or kept[-1].trip is None or kept[0].promotion is None:
+        raise CheckFailedError("the history did not hold every move with its evidence")
+    ledgered = (
+        await h.execute(
+            text(
+                "SELECT count(*) FROM obs.audit_entry WHERE action = 'leash_change'"
+                " AND subject = :subject"
+            ).bindparams(subject=f"agent:{agent_id}")
+        )
+    ).scalar_one()
+    if ledgered != len([one for one in expected if one is not MoveKind.PROPOSED]):
+        raise CheckFailedError("a leash move did not reach the ledger, or a proposal did")
+
+    # 7. A pin reviewed below its bar extends, keeps its start, and holds the agent down (M39.8.2).
+    # The pinned agent earned Assisted before its pin, so a hold is the only thing between it and
+    # a person seeing its actions.
+    started = h.now - timedelta(days=31)
+    before = started - timedelta(days=1)
+    await judged(pinned_id, write, NOTE_TARGET, approved, at=before - timedelta(hours=1))
+    await pressed(
+        NOTE_TARGET,
+        everywhere,
+        AutonomyTier.ASSISTED,
+        first,
+        SideEffect.WRITE,
+        agent_id=pinned_id,
+        at=before,
+    )
+    await store.write_pin(
+        ShadowPin(
+            agent_id=pinned_id, pinned_at=started, review_due_at=started + timedelta(days=30)
+        ),
+        PinOutcome.PINNED,
+        by=first,
+        counts=None,
+        at=started,
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+    )
+    short = [ApprovalVerdict.APPROVED] * 8 + [ApprovalVerdict.AMENDED] * 2
+    await judged(pinned_id, write, NOTE_TARGET, short, at=started + timedelta(days=1))
+    state = await store.state(pinned_id)
+    held = await governed(pinned_id, write, NOTE_TARGET, next(minutes), region="south", at=h.now)
+    if state.pin is None or held.route is not Route.SIMULATE:
+        raise CheckFailedError("a pinned agent was not held at Shadow")
+    watched = [one for one in simulated_only(state.actions) if one.at >= started]
+    digests = {one.action_digest for one in watched}
+    found = review(
+        state.pin.pin,
+        simulated=watched,
+        reviews=[one for one in state.verdicts if one.action_digest in digests],
+        now=h.now,
+    )
+    if found.outcome is not ShadowOutcome.EXTENDED or found.pin.pinned_at != started:
+        raise CheckFailedError("a pin reviewed below its bar did not extend, keeping its start")
+    counted = found.confidence
+    await store.write_pin(
+        found.pin,
+        PinOutcome.EXTENDED,
+        by=first,
+        counts=(counted.understood, counted.reviewed, counted.simulated),
+        at=h.now,
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+    )
+    state = await store.state(pinned_id)
+    if state.pin is None or state.pin.outcome is not PinOutcome.EXTENDED:
+        raise CheckFailedError("an extended pin was not kept with its later review")
+    try:
+        raising(
+            effective_leash(Leash(), state.moves),
+            agent_id=pinned_id,
+            target=NOTE_TARGET,
+            scope=everywhere,
+            to=AutonomyTier.ASSISTED,
+            by=first,
+            at=h.now,
+            effect=SideEffect.WRITE,
+            record=Record(clean_runs=10, agreement_rate=1.0, reviewed=10),
+            pending=None,
+            supervision=state.pin.outcome,
+        )
+    except LeashMoveError:
+        pass
+    else:
+        raise CheckFailedError("a rung rose while its agent's review had not found it ready")
+
+
+# ---------------------------------------------- 11. tools and connectors attached, and what runs
+#: The shipped connector the check binds. Any shipped connector would do; a test holds that it is
+#: one, so a renamed connector fails the test rather than the check on an install.
+BOUND_CONNECTOR: Final = "freshdesk"
+
+
+def _attachable_tools() -> tuple[Any, ...]:
+    """The check's own tools: two reads, a write above the ceiling, and one outside it."""
+    from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
+
+    def made(name: str, capability: str, effect: SideEffect = SideEffect.NONE) -> Any:
+        return ToolDefinition(
+            name=name,
+            description=f"Declared by an install acceptance check as {name}",
+            entity=name.split(".", 1)[1].split("_", 1)[1],
+            required_capability=capability,
+            side_effect=effect,
+            identity_mode=IdentityMode.DELEGATED,
+            source=name.split(".", 1)[0],
+        )
+
+    return (
+        made("acceptance.read_note", "read:note.body"),
+        made("acceptance.read_deal", "read:deal.stage"),
+        made("acceptance.update_deal", "write:deal.stage", SideEffect.WRITE),
+        made("elsewhere.read_ticket", "read:ticket.status"),
+    )
+
+
+@check(
+    leaves=("M39.8.6", "M39.2.1.2", "M39.1.1.3"),
+    sentence=(
+        "A tool administrator attaches a tool the ceiling and their reach admit and is refused one "
+        "above either; the steward binds a shipped connector, which the ceiling then reads "
+        "through, and unbinds it; each press is a ledger entry naming who, which way and why; and "
+        "the answer route's roster hands a run exactly the tools and sources carried after each."
+    ),
+)
+async def an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them(h: Harness) -> None:
+    from brain.agent_attachment_routes import FROM_THE_AGENT_PAGE, may_press
+    from brain.agent_roster import agent_roster_for
+    from brain.agents.attachments import (
+        AttachmentError,
+        connectors_after_attach,
+        connectors_after_detach,
+        connectors_of,
+        narrowed,
+        opened_by,
+        to_attach,
+        to_detach,
+    )
+    from brain.agents.binding import providers
+    from brain.agents.model import entitlement_ceiling
+    from brain.core.entitlement import Capability
+    from brain.gate.roster import setup_of
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.attachment_store import StoredAttachments
+    from brain.tables.attachment import AttachmentPart
+
+    await h.found_departments()
+    admin, member = h.principal(A, "tooling"), h.principal(A, "member")
+    # A shipped connector's first entity, read through the binding's own map, so the check binds a
+    # source this release really has rather than a name it chose.
+    connector, entity = next(
+        (name, one) for one, name in sorted(providers().items()) if name == BOUND_CONNECTOR
+    )
+    sourced = f"read:{entity}.id"
+    reaches = (
+        "read:note.body",
+        "read:deal.stage",
+        "write:deal.stage",
+        "read:ticket.status",
+        sourced,
+    )
+    await h.person(
+        admin,
+        department=A,
+        grants=(*_in(A, "admin:tool", "admin:connector"), *_everywhere(*reaches)),
+    )
+    await h.person(member, department=A, grants=_everywhere(*reaches))
+    agent_id = await installed_agent(
+        h,
+        admin,
+        capabilities=("read:note.body", "read:deal.stage", "write:deal.stage", sourced),
+        allowed_tools=("acceptance.read_note",),
+        suffix="_tools",
+        scope=Scope.unrestricted(),
+    )
+    registered = _attachable_tools()
+    names = [one.name for one in registered]
+    admin_reach, member_reach = await h.reach(admin), await h.reach(member)
+    store = StoredAttachments(h.sessions)
+    roster = agent_roster_for(h.sessions)
+    if roster is None:
+        raise CheckFailedError("the answer route's roster reads nothing on this install")
+
+    async def carried() -> frozenset[str]:
+        """What a run of the agent is handed now, as the answer route builds it."""
+        stored = await roster()
+        found = {one.agent_id: one for one in stored.records}.get(agent_id)
+        if found is None:
+            raise CheckFailedError("the check's agent was not in the answer route's roster")
+        return setup_of(found, names, stored.install_hashes.get(agent_id)).ceiling.allowed_tools
+
+    async def reads_the_source() -> bool:
+        """Whether a run's ceiling, as the answer route builds it, holds the connector's read."""
+        found = {one.agent_id: one for one in (await roster()).records}.get(agent_id)
+        if found is None:
+            raise CheckFailedError("the check's agent was not in the answer route's roster")
+        return entitlement_ceiling(found).holds(Capability(value=sourced))
+
+    async def bound(attached: bool) -> tuple[str, ...]:
+        record = await stored_agent(h, agent_id)
+        becomes = (
+            connectors_after_attach(
+                connector,
+                record=record,
+                by=admin_reach,
+                now=h.now,
+            )
+            if attached
+            else connectors_after_detach(connector, record=record)
+        )
+        await store.bind_connectors(
+            agent_id=agent_id,
+            was=connectors_of(record),
+            becomes=becomes,
+            by=admin,
+            reason_code=FROM_THE_AGENT_PAGE,
+            ent_hash=SET_UP_REACH,
+            trace_id=h.trace_id,
+        )
+        return becomes
+
+    async def pressed(reference: str, attached: bool) -> tuple[str, ...]:
+        record = await stored_agent(h, agent_id)
+        record = narrowed(record, await store.changes(agent_id))
+        now_carried = record.authority.allowed_tools
+        tools = (
+            to_attach(
+                reference,
+                record=record,
+                carried=now_carried,
+                registered=registered,
+                by=admin_reach,
+                now=h.now,
+            )
+            if attached
+            else to_detach(reference, record=record, carried=now_carried)
+        )
+        await store.press(
+            agent_id=agent_id,
+            part=AttachmentPart.TOOL,
+            reference=reference,
+            attached=attached,
+            tools=tools,
+            by=admin,
+            reason_code=FROM_THE_AGENT_PAGE,
+            ent_hash=SET_UP_REACH,
+            trace_id=h.trace_id,
+            at=h.now,
+        )
+        return tools
+
+    record = await stored_agent(h, agent_id)
+    if not may_press(AttachmentPart.TOOL, admin_reach, record, h.now) or may_press(
+        AttachmentPart.TOOL, member_reach, record, h.now
+    ):
+        raise CheckFailedError("a tool could be attached by somebody other than its role's holder")
+    if await carried() != {"acceptance.read_note"}:
+        raise CheckFailedError("a run was not handed the tools the agent's manifest names")
+
+    # 1. A tool within the ceiling is attached; one above it, and one outside it, are refused.
+    await pressed("acceptance.read_deal", True)
+    for refused in ("acceptance.update_deal", "elsewhere.read_ticket"):
+        try:
+            await pressed(refused, True)
+        except AttachmentError:
+            continue
+        raise CheckFailedError("a tool outside the agent's ceiling was attached")
+    if await carried() != {"acceptance.read_note", "acceptance.read_deal"}:
+        raise CheckFailedError("a run was not handed a tool attached a moment before")
+
+    # 2. A connector is the agent's own list: unnamed, its source is out of the ceiling; named by
+    # the steward, a run reads through it; taken away, it is out again.
+    if await reads_the_source() or opened_by(record, connector) != (Capability(value=sourced),):
+        raise CheckFailedError("an agent naming no connector read a connected source")
+    if not may_press(AttachmentPart.CONNECTOR, admin_reach, record, h.now) or may_press(
+        AttachmentPart.CONNECTOR, member_reach, record, h.now
+    ):
+        raise CheckFailedError("a connector could be attached by somebody not answering for it")
+    if await bound(True) != (connector,) or not await reads_the_source():
+        raise CheckFailedError("a run did not read through a connector attached a moment before")
+    if await bound(False) != () or await reads_the_source():
+        raise CheckFailedError("a run still read through a connector detached a moment before")
+
+    # 3. Every press on the ledger: who, which way, and why.
+    rows = (
+        await h.execute(
+            text(
+                "SELECT actor_id, details FROM obs.audit_entry WHERE action = 'compose_change'"
+                " AND subject = :subject ORDER BY seq"
+            ).bindparams(subject=f"agent:{agent_id}")
+        )
+    ).all()
+    said = [
+        (
+            str(actor),
+            dict(details)["part"],
+            dict(details)["direction"],
+            dict(details)["reason_code"],
+        )
+        for actor, details in rows
+    ]
+    if said != [
+        (admin, "tool", "attached", FROM_THE_AGENT_PAGE),
+        (admin, "connector", "attached", FROM_THE_AGENT_PAGE),
+        (admin, "connector", "detached", FROM_THE_AGENT_PAGE),
+    ]:
+        raise CheckFailedError("a press did not reach the ledger naming who, which way and why")

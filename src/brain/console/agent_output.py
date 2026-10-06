@@ -86,8 +86,22 @@ deployment check is not red on the day it lands, and a test asserts the finding 
 The id is not repeated on the lines below, because those are parsed for ids and a sentence
 declining a leaf reads to the parser exactly like claiming it.
 
+**A re-download is checked against what the content drew on, not only against who asked.**
+`may_download` said "the requester as they are now" and meant it for everybody but the person the
+artifact was produced for, who passed `may_see` for ever: their reach could narrow to nothing and
+the file their old reach built was still theirs to fetch. So a record carries `drew_on`, the
+grants the producing run's reach held for what reached the file (`producible_fields` decides
+which fields those were), and a download asks that the requester still holds every one of them
+at least as widely. See `A_REDOWNLOAD_IS_CHECKED_AGAINST_WHAT_THE_CONTENT_DREW_ON`.
+
+**An artifact names the canonical client it was produced for**, and `latest_for_client` answers
+"the newest proposal for this client" by the whole family of ids the client resolves to, since a
+merge rewrites nothing, and only among what the asker may fetch now. Nothing found and nothing
+the asker may have are the same None.
+
 Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5
 Task ids: M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4, M39.5.2.5
+Task ids: M39.8.5
 """
 
 from __future__ import annotations
@@ -96,7 +110,7 @@ import enum
 import inspect
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Final
 
@@ -110,7 +124,7 @@ from brain.console.workspace import (
     basis_of,
 )
 from brain.console.workspace_capabilities import run_reach
-from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.field_policy import Classification, FieldPolicy
 from brain.core.redaction import RESERVED_KEYS, compute_mask
 from brain.ops.jobs import hidden_count_fields
@@ -187,6 +201,24 @@ SUPERSEDING_KEEPS_THE_ANSWER_EXPLAINABLE_AND_DELETING_DOES_NOT: Final = (
     "replacement and archive points at nothing, which is the distinction "
     "brain.knowledge.item draws between a document that was replaced and one that was "
     "withdrawn: an asker who finds nothing must not be told a successor exists."
+)
+
+
+#: Why a re-download asks about the grants the content drew on, and not only about the asker.
+A_REDOWNLOAD_IS_CHECKED_AGAINST_WHAT_THE_CONTENT_DREW_ON: Final = (
+    "An artifact is a copy of what the producing run could read, and the person it was produced "
+    "for is always entitled to know it exists. Knowing it exists is not the same as being handed "
+    "it again: if their reach has narrowed since, the file holds fields they may no longer read. "
+    "So a download asks that the requester still holds every grant the content was drawn under, "
+    "in a scope at least as wide, and refuses otherwise, whoever the requester is."
+)
+
+#: Why "the latest for this client" answers only from what the asker may fetch.
+THE_LATEST_FOR_A_CLIENT_IS_THE_NEWEST_THE_ASKER_MAY_FETCH: Final = (
+    "The newest artifact of a kind for a client is asked for by an agent in the middle of a run, "
+    "and the answer goes into what the run reads. So it is chosen from the artifacts the asker "
+    "may fetch now, never from all of them: an answer that skipped past a newer one the asker may "
+    "not see would tell them a newer one exists, and one that returned it would hand it over."
 )
 
 
@@ -339,6 +371,12 @@ class Artifact:
     provenance: Provenance = NO_PROVENANCE
     #: The artifact that replaced this one. Set exactly when the state is `SUPERSEDED`.
     superseded_by: str = ""
+    #: The canonical client it was produced for (`er.canonical`), or empty for none (M39.8.5).
+    client_id: str = ""
+    #: The grants the producing run's reach held for what reached the file. What a re-download
+    #: is checked against, and never a permission. See
+    #: `A_REDOWNLOAD_IS_CHECKED_AGAINST_WHAT_THE_CONTENT_DREW_ON`.
+    drew_on: tuple[Grant, ...] = ()
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -382,6 +420,12 @@ class Artifact:
                 f"artifact {self.artifact_id!r} is {self.state.value} and names "
                 f"{self.superseded_by!r} as its replacement; one of those is not true, and a "
                 "reader following the panel lands on whichever the renderer trusted"
+            )
+            raise ArtifactError(msg)
+        if self.client_id != self.client_id.strip():
+            msg = (
+                f"artifact {self.artifact_id!r} names {self.client_id!r} as its client, which "
+                "no canonical entity id is, so the latest for that client would never find it"
             )
             raise ArtifactError(msg)
 
@@ -452,6 +496,8 @@ def record(
     inputs: Sequence[ArtifactInput],
     bytes_stored: int = 0,
     provenance: Provenance = NO_PROVENANCE,
+    client_id: str = "",
+    drew_on: Sequence[Grant] = (),
 ) -> Artifact:
     """Record one produced thing as an artifact (M39.5.1.1, M39.5.1.2, M39.5.1.3).
 
@@ -481,6 +527,8 @@ def record(
         data_class=retention_class_for(inputs),
         bytes_stored=bytes_stored,
         provenance=provenance,
+        client_id=client_id,
+        drew_on=tuple(drew_on),
     )
 
 
@@ -563,13 +611,30 @@ def may_see(one: Artifact, reader: EntitlementSet, now: datetime | None = None) 
     return scope.matches(_scope_row(one))
 
 
+def still_holds(drew_on: Iterable[Grant], requester: EntitlementSet, now: datetime) -> bool:
+    """Whether the requester holds every grant the content was drawn under, at least as widely.
+
+    At least as widely is a comparison of clauses rather than of rows: the requester's scope for
+    a capability admits every row the recorded scope did when each of its clauses is one of the
+    recorded scope's, because a conjunction of fewer clauses admits more. Two scopes that admit
+    the same rows written differently are refused, which is the direction to be wrong in. See
+    `A_REDOWNLOAD_IS_CHECKED_AGAINST_WHAT_THE_CONTENT_DREW_ON`.
+    """
+    for one in drew_on:
+        held = requester.scope_for(one.capability, now)
+        if held is None or not set(held.clauses) <= set(one.scope.clauses):
+            return False
+    return True
+
+
 def may_download(one: Artifact, requester: EntitlementSet, now: datetime) -> bool:
     """Whether this requester may fetch the bytes, asked now rather than when it was made
     (M39.5.1.5).
 
-    Two conditions. The artifact still exists, which is `brain.ops.retention.is_expired` and
-    not a date compared here; and the requester is entitled to it as they are at this moment,
-    which is `may_see`. There is no third condition and in particular there is no link: see
+    Three conditions. The artifact still exists, which is `brain.ops.retention.is_expired` and
+    not a date compared here; the requester is entitled to know it exists as they are at this
+    moment, which is `may_see`; and they still hold everything its content drew on, which is
+    `still_holds`. There is no fourth and in particular there is no link: see
     `A_LINK_THAT_CARRIES_ITS_OWN_PERMISSION_IS_A_GRANT_ANYBODY_CAN_FORWARD`. `artifact_gaps`
     reads this signature for a parameter one could arrive through.
 
@@ -580,7 +645,40 @@ def may_download(one: Artifact, requester: EntitlementSet, now: datetime) -> boo
     """
     if is_expired(one.data_class, one.at, now):
         return False
-    return may_see(one, requester, now)
+    return may_see(one, requester, now) and still_holds(one.drew_on, requester, now)
+
+
+def latest_for_client(
+    entries: Sequence[Artifact],
+    *,
+    family: Iterable[str],
+    kind: ArtifactKind,
+    requester: EntitlementSet,
+    now: datetime,
+) -> Artifact | None:
+    """The newest current artifact of a kind for a client, among what the requester may fetch
+    (M39.8.5).
+
+    `family` is every id the client now resolves to (`brain.resolution.canonical.family_of`),
+    because a merge rewrites nothing and an artifact recorded against the entity merged away is
+    still that client's. Superseded and archived artifacts are not candidates: a withdrawn
+    proposal is not the latest one. `may_download` is asked of each candidate before one is
+    chosen, which is the ordering `THE_LATEST_FOR_A_CLIENT_IS_THE_NEWEST_THE_ASKER_MAY_FETCH`
+    argues, and nothing and nothing permitted are the one None.
+    """
+    ids = frozenset(family)
+    candidates = [
+        one
+        for one in entries
+        if one.client_id
+        and one.client_id in ids
+        and one.kind is kind
+        and one.state is ArtifactState.CURRENT
+        and may_download(one, requester, now)
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda one: (one.at, one.artifact_id))
 
 
 def visible_artifacts(
@@ -683,21 +781,7 @@ def supersede(one: Artifact, *, by: str) -> Artifact:
     if by.strip() == one.artifact_id:
         msg = f"artifact {one.artifact_id!r} cannot supersede itself"
         raise ArtifactError(msg)
-    return Artifact(
-        artifact_id=one.artifact_id,
-        agent_id=one.agent_id,
-        kind=one.kind,
-        run_id=one.run_id,
-        agent_version=one.agent_version,
-        caller_id=one.caller_id,
-        entitlement_hash=one.entitlement_hash,
-        at=one.at,
-        data_class=one.data_class,
-        state=ArtifactState.SUPERSEDED,
-        bytes_stored=one.bytes_stored,
-        provenance=one.provenance,
-        superseded_by=by.strip(),
-    )
+    return replace(one, state=ArtifactState.SUPERSEDED, superseded_by=by.strip())
 
 
 def archive(one: Artifact) -> Artifact:
@@ -714,20 +798,7 @@ def archive(one: Artifact) -> Artifact:
             "second withdrawal in a history that only had one"
         )
         raise ArtifactError(msg)
-    return Artifact(
-        artifact_id=one.artifact_id,
-        agent_id=one.agent_id,
-        kind=one.kind,
-        run_id=one.run_id,
-        agent_version=one.agent_version,
-        caller_id=one.caller_id,
-        entitlement_hash=one.entitlement_hash,
-        at=one.at,
-        data_class=one.data_class,
-        state=ArtifactState.ARCHIVED,
-        bytes_stored=one.bytes_stored,
-        provenance=one.provenance,
-    )
+    return replace(one, state=ArtifactState.ARCHIVED, superseded_by="")
 
 
 # ------------------------------------------------- count and storage (M39.5.2.5)

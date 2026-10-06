@@ -86,6 +86,7 @@ from brain.agents.upgrade import (
     decline,
     publish_version,
     review,
+    rungs_an_upgrade_would_raise,
 )
 from brain.connectors.contract import ConnectorScope, CredentialBinding, TransportKind
 from brain.connectors.manifest import (
@@ -868,11 +869,14 @@ def test_the_supervision_after_an_upgrade_is_the_new_templates_and_not_the_old_o
 
     The two guardrail paths are the publisher's decision at both versions, so an upgrade
     takes them exactly as published: nothing an installer overlaid and nothing they resolved
-    can hold the old side effect or the old rung.
+    can hold the old side effect or the old rung. The rung here goes down, which is immediate;
+    going up is `test_an_upgrade_that_would_raise_a_rung_is_refused_and_one_that_lowers_one_is_not`.
 
     Delete this and the seal is tested only by what it refuses, which is satisfied by a
     function that refuses everything and by an upgrade that keeps the old guardrails."""
-    first = _signed()
+    first = _signed(
+        _manifest(leash=(LeashRung(target="email.send", rung=AutonomyTier.AUTONOMOUS),))
+    )
     tightened = publish(
         _manifest(
             version=2,
@@ -900,6 +904,70 @@ def test_the_supervision_after_an_upgrade_is_the_new_templates_and_not_the_old_o
     assert upgraded.effective.record.authority.max_side_effect is SideEffect.DRAFT
     assert upgraded.effective.leash.rung_for(INSTANCE, "email.send", {}) is (AutonomyTier.ASSISTED)
     assert not set(upgraded.instance.overlay) & set(SEALED_PATHS)
+
+
+#: A rung before and after, either of them none for a target no entry names.
+RungPairs = tuple[tuple[AutonomyTier | None, AutonomyTier | None], ...]
+
+
+def _on_a_rung(rung: AutonomyTier | None, *, then: AutonomyTier | None) -> UpgradeReview:
+    """A review of an agent holding `email.send` at `rung` (none: no entry) against a version
+    holding it at `then`."""
+
+    def leash(at: AutonomyTier | None) -> tuple[LeashRung, ...]:
+        return () if at is None else (LeashRung(target="email.send", rung=at),)
+
+    first = _signed(_manifest(leash=leash(rung)))
+    second = publish(
+        _manifest(version=2, leash=leash(then)), key=KEY, signed_by=PUBLISHER, at=LATER
+    )
+    return review(_installed(first), shelf=_shelved(first, second), declines=Declines())
+
+
+def _accepting(reviewed: UpgradeReview) -> Upgraded:
+    return accept(
+        reviewed,
+        resolutions={},
+        key=KEY,
+        audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
+        by=ACCEPTER,
+        at=LATER_STILL,
+    )
+
+
+def test_an_upgrade_that_would_raise_a_rung_is_refused_and_one_that_lowers_one_is_not() -> None:
+    """**An upgrade never raises an autonomy rung.** A version holding a target at a higher rung
+    than the agent is on, a new target at Assisted over no entry at all, and one at any rung over
+    Shadow are each refused with the rule's own words; the same target held, lowered, dropped or
+    added at Shadow is accepted, and a decline still works on the version that cannot be
+    accepted. Lowering is immediate and raising needs evidence of the agent's own runs.
+
+    Delete this and a published version carries autonomy into every agent that accepts it,
+    which the agent never earned and nobody was shown."""
+    raising: RungPairs = (
+        (AutonomyTier.SHADOW, AutonomyTier.ASSISTED),
+        (AutonomyTier.ASSISTED, AutonomyTier.AUTONOMOUS),
+        (None, AutonomyTier.ASSISTED),
+    )
+    for before, after in raising:
+        reviewed = _on_a_rung(before, then=after)
+        assert rungs_an_upgrade_would_raise(reviewed) == ("email.send",)
+        with pytest.raises(TemplateError, match="never raises a rung"):
+            _accepting(reviewed)
+        assert decline(reviewed, declines=Declines(), by=ACCEPTER, at=LATER_STILL).version == 2
+    keeping: RungPairs = (
+        (AutonomyTier.AUTONOMOUS, AutonomyTier.ASSISTED),
+        (AutonomyTier.ASSISTED, AutonomyTier.ASSISTED),
+        (AutonomyTier.ASSISTED, None),
+        (None, AutonomyTier.SHADOW),
+        (None, None),
+    )
+    for before, after in keeping:
+        reviewed = _on_a_rung(before, then=after)
+        assert rungs_an_upgrade_would_raise(reviewed) == ()
+        assert _accepting(reviewed).instance.template_version == 2
 
 
 # ------------------------------------------ an accepted upgrade is settled as an install is
@@ -998,7 +1066,9 @@ def _connectors(*, serving: bool) -> ConnectorRegistry:
 def _accepted(
     candidate: SignedManifest, *, tools: ToolRegistry, registry: ConnectorRegistry
 ) -> Upgraded:
-    first = _signed()
+    # Version one already holds the tool at the rung version two names: an upgrade carries a rung
+    # across and never raises one, so the bound-and-pinned leash is read off an agent that is on it.
+    first = _signed(_manifest(leash=(LeashRung(target=DECLARED_TOOL, rung=AutonomyTier.ASSISTED),)))
     return accept(
         review(_installed(first), shelf=_shelved(first, candidate), declines=Declines()),
         resolutions={},

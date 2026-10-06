@@ -421,7 +421,8 @@ services:
       KC_DB: postgres
       KC_HEALTH_ENABLED: 'true'
       KC_VAULT: file
-      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40
+      JAVA_OPTS_APPEND: -Xms64m -Xmx384m
+      MALLOC_ARENA_MAX: '2'
     volumes:
     - keycloak-build:/opt/keycloak/lib/quarkus
     networks:
@@ -461,7 +462,8 @@ services:
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:?set KEYCLOAK_HOSTNAME}
       KC_HOSTNAME_STRICT: 'true'
       KC_HEALTH_ENABLED: 'true'
-      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40
+      JAVA_OPTS_APPEND: -Xms128m -Xmx420m -XX:ReservedCodeCacheSize=96m
+      MALLOC_ARENA_MAX: '2'
     volumes:
     - keycloak-build:/opt/keycloak/lib/quarkus
     - realm-import:/opt/keycloak/data/import:ro

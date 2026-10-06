@@ -1,10 +1,11 @@
 /**
- * The three acts that change a webhook subscriber: registering one, replacing its signing secret
- * and switching it off.
+ * The five acts that change a webhook subscriber: registering one, replacing its signing secret,
+ * switching it off, switching it back on, and replaying one delivery that was given up.
  *
  * **Every write is sent from a confirmation, in the API's words.** Each opens `kit/ConfirmDialog`
  * with the sentence `brain.webhook_routes` serves for that act (`registering`, `replacing`,
- * `switching_off`), so the words a person agrees to are the words of the system that does it.
+ * `switching_off`, `switching_on`, `replaying`), so the words a person agrees to are the words of the
+ * system that does it.
  *
  * **Every field says what it accepts before anything is sent**, and a blank one is said beside it in
  * the API's own blank sentence before the confirmation opens (`webhooksQuery.BLANK_SENTENCES`, held
@@ -14,7 +15,7 @@
  * was typed is all the form knows until the person confirms, when the value is taken out of the
  * field, which empties it, for the one request. The old screen kept it in component state.
  *
- * Task ids: M27.8.12, M27.8.5, M27.16.1
+ * Task ids: M27.8.12, M27.8.5, M27.16.1, M27.15.44
  */
 
 import { useState, type FormEvent } from "react";
@@ -36,7 +37,10 @@ import {
   secretApiPath,
   secretBody,
   secretFormat,
+  replayApiPath,
   switchOffApiPath,
+  switchOnApiPath,
+  type DeliveryRow,
   type WebhooksBody,
 } from "../webhooksQuery";
 import { ACT_LABELS } from "./webhookActions";
@@ -52,6 +56,8 @@ export const KEEP_LABEL = "Change nothing";
 export const NOT_REGISTERED = "The subscriber was not registered";
 export const NOT_REPLACED = "The secret was not replaced";
 export const NOT_SWITCHED_OFF = "The subscriber was not switched off";
+export const NOT_SWITCHED_ON = "The subscriber was not switched back on";
+export const NOT_REPLAYED = "The delivery was not replayed";
 
 const REGISTER_FORM = "webhook-register";
 const REPLACE_FORM = "webhook-replace";
@@ -354,6 +360,92 @@ export function SwitchOffDialog({
       consequence={page.switching_off}
       details={failure === null ? undefined : <FailureNotice failure={failure} title={NOT_SWITCHED_OFF} />}
       confirmLabel={ACT_LABELS.switchOff}
+      cancelLabel={KEEP_LABEL}
+      busy={busy}
+      onConfirm={send}
+      onCancel={onClose}
+    />
+  );
+}
+
+export function SwitchOnDialog({
+  page,
+  subscriberId,
+  onClose,
+  onDone,
+}: {
+  readonly page: WebhooksBody;
+  readonly subscriberId: string;
+  readonly onClose: () => void;
+  readonly onDone: (told: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // Sent here rather than through a shared hook, so tests/support/writes.ts can follow this write to the
+  // confirmation that sends it, as it follows the other three.
+  const send = () => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(switchOnApiPath(subscriberId), { method: "POST" });
+      setBusy(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      onDone(readTold(result.data));
+    })();
+  };
+  return (
+    <ConfirmDialog
+      open
+      question={`Switch ${subscriberId} back on?`}
+      consequence={page.switching_on}
+      details={failure === null ? undefined : <FailureNotice failure={failure} title={NOT_SWITCHED_ON} />}
+      confirmLabel={ACT_LABELS.switchOn}
+      cancelLabel={KEEP_LABEL}
+      busy={busy}
+      onConfirm={send}
+      onCancel={onClose}
+    />
+  );
+}
+
+export function ReplayDialog({
+  page,
+  subscriberId,
+  delivery,
+  onClose,
+  onDone,
+}: {
+  readonly page: WebhooksBody;
+  readonly subscriberId: string;
+  readonly delivery: DeliveryRow;
+  readonly onClose: () => void;
+  readonly onDone: (told: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // Sent here rather than through a shared hook, so tests/support/writes.ts can follow this write to the
+  // confirmation that sends it, as it follows the other three.
+  const send = () => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(replayApiPath(subscriberId, delivery.replay ?? ""), { method: "POST" });
+      setBusy(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      onDone(readTold(result.data));
+    })();
+  };
+  return (
+    <ConfirmDialog
+      open
+      question={`Send this ${delivery.kind} delivery to ${subscriberId} once more?`}
+      consequence={page.replaying}
+      details={failure === null ? undefined : <FailureNotice failure={failure} title={NOT_REPLAYED} />}
+      confirmLabel={ACT_LABELS.replay}
       cancelLabel={KEEP_LABEL}
       busy={busy}
       onConfirm={send}

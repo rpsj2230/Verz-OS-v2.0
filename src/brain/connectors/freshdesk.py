@@ -98,12 +98,13 @@ Rejected: the helpdesk itself as the predicate, as Xero pins its tenant. No gran
 install is scoped by a helpdesk, so every ticket would be reachable by the data steward and
 nobody else until somebody wrote a grant no screen can write.
 
-Task ids: M11.6.2, M11.9.6, M11.4.6
+Task ids: M11.6.2, M11.9.6, M11.4.6, M11.8.12
 """
 
 from __future__ import annotations
 
 import enum
+import html
 import inspect
 import math
 import re
@@ -139,6 +140,8 @@ from brain.connectors.declaration import (
     Recorded,
     Setting,
     SettingRefusedError,
+    WriteCall,
+    WriteGrant,
 )
 from brain.connectors.manifest import (
     ChangeSignal,
@@ -155,10 +158,11 @@ from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
 from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.department import SLUG_RE
-from brain.core.envelope import IdentityMode, TypedResult
+from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
 from brain.core.scope import Scope
+from brain.gate.leash import Action
 from brain.gate.provenance import FRESHNESS_TEXT, Freshness
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import (
@@ -1585,29 +1589,350 @@ class FreshdeskLiveLookup:
     """
 
     def entities(self) -> tuple[str, ...]:
-        return (TICKET,)
+        return (TICKET, CONVERSATION)
 
     def identity_mode(self, entity: str) -> IdentityMode:
         del entity
         return IdentityMode.SERVICE
 
     def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
-        FreshdeskReading._assert_ticket(entity)
+        if entity != CONVERSATION:
+            FreshdeskReading._assert_ticket(entity)
         if not TICKET_ID.match(source_id):
             msg = (
                 "a ticket id laid into the helpdesk's address is digits, and this one is not; it "
                 "is refused rather than escaped"
             )
             raise ConnectorContractError(msg)
+        if entity == CONVERSATION:
+            return MappingProxyType({"id": source_id, "per_page": str(CONVERSATIONS_PER_PAGE)})
         return MappingProxyType({"id": source_id})
 
     def operation(
         self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
     ) -> RestOperation | None:
         del resolver  # checked when the address is prepared
-        FreshdeskReading._assert_ticket(entity)
         connection = FreshdeskConnection.from_settings(settings)
+        if entity == CONVERSATION:
+            return conversations_operation(domain=connection.domain)
+        FreshdeskReading._assert_ticket(entity)
         return live_ticket_operation(domain=connection.domain)
+
+
+# --------------------------------------------------------------------- a reply to a ticket
+#: A ticket's conversations, as the write's read-back reads them. Each row is named by the ticket
+#: it belongs to, so the read-back asks for the ticket and judges every conversation on it.
+CONVERSATION: Final = "ticket_conversation"
+
+#: The most conversations one read-back page holds, Freshdesk's own ceiling for a page.
+CONVERSATIONS_PER_PAGE: Final = 100
+
+#: `GET /api/v2/tickets/{id}/conversations`: every reply and note on one ticket, oldest first.
+LIST_CONVERSATIONS: Final = OperationSpec(
+    operation_id="listTicketConversations",
+    method="get",
+    path="/api/v2/tickets/{id}/conversations",
+    parameters=(
+        ParameterSpec(name="id", location="path", required=True),
+        _query("page"),
+        _query("per_page"),
+    ),
+    records_at="",
+    returns_list=True,
+)
+
+#: `POST /api/v2/tickets/{id}/reply`: one public reply, sent to the ticket's requester.
+REPLY_TO_TICKET: Final = OperationSpec(
+    operation_id="replyToTicket",
+    method="post",
+    path="/api/v2/tickets/{id}/reply",
+    parameters=(ParameterSpec(name="id", location="path", required=True),),
+    records_at="",
+    returns_list=False,
+)
+
+#: A conversation, named by its ticket: its own id, its text, whether the customer wrote it and
+#: whether it is private. Nothing else on it is read, and none of it is kept.
+CONVERSATION_MAPPING: Final[tuple[FieldMapping, ...]] = (
+    FieldMapping(target="id", source_path="ticket_id"),
+    FieldMapping(target="conversation_id", source_path="id"),
+    FieldMapping(target="body_text", source_path="body_text"),
+    FieldMapping(target="incoming", source_path="incoming"),
+    FieldMapping(target="private", source_path="private"),
+)
+
+
+def conversations_operation(*, domain: str) -> RestOperation:
+    """One ticket's conversations, for reading an approved reply back (M11.8.12)."""
+    return RestOperation(
+        base_url=f"https://{domain}",
+        operation=LIST_CONVERSATIONS,
+        transport=RestTransport(
+            spec_ref=SPEC_REF,
+            operation=LIST_CONVERSATIONS.operation_id,
+            entity=CONVERSATION,
+            fields=CONVERSATION_MAPPING,
+        ),
+    )
+
+
+def reply_operation(*, domain: str) -> RestOperation:
+    """The reply itself, sent to the connection's own helpdesk and nowhere else."""
+    return RestOperation(
+        base_url=f"https://{domain}",
+        operation=REPLY_TO_TICKET,
+        transport=RestTransport(
+            spec_ref=SPEC_REF,
+            operation=REPLY_TO_TICKET.operation_id,
+            entity=CONVERSATION,
+            fields=CONVERSATION_MAPPING,
+        ),
+    )
+
+
+#: What a person must hold, in the helpdesk's department, to prepare or approve a reply.
+REPLY_CAPABILITY: Final = f"write:{TICKET}"
+
+#: The longest reply prepared. A reply is a message to a customer, not a document.
+MAX_REPLY_CHARS: Final = 10_000
+
+#: The action key the ticket a reply answers is carried under.
+TICKET_KEY: Final = "ticket"
+
+#: What a model names the text of its reply, which is the action's `REPLY_FIELD` once prepared.
+REPLY_ARGUMENT: Final = "body"
+
+#: The longest reply a model may ask for. Shorter than `MAX_REPLY_CHARS`, because a held action
+#: keeps the text it was shown in an artefact of at most 8,000 characters
+#: (`brain.gate.leash.SuspendedAction.artefact`), and a reply whose artefact does not fit would
+#: fail the run it was asked in rather than wait for a person.
+MAX_PROPOSED_REPLY_CHARS: Final = 7_000
+
+#: The field a reply writes on its ticket, classified by the grant that writes it (behind
+#: `read:ticket.reply`), because no record the index or a live read holds has it. See
+#: `brain.connectors.declaration.A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT`.
+REPLY_FIELD: Final = "reply"
+
+#: The reply as the gate governs it. **A write to a customer, and a sensitive effect**, so
+#: `brain.gate.leash.effective_tier` caps it at Assisted whatever the leash says: it waits for a
+#: person and is never sent by an agent on its own.
+TICKET_REPLY_TOOL: Final = ToolDefinition(
+    name="freshdesk.reply_to_ticket",
+    description=(
+        "Prepare a reply to one helpdesk ticket, for a person to approve. Nothing is sent to the "
+        "customer by preparing it."
+    ),
+    entity=TICKET,
+    args_schema={
+        "type": "object",
+        "properties": {
+            TICKET_KEY: {
+                "type": "string",
+                "description": "The helpdesk's own id of the ticket being answered: digits only.",
+            },
+            REPLY_ARGUMENT: {
+                "type": "string",
+                "maxLength": MAX_PROPOSED_REPLY_CHARS,
+                "description": "The reply as plain text, for a person to read before it is sent.",
+            },
+        },
+        "required": [TICKET_KEY, REPLY_ARGUMENT],
+        "additionalProperties": False,
+    },
+    required_capability=REPLY_CAPABILITY,
+    side_effect=SideEffect.WRITE,
+    identity_mode=IdentityMode.SERVICE,
+    source=FRESHDESK,
+    sensitive=True,
+)
+
+#: Why a reply is read back by its text among the ticket's conversations.
+A_REPLY_IS_READ_BACK_BY_ITS_TEXT_ON_ITS_TICKET: Final = (
+    "Freshdesk issues a reply's own id only in its answer to the send, and has no call that reads "
+    "one conversation by its id, so a reply cannot be named before it is sent. It is read back as "
+    "the ticket's conversations, and the write is done only when one of them is a public reply "
+    "from the helpdesk holding exactly the approved text. Two limits follow. A reply past the "
+    "first page of a ticket with more conversations than a page holds is not found, and is "
+    "reported failed though it was posted. And an earlier public reply with the same text "
+    "satisfies the read-back, so a send that did not land is reported done if the ticket already "
+    "held those exact words, which a customer has then already read."
+)
+
+
+@dataclass(frozen=True)
+class TicketReply:
+    """One reply to one ticket, checked before anything is prepared."""
+
+    ticket: str
+    body: str
+
+    def __post_init__(self) -> None:
+        if not TICKET_ID.match(self.ticket):
+            msg = "a reply names its ticket by the helpdesk's own id, which is digits"
+            raise ConnectorContractError(msg)
+        text = self.body.strip()
+        if not text or len(self.body) > MAX_REPLY_CHARS:
+            msg = f"a reply holds some text and at most {MAX_REPLY_CHARS} characters"
+            raise ConnectorContractError(msg)
+        if not all(one.isprintable() or one in "\n\t" for one in self.body):
+            msg = "a reply is printable text with line breaks, and nothing a helpdesk would hide"
+            raise ConnectorContractError(msg)
+
+    def html(self) -> str:
+        """The body as Freshdesk takes it: the text escaped, each line break a `<br>`."""
+        return html.escape(self.body.strip()).replace("\n", "<br>")
+
+
+def said(text: object) -> str:
+    """Text as a read-back compares it: every run of white space one space, trimmed."""
+    return " ".join(str(text).split()) if isinstance(text, str) else ""
+
+
+def prepare_ticket_reply(reply: TicketReply, *, agent_id: str, department: str) -> Action:
+    """The action a person approves: this text, to this ticket, in this department (M11.8.12).
+
+    The text travels whole, so the card an approver reads is the reply the customer would get, and
+    the row carries the ticket and the department the approver's grant is matched against.
+    """
+    if not SLUG_RE.fullmatch(department):
+        msg = "a department's short name is what an approver's grant is matched against"
+        raise ConnectorContractError(msg)
+    args = {REPLY_FIELD: reply.body.strip()}
+    return Action(
+        agent_id=agent_id,
+        tool=TICKET_REPLY_TOOL,
+        target=TICKET,
+        touched_fields=(REPLY_FIELD,),
+        row={DEPARTMENT_SETTING: department, TICKET_KEY: reply.ticket},
+        args=args,
+    )
+
+
+def ticket_reply_of(action: Action) -> TicketReply:
+    """The reply an approved action names, rebuilt and checked again.
+
+    Refused for an action that is not this connector's reply, so the reply key is never handed
+    an action it was not granted for.
+    """
+    if action.tool.name != TICKET_REPLY_TOOL.name:
+        msg = f"{action.tool.name!r} is not a reply to a ticket"
+        raise ConnectorContractError(msg)
+    return TicketReply(ticket=action.row.get(TICKET_KEY, ""), body=action.args.get(REPLY_FIELD, ""))
+
+
+#: Why a reply a model asks for is built from the connection and the record, never from the model.
+A_MODEL_NAMES_A_TICKET_AND_A_REPLY_AND_NOTHING_ELSE: Final = (
+    "A model asking for a reply names the ticket and writes the text. The department an "
+    "approver's grant is matched against is the connection's own setting, the ticket must be "
+    "one the run's reach can read, and the id the held action carries is the one that record "
+    "has, so a model cannot move a reply to another department or another helpdesk by what it "
+    "writes."
+)
+
+
+class TicketReplyProposal:
+    """A reply an agent run asks for, as the action a person is asked to approve (M13.7.6).
+
+    See `A_MODEL_NAMES_A_TICKET_AND_A_REPLY_AND_NOTHING_ELSE`. The text is the model's and travels
+    whole, so the card an approver reads is the reply the customer would get; everything that
+    decides who may approve it is not.
+    """
+
+    @property
+    def tool(self) -> ToolDefinition:
+        return TICKET_REPLY_TOOL
+
+    def target_of(self, arguments: Mapping[str, str]) -> str:
+        ticket = arguments.get(TICKET_KEY, "")
+        # `fullmatch`, because the pattern's `$` also matches before a trailing line break, and
+        # this id is the one a model typed.
+        if not TICKET_ID.fullmatch(ticket):
+            msg = "a reply names its ticket by the helpdesk's own id, which is digits"
+            raise ConnectorContractError(msg)
+        return ticket
+
+    def action_for(
+        self,
+        arguments: Mapping[str, str],
+        *,
+        agent_id: str,
+        record: Mapping[str, Any],
+        settings: Mapping[str, str],
+    ) -> Action:
+        ticket = self.target_of(arguments)
+        if str(record.get("id", "")) != ticket:
+            msg = "a reply is prepared for the ticket that was read, and this is not that one"
+            raise ConnectorContractError(msg)
+        return prepare_ticket_reply(
+            TicketReply(ticket=ticket, body=arguments.get(REPLY_ARGUMENT, "")),
+            agent_id=agent_id,
+            department=settings.get(DEPARTMENT_SETTING, ""),
+        )
+
+    def described(self, action: Action) -> str:
+        """The reply as its asker is told of it: the ticket they named, and nothing of the text."""
+        return f"a reply to ticket {ticket_reply_of(action).ticket}"
+
+
+class TicketReplyWrites:
+    """How an approved reply is sent and how the ticket read back is judged (M11.8.12).
+
+    The address is the connection's helpdesk, from its settings, and never anything the action
+    carries, so a reply key goes only where the read key already goes. See
+    `A_REPLY_IS_READ_BACK_BY_ITS_TEXT_ON_ITS_TICKET` for the judgement.
+    """
+
+    def call_for(self, action: Action, *, settings: Mapping[str, str]) -> WriteCall:
+        reply = ticket_reply_of(action)
+        connection = FreshdeskConnection.from_settings(settings)
+        return WriteCall(
+            operation=reply_operation(domain=connection.domain),
+            arguments=MappingProxyType({"id": reply.ticket}),
+            body=MappingProxyType({"body": reply.html()}),
+            entity=CONVERSATION,
+            source_id=reply.ticket,
+        )
+
+    def differs(self, action: Action, found: Mapping[str, Any]) -> tuple[str, ...]:
+        reply = ticket_reply_of(action)
+        named: list[str] = []
+        if said(found.get("body_text")) != said(reply.body):
+            named.append(REPLY_FIELD)
+        if found.get("private") is not False or found.get("incoming") is not False:
+            named.append("public_reply")
+        return tuple(named)
+
+
+#: What an approver of a reply is told on an install that has not given the reply key.
+THIS_INSTALL_HAS_NOT_ALLOWED_TICKET_REPLIES: Final = (
+    "Approving this sends nothing to the customer: this install has not allowed replies to "
+    "tickets. An administrator allows them on the Freshdesk source's page with the API key of an "
+    "agent who may reply."
+)
+
+#: The grant that lets an approved reply be sent. Off until its key is given.
+TICKET_REPLIES: Final = WriteGrant(
+    name="ticket_replies",
+    label="Allow approved replies to tickets",
+    tools=(TICKET_REPLY_TOOL.name,),
+    credential_label="The API key of a Freshdesk agent who may reply to tickets",
+    credential_hint=(
+        "Ask for an agent API key whose role may reply to tickets: sign in to Freshdesk as an "
+        "agent with that role who is not an administrator, open Profile settings and copy Your API "
+        "Key. It is kept in a vault slot of "
+        "its own, apart from the read key, and used only to send a reply a person in the "
+        "helpdesk's department approved, which is then read back from the ticket before it is "
+        "reported done. Never an administrator's key: it can delete tickets and change SLAs."
+    ),
+    not_allowed=THIS_INSTALL_HAS_NOT_ALLOWED_TICKET_REPLIES,
+    prepares=TicketReplyWrites(),
+    proposes={TICKET_REPLY_TOOL.name: TicketReplyProposal()},
+    fields=each_behind_its_own(TICKET, (REPLY_FIELD,)),
+    scopes=KeyScopes(
+        request=("an agent API key whose role may reply to tickets",),
+        refuse=("an admin key, which can delete tickets and change SLAs",),
+    ),
+)
 
 
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
@@ -1765,6 +2090,7 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=FreshdeskReading(),
     live=FreshdeskLiveLookup(),
+    writes=(TICKET_REPLIES,),
     # Freshdesk declares no field rules, so each field the index keeps, and the body read live
     # (`LIVE_BODY_FIELD`), is behind its own capability: being told one is a grant of its own.
     ask=AskRows(

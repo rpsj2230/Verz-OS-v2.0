@@ -70,6 +70,46 @@ TITLE_CHARS = 200
 CHANNEL_CHARS = 32
 
 
+#: An agent's id and a request's trace, as `brain.agents.model` and `obs.request_telemetry` hold
+#: them. Copied rather than imported, because a transcript table sits below both; held equal to
+#: both by `tests/unit/test_thread_runs.py`.
+AGENT_ID_CHARS = 60
+TRACE_ID_CHARS = 64
+RUN_STATE_CHARS = 16
+
+
+class RunState(enum.StrEnum):
+    """How the run behind one answer ended, as its asker's thread records it (`0192`).
+
+    Four, and each is what the person was shown: an answer, a decline, an answer a source did not
+    finish in time, or nothing because the run failed. A failed run keeps the question and a turn
+    with no body, so the thread says it failed and never shows model output it did not produce.
+    """
+
+    ANSWERED = "answered"
+    ABSTAINED = "abstained"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+
+
+#: Why the three columns are held to answers.
+ONLY_AN_ANSWER_NAMES_ITS_RUN = (
+    "Only an answer carries an agent, a trace or a run state. A question is the person's own and "
+    "a system note is nobody's, and a run state on either would say a run happened where none did."
+)
+
+#: The checks that hold `ONLY_AN_ANSWER_NAMES_ITS_RUN`, by name. Each is written `<column> IS NULL
+#: OR ...`, so a row the previous release writes, which never sets the column, always passes it;
+#: `brain.deployment.compatibility` reads that shape as the narrowing it is not.
+RUN_CHECKS: dict[str, str] = {
+    "run_state_on_an_answer": (
+        f"run_state IS NULL OR (role = 'assistant' AND {one_of('run_state', RunState)})"
+    ),
+    "agent_on_an_answer": "agent_id IS NULL OR role = 'assistant'",
+    "trace_on_an_answer": "trace_id IS NULL OR role = 'assistant'",
+}
+
+
 class MessageRole(enum.StrEnum):
     """Who said it. Closed, and the members are not interchangeable.
 
@@ -146,7 +186,9 @@ class MessageRow(TimestampMixin, Base):
         # asserts the shape it can: an array, so a caller cannot put a record object in it
         # and have it read as a reference list later.
         CheckConstraint("jsonb_typeof(refs) = 'array'", name="refs_is_an_array"),
+        *(CheckConstraint(condition, name=name) for name, condition in RUN_CHECKS.items()),
         Index("ix_message_conversation", "conversation_id", "created_at"),
+        Index("ix_message_agent", "agent_id", "created_at"),
         {"schema": "chat"},
     )
 
@@ -176,3 +218,13 @@ class MessageRow(TimestampMixin, Base):
     #: Entity and record identifiers the answer drew on. Never values. See the module
     #: docstring, and `brain.chat.turns.RecordRef`, which is the same rule in the type.
     refs: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+
+    #: For an answer, the stored agent that answered, or None when it was answered at the asker's
+    #: own reach. None on every answer written before `0192`, which recorded no agent.
+    agent_id: Mapped[str | None] = mapped_column(String(AGENT_ID_CHARS), nullable=True)
+
+    #: For an answer, the request it answered, as `obs.request_telemetry` names it.
+    trace_id: Mapped[str | None] = mapped_column(String(TRACE_ID_CHARS), nullable=True)
+
+    #: For an answer, how its run ended. See `RunState`. None before `0192`.
+    run_state: Mapped[str | None] = mapped_column(String(RUN_STATE_CHARS), nullable=True)
