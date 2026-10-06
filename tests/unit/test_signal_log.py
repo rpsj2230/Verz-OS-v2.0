@@ -1,29 +1,25 @@
 """The learning signal's log: `0197`, its store and its writers, held to what they refuse to keep.
 
-The first half needs no server. It holds the migration to the models and to the grammars it
-copies, holds that no column of either table could hold a sentence and that neither install-wide
-function returns a column a person could come back in, holds that nothing deciding an answer
-imports the log, and drives the retrieval log's search wrapper over the model lane's own fixtures:
-a passage the redactor drops is never kept, and the one it keeps is.
+The first half needs no server. It holds the migration to the model and to the grammars it
+copies, holds that no column could hold a sentence and that the install-wide function returns no
+column a person could come back in, holds that nothing deciding an answer imports the log, and
+holds that a question handed to a person says so on the answer and on the exchange kept.
 
 The second half builds PostgreSQL to head and drives the writers as the application role: a
 question asking the thread's last one again is a signal naming the earlier answer and one on
 another subject is not, an exchange handed to a person and an answer marked wrong are signals
 naming their answers, one person can neither read nor write another's, a refused signal costs
-the exchange nothing, signals are counted by kind and never per person, and a retrieval is kept
-at its trace for its asker and read across the install as a ranking alone.
+the exchange nothing, and signals are counted by kind and never per person.
 
 **The database half skips when there is no server**, and CI always has one.
 
-Task ids: M16.2.8, M15.3.4, M9.2.4
+Task ids: M16.2.8, M9.2.4
 """
 
 from __future__ import annotations
 
 import ast
-import dataclasses
 import re
-import uuid
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -40,19 +36,7 @@ from brain.chat.turns import CorrectionKind
 from brain.db import metadata
 from brain.gate.answer import Answered
 from brain.gate.context import Channel
-from brain.gate.model_lane import ModelLane
-from brain.knowledge.quality import RETRIEVER_RE, RetrievalEvent
-from brain.knowledge.search import CHUNK_ID_CHARS
 from brain.memory.signals import REASK_WINDOW, Observation, Signal
-from brain.ops.retrieval_log import (
-    RETRIEVER,
-    LoggedSearch,
-    Retrieved,
-    StoredRetrievals,
-    cited_positions,
-    kept_retrieval,
-    logging_retrievals,
-)
 from brain.ops.signal_store import StoredSignals, kept_trace, noticed
 from brain.session import make_session_factory
 from brain.tables import signal_log as tables
@@ -62,7 +46,6 @@ from tests.fixtures.amended_tables import created_ddl
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_acceptance import ROOT, at_head
 from tests.unit.test_automation_owner_store import app_engine
-from tests.unit.test_model_lane import CALLER, VISIBLE, WITHHELD, Passages
 from tests.unit.test_tables import DIALECT, VERSIONS, migration_module, rendered, squash
 
 MIGRATION: Final = VERSIONS / "0197_signal_log.py"
@@ -70,10 +53,8 @@ MIGRATION: Final = VERSIONS / "0197_signal_log.py"
 #: The packages whose modules decide what an answer says, retrieves or remembers.
 DECIDING_PACKAGES: Final = ("gate", "memory", "knowledge", "core")
 
-#: The three modules the log lives in.
-LOG_MODULES: Final = frozenset(
-    {"brain.tables.signal_log", "brain.ops.signal_store", "brain.ops.retrieval_log"}
-)
+#: The two modules the log lives in.
+LOG_MODULES: Final = frozenset({"brain.tables.signal_log", "brain.ops.signal_store"})
 
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
 LONG_AGO: Final = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
@@ -90,49 +71,42 @@ def test_the_migration_copies_the_widths_and_grammars_the_models_declare() -> No
     assert m.SIGNAL_CHARS == tables.SIGNAL_CHARS
     assert m.TRACE_ID_CHARS == TRACE_ID_CHARS
     assert m.PRINCIPAL_ID_CHARS == PRINCIPAL_ID_CHARS
-    assert m.CHUNK_ID_CHARS == CHUNK_ID_CHARS
     assert m.TRACE_ID == TRACE_ID
     assert m.SIGNAL_IN == one_of("signal", (one.value for one in Signal)) == tables.SIGNAL_IN
-    assert m.POSITIONS_ARE_INSIDE_WHAT_WAS_RETURNED == tables.POSITIONS_ARE_INSIDE_WHAT_WAS_RETURNED
     # Every kind fits the column, measured against the vocabulary rather than the constant.
     assert max(len(one.value) for one in Signal) <= tables.SIGNAL_CHARS
 
 
-@pytest.mark.parametrize("qualified", ("mem.signal", "mem.retrieval"))
-def test_the_migration_builds_each_table_exactly_as_the_model_declares_it(qualified: str) -> None:
+def test_the_migration_builds_the_table_exactly_as_the_model_declares_it() -> None:
     """Compared on rendered DDL, so a width, a nullability, a key or a constraint that differs
     between the model and `0197` is caught. Delete this and the store can write through a model
     describing a table the database never built."""
     up = squash(rendered("upgrade", MIGRATION))
-    table = metadata.tables[qualified]
+    table = metadata.tables["mem.signal"]
     assert squash(created_ddl(table, DIALECT)) in up
     for index in table.indexes:
         assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in up
 
 
-def test_the_tables_are_secured_by_person_granted_select_and_insert_and_dropped_after() -> None:
-    """Both tables read and written only in the session's own name, SELECT and INSERT alone,
-    and both functions executable by the application alone. Delete this and a policy reading
+def test_the_table_is_secured_by_person_granted_select_and_insert_and_dropped_after() -> None:
+    """The table read and written only in the session's own name, SELECT and INSERT alone, and
+    its function executable by the application alone. Delete this and a policy reading
     `USING (true)` lets anybody read what everybody re-asked, or an UPDATE grant lets a signal be
     rewritten after the fact."""
     m = migration_module(MIGRATION)
     up = squash(rendered("upgrade", MIGRATION))
     down = squash(rendered("downgrade", MIGRATION))
-    assert m.GRANTS == (
-        "GRANT SELECT, INSERT ON mem.signal TO brain_app",
-        "GRANT SELECT, INSERT ON mem.retrieval TO brain_app",
-    )
+    assert m.GRANTS == ("GRANT SELECT, INSERT ON mem.signal TO brain_app",)
     assert "brain_fastlane" not in up
     mine = "principal_id = current_setting('app.principal_id', true)"
-    for table in ("mem.signal", "mem.retrieval"):
-        assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in up
-        assert f"DROP TABLE {table}" in down
-    assert up.count(f"USING ({mine})") == 2
-    assert up.count(f"WITH CHECK ({mine})") == 2
-    for function in (m.SIGNAL_COUNTS, m.RETRIEVAL_EVENTS):
-        assert f"REVOKE EXECUTE ON FUNCTION {function} FROM PUBLIC" in up
-        assert f"GRANT EXECUTE ON FUNCTION {function} TO brain_app" in up
-        assert f"DROP FUNCTION {function}" in down
+    assert m.TABLES == ("mem.signal",)
+    assert "ALTER TABLE mem.signal ENABLE ROW LEVEL SECURITY" in up
+    assert "DROP TABLE mem.signal" in down
+    assert up.count(f"USING ({mine})") == 1
+    assert up.count(f"WITH CHECK ({mine})") == 1
+    assert f"REVOKE EXECUTE ON FUNCTION {m.SIGNAL_COUNTS} FROM PUBLIC" in up
+    assert f"GRANT EXECUTE ON FUNCTION {m.SIGNAL_COUNTS} TO brain_app" in up
+    assert f"DROP FUNCTION {m.SIGNAL_COUNTS}" in down
 
 
 def _returned_columns(body: str) -> set[str]:
@@ -142,20 +116,18 @@ def _returned_columns(body: str) -> set[str]:
     return {line.split()[0] for line in found.group(1).split(",") if line.strip()}
 
 
-def test_the_install_wide_reads_return_no_column_a_person_or_a_passage_could_come_back_in() -> None:
+def test_the_install_wide_read_returns_no_column_a_person_could_come_back_in() -> None:
     """**The enforceable half of `A_COUNT_PER_PERSON_IS_A_PERFORMANCE_REVIEW`, in the database.**
-    The two functions read past the per-person policy, so what they return is everything anybody
-    reads of other people's rows: a kind and a count, and a count, positions and a duration.
-    Delete this and a principal column added to either is a ranking of who the system fails, or
-    a list of which documents one person's reach holds, with every other test green."""
+    The function reads past the per-person policy, so what it returns is everything anybody reads
+    of other people's rows: a kind and a count. Delete this and a principal column added to it is
+    a ranking of who the system fails, with every other test green."""
     m = migration_module(MIGRATION)
-    assert _returned_columns(m.CREATE_SIGNAL_COUNTS) == {"signal", "noticed"}
-    assert _returned_columns(m.CREATE_RETRIEVAL_EVENTS) == {"returned", "used", "latency_ms"}
-    assert "GROUP BY s.signal ORDER BY s.signal" in squash(m.CREATE_SIGNAL_COUNTS)
-    for body in (m.CREATE_SIGNAL_COUNTS, m.CREATE_RETRIEVAL_EVENTS):
-        assert "SECURITY DEFINER" in body and "STABLE" in body
-        assert "SET search_path = pg_catalog, mem" in body
-        assert "now()" not in body.lower()
+    body = m.CREATE_SIGNAL_COUNTS
+    assert _returned_columns(body) == {"signal", "noticed"}
+    assert "GROUP BY s.signal ORDER BY s.signal" in squash(body)
+    assert "SECURITY DEFINER" in body and "STABLE" in body
+    assert "SET search_path = pg_catalog, mem" in body
+    assert "now()" not in body.lower()
 
 
 def test_no_column_of_the_signal_table_could_hold_a_sentence() -> None:
@@ -180,39 +152,24 @@ def test_no_column_of_the_signal_table_could_hold_a_sentence() -> None:
         column_type = table.columns[name].type
         assert isinstance(column_type, String) and column_type.length is not None
         assert column_type.length <= PRINCIPAL_ID_CHARS, name
-    retrieval = metadata.tables["mem.retrieval"]
-    assert set(retrieval.columns.keys()) == {
-        "id",
-        "trace_id",
-        "principal_id",
-        "chunk_ids",
-        "used",
-        "latency_ms",
-        "at",
-    }
 
 
-def test_one_answer_is_one_piece_of_evidence_per_kind_and_one_retrieval_per_trace() -> None:
-    """The unique keys `ONE_ANSWER_IS_ONE_PIECE_OF_EVIDENCE_PER_KIND` rests on. Delete this and
+def test_one_answer_is_one_piece_of_evidence_per_kind() -> None:
+    """The unique key `ONE_ANSWER_IS_ONE_PIECE_OF_EVIDENCE_PER_KIND` rests on. Delete this and
     one person clicking "wrong" five times weighs as five people's judgement."""
-    signal, retrieval = (
-        {
-            tuple(one.columns.keys())
-            for one in metadata.tables[table].constraints
-            if isinstance(one, UniqueConstraint)
-        }
-        for table in ("mem.signal", "mem.retrieval")
-    )
-    assert signal == {("signal", "message_id")}
-    assert retrieval == {("trace_id",)}
+    unique = {
+        tuple(one.columns.keys())
+        for one in metadata.tables["mem.signal"].constraints
+        if isinstance(one, UniqueConstraint)
+    }
+    assert unique == {("signal", "message_id")}
 
 
 def test_nothing_that_decides_an_answer_can_read_the_signal_log() -> None:
     """**A signal is evidence and never an instruction.** No module under the packages that
-    decide what an answer retrieves, remembers or says imports the log's table or either store,
-    so a re-ask or a retrieval cannot reorder what the next person is told. Delete this and a
-    boost read off one person's retrievals can arrive in a diff about something else, which is
-    what `brain.knowledge.quality` rejected."""
+    decide what an answer retrieves, remembers or says imports the log's table or its store, so a
+    re-ask or a correction cannot reorder what the next person is told. Delete this and a boost
+    read off one person's corrections can arrive in a diff about something else."""
     importing: list[str] = []
     for package in DECIDING_PACKAGES:
         for path in sorted((ROOT / "src" / "brain" / package).rglob("*.py")):
@@ -242,83 +199,19 @@ def test_a_trace_outside_the_ledgers_grammar_is_kept_as_no_trace_and_one_inside_
     assert kept_trace("x" * (TRACE_ID_CHARS + 1)) is None
 
 
-# ------------------------------------------------------------------- the retrieval log, pure
-def test_a_search_keeps_the_passages_the_model_is_shown_and_never_one_the_redactor_dropped() -> (
-    None
-):
-    """**`A_RETRIEVAL_KEEPS_ONLY_WHAT_THE_MODEL_WAS_SHOWN`.** The model lane's own fixtures: the
-    caller may read the handbook's passage and not the quarantined one. Delete this and the log
-    keeps the id of a passage the caller was never shown, which is a record of what they could
-    not see; the positive half proves the wrapper is not keeping nothing."""
-    kept = Retrieved()
-    search = LoggedSearch(inner=Passages(VISIBLE, WITHHELD), kept=kept)
-    found = run(lambda: search.passages("leave", entitlement=CALLER, now=LONG_AGO))
-    assert [one.id for one in found.records] == [VISIBLE.id, WITHHELD.id]
-    assert kept.chunk_ids == (VISIBLE.id,)
-    assert kept.latency_ms >= 0
-
-
-def test_the_first_search_of_a_request_is_its_retrieval() -> None:
-    """A second search at the same trace does not replace the first. Delete this and a lane that
-    searched twice keeps whichever ran last, which is not the list the answer was drawn from."""
-    kept = Retrieved()
-    run(
-        lambda: LoggedSearch(inner=Passages(VISIBLE), kept=kept).passages(
-            "leave", entitlement=CALLER, now=LONG_AGO
-        )
-    )
-    run(
-        lambda: LoggedSearch(inner=Passages(), kept=kept).passages(
-            "leave", entitlement=CALLER, now=LONG_AGO
-        )
-    )
-    assert kept.chunk_ids == (VISIBLE.id,)
-
-
-def test_no_model_step_logs_nothing_and_a_model_step_has_its_search_wrapped() -> None:
-    """Delete this and a process with no model gains a lane, or the lane's search is not the
-    one that notes what it returned."""
-    kept = Retrieved()
-    assert logging_retrievals(None, kept) is None
-    # No model is asked here, so none is given: the wrapper reads only the search.
-    lane = ModelLane(search=Passages(VISIBLE), model=cast(Any, None))
-    wrapped = logging_retrievals(lane, kept)
-    assert wrapped is not None and isinstance(wrapped.search, LoggedSearch)
-    assert wrapped.search.inner is lane.search
-    assert wrapped.search.kept is kept
-    assert dataclasses.replace(wrapped, search=lane.search) == lane
-
-
-def _evidence(view: dict[str, str]) -> Any:
-    return SimpleNamespace(view=lambda: view)
-
-
-def _answered(*documents: Any, escalated: bool = False) -> Answered:
-    provenance = SimpleNamespace(documents=documents) if documents else None
+# ------------------------------------------------------------------- the handoff's flag
+def _answered(*, escalated: bool = False) -> Answered:
+    # A cast at the boundary: `exchange_of` reads these five attributes and nothing else.
     return cast(
         Answered,
         SimpleNamespace(
             frames=("event: text\ndata: An answer.\n\n", DONE),
             from_cache=False,
-            provenance=provenance,
+            provenance=None,
             referred=False,
             escalated=escalated,
         ),
     )
-
-
-def test_the_positions_kept_are_those_of_the_passages_the_answer_cited() -> None:
-    """Read from the answer's own document evidence by the chunk each anchor names. Delete this
-    and the ranking signal reads every answer as unused, or as used at the wrong place."""
-    cited = _evidence({"kind": "document", "document_id": "d1", "anchor": "chunk=c3&x=1"})
-    row = _evidence({"kind": "record", "entity": "client", "record_id": "c1", "field": "f"})
-    assert cited_positions(("c1", "c2", "c3"), _answered(cited, row)) == (3,)
-    assert cited_positions(("c1", "c2"), _answered(cited)) == ()
-    assert cited_positions(("c1",), _answered()) == ()
-    # The positions are a record quality accepts: sorted, one-based, inside what was returned.
-    event = RetrievalEvent(retrievers=(RETRIEVER,), returned=3, used=(3,))
-    assert event.first_used_position == 3
-    assert RETRIEVER_RE.match(RETRIEVER)
 
 
 def test_an_exchange_says_whether_its_question_was_handed_to_a_person() -> None:
@@ -329,6 +222,69 @@ def test_an_exchange_says_whether_its_question_was_handed_to_a_person() -> None:
     answered = exchange_of("q", _answered(escalated=False), policies)
     assert handed is not None and handed.escalated is True
     assert answered is not None and answered.escalated is False
+
+
+def _handing_on(monkeypatch: pytest.MonkeyPatch, *, declared: bool) -> None:
+    """`escalated`'s collaborators stood in: a skill declaring a queue or none, a store that
+    files the handoff with nobody named for the queue, and a send that therefore sends nothing."""
+    from brain import escalation_routes
+    from brain.tables.escalation import EscalationDelivery
+
+    async def no_skills(*args: Any, **kwargs: Any) -> tuple[()]:
+        return ()
+
+    async def filed(*args: Any, **kwargs: Any) -> Any:
+        return SimpleNamespace(route=None, escalation_id="e1")
+
+    async def not_sent(*args: Any, **kwargs: Any) -> EscalationDelivery:
+        return EscalationDelivery.NOT_SENT
+
+    skill = SimpleNamespace(escalate_to="acceptance_queue", name="escalates")
+    told = SimpleNamespace(for_asker=lambda: SimpleNamespace(text="Handed on."))
+    monkeypatch.setattr(
+        escalation_routes, "escalations_of", lambda request: SimpleNamespace(file=filed)
+    )
+    monkeypatch.setattr(escalation_routes, "offered_skills", no_skills)
+    monkeypatch.setattr(
+        escalation_routes, "declared_by", lambda skills: skill if declared else None
+    )
+    monkeypatch.setattr(escalation_routes, "escalation_for", lambda *args, **kwargs: told)
+    monkeypatch.setattr(escalation_routes, "handed_on", not_sent)
+
+
+@pytest.mark.parametrize("declared", (True, False))
+def test_an_abstention_handed_to_a_person_says_so_on_the_answer_and_no_other_does(
+    monkeypatch: pytest.MonkeyPatch, declared: bool
+) -> None:
+    """**Where the ESCALATED signal starts** (M16.2.4, M16.2.8). The answer route marks an answer
+    it handed on, and only that one: an abstention under a skill that names no queue is the
+    abstention it was. Delete this and the exchange a handoff leaves is kept as an ordinary
+    answer, so no signal is ever written for it, or every abstention is filed as a handoff."""
+    from brain.escalation_routes import escalated
+    from brain.gate.abstain import SearchScope, nothing_retrieved
+
+    _handing_on(monkeypatch, declared=declared)
+    answered = Answered(frames=(DONE,), abstention=nothing_retrieved(SearchScope()))
+    asking = cast(
+        Any,
+        SimpleNamespace(
+            reach=SimpleNamespace(ent_hash=lambda: "0" * 32),
+            principal=SimpleNamespace(id=ME, display_name="Asker"),
+            now=LONG_AGO,
+        ),
+    )
+    out = run(
+        lambda: escalated(
+            cast(Any, None),
+            answered,
+            agent=cast(Any, SimpleNamespace(agent_id="agent_1")),
+            asking=asking,
+            question="Who signs the lease renewal",
+            trace_id="t-handed",
+        )
+    )
+    assert out.escalated is declared
+    assert len(out.frames) == (2 if declared else 1)
 
 
 # --------------------------------------------------------------------------- on a server
@@ -576,85 +532,6 @@ def test_signals_are_counted_by_kind_for_the_install_and_never_per_person(databa
     assert counted == {"reasked": 2}
 
 
-def _retrieved(url: str, principal: str, trace: str, ids: tuple[str, ...] | None) -> bool:
-    cited = _evidence({"kind": "document", "document_id": "d", "anchor": "chunk=c2"})
-    return with_sessions(
-        url,
-        lambda s: kept_retrieval(
-            s,
-            trace_id=trace,
-            principal_id=principal,
-            retrieved=Retrieved(chunk_ids=ids, latency_ms=12),
-            answered=_answered(cited),
-            now=datetime(2019, 7, 1, 9, 0, tzinfo=UTC),
-        ),
-    )
-
-
-@pytest.mark.needs_db
-def test_a_retrieval_is_kept_at_its_trace_for_its_asker_and_read_by_the_install_as_a_ranking(
-    database: str,
-) -> None:
-    """**M15.3.4, and `THE_INSTALL_READS_A_RETRIEVAL_AS_A_RANKING_AND_ITS_ASKER_AS_IDS`.** The
-    asker reads the ids and the cited position back at the trace, somebody else reads nothing
-    there, and the install reads a `RetrievalEvent` with no id in it. Delete this and the log can
-    go unwritten, or be read by anybody, with the arithmetic over it still green."""
-    trace = f"t-retrieval-{uuid.uuid4().hex[:8]}"
-    assert _retrieved(database, ME, trace, ("c1", "c2", "c3"))
-    # One retrieval per trace: a second write there keeps the first and fails nothing.
-    assert _retrieved(database, ME, trace, ("c9",))
-    mine = with_sessions(database, lambda s: StoredRetrievals(s).at_trace(ME, trace))
-    assert mine is not None and (mine.chunk_ids, mine.used) == (("c1", "c2", "c3"), (2,))
-    assert with_sessions(database, lambda s: StoredRetrievals(s).at_trace(SOMEBODY, trace)) is None
-    events = with_sessions(
-        database,
-        lambda s: StoredRetrievals(s).events(
-            since=datetime(2019, 6, 30, tzinfo=UTC), until=datetime(2019, 7, 2, tzinfo=UTC)
-        ),
-    )
-    assert RetrievalEvent(retrievers=(RETRIEVER,), returned=3, used=(2,), latency_ms=12) in events
-
-
-@pytest.mark.needs_db
-def test_a_question_that_searched_nothing_keeps_nothing_and_one_that_found_nothing_is_kept(
-    database: str,
-) -> None:
-    """A fast-lane answer searched nothing; a search that found nothing is the evidence knowledge
-    gaps are read from. Delete this and either every fast-lane answer looks like an empty search,
-    or the questions nothing could answer are the ones the log forgets."""
-    assert not _retrieved(database, ME, "t-searched-nothing", None)
-    assert not _retrieved(database, ME, "not a trace at all", ("c1",))
-    assert _retrieved(database, ME, "t-found-nothing", ())
-    empty = with_sessions(database, lambda s: StoredRetrievals(s).at_trace(ME, "t-found-nothing"))
-    assert empty is not None and empty.chunk_ids == ()
-    assert (
-        with_sessions(database, lambda s: StoredRetrievals(s).at_trace(ME, "t-searched-nothing"))
-        is None
-    )
-
-
-@pytest.mark.needs_db
-def test_a_cited_position_past_the_passages_returned_is_refused_by_the_database(
-    database: str,
-) -> None:
-    """The table's own `used_inside_returned`, which `RetrievalEvent` holds in Python. Delete
-    this and a position of something the caller was never shown can be written by any writer
-    that skips the dataclass."""
-    import psycopg
-
-    with pytest.raises(psycopg.errors.CheckViolation):
-        sql(
-            database,
-            "INSERT INTO mem.retrieval (trace_id, principal_id, chunk_ids, used, latency_ms, at)"
-            " VALUES ('t-past-the-end', 'u', ARRAY['c1'], ARRAY[2]::smallint[], 1, now())",
-        )
-    sql(
-        database,
-        "INSERT INTO mem.retrieval (trace_id, principal_id, chunk_ids, used, latency_ms, at)"
-        " VALUES ('t-inside', 'u', ARRAY['c1'], ARRAY[1]::smallint[], 1, now())",
-    )
-
-
 @pytest.mark.needs_db
 def test_the_same_signal_noticed_twice_is_kept_once_and_both_times_said_kept(database: str) -> None:
     """`ONE_ANSWER_IS_ONE_PIECE_OF_EVIDENCE_PER_KIND`, as the writer reports it: a second notice of
@@ -707,38 +584,3 @@ def test_a_question_in_a_thread_that_holds_no_answer_yet_reasks_nothing(database
     thread = with_sessions(database, work)
     assert len(_answers(database, thread)) == 1
     assert _signals(database, person) == []
-
-
-@pytest.mark.needs_db
-def test_an_id_no_passage_carries_keeps_no_retrieval_and_fails_nothing(database: str) -> None:
-    """A live source can hand back an id longer than a passage id. Delete this and that id is
-    sent to a column that refuses it, which is an error on the answer path rather than a log."""
-    assert not _retrieved(database, ME, "t-overlong", ("c" * (CHUNK_ID_CHARS + 1),))
-    assert not _retrieved(database, ME, "t-unnamed", ("",))
-    assert with_sessions(database, lambda s: StoredRetrievals(s).at_trace(ME, "t-overlong")) is None
-
-
-def test_a_retrieval_that_cannot_be_kept_never_fails_the_answer() -> None:
-    """`A_SIGNAL_NEVER_COSTS_THE_PERSON_THEIR_TRANSCRIPT`, for the retrieval log: a database that
-    cannot be reached is logged and the answer goes out. Delete this and a retrieval write that
-    fails turns a good answer into a fault."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    from brain.api_routes import retrieval_logged
-
-    async def go() -> None:
-        # Nothing listens on port one, so the connection is refused at once.
-        engine = create_async_engine("postgresql+psycopg://nobody@127.0.0.1:1/none")
-        try:
-            await retrieval_logged(
-                SimpleNamespace(db_sessions=async_sessionmaker(engine)),
-                trace_id="t-unreachable",
-                principal_id=ME,
-                retrieved=Retrieved(chunk_ids=("c1",)),
-                answered=_answered(),
-                now=LONG_AGO,
-            )
-        finally:
-            await engine.dispose()
-
-    run(go)

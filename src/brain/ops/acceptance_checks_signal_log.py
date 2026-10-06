@@ -1,24 +1,21 @@
-"""The install acceptance checks for the learning signal's log: kept where it happens, in no words.
+"""The install acceptance check for the learning signal's log: kept where it happens, in no words.
 
-Each check asks through `/answer`'s own function and keeps the exchange through the route's own
+The check asks through `/answer`'s own function and keeps the exchange through the route's own
 `remembered`, as `brain.ops.acceptance_threads` does, marks an answer wrong through the
-corrections route's own function, and reads what was kept back through `brain.ops.signal_store`
-and `brain.ops.retrieval_log`, as reserved people in the reserved departments, inside the check's
-rolled-back transaction.
+corrections route's own function, and reads what was kept back through `brain.ops.signal_store`,
+as reserved people in the reserved departments, inside the check's rolled-back transaction.
 
-**The first check needs no model.** It asks two questions that share their subject in different
-words and one that does not, so the re-ask detector has a real decision to make in each
-direction, and every answer is the abstention a process with no model lane gives, which is kept in
-the thread like any other. A word nothing on the install holds is planted in the first question,
-and the check reads every column of every signal it wrote looking for it, and reads the thread to
-prove the word was really there to be copied. See `A_PLANTED_WORD_IS_LOOKED_FOR_IN_EVERY_COLUMN`.
+**It needs no model.** It asks two questions that share their subject in different words and one
+that does not, so the re-ask detector has a real decision to make in each direction, and every
+answer is the abstention a process with no model lane gives, which is kept in the thread like
+any other. A word nothing on the install holds is planted in the first question, and the check
+reads every column of every signal it wrote looking for it, and reads the thread to prove the
+word was really there to be copied. See `A_PLANTED_WORD_IS_LOOKED_FOR_IN_EVERY_COLUMN`.
 
-**The second asks the stand-in model**, as `brain.ops.acceptance_answers` does, so a search runs
-and its retrieval is kept, and then asks an agent whose skill escalates a question nothing
-answers, so the handoff is a signal and the empty search is a retrieval with no passages. On an
-install with no model profile it says it was not run, as every check that reaches a model does.
+A retrieval is not checked here: `ops.retrieval_event` (migration `0193`) keeps M15.3.4's log, and
+its own check proves it.
 
-Task ids: M16.2.8, M9.2.4, M15.3.4
+Task ids: M16.2.8, M9.2.4
 """
 
 from __future__ import annotations
@@ -38,7 +35,7 @@ if TYPE_CHECKING:
 
 #: Where this module's checks stand on the Install page, before every larger key. See
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
-CHECK_ORDER: Final = 440
+CHECK_ORDER: Final = 442
 
 A, B = RESERVED_DEPARTMENTS
 
@@ -78,21 +75,6 @@ ANOTHER_PERSON_REACHED_A_SIGNAL: Final = (
 COUNTED_BY_PERSON: Final = (
     "signals could be counted per person, or the install's count was not by kind alone"
 )
-#: A retrieval was not kept at its trace as the passages the model was shown.
-NO_RETRIEVAL_KEPT: Final = (
-    "a question answered from a document kept no retrieval at its trace naming the passages "
-    "the model was shown and the one the answer cited"
-)
-#: A retrieval was read by somebody it did not run for, or across the install with its ids.
-A_RETRIEVAL_WAS_READ_BY_ANOTHER: Final = (
-    "a retrieval's passages were read by somebody it did not run for, or the install's read of "
-    "it was not the ranking measurement alone"
-)
-#: A question handed to a person left no signal.
-NO_ESCALATION_KEPT: Final = (
-    "a question handed to a person was not kept as a signal naming the answer that said so, or "
-    "its empty search was not kept as a retrieval of nothing"
-)
 
 
 async def _asked(
@@ -102,8 +84,6 @@ async def _asked(
     question: str,
     thread: str | None,
     n: int,
-    *,
-    agent: str | None = None,
 ) -> tuple[Answered, str | None, str]:
     """One question through `/answer`'s own function, kept as the route keeps it, at its own
     trace: the answer, the thread it was kept in, and the trace."""
@@ -119,7 +99,7 @@ async def _asked(
         channel=Channel.CONSOLE,
         now=asking.now,
     )
-    ask = Question(question=question, thread=thread, agent=agent)
+    ask = Question(question=question, thread=thread)
     request = _request(app)
     trace = f"{h.trace_id}-{n}"
     outcome = await answered_for(
@@ -289,69 +269,3 @@ async def a_reask_and_a_correction_are_logged_by_id_and_never_in_words(h: Harnes
         or counted.get(Signal.CONTRADICTED.value, 0) < 1
     ):
         raise CheckFailedError(COUNTED_BY_PERSON)
-
-
-# ---------------------------------------- 2. a retrieval and a handoff (M15.3.4, M16.2.8)
-@check(
-    leaves=("M15.3.4", "M16.2.8"),
-    sentence=(
-        "A member of acceptance_a asks the stand-in a question their document answers, then asks "
-        "an escalating agent a question nothing answers: the first retrieval is kept at its trace "
-        "as the passages shown and the one cited, read by them, not by acceptance_b, and by the "
-        "install with no passage in it; the second is an escalation signal and a retrieval of "
-        "nothing."
-    ),
-)
-async def a_retrieval_is_logged_at_its_trace_as_the_passages_shown(h: Harness) -> None:
-    from brain.memory.signals import Signal
-    from brain.ops.acceptance_answers import _document_of, asking_with_a_stand_in
-    from brain.ops.acceptance_checks import _in
-    from brain.ops.acceptance_escalation import _escalating_agent
-    from brain.ops.acceptance_models import pinned
-    from brain.ops.acceptance_routing import ANSWERS, roster_over, step
-    from brain.ops.retrieval_log import StoredRetrievals
-    from brain.ops.signal_store import StoredSignals
-
-    s = await asking_with_a_stand_in(h)
-    await pinned(h, (step(ANSWERS),))
-    other = h.principal(B, "member")
-    await h.person(other, department=B, grants=_in(B, "read:knowledge"))
-    _, chunks = await _document_of(h, s.reader, s.paired.key)
-    started = datetime.now(UTC)
-
-    answered, _, trace = await _asked(h, s.app, s.reader, s.paired.question, None, 11)
-    retrievals = StoredRetrievals(h.sessions)
-    kept = await retrievals.at_trace(s.reader, trace)
-    if (
-        answered.composed is None
-        or kept is None
-        or not kept.chunk_ids
-        or not set(kept.chunk_ids) <= chunks
-        or not kept.used
-    ):
-        raise CheckFailedError(NO_RETRIEVAL_KEPT)
-    if await retrievals.at_trace(other, trace) is not None:
-        raise CheckFailedError(A_RETRIEVAL_WAS_READ_BY_ANOTHER)
-    events = await retrievals.events(
-        since=started - timedelta(minutes=1), until=datetime.now(UTC) + timedelta(minutes=1)
-    )
-    if not any(
-        one.returned == len(kept.chunk_ids) and one.used == kept.used for one in events
-    ) or any(s.paired.key in one for one in await _rows_as_text(h, s.reader, "mem.retrieval")):
-        raise CheckFailedError(A_RETRIEVAL_WAS_READ_BY_ANOTHER)
-
-    agent, _ = await _escalating_agent(h)
-    s.app.state.agent_roster = roster_over(h)
-    nothing = f"What does {h.word()} say about {h.word()}"
-    handed, thread, handed_on = await _asked(h, s.app, s.reader, nothing, None, 12, agent=agent)
-    if not handed.escalated or thread is None:
-        raise CheckFailedError("a question nothing answered was not handed to a person")
-    answers = await _answers(h, s.reader, thread)
-    escalations = [
-        (one.conversation_id, one.message_id)
-        for one in await StoredSignals(h.sessions).own(s.reader)
-        if one.signal is Signal.ESCALATED
-    ]
-    empty = await retrievals.at_trace(s.reader, handed_on)
-    if escalations != [(thread, answers[-1])] or empty is None or empty.chunk_ids:
-        raise CheckFailedError(NO_ESCALATION_KEPT)

@@ -1,14 +1,13 @@
-"""`mem.signal` and `mem.retrieval`: what was noticed about an answer, and what retrieval returned.
+"""`mem.signal`: what was noticed about an answer, naming it and never quoting it.
 
-`migrations/versions/0197_signal_log.py` builds both and holds the argument for their policies;
-`brain.ops.signal_store` and `brain.ops.retrieval_log` write and read them. What is here is the
-model that mirrors the migration, and the reason each column has the type it has.
+`migrations/versions/0197_signal_log.py` builds it and holds the argument for its policies;
+`brain.ops.signal_store` writes and reads it. What is here is the model that mirrors the
+migration, and the reason each column has the type it has.
 
-**No column of either table could hold a sentence.** A signal is a kind from
-`brain.memory.signals.Signal`'s closed vocabulary, two UUIDs naming a conversation and a message,
-a trace id held to the ledger's grammar, a principal and an instant. A retrieval is a trace, a
-principal, an array of passage ids, an array of positions, a duration and an instant. The
-obvious design has a `question` column, because learning wants to read it later, and that is
+**No column could hold a sentence.** A signal is a kind from `brain.memory.signals.Signal`'s
+closed vocabulary, two UUIDs naming a conversation and a message, a trace id held to the ledger's
+grammar, a principal and an instant. The obvious design has a `question` column, because learning
+wants to read it later, and that is
 `brain.memory.signals.A_SIGNAL_LOG_MUST_NOT_BECOME_A_SECOND_TRANSCRIPT`: a second copy of what
 somebody asked, under this table's permissions rather than the conversation's. **Typing the
 references as UUIDs is the structural half of that rule**, because a UUID column refuses words
@@ -21,12 +20,7 @@ alternative, a row per event, lets one person's repeated clicks weigh as several
 judgement, which is the per-person weighting `brain.memory.signals.counts_by` refuses from the
 other side.
 
-**A retrieval's positions are held to the passages it returned by the database**, as
-`brain.knowledge.quality.RetrievalEvent` holds them in Python: every position is one-based and
-none is past the end of the list, because a position past the end is a record of something the
-caller was not shown.
-
-Task ids: M16.2.8, M15.3.4
+Task ids: M16.2.8
 """
 
 from __future__ import annotations
@@ -35,24 +29,11 @@ import uuid
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import (
-    CheckConstraint,
-    DateTime,
-    Index,
-    Integer,
-    SmallInteger,
-    String,
-    UniqueConstraint,
-    Uuid,
-    func,
-    text,
-)
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import CheckConstraint, DateTime, Index, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.audit.ledger import TRACE_ID
 from brain.db import Base
-from brain.knowledge.search import CHUNK_ID_CHARS
 from brain.memory.signals import Signal
 from brain.tables.audit import TRACE_ID_CHARS
 from brain.tables.identity import PRINCIPAL_ID_CHARS, one_of
@@ -72,11 +53,6 @@ SIGNAL_IN: Final = one_of("signal", (one.value for one in Signal))
 
 #: The trace grammar the ledger keeps, or no trace at all.
 TRACE_SHAPE: Final = f"trace_id IS NULL OR trace_id ~ '{TRACE_ID}'"
-
-#: Every position is one-based and none is past the passages returned.
-POSITIONS_ARE_INSIDE_WHAT_WAS_RETURNED: Final = (
-    "0 < ALL (used) AND cardinality(chunk_ids) >= ALL (used)"
-)
 
 
 def _present(column: str) -> str:
@@ -109,37 +85,5 @@ class SignalRow(Base):
         UniqueConstraint("signal", "message_id"),
         Index("ix_mem_signal_at", "at"),
         Index("ix_mem_signal_principal_id_at", "principal_id", "at"),
-        {"schema": "mem"},
-    )
-
-
-class RetrievalRow(Base):
-    """`mem.retrieval`. One retrieval at one trace: the passages it returned, as ids only."""
-
-    __tablename__ = "retrieval"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
-    trace_id: Mapped[str] = mapped_column(String(TRACE_ID_CHARS), nullable=False)
-    principal_id: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
-    #: The passages the model was shown, in the order retrieval ranked them.
-    chunk_ids: Mapped[list[str]] = mapped_column(
-        ARRAY(String(CHUNK_ID_CHARS)), nullable=False, server_default=text("'{}'")
-    )
-    #: One-based positions into `chunk_ids` of the passages the answer cited.
-    used: Mapped[list[int]] = mapped_column(
-        ARRAY(SmallInteger), nullable=False, server_default=text("'{}'")
-    )
-    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
-    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-    __table_args__ = (
-        CheckConstraint(f"trace_id ~ '{TRACE_ID}'", name="trace_shape"),
-        CheckConstraint(_present("principal_id"), name="principal_present"),
-        CheckConstraint(POSITIONS_ARE_INSIDE_WHAT_WAS_RETURNED, name="used_inside_returned"),
-        CheckConstraint("latency_ms >= 0", name="latency_is_a_duration"),
-        UniqueConstraint("trace_id"),
-        Index("ix_mem_retrieval_at", "at"),
         {"schema": "mem"},
     )

@@ -597,9 +597,8 @@ WRITTEN_BY_CHECKS = (
     "obs.trace_read",
     "mem.mark",
     "agent.learning_pause",
-    # The signal log's check writes signals and retrievals in its rolled-back transaction (`0197`).
+    # The signal log's check writes signals in its rolled-back transaction (`0197`).
     "mem.signal",
-    "mem.retrieval",
     "ops.operation",
     "ops.budget_version",
     # A Lark Base indexed by a check offers its table's grants on the grants screen.
@@ -692,8 +691,6 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
     # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
     assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
-    # A retrieval is kept from a model's search; `tests/unit/test_acceptance_signal_log.py` runs it.
-    assert outcomes.pop("a_retrieval_is_logged_at_its_trace_as_the_passages_shown")[0] == NOT_RUN
     assert (
         outcomes.pop("a_document_is_added_answered_replaced_and_falls_due_for_review")[0] == NOT_RUN
     )

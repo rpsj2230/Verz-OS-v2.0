@@ -439,8 +439,8 @@ REGISTRY_OBSERVATION_TABLES: tuple[str, ...] = (
 ENTITY_MERGE_TABLES: tuple[str, ...] = ("er.merge", "er.unmerge")
 #: And the one 0184 adds: a pair of records waiting for a person.
 REVIEW_ITEM_TABLES: tuple[str, ...] = ("er.review_item",)
-#: And the two 0197 adds: what was noticed about each answer, and what each retrieval returned.
-SIGNAL_LOG_TABLES: tuple[str, ...] = ("mem.signal", "mem.retrieval")
+#: And the one 0197 adds: what was noticed about each answer, by id and never in words.
+SIGNAL_LOG_TABLES: tuple[str, ...] = ("mem.signal",)
 
 ALL_TABLES = (
     CORE_TABLES

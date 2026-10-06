@@ -245,7 +245,6 @@ from brain.ops.live_read_run import (
 )
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
-from brain.ops.retrieval_log import Retrieved, kept_retrieval, logging_retrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
@@ -1834,10 +1833,6 @@ async def answered_for(
                 now=asking.now,
                 trace_id=recorder.trace_id,
             )
-        # What the search returns, as the model is shown it, noted for the retrieval log
-        # (M15.3.4) and written once the answer exists. See `brain.ops.retrieval_log`.
-        retrieved = Retrieved()
-        model = logging_retrievals(model, retrieved)
         answered = await answer_lane(
             address.question,
             origin=origin,
@@ -1878,14 +1873,6 @@ async def answered_for(
             asking=asking,
             question=address.question,
             trace_id=recorder.trace_id,
-        )
-        await retrieval_logged(
-            request.app.state,
-            trace_id=recorder.trace_id,
-            principal_id=asking.principal.id,
-            retrieved=retrieved,
-            answered=answered,
-            now=asking.now,
         )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own
@@ -2002,38 +1989,6 @@ async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> Marked
         raise Absent("that answer cannot be marked by this caller")
     log.info("answer marked", principal=asked.caller.principal.id, helpful=body.helpful)
     return MarkedView(counted=True, told=MARK_COUNTED)
-
-
-async def retrieval_logged(
-    state: Any,
-    *,
-    trace_id: str,
-    principal_id: str,
-    retrieved: Retrieved,
-    answered: Answered,
-    now: datetime,
-) -> None:
-    """Keep what this request's search returned at its trace, and never fail the answer for it.
-
-    `brain.ops.retrieval_log.kept_retrieval` over this process's database; nothing on a process
-    with none, and nothing for a question that searched nothing. A failure is logged by its type
-    and the answer goes out, for `brain.ops.signal_store.
-    A_SIGNAL_NEVER_COSTS_THE_PERSON_THEIR_TRANSCRIPT`'s reason.
-    """
-    sessions = getattr(state, "db_sessions", None)
-    if not isinstance(sessions, async_sessionmaker) or retrieved.chunk_ids is None:
-        return
-    try:
-        await kept_retrieval(
-            sessions,
-            trace_id=trace_id,
-            principal_id=principal_id,
-            retrieved=retrieved,
-            answered=answered,
-            now=now,
-        )
-    except Exception as exc:
-        log.warning("retrieval.not_kept", error=type(exc).__name__)
 
 
 async def remembered(

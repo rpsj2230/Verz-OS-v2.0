@@ -814,8 +814,6 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
   "mem.signal":
     "What the system noticed about each answer a person was given, re-asked, corrected or handed to a person, by message id and never a word; read by that person and counted by kind, and no administrator manages one.",
-  "mem.retrieval":
-    "Which passages each of a person's questions was answered from, as ids at its trace; read by that person and measured as a ranking across the install, and no administrator manages one.",
   "POST /api/v1/widget/sessions":
     "Where a website visitor's browser asks for a session, which holds nothing and writes no row an administrator manages; the sites it serves are the install's widget origins setting.",
   "POST /api/v1/widget/questions":
