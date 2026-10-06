@@ -24,12 +24,14 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 from brain import govern_routes
 from brain.console.global_surfaces import GOVERNANCE_CONTROL
 from brain.console.reads import Plane, plane_capability
+from brain.console.screens import screen
 from brain.core.entitlement import Capability, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.db import metadata
 from brain.identity.roles import SCOPE_REQUIRED, SEPARATION_OF_DUTIES_WARNING, Role
 from brain.nomination_routes import (
     A_NOMINATION_IS_A_PROPOSAL_ANYBODY_ON_THE_ROLES_SCREEN_MAY_MAKE,
+    A_NOMINATION_SAYS_NOTHING_ABOUT_WHETHER_ITS_NOMINEE_EXISTS,
     A_PERSON_IS_PROPOSED_BY_SOMEBODY_ELSE,
     DECISION_PATH,
     NOMINATIONS_PATH,
@@ -54,12 +56,16 @@ ROLES_READ = (
     Grant(capability=plane_capability(Plane.CONFIGURATION), scope=WHOLE),
 )
 
+#: The People screen's read, which is what being shown a person's name asks.
+PEOPLE_READ = Grant(capability=screen("people").read.requires, scope=WHOLE)
+
 #: `u_wide` nominates and holds the grant decision too, so its refusal is the two-person rule
-#: and not a missing grant. `u_admin` decides everywhere, `u_elsewhere` only over the web
-#: department, `u_prefix` sees the screen and decides nothing, `u_none` sees nothing.
+#: and not a missing grant; it may name nobody. `u_admin` decides everywhere and may name anybody,
+#: `u_elsewhere` decides only over the web department, `u_prefix` sees the screen and decides
+#: nothing, `u_none` sees nothing.
 GRANTS: Final[Mapping[str, tuple[Grant, ...]]] = {
     "u_wide": (*ROLES_READ, Grant(capability=GOVERNANCE_CONTROL, scope=WHOLE)),
-    "u_admin": (*ROLES_READ, Grant(capability=GOVERNANCE_CONTROL, scope=WHOLE)),
+    "u_admin": (*ROLES_READ, PEOPLE_READ, Grant(capability=GOVERNANCE_CONTROL, scope=WHOLE)),
     "u_elsewhere": (*ROLES_READ, Grant(capability=GOVERNANCE_CONTROL, scope=IN_WEB)),
     "u_prefix": ROLES_READ,
     "u_none": (),
@@ -233,6 +239,45 @@ def test_a_third_person_confirms_a_nomination_into_a_role_grant_on_the_ledger(
     # Decided, it is offered to nobody to decide again, and its nominator sees what became of it.
     assert listing(database, "u_admin").json()["deciding"] == []
     assert [one["outcome"] for one in listing(database, "u_wide").json()["mine"]] == ["confirmed"]
+
+
+def test_a_nominee_who_exists_and_an_id_nobody_holds_are_indistinguishable_to_the_nominator(
+    database: str,
+) -> None:
+    """`A_NOMINATION_SAYS_NOTHING_ABOUT_WHETHER_ITS_NOMINEE_EXISTS`: `u_wide`, who may name
+    nobody, nominates a colleague and an id nobody holds, and the two answers and the two rows in
+    their own list differ only in the id and the id they named; neither carries a name. `u_admin`,
+    who may name people, is shown the colleague's name. Nothing reaches the ledger for either.
+
+    Delete this and nominating an id becomes a way to ask whether a person exists, and what they
+    are called, past the People screen's rule."""
+    real, ghost = press(
+        database,
+        nominate("u_wide", "u_narrow", "auditor"),
+        nominate("u_wide", "u_nobody_by_this_id", "auditor"),
+    )
+    assert (real.status_code, ghost.status_code) == (201, 201)
+    assert sorted(real.json()) == sorted(ghost.json())
+    assert real.json()["change"] == ghost.json()["change"] == "nominated"
+
+    def without_ids(one: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in one.items()
+            if key not in ("id", "principal_id", "created_at")
+        }
+
+    mine = listing(database, "u_wide").json()["mine"]
+    assert [one["principal_id"] for one in mine] == ["u_nobody_by_this_id", "u_narrow"]
+    assert without_ids(mine[0]) == without_ids(mine[1])
+    assert {one["display_name"] for one in mine} == {None}
+    named = {
+        one["principal_id"]: one["display_name"]
+        for one in listing(database, "u_admin").json()["deciding"]
+    }
+    assert named == {"u_narrow": "Person u_narrow", "u_nobody_by_this_id": None}
+    assert entries(database, "grant") == []
+    assert "People screen" in A_NOMINATION_SAYS_NOTHING_ABOUT_WHETHER_ITS_NOMINEE_EXISTS
 
 
 def test_a_nominee_in_the_deciders_department_is_theirs_to_decide_and_a_decline_writes_no_grant(
