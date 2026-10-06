@@ -325,10 +325,11 @@ AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON: Final = (
 #: What the subscribers screen cannot do, served beside it.
 HOW_TO_STOP_BEING_TOLD: Final = (
     "A subscriber is switched off on the Webhooks screen, which records who switched it off in "
-    "the audit ledger and sends nothing more to it, including deliveries already waiting. A "
-    "subscriber switched off is never switched back on: it is registered again under a new id. "
-    "A notice to people is switched off on the Notifications and email screen, except a notice "
-    "that exists to report misuse or a mechanism that stopped running, which has no switch."
+    "the audit ledger and sends nothing more to it, including deliveries already waiting. It is "
+    "switched back on on the same screen, which is recorded too, and is told only what happens "
+    "from then on. A notice to people is switched off on the Notifications and email screen, "
+    "except a notice that exists to report misuse or a mechanism that stopped running, which has "
+    "no switch."
 )
 ONLY_WEBHOOK_SUBSCRIBERS_ARE_LISTED: Final = (
     "Only webhook subscribers are listed here. Every notice this install composes for people, "
