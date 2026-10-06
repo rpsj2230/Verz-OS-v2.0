@@ -128,6 +128,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/CitedDocument.tsx retrievalUsesPath(followed.retrievalId)":
     "Opening a cited document sends the place of the passage followed for the learning signal; it " +
     "adds one position to a retrieval that names no document or person, so nothing is ended.",
+  "src/pages/Ask.tsx exportPath(thread)":
+    "Exporting a conversation hands the person their own thread as a file and records that it was " +
+    "taken; the thread and everything in it stay as they were, so nothing is ended.",
   "src/pages/Ask.tsx correctionPath(thread)":
     "Marking an answer wrong adds a note to the person's own conversation naming the kind; the " +
     "answer, its records and everything else in the thread stay as they were, so nothing is ended.",

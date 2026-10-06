@@ -466,7 +466,8 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
             vault = None
     # The cache this process's settings name, for the person's session memory (M16.1.1); none
     # configured is none kept. See the erasure store's reason constant about session memory.
-    sessions = session_keys_for(settings.valkey_url) if settings.valkey_url else None
+    valkey_url = settings.valkey_url
+    sessions = session_keys_for(valkey_url) if valkey_url else None
     with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
         return drain_erasure_queue(
             conn, now=now, report_only=report_only, own_tokens=vault, sessions=sessions
