@@ -103,6 +103,7 @@ from brain.channels.adapter import (
     ChannelAdapter,
     ChannelWire,
     Conversation,
+    RoomChange,
 )
 from brain.channels.marks import MARK_ACKNOWLEDGEMENT, AnswerMarks, read_mark
 from brain.channels.outbound import Outgoing
@@ -231,6 +232,9 @@ class Inbound:
     conversation: Conversation | None = None
     #: A press on a card rather than a message: the events route's `CardPresser` takes it.
     press: CardPress | None = None
+    #: The bot joining or leaving a shared conversation: the events route notes the room and
+    #: answers nothing (M39.2.4.4).
+    room: RoomChange | None = None
 
 
 class ReceiptKind(enum.StrEnum):
@@ -516,6 +520,7 @@ async def accept(
             address=from_mention(received.event.text),
             conversation=received.conversation,
             press=received.press,
+            room=received.room,
         ),
         reply_to=received.reply_to,
     )
@@ -590,6 +595,9 @@ async def reply_for(
     if receipt.inbound.press is not None:
         msg = "a press on a card is decided by a CardPresser and never replied to as a message"
         raise ValueError(msg)
+    if receipt.inbound.room is not None:
+        # The bot joining or leaving a room asks nothing; the events route notes the room.
+        return ()
     inbound = receipt.inbound
     event = inbound.event
     conversation = inbound.conversation

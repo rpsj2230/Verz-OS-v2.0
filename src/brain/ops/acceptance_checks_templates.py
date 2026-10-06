@@ -218,7 +218,9 @@ async def _install(
         _request(app),
         identity.template_id,
         identity.version,
-        TemplateInstallAsked(expected_digest=signed.content_digest, for_department=True),
+        TemplateInstallAsked(
+            expected_digest=signed.content_digest, for_department=True, channels=("console",)
+        ),
         await _asking(h, administrator),
     )
     if answered.status_code != 201:

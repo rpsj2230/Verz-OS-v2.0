@@ -287,13 +287,14 @@ NOTICES: Final[tuple[Notice, ...]] = (
     Notice(
         kind=NoticeKind.AUTOMATION_PAUSED,
         title="An automation was paused for failing",
-        told="The automation's owner.",
+        told="The steward of the automation's agent.",
         about="Which automation stopped, and why.",
         how=(
-            "Shown beside the automation on its agent's Automations tab, with the reason. No "
-            "channel sends it to the owner yet."
+            "Shown beside the automation on its agent's Automations tab, with the reason, and sent "
+            "once to the agent's steward in the chat they last used."
         ),
         composed_by="brain.console.agent_automations:failure_pause",
+        sent_by="brain.automation_paused_told:tell_paused_stewards",
         fixed_because=A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH,
     ),
 )

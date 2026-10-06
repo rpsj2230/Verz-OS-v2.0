@@ -178,6 +178,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
       "/api/v1/agents/quote-helper/automations": AGENT_AUTOMATIONS,
+      // The header badge asks whether a newer template version is on offer; this agent is current.
+      "/api/v1/agents/quote-helper/upgrade": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        badge: "current",
+        from_version: 1,
+        conflicts: [],
+        updates: [],
+        nothing: UNBROKEN,
+      },
     },
   },
   // The Profile, the view with the most on it: the capabilities, the permissions, the leash and the
@@ -188,6 +198,22 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: {
+      // The Conversations section, drawn at this pattern's /conversations address rather than the
+      // profile one mounted here: answered so the audit names the screen that reads it. Its rows
+      // are held by tests/agent-conversations.test.tsx.
+      "/api/v1/agents/quote-helper/conversations": {
+        agent_id: "quote-helper",
+        items: [
+          {
+            thread_id: "t1",
+            title: UNBROKEN,
+            last_at: "2019-03-06T09:00:00Z",
+            last_channel: "console",
+            agents: [{ agent_id: "quote-helper", display_name: UNBROKEN }],
+            state: "failed",
+          },
+        ],
+      },
       "/api/v1/agents/quote-helper/workspace": {
         ...WORKSPACE,
         profile: {
@@ -208,6 +234,28 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         },
       },
       "/api/v1/routing/rungs": MATRIX,
+      // A newer version of the template, with a conflict and the widest values its columns draw
+      // (M13.4.3), so the card is held to a phone.
+      "/api/v1/agents/quote-helper/upgrade": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        badge: "available",
+        from_version: 1,
+        to_version: 2,
+        expected_hash: "a".repeat(64),
+        conflicts: [
+          {
+            path: "persona",
+            where: UNBROKEN,
+            was: UNBROKEN,
+            now: UNBROKEN,
+            local: UNBROKEN,
+            owner: { source: "instance", set_by: UNBROKEN, set_at: "2019-03-04T09:00:00Z" },
+          },
+        ],
+        updates: [{ path: "tier", where: UNBROKEN, was: UNBROKEN, now: UNBROKEN, sealed: true }],
+        accept_unavailable: UNBROKEN,
+      },
       // The capability detail, whose widest values are a source, a projected field, a skill and a
       // predicate value, each a token with nowhere to break.
       "/api/v1/agents/quote-helper/capabilities": {
@@ -220,6 +268,51 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         skills_editable: true,
         offers: [{ name: UNBROKEN, version: UNBROKEN, digest: "e".repeat(64), review: "pending", control: "review", route: "/skills/x" }],
         knowledge: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }], matched: 1, verified: 1, stale: 0, unverified: 0, at_least: false },
+      },
+      // The leash block: an entry, a move with its evidence, a trip with its metric, supervision
+      // and an action waiting for a verdict, each value a token with nowhere to break.
+      "/api/v1/agents/quote-helper/leash": {
+        agent_id: "quote-helper",
+        entries: [{ target: UNBROKEN, scope: { clauses: [] }, where: UNBROKEN, rung: "assisted", proposed: "autonomous" }],
+        history: [
+          { target: UNBROKEN, where: UNBROKEN, kind: "raised", was: "shadow", became: "assisted", at: "2019-03-04T09:00:00Z", approver: UNBROKEN, second_approver: UNBROKEN, clean_runs: 10, agreement_rate: 1, metric: "", measured: null, threshold: null },
+          { target: UNBROKEN, where: "", kind: "tripped", was: "assisted", became: "shadow", at: "2019-03-05T09:00:00Z", approver: "", second_approver: "", clean_runs: null, agreement_rate: null, metric: UNBROKEN, measured: 0.5, threshold: 0.9 },
+        ],
+        supervision: { pinned_at: "2019-02-01T09:00:00Z", review_due_at: "2019-03-03T09:00:00Z", outcome: "extended", understood: 8, reviewed: 10, simulated: 10, held: true, due: true },
+        awaiting: [{ action_digest: "d".repeat(64), target: UNBROKEN, route: "simulate", at: "2019-03-06T09:00:00Z" }],
+        may_move: true,
+        may_judge: true,
+      },
+      // The tools block: what it carries and what may be attached, each value a token.
+      "/api/v1/agents/quote-helper/attachments": {
+        agent_id: "quote-helper",
+        carried: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        carried_connectors: [UNBROKEN],
+        tools: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        connectors: [UNBROKEN],
+        may_change_tools: true,
+        may_change_connectors: true,
+      },
+      // Group chats, for its steward: an install and a chat the bot is in, each value a token.
+      "/api/v1/agents/quote-helper/groups": {
+        agent_id: "quote-helper",
+        installs: [{ id: "g-1", channel: "lark", room_ref: UNBROKEN, name: UNBROKEN, present: false, answering: false, installed_at: "2019-03-04T09:00:00Z" }],
+        rooms: [{ channel: "lark", room_ref: UNBROKEN, name: UNBROKEN }],
+      },
+      // Where it answers, for its steward: `LifecycleView`, whose widest value is a channel's name.
+      "/api/v1/agents/quote-helper/lifecycle": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        state: "enabled",
+        owner_id: UNBROKEN,
+        effective_hash: "a".repeat(64),
+        may_change: false,
+        may_duplicate: false,
+        duplicate_unavailable: null,
+        channels: ["console"],
+        channel_choices: [{ name: "console", label: UNBROKEN }],
+        channels_note: UNBROKEN,
+        may_change_channels: true,
       },
     },
   },

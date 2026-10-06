@@ -16,16 +16,22 @@
  * colleague can be sent the view, and the back button undoes a filter. An old link that opened a
  * subject's history as `?subject=kind:id` is sent to that subject's page.
  *
+ * **Refusals and redactions are counted by the API, over other people's entries** (`auditStatistics.ts`):
+ * how often each shape of refusal happened, in `brain.ops.denial_alerts`' own words, and how many
+ * entries carried a redaction. A route answering 404 leaves the card out, as the rest of the console
+ * leaves out a block that is not the reader's.
+ *
  * **Verifying the ledger has its own page** (`VerifyPage.tsx`), reached from the header: it is a
  * check somebody runs, not something to read past on the way to the entries.
  *
- * Task ids: M27.7.13, M27.8.6, M27.16.1
+ * Task ids: M27.7.13, M27.8.6, M27.16.1, M33.4.1.3
  */
 
-import { ScrollText, ShieldCheck, X } from "lucide-react";
+import { ScrollText, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { EmptyState, FailureState, LoadingState, PageHeader } from "../../components/kit";
+import { EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
+import { useResource } from "../../api/useResource";
 import { SEARCH_LABEL } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -46,6 +52,16 @@ import {
   type LedgerPage,
 } from "../auditQuery";
 import { TRACE_PAGE_PATH } from "../traceQuery";
+import {
+  AUDIT_STATISTICS_API_PATH,
+  NO_PATTERN,
+  readStatistics,
+  REDACTED_LABEL,
+  STATISTICS_HEADING,
+  STATISTICS_LEDE,
+  timesWords,
+  UNREADABLE_STATISTICS,
+} from "./auditStatistics";
 import { ACTION_LABELS, kindWords, NO_NAME } from "./auditWords";
 import { LedgerTable } from "./LedgerTable";
 import { useLedger } from "./useLedger";
@@ -316,6 +332,57 @@ function Entries({ filters, search }: { readonly filters: AuditFilters; readonly
   );
 }
 
+/** The refusal and redaction statistics: the API's figures, drawn as sent, or nothing on a 404. */
+function Statistics() {
+  const answer = useResource<unknown>(AUDIT_STATISTICS_API_PATH);
+  if (answer.failure !== null && answer.failure.status === 404 && !answer.failure.secondFactorNeeded) {
+    return null;
+  }
+  let body: ReactNode;
+  if (answer.failure !== null) {
+    body = <FailureState failure={answer.failure} />;
+  } else if (answer.data === null) {
+    body = <LoadingState label="Counting refusals and redactions." rows={2} />;
+  } else {
+    const found = readStatistics(answer.data);
+    body =
+      found === null ? (
+        <p className="m-0 text-[13px] text-dim">{UNREADABLE_STATISTICS}</p>
+      ) : (
+        <div className="flex min-w-0 flex-col gap-3">
+          {found.refusals.length === 0 ? (
+            <p className="m-0 text-[13px] text-dim">{NO_PATTERN}</p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
+              {found.refusals.map((one) => (
+                <li key={one.shape} className="flex flex-col gap-0.5 py-2 text-[13px] sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+                  <span className="min-w-0 text-body">{one.reads_as}</span>
+                  <span className="shrink-0 text-ink tabular-nums">{timesWords(one.occurrences)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <FactList>
+            <Fact label={REDACTED_LABEL}>{String(found.redacted_entries)}</Fact>
+          </FactList>
+        </div>
+      );
+  }
+  return (
+    <SectionCard
+      title={STATISTICS_HEADING}
+      lede={STATISTICS_LEDE}
+      action={
+        <span className="text-dim [&>svg]:size-4">
+          <ShieldAlert aria-hidden />
+        </span>
+      }
+    >
+      {body}
+    </SectionCard>
+  );
+}
+
 export function AuditPage() {
   const [search] = useSearchParams();
   const subject = subjectFrom(search);
@@ -347,6 +414,7 @@ export function AuditPage() {
           </Button>
         }
       />
+      <Statistics />
       <Entries filters={filters} search={search} />
     </div>
   );

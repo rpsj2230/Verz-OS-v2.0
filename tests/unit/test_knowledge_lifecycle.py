@@ -637,11 +637,30 @@ def test_every_task_kind_says_one_document_and_no_count() -> None:
     assert "steward of Site handover" in task_sentence(named, title="Site handover")
 
 
+def _newest_task_kinds() -> tuple[str, ...]:
+    """The task kinds the newest migration declaring them leaves the table holding."""
+    import importlib.util
+
+    newest: tuple[str, ...] = ()
+    for path in sorted(MIGRATION.glob("*.py")):
+        if "TASK_KINDS" not in path.read_text(encoding="utf-8"):
+            continue
+        spec = importlib.util.spec_from_file_location(f"m_{path.stem}", path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        newest = tuple(getattr(module, "TASK_KINDS", newest))
+    return newest
+
+
 def test_a_review_task_is_not_dismissed_and_the_kinds_are_the_tables() -> None:
     """A review is closed by verifying. Delete this and the task list can be emptied by pressing a
     button while every document stays overdue, or the table refuse a kind the code opens."""
     built = migration()
     assert TaskKind.REVERIFY not in DISMISSABLE
-    assert tuple(sorted(one.value for one in TaskKind)) == built.TASK_KINDS
+    # The kinds are widened by `0198`, so the newest migration that declares them is the one
+    # the table holds.
+    assert tuple(sorted(one.value for one in TaskKind)) == _newest_task_kinds()
+    assert TaskKind.CORRECTION_PROPOSED not in DISMISSABLE
     assert tuple(sorted(one.value for one in Outcome)) == built.OUTCOMES
     assert tuple(sorted(one.value for one in SolutionState)) == built.SOLUTION_STATES

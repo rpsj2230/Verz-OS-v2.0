@@ -1,14 +1,15 @@
 ### The audit trail: who changed what, and when
 
 - **Screens:** `/audit`, `/audit/verify`, `/audit/trace`, `/audit/trace/:traceId`, `/audit/subject/:kind/:id`, `/audit/subject/:kind/:id/:view`, `/requirement-checks`
-- **Tables:** `obs.audit_entry`, `ops.sensitive_read`, `ops.requirement_check`, `agent.browser_session`, `obs.trace_step`, `obs.trace_read`
+- **Tables:** `obs.audit_entry`, `obs.elevation_entry`, `ops.sensitive_read`, `ops.requirement_check`, `agent.browser_session`, `obs.trace_step`, `obs.trace_read`
 - **Installation values:** none
-- **Measured here:** 6 routes, 1 called by no screen; 3 write routes, 2 with all three proofs; 0 gaps.
+- **Measured here:** 7 routes, 1 called by no screen; 3 write routes, 2 with all three proofs; 0 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/audit` | `/`, `/audit`, `/audit/subject/:kind/:id`, `/audit/subject/:kind/:id/:view`, `/models/:provider`, `/models/:provider/:view` |
 | `GET /api/v1/audit/history` | `/audit/subject/:kind/:id/:view` |
+| `GET /api/v1/audit/statistics` | `/audit` |
 | `GET /api/v1/requirements/checks` | `/requirement-checks` |
 | `POST /api/v1/audit/verification` | `/audit`, `/audit/subject/:kind/:id`, `/audit/subject/:kind/:id/:view`, `/audit/verify` |
 | `POST /api/v1/requirements/checks` | `/requirement-checks` |

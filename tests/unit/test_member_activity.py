@@ -34,6 +34,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from brain.agents.model import (
+    ASKING_CHANNELS,
     AgentAudience,
     AgentAuthority,
     AgentRecord,
@@ -159,8 +160,10 @@ def an_agent(
     department: str = "",
     capabilities: tuple[str, ...] = (READ_NAME,),
     disabled_at: datetime | None = None,
+    channels: tuple[str, ...] = ASKING_CHANNELS,
 ) -> AgentRecord:
-    """One real agent, so `visible_to` and `entitlement_ceiling` answer for a real record."""
+    """One real agent, so `visible_to` and `entitlement_ceiling` answer for a real record. Switched
+    on everywhere unless a test says otherwise, so a channel is offered only for the reach."""
     return AgentRecord(
         agent_id=agent_id,
         display_name=f"Agent {agent_id}",
@@ -169,6 +172,7 @@ def an_agent(
         authority=AgentAuthority(capabilities=tuple(Capability(value=one) for one in capabilities)),
         created_by=THEM,
         disabled_at=disabled_at,
+        channels=channels,
     )
 
 
@@ -452,6 +456,24 @@ def test_an_agents_tab_counts_this_persons_runs_and_offers_channels_at_the_run_r
 
 
 # --- opening one into the workspace (M40.2.2.2) ----------------------------------------
+
+
+def test_an_agents_tab_offers_no_channel_the_agent_is_not_switched_on_for() -> None:
+    """**M13.7.4.** The same agent at the same reach, switched on for the console alone, is offered
+    the console and not WhatsApp, which its reach would carry. Delete this and the page tells a
+    person they can use an agent on a channel where asking it is answered as if it did not exist."""
+    rows = my_agents(
+        [an_agent("a_console", channels=("console",))],
+        [],
+        principal_id=ME,
+        viewer=a_viewer(),
+        reach=holding(READ_NAME),
+        capabilities=[INTERNAL_ONLY, ANYTHING],
+        policy=POLICY,
+        since=MONTH_AGO,
+        until=NOW,
+    )
+    assert [row.channels for row in rows] == [(Channel.CONSOLE,)]
 
 
 def test_a_member_workspace_link_lands_or_returns_nothing_and_never_says_which() -> None:

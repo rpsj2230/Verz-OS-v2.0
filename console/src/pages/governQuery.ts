@@ -143,6 +143,35 @@ export const APPOINTMENT_API_PATH = "/govern/roles/appointment";
 export const DEPUTY_API_PATH = "/govern/roles/deputy";
 export const ROLE_REMOVAL_API_PATH = "/govern/roles/removal";
 
+// ------------------------------------------------- role nominations (M33.1.2.3)
+
+export const NOMINATIONS_API_PATH = "/govern/roles/nominations";
+
+/** Where one nomination is confirmed or declined. */
+export function nominationDecisionApiPath(nominationId: string): string {
+  return `${NOMINATIONS_API_PATH}/${encodeURIComponent(nominationId)}/decision`;
+}
+
+/** One nomination as `GET /api/v1/govern/roles/nominations` answers it. */
+export type NominationRow = components["schemas"]["NominationView"];
+
+/** What the reader may decide, and what they proposed. No count of anything else. */
+export interface NominationsPage {
+  readonly deciding: readonly NominationRow[];
+  readonly mine: readonly NominationRow[];
+}
+
+export function readNominations(payload: unknown): NominationsPage {
+  if (typeof payload !== "object" || payload === null) {
+    return { deciding: [], mine: [] };
+  }
+  const found = payload as { deciding?: unknown; mine?: unknown };
+  return {
+    deciding: Array.isArray(found.deciding) ? (found.deciding as NominationRow[]) : [],
+    mine: Array.isArray(found.mine) ? (found.mine as NominationRow[]) : [],
+  };
+}
+
 /** The six roles, as the route's `Role` enum spells them. */
 export const ROLE_VALUES = [
   "super_admin",

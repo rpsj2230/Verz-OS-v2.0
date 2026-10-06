@@ -16,6 +16,7 @@ payload window moved and the artifact outlived its trace.
 
 Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5
 Task ids: M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4, M39.5.2.5
+Task ids: M39.8.5
 """
 
 from __future__ import annotations
@@ -1135,3 +1136,153 @@ def test_a_reader_holding_the_grant_sees_the_artifact_and_one_holding_neither_do
     assert may_see(elsewhere, scoped) is False
     assert may_see(here, holding(principal=OTHER)) is True
     assert may_see(here, holding(principal=READER)) is False
+
+
+# --- what a re-download is checked against, and the latest for a client (M39.5.1.5, M39.8.5) -----
+
+
+def in_department(capability: str, department: str) -> Grant:
+    """One grant scoped to a department, as a department's grants are written."""
+    return Grant(capability=Capability(value=capability), scope=Scope.department(department))
+
+
+def test_the_person_a_report_was_for_is_refused_it_once_their_reach_no_longer_covers_it() -> None:
+    """**M39.5.1.5 for the one requester `may_see` always admits.** An artifact records the grants
+    its content drew on, and the person it was produced for fetches it while they hold each of
+    them at least as widely, and not after a grant is taken away or narrowed to a smaller scope.
+    A requester holding the same capability wider than the recording still fetches it.
+
+    Delete this and the person a cost report was produced for keeps the costs after losing the
+    grant to read them, because `may_see` answers yes to its own person for ever."""
+    drew_on = (in_department("read:client.contract_value", "sales"),)
+    made = an_artifact_with_grants("a_1", drew_on)
+    narrowed = EntitlementSet(
+        principal_id=READER,
+        grants=(
+            Grant(
+                capability=Capability(value="read:client.contract_value"),
+                scope=Scope(
+                    clauses=(
+                        Clause(field="department", op=Op.EQ, value="sales"),
+                        Clause(field="region", op=Op.EQ, value="north"),
+                    )
+                ),
+            ),
+        ),
+    )
+
+    assert may_download(made, EntitlementSet(principal_id=READER, grants=drew_on), NOW) is True
+    assert may_download(made, holding("read:client.contract_value"), NOW) is True
+    assert may_see(made, holding(principal=READER), NOW) is True
+    assert may_download(made, holding(principal=READER), NOW) is False
+    assert may_download(made, narrowed, NOW) is False
+
+
+def test_a_holder_of_the_screen_is_refused_a_file_whose_content_they_could_not_read() -> None:
+    """The grant path is held to the same rule: a reader whose artifact grant covers the row and
+    who does not hold what the content drew on may know it exists and may not fetch it. The
+    positive half holds both.
+
+    Delete this and the Artifacts screen is a way to read a cost column through somebody
+    else's report."""
+    made = an_artifact_with_grants("a_1", (in_department("read:client.contract_value", "sales"),))
+    screen_only = holding_over_agent(AGENT, principal=OTHER)
+    both = EntitlementSet(
+        principal_id=OTHER,
+        grants=(
+            *screen_only.grants,
+            in_department("read:client.contract_value", "sales"),
+        ),
+    )
+
+    assert may_see(made, screen_only, NOW) is True
+    assert may_download(made, screen_only, NOW) is False
+    assert may_download(made, both, NOW) is True
+
+
+def an_artifact_with_grants(
+    artifact_id: str,
+    drew_on: tuple[Grant, ...],
+    *,
+    client_id: str = "",
+    at: datetime = NOW,
+    kind: ArtifactKind = ArtifactKind.REPORT,
+    caller: str = READER,
+) -> Artifact:
+    made = an_artifact(artifact_id, at=at, kind=kind, caller=caller)
+    return Artifact(
+        **{f.name: getattr(made, f.name) for f in dataclass_fields(made)}
+        | {"drew_on": drew_on, "client_id": client_id}
+    )
+
+
+def test_the_latest_for_a_client_is_the_newest_current_one_the_requester_may_fetch() -> None:
+    """**M39.8.5.** Among one kind for a client's whole family of ids: a newer one of another kind,
+    another client, a superseded one, an archived one and one the requester may not fetch are
+    all passed over, and the newest left is the answer. With nothing left the answer is None,
+    the same for nothing recorded and nothing permitted.
+
+    Delete this and "the latest proposal for this client" hands a run a withdrawn proposal, or a
+    newer one the asker may not read."""
+    later = NOW + timedelta(hours=1)
+    oldest = an_artifact_with_grants("a_old", (), client_id="c_gone", at=NOW - timedelta(days=1))
+    kept = an_artifact_with_grants("a_kept", (), client_id="c_kept", at=NOW)
+    entries = (
+        oldest,
+        kept,
+        an_artifact_with_grants("a_deck", (), client_id="c_kept", at=later, kind=ArtifactKind.DECK),
+        an_artifact_with_grants("a_other", (), client_id="c_elsewhere", at=later),
+        supersede(an_artifact_with_grants("a_sup", (), client_id="c_kept", at=later), by="a_x"),
+        archive(an_artifact_with_grants("a_arch", (), client_id="c_kept", at=later)),
+        an_artifact_with_grants(
+            "a_theirs",
+            (in_department("read:client.contract_value", "sales"),),
+            client_id="c_kept",
+            at=later,
+        ),
+    )
+    family = {"c_kept", "c_gone"}
+    me = holding(principal=READER)
+
+    found = output_module.latest_for_client(
+        entries, family=family, kind=ArtifactKind.REPORT, requester=me, now=later
+    )
+    assert found == kept
+    only_gone = output_module.latest_for_client(
+        (oldest,), family=family, kind=ArtifactKind.REPORT, requester=me, now=later
+    )
+    assert only_gone == oldest
+    assert (
+        output_module.latest_for_client(
+            entries, family={"c_nobody"}, kind=ArtifactKind.REPORT, requester=me, now=later
+        )
+        is None
+    )
+    assert (
+        output_module.latest_for_client(
+            entries,
+            family=family,
+            kind=ArtifactKind.REPORT,
+            requester=holding(principal=OTHER),
+            now=later,
+        )
+        is None
+    )
+
+
+def test_a_client_id_with_space_around_it_is_refused_rather_than_recorded() -> None:
+    """Delete this and an artifact recorded against " c_1" is found by no question about c_1."""
+    with pytest.raises(ArtifactError, match="client"):
+        an_artifact_with_grants("a_1", (), client_id=" c_1")
+    assert an_artifact_with_grants("a_1", (), client_id="c_1").client_id == "c_1"
+
+
+def test_superseding_and_archiving_keep_the_client_and_what_the_content_drew_on() -> None:
+    """Delete this and a supersession drops the grants a re-download is checked against, so the
+    old version of a report becomes fetchable by anybody who may see it."""
+    drew_on = (in_department("read:client.contract_value", "sales"),)
+    made = an_artifact_with_grants("a_1", drew_on, client_id="c_1")
+
+    for changed in (supersede(made, by="a_2"), archive(made), archive(supersede(made, by="a_2"))):
+        assert (changed.drew_on, changed.client_id) == (drew_on, "c_1")
+    assert archive(supersede(made, by="a_2")).superseded_by == ""

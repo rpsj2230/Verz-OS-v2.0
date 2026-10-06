@@ -35,16 +35,16 @@ nothing on an install switches a tier off for one agent yet; tier three is never
 gated change waits for a person.
 
 Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5
-Task ids: M39.4.2.1, M39.4.2.2, M39.4.2.4
+Task ids: M39.4.2.1, M39.4.2.2, M39.4.2.3, M39.4.2.4
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime
-from typing import Annotated, Final
+from typing import Annotated, Any, Final
 
 import structlog
 from fastapi import APIRouter, Path, Request
@@ -66,6 +66,7 @@ from brain.console.reach_view import (
     LearningState,
     MemoryText,
     Revision,
+    TierTwoRow,
     active_tiers,
     revisions,
     run_reach,
@@ -84,10 +85,13 @@ from brain.estate_routes import (
 )
 from brain.memory.digest import Learning
 from brain.memory.formation import Formation
+from brain.memory.promotion import LearnedRule, PromotionState
+from brain.memory.promotion_store import StoredLearnedRules
 from brain.memory.signals import Signal
-from brain.memory.tiers import Tier
+from brain.memory.tiers import Occurrence, Tier, independent
 from brain.memory.turn import MEMORY_ID_DIGEST_CHARS, MEMORY_ID_PREFIX, recall_place
 from brain.ops.memory_store import inferred_named, stated_named
+from brain.promotion_routes import may_promote_where
 from brain.tables.learning import MEMORY_ID_CHARS
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 
@@ -173,6 +177,13 @@ class TierTwoItemView(BaseModel):
     evidence: list[str]
     promote_ready: bool
     learned_at: datetime
+    #: Where its learned rule stands, `held`, `awaiting_second` or `promoted`, or null for a
+    #: learning that holds no rule (M39.4.2.3).
+    state: str | None = None
+    #: How many separate conversations would have used it, shown only to whoever may promote it.
+    agreeing: int | None = None
+    #: Whether this reader may press Promote on it now. See `brain.promotion_routes`.
+    promote_offered: bool = False
 
 
 class TierThreeItemView(BaseModel):
@@ -242,6 +253,31 @@ def item_view(text: MemoryText, *, reader_id: str, steward: bool) -> MemoryItemV
     )
 
 
+def tier_two_view(
+    row: TierTwoRow,
+    learned: LearnedRule | None,
+    seen: Sequence[Occurrence],
+    reader: EntitlementSet,
+    now: datetime,
+) -> TierTwoItemView:
+    """One tier-two row, with its learned rule's standing and the press for whoever may make it."""
+    offered = (
+        learned is not None
+        and learned.state is not PromotionState.PROMOTED
+        and may_promote_where(reader, learned.department, now)
+    )
+    return TierTwoItemView(
+        memory_id=row.memory_id,
+        change=row.change.value,
+        evidence=[signal.value for signal in row.evidence],
+        promote_ready=row.promote_ready,
+        learned_at=row.learned_at,
+        state=None if learned is None else learned.state.value,
+        agreeing=independent(seen, now=now) if offered else None,
+        promote_offered=offered,
+    )
+
+
 def revision_view(one: Revision) -> MemoryRevisionView:
     return MemoryRevisionView(
         memory_id=one.memory_id,
@@ -261,8 +297,14 @@ def memory_view(
     reader: EntitlementSet,
     department: str | None,
     now: datetime,
+    learned: Mapping[str, LearnedRule] | None = None,
+    occurrences: Mapping[str, Sequence[Occurrence]] | None = None,
 ) -> AgentMemoryView:
     """The agent's memory, its history and its tiers, for this reader. See the module docstring.
+
+    `learned` and `occurrences` are each tier-two learning's held rule and the conversations
+    counted for it (M39.4.2.3), so a row is ready on counted agreement and offers Promote to a
+    reader who may press it where the rule would answer.
 
     `department` is the reader's primary department, which `recall_place` adds to the place
     their own memory is recalled at, so a reader whose grants are scoped to it recalls their own.
@@ -291,8 +333,11 @@ def memory_view(
         now=now,
         supersessions=marks,
         demotions=demoted,
+        occurrences=occurrences,
     )
     by_id = {one.memory_id: one for one in stored.learnings}
+    rules = learned or {}
+    counted = occurrences or {}
     tiers = active_tiers(LearningState(agent_id=record.agent_id, declared=frozenset(Tier)))
     return AgentMemoryView(
         agent_id=record.agent_id,
@@ -318,12 +363,8 @@ def memory_view(
             for one in review.tier_one
         ],
         tier_two=[
-            TierTwoItemView(
-                memory_id=one.memory_id,
-                change=one.change.value,
-                evidence=[signal.value for signal in one.evidence],
-                promote_ready=one.promote_ready,
-                learned_at=one.learned_at,
+            tier_two_view(
+                one, rules.get(one.memory_id), counted.get(one.memory_id, ()), reader, now
             )
             for one in review.tier_two
         ],
@@ -401,6 +442,7 @@ async def agent_memory(request: Request, agent_id: str, asked: Asked) -> AgentMe
             log.info("agent memory not answerable", principal=asked.caller.principal.id)
             raise _no_agent_here()
         stored, entries = await agent_entries(session, record)
+    learned, occurrences = await learned_rules_of(factory, stored.learnings)
     return memory_view(
         record,
         stored,
@@ -408,7 +450,23 @@ async def agent_memory(request: Request, agent_id: str, asked: Asked) -> AgentMe
         reader=asked.reach,
         department=asked.caller.principal.primary_department,
         now=asked.now,
+        learned=learned,
+        occurrences=occurrences,
     )
+
+
+async def learned_rules_of(
+    factory: Any, learnings: Sequence[Learning]
+) -> tuple[Mapping[str, LearnedRule], Mapping[str, Sequence[Occurrence]]]:
+    """Each tier-two learning's held rule and its counted conversations (M39.4.2.3)."""
+    store = StoredLearnedRules(factory)
+    twos = [one.memory_id for one in learnings if one.proposal.tier is Tier.PROMOTED]
+    found = {}
+    for memory_id in twos:
+        held = await store.learned(memory_id)
+        if held is not None:
+            found[memory_id] = held
+    return found, await store.occurrences(tuple(found))
 
 
 async def _shown(

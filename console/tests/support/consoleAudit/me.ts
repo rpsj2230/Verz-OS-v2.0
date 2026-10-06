@@ -8,6 +8,7 @@
  */
 
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
+import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
 import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
@@ -19,6 +20,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/MyChannels.tsx myUnbindApiPath(row.channel)": [
     at("POST /api/v1/me/channels/{name}/unbind", "myUnbindApiPath", myUnbindApiPath("webhook")),
   ],
+  "src/components/MyAccounts.tsx myConsentPath(row.connector)": [
+    at("POST /api/v1/me/accounts/{connector}/consent", "myConsentPath", myConsentPath("xero")),
+  ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
   ],
@@ -29,6 +33,23 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/me/accounts/{connector}/consent": {
+    row: t(
+      "test_connector_consent",
+      "test_a_consent_is_answered_as_the_kind_it_was_started_as_and_the_kind_never_changes",
+      true,
+    ),
+    audit: {
+      notApplicable:
+        "Starting a person's own consent keeps no credential and changes no connection: it holds one " +
+        "ops.oauth_consent row for that person, which only they can take, once. The ledger entry is the " +
+        "refresh token's credential write when the vendor answers, which test_connector_consent_routes holds.",
+    },
+    behaviour: t(
+      "test_connector_consent_routes",
+      "test_a_reader_starts_their_own_consent_and_a_person_without_the_capability_is_refused_alike",
+    ),
+  },
   "POST /api/v1/me/channels/{name}/code": {
     row: t(
       "test_channel_binding",
