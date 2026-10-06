@@ -9,6 +9,10 @@
  * saves a new version beside this one and changes nothing, so it is a form. Trying a skill out has
  * no route and is drawn inert with its sentence (`skillActions.ts`).
  *
+ * **A version's example tasks are shown with the newest rehearsal of exactly that version**
+ * (M12.3.4), each example's outcome and what the rehearsal could not judge; a reviewer rehearses a
+ * waiting version through any agent they can see, and approving waits until one passes.
+ *
  * **Exporting takes an approved version away as a file** (M12.3.1): one press, recorded in the ledger,
  * and the package waits for review on whichever install adds it.
  *
@@ -24,7 +28,7 @@
  * the version it was edited from and the people's identifiers are in each version's Advanced
  * section; the page names people and agents.
  *
- * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.2.10, M12.3.1
+ * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.2.10, M12.3.1, M12.3.4
  */
 
 import { Download, FlaskConical, Pencil } from "lucide-react";
@@ -45,6 +49,12 @@ import {
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import {
+  EXAMPLES_HEADING,
+  NO_EXAMPLES,
+  NOT_YET_REHEARSED,
+  outcomeWords,
+  REHEARSAL_FAILED,
+  REHEARSAL_PASSED,
   EXPORT,
   EXPORT_NOT_SAVED,
   exportedSentence,
@@ -68,7 +78,7 @@ import {
   type SkillDiff,
   type SkillPin,
 } from "../skillsQuery";
-import { AssignForm, CategoriesForm, EditVersionForm, type Tell } from "./SkillForms";
+import { AssignForm, CategoriesForm, EditVersionForm, RehearseForm, type Tell } from "./SkillForms";
 import { ReviewPill, RetiredPill } from "./pills";
 import { UNAVAILABLE } from "./skillActions";
 import { dayWords, named, type SkillDetail } from "./skillDetailQuery";
@@ -345,16 +355,62 @@ function Export({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: 
   );
 }
 
+/**
+ * A version's example tasks, and the newest rehearsal of exactly this version with each example's
+ * outcome and what the rehearsal could not judge (M12.3.4). Shown only where the body is.
+ */
+function Examples({ one }: { readonly one: LibrarySkill }) {
+  const examples = one.examples ?? [];
+  const rehearsal = one.rehearsal ?? null;
+  if (one.body === null) {
+    return null;
+  }
+  if (examples.length === 0) {
+    return <p className="m-0 text-[12.5px] text-dim">{NO_EXAMPLES}</p>;
+  }
+  const outcome = new Map((rehearsal?.outcomes ?? []).map((row) => [row.task, row]));
+  return (
+    <section aria-label={`${EXAMPLES_HEADING}: ${one.name} ${one.version}`} className="flex min-w-0 flex-col gap-2 rounded-md border border-line p-3">
+      <h4 className="m-0 text-[13px] font-semibold text-ink">{EXAMPLES_HEADING}</h4>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {examples.map((example) => {
+          const found = outcome.get(example.task);
+          return (
+            <li key={example.task} className="text-[12.5px] text-body [overflow-wrap:anywhere]">
+              <span className="text-ink">{example.task}</span>
+              <span className="text-dim"> uses {example.expects.length === 0 ? "no tool" : example.expects.join(", ")}</span>
+              {found === undefined ? null : <span className={found.passed ? " text-ok" : " text-crit"}> · {outcomeWords(found)}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      {rehearsal === null ? (
+        <p className="m-0 text-[12px] text-dim">{NOT_YET_REHEARSED}</p>
+      ) : (
+        <>
+          <p className="m-0 text-[12.5px] font-medium text-ink">
+            {rehearsal.passed ? REHEARSAL_PASSED : REHEARSAL_FAILED}, rehearsed by {rehearsal.rehearsed_by}
+            {rehearsal.at ? `, ${dayWords(rehearsal.at)}` : ""}.
+          </p>
+          <p className="m-0 text-[12px] text-dim">{rehearsal.limit}</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Version({
   one,
   newest,
   agents,
+  rehearsalAgents,
   registryIsAbsent,
   onTold,
 }: {
   readonly one: LibrarySkill;
   readonly newest: boolean;
   readonly agents: readonly AgentChoice[];
+  readonly rehearsalAgents: readonly AgentChoice[];
   readonly registryIsAbsent: boolean;
   readonly onTold: Tell;
 }) {
@@ -405,6 +461,10 @@ function Version({
         </details>
       )}
       <Findings one={one} />
+      <Examples one={one} />
+      {one.rehearsable === true && rehearsalAgents.length > 0 && !editing ? (
+        <RehearseForm one={one} agents={rehearsalAgents} onTold={onTold} />
+      ) : null}
       {one.diff === null || one.diff === undefined ? null : <Changed diff={one.diff} />}
       {editing ? (
         <EditVersionForm
@@ -600,6 +660,7 @@ export function SkillProfile({ detail, onTold }: { readonly detail: SkillDetail;
                 one={one}
                 newest={index === 0}
                 agents={detail.agents}
+                rehearsalAgents={detail.rehearsalAgents}
                 registryIsAbsent={detail.registryIsAbsent}
                 onTold={onTold}
               />

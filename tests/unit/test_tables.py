@@ -427,8 +427,9 @@ STEWARDS_TABLES: tuple[str, ...] = ("ops.connector_steward", "gate.self_grant")
 RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.record_retired", "proj.source_epoch")
 #: And the one 0178 adds: the bytes of every script a stored skill carries.
 SKILL_SCRIPT_TABLES: tuple[str, ...] = ("agent.skill_script",)
-#: And what 0191 adds: each export of an approved version (M12.3.1).
-SKILL_EXPORT_TABLES: tuple[str, ...] = ("agent.skill_export",)
+#: And the two 0191 adds: each export of an approved version, and each rehearsal of one's
+#: examples (M12.3.1, M12.3.4).
+SKILL_EXPORT_TABLES: tuple[str, ...] = ("agent.skill_export", "agent.skill_rehearsal")
 
 ALL_TABLES = (
     CORE_TABLES

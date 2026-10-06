@@ -2902,7 +2902,7 @@
     "M27.7.29",
     "M2.3.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 160: only an unscoped stop stops one agent"
   },
   {
    "id": "ARC-A-171",
@@ -8432,7 +8432,7 @@
    "proof": [
     "M12.4.9"
    ],
-   "decision": null
+   "decision": "needs-rupash 161: reach-only rehearsal until the agent runtime runs examples"
   },
   {
    "id": "OWN-45",
@@ -12273,7 +12273,7 @@
    "proof": [
     "M12.4.9"
    ],
-   "decision": null
+   "decision": "needs-rupash 161: reach-only rehearsal until the agent runtime runs examples"
   },
   {
    "id": "CON-60",

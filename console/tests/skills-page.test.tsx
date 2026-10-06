@@ -29,7 +29,7 @@ import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/Skill
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
 import { IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, FINDINGS_HEADING } from "../src/pages/skills/SkillProfile";
-import { EXPORT, exportedSentence } from "../src/pages/skillsQuery";
+import { EXPORT, exportedSentence, NOT_YET_REHEARSED, REHEARSAL_FAILED, REHEARSAL_PASSED, REHEARSE } from "../src/pages/skillsQuery";
 import { PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
 import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
 import { readHistory, readSkillDetail } from "../src/pages/skills/skillDetailQuery";
@@ -158,6 +158,9 @@ function version(overrides: Record<string, unknown> = {}): Record<string, unknow
     retired_by: null,
     retirable: true,
     exportable: false,
+    examples: [],
+    rehearsal: null,
+    rehearsable: false,
     submitted_by_name: "Iris Importer",
     reviewer_name: "Rex Reviewer",
     findings: [],
@@ -184,6 +187,7 @@ function skillsPage(library: Record<string, unknown>[], pins: Record<string, unk
     library,
     library_truncated: false,
     agents: [{ agent_id: "company_desk", display_name: "Company Desk" }],
+    rehearsal_agents: [{ agent_id: "company_desk", display_name: "Company Desk" }],
     may_add: true,
     registry_is_absent: false,
     categories: ["hosting"],
@@ -584,6 +588,67 @@ describe("one skill's page", () => {
 
     const plain = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ exportable: false })], [PIN]));
     expect([...plain.container.querySelectorAll("button")].some((one) => one.getAttribute("aria-label")?.startsWith(EXPORT))).toBe(false);
+  });
+
+  test("a waiting version's examples are rehearsed through an agent in one press, and each outcome is shown with its limit", async () => {
+    // What breaks if this is deleted: a reviewer with no way to rehearse what approval waits for, a
+    // rehearsal sent without the agent, or a result read as more than it judged (M12.3.4).
+    const example = { task: "Is example.com due for renewal", expects: ["crm.read_client"] };
+    const waiting = version({ review: "pending", reviewable: true, examples: [example], rehearsable: true, rehearsal: null });
+    const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([waiting], [PIN], {
+      [`POST ${API}/skills/${DIGEST}/rehearsals`]: {
+        body: {
+          digest: DIGEST,
+          kind: "reach",
+          agent_id: "company_desk",
+          rehearsed_by: "u_admin",
+          at: "2019-03-06T09:00:00Z",
+          passed: true,
+          outcomes: [{ task: example.task, passed: true, missing: [] }],
+          limit: "It ran no model.",
+        },
+      },
+    }));
+
+    expect(container.textContent).toContain(NOT_YET_REHEARSED);
+    const form = container.querySelector<HTMLFormElement>(`form[aria-label^="${REHEARSE}"]`)!;
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(sent.some((one) => one.method === "POST" && one.path === `${API}/skills/${DIGEST}/rehearsals`)).toBe(true);
+    });
+    expect(sent.find((one) => one.method === "POST")?.body).toEqual({ agent_id: "company_desk" });
+    await waitFor(() => {
+      expect(container.textContent).toContain(`${REHEARSAL_PASSED}, rehearsing ${NAME}`);
+    });
+
+    const shown = await consoleAt(
+      `${skillAddress(NAME)}/profile`,
+      skillAnswers(
+        [
+          version({
+            review: "pending",
+            examples: [example, { task: "Open a ticket", expects: ["desk.read_ticket"] }],
+            rehearsal: {
+              digest: DIGEST,
+              kind: "reach",
+              agent_id: "company_desk",
+              rehearsed_by: "Alex Admin",
+              at: "2019-03-06T09:00:00Z",
+              passed: false,
+              outcomes: [
+                { task: example.task, passed: true, missing: [] },
+                { task: "Open a ticket", passed: false, missing: ["desk.read_ticket"] },
+              ],
+              limit: "It ran no model, so it did not judge any answer.",
+            },
+          }),
+        ],
+        [PIN],
+      ),
+    );
+    expect(shown.container.textContent).toContain("Could not reach desk.read_ticket");
+    expect(shown.container.textContent).toContain(`${REHEARSAL_FAILED}, rehearsed by Alex Admin`);
+    expect(shown.container.textContent).toContain("It ran no model, so it did not judge any answer.");
   });
 
   test("a retired version offers reinstating and no assignment", async () => {

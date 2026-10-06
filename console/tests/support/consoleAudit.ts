@@ -371,6 +371,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/{digest}/reinstatement",
       "/api/v1/skills/{digest}/detachments",
       "/api/v1/skills/{digest}/export",
+      "/api/v1/skills/{digest}/rehearsals",
       "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
@@ -387,12 +388,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_script",
       "agent.skill_detachment",
       "agent.skill_export",
+      "agent.skill_rehearsal",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
       {
-        what: "A skill cannot be tried out through an agent in practice mode before it is assigned.",
-        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW, and no route runs a rehearsal; the Profile draws it inert with pages/skills/skillActions.ts' sentence.",
+        what: "A skill cannot be tried out through an agent in practice mode, with a model answering, before it is assigned.",
+        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW. POST /api/v1/skills/{digest}/rehearsals rehearses a version's examples for reach only and runs no model (needs-rupash 161); the Profile draws the practice run inert with pages/skills/skillActions.ts' sentence.",
       },
       {
         what: "A skill that declares scripts cannot be added.",
