@@ -180,7 +180,7 @@ from brain.gate.badge_store import item_lookup_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
-from brain.gate.fast_lane import FastPathRule, RowReader
+from brain.gate.fast_lane import AmbiguityReader, FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
 from brain.gate.live_records import LiveRecords
@@ -1080,6 +1080,16 @@ async def base_lane_of(state: Any) -> BaseLane:
     )
 
 
+def ambiguity_of(state: Any) -> AmbiguityReader | None:
+    """The registry's reader for an ambiguous name, or None on a process with no database."""
+    from brain.resolution.ambiguity_store import StoredAmbiguity
+
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return None
+    return StoredAmbiguity(sessions)
+
+
 def live_records_of(state: Any) -> LiveRecords | None:
     """What reads a connected source's records live for this process, or None where nothing can.
 
@@ -1859,6 +1869,9 @@ async def answered_for(
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
             source_policies={**source_field_policies(registry), **base.source_policies},
+            # Which client each record a name matched is, so records the asker reads that are
+            # more than one client are named as ambiguous rather than guessed at (M14.6.5).
+            ambiguity=ambiguity_of(request.app.state),
         )
         # An abstention under a skill that declares a queue is handed to the person named for it,
         # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported

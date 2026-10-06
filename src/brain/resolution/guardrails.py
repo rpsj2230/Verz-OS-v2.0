@@ -81,6 +81,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
+from brain.core.entitlement import Capability
 from brain.resolution.canonical import (
     EntityType,
     Identifier,
@@ -837,6 +838,11 @@ class UnresolvedReason(enum.StrEnum):
     #: One candidate, in the band between the thresholds M14.3.3 sets.
     BELOW_CONFIDENCE = "below confidence"
 
+
+#: Who may review a pair and be handed its review reference: the Owner's and the Administrator's
+#: capability (decision (c)). Declared here, beside the notice it decides about, so the answer
+#: lane and the review screen ask about one capability.
+REVIEWER_CAPABILITY: Final = Capability(value="admin:entity_merge")
 
 #: The one sentence every unresolved outcome renders.
 #:
