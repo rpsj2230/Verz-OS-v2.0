@@ -263,7 +263,7 @@ async def escalated(
         # vendor raises here would otherwise turn a true abstention into a fault.
         log.warning("escalation.not_made", error=type(exc).__name__)
         return answered
-    return with_sentence(answered, told)
+    return dataclasses.replace(with_sentence(answered, told), escalated=True)
 
 
 # ------------------------------------------------------------------------ the views

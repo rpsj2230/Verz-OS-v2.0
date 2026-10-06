@@ -245,6 +245,7 @@ from brain.ops.live_read_run import (
 )
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
+from brain.ops.retrieval_log import Retrieved, kept_retrieval, logging_retrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
@@ -1833,6 +1834,10 @@ async def answered_for(
                 now=asking.now,
                 trace_id=recorder.trace_id,
             )
+        # What the search returns, as the model is shown it, noted for the retrieval log
+        # (M15.3.4) and written once the answer exists. See `brain.ops.retrieval_log`.
+        retrieved = Retrieved()
+        model = logging_retrievals(model, retrieved)
         answered = await answer_lane(
             address.question,
             origin=origin,
@@ -1873,6 +1878,14 @@ async def answered_for(
             asking=asking,
             question=address.question,
             trace_id=recorder.trace_id,
+        )
+        await retrieval_logged(
+            request.app.state,
+            trace_id=recorder.trace_id,
+            principal_id=asking.principal.id,
+            retrieved=retrieved,
+            answered=answered,
+            now=asking.now,
         )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own
@@ -1991,15 +2004,53 @@ async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> Marked
     return MarkedView(counted=True, told=MARK_COUNTED)
 
 
+async def retrieval_logged(
+    state: Any,
+    *,
+    trace_id: str,
+    principal_id: str,
+    retrieved: Retrieved,
+    answered: Answered,
+    now: datetime,
+) -> None:
+    """Keep what this request's search returned at its trace, and never fail the answer for it.
+
+    `brain.ops.retrieval_log.kept_retrieval` over this process's database; nothing on a process
+    with none, and nothing for a question that searched nothing. A failure is logged by its type
+    and the answer goes out, for `brain.ops.signal_store.
+    A_SIGNAL_NEVER_COSTS_THE_PERSON_THEIR_TRANSCRIPT`'s reason.
+    """
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker) or retrieved.chunk_ids is None:
+        return
+    try:
+        await kept_retrieval(
+            sessions,
+            trace_id=trace_id,
+            principal_id=principal_id,
+            retrieved=retrieved,
+            answered=answered,
+            now=now,
+        )
+    except Exception as exc:
+        log.warning("retrieval.not_kept", error=type(exc).__name__)
+
+
 async def remembered(
-    request: Request, asking: Answering, ask: Question, answered: Answered
+    request: Request,
+    asking: Answering,
+    ask: Question,
+    answered: Answered,
+    *,
+    trace_id: str | None = None,
 ) -> str | None:
     """Keep this exchange in the asker's thread, and say which thread (M9.1.1).
 
     `brain.chat.remember.remember` over this process's store, with the policies the answer was
     redacted under, which are what a stored answer's references are re-checked against. A
     failure to keep it is logged and the answer still goes out: the person asked a question, and
-    losing its transcript is not a reason to withhold the answer.
+    losing its transcript is not a reason to withhold the answer. `trace_id` is the request it was
+    answered on, which the learning signals written beside it name (M16.2.8).
     """
     from brain.chat.remember import remember, threads_of
 
@@ -2019,6 +2070,7 @@ async def remembered(
             answered=answered,
             policies=policies,
             now=asking.now,
+            trace_id=trace_id,
         )
     except Exception as exc:
         log.warning("thread.not_kept", error=type(exc).__name__)
@@ -2055,7 +2107,9 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
         return asked_too_often(request, outcome)
     if isinstance(outcome, Halted):
         return halted_reply(request, outcome)
-    thread = await remembered(request, Answering.of(asked), ask, outcome)
+    thread = await remembered(
+        request, Answering.of(asked), ask, outcome, trace_id=recorder.trace_id
+    )
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,

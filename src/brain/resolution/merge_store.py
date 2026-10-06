@@ -159,8 +159,9 @@ THE_ANSWER_CACHE_HOLDS_NOTHING_KEYED_BY_AN_ENTITY: Final = (
 #: Why memory has nothing to drop on a merge.
 MEMORY_HOLDS_NOTHING_KEYED_BY_AN_ENTITY: Final = (
     "mem.persistent, mem.adaptive, mem.learning, mem.correction and mem.mark key on a person, a "
-    "scope and a statement, and no column in the mem schema names a canonical entity, so there "
-    "is no row a merge could leave answering from before it."
+    "scope and a statement, mem.signal and mem.retrieval on a person, a message and a passage, "
+    "and no column in the mem schema names a canonical entity, so there is no row a merge could "
+    "leave answering from before it."
 )
 
 #: Why the projection's local id is left as it is.

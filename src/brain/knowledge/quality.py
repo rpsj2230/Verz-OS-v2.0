@@ -85,6 +85,14 @@ from one caller's reach is applied to the next caller's ranking, which is one pe
 what exists leaking into another's ordering. Per-reference learning belongs in the memory
 layer, where those controls are the point.
 
+**Where an install keeps the record, since `0197`.** `brain.ops.retrieval_log` writes each
+retrieval to `mem.retrieval` at its trace with the ids of the passages its asker was shown, which
+is more than this record holds, and reconciles the two by who may read what: the ids are readable
+by that asker alone, by the table's policy, and everybody's retrievals are read back only through
+`mem.retrieval_events` as `RetrievalEvent`s, with no reference, trace or principal. So the
+rejection below still holds for every reader that aggregates, and nothing that ranks reads the
+table.
+
 Rejected: reporting a signal over however many events there happen to be. A rate computed over
 one retrieval is that retrieval, and a learning rule promoted from it is a rule promoted from
 one person's afternoon. `signal` returns None below `MINIMUM_EVENTS_FOR_A_SIGNAL`, which is

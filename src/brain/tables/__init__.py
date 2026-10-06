@@ -136,6 +136,7 @@ from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
 from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
+from brain.tables.signal_log import RetrievalRow, SignalRow
 from brain.tables.skill import (
     SkillAssignmentRow,
     SkillDetachmentRow,
@@ -445,6 +446,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0184_entity_review_items. Points at nothing: the records and entities are values, so an item
     # outlives a merge or an unmerge of what it names.
     "er.review_item",
+    # 0197_signal_log. Neither points at anything: a conversation, a message, a trace and a passage
+    # are values, so a signal and a retrieval outlive what they name.
+    "mem.signal",
+    "mem.retrieval",
 )
 
 __all__ = [
@@ -540,6 +545,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "RetiredRecordRow",
+    "RetrievalRow",
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",
@@ -554,6 +560,7 @@ __all__ = [
     "SessionRow",
     "SettingRow",
     "SettingType",
+    "SignalRow",
     "SkillAssignmentRow",
     "SkillDetachmentRow",
     "SkillInvocationRow",
