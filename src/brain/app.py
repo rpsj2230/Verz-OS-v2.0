@@ -67,6 +67,7 @@ from brain.api import (
 from brain.api_routes import GateWiring, second_factor_needed
 from brain.attribution import trace_of_request
 from brain.audit.ledger import TRACE_ID
+from brain.automation_paused_told import keep_telling_paused_stewards
 from brain.automation_routes import AutomationWiring
 from brain.cache import (
     AsyncValkeyClient,
@@ -396,6 +397,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
     telling: asyncio.Task[None] | None = None
+    pausing: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -468,6 +470,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # An asker whose handed-on question expired is told in their own chat, by this process
         # because the worker holds no channel's token. See `brain.escalation_told`.
         telling = asyncio.create_task(keep_telling_expired_askers(app))
+        # A steward whose automation was paused for failing is told in their own chat, by this
+        # process for the same reason. See `brain.automation_paused_told`.
+        pausing = asyncio.create_task(keep_telling_paused_stewards(app))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -834,6 +839,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             telling.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await telling
+        if pausing is not None:
+            pausing.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pausing
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):
