@@ -69,6 +69,10 @@ export const ASKS_NOTHING_ON_ARRIVAL: Readonly<Record<string, string>> = {
   "/audit/trace/:traceId":
     "The trace id is filled in from the address and nothing is asked until a reason is given and the " +
     "form sent, which tests/trace-page.test.tsx holds.",
+  "/me/undo/:memoryId":
+    "The undo a weekly learning digest links asks nothing on opening, so a chat unfurling the link " +
+    "undoes nothing; what the undo says when it is refused is held in " +
+    "tests/learning-undo-page.test.tsx.",
   "/memory":
     "The bare address is a form that names a person and opens /memory/:subject, which asks and is " +
     "held here.",

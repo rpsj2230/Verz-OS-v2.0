@@ -116,6 +116,7 @@ from brain.install import InstallError, installed_name, value_of
 from brain.knowledge.app_parse_budget import app_parse_gaps
 from brain.knowledge.document_tools import KnowledgeCaches
 from brain.knowledge.row_store import SessionRowSource
+from brain.learning_told import keep_sending_learning_digests
 from brain.mailbox_read import keep_reading_the_mailbox
 from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
@@ -395,6 +396,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
     telling: asyncio.Task[None] | None = None
+    # Each person's week of learning, told in their own chat. See `brain.learning_told`.
+    learning: asyncio.Task[None] | None = None
     pausing: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
@@ -468,6 +471,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # An asker whose handed-on question expired is told in their own chat, by this process
         # because the worker holds no channel's token. See `brain.escalation_told`.
         telling = asyncio.create_task(keep_telling_expired_askers(app))
+        # Each person is told what the system learnt from them last week, once, by this process for
+        # the same reason. See `brain.learning_told`.
+        learning = asyncio.create_task(keep_sending_learning_digests(app))
         # A steward whose automation was paused for failing is told in their own chat, by this
         # process for the same reason. See `brain.automation_paused_told`.
         pausing = asyncio.create_task(keep_telling_paused_stewards(app))
@@ -828,6 +834,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             telling.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await telling
+        if learning is not None:
+            learning.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await learning
         if pausing is not None:
             pausing.cancel()
             with contextlib.suppress(asyncio.CancelledError):
