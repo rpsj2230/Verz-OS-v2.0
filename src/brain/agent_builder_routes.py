@@ -53,6 +53,7 @@ from __future__ import annotations
 import secrets
 import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Final
 
@@ -70,6 +71,13 @@ from brain.agent_lifecycle_routes import (
     visible,
 )
 from brain.agent_routes import TEMPLATE_SCREEN, _tool_registry
+from brain.agents.attachments import (
+    connectors_after_publish,
+    with_connectors,
+)
+from brain.agents.attachments import (
+    connectors_of as agent_connectors,
+)
 from brain.agents.authoring import LiteralKind, scan
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.creation import (
@@ -760,6 +768,19 @@ async def _publish(
             tools=tools,
             at=asked.now,
         )
+        # The draft's own change to the connectors, applied to the agent's list as it stands now.
+        # See `brain.agents.attachments.A_PUBLISH_CHANGES_ONLY_THE_CONNECTORS_ITS_DRAFT_CHANGED`.
+        settled = replace(
+            settled,
+            record=with_connectors(
+                settled.record,
+                connectors_after_publish(
+                    agent_connectors(found.record),
+                    _connectors_in(draft.revisions[0]),
+                    _connectors_in(revision),
+                ),
+            ),
+        )
         disabled_at = found.record.disabled_at
         if disabled_at is None and not settled.completeness.is_ready:
             disabled_at = asked.now
@@ -780,6 +801,12 @@ async def _publish(
         state=DraftState.PUBLISHED.value, agent_id=draft.agent_id, sentence=sentence, widened=[]
     )
     return JSONResponse(status_code=201, content=body.model_dump(mode="json"))
+
+
+def _connectors_in(revision: Revision) -> tuple[str, ...]:
+    """The connector names a revision's document lists, and nothing that is not a name."""
+    named = revision.document().get("connectors", ())
+    return tuple(one for one in named if isinstance(one, str)) if isinstance(named, list) else ()
 
 
 def _missing_words(settled: Installation) -> list[str]:
@@ -927,6 +954,10 @@ async def edit_agent_as_draft(request: Request, agent_id: str, asked: Asked) -> 
         return _not_changed(REFUSED, NO_INSTALL_TO_START_FROM)
     signed, instance = found.install
     effective = materialise(signed, instance, audience=found.record.audience)
+    document = seed(effective.manifest, agent_id)
+    # The agent's own list, not the manifest's: a connector bound on its page is part of the agent
+    # as it is now. See `attachments.A_PUBLISH_CHANGES_ONLY_THE_CONNECTORS_ITS_DRAFT_CHANGED`.
+    document["connectors"] = sorted(agent_connectors(found.record))
     return await _start(
         request,
         store,
@@ -934,7 +965,7 @@ async def edit_agent_as_draft(request: Request, agent_id: str, asked: Asked) -> 
         agent_id=agent_id,
         kind=DraftKind.EDIT,
         base_hash=found.effective_hash,
-        document=seed(effective.manifest, agent_id),
+        document=document,
         key=template_key_of(request),
     )
 
