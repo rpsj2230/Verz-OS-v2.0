@@ -142,7 +142,6 @@ async def an_agents_run_holds_the_reply_it_asks_for_and_sends_nothing(h: Harness
     from brain.gate.injection import AutonomyTier, RiskAssessment
     from brain.gate.model_lane import ModelLane
     from brain.gate.runtime import AgentRuntime
-    from brain.gate.runtime_effects import ConnectorSideEffects
     from brain.gate.suspension_store import StoredSuspensions
     from brain.knowledge.row_store import SessionRowSource
     from brain.models.metering import Meter
@@ -159,6 +158,7 @@ async def an_agents_run_holds_the_reply_it_asks_for_and_sends_nothing(h: Harness
         run_approved,
     )
     from brain.ops.connector_store import StoredConnections, live
+    from brain.ops.runtime_effects import ConnectorSideEffects
     from brain.ops.trace_sink import CountingTraceSink
     from brain.tools.startup import build_registry
 

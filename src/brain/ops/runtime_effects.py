@@ -7,6 +7,10 @@ tool, how a model's arguments become the action a person approves
 model's arguments against the tool's own schema, hands the connector the record the run read and
 the connection's settings, and stores what the leash says must wait.
 
+**It lives in `ops` and not in `gate` because it imports connectors**, which the gate never does
+(`tests/unit/test_repo_shape.py` holds that direction): the gate defines the `SideEffects` seam and
+the install plugs this in. It sat in the gate until CI refused it.
+
 **Nothing here decides a permission.** Whether a write may be asked for at all is the agent's
 tool ceiling and the run's reach, which the projected catalogue and the runtime have already
 applied; what happens to it is `brain.gate.leash`. This module is the translation between a

@@ -176,10 +176,10 @@ class ApprovedRun:
 def assessment_of(action: Action) -> RiskAssessment:
     """The injection screen over what the action carries, as the automation step route takes it.
 
-    `brain.gate.runtime_effects.action_assessment`, which is where an agent run raises an action,
+    `brain.ops.runtime_effects.action_assessment`, which is where an agent run raises an action,
     so the same function is read where the action is raised and where it is run.
     """
-    from brain.gate.runtime_effects import action_assessment
+    from brain.ops.runtime_effects import action_assessment
 
     return action_assessment(action)
 
@@ -188,9 +188,9 @@ def policy_of(action: Action) -> FieldPolicy:
     """The field policy the action's target is decided under: its source's read classification,
     and the fields that source's write grants declare (`brain.tools.startup.field_policy_for`).
 
-    `brain.gate.runtime_effects.action_policy`, for the reason `assessment_of` gives.
+    `brain.ops.runtime_effects.action_policy`, for the reason `assessment_of` gives.
     """
-    from brain.gate.runtime_effects import action_policy
+    from brain.ops.runtime_effects import action_policy
 
     return action_policy(action)
 

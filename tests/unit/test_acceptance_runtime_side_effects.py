@@ -83,8 +83,8 @@ def test_the_check_fails_where_the_run_is_broken(
     sentence. Delete this and the check can pass with the property gone."""
     import brain.gate.leash as leash
     import brain.gate.runtime as runtime
-    import brain.gate.runtime_effects as effects
     import brain.ops.approved_runs as approved_runs
+    import brain.ops.runtime_effects as effects
     import brain.tools.startup as startup
     from brain.connectors import freshdesk
 

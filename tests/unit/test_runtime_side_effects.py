@@ -47,12 +47,12 @@ from brain.gate.runtime import (
     ToolRefusedError,
     never_reached,
 )
-from brain.gate.runtime_effects import ConnectorSideEffects, arguments_fit
 from brain.gate.screening import NOTHING_MATCHED
 from brain.knowledge.visibility import Visibility
 from brain.models.metering import Meter
 from brain.ops.connector_store import Connection
 from brain.ops.idempotency import IdempotencyError
+from brain.ops.runtime_effects import ConnectorSideEffects, arguments_fit
 from brain.tools.proposed_writes import register_proposed_writes
 from brain.tools.registry import ToolRegistry
 from tests.unit.test_agent_runtime import Model, Runs
@@ -958,9 +958,9 @@ def test_an_approved_reply_a_run_held_is_sent_once_by_the_workers_own_run_and_by
     and read back with the read key, once; the registered tool itself refuses to be called. Delete
     this and what a run holds can be a record the worker cannot carry out, or a tool anybody can
     call to send."""
-    from brain.gate.runtime_effects import action_assessment, action_policy
     from brain.ops.acceptance_checks import _HeldLedger
     from brain.ops.connector_write_run import WriteOutcome, send_approved
+    from brain.ops.runtime_effects import action_assessment, action_policy
     from tests.unit.test_freshdesk_reply import connection as helpdesk_row
 
     made = desk_world([reply_to(), ANSWER])

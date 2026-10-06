@@ -1941,10 +1941,10 @@ async def side_effects_for(
     store has nowhere to hold one, so it offers none.
     """
     from brain.connectors.declaration import proposers
-    from brain.gate.runtime_effects import ConnectorSideEffects
     from brain.gate.suspension_store import StoredSuspensions
     from brain.ops.connector_catalogue import declarations
     from brain.ops.connector_store import StoredConnections
+    from brain.ops.runtime_effects import ConnectorSideEffects
 
     sessions = getattr(request.app.state, "db_sessions", None)
     store = getattr(request.app.state, "suspensions", None)

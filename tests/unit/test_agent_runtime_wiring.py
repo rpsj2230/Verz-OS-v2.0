@@ -281,7 +281,7 @@ def test_an_agent_that_may_ask_for_a_write_is_handed_its_leash_and_a_place_to_ho
     suspension store, and the loop then offers it the write beside the read; an agent that names no
     write is handed nothing, so it is run as it was. Delete this and the runtime can hold a write
     in tests and in no process, which is the mechanism correct, tested and never called."""
-    from brain.gate.runtime_effects import ConnectorSideEffects
+    from brain.ops.runtime_effects import ConnectorSideEffects
     from tests.unit.test_runtime_side_effects import (
         DESK_CAPABILITIES,
         REPLY,
