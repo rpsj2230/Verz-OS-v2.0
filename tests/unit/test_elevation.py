@@ -30,7 +30,9 @@ import pytest
 
 from brain.audit.anchor import Anchor, take_anchor
 from brain.audit.ledger import AuditAction, AuditChain
+from brain.audit.record import AuditRecorder
 from brain.console.elevation import (
+    A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN,
     ALREADY_HOLDS_PROMPT,
     ELEVATION_ACTIONS,
     ELEVATION_CHAIN,
@@ -147,6 +149,7 @@ def super_admins(*ids: str) -> tuple[RoleGrant, ...]:
 
 def a_session(
     *,
+    session_id: str = "bg_1",
     principal_id: str = "p_partner",
     opened_at: datetime = NOW,
     duration: timedelta = timedelta(hours=1),
@@ -155,7 +158,7 @@ def a_session(
 ) -> BreakGlassSession:
     """One real session through its own validators."""
     return BreakGlassSession(
-        session_id="bg_1",
+        session_id=session_id,
         principal_id=principal_id,
         reason=BreakGlassReason.INSTALL,
         opened_at=opened_at,
@@ -443,6 +446,17 @@ def test_an_elevation_entry_lands_in_its_own_chain_and_not_in_the_main_ledger() 
     assert len(main) == 0
     assert elevation.head() != before
     assert main.head() == AuditChain().head()
+    # The install writes the same entry to the main ledger too (`0209`), and the pair is healthy.
+    record_elevation(
+        AuditRecorder(
+            main,
+            actor_id=session.authorised_by,
+            ent_hash="0" * 32,
+            trace_id="t_1",
+            clock=lambda: NOW,
+        ),
+        session,
+    )
     assert chain_findings(main=main, elevation=elevation) == ()
 
 
@@ -505,6 +519,104 @@ def test_the_diagnostic_reports_an_elevation_entry_written_to_the_wrong_chain() 
     assert len(into_elevation) == 1
     assert ELEVATION_CHAIN in into_elevation[0]
     assert frozenset({AuditAction.BREAK_GLASS}) == ELEVATION_ACTIONS
+
+
+def _twins(*, actor_id: str | None = None, at: datetime = NOW) -> tuple[AuditChain, AuditChain]:
+    """One session recorded in both chains, the main copy's actor or instant changed as asked."""
+    session = a_session()
+    main, elevation = AuditChain(), AuditChain()
+    record_elevation(
+        elevation_recorder(
+            elevation, session, ent_hash="0" * 32, trace_id="t_1", clock=lambda: NOW
+        ),
+        session,
+    )
+    record_elevation(
+        AuditRecorder(
+            main,
+            actor_id=actor_id or session.authorised_by,
+            ent_hash="0" * 32,
+            trace_id="t_1",
+            clock=lambda: at,
+        ),
+        session,
+    )
+    return main, elevation
+
+
+def test_every_break_glass_entry_has_its_twin_in_the_other_chain_saying_the_same_thing() -> None:
+    """`A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN`, in all three directions. A
+    healthy pair finds nothing; an elevation entry with no twin in the main chain, a main entry
+    with no twin in the elevation chain once that chain has begun, and a twin naming a different
+    actor or instant are each a finding. Delete this and the two copies can drift apart, which is
+    invisible: both entries exist and both chains verify."""
+    healthy_main, healthy_elevation = _twins()
+    assert chain_findings(main=healthy_main, elevation=healthy_elevation) == ()
+
+    no_main_twin = chain_findings(main=AuditChain(), elevation=healthy_elevation)
+    assert len(no_main_twin) == 1 and "no twin in the main chain" in no_main_twin[0]
+
+    later = a_session(session_id="s_later")
+    record_elevation(
+        AuditRecorder(
+            healthy_main,
+            actor_id=later.authorised_by,
+            ent_hash="0" * 32,
+            trace_id="t_2",
+            clock=lambda: NOW + timedelta(minutes=5),
+        ),
+        later,
+    )
+    no_elevation_twin = chain_findings(main=healthy_main, elevation=healthy_elevation)
+    assert (
+        len(no_elevation_twin) == 1
+        and f"no twin in the {ELEVATION_CHAIN} chain" in no_elevation_twin[0]
+    )
+
+    for drifted_main, drifted_elevation in (
+        _twins(actor_id="u_somebody_else"),
+        _twins(at=NOW + timedelta(seconds=1)),
+    ):
+        drifted = chain_findings(main=drifted_main, elevation=drifted_elevation)
+        assert len(drifted) == 1 and "differently" in drifted[0]
+    assert "twin" in A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN
+
+
+def test_a_main_chain_entry_from_before_the_elevation_chain_began_is_history() -> None:
+    """The sibling of the twins check: an install upgraded to `0209` has break-glass entries in
+    the main chain from before the second chain existed, and those are not findings once the
+    elevation chain has begun, given or read off its first entry. Delete this and every such
+    install reports its history as drift for ever, which teaches its operator to ignore the
+    check."""
+    main, elevation = _twins()
+    earlier = a_session(session_id="s_earlier")
+    record_elevation(
+        AuditRecorder(
+            main,
+            actor_id=earlier.authorised_by,
+            ent_hash="0" * 32,
+            trace_id="t_0",
+            clock=lambda: NOW - timedelta(days=30),
+        ),
+        earlier,
+    )
+    assert chain_findings(main=main, elevation=elevation) == ()
+    assert chain_findings(main=main, elevation=elevation, since=NOW - timedelta(days=60)) != ()
+    # A cut-off given wins over the chain's first entry: before any elevation entry exists, only
+    # what is newer than it is asked about.
+    history = AuditChain()
+    record_elevation(
+        AuditRecorder(
+            history,
+            actor_id=earlier.authorised_by,
+            ent_hash="0" * 32,
+            trace_id="t_0",
+            clock=lambda: NOW - timedelta(days=30),
+        ),
+        earlier,
+    )
+    assert chain_findings(main=history, elevation=AuditChain(), since=NOW - timedelta(days=1)) == ()
+    assert chain_findings(main=history, elevation=AuditChain()) != ()
 
 
 def test_the_chain_name_is_the_identity_layers_and_is_anchored_separately() -> None:

@@ -55,7 +55,7 @@ from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.attachment import ToolAttachmentRow
-from brain.tables.audit import AuditEntryRow
+from brain.tables.audit import AuditEntryRow, ElevationEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
@@ -502,6 +502,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.group_install",
     # 0208_role_nominations. A confirmed nomination points at the role grant it wrote.
     "gate.role_nomination",
+    # 0209_elevation_chain. Points at nothing: the second chain, of elevations alone.
+    "obs.elevation_entry",
 )
 
 __all__ = [
@@ -555,6 +557,7 @@ __all__ = [
     "DepartmentRow",
     "DeploymentRecordRow",
     "DirectoryRoleGrantRow",
+    "ElevationEntryRow",
     "ElevationRequestRow",
     "EntityAliasRow",
     "EntityIdentifierRow",
