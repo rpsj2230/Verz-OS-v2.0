@@ -2920,7 +2920,7 @@
     "M39.7.2",
     "M10.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "FEAT-1.1",
@@ -6041,7 +6041,7 @@
    "proof": [
     "M10.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "ARC-B-069",
@@ -7843,7 +7843,7 @@
    "proof": [
     "M28.5.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "OWN-9",
@@ -15670,7 +15670,7 @@
    "proof": [
     "M27.14.4"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "CONA-22",
