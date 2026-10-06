@@ -19,7 +19,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import Select
 from sqlalchemy.dialects import postgresql
 
 from brain.connectors import domains
@@ -298,12 +297,15 @@ def test_the_worker_indexes_each_listed_domain_and_asks_only_their_registries() 
             return self
 
         async def execute(self, statement: Any) -> Any:
-            if isinstance(statement, Select):
-                # The read a page makes before it is written (M11.8.7): nothing is kept here.
-                return SimpleNamespace(all=list)
-            dialect: Any = postgresql.dialect()  # type: ignore[no-untyped-call]
-            written.append(statement.compile(dialect=dialect).params)
-            return None
+            # The index rows written, and nothing else: the worker also reads the rows a page
+            # names before writing it, and counts a change in the source's epoch. An index that
+            # holds nothing answers each read with no rows.
+            if getattr(statement, "table", None) is not None and (
+                statement.table.fullname == "proj.record"
+            ):
+                dialect: Any = postgresql.dialect()  # type: ignore[no-untyped-call]
+                written.append(statement.compile(dialect=dialect).params)
+            return SimpleNamespace(all=list, scalars=lambda: SimpleNamespace(all=list))
 
     one = connection()
     plan = plan_for(one, last=None, now=LONG_AGO)
@@ -328,6 +330,74 @@ def test_the_worker_indexes_each_listed_domain_and_asks_only_their_registries() 
     kept = {params["source_id"]: params for params in written}
     assert set(kept) == {ROUTED, UNPUBLISHED_DOMAIN}
     assert REGISTRAR not in json.dumps(written, default=str)
+
+
+@dataclass
+class RegistryDown(Caller):
+    """`Caller`, with the registry of one domain not answering."""
+
+    down: str = ""
+
+    def get(self, url: str, *, address: str, headers: Any, max_bytes: int) -> SourceAnswer:
+        if url.endswith(f"/domain/{self.down}"):
+            self.asked.append(url)
+            return SourceAnswer(status=503, headers={}, body=b"{}")
+        return super().get(url, address=address, headers=headers, max_bytes=max_bytes)
+
+
+def tables_written(caller: Caller) -> tuple[Any, list[str]]:
+    """One attempt at two routed domains through `attempt`, and every table a statement wrote."""
+    tables: list[str] = []
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        def begin(self) -> Session:
+            return self
+
+        async def execute(self, statement: Any) -> Any:
+            if getattr(statement, "table", None) is not None:
+                tables.append(statement.table.fullname)
+            return SimpleNamespace(all=list, scalars=lambda: SimpleNamespace(all=list))
+
+    one = connection({"domains": "example.com, example.net", "department": "operations"})
+    plan = plan_for(one, last=None, now=LONG_AGO)
+    done = asyncio.run(
+        attempt(
+            LiveConnection(id=uuid.uuid4(), connection=one),
+            plan,
+            previous=None,
+            sessions=Session,  # type: ignore[arg-type]
+            keys=NoKeys(),
+            caller=caller,
+            resolver=Resolver(),
+            clock=lambda: LONG_AGO,
+            sleep=lambda seconds: asyncio.sleep(0),
+        )
+    )
+    return done, tables
+
+
+def test_a_pass_that_skipped_a_registry_retires_nothing_and_says_it_was_cut_short() -> None:
+    """**A routed pass with a server that did not answer is partial (M11.9.15, M11.8.11).** The
+    other domain is still read, the attempt is cut short, and no statement retires anything,
+    because the domain whose registry did not answer was not asked for and is not therefore gone.
+    Its sibling reads both and retires what it did not see. Delete this and a registry down for
+    a minute retires every domain it publishes from every answer."""
+    from brain.ops.connector_sync import READ_BUT_CUT_SHORT, READ_TO_THE_END
+
+    skipped, tables = tables_written(RegistryDown(down="example.net"))
+    assert (skipped.outcome, skipped.detail) == (SyncOutcome.SYNCED, READ_BUT_CUT_SHORT)
+    assert "proj.record" in tables and "proj.record_retired" not in tables
+    assert skipped.read_state is not None and skipped.read_state.walking is None
+
+    whole, tables = tables_written(Caller())
+    assert (whole.outcome, whole.detail) == (SyncOutcome.SYNCED, READ_TO_THE_END)
+    assert "proj.record_retired" in tables
 
 
 def read_live(domain: str, caller: Caller) -> Any:

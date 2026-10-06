@@ -44,7 +44,13 @@ written into the row; a template's own skill has none and the column is left emp
 and detachments are read back as records, from which `brain.console.skill_library.
 current_assignments` derives what is in force; nothing here decides that.
 
-Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M27.15.55, M27.15.56
+**`0178`'s scripts are written with their skill and read back as hashes** (M12.4.11). A skill's
+scripts go into `agent.skill_script` in the transaction that adds the skill, after it, so the
+insert policy finds the skill its submitter just wrote. The library reads each skill's paths and
+hashes beside it, which its digest covers, and never the bytes; `script_bytes` reads those for a
+run, which checks them against the approved hashes before anything executes.
+
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M27.15.55, M27.15.56, M12.4.11
 """
 
 from __future__ import annotations
@@ -77,6 +83,7 @@ from brain.tables.skill import (
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
+    SkillScriptRow,
 )
 from brain.tables.template import TemplateInstanceRow
 from brain.tools.skills import ImportedSkill, Skill, SkillSource, SkillState, SourceKind
@@ -135,6 +142,43 @@ def skill_values(one: LibrarySkill) -> dict[str, Any]:
         "escalation_needs": skill.escalation_needs or None,
         "escalate_within": skill.escalate_within,
     }
+
+
+def script_values(one: LibrarySkill) -> list[dict[str, Any]]:
+    """The rows a skill's scripts are written as: path, the hash its digest covers, and the bytes.
+
+    Refuses a skill whose hashes and bytes disagree on which scripts there are, before anything is
+    written; the table refuses a hash that is not the sha256 of its bytes. See `0178`.
+    """
+    hashes = dict(one.imported.skill.script_sha256)
+    if set(hashes) != set(one.scripts):
+        msg = (
+            f"{one.name!r} declares scripts {sorted(hashes)} and carries bytes for "
+            f"{sorted(one.scripts)}"
+        )
+        raise ValueError(msg)
+    return [
+        {"digest": one.digest, "path": path, "sha256": hashes[path], "content": one.scripts[path]}
+        for path in sorted(hashes)
+    ]
+
+
+def script_hashes_of(digests: Sequence[str]) -> Select[tuple[str, str, str]]:
+    """Each named skill's scripts and their hashes, without the bytes, in path order."""
+    return (
+        select(SkillScriptRow.digest, SkillScriptRow.path, SkillScriptRow.sha256)
+        .where(SkillScriptRow.digest.in_(list(digests)))
+        .order_by(SkillScriptRow.digest, SkillScriptRow.path)
+    )
+
+
+def script_bytes_of(digest: str) -> Select[tuple[str, bytes]]:
+    """One skill's scripts and their bytes, for a run."""
+    return (
+        select(SkillScriptRow.path, SkillScriptRow.content)
+        .where(SkillScriptRow.digest == digest)
+        .order_by(SkillScriptRow.path)
+    )
 
 
 def adding(one: LibrarySkill) -> ReturningInsert[tuple[str]]:
@@ -297,11 +341,17 @@ def detachments_named(names: Sequence[str]) -> Select[tuple[SkillDetachmentRow]]
 
 
 # ------------------------------------------------------------------------ rows to the domain
-def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySkill | None:
+def library_skill_of(
+    row: SkillRow,
+    review: SkillReviewRow | None,
+    scripts: Sequence[tuple[str, str]] = (),
+) -> LibrarySkill | None:
     """The stored skill as the library holds it, or None when it does not construct.
 
     The approved digest is the key the decision row names, never the digest of the fields, so a
     row edited after its approval reads as moved: `ImportedSkill.is_executable` compares the two.
+    `scripts` is the skill's `0178` rows as path and hash, which the digest covers; a script whose
+    row was changed by hand makes the skill read as moved, for the same reason.
     """
     try:
         skill = Skill(
@@ -309,6 +359,8 @@ def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySki
             description=row.description,
             version=row.version,
             tools=tuple(row.tools),
+            scripts=tuple(path for path, _ in scripts),
+            script_sha256=tuple(scripts),
             body=row.body,
             escalate_to=row.escalate_to or "",
             escalation_needs=row.escalation_needs or "",
@@ -371,9 +423,22 @@ def detachment_record_of(row: SkillDetachmentRow) -> DetachmentRecord:
     )
 
 
-def _constructed(rows: Sequence[Any]) -> tuple[LibrarySkill, ...]:
-    found = (library_skill_of(skill_row, review_row) for skill_row, review_row in rows)
+def _constructed(rows: Sequence[Any], scripts: Sequence[Any] = ()) -> tuple[LibrarySkill, ...]:
+    held: dict[str, list[tuple[str, str]]] = {}
+    for digest, path, sha256 in scripts:
+        held.setdefault(digest, []).append((path, sha256))
+    found = (
+        library_skill_of(skill_row, review_row, held.get(skill_row.digest, ()))
+        for skill_row, review_row in rows
+    )
     return tuple(one for one in found if one is not None)
+
+
+async def _with_scripts(session: AsyncSession, rows: Sequence[Any]) -> tuple[LibrarySkill, ...]:
+    """The rows constructed with their scripts' hashes, read in the same session."""
+    digests = [skill_row.digest for skill_row, _ in rows]
+    scripts = (await session.execute(script_hashes_of(digests))).all() if digests else []
+    return _constructed(rows, scripts)
 
 
 class StoredSkills:
@@ -385,13 +450,19 @@ class StoredSkills:
     async def library(self, limit: int = MAX_LIBRARY) -> tuple[LibrarySkill, ...]:
         async with self._sessions() as session:
             rows = (await session.execute(library_of(limit))).all()
-        return _constructed(rows)
+            return await _with_scripts(session, rows)
 
     async def skill(self, digest: str) -> LibrarySkill | None:
         async with self._sessions() as session:
             rows = (await session.execute(one_skill(digest))).all()
-        found = _constructed(rows)
+            found = await _with_scripts(session, rows)
         return found[0] if found else None
+
+    async def script_bytes(self, digest: str) -> dict[str, bytes]:
+        """The bytes of every script one stored skill carries, by path, for a run to check."""
+        async with self._sessions() as session:
+            rows = (await session.execute(script_bytes_of(digest))).all()
+        return {path: bytes(content) for path, content in rows}
 
     async def add(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
         """Write the skill, or say these bytes are already in the library."""
@@ -400,6 +471,8 @@ class StoredSkills:
             await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
             written = (await session.execute(adding(one))).scalar_one_or_none()
+            if written is not None and one.scripts:
+                await session.execute(insert(SkillScriptRow), script_values(one))
         return written is not None
 
     async def decide(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:

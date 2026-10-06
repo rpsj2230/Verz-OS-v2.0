@@ -281,6 +281,11 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     trigger on `agent.browser_session` under the run, with the recording's digest on the end. A
     run changes nothing about the agent, which is why it is not AGENT.
 
+    `entity_unmerge` records a merge reversed, an entity's forwarding pointer cleared, written by
+    `0183`'s replacement of `0104`'s trigger function on `er.canonical`, one entry per side. A
+    reversal is decided by somebody else on other evidence than the merge it undoes, and "which
+    merges are in force" is the merges less the unmerges, which is why it is not ENTITY_MERGE.
+
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
     they differ by orders of magnitude in frequency and they answer different questions.
@@ -321,6 +326,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "chat identity bound to a person or unbound": AuditAction.CHANNEL_BINDING,
         "pack created, versioned or retired": AuditAction.PACK,
         "agent's browser session started or ended": AuditAction.BROWSER_SESSION,
+        "entity merge reversed": AuditAction.ENTITY_UNMERGE,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -359,6 +365,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "channel_binding",
         "pack",
         "browser_session",
+        "entity_unmerge",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

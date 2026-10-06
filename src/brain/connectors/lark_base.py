@@ -2529,6 +2529,7 @@ CEILING: Final = ConnectorLimit(
 CONNECTOR: Final = ConnectorDeclaration(
     ceiling=CEILING,
     name=LARK_BASE,
+    discovers=DISCOVERED_ENTITY_PREFIX,
     label="Lark Base",
     not_from_the_console=(
         "It is connected through Connect Lark on this screen, which creates the Lark app, "

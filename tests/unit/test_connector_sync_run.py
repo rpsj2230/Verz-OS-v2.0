@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from structlog.testing import capture_logs
 
 from brain.connectors import hubspot, xero
+from brain.connectors.declaration import Reading
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.minimal_index import fresh_canary, planted, sightings
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -66,7 +67,6 @@ from brain.ops.connector_sync import (
     SOURCE_UNREACHABLE,
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
-    SourceReading,
     fields_lost_detail,
     fields_lost_of,
 )
@@ -107,8 +107,16 @@ OTHER_TENANT: Final = "99999999-8888-7777-6666-555555555555"
 #: Where the stand-in resolver says every name is.
 PUBLIC: Final = "93.184.216.34"
 
-#: The tables a sync reads and writes.
-SYNC_TABLES: Final = ("ops.connector_connection", "ops.connector_sync", "proj.record")
+#: The tables a sync reads and writes, and the halts it asks first: without `ops.halt` the halts
+#: cannot be read, which stops every source, as `brain.ops.halt_store` means it to.
+SYNC_TABLES: Final = (
+    "ops.connector_connection",
+    "ops.connector_sync",
+    "proj.record",
+    "proj.record_retired",
+    "proj.source_epoch",
+    "ops.halt",
+)
 
 #: What connecting through `StoredConnections.connect` reads besides the connection: the data
 #: steward's appointment, which a connection grants to in its own transaction, and the principals
@@ -283,7 +291,7 @@ def sync(
     *,
     at: datetime = NOW,
     keys: Any = None,
-    readings: Mapping[str, SourceReading] | None = None,
+    readings: Mapping[str, Reading] | None = None,
 ) -> SyncRun:
     clock = iter(at + timedelta(seconds=n) for n in range(10_000))
 
@@ -334,7 +342,7 @@ INVOICES: Final = RowTool(
     classification=TableClassification(
         entity=xero.ENTITY_INVOICE,
         rules=(
-            ColumnRule("tenant_id", Capability(value="read:invoice"), Classification.INTERNAL),
+            ColumnRule("tenant_id", Capability(value="read:xero_invoice"), Classification.INTERNAL),
             *(
                 ColumnRule(one.field, one.required_capability, one.classification)
                 for one in xero.XERO_FIELD_RULES
@@ -349,7 +357,7 @@ INVOICES: Final = RowTool(
 def a_reader(principal: str, scope: Scope) -> EntitlementSet:
     """Somebody holding the invoice row and every invoice column, all in one scope."""
     capabilities = [
-        "read:invoice",
+        "read:xero_invoice",
         *(one.required_capability.value for one in INVOICES.classification.rules),
     ]
     return EntitlementSet(
@@ -436,7 +444,7 @@ def test_a_synced_invoice_is_read_within_its_tenant_and_is_absent_for_everybody_
     assert invoices.headers["Accept"] == "application/json"
 
     ((source, entity, source_id, fields, last_seen_at, deleted_at),) = rows
-    assert (source, entity, source_id, deleted_at) == ("xero", "invoice", INVOICE_ID, None)
+    assert (source, entity, source_id, deleted_at) == ("xero", "xero_invoice", INVOICE_ID, None)
     assert fields["tenant_id"] == TENANT
     assert fields["status"] == "AUTHORISED"
     assert "amount_due" not in fields
@@ -457,7 +465,7 @@ def test_a_synced_invoice_is_read_within_its_tenant_and_is_absent_for_everybody_
     assert recorded_attempt == [(connection_id, "xero")]
 
     (seen,) = after["u_finance"]["records"]
-    assert (seen["entity"], seen["id"], seen["tenant_id"]) == ("invoice", INVOICE_ID, TENANT)
+    assert (seen["entity"], seen["id"], seen["tenant_id"]) == ("xero_invoice", INVOICE_ID, TENANT)
     assert seen["status"] == "AUTHORISED"
     assert before["u_finance"]["records"] == []
     for principal in ("u_elsewhere", "u_department", "u_nobody"):
@@ -470,7 +478,7 @@ def test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again
     routes. Connected through the store the route writes with, the source is read on the next run
     and its attempt is listed for the Connectors screen; disconnected through the same store, the
     next run calls nothing, records nothing, and the screen's read lists no attempt for it, while
-    the records it already wrote stay, ageing, as `A_SYNC_RETIRES_NOTHING` says.
+    the records it already wrote stay, ageing: nothing reads the source, so nothing retires them.
 
     Delete this and a disconnected source could go on being read with the key its administrator
     was told to revoke, or a connected one could be listed and never read."""
@@ -564,6 +572,41 @@ def test_a_declined_key_is_down_at_once_and_an_unreachable_source_backs_off_and_
     waits = [one[5] - one[6] for one in runs]
     interval = xero.RECONCILIATION_INTERVAL
     assert waits == [interval, interval * 2, interval * 4]
+
+
+@pytest.mark.needs_db
+def test_a_stopped_source_is_neither_called_nor_recorded_and_is_read_once_resumed() -> None:
+    """**A connector halt, on the scheduled read.** While the source is stopped the run calls it
+    not once and records no attempt, and counts it as stopped; once the stop is resumed the next
+    run reads it. Delete this and a source an administrator stopped for leaking rows goes on
+    being read on schedule with the screen saying it is stopped."""
+
+    def act(kind: str, reason: str, at: datetime) -> None:
+        sql(
+            url,
+            "INSERT INTO ops.halt (act, scope, target, actor_id, actor_role, reason, at)"
+            " VALUES (%s, 'connector', 'xero', 'u_admin', 'install administrator', %s, %s)",
+            kind,
+            reason,
+            at,
+        )
+
+    with a_database("brain_connector_sync_halted") as url:
+        connect(url)
+        act("halt", "the source is returning other tenants", NOW - timedelta(minutes=5))
+        stopped = Replay([answer_for("XERO-200-invoices"), NO_CONTACTS])
+        held = sync(url, stopped)
+        recorded = attempts(url)
+        act("resume", "the vendor fixed the tenant filter", NOW - timedelta(minutes=1))
+        resumed = Replay([answer_for("XERO-200-invoices"), NO_CONTACTS])
+        ran = sync(url, resumed)
+
+    assert stopped.calls == []
+    assert recorded == []
+    assert (held.held, held.read) == (1, 0)
+    assert "1 stopped by a halt" in held.summary()
+    assert (ran.held, ran.read) == (0, 1)
+    assert len(resumed.calls) == 2
 
 
 @pytest.mark.needs_db
@@ -672,7 +715,7 @@ def test_a_record_somebody_retired_stays_retired_whatever_the_source_still_says(
         sql(
             url,
             "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at, deleted_at) "
-            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            "VALUES ('xero', 'xero_invoice', %s, '{}'::jsonb, %s, %s)",
             INVOICE_ID,
             NOW - timedelta(days=30),
             NOW - timedelta(days=1),
@@ -687,6 +730,55 @@ def test_a_record_somebody_retired_stays_retired_whatever_the_source_still_says(
     assert last_seen_at == NOW - timedelta(days=30)
     assert deleted_at == NOW - timedelta(days=1)
     assert after["records"] == []
+
+
+@pytest.mark.needs_db
+def test_a_record_a_read_retired_serves_again_when_returned_and_its_retirement_is_kept() -> None:
+    """**M11.8.11's last clause.** A record a complete read retired a day ago, kept in
+    `proj.record_retired` with that instant, and the source lists it again. The next read serves it
+    again from its row, carrying this reading, which a reader in its tenant is handed, and the
+    retirement stays exactly as it was kept.
+
+    Delete this and a returned record can stay out of every answer for good, or its return can
+    rewrite the record of when it went, which is what
+    `A_RETURNED_RECORD_SERVES_AGAIN_AND_ITS_RETIREMENT_IS_KEPT` refuses."""
+    noticed = NOW - timedelta(days=1)
+    with a_database("brain_connector_sync_returned") as url:
+        connect(url)
+        sql(
+            url,
+            "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at, deleted_at) "
+            "VALUES ('xero', %s, %s, '{}'::jsonb, %s, %s)",
+            xero.ENTITY_INVOICE,
+            INVOICE_ID,
+            NOW - timedelta(days=30),
+            noticed,
+        )
+        sql(
+            url,
+            "INSERT INTO proj.record_retired "
+            "(source, entity, source_id, fields, last_seen_at, noticed_at) "
+            "VALUES ('xero', %s, %s, '{}'::jsonb, %s, %s)",
+            xero.ENTITY_INVOICE,
+            INVOICE_ID,
+            NOW - timedelta(days=30),
+            noticed,
+        )
+        ran = sync(url, Replay([answer_for("XERO-200-invoices"), NO_CONTACTS]))
+        rows = projected(url)
+        kept = sql(
+            url,
+            "SELECT source_id, fields, last_seen_at, noticed_at FROM proj.record_retired",
+        )
+        after = read_as(url, ENTITLED)
+
+    assert ran.read == 1
+    ((_, _, source_id, fields, seen, deleted_at),) = rows
+    assert (source_id, deleted_at) == (INVOICE_ID, None)
+    assert fields["tenant_id"] == TENANT
+    assert seen >= NOW
+    assert kept == [(INVOICE_ID, {}, NOW - timedelta(days=30), noticed)]
+    assert [one["id"] for one in after["records"]] == [INVOICE_ID]
 
 
 @pytest.mark.needs_db

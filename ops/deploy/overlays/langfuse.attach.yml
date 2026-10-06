@@ -11,13 +11,24 @@
 # product's buckets and not this one, so this is a one-shot of its own, costed nowhere because it
 # exits, with a limit like every container on a shared host.
 #
-# Task ids: M32.1.1.1
+# Task ids: M32.1.1.1, M32.1.2.6
 
 services:
   langfuse-web:
     networks:
       - default
       - brain-app
+    # The ledger's own first start creates its organisation and project, with the project keys the
+    # release minted on the server, so nobody signs in to its console to make a key before spans
+    # can arrive (brain.ops.ledger_export). The identifiers are the product's, the same on every
+    # install; the keys are this server's.
+    environment:
+      LANGFUSE_INIT_ORG_ID: brain
+      LANGFUSE_INIT_ORG_NAME: Brain
+      LANGFUSE_INIT_PROJECT_ID: brain
+      LANGFUSE_INIT_PROJECT_NAME: Brain
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?minted by the release}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?minted by the release}
   langfuse-worker:
     networks:
       - default
