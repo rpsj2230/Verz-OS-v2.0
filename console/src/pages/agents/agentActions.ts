@@ -7,15 +7,16 @@
  * with install, start and stop, the instruction override (`/govern/prompts/{agent_id}`, drawn on the
  * Prompts page) and skill assignment (`/skills/{digest}/assignments`, drawn on the Skills page). It
  * served no route that changes an agent's audience or its leash, previews it as a person, or installs
- * it into a chat group. Each of those is an `UNAVAILABLE` sentence below and is drawn as
+ * it into a chat group then. Each of those is an `UNAVAILABLE` sentence below and is drawn as
  * `kit/UnavailableAction`, so the page shows the act exists and is coming rather than hiding it or
  * faking it. Switching on and off, archiving, duplicating and handing on arrived with
  * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`); creating an
  * agent, editing one as a draft and changing its permissions through that draft arrived with
  * `brain.agent_builder_routes` the same day (`NewAgentPage.tsx`, `DraftStart.tsx`, `DraftPage.tsx`).
  * Switching the channels an agent answers on arrived as `/agents/{id}/channels` on 2026-10-06 and is
- * live on the Profile (`AgentChannels.tsx`); adding an agent to one group chat is a different act,
- * a binding to a room rather than a channel, and is still a sentence.
+ * live on the Profile (`AgentChannels.tsx`). Installing an agent into one group chat arrived as
+ * `/agents/{id}/groups` the same day and is live on the Profile too (`AgentGroups.tsx`), so its
+ * sentence is gone.
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
  * `tests/agents-page.test.tsx` reads every sentence here against the API document: an act listed as
@@ -30,10 +31,6 @@
 
 /** Why each act that has no route cannot be pressed, and the shape of the API path whose arrival retires it. */
 export const UNAVAILABLE = Object.freeze({
-  chatGroup: {
-    reason: "Coming soon: adding an agent to a group chat.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/groups\b/,
-  },
   level: {
     reason: "Coming soon: changing who can find this agent.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(audience|availability)\b/,

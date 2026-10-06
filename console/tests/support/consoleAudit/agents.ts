@@ -23,10 +23,18 @@ import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentChannelsApiPath, agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
 import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
+import { agentGroupRemovalApiPath, agentGroupsApiPath } from "../../../src/pages/agents/agentGroupsQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
 import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
 
 /** A channel switch pressed over HTTP against PostgreSQL: the row, and one ledger entry naming who. */
+/** An agent installed into a group chat and taken out, over HTTP against PostgreSQL, each on the ledger. */
+const GROUP_INSTALLED = t(
+  "test_group_install",
+  "test_a_steward_installs_their_agent_in_a_chat_the_bot_is_in_and_takes_it_out",
+  true,
+);
+
 const CHANNELS_PRESSED = t(
   "test_agent_lifecycle_store",
   "test_a_channel_switch_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person",
@@ -173,6 +181,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/archive", "agentMoveApiPath", agentMoveApiPath("quote-helper", "archive")),
     at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
     at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
+  ],
+  "src/pages/agents/AgentGroups.tsx agentGroupsApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/groups", "agentGroupsApiPath", agentGroupsApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentGroups.tsx agentGroupRemovalApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/groups/removal", "agentGroupRemovalApiPath", agentGroupRemovalApiPath("quote-helper")),
   ],
   "src/pages/agents/AgentChannels.tsx agentChannelsApiPath(drawn.agentId)": [
     at("POST /api/v1/agents/{agent_id}/channels", "agentChannelsApiPath", agentChannelsApiPath("quote-helper")),
@@ -362,6 +376,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PRESSED,
     audit: LIFECYCLE_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_a_transfer_hands_the_agent_to_somebody_here_and_names_who_handed_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/groups": {
+    row: GROUP_INSTALLED,
+    audit: GROUP_INSTALLED,
+    behaviour: t("test_group_install", "test_a_chat_the_bot_left_or_was_never_in_takes_no_agent", true),
+  },
+  "POST /api/v1/agents/{agent_id}/groups/removal": {
+    row: GROUP_INSTALLED,
+    audit: GROUP_INSTALLED,
+    behaviour: GROUP_INSTALLED,
   },
   "POST /api/v1/agents/{agent_id}/channels": {
     row: CHANNELS_PRESSED,

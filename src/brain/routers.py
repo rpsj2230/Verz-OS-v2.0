@@ -66,6 +66,10 @@ from brain.agent_capability_routes import router as agent_capability_router
 # and how each run ended, a failed one included.
 from brain.agent_conversation_routes import router as agent_conversation_router
 
+# An agent installed into a group chat the bot is in, and taken out of one, by whoever switches its
+# channels (M39.2.4.4). See `brain.agent_group_routes`.
+from brain.agent_group_routes import router as agent_group_router
+
 # One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
 # breaker reads, and the supervision pin and its reviews.
 from brain.agent_leash_routes import router as agent_leash_router
