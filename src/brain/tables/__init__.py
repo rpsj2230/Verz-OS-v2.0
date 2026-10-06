@@ -133,6 +133,7 @@ from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
+from brain.tables.role_nomination import RoleNominationRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
@@ -449,6 +450,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
     # outlives both.
     "ops.agent_run",
+    # 0208_role_nominations. A confirmed nomination points at the role grant it wrote.
+    "gate.role_nomination",
 )
 
 __all__ = [
@@ -548,6 +551,7 @@ __all__ = [
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",
+    "RoleNominationRow",
     "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",

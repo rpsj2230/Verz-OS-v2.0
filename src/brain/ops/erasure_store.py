@@ -266,6 +266,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
         # when it would leave fewer than two Super Admins, so an erasure cannot lock the install.
         "gate.role_grant": "principal_id",
+        # A person proposed for a role (`0208`). The table grants no DELETE and has no retirement,
+        # because the row is the record of who proposed whom and who decided, so an erasure keeps
+        # these and reports them kept.
+        "gate.role_nomination": "principal_id",
         "gate.suspension": "principal_id",
         "gate.team_membership": "principal_id",
         "know.chunk": "owner_id",

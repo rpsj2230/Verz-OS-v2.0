@@ -20,7 +20,7 @@
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { UNAVAILABLE_MARK } from "../src/components/kit";
 import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src/pages/access/formParts";
@@ -35,6 +35,7 @@ import { AGENT_FORMAT } from "../src/pages/people/PersonPreview";
 import { ADD_WORK_EMAIL, JOIN, WORK_EMAIL_BLANK } from "../src/pages/people/WorkEmail";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
+import { NOMINATED_NOBODY, NOTHING_TO_DECIDE } from "../src/pages/roles/RolesPage";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const API = "/api/v1";
@@ -840,6 +841,68 @@ describe("Roles and permissions", () => {
     await waitFor(() => expect(writes(mounted.idp)).toEqual([{ to: `POST ${API}/govern/roles/removal`, body: { grant_id: "g-1" } }]));
   });
 
+  test("a nomination is sent to the nominations address, chosen by name and with no acknowledgement", async () => {
+    // What breaks if this is deleted: M33.1.2.3's proposal sent to the appointment address, which
+    // grants at once, or an acknowledgement the person proposing cannot give sent with it.
+    const mounted = await consoleAt("/roles", {
+      ...ROLES_ANSWERS,
+      [`${API}/govern/directory`]: { body: directory([ADA]) },
+      [`POST ${API}/govern/roles/nominations`]: { status: 201, body: { id: "n-1", change: "nominated", at: "2019-03-04T09:00:00Z" } },
+    });
+    expect(textOf(mounted.container)).toContain(NOTHING_TO_DECIDE);
+    expect(textOf(mounted.container)).toContain(NOMINATED_NOBODY);
+    fireEvent.click(within(mounted.container).getAllByRole("button", { name: /^Nominate$/ })[0] as HTMLElement);
+    const drawer = await dialogNamed("Nominate for a role");
+    expect(within(drawer).queryByLabelText("Acknowledgement")).toBeNull();
+    type(within(drawer).getByLabelText("Person"), "Ad");
+    fireEvent.click(await within(drawer).findByRole("button", { name: /Ada Okafor/ }));
+    type(within(drawer).getByLabelText("Role"), "auditor");
+    type(within(drawer).getByLabelText("Reason"), "cover");
+    await submitForm(drawer);
+    await waitFor(() =>
+      expect(writes(mounted.idp)).toEqual([
+        { to: `POST ${API}/govern/roles/nominations`, body: { principal_id: "p_ada", role: "auditor", reason: "cover" } },
+      ]),
+    );
+  });
+
+  test("a nomination waiting for the reader is confirmed or declined from its drawer, and the reader's own say their state", async () => {
+    // What breaks if this is deleted: a nomination nobody can decide from the console, a decision
+    // sent without saying which, or the reader's own nominations with no word of what became of them.
+    const waiting = {
+      id: "n-1", principal_id: "p_ada", display_name: "Ada Okafor", role: "auditor", scope_slug: null,
+      nominated_by: "p_ben", reason: "cover", created_at: "2019-03-04T09:00:00Z", outcome: null, decided_by: null, decided_at: null,
+    };
+    const mine = { ...waiting, id: "n-2", display_name: "Ben Lim", principal_id: "p_ben", outcome: "confirmed", decided_by: "p_cy", decided_at: "2019-03-05T09:00:00Z" };
+    const answers = {
+      ...ROLES_ANSWERS,
+      [`${API}/govern/roles/nominations`]: { body: { deciding: [waiting], mine: [mine] } },
+      [`POST ${API}/govern/roles/nominations/n-1/decision`]: { body: { id: "n-1", change: "confirmed", at: "2019-03-05T09:00:00Z" } },
+    };
+    const confirming = await consoleAt("/roles", answers);
+    expect(textOf(confirming.container)).toContain("Waiting for a decision");
+    expect(textOf(confirming.container)).toContain("Confirmed");
+    press(confirming.container, "Decide the nomination of Ada Okafor, Auditor");
+    const drawer = await dialogNamed("Decide a nomination");
+    type(within(drawer).getByLabelText("Acknowledgement"), "a company of two");
+    await submitForm(drawer);
+    await waitFor(() =>
+      expect(writes(confirming.idp)).toEqual([
+        { to: `POST ${API}/govern/roles/nominations/n-1/decision`, body: { decision: "confirm", acknowledgement: "a company of two" } },
+      ]),
+    );
+    cleanup();
+    const declining = await consoleAt("/roles", answers);
+    press(declining.container, "Decide the nomination of Ada Okafor, Auditor");
+    const deciding = await dialogNamed("Decide a nomination");
+    // An acknowledgement typed and then a decline: a decline appoints nobody and carries none.
+    type(within(deciding).getByLabelText("Acknowledgement"), "a company of two");
+    press(deciding, "Decline");
+    await waitFor(() =>
+      expect(writes(declining.idp)).toEqual([{ to: `POST ${API}/govern/roles/nominations/n-1/decision`, body: { decision: "decline" } }]),
+    );
+  });
+
   test("a scope is renamed on the Scopes tab through a confirmation, sending the label the page showed", async () => {
     // What breaks if this is deleted: M27.11.1's missing act, a scope's name that could not be changed
     // from the console at all.
@@ -938,6 +1001,7 @@ const ROLES_ANSWERS: Readonly<Record<string, Answer>> = {
   },
   [`${API}/govern/roles/group-rules`]: { body: { rules: [], synced: [], editable: true } },
   [`${API}/govern/roles/misconfigurations`]: { body: { items: [] } },
+  [`${API}/govern/roles/nominations`]: { body: { deciding: [], mine: [] } },
   [`${API}/govern/scopes`]: SCOPES_ANSWER,
 };
 
@@ -964,6 +1028,7 @@ const DRAWERS: readonly {
     says: "Choose at least one department for the scope to reach.",
   },
   { at: "/roles", answers: ROLES_ANSWERS, opener: /^Appoint$/, title: "Appoint to a role", says: "Choose who to appoint." },
+  { at: "/roles", answers: ROLES_ANSWERS, opener: /^Nominate$/, title: "Nominate for a role", says: "Choose who to nominate." },
   { at: "/roles", answers: ROLES_ANSWERS, opener: "Appoint a deputy", title: "Appoint a deputy", says: "Give a whole number of days from 1 to 30." },
   { at: "/roles", answers: ROLES_ANSWERS, opener: "Map a group", title: "Map a directory group", says: "Type the group exactly as the identity provider spells it." },
   {
