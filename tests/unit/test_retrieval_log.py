@@ -12,6 +12,7 @@ Task ids: M15.3.4
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 
@@ -24,6 +25,7 @@ from tests.unit.test_document_tools import (
     Embedding,
     Recording,
     body,
+    holding,
     search,
     search_embedding,
 )
@@ -108,27 +110,85 @@ def test_the_passage_search_notes_the_retrievers_that_ran_and_what_two_agreed_on
     )
 
 
-def test_a_ranking_served_from_the_cache_notes_nothing_and_still_answers() -> None:
-    """`A_CACHED_RANKING_IS_NOT_A_SECOND_RETRIEVAL`. The first asking ranks and notes one
-    retrieval; the second, served from the kept list inside its five minutes, runs no retriever
-    and notes nothing, and still hands the passage back, which is the positive half beside the
-    silence. Delete this and a cache hit can be logged with the first ranking's retrievers and
-    timing as though they had run again, or the noting can move to where a hit reaches it."""
+def _hybrid_searcher(source: Any, kept: Any) -> Any:
+    from brain.knowledge.document_tools import QuestionEmbedder, searcher
+    from tests.unit.test_document_tools import A_REVISION
+
+    return searcher(source, QuestionEmbedder(service=Embedding(), revision=A_REVISION), kept)
+
+
+def _ask(handler: Any) -> Any:
+    from brain.knowledge.document_tools import DocumentSearch
+    from tests.unit.test_document_tools import NOW, holding, settle
+
+    request = DocumentSearch(question="leave")
+    return settle(handler(request, entitlement=holding(KNOWLEDGE_READ.value), now=NOW))
+
+
+def test_a_miss_notes_the_ranking_it_made_and_a_hit_notes_it_again_from_the_cache() -> None:
+    """`A_CACHED_RANKING_IS_NOTED_AS_SERVED_FROM_THE_CACHE`. The first asking ranks with both
+    legs and notes the two retrievers and the passage both found, marked not from the cache, and
+    keeps the same beside the references; the second, served from that entry, ranks nothing and
+    notes the same retrievers and corroboration marked from the cache, and still hands the
+    passages back. Delete this and a hit can go unlogged, be logged as a ranking made for the
+    request, or lose the corroboration the first ranking found."""
     from brain.gate.caches import CachedRetrieval
-    from tests.unit.test_document_tools import holding
+    from tests.unit.test_knowledge_caches import Corpus, Kept, legs
+
+    second = body("c_leave_2", "doc_leave", 1, "Carry over up to five days.")
+    first = body("c_leave_1", "doc_leave", 0, "Annual leave is 25 days.")
+    source = Corpus(
+        ranked=[("c_leave_1", "c_leave_2")] * legs(), nearest=("c_leave_1",), bodies=(first, second)
+    )
+    kept: Kept[CachedRetrieval] = Kept()
+    handler = _hybrid_searcher(source, kept)
+
+    with collected() as missed:
+        answered_first = _ask(handler)
+    with collected() as hit:
+        answered_again = _ask(handler)
+
+    ranked_once = (LEXICAL_RETRIEVER, VECTOR_RETRIEVER), frozenset({"c_leave_1"})
+    [made] = missed
+    assert ((made.retrievers, made.corroborated), made.from_cache) == (ranked_once, False)
+    [entry] = kept.held.values()
+    assert (entry.retrievers, entry.corroborated_at) == (
+        (LEXICAL_RETRIEVER, VECTOR_RETRIEVER),
+        (0,),
+    )
+    [served] = hit
+    assert ((served.retrievers, served.corroborated), served.from_cache) == (ranked_once, True)
+    assert len(source.rankings()) == legs()
+    ids = [one.id for one in answered_first.records]
+    assert ids == [one.id for one in answered_again.records] == ["c_leave_1", "c_leave_2"]
+    assert event_for(hit, ids) == RetrievalEvent(
+        retrievers=(LEXICAL_RETRIEVER, VECTOR_RETRIEVER),
+        returned=2,
+        corroborated=1,
+        latency_ms=served.latency_ms,
+        from_cache=True,
+    )
+
+
+def test_an_entry_kept_before_the_cache_held_its_retrievers_notes_nothing_and_answers() -> None:
+    """The five minutes after a deploy: an entry with references and no retrievers is served,
+    its passages handed back, and nothing noted, because a retrieval naming no retriever is one
+    `RetrievalEvent` refuses. Delete this and the first hit on an old entry fails the answer's
+    logging rather than being passed over."""
+    from brain.gate.caches import CachedRetrieval
     from tests.unit.test_knowledge_caches import LEAVE, Corpus, Kept, asked, legs
 
     source = Corpus(ranked=[("c_leave_1",)] * legs(), bodies=(LEAVE,))
     kept: Kept[CachedRetrieval] = Kept()
-    with collected() as missed:
-        first = asked(source, kept, holding(KNOWLEDGE_READ.value))
-    with collected() as hit:
-        second = asked(source, kept, holding(KNOWLEDGE_READ.value))
+    asked(source, kept, holding(KNOWLEDGE_READ.value))
+    [key] = kept.held
+    kept.held[key] = CachedRetrieval(key=key, chunk_ids=("c_leave_1",))
 
-    assert [one.id for one in first.records] == [one.id for one in second.records] == ["c_leave_1"]
-    assert [one.retrievers for one in missed] == [(LEXICAL_RETRIEVER,)]
+    with collected() as hit:
+        again = asked(source, kept, holding(KNOWLEDGE_READ.value))
+
     assert hit == []
-    assert len(source.rankings()) == legs()
+    assert [one.id for one in again.records] == ["c_leave_1"]
 
 
 def test_latency_is_whole_milliseconds_and_never_negative() -> None:

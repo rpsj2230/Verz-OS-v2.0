@@ -65,6 +65,7 @@ def event_from(row: RetrievalEventRow) -> RetrievalEvent:
         corroborated=row.corroborated,
         used=tuple(row.used),
         latency_ms=row.latency_ms,
+        from_cache=row.from_cache,
     )
 
 
@@ -86,6 +87,7 @@ class StoredRetrievals:
                     corroborated=event.corroborated,
                     used=[],
                     latency_ms=event.latency_ms,
+                    from_cache=event.from_cache,
                 )
             )
         return str(event_id)

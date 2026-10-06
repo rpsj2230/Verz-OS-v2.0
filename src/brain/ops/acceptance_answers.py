@@ -676,7 +676,16 @@ async def a_prompt_too_long_for_every_model_is_answered_from_fewer(h: Harness) -
 # ---------------------------------------------- 7. the retrieval log (M15.3.4)
 #: The columns a retrieval is kept under, which name no document, question or person.
 RETRIEVAL_COLUMNS: Final = frozenset(
-    {"event_id", "at", "retrievers", "returned", "corroborated", "used", "latency_ms"}
+    {
+        "event_id",
+        "at",
+        "retrievers",
+        "returned",
+        "corroborated",
+        "used",
+        "latency_ms",
+        "from_cache",
+    }
 )
 
 
@@ -735,9 +744,11 @@ async def a_followed_citation_is_kept_as_a_place_and_nothing_else(h: Harness) ->
     shown = len(answered.composed.payload.records) if answered.composed is not None else 0
     if set(row) != RETRIEVAL_COLUMNS:
         raise CheckFailedError("a retrieval was kept with a column beyond what the signal reads")
-    if (row["retrievers"], row["returned"], list(row["used"])) != ("lexical", shown, []):
+    kept_as = (row["retrievers"], row["returned"], list(row["used"]), row["from_cache"])
+    if kept_as != ("lexical", shown, [], False):
         raise CheckFailedError(
-            "a retrieval was not kept as the retrievers that ran and the list shown"
+            "a retrieval was not kept as the retrievers that ran, the list shown and a ranking "
+            "made for this request"
         )
     positions = {one.view().get("position") for one in cited}
     if "1" not in positions:

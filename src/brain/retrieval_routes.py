@@ -78,6 +78,7 @@ class SignalView(BaseModel):
     top_position_share: float = 0.0
     mean_first_used_position: float = 0.0
     latency_p95_ms: float = 0.0
+    cached_share: float = 0.0
 
 
 def _store(request: Request) -> StoredRetrievals:
@@ -116,4 +117,5 @@ async def retrieval_signal(request: Request, asked: Asked) -> SignalView:
         top_position_share=found.top_position_share,
         mean_first_used_position=found.mean_first_used_position,
         latency_p95_ms=found.latency_p95_ms,
+        cached_share=found.cached_share,
     )

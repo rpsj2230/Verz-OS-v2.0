@@ -436,8 +436,9 @@ def test_a_citation_without_its_place_fails_the_retrieval_log_check(
 def test_the_signal_is_read_over_the_newest_retrievals(install: str) -> None:
     """`brain.ops.retrieval_store.SIGNAL_WINDOW` is a window over the most recent retrievals:
     three kept one after another and read back with a window of two are the last two, newest
-    first. They are removed afterwards. Delete this and the window can be the oldest thousand,
-    so the signal describes a ranking the install no longer runs."""
+    first, the newest served from the cache and read back so. They are removed afterwards.
+    Delete this and the window can be the oldest thousand, so the signal describes a ranking the
+    install no longer runs, or a hit is stored or read as a ranking made for its request."""
     from sqlalchemy import delete
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -446,12 +447,14 @@ def test_the_signal_is_read_over_the_newest_retrievals(install: str) -> None:
     from brain.ops.retrieval_store import StoredRetrievals
     from brain.tables.retrieval import RetrievalEventRow
 
-    async def work() -> list[int]:
+    async def work() -> list[tuple[int, bool]]:
         engine = create_async_engine(normalise_database_url(install))
         try:
             store = StoredRetrievals(async_sessionmaker(engine))
             kept = [
-                await store.record(RetrievalEvent(retrievers=("lexical",), returned=n))
+                await store.record(
+                    RetrievalEvent(retrievers=("lexical",), returned=n, from_cache=n == 9)
+                )
                 for n in (7, 8, 9)
             ]
             recent = await store.recent(limit=2)
@@ -461,11 +464,11 @@ def test_the_signal_is_read_over_the_newest_retrievals(install: str) -> None:
                         RetrievalEventRow.event_id.in_([uuid.UUID(one) for one in kept])
                     )
                 )
-            return [one.returned for one in recent]
+            return [(one.returned, one.from_cache) for one in recent]
         finally:
             await engine.dispose()
 
-    assert asyncio.run(work()) == [9, 8]
+    assert asyncio.run(work()) == [(9, True), (8, False)]
 
 
 def test_the_answers_checks_are_listed_in_their_page_order() -> None:

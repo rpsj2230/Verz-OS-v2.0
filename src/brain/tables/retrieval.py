@@ -22,7 +22,17 @@ import uuid
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String, Uuid, func, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +63,9 @@ class RetrievalEventRow(Base):
         ARRAY(Integer), nullable=False, server_default=text("'{}'")
     )
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Served from the retrieval cache rather than ranked for this request. Written once, as
+    #: every column but `used` is: `brain_app` may update `used` alone.
+    from_cache: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     __table_args__ = (
         CheckConstraint(f"retrievers ~ '{RETRIEVERS_PATTERN}'", name="retrievers_are_names"),

@@ -65,12 +65,15 @@ class Searched:
     """What one passage search knew, held in memory for its request and never written.
 
     `corroborated` is the chunk ids more than one retriever ranked, which `event_for` counts
-    against the passages actually shown and then drops.
+    against the passages actually shown and then drops. `from_cache` says the ranking was served
+    from the retrieval cache rather than made for this request; see
+    `brain.knowledge.document_tools.A_CACHED_RANKING_IS_NOTED_AS_SERVED_FROM_THE_CACHE`.
     """
 
     retrievers: tuple[str, ...]
     corroborated: frozenset[str]
     latency_ms: int
+    from_cache: bool = False
 
 
 _COLLECTING: ContextVar[list[Searched] | None] = ContextVar("brain_retrievals", default=None)
@@ -120,4 +123,5 @@ def event_for(searched: Sequence[Searched], shown: Iterable[str]) -> RetrievalEv
         returned=len(ids),
         corroborated=sum(1 for one in ids if one in last.corroborated),
         latency_ms=last.latency_ms,
+        from_cache=last.from_cache,
     )
