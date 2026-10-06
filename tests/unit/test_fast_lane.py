@@ -59,6 +59,7 @@ from brain.gate.fast_lane import (
     FAST_LANE_ROW_LIMIT,
     FastLaneAnswer,
     FastLaneError,
+    FastLaneUnresolved,
     FastPathRule,
     RowReader,
     RuleMatch,
@@ -88,11 +89,14 @@ def respond(
 ) -> FastLaneAnswer | None:
     """`brain.gate.fast_lane.respond`, run to completion from a synchronous test.
 
-    See `tests/unit/test_row_plane.py` for why this is `asyncio.run` and not a plugin.
+    See `tests/unit/test_row_plane.py` for why this is `asyncio.run` and not a plugin. No
+    ambiguity reader is handed over, so an unresolved name cannot come back here.
     """
-    return asyncio.run(
+    found = asyncio.run(
         _respond(question, rules=rules, readers=readers, entitlement=entitlement, now=now)
     )
+    assert not isinstance(found, FastLaneUnresolved)
+    return found
 
 
 REPO = Path(__file__).resolve().parents[2]

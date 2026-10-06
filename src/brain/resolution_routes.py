@@ -42,7 +42,6 @@ from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.automation_schedule_routes import NotChangedView
 from brain.console.govern import NOWHERE, _in_reach
-from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
 from brain.knowledge.columns import ColumnView
 from brain.resolution.calibration import drift
@@ -52,6 +51,7 @@ from brain.resolution.calibration_store import (
     weights_in_force,
 )
 from brain.resolution.canonical import SourceRef
+from brain.resolution.guardrails import REVIEWER_CAPABILITY
 from brain.resolution.review import card_for, review_page
 from brain.resolution.review_store import (
     StoredItem,
@@ -67,8 +67,9 @@ log = structlog.get_logger()
 
 router = APIRouter(prefix=API_PREFIX, tags=["resolution"])
 
-#: Reads the review queue and decides a pair. Held over everything or not at all.
-ENTITY_MERGE_CAPABILITY: Final = Capability(value="admin:entity_merge")
+#: Reads the review queue and decides a pair. Held over everything or not at all. The one
+#: capability `guardrails.REVIEWER_CAPABILITY` declares, so the screen and the answer lane agree.
+ENTITY_MERGE_CAPABILITY: Final = REVIEWER_CAPABILITY
 
 REVIEW_PATH: Final = "/resolution/review"
 ITEM_PATH: Final = "/resolution/review/{item_id}"

@@ -74,6 +74,7 @@ from brain.core.envelope import SideEffect
 from brain.db import Base, TimestampMixin
 from brain.knowledge.visibility import Visibility
 from brain.models.routing import TIER_LADDER
+from brain.tables.connector_connection import CONNECTOR_CHARS
 from brain.tables.gate import CAPABILITY_CHARS, SCOPE_SHAPE, TOOL_NAME_CHARS
 from brain.tables.identity import one_of
 
@@ -194,6 +195,12 @@ class AgentRow(TimestampMixin, Base):
     #: The subset without which the agent cannot function.
     required_tools: Mapped[list[str]] = mapped_column(
         ARRAY(String(TOOL_NAME_CHARS)), nullable=False, server_default=text("'{}'")
+    )
+
+    #: The connectors the agent's template names, which `brain.agents.model.entitlement_ceiling`
+    #: compiles into its ceiling (M13.8.1). Empty reaches no connected source.
+    connectors: Mapped[list[str]] = mapped_column(
+        ARRAY(String(CONNECTOR_CHARS)), nullable=False, server_default=text("'{}'")
     )
 
     max_side_effect: Mapped[str] = mapped_column(

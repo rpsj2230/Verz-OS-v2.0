@@ -204,6 +204,13 @@ jobs:
           echo "audience after the script: $repaired"
           [ "$repaired" = '"brain-api"' ] || { echo "::error::the script did not restore the audience"; exit 1; }
 
+      - name: The application's memory at rest, and sampling from here on
+        # A slow leak is a trend across nightly runs, so every run prints the same three
+        # snapshots and the series between them. See e2e/app-memory.sh.
+        run: |
+          sh e2e/app-memory.sh snapshot "at rest, before any browser"
+          sh e2e/app-memory.sh start
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -221,6 +228,14 @@ jobs:
       - name: Every module in the browser
         working-directory: e2e
         run: npx playwright test
+
+      - name: The application's memory after the specs and after a minute idle
+        if: always()
+        run: |
+          sh e2e/app-memory.sh snapshot "after the specs"
+          sleep 60
+          sh e2e/app-memory.sh snapshot "after a minute idle"
+          sh e2e/app-memory.sh report
 
       - name: Nothing restarted while the browser used the install
         # A container killed under load comes back by its restart policy, and a spec that
