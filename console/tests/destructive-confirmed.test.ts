@@ -263,6 +263,13 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Editing a memory about yourself writes the new words beside the old and marks the old as " +
     "replaced; nothing is deleted, the old words stay in its history, and Forget on the new one " +
     "puts the old one back, which tests/unit/test_memory_store.py follows through PostgreSQL.",
+  'src/pages/AskAttach.tsx uploadPath(kind, "personal", "")':
+    "Attaching a file adds it as a new document at the person's own level, which only they may " +
+    "read; nothing existing is replaced or removed, and the upload route's own tests hold that it " +
+    "adds and never overwrites, which tests/unit/test_knowledge_routes.py follows.",
+  "src/pages/AskAttach.tsx ATTACHMENTS_API_PATH":
+    "Naming a document on one's own conversation adds a note to that thread and changes nothing " +
+    "else; naming it again adds nothing, which tests/unit/test_chat_attachments.py holds.",
   "src/pages/Ask.tsx MARK_API_PATH":
     "A mark is one bit against an answer the person was given, counted and read by nothing that " +
     "decides an answer, and a second mark replaces the first in the count, which " +
