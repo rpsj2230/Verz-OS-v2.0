@@ -252,10 +252,13 @@ def test_connector_access_is_compiled_in_the_ceiling_and_decided_nowhere_else() 
     callers, readers = _calls_and_reads()
 
     assert callers == {"brain.agents.model": {"entitlement_ceiling"}}
+    # `brain.agents.attachments` edits the list a connector press writes, through `connectors_of`,
+    # and decides nothing from it: what a connector opens is asked of `entitlement_ceiling`.
     assert readers == {
         "brain.agents.model",
         "brain.agents.install",
         "brain.agents.install_store",
+        "brain.agents.attachments",
     }
 
 

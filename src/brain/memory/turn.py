@@ -73,7 +73,7 @@ a memory, which is almost every question, is decided by `worth_forming` before a
 opened, so forming a memory costs a question that asks nothing to be remembered nothing at all.
 Web and chat both answer through that one function, so a memory forms from either.
 
-Task ids: M16.1.2, M16.1.3, M38.2.2.4, M16.7.12, M16.7.2
+Task ids: M16.1.2, M16.1.3, M38.2.2.4, M16.7.12, M16.7.2, M16.1.1
 """
 
 from __future__ import annotations
@@ -183,6 +183,19 @@ EXTRACTED_OPENERS: Final[tuple[str, ...]] = (
     "please always ",
     "please never ",
     "from now on ",
+)
+
+#: How something said for this conversation only opens (M16.1.1). Lower-case, matched at the
+#: start of a sentence, and checked by `session_statements` alone: `candidate` does not know
+#: them, so a sentence opening this way forms no stored memory of any kind.
+SESSION_OPENERS: Final[tuple[str, ...]] = (
+    "for the rest of this conversation, ",
+    "for this conversation, ",
+    "in this conversation, ",
+    "for this chat, ",
+    "in this chat, ",
+    "just for now, ",
+    "for now, ",
 )
 
 #: The words that make a statement about the person. Whole words, lower-cased.
@@ -371,6 +384,31 @@ def candidate(sentence: str) -> tuple[MemoryKind, str] | None:
         if lowered.startswith(opener):
             return _bounded(MemoryKind.ADAPTIVE, sentence.strip().rstrip(".!?").strip())
     return None
+
+
+def session_statements(said: str) -> tuple[str, ...]:
+    """What the person said for this conversation only, each statement once (M16.1.1).
+
+    A sentence opening with one of `SESSION_OPENERS` keeps what follows the opener, bounded as a
+    stored memory is and held to `about_the_person` as one is, because a session memory is the
+    person's own words about how they want this conversation answered and never a fact about
+    somebody else or a value read from a source (M16.7.5). Everything else is not a session
+    statement, whatever it says.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+    for sentence in sentences(said):
+        lowered = sentence.lower()
+        opener = next((one for one in SESSION_OPENERS if lowered.startswith(one)), None)
+        if opener is None:
+            continue
+        kept = sentence[len(opener) :].strip().rstrip(".!?").strip()
+        bounded = _bounded(MemoryKind.SESSION, kept)
+        if bounded is None or not about_the_person(kept) or key_of(kept) in seen:
+            continue
+        seen.add(key_of(kept))
+        found.append(kept)
+    return tuple(found)
 
 
 def _bounded(kind: MemoryKind, statement: str) -> tuple[MemoryKind, str] | None:

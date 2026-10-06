@@ -230,24 +230,39 @@ def priced_in(prices: Mapping[tuple[str, str], Price], currency: str) -> bool:
     return any(one.currency == currency for one in prices.values())
 
 
+async def cost_recorded_in(
+    session: AsyncSession,
+) -> tuple[str | None, FigureNotRecordedView | None]:
+    """The currency this install's costs are recorded in, or no currency and the sentence why.
+
+    Nothing may be summed for an install whose cost could not have been written: see
+    `A_COST_OVER_NO_PRICE_IS_NOT_RECORDED_AND_NEVER_NOUGHT`. A currency that does not resolve is
+    one no price can be in, so it is that sentence too, and the log says which setting failed.
+    Its own function since 2026-10-06 because a department head's budget pace is a sum over the
+    same table and is nought for the same reason on the same installs.
+    """
+    if not RUN_SPEND_IS_RECORDED:
+        return None, COST_IS_NOT_RECORDED
+    try:
+        code = install_currency()
+    except LocaleError as failed:
+        log.warning("overview figures currency unresolved", error=str(failed))
+        return None, COST_HAS_NO_PRICE
+    if not priced_in(await read_prices(session), code):
+        return None, COST_HAS_NO_PRICE
+    return code, None
+
+
 async def week_cost(
     session: AsyncSession, since: datetime, until: datetime, *, basis: Basis, caller_id: str
 ) -> tuple[int | None, str | None, FigureNotRecordedView | None]:
     """The window's cost and its currency, or no figure and the sentence saying why.
 
-    Nothing is summed for an install whose cost could not have been written: see
-    `A_COST_OVER_NO_PRICE_IS_NOT_RECORDED_AND_NEVER_NOUGHT`. A currency that does not resolve is
-    one no price can be in, so it is that sentence too, and the log says which setting failed.
+    `cost_recorded_in` decides whether there is a figure at all, and this sums it.
     """
-    if not RUN_SPEND_IS_RECORDED:
-        return None, None, COST_IS_NOT_RECORDED
-    try:
-        code = install_currency()
-    except LocaleError as failed:
-        log.warning("overview figures currency unresolved", error=str(failed))
-        return None, None, COST_HAS_NO_PRICE
-    if not priced_in(await read_prices(session), code):
-        return None, None, COST_HAS_NO_PRICE
+    code, unrecorded = await cost_recorded_in(session)
+    if code is None:
+        return None, None, unrecorded
     ((summed,),) = (
         await session.execute(request_cost(since, until, basis=basis, caller_id=caller_id))
     ).all()
