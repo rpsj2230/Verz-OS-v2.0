@@ -174,7 +174,7 @@ def test_tools_and_connectors_are_attached_within_the_ceiling_and_a_run_carries_
 
     async def act(client: httpx.AsyncClient, roster: Any, store: StoredAttachments) -> Any:
         def mine(found: Any) -> Any:
-            return {one.agent_id: one for one in found}[AGENT]
+            return {one.agent_id: one for one in found.records}[AGENT]
 
         said: dict[str, Any] = {}
         said["offered"] = (await client.get(PATH, headers=headers("u_admin"))).json()
