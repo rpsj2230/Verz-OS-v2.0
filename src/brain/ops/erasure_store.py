@@ -55,6 +55,16 @@ implementation over a real backend plugs into. The answer cache has no delete by
 not reached. **Every erasure is therefore incomplete today**, and the queue says so with the stores
 named, which is the honest state rather than a defect in the queue.
 
+**A person's session memory is deleted with their memories, from keys named and never matched.**
+Session memory lives in Valkey under `brain.memory.formation.session_key(thread, person)`, one key
+per conversation (M16.1.1). The person's conversation ids are read inside the request's transaction
+before anything is erased, because the conversation store is erased before the memory store and the
+ids go with it, and `SessionMemoryEraser` deletes exactly the keys those ids name, as part of the
+memory store's removal. No pattern, no scan: a key this run did not build from the person and one
+of their conversations is never touched. A process with no cache configured holds no session
+memory, so there is nothing to reach. See
+`AN_ERASED_PERSONS_SESSION_MEMORY_IS_DELETED_NOT_LEFT_TO_EXPIRE`.
+
 **A legal hold wins, judged when the request is carried out.** The holds are read inside the drain's
 own transaction by `brain.ops.retention_store.active_holds`, and a held request is finished as held
 with the holds that stopped it and nothing touched. It is not left waiting: a hold can stand for
@@ -81,10 +91,10 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, cast, runtime_checkable
 
 import psycopg
 from psycopg import sql
@@ -93,6 +103,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.memory.formation import session_key
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.ops.erasure import (
     Deletion,
@@ -755,18 +766,76 @@ def _identifier(table: str) -> sql.Identifier:
     return sql.Identifier(schema, name)
 
 
+#: Why an erasure deletes session memory rather than letting it expire.
+AN_ERASED_PERSONS_SESSION_MEMORY_IS_DELETED_NOT_LEFT_TO_EXPIRE: Final = (
+    "A conversation that is retired leaves its session memory unreachable until it expires, "
+    "because nothing reads it except through a live conversation. An erasure request is a "
+    "promise that the person's data is gone, so the keys of every conversation they had are "
+    "deleted with their memories, named one by one from the conversation ids read before the "
+    "conversations are erased, and never found by a pattern."
+)
+
+
+class SessionKeys(Protocol):
+    """The two Valkey commands an erasure of session memory uses. `redis.Redis` satisfies it.
+
+    A protocol of its own rather than a widening of `brain.cache.ValkeyClient`, which has no
+    delete by design: only the erasure drain holds a client with one, and only named keys reach it.
+    """
+
+    def exists(self, *names: str) -> int: ...
+    def delete(self, *names: str) -> int: ...
+
+
+@dataclass(frozen=True)
+class SessionMemoryEraser:
+    """One person's session memory, one key per conversation id read before the run. See
+    `AN_ERASED_PERSONS_SESSION_MEMORY_IS_DELETED_NOT_LEFT_TO_EXPIRE`."""
+
+    client: SessionKeys
+    #: The person's conversation ids, read in the request's own transaction before any store.
+    threads: tuple[str, ...]
+
+    def _keys(self, subject_id: str) -> tuple[str, ...]:
+        return tuple(session_key(thread, subject_id) for thread in self.threads)
+
+    def count_for(self, subject_id: str) -> int:
+        keys = self._keys(subject_id)
+        return int(self.client.exists(*keys)) if keys else 0
+
+    def erase(self, subject_id: str) -> int:
+        keys = self._keys(subject_id)
+        return int(self.client.delete(*keys)) if keys else 0
+
+
+def conversations_of(conn: psycopg.Connection[Any], subject_id: str) -> tuple[str, ...]:
+    """Every conversation id the person has, retired ones included, as the owner reads them."""
+    rows = conn.execute(
+        "SELECT id FROM chat.conversation WHERE principal_id = %s", (subject_id,)
+    ).fetchall()
+    return tuple(str(row[0]) for row in rows)
+
+
 class EstateEraser:
     """The eraser the queue runs: each store to the executor that can reach it, the rest refused.
 
     `objects` is the seam for the object store. Handed none, which is every install on this
     commit, recordings and attachments are refused with `NO_OBJECT_STORE_ERASER`; an
     implementation over a real `brain.ops.storage.StorageBackend` is passed here and nothing else
-    changes. See the module docstring.
+    changes. See the module docstring. `sessions` is the person's session memory, deleted as part
+    of the memory store; handed none, a process with no cache has none to delete.
     """
 
-    def __init__(self, postgres: PostgresEraser, *, objects: StoreEraser | None = None) -> None:
+    def __init__(
+        self,
+        postgres: PostgresEraser,
+        *,
+        objects: StoreEraser | None = None,
+        sessions: SessionMemoryEraser | None = None,
+    ) -> None:
         self.postgres = postgres
         self.objects = objects
+        self.sessions = sessions
 
     def _executor(self, store: Store) -> StoreEraser:
         facts = facts_for(store)
@@ -781,10 +850,17 @@ class EstateEraser:
         raise ErasureError(NO_INDEX_ERASER)
 
     def count_for(self, store: Store, subject_id: str) -> int:
-        return self._executor(store).count_for(store, subject_id)
+        counted = self._executor(store).count_for(store, subject_id)
+        if store is Store.MEMORY and self.sessions is not None:
+            counted += self.sessions.count_for(subject_id)
+        return counted
 
     def erase(self, store: Store, subject_id: str) -> StoreRemoval:
-        return self._executor(store).erase(store, subject_id)
+        removal = self._executor(store).erase(store, subject_id)
+        if store is Store.MEMORY and self.sessions is not None:
+            gone = self.sessions.erase(subject_id)
+            removal = replace(removal, removed=removal.removed + gone)
+        return removal
 
 
 # ---------------------------------------------------------------------------- the drain
@@ -815,6 +891,7 @@ def drain_erasure_queue(
     report_only: bool = False,
     limit: int = DRAIN_LIMIT,
     objects: StoreEraser | None = None,
+    sessions: SessionKeys | None = None,
 ) -> str:
     """Carry out the oldest open requests filed by `now`, one transaction each, as report lines.
 
@@ -857,9 +934,15 @@ def drain_erasure_queue(
             _set(conn, ACTOR_SETTING, ERASURE_QUEUE_ACTOR)
             _set(conn, TRACE_ID_SETTING, f"erasure.{request_id}")
             holds = active_holds(conn, now)
+            # Read before any store is erased: the conversations go before the memories do.
+            remembered = (
+                None
+                if sessions is None
+                else SessionMemoryEraser(sessions, conversations_of(conn, subject_id))
+            )
             try:
                 deletion = carry_out(
-                    EstateEraser(PostgresEraser(conn), objects=objects),
+                    EstateEraser(PostgresEraser(conn), objects=objects, sessions=remembered),
                     subject_id=subject_id,
                     requested_at=requested_at,
                     completed_at=now,
@@ -1012,3 +1095,12 @@ class StoredErasures:
                 .all()
             )
             return tuple(record_from(row) for row in rows)
+
+
+def session_keys_for(url: str) -> SessionKeys:
+    """The erasure drain's client for session memory: `brain.cache.make_client`, bounded as every
+    cache client is. The cast is at a library boundary: `redis.Redis` has `exists` and `delete`
+    and `make_client` returns the narrower protocol, so proving the match buys nothing."""
+    from brain.cache import make_client
+
+    return cast(SessionKeys, make_client(url))

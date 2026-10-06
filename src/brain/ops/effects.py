@@ -356,12 +356,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.SAME_RESULT_WHEN_REPEATED
         ),
         "brain.deployment.database:Executor.execute": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # An erased person's session memory, by the keys their conversations name (M16.1.1).
+        "brain.ops.erasure_store:SessionKeys.exists": Repeat.READS,
+        "brain.ops.erasure_store:SessionKeys.delete": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The gate.
         "brain.gate.answer_cache:AnswerStore.get": Repeat.READS,
         "brain.gate.answer_cache:AnswerStore.set": Repeat.DERIVED_STATE,
         "brain.knowledge.document_tools:RecordStore.get": Repeat.READS,
         "brain.knowledge.document_tools:RecordStore.set": Repeat.DERIVED_STATE,
         "brain.gate.compose:TraceSink.emit": Repeat.DERIVED_STATE,
+        # Where a turn's remembered statements are read, for its context (M16.6.1).
+        "brain.gate.turn_context:Recollection.hints": Repeat.READS,
         # Which client each record a name matched is, read from the registry (M14.6.5).
         "brain.gate.fast_lane:AmbiguityReader.current_entities": Repeat.READS,
         "brain.gate.fast_lane:AmbiguityReader.open_review": Repeat.READS,

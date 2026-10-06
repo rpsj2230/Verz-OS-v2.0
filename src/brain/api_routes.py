@@ -159,6 +159,7 @@ from brain.agents.template import config_hash
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, Page, bound_trace_id
 from brain.audit.compliance import intercept
 from brain.audit.record import DenyReason
+from brain.cache import AsyncValkeyClient
 from brain.core.department import gaps_for_question
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import ToolDefinition, TypedResult
@@ -221,7 +222,7 @@ from brain.knowledge.rows import (
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
-from brain.memory.turn import Turn, recall_place, turn_of
+from brain.memory.turn import Turn, recall_place, session_statements, turn_of
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
@@ -250,6 +251,7 @@ from brain.ops.live_read_run import (
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
+from brain.ops.session_memory_store import SessionRecollection, StoredSessions
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
@@ -1262,7 +1264,9 @@ async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowU
     if not ask.thread or store is None:
         return None
     thread = await store.thread(asking.principal.id, ask.thread)
-    if thread is None:
+    # A retired conversation is hidden from the application's role already; asked again here
+    # because session memory is read only through a follow-up, and must go with the conversation.
+    if thread is None or thread.retired:
         return None
     earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
     if not earlier:
@@ -1396,6 +1400,48 @@ def with_hints(
         trace_id=trace_id,
     )
     return replace(lane, hints=bound)
+
+
+def sessions_of(state: Any) -> StoredSessions | None:
+    """Where session memory is kept: `app.state.session_memory`, or the process's Valkey client,
+    or None on a process with no cache, which keeps no session memory (M16.1.1)."""
+    found = getattr(state, "session_memory", None)
+    if isinstance(found, StoredSessions):
+        return found
+    client = getattr(state, "valkey", None)
+    # The client `brain.app.lifespan` built from `make_async_client`, held as its owned protocol;
+    # the narrower protocol is all the store is handed. A cast at that boundary proves nothing.
+    return None if client is None else StoredSessions(cast(AsyncValkeyClient, client))
+
+
+def with_session(
+    state: Any, lane: ModelLane | None, *, principal_id: str, thread_id: str | None
+) -> ModelLane | None:
+    """The model step carrying what the asker said for this conversation only (M16.1.1).
+
+    `thread_id` is given only for a conversation the route has found as the asker's own and live,
+    which is a follow-up; see
+    `brain.ops.session_memory_store.A_SESSION_MEMORY_IS_ONE_PERSONS_ONE_CONVERSATION_AND_GOES_WITH_IT`.
+    """
+    sessions = sessions_of(state)
+    if lane is None or sessions is None or not thread_id:
+        return lane
+    bound = SessionRecollection(store=sessions, thread_id=thread_id, principal_id=principal_id)
+    return replace(lane, session=bound)
+
+
+async def session_formed(
+    state: Any, *, principal_id: str, thread_id: str | None, said: str, now: datetime
+) -> None:
+    """Keep what the person said for this conversation, once the exchange has its thread.
+
+    Silent and never failing the answer: tier zero (M16.3.1). Nothing is kept for an exchange
+    kept in no thread, which is a referred question or a process with no database.
+    """
+    sessions = sessions_of(state)
+    if sessions is None or not thread_id:
+        return
+    await sessions.remember(thread_id, principal_id, session_statements(said), now=now)
 
 
 def default_agents(registry: ToolRegistry) -> dict[str, AgentSetup]:
@@ -2065,6 +2111,14 @@ async def answered_for(
                 now=asking.now,
                 trace_id=recorder.trace_id,
             )
+            # And what they said for this conversation only, from a conversation found as theirs
+            # and live, which is the one a follow-up continues (M16.1.1).
+            model = with_session(
+                request.app.state,
+                model,
+                principal_id=asking.principal.id,
+                thread_id=ask.thread if follow_up is not None else None,
+            )
         # The selected agent's tool loop, when its catalogue offers a tool the passage step does
         # not already read (M13.7.1). See `agent_runtime_for`.
         if model is not None and agent is not None:
@@ -2306,6 +2360,15 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     if isinstance(outcome, Halted):
         return halted_reply(request, outcome)
     thread = await remembered(request, Answering.of(asked), ask, outcome)
+    # What the person said for this conversation only, kept once the exchange has its thread.
+    asking = Answering.of(asked)
+    await session_formed(
+        request.app.state,
+        principal_id=asking.principal.id,
+        thread_id=thread,
+        said=ask.question,
+        now=asking.now,
+    )
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
