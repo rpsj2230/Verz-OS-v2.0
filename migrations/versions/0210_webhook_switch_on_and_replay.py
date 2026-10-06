@@ -7,10 +7,11 @@ This is the schema half, and every change is a widening.
 
 **Two more words, each recorded by the trigger `0059` already put on the table.** `switched_on`,
 and `replayed`, which names the delivery it put back by its event id. The change constraint is
-widened to five, and the secret's constraint is restated so only a registration and a replacement
-write a secret. **A replay names its delivery, and one delivery is replayed once**: a check holds
-`event_id` present exactly on a replay, and a partial unique index on the subscriber and the event
-over replays refuses a second.
+widened to five, and the secret's constraint (under the name it has always had, so the gate can
+read what it replaced) is restated so only a registration and a replacement write a secret.
+**A replay names its delivery, and one delivery is replayed once**: two checks hold `event_id`
+present exactly on a replay (each readable by the compatibility gate, which cannot order an
+equality), and a partial unique index on the subscriber and the event over replays refuses a second.
 
 **Two more update policies, each one direction only.** A switched-off subscriber may be switched
 back on, and only that: `USING (deactivated_at IS NOT NULL) WITH CHECK (deactivated_at IS NULL)`.
@@ -30,11 +31,12 @@ Revises: 0189
 
 from __future__ import annotations
 
+import sqlalchemy as sa
 from alembic import op
 
 revision = "0210"
 # main's head at the time of writing. Re-pointed at whichever migration is the head when it lands.
-down_revision = "0189"
+down_revision = "0207"
 branch_labels = None
 depends_on = None
 
@@ -54,8 +56,15 @@ CHANGE_AFTER = (
 WRITES_BEFORE = "change <> 'switched_off' OR secret_written_at IS NULL"
 WRITES_AFTER = "change IN ('registered', 'secret_replaced') OR secret_written_at IS NULL"
 
-#: A replay names its delivery, and nothing else does.
-REPLAY_NAMES_ITS_DELIVERY = "(change = 'replayed') = (event_id IS NOT NULL)"
+#: A replay names its delivery, and nothing else does. Two checks rather than one equality, so the
+#: compatibility gate can read each: the first binds only a word the old constraint refused, the
+#: second only a column the previous release never writes.
+REPLAY_NAMES_ITS_DELIVERY = "change <> 'replayed' OR event_id IS NOT NULL"
+ONLY_A_REPLAY_NAMES_A_DELIVERY = "event_id IS NULL OR change = 'replayed'"
+
+#: The secret constraint keeps the name it has always had, so the downgrade restoring it is how
+#: the gate knows what it replaced. The name says "a switch off"; it now holds for both new words.
+CONSTRAINT_ON_SECRETS = "a_switch_off_writes_no_secret"
 
 
 #: Drops a check on `ops.webhook_change` by whichever name it has, matched on its suffix, for the
@@ -100,18 +109,23 @@ POLICIES: tuple[str, ...] = (
 
 
 def upgrade() -> None:
-    op.execute(f"ALTER TABLE ops.webhook_change ADD COLUMN event_id varchar({IDENTIFIER_CHARS})")
-    op.execute(_drop_by_suffix("_change"))
-    op.create_check_constraint("change", "webhook_change", CHANGE_AFTER, schema="ops")
-    op.execute(_drop_by_suffix("a_switch_off_writes_no_secret"))
-    op.create_check_constraint(
-        "only_writes_carry_a_secret",
+    op.add_column(
         "webhook_change",
-        WRITES_AFTER,
+        sa.Column("event_id", sa.String(IDENTIFIER_CHARS), nullable=True),
         schema="ops",
     )
+    op.execute(_drop_by_suffix("_change"))
+    op.create_check_constraint("change", "webhook_change", CHANGE_AFTER, schema="ops")
+    op.execute(_drop_by_suffix(CONSTRAINT_ON_SECRETS))
+    op.create_check_constraint(CONSTRAINT_ON_SECRETS, "webhook_change", WRITES_AFTER, schema="ops")
     op.create_check_constraint(
         "a_replay_names_its_delivery", "webhook_change", REPLAY_NAMES_ITS_DELIVERY, schema="ops"
+    )
+    op.create_check_constraint(
+        "only_a_replay_names_a_delivery",
+        "webhook_change",
+        ONLY_A_REPLAY_NAMES_A_DELIVERY,
+        schema="ops",
     )
     op.create_index(
         "uq_webhook_change_one_replay",
@@ -129,10 +143,11 @@ def downgrade() -> None:
     op.execute("DROP POLICY outbox_delivery_replayable ON ops.outbox_delivery")
     op.execute("DROP POLICY webhook_subscriber_reactivatable ON ops.webhook_subscriber")
     op.drop_index("uq_webhook_change_one_replay", table_name="webhook_change", schema="ops")
+    op.execute(_drop_by_suffix("only_a_replay_names_a_delivery"))
     op.execute(_drop_by_suffix("a_replay_names_its_delivery"))
-    op.execute(_drop_by_suffix("only_writes_carry_a_secret"))
+    op.execute(_drop_by_suffix(CONSTRAINT_ON_SECRETS))
     op.create_check_constraint(
-        "a_switch_off_writes_no_secret",
+        CONSTRAINT_ON_SECRETS,
         "webhook_change",
         WRITES_BEFORE,
         schema="ops",
@@ -142,4 +157,4 @@ def downgrade() -> None:
     op.create_check_constraint(
         "change", "webhook_change", CHANGE_BEFORE, schema="ops", postgresql_not_valid=True
     )
-    op.execute("ALTER TABLE ops.webhook_change DROP COLUMN event_id")
+    op.drop_column("webhook_change", "event_id", schema="ops")

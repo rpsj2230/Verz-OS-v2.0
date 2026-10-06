@@ -94,11 +94,15 @@ class WebhookChangeRow(Base):
         CheckConstraint("length(btrim(changed_by)) > 0", name="changed_by_present"),
         CheckConstraint(
             f"{one_of('change', WRITES_A_SECRET)} OR secret_written_at IS NULL",
-            name="only_writes_carry_a_secret",
+            name="a_switch_off_writes_no_secret",
         ),
         CheckConstraint(
-            f"(change = '{WebhookChange.REPLAYED.value}') = (event_id IS NOT NULL)",
+            f"change <> '{WebhookChange.REPLAYED.value}' OR event_id IS NOT NULL",
             name="a_replay_names_its_delivery",
+        ),
+        CheckConstraint(
+            f"event_id IS NULL OR change = '{WebhookChange.REPLAYED.value}'",
+            name="only_a_replay_names_a_delivery",
         ),
         Index("ix_ops_webhook_change_subscriber", "subscriber_id", "changed_at"),
         Index(
