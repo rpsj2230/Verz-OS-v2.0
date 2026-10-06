@@ -825,9 +825,15 @@ def test_a_cached_retrieval_holds_references_and_no_passages():
 
     The policy in 0009 protects `know.chunk`; nothing protects a cache value. Delete this
     and a `bodies` or `passages` field is added to save the re-read, and the corpus now has
-    a second copy sitting outside the wall that was written to guard it.
+    a second copy sitting outside the wall that was written to guard it. The two fields the
+    learning signal reads are names and a subset of these same references, never a passage.
     """
-    assert {f.name for f in CachedRetrieval.__dataclass_fields__.values()} == {"key", "chunk_ids"}
+    assert {f.name for f in CachedRetrieval.__dataclass_fields__.values()} == {
+        "key",
+        "chunk_ids",
+        "retrievers",
+        "corroborated_at",
+    }
 
     with pytest.raises(CacheLayerError):
         CachedRetrieval(key="retr:whatever", chunk_ids=("a", "a"))
@@ -835,6 +841,40 @@ def test_a_cached_retrieval_holds_references_and_no_passages():
         CachedRetrieval(key="retr:whatever", chunk_ids=("has a space",))
     with pytest.raises(CacheLayerError):
         CachedRetrieval(key="", chunk_ids=("c1",))
+
+
+def test_a_cached_ranking_keeps_its_retrievers_and_corroboration_as_names_and_its_own_places():
+    """What a hit is noted with (M15.3.4): the retrievers as a sorted set of retriever names, and
+    the corroborated references as sorted places inside the entry's own list, read back as those
+    references. The positive case first,
+    then each refusal. Delete this and an entry can carry a reference it never ranked, which a
+    hit would count as corroborated in a list the caller was not shown, or a name that splits
+    into retrievers nobody ran."""
+    kept = CachedRetrieval(
+        key="retr:whatever",
+        chunk_ids=("c1", "c2", "c3"),
+        retrievers=("lexical", "vector"),
+        corroborated_at=(0, 2),
+    )
+    assert (kept.retrievers, kept.corroborated) == (("lexical", "vector"), frozenset({"c1", "c3"}))
+    assert CachedRetrieval(key="retr:whatever", chunk_ids=("c1",)).retrievers == ()
+
+    for retrievers, corroborated in (
+        (("vector", "lexical"), ()),
+        (("lexical", "lexical"), ()),
+        (("Lexical",), ()),
+        (("lexical",), (3,)),
+        (("lexical",), (-1,)),
+        (("lexical",), (2, 0)),
+        (("lexical",), (1, 1)),
+    ):
+        with pytest.raises(CacheLayerError):
+            CachedRetrieval(
+                key="retr:whatever",
+                chunk_ids=("c1", "c2", "c3"),
+                retrievers=retrievers,
+                corroborated_at=corroborated,
+            )
 
 
 def test_the_retrieval_cap_is_what_a_query_could_have_produced():

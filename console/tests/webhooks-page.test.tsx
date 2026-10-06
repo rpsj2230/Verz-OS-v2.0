@@ -1,6 +1,6 @@
 /**
  * The Webhooks module on the page kit: the list, one subscriber's three views, the three writes and
- * their confirmations, and the two acts drawn as not built yet.
+ * their confirmations, and switching back on and replaying a delivery that was given up.
  *
  * Reached through the application's own route table. The failures worth testing look like the page
  * working: a control for a reader the API said may not manage, a write sent without its
@@ -16,7 +16,7 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { ACT_LABELS, UNAVAILABLE } from "../src/pages/webhooks/webhookActions";
+import { ACT_LABELS } from "../src/pages/webhooks/webhookActions";
 import { NOT_MANAGEABLE } from "../src/pages/webhooks/WebhooksPage";
 import { BLANK_SENTENCES, REGISTRATION_FORMATS, type SubscriberRow, type WebhooksBody } from "../src/pages/webhooksQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
@@ -28,7 +28,10 @@ const CONSOLE_ORIGIN = "https://console.test";
 const SECRET = "whsec-SIGNING-SENTINEL-0123456789abcdefABCDEF";
 const REGISTERING = "The subscriber is told, at this address, whenever one of the chosen kinds happens.";
 const REPLACING = "The new secret signs every request from now on.";
-const SWITCHING_OFF = "The subscriber is told nothing more. This cannot be undone.";
+const SWITCHING_OFF = "The subscriber is told nothing more until it is switched back on.";
+const SWITCHING_ON = "The subscriber is told again, from now on, about the kinds it chose.";
+const REPLAYING = "The delivery is sent once more, and is not replayed again.";
+const HANDLE = "0123456789abcdef0123456789abcdef";
 
 beforeAll(async () => {
   installRadixStubs();
@@ -56,6 +59,7 @@ function subscriber(overrides: Partial<SubscriberRow> = {}): SubscriberRow {
         last_attempt_at: "2019-03-04T09:40:00Z",
         reason: "not sent: refused",
         next_attempt_at: null,
+        replay: HANDLE,
       },
     ],
     changes: [{ change: "registered", changed_by: "u_ada", changed_at: "2019-03-04T09:00:00Z", secret_written_at: null }],
@@ -85,6 +89,8 @@ function page(overrides: Partial<WebhooksBody> = {}): WebhooksBody {
     registering: REGISTERING,
     replacing: REPLACING,
     switching_off: SWITCHING_OFF,
+    switching_on: SWITCHING_ON,
+    replaying: REPLAYING,
     secret_minimum: 32,
     people: { u_ada: "Ada Admin" },
     ...overrides,
@@ -234,19 +240,43 @@ describe("the Webhooks list", () => {
 });
 
 describe("one subscriber's page", () => {
-  test("the Dashboard lists its deliveries, and a delivery given up offers a replay that is drawn and inert", async () => {
-    // What breaks if this is deleted: an exhausted delivery reads as a working replay control, or
-    // the replay is hidden so the page says the product has no such act.
+  test("a delivery given up is replayed once by its name, confirmed in the API's words, with no body", async () => {
+    // What breaks if this is deleted: a replay sent on one press, sent by an event id rather than the
+    // name the API gave it, or offered on a delivery the API named no replay for.
     const { container, sent } = await consoleAt("/webhooks/billing_bridge", page());
     expect(container.querySelector("h1")?.textContent).toBe("billing_bridge");
     const table = container.querySelector("tbody")?.textContent ?? "";
     expect(table).toContain("Given up");
     expect(table).toContain("not sent: refused");
-    const replay = container.querySelector('[data-unavailable][aria-describedby]');
-    expect(replay).not.toBeNull();
-    expect(container.textContent).toContain(UNAVAILABLE.replay.reason);
-    fireEvent.click(replay as HTMLElement);
+    fireEvent.click(button(container, `${ACT_LABELS.replay}: approval.requested`));
+    expect(dialog().textContent).toContain(REPLAYING);
     expect(posts(sent)).toEqual([]);
+    fireEvent.click(button(dialog(), ACT_LABELS.replay));
+    await waitFor(() => {
+      expect(posts(sent)).toEqual([[`/api/v1/webhooks/subscribers/billing_bridge/deliveries/${HANDLE}/replay`, null]]);
+    });
+  });
+
+  test("a delivery the API named no replay for offers none", async () => {
+    // What breaks if this is deleted: a replay control on a delivery still being tried, which the
+    // route refuses, or one built from a name the console made up.
+    const trying = subscriber({
+      deliveries: [
+        {
+          kind: "approval.requested",
+          state: "pending",
+          attempts: 1,
+          occurred_at: "2019-03-04T09:10:00Z",
+          last_attempt_at: "2019-03-04T09:11:00Z",
+          reason: null,
+          next_attempt_at: "2019-03-04T09:12:00Z",
+          replay: null,
+        },
+      ],
+    });
+    const { container } = await consoleAt("/webhooks/billing_bridge", page({ subscribers: [trying] }));
+    expect(container.querySelector("tbody")?.textContent ?? "").toContain("approval.requested");
+    expect([...container.querySelectorAll("button")].some((one) => one.getAttribute("aria-label")?.startsWith(ACT_LABELS.replay))).toBe(false);
   });
 
   test("replacing the secret and switching off are each confirmed in the API's words and send only themselves", async () => {
@@ -279,14 +309,20 @@ describe("one subscriber's page", () => {
     });
   });
 
-  test("a switched-off subscriber offers no write, and switching back on is drawn and inert with its reason", async () => {
-    // What breaks if this is deleted: a control on a subscriber every write refuses, or "switch back
-    // on" hidden as though the product had no such act.
+  test("a switched-off subscriber offers only switching back on, confirmed in the API's words", async () => {
+    // What breaks if this is deleted: a secret replacement or switch-off offered on a subscriber
+    // every such write refuses, or switching back on sent without its confirmation.
     const off = page({ subscribers: [subscriber({ active: false, deactivated_at: "2019-03-05T09:00:00Z" })] });
-    const { container } = await consoleAt("/webhooks/billing_bridge/profile", off);
+    const { container, sent } = await consoleAt("/webhooks/billing_bridge/profile", off);
     const header = container.querySelector('[data-slot="detail-header"]') as HTMLElement;
-    expect([...header.querySelectorAll("button:not([data-unavailable])")].map((one) => one.textContent)).toEqual([]);
-    expect(container.textContent).toContain(UNAVAILABLE.switchOn.reason);
+    expect([...header.querySelectorAll("button")].map((one) => one.textContent?.trim())).toEqual([ACT_LABELS.switchOn]);
+    fireEvent.click(button(header, ACT_LABELS.switchOn));
+    expect(dialog().textContent).toContain(SWITCHING_ON);
+    expect(posts(sent)).toEqual([]);
+    fireEvent.click(button(dialog(), ACT_LABELS.switchOn));
+    await waitFor(() => {
+      expect(posts(sent)).toEqual([["/api/v1/webhooks/subscribers/billing_bridge/switch-on", null]]);
+    });
   });
 
   test("the About view names who registered and changed it, with each id under Advanced alone", async () => {
@@ -308,14 +344,15 @@ describe("one subscriber's page", () => {
     expect(container.textContent).toContain("No subscriber here");
   });
 
-  test("every act drawn as unavailable names no route the API document declares", () => {
-    // What breaks if this is deleted: a switch-on or replay route lands and the page goes on saying
-    // "coming soon" about it.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
+  test("every act the page sends is a route the API document declares for a POST", () => {
+    // What breaks if this is deleted: the page sends switch-on or replay to an address the API
+    // renamed, which reads as a working control and answers 404 in front of an administrator.
+    const paths = (apiDocument()["paths"] ?? {}) as Record<string, Record<string, unknown>>;
+    for (const path of [
+      "/api/v1/webhooks/subscribers/{subscriber_id}/switch-on",
+      "/api/v1/webhooks/subscribers/{subscriber_id}/deliveries/{handle}/replay",
+    ]) {
+      expect(Object.keys(paths[path] ?? {}), path).toContain("post");
     }
-    expect(UNAVAILABLE.switchOn.retiredBy.test("/api/v1/webhooks/subscribers/{subscriber_id}/switch-on")).toBe(true);
-    expect(UNAVAILABLE.replay.retiredBy.test("/api/v1/webhooks/deliveries/{delivery}/replay")).toBe(true);
   });
 });

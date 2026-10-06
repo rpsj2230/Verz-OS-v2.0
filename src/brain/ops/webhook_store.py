@@ -39,12 +39,13 @@ Task ids: M27.8.12
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
 
-from sqlalchemy import Select, func, select, text
+from sqlalchemy import Select, exists, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -53,7 +54,9 @@ from brain.ops.outbox_store import (
     OutboxStoreError,
     deactivate_subscriber,
     last_delivered,
+    reactivate_subscriber,
     register_subscriber,
+    replay_delivery,
     subscriber_from,
 )
 from brain.ops.schedule_control import paused_controls
@@ -87,6 +90,17 @@ A_CHANGE_IS_ATTRIBUTED_HERE_AND_CHAINED_BY_A_TRIGGER: Final = (
 #: How many recent deliveries and changes the screen reads for each subscriber.
 RECENT_PER_SUBSCRIBER: Final = 5
 
+#: Why a delivery is replayed by a name of its own rather than by its event id.
+A_DELIVERY_IS_REPLAYED_BY_A_NAME_OF_ITS_OWN: Final = (
+    "An event id can be the id of the record the event is about, and the screen lists deliveries "
+    "without one. So a delivery that was given up is offered for replay under a digest of its "
+    "subscriber and its event, which the store matches among that subscriber's deliveries and "
+    "which names no record."
+)
+
+#: How long a replay name is: long enough that two deliveries to one subscriber never share one.
+REPLAY_HANDLE_CHARS: Final = 32
+
 #: The control whose runs are delivery, by the registry's name for it.
 DISPATCH_CONTROL: Final = "outbox_dispatch"
 
@@ -97,6 +111,27 @@ class SubscriberTakenError(Exception):
 
 class NoActiveSubscriberError(Exception):
     """No subscriber with this id is switched on: it was never registered, or it is switched off."""
+
+
+class NoSwitchedOffSubscriberError(Exception):
+    """No subscriber with this id is switched off: it was never registered, or it is on."""
+
+
+class NothingToReplayError(Exception):
+    """No delivery to this subscriber that was given up has this name, or it was replayed once."""
+
+
+def replay_handle(event_id: str, subscriber_id: str) -> str:
+    """The name a delivery is replayed by from the console, which is not its event id.
+
+    An event id can be a record's own id (`brain.ops.automation_run.run_event` uses the run's), and
+    `DeliveryLine` carries no record id for the reason its docstring gives. So a delivery is named
+    by a digest of the subscriber and the event, which the store matches among that subscriber's
+    deliveries and which says nothing about the record. See
+    `A_DELIVERY_IS_REPLAYED_BY_A_NAME_OF_ITS_OWN`.
+    """
+    joined = f"{subscriber_id}\x00{event_id}".encode()
+    return hashlib.sha256(joined).hexdigest()[:REPLAY_HANDLE_CHARS]
 
 
 # ---------------------------------------------------------------------- the shapes
@@ -114,6 +149,9 @@ class DeliveryLine:
     reason: str | None
     #: When a pending delivery is next tried. None once it is delivered or set aside.
     next_attempt_at: datetime | None = None
+    #: The name a delivery that was given up is replayed by, from `replay_handle`. None otherwise,
+    #: and None for one replayed once already, since `0210`'s index refuses a second replay.
+    replay: str | None = None
 
 
 @dataclass(frozen=True)
@@ -191,6 +229,14 @@ class WebhookRecords(Protocol):
         """Switch an active subscriber off and record who did, or nothing."""
         ...
 
+    async def switch_on(self, subscriber_id: str, *, actor: str, at: datetime) -> None:
+        """Switch a switched-off subscriber back on and record who did, or nothing."""
+        ...
+
+    async def replay(self, subscriber_id: str, handle: str, *, actor: str, at: datetime) -> None:
+        """Put one delivery that was given up back to be sent, once, and record who did."""
+        ...
+
     async def dispatcher(self) -> DispatcherLine:
         """The newest run of the dispatch and whether a person has paused it."""
         ...
@@ -203,6 +249,7 @@ def _recent_deliveries(ids: Sequence[str], limit: int) -> Select[Any]:
     ranked = (
         select(
             OutboxDeliveryRow.subscriber_id,
+            OutboxDeliveryRow.event_id,
             OutboxEventRow.kind,
             OutboxDeliveryRow.state,
             OutboxDeliveryRow.attempts,
@@ -210,6 +257,13 @@ def _recent_deliveries(ids: Sequence[str], limit: int) -> Select[Any]:
             OutboxDeliveryRow.last_attempt_at,
             OutboxDeliveryRow.last_reason,
             OutboxDeliveryRow.due_at,
+            exists()
+            .where(
+                WebhookChangeRow.subscriber_id == OutboxDeliveryRow.subscriber_id,
+                WebhookChangeRow.event_id == OutboxDeliveryRow.event_id,
+                WebhookChangeRow.change == WebhookChange.REPLAYED.value,
+            )
+            .label("replayed"),
             func.row_number()
             .over(
                 partition_by=OutboxDeliveryRow.subscriber_id,
@@ -324,6 +378,11 @@ class StoredWebhooks:
                         next_attempt_at=(
                             one["due_at"] if one["state"] == DeliveryState.PENDING.value else None
                         ),
+                        replay=(
+                            replay_handle(one["event_id"], one["subscriber_id"])
+                            if one["state"] == DeliveryState.EXHAUSTED.value and not one["replayed"]
+                            else None
+                        ),
                     )
                 )
             changes: dict[str, list[ChangeLine]] = {}
@@ -411,6 +470,41 @@ class StoredWebhooks:
                 raise NoActiveSubscriberError(subscriber_id) from already
             session.add(_change(subscriber_id, WebhookChange.SWITCHED_OFF, actor, at, None))
             await session.flush()
+
+    async def switch_on(self, subscriber_id: str, *, actor: str, at: datetime) -> None:
+        async with self._sessions() as session, session.begin():
+            try:
+                await reactivate_subscriber(session, subscriber_id)
+            except OutboxStoreError as already:
+                raise NoSwitchedOffSubscriberError(subscriber_id) from already
+            session.add(_change(subscriber_id, WebhookChange.SWITCHED_ON, actor, at, None))
+            await session.flush()
+
+    async def replay(self, subscriber_id: str, handle: str, *, actor: str, at: datetime) -> None:
+        async with self._sessions() as session, session.begin():
+            given_up = (
+                await session.execute(
+                    select(OutboxDeliveryRow.event_id).where(
+                        OutboxDeliveryRow.subscriber_id == subscriber_id,
+                        OutboxDeliveryRow.state == DeliveryState.EXHAUSTED.value,
+                    )
+                )
+            ).scalars()
+            named = [one for one in given_up if replay_handle(one, subscriber_id) == handle]
+            if len(named) != 1:
+                raise NothingToReplayError(subscriber_id)
+            [event_id] = named
+            change = _change(subscriber_id, WebhookChange.REPLAYED, actor, at, None)
+            change.event_id = event_id
+            session.add(change)
+            try:
+                await session.flush()
+            except IntegrityError as twice:
+                raise NothingToReplayError(subscriber_id) from twice
+            try:
+                await replay_delivery(session, event_id, subscriber_id, at=at)
+            except OutboxStoreError as moved:
+                raise NothingToReplayError(subscriber_id) from moved
 
     async def dispatcher(self) -> DispatcherLine:
         async with self._sessions() as session, session.begin():

@@ -17,13 +17,15 @@
  * that day, so it is the same day wherever the browser is, and a day that is not after today is
  * said before anything is sent, because the API would refuse it for the same reason.
  *
- * Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M10.7.2
+ * Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M10.7.2, M16.6.6
  */
 
 /** Where each read and write lives, under the API's versioned base. */
 const ITEMS_API_PATH = "/knowledge/items";
 export const TASKS_API_PATH = "/knowledge/tasks";
 export const SOLUTIONS_API_PATH = "/knowledge/solutions";
+/** Corrections carrying the right answer, waiting for whoever may add a new version (M16.6.6). */
+export const CORRECTIONS_API_PATH = "/knowledge/corrections";
 
 function one(id: string): string {
   return `${ITEMS_API_PATH}/${encodeURIComponent(id)}`;
@@ -66,6 +68,15 @@ export function taskDonePath(id: string): string {
 
 export function solutionDecisionPath(id: string): string {
   return `${SOLUTIONS_API_PATH}/${encodeURIComponent(id)}/decision`;
+}
+
+/** One correction to review: its words and who would read them, fetched only when opened. */
+export function correctionReviewPath(id: string): string {
+  return `${CORRECTIONS_API_PATH}/${encodeURIComponent(id)}`;
+}
+
+export function correctionDecisionPath(id: string): string {
+  return `${correctionReviewPath(id)}/decision`;
 }
 
 /**

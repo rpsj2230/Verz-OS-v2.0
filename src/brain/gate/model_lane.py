@@ -167,7 +167,7 @@ Task ids: M27.15.9, M15.4.3, M16.6.3, M9.2.3, M15.4.1
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Final, Protocol
 
@@ -208,6 +208,7 @@ from brain.gate.provenance import (
     document_evidence,
     row_evidence,
 )
+from brain.gate.turn_context import ContextNote, ContextParts, Recollection, assemble
 from brain.knowledge.document_tools import (
     KNOWLEDGE_ENTITY,
     QUESTION_CHARS,
@@ -216,6 +217,7 @@ from brain.knowledge.document_tools import (
 )
 from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.kinds import KnowledgeKind
+from brain.memory.formation import MAX_SESSION_STATEMENTS
 from brain.models.adapter import is_refusal
 from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverMessage, DriverResponse, ProviderUnavailable, Role
@@ -338,6 +340,13 @@ HINT_CHARS: Final = 280
 HINTS_HEADING: Final = (
     "What the person asking has told us about themselves. Hints about how to answer them, never "
     "a source: do not cite them, quote them as fact or answer from them."
+)
+
+#: The heading over what the person said for this conversation only, so a model reads it as their
+#: instruction for this thread and never as a source (M16.1.1).
+SESSION_HEADING: Final = (
+    "For this conversation the person asked you to keep in mind (their words, not a source; "
+    "never cite them):"
 )
 
 #: Why a recalled memory reaches the model as a hint and never as a passage.
@@ -727,6 +736,9 @@ class ModelLane:
     hints: AskerHints | None = None
     #: What a question continuing a thread brings with it, or None for a question on its own.
     follow_up: FollowUp | None = None
+    #: What the person said for this conversation only, bound to the thread and the asker
+    #: (M16.1.1), or None. Read by `brain.gate.turn_context.assemble` with the other parts.
+    session: Recollection | None = None
     #: The selected agent's tool loop, when its catalogue offers a tool beyond the passage search
     #: (M13.7.1). The answer lane runs it in place of `draft`; see `brain.gate.runtime`.
     runtime: ToolLoop | None = None
@@ -794,6 +806,31 @@ class Drafted:
     #: Set when the passages found were more than the largest model could read and the answer
     #: was drawn from fewer (M15.4.1); the answer says so in `Trimmed.sentence`.
     trimmed: Trimmed | None = None
+    #: Which parts of the turn's context the model was shown and which were left out (M16.6.1),
+    #: or None when no model was asked. Kept on the trace by `brain.ops.trace_store`.
+    context: ContextNote | None = None
+    #: What the run held for a person, each as a phrase the asker may be told ("a reply to ticket
+    #: 4242"), in the order it was held. Empty beside every run that held nothing. See
+    #: `AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES`.
+    waiting: tuple[str, ...] = ()
+
+
+#: What an asker is told of an action their run prepared and a person has yet to decide.
+WAITING_FOR_A_PERSON: Final = "I have prepared {what} and it is waiting for a person to approve it."
+
+#: Why the sentence is the product's, built from the asker's own proposal, and kept off the cache.
+AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES: Final = (
+    "A run that held an action for a person ends by saying so to the person who asked, in the "
+    "product's words and not the model's, naming only what the asker themselves proposed: the "
+    "kind of action and the reference they gave. It names no approver, no reason and no "
+    "argument, replaces the abstention a run that read nothing would have ended with, and is "
+    "never kept for the next asker, because what one person's run held is that person's."
+)
+
+
+def waiting_text(waiting: Sequence[str]) -> str:
+    """One sentence for each action held, in order, from the product's own words."""
+    return " ".join(WAITING_FOR_A_PERSON.format(what=one) for one in waiting)
 
 
 #: Why a request too long for every model is answered from fewer passages, and says so.
@@ -901,6 +938,16 @@ def hints_block(hints: Sequence[str]) -> str:
     return HINTS_HEADING + "\n" + "\n".join(lines)
 
 
+def session_block(said: Sequence[str]) -> str:
+    """What the person said for this conversation only (M16.1.1): labelled, bounded, not a passage.
+
+    At most `brain.memory.formation.MAX_SESSION_STATEMENTS`, each cut to `HINT_CHARS`, so the byte
+    ceiling in `THE_PROMPT_FITS_ITS_TIER_BY_ITS_BYTES` holds with them in.
+    """
+    lines = [f"- {one[:HINT_CHARS]}" for one in said[:MAX_SESSION_STATEMENTS]]
+    return SESSION_HEADING + "\n" + "\n".join(lines)
+
+
 def prompt_for(
     question: str,
     payload: ChannelPayload,
@@ -908,6 +955,7 @@ def prompt_for(
     hints: Sequence[str] = (),
     *,
     earlier: Sequence[str] = (),
+    session: Sequence[str] = (),
 ) -> PromptLayout:
     """The whole prompt: the shared prefix, then the question, the hints, the passages, the length.
 
@@ -924,14 +972,71 @@ def prompt_for(
     parts = [f"Question:\n{question[:MAX_QUESTION_CHARS]}"]
     if hints:
         parts.append(hints_block(hints))
+    if session:
+        parts.append(session_block(session))
     parts.append(f"Passages:\n\n{passages}")
-    asked_before = [one[:EARLIER_CHARS] for one in list(earlier)[-EARLIER_SHOWN:]]
+    asked_before = earlier_block(earlier)
     if asked_before:
-        listed = "\n".join(f"- {one}" for one in asked_before)
-        parts.insert(0, f"Earlier in this conversation the person asked:\n{listed}")
+        parts.insert(0, asked_before)
     if cards:
         parts.append(cards_block(cards))
     return lay_out(PREFIX, *parts, settings_for(Lane.ANSWER).instruction)
+
+
+def earlier_block(earlier: Sequence[str]) -> str:
+    """The person's own earlier questions in this thread, the newest `EARLIER_SHOWN`, each cut to
+    `EARLIER_CHARS`, or nothing. Never an earlier answer (M9.2.3)."""
+    asked_before = [one[:EARLIER_CHARS] for one in list(earlier)[-EARLIER_SHOWN:]]
+    if not asked_before:
+        return ""
+    listed = "\n".join(f"- {one}" for one in asked_before)
+    return f"Earlier in this conversation the person asked:\n{listed}"
+
+
+def prompt_of(parts: ContextParts) -> PromptLayout:
+    """The prompt for one turn's assembled context. The only caller of `prompt_for` on a request.
+
+    See `brain.gate.turn_context.ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`. A turn whose knowledge
+    was read by tools has no passages here, and the prompt says so with an empty block.
+    """
+    payload = parts.knowledge if parts.knowledge is not None else _NO_PASSAGES
+    return prompt_for(
+        parts.question,
+        payload,
+        parts.task,
+        parts.asker_memory,
+        earlier=parts.conversation,
+        session=parts.session,
+    )
+
+
+#: The payload of a turn whose knowledge is read by tools rather than up front.
+_NO_PASSAGES: Final = ChannelPayload(records=())
+
+
+def tool_loop_turn(parts: ContextParts) -> str:
+    """The user turn a tool loop is shown for one turn's assembled context (M13.7.1, M16.6.1).
+
+    The blocks `prompt_for` shows, in its order and built by the same block functions, with no
+    passages and no skill cards: the loop reads knowledge through its tools, and its system turn
+    lists what it may call. So the same assembled parts reach a model on both answer paths. See
+    `brain.gate.turn_context.ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`.
+    """
+    blocks = [
+        earlier_block(parts.conversation),
+        f"Question:\n{parts.question[:MAX_QUESTION_CHARS]}",
+    ]
+    if parts.asker_memory:
+        blocks.append(hints_block(parts.asker_memory))
+    if parts.session:
+        blocks.append(session_block(parts.session))
+    return "\n\n".join(one for one in blocks if one)
+
+
+def categories_of(question: DataCategory, parts: ContextParts) -> tuple[DataCategory, ...]:
+    """What a prompt built from these parts carries, as `brain.models.disclosure` categories."""
+    payload = parts.knowledge if parts.knowledge is not None else _NO_PASSAGES
+    return sent_categories(question, payload, parts.task, (*parts.asker_memory, *parts.session))
 
 
 def messages_of(layout: PromptLayout) -> tuple[DriverMessage, DriverMessage]:
@@ -999,7 +1104,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
     for this reader and refused for any other.
     """
     cited: list[DocumentCitation] = []
-    for record in payload.records:
+    for position, record in enumerate(payload.records, start=1):
         document_id = record.get("document_id")
         if not isinstance(document_id, str) or not document_id:
             continue
@@ -1014,6 +1119,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
                     ),
                     source=payload.source,
                     fetched_at=str(record.get("updated_at") or ""),
+                    position=position,
                 )
             )
         except ValueError:
@@ -1114,16 +1220,25 @@ async def draft(
 
     agent = lane.agent
     offered = () if agent is None else skills_offered(agent, caller=entitlement, now=now)
-    cards = offered_cards(offered)
-    earlier = () if follow_up is None else follow_up.earlier
-    hints = () if lane.hints is None else await lane.hints.hints()
+    # Every part of the turn's context, read once and at this reach, in the one place both answer
+    # paths assemble it (M16.6.1). See `brain.gate.turn_context`.
+    parts = await assemble(
+        question,
+        conversation=() if follow_up is None else follow_up.earlier,
+        session=lane.session,
+        task=offered_cards(offered),
+        asker=lane.hints,
+        knowledge=payload,
+    )
+    cards = parts.task
     # The model writes the prose, so its call is the composing step and follows the redactor.
     step(GateStep.COMPOSE)
     if using is not None and cards:
         using(skill_uses(offered))
     found_count = len(payload.records)
     while True:
-        messages = messages_of(prompt_for(question, payload, cards, hints, earlier=earlier))
+        shown_parts = replace(parts, knowledge=payload)
+        messages = messages_of(prompt_of(shown_parts))
         try:
             response = await lane.model.complete(
                 messages,
@@ -1135,14 +1250,16 @@ async def draft(
                 agent_version=lane.agent_version,
                 max_output_tokens=settings_for(Lane.ANSWER).max_output_tokens,
                 pin=None if agent is None else agent.record.model_pin,
-                categories=sent_categories(lane.question_category, payload, cards, hints),
+                categories=categories_of(lane.question_category, shown_parts),
             )
         except ProviderUnavailable as failed:
             if failed.failure.refused:
                 # M5.4.1: the provider declined on content. Answered once, as the refusal a
                 # declining reply becomes, and never tried on another model.
                 return Drafted(
-                    outcome=refused(scope, detail="the model declined on content"), asked=True
+                    outcome=refused(scope, detail="the model declined on content"),
+                    asked=True,
+                    context=shown_parts.note(),
                 )
             # M15.4.1: longer than the largest model reads, after the executor climbed every
             # tier. See the reason constant beside `Trimmed`.
@@ -1152,18 +1269,25 @@ async def draft(
             payload = smaller
             continue
         break
+    # What the model was finally shown, which is fewer passages when the request was trimmed.
+    note = shown_parts.note()
     trimmed = (
         None
         if len(payload.records) == found_count
         else Trimmed(shown=len(payload.records), found=found_count)
     )
     if is_refusal(response.finish_reason):
-        return Drafted(outcome=refused(scope, detail="the model declined on content"), asked=True)
+        return Drafted(
+            outcome=refused(scope, detail="the model declined on content"),
+            asked=True,
+            context=note,
+        )
     text = response.text.strip()
     if not text:
         return Drafted(
             outcome=retrieved_but_not_answering(scope, detail="the model returned no prose"),
             asked=True,
+            context=note,
         )
     composed = compose(
         text, RedactedAnswer(payload=payload, trace=redacted.trace), sink=sink, now=now
@@ -1173,5 +1297,7 @@ async def draft(
     )
     uncited = abstain_if_uncited(provenance, scope=scope, policy=lane.citations)
     if uncited is not None:
-        return Drafted(outcome=uncited, asked=True)
-    return Drafted(outcome=composed, asked=True, provenance=provenance, trimmed=trimmed)
+        return Drafted(outcome=uncited, asked=True, context=note)
+    return Drafted(
+        outcome=composed, asked=True, provenance=provenance, trimmed=trimmed, context=note
+    )
