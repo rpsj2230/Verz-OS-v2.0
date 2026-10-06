@@ -1,6 +1,6 @@
 """`ops.custom_connector`: a connector for a new API, as submitted, and who reviewed it.
 
-`migrations/versions/0181_custom_connector.py` holds the argument for the table, its policies and
+`migrations/versions/0203_custom_connector.py` holds the argument for the table, its policies and
 its trigger; what is here is the model that mirrors it, and `brain.ops.custom_connector` is what a
 row means.
 

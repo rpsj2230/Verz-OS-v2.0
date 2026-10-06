@@ -52,6 +52,11 @@ export const DEFINITIONS_API_PATH = "/custom-connectors";
 export const SUBMIT_LABEL = "Submit for review";
 export const APPROVE_LABEL = "Approve";
 export const REJECT_LABEL = "Reject";
+export const BLANK_NAME = "Give the API a short name, in lower case, to know it by.";
+export const BLANK_LABEL = "Give the API the name people will see on the Connectors screen.";
+export const BLANK_DEPARTMENT = "Say which department this API's records belong to.";
+export const BLANK_DOCUMENT = "Paste the API's OpenAPI document, which says what it can be asked.";
+export const BLANK_CEILING = "Give the vendor's stated limit a minute and the page that states it.";
 const FORM = "custom-connector";
 
 export type Classification = "public" | "internal" | "confidential" | "restricted";
@@ -218,6 +223,20 @@ export function SubmitForm({ page, onKept }: { readonly page: DefinitionsPage; r
   }
 
   function submit(): void {
+    // Blank is said here and nothing is sent; any other shape is the API's to judge.
+    const blank = (value: string) => value.trim() === "";
+    const missing: FieldProblem[] = [
+      ...(blank(name) ? [{ field: "name", code: "missing", message: BLANK_NAME }] : []),
+      ...(blank(label) ? [{ field: "label", code: "missing", message: BLANK_LABEL }] : []),
+      ...(blank(department) ? [{ field: "department", code: "missing", message: BLANK_DEPARTMENT }] : []),
+      ...(blank(document) ? [{ field: "document", code: "missing", message: BLANK_DOCUMENT }] : []),
+      ...(blank(perMinute) || blank(cited) ? [{ field: "ceiling", code: "missing", message: BLANK_CEILING }] : []),
+    ];
+    if (missing.length > 0) {
+      setFailure(null);
+      setProblems(missing);
+      return;
+    }
     setBusy(true);
     setFailure(null);
     setProblems([]);
@@ -475,7 +494,8 @@ export function DefinitionCard({ one, review, onDecided }: { readonly one: Defin
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<readonly FieldProblem[]>([]);
 
-  function decide(approve: boolean): void {
+  const confirm = () => {
+    const approve = asking === true;
     setBusy(true);
     void (async () => {
       const result = await request<{ told: string }>(`${DEFINITIONS_API_PATH}/${one.name}/review`, {
@@ -490,7 +510,7 @@ export function DefinitionCard({ one, review, onDecided }: { readonly one: Defin
       }
       onDecided(result.data.told);
     })();
-  }
+  };
 
   return (
     <SectionCard
@@ -545,7 +565,7 @@ export function DefinitionCard({ one, review, onDecided }: { readonly one: Defin
         cancelLabel="Not now"
         busy={busy}
         danger={asking === false}
-        onConfirm={() => { decide(asking === true); }}
+        onConfirm={confirm}
         onCancel={() => { setAsking(null); }}
       />
     </SectionCard>

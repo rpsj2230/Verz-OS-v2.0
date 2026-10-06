@@ -1,7 +1,7 @@
 """A connector definition is kept, reviewed by a second person, and sent back for review if changed.
 
 The first half needs no server: the migration's copied grammars and vocabularies held to the live
-ones. The second builds a database at head and drives `0181`'s table as the application role,
+ones. The second builds a database at head and drives `0203`'s table as the application role,
 attributed as a route attributes it: a submission is kept waiting and on the ledger, the submitter's
 own approval is refused by the store and by the database, a second person's is kept with them named,
 a decision on a revision that has moved is refused, a change sends an approved definition back to
@@ -43,7 +43,7 @@ from tests.unit.test_automation_owner_store import app_engine
 from tests.unit.test_custom_connector import definition
 from tests.unit.test_tables import VERSIONS, migration_module
 
-MIGRATION: Final = VERSIONS / "0181_custom_connector.py"
+MIGRATION: Final = VERSIONS / "0203_custom_connector.py"
 
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
 LONG_AGO: Final = datetime(2019, 3, 4, 9, 0, tzinfo=UTC)
@@ -53,7 +53,7 @@ NAME: Final = "widgets_api"
 
 # ------------------------------------------------------------ the migration and the model
 def test_the_migration_copies_the_live_grammars_widths_and_vocabularies() -> None:
-    """Delete this and the table `0181` builds can drift from the names, identifiers, states and
+    """Delete this and the table `0203` builds can drift from the names, identifiers, states and
     schemes the product writes, so a definition the domain accepts is refused by a constraint
     nobody updated, or one it refuses is admitted."""
     migration = migration_module(MIGRATION)
@@ -176,7 +176,7 @@ def test_a_definition_is_kept_waiting_reviewed_by_a_second_person_and_written_to
 
 @pytest.mark.needs_db
 def test_the_database_refuses_a_definition_approved_by_its_own_submitter(install: str) -> None:
-    """`0181`'s constraint and update policy, asked directly with the store's own refusal not in
+    """`0203`'s constraint and update policy, asked directly with the store's own refusal not in
     the way: a row whose reviewer is its submitter is refused even when the actor is that person.
     Delete this and a route that forgot to ask lets a submitter approve their own."""
     name = f"{NAME}_own"

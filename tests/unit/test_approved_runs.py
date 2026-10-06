@@ -3,7 +3,7 @@
 The first half runs anywhere: what a run reports, the three ways `_run_one` declines before it
 reaches an executor, `ToolExecutor` through the real `brain.gate.leash.resume` (once, again, and a
 reach that moved), `ConnectorWrites` mapping every `send_approved` outcome, and one failing action
-not stopping the rest. The second builds PostgreSQL to head and asks `gate.approved_to_run` (`0176`)
+not stopping the rest. The second builds PostgreSQL to head and asks `gate.approved_to_run` (`0201`)
 which rows it returns, as whom it may be called, and whether it reverses.
 
 The clock is 2999, for the reason CLAUDE.md records about fixtures that go off: what is tested is
@@ -60,7 +60,7 @@ from tests.unit.test_suspension_store import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-MIGRATION = ROOT / "migrations" / "versions" / "0176_approved_runs.py"
+MIGRATION = ROOT / "migrations" / "versions" / "0201_approved_runs.py"
 NOW = datetime(2999, 6, 1, 9, 0, tzinfo=UTC)
 LEASH = Leash(
     entries=(
@@ -75,7 +75,7 @@ LEASH = Leash(
 
 
 def migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("m0176", MIGRATION)
+    spec = importlib.util.spec_from_file_location("m0201", MIGRATION)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

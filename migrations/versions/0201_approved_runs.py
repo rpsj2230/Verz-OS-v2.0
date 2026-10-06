@@ -25,28 +25,28 @@ The window is a parameter and the body reads no clock, so the instant is the cal
 `0172`. Its search path is pinned and every object is named with its schema. EXECUTE is revoked
 from `PUBLIC` and granted to `brain_app`, the login the worker's controls use.
 
-**The control-run names gain `approved_actions`**, replacing `0169`'s, so the worker can record its
+**The control-run names gain `approved_actions`**, replacing `0182`'s, so the worker can record its
 scheduled run.
 
-**The downgrade** drops the function and puts `0169`'s names back `NOT VALID`, for `0026`'s reason:
+**The downgrade** drops the function and puts `0182`'s names back `NOT VALID`, for `0026`'s reason:
 a run already recorded stays.
 
-Revises `0154`, the head of main when this was written.
+Written as `0176` revising `0154`; renumbered `0201` revising `0190` when it joined the train
+after `0190`, with `0182`'s control-run names as the ones it replaces.
 
 Task ids: M13.7.6
 
-Revision ID: 0176
-Revises: 0154
+Revision ID: 0201
+Revises: 0190
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "0176"
-# The head of origin/main when this was written. Re-pointed at whichever migration is the head
-# when it lands: nothing here depends on a table a later migration builds.
-down_revision = "0154"
+revision = "0201"
+# The train's head below it. Nothing here depends on a table a later migration builds.
+down_revision = "0190"
 branch_labels = None
 depends_on = None
 
@@ -91,25 +91,25 @@ GRANTS: tuple[str, ...] = (
     f"GRANT EXECUTE ON FUNCTION {FUNCTION} TO {APP_ROLE}",
 )
 
-#: The control-run names, with and without `approved_actions`. The second is `0169`'s.
+#: The control-run names, with and without `approved_actions`. The second is `0182`'s.
 WITH_APPROVED_ACTIONS = (
     "name IN ('acceptance_run', 'approved_actions', 'audit_anchor', 'automation_run', "
     "'backup_exposure', 'canary_run', 'connector_sync', 'denial_digest', 'directory_sync', "
+    "'entity_resolution', 'erasure_queue', 'escalation_expiry', 'evening_digest', "
+    "'knowledge_reverification', 'model_health_probes', 'outbox_dispatch', 'queue_redrive', "
+    "'resolution_calibration', 'restore_drill', 'retention_sweep', 'side_effect_resume', "
+    "'spend_correction', 'spend_report_refresh', 'vault_audit_ship', 'vault_token_renewal')"
+)
+WITHOUT_APPROVED_ACTIONS = (
+    "name IN ('acceptance_run', 'audit_anchor', 'automation_run', 'backup_exposure', "
+    "'canary_run', 'connector_sync', 'denial_digest', 'directory_sync', 'entity_resolution', "
     "'erasure_queue', 'escalation_expiry', 'evening_digest', 'knowledge_reverification', "
     "'model_health_probes', 'outbox_dispatch', 'queue_redrive', 'resolution_calibration', "
     "'restore_drill', 'retention_sweep', 'side_effect_resume', 'spend_correction', "
     "'spend_report_refresh', 'vault_audit_ship', 'vault_token_renewal')"
 )
-WITHOUT_APPROVED_ACTIONS = (
-    "name IN ('acceptance_run', 'audit_anchor', 'automation_run', 'backup_exposure', "
-    "'canary_run', 'connector_sync', 'denial_digest', 'directory_sync', 'erasure_queue', "
-    "'escalation_expiry', 'evening_digest', 'knowledge_reverification', 'model_health_probes', "
-    "'outbox_dispatch', 'queue_redrive', 'resolution_calibration', 'restore_drill', "
-    "'retention_sweep', 'side_effect_resume', 'spend_correction', 'spend_report_refresh', "
-    "'vault_audit_ship', 'vault_token_renewal')"
-)
 
-#: What this migration replaces: `0169`'s control-run names.
+#: What this migration replaces: `0182`'s control-run names.
 SUPERSEDES: dict[str, str] = {WITHOUT_APPROVED_ACTIONS: WITH_APPROVED_ACTIONS}
 
 #: Drops the control-run name constraint by whichever name it has. See `0030`, which `0133` copies.

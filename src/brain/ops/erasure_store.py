@@ -308,7 +308,7 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # lists and nothing the run read. `0188` grants no way for a row to leave, so an erasure
         # keeps these and reports them kept, as it does a question asked.
         "ops.agent_run": "principal_id",
-        # A consent a person started at a vendor (`0180`), theirs whatever its kind. Removed on
+        # A consent a person started at a vendor (`0202`), theirs whatever its kind. Removed on
         # erasure although the application may never delete one: see `REMOVED`. The refresh
         # token a person's own consent bought is in the vault: `erase_own_refresh_tokens`.
         "ops.oauth_consent": "principal_id",

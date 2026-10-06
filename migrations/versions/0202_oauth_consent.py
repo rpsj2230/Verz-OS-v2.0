@@ -30,7 +30,7 @@ kept where its kind says and judged by the authority its kind asks, and the kind
 after the row is written: it is not among the columns the application may update. Nothing else
 differs, and the policies need no second rule: `principal_id` already names whose consent it is,
 and every policy already holds it to the actor. Added in place rather than in a migration of its
-own, because no install had applied `0180` when the personal consent was designed.
+own, because no install had applied `0202` when the personal consent was designed.
 
 **No DELETE for the application, and erasure removes a person's rows.** A consent used or expired
 stays as the record that it was started, by whom and when, and holds nothing a reader could use,
@@ -42,14 +42,13 @@ would change nothing and a policy for it would never apply, so neither is writte
 
 **The downgrade** drops the table; its policies and grants go with it.
 
-Revised `0167` when it was written, and is re-pointed at whichever migration is the head when it
-lands: nothing here depends on anything after `0068`'s connections. Now `0154`, main's head when
-main was last taken in (found from the chain: no migration revises it).
+Revised `0167` when it was written, and `0154` after; renumbered `0202` revising `0201` when it joined
+the train. Nothing here depends on anything after `0068`'s connections.
 
 Task ids: M11.8.6
 
-Revision ID: 0180
-Revises: 0154
+Revision ID: 0202
+Revises: 0201
 """
 
 from __future__ import annotations
@@ -57,9 +56,9 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0180"
-# The head of origin/main when this branch last took it in: 0154, which lands after 0167.
-down_revision = "0154"
+revision = "0202"
+# The train's migration below it.
+down_revision = "0201"
 branch_labels = None
 depends_on = None
 

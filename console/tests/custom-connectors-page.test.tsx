@@ -11,6 +11,11 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { CUSTOM_CONNECTORS_PATH } from "../src/pages/CustomConnectors.route";
 import {
   APPROVE_LABEL,
+  BLANK_CEILING,
+  BLANK_DEPARTMENT,
+  BLANK_DOCUMENT,
+  BLANK_LABEL,
+  BLANK_NAME,
   DEFINITIONS_API_PATH,
   SUBMIT_LABEL,
   readOperations,
@@ -79,6 +84,19 @@ function page(definitions: Definition[]): DefinitionsPage {
   };
 }
 
+/** Every field the form judges blank, filled, so a submit reaches the API. */
+function fill(container: HTMLElement): void {
+  const set = (id: string, value: string) => {
+    fireEvent.change(container.querySelector(`#custom-connector-${id}`) as HTMLInputElement, { target: { value } });
+  };
+  set("name", "widgets_api");
+  set("label", "Widgets");
+  set("department", "finance");
+  set("document", DOCUMENT);
+  set("minute", "60");
+  set("cited", "https://vendor.example/limits");
+}
+
 async function mounted(answers: Record<string, Answer>) {
   return mountPage(
     CUSTOM_CONNECTORS_PATH,
@@ -106,9 +124,7 @@ describe("the Add an API page", () => {
       [SUBMIT]: () =>
         json({ problems: [{ field: "ceiling", code: "missing", message: "CEILING-SENTINEL" }] }, 422),
     });
-    fireEvent.change(container.querySelector("#custom-connector-document") as HTMLTextAreaElement, {
-      target: { value: DOCUMENT },
-    });
+    fill(container);
     fireEvent.click(button(container, SUBMIT_LABEL));
     await waitFor(() => {
       expect(container.textContent).toContain("CEILING-SENTINEL");
@@ -122,6 +138,20 @@ describe("the Add an API page", () => {
       backendModelFields("src/brain/custom_connector_routes.py", "EntityAsked").sort(),
     );
     expect(container.querySelector('[aria-invalid="true"]')).toBeNull();
+  });
+
+  test("a form sent blank says what to fill in beside its fields and sends nothing", async () => {
+    // What breaks if this is deleted: an empty definition sent for the API to refuse, which is a
+    // request a person made by pressing once on an empty page. The sibling above sends a filled one.
+    const { container, sent } = await mounted({ [LIST]: () => json(page([])) });
+    fireEvent.click(button(container, SUBMIT_LABEL));
+    await waitFor(() => {
+      expect(container.textContent).toContain(BLANK_NAME);
+    });
+    for (const said of [BLANK_LABEL, BLANK_DEPARTMENT, BLANK_DOCUMENT, BLANK_CEILING]) {
+      expect(container.textContent).toContain(said);
+    }
+    expect(sent.filter((one) => one.method === "POST")).toEqual([]);
   });
 
   test("a definition is approved only through its confirmation, naming the revision read", async () => {

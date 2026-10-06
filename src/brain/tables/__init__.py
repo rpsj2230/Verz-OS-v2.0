@@ -451,9 +451,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
     # outlives both.
     "ops.agent_run",
-    # 0180_oauth_consent. Points at nothing: the source and the person are values.
+    # 0202_oauth_consent. Points at nothing: the source and the person are values.
     "ops.oauth_consent",
-    # 0181_custom_connector. Points at nothing: the submitter and the reviewer are values.
+    # 0203_custom_connector. Points at nothing: the submitter and the reviewer are values.
     "ops.custom_connector",
 )
 

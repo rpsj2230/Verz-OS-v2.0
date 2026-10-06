@@ -1,6 +1,6 @@
 """A consent waits for its vendor's answer once, for the person who started it, and briefly.
 
-`brain.ops.connector_consent` over `ops.oauth_consent` (`0180`), against PostgreSQL at head and as
+`brain.ops.connector_consent` over `ops.oauth_consent` (`0202`), against PostgreSQL at head and as
 the application's role (`brain.session.make_application_sessions`, which requests are served by),
 so the table's policies are what is being asked as well as the store's statement. And the one
 mark a refused consent leaves on the source's health, which is `after_attempt`'s rule. Every
@@ -209,7 +209,7 @@ def test_the_table_keeps_no_state_and_a_verifier_only_sealed() -> None:
 
 @pytest.mark.needs_db
 def test_a_person_sees_and_starts_only_their_own_consents() -> None:
-    """`0180`'s policies, asked as the application's role: a row started by one person is read by
+    """`0202`'s policies, asked as the application's role: a row started by one person is read by
     them and by nobody else, and a row cannot be inserted in somebody else's name. Delete this and
     the store's `WHERE` is the only thing standing between two people's consents."""
     with at_head("brain_oauth_consent_rls") as url:

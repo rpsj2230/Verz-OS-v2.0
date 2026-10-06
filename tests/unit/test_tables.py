@@ -154,8 +154,8 @@ MIGRATION_REGISTRY_OBSERVATIONS = VERSIONS / "0182_entity_registry_observations.
 MIGRATION_ENTITY_MERGES = VERSIONS / "0183_entity_merges.py"
 MIGRATION_REVIEW_ITEMS = VERSIONS / "0184_entity_review_items.py"
 MIGRATION_AGENT_RUN = VERSIONS / "0188_agent_run.py"
-MIGRATION_OAUTH_CONSENT = VERSIONS / "0180_oauth_consent.py"
-MIGRATION_CUSTOM_CONNECTOR = VERSIONS / "0181_custom_connector.py"
+MIGRATION_OAUTH_CONSENT = VERSIONS / "0202_oauth_consent.py"
+MIGRATION_CUSTOM_CONNECTOR = VERSIONS / "0203_custom_connector.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -443,9 +443,9 @@ ENTITY_MERGE_TABLES: tuple[str, ...] = ("er.merge", "er.unmerge")
 REVIEW_ITEM_TABLES: tuple[str, ...] = ("er.review_item",)
 #: And the one 0188 adds: every finished agent run, as counts and names.
 AGENT_RUN_TABLES: tuple[str, ...] = ("ops.agent_run",)
-#: And the one 0180 adds: a consent started at a vendor, held until it is answered once.
+#: And the one 0202 adds: a consent started at a vendor, held until it is answered once.
 OAUTH_CONSENT_TABLES: tuple[str, ...] = ("ops.oauth_consent",)
-#: And the one 0181 adds: a connector for a new API, as submitted, and who reviewed it.
+#: And the one 0203 adds: a connector for a new API, as submitted, and who reviewed it.
 CUSTOM_CONNECTOR_TABLES: tuple[str, ...] = ("ops.custom_connector",)
 
 ALL_TABLES = (

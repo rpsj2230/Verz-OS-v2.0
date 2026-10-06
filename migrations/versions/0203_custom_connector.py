@@ -30,12 +30,12 @@ rejected, which is a decision the ledger records, rather than removed.
 The downgrade drops the trigger, its function and the table; the ledger entries stay, for `0026`'s
 reason.
 
-Revises `0154`, the head of main when it was written.
+Written as `0181` revising `0154`; renumbered `0203` revising `0202` when it joined the train.
 
 Task ids: M11.7.8
 
-Revision ID: 0181
-Revises: 0154
+Revision ID: 0203
+Revises: 0202
 """
 
 from __future__ import annotations
@@ -44,9 +44,9 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0181"
-# The head of origin/main when it was written; re-pointed at whichever is the head when it lands.
-down_revision = "0154"
+revision = "0203"
+# The train's migration below it.
+down_revision = "0202"
 branch_labels = None
 depends_on = None
 

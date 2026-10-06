@@ -39,6 +39,11 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/connectors/CustomConnectorsPage.tsx DEFINITIONS_API_PATH":
+    "Submitting an API's definition keeps a new one waiting for a second person's review; nothing is " +
+    "read through it until it is approved, and it replaces no definition, which is the change route's, " +
+    "and that one is not sent from this page. tests/unit/test_custom_connector_store.py holds the " +
+    "definition waiting and tests/custom-connectors-page.test.tsx the form.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
     "Adding a work email binds an address to a person who has none. It retires the staff list's " +
     "person for that address only when they have never signed in and hold nothing but what the sync " +

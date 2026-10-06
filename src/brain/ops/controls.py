@@ -1037,7 +1037,7 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="approved_actions",
-        # Since 2026-10-06 (`0176`, M13.7.6). The worker's schedule starts `run_approved_now`,
+        # Since 2026-10-06 (`0201`, M13.7.6). The worker's schedule starts `run_approved_now`,
         # which reads each approved action through `gate.approved_to_run` and runs it once
         # through `brain.gate.leash.resume` at its requester's reach as it is now.
         symbols=(

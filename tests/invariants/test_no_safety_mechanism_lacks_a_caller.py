@@ -153,7 +153,7 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: `entity_resolution` joined on 2026-10-06 the day it was registered (`0182`, M14.1), giving every
 #: record a connector declares for resolution its entity through
 #: `brain.resolution.registry_store.run_registry_now`.
-#: `approved_actions` joined on 2026-10-06 the day it was registered (`0176`, M13.7.6), running
+#: `approved_actions` joined on 2026-10-06 the day it was registered (`0201`, M13.7.6), running
 #: each approved action once through `brain.ops.approved_runs.run_approved_now`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {

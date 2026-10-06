@@ -937,7 +937,7 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
     # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
     Runner(name="evening_digest", run=evening_digest, workload=WorkloadClass.BATCH),
-    # Wired on 2026-10-06 with `gate.approved_to_run` (`0176`). See `brain.ops.approved_runs`.
+    # Wired on 2026-10-06 with `gate.approved_to_run` (`0201`). See `brain.ops.approved_runs`.
     Runner(name="approved_actions", run=approved_actions, workload=WorkloadClass.BACKGROUND),
 )
 

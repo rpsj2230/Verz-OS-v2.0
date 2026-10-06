@@ -17,7 +17,7 @@ change back before calling it done. A tool with no executor is never listed, so 
 kind nothing can run stays approved until it lapses rather than being reported run. See
 `AN_ACTION_NOTHING_CAN_RUN_IS_NEVER_LISTED`.
 
-**The worker sees approved actions through one narrow door.** `gate.approved_to_run` (`0176`)
+**The worker sees approved actions through one narrow door.** `gate.approved_to_run` (`0201`)
 returns the id and the principal of each approved suspension inside its window, naming a tool an
 executor runs, with no operation recorded against it, and nothing else. Each is then read **at its
 principal's reach, resolved now** through the one resolver (`StoredEntitlements`), so `0042`'s
@@ -193,7 +193,7 @@ def policy_of(action: Action) -> FieldPolicy:
 async def approved_to_run(
     session: AsyncSession, *, now: datetime, tools: Sequence[str], limit: int = PER_RUN
 ) -> list[Listed]:
-    """`gate.approved_to_run`: the approved, unrun, unlapsed actions of these tools. See `0176`."""
+    """`gate.approved_to_run`: the approved, unrun, unlapsed actions of these tools. See `0201`."""
     if not tools:
         return []
     rows = await session.execute(

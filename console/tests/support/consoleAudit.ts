@@ -451,6 +451,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/channels/:name/:view",
       // Where a vendor sends the person back after consenting to a source (M11.8.6).
       "/connector-consent",
+      // An API's connector added from its specification, and reviewed by a second person (M11.7.8).
+      "/connectors/new-api",
     ],
     routes: [
       "/api/v1/connectors",
@@ -480,6 +482,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/console/channels",
       "/api/v1/console/channels/{name}",
       "/api/v1/console/channels/{name}/stats",
+      // An API's connector: submitted, changed and reviewed (M11.7.8).
+      "/api/v1/custom-connectors*",
     ],
     tables: [
       "auth.binding_code",
@@ -489,6 +493,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.connector_sync",
       // A consent started at a vendor, held until it is answered once (M11.8.6).
       "ops.oauth_consent",
+      // A connector for a new API, as submitted, and who reviewed it (M11.7.8).
+      "ops.custom_connector",
       "proj.record",
       "proj.record_retired",
       "proj.source_epoch",
