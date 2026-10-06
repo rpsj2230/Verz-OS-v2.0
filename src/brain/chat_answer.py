@@ -56,7 +56,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Final, Protocol, runtime_checkable
 
@@ -87,6 +87,7 @@ from brain.channels.adapter import (
 from brain.channels.cards import LABEL_PREFIX
 from brain.channels.inbound import ChannelBindings, Inbound, prompt_intent, reply_intent
 from brain.channels.lark import ChatType, LarkMessage, Rendered, Visibility, plan_delivery
+from brain.channels.marks import mark_line
 from brain.channels.outbound import Outgoing
 from brain.channels.room import Member, RoomRefusedError, RoomRender, floor, revalidate
 from brain.channels.room import plan as room_plan
@@ -169,6 +170,11 @@ class ChatReply:
     highest: Classification
     #: True when the lane answered, false for an abstention or a refusal.
     answered: bool
+    #: The request trace the answer ran under, which the reply offers for marking (M16.6.4).
+    #: Empty for a sentence that ran no request. The room's posting is sent with it emptied, in
+    #: `ChatAnswerer._planned`, which is the one place a room's answer leaves; see
+    #: `brain.channels.marks`.
+    trace_id: str = ""
 
 
 class People(Protocol):
@@ -424,7 +430,13 @@ class ChatAnswerer:
         }
         if keep:
             await self._kept(person, inbound, asked, outcome, policies, now)
-        return ChatReply(text, payload, highest_in(payload, policies), outcome.composed is not None)
+        return ChatReply(
+            text,
+            payload,
+            highest_in(payload, policies),
+            outcome.composed is not None,
+            trace_id=trace,
+        )
 
     async def _kept(
         self,
@@ -524,7 +536,9 @@ class ChatAnswerer:
         out: list[Outgoing] = []
         for delivery in deliveries:
             if delivery.visibility is Visibility.ROOM and theirs is not None:
-                to, reply = conversation.room_to, theirs
+                # The room's posting never offers a mark, even when it is the asker's own answer
+                # because everybody present holds the same: see `brain.channels.marks`.
+                to, reply = conversation.room_to, replace(theirs, trace_id="")
             elif delivery.visibility is Visibility.EPHEMERAL:
                 to, reply = conversation.aside_to, mine
             else:
@@ -647,14 +661,16 @@ class ChatAnswerer:
         capabilities: ChannelCapabilities,
     ) -> Outgoing:
         """One answer to one address, held to the asker's reach when it leaves, or the link where
-        the answer holds more than this channel may carry."""
+        the answer holds more than this channel may carry. The asker's own answer ends with the
+        line that marks it (M16.6.4)."""
         if not capabilities.may_carry(reply.highest):
             return self._sentence(record, event, to, CEILING_TOLD + (ask_link() or "the console"))
+        text = f"{reply.text}\n\n{mark_line(reply.trace_id)}" if reply.trace_id else reply.text
         return Outgoing(
             channel=event.channel,
             to=to,
             intent=reply_intent(record, event),
-            text=reply.text,
+            text=text,
             payload=reply.payload,
             highest=reply.highest,
             recipient=person.id,

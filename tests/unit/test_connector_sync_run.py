@@ -67,6 +67,8 @@ from brain.ops.connector_sync import (
     SOURCE_UNREACHABLE,
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
+    fields_lost_detail,
+    fields_lost_of,
 )
 from brain.ops.connector_sync_run import (
     THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES,
@@ -1235,3 +1237,84 @@ def test_hubspots_reading_would_follow_every_page_it_is_told_of_once_its_ceiling
         asked.append(dict(following))
 
     assert [one.get("after") for one in asked] == [None, "c2", "c3"]
+
+
+# ------------------------------------------------------------------ the schema check (M11.8.7)
+def renamed(cid: str, old: str, new: str) -> SourceAnswer:
+    """A recording whose records call one field by another name, as a vendor's rename would."""
+    body = recorded(cid).body
+    rows = [
+        {(new if key == old else key): value for key, value in one.items()}
+        for one in body["Invoices"]
+    ]
+    return SourceAnswer(status=200, headers={}, body=json.dumps({"Invoices": rows}).encode())
+
+
+def synced_detail(url: str) -> str:
+    async def work(sessions: async_sessionmaker[AsyncSession]) -> str:
+        return (await StoredSyncStates(sessions).states())["xero"].synced_detail
+
+    return through(url, work)
+
+
+@pytest.mark.needs_db
+def test_a_field_the_source_renamed_is_lost_until_a_read_finds_it_again() -> None:
+    """**M11.8.7 on the worker's own run.** Read once as recorded, the invoice's status is kept.
+    Read again with Xero calling it something else, the read is still a read, degraded, and its
+    sentence names the invoice's status, as the newest read's sentence says. A failed read
+    after it does not forget it, and a further read that still finds no status keeps it lost
+    although the index no longer holds it. Read as recorded again, it is found and the source is
+    healthy. Delete this and a renamed field is answered as empty for as long as the source runs,
+    or a field is called lost once and forgotten by the next read."""
+    status = f"{xero.ENTITY_INVOICE}.status"
+    lost = fields_lost_detail((status,))
+    with a_database("brain_connector_sync_lost") as url:
+        connect(url)
+        sync(url, Replay([answer_for("XERO-200-invoices"), NO_CONTACTS]))
+        sync(
+            url,
+            Replay([renamed("XERO-200-invoices", "Status", "InvoiceStatus"), NO_CONTACTS]),
+            at=NOW + timedelta(days=2),
+        )
+        after_rename = synced_detail(url)
+        sync(
+            url,
+            Replay([SourceAnswer(status=503, headers={}, body=b"{}")]),
+            at=NOW + timedelta(days=4),
+        )
+        after_failure = synced_detail(url)
+        sync(
+            url,
+            Replay([renamed("XERO-200-invoices", "Status", "InvoiceStatus"), NO_CONTACTS]),
+            at=NOW + timedelta(days=6),
+        )
+        still = synced_detail(url)
+        sync(
+            url, Replay([answer_for("XERO-200-invoices"), NO_CONTACTS]), at=NOW + timedelta(days=8)
+        )
+        found = synced_detail(url)
+        runs = [(outcome, health, detail) for outcome, health, *_, detail in attempts(url)]
+
+    assert runs == [
+        ("synced", "ok", READ_TO_THE_END),
+        ("synced", "degraded", lost),
+        ("failed", "degraded", SOURCE_UNREACHABLE),
+        ("synced", "degraded", lost),
+        ("synced", "ok", READ_TO_THE_END),
+    ]
+    assert (after_rename, after_failure, still, found) == (lost, lost, lost, READ_TO_THE_END)
+    assert fields_lost_of(lost) == frozenset({status})
+
+
+@pytest.mark.needs_db
+def test_a_field_no_record_ever_carried_is_not_called_lost() -> None:
+    """**A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_CARRIED_IT_NO_LONGER_DO, its other half.** A source
+    whose first read has no status on any invoice is read to the end and healthy: a vendor leaving
+    an empty field out is not a rename, and nothing kept the field before. Delete this and every
+    source that omits empty fields is degraded on its first read and answered as unreadable."""
+    with a_database("brain_connector_sync_never_carried") as url:
+        connect(url)
+        sync(url, Replay([renamed("XERO-200-invoices", "Status", "InvoiceStatus"), NO_CONTACTS]))
+        runs = [(outcome, health, detail) for outcome, health, *_, detail in attempts(url)]
+
+    assert runs == [("synced", "ok", READ_TO_THE_END)]
