@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T08:52:14.669367+00:00",
-  "commit": "be01c888",
-  "commit_subject": "Every open task says what already exists for it, whether it is wired, and where the rest lives (#464)",
+  "generated_at": "2026-10-06T09:29:16.252211+00:00",
+  "commit": "bef3f9f5",
+  "commit_subject": "Migration train: 0190 to 0207 in one chain (channels, approved actions, OAuth, API connectors, skills, conversations, retrieval log, artifacts, autonomy moves, tools per agent, learning, history fix, conversation export) (#460)",
   "total": 1596,
   "done": 680,
   "percent": 42.6,
