@@ -15,11 +15,12 @@ and on a channel that carries approvals and cards each approval the Approvals sc
 them is sent as a card to a conversation only they read with the bot, never to a group. Which
 approvals is `brain.approval_routes.shown_card`, the question the Approvals screen asks, at the
 reach a press would decide under, so a card is offered exactly when pressing it could decide it.
-The card's body is `brain.console.approvals.card`'s for that reach, which is what the same person
-reads on the Approvals screen, and `build_approval_card` refuses one computed at any other: the
-asker's reach never reaches the approver (needs-rupash 14). Each card goes once per approver and
-approval, keyed through the operation ledger, and every open draws on the open half of the card
-ceiling. See `A_CARD_IS_OFFERED_WHERE_ITS_READER_ALONE_READS_IT`.
+The card's request is `brain.console.approvals.card`'s for that reach, rendered at it by
+`brain.gate.approval_request.render_request`, which is what the same person reads on the Approvals
+screen, and `build_approval_card` refuses one rendered for anybody else and makes the payload
+itself: the asker's artefact never reaches the approver (needs-rupash 14, M33.8.1). Each card
+goes once per approver and approval, keyed through the operation ledger, and every open draws on
+the open half of the card ceiling. See `A_CARD_IS_OFFERED_WHERE_ITS_READER_ALONE_READS_IT`.
 
 **A card is sent to each approver the moment an approval is raised, to the Lark address their
 binding keeps (M10.2.7, needs-rupash 118).** Until 2026-09-29 a chat binding kept the digest of
@@ -142,7 +143,6 @@ from brain.chat_answer import People, ask_link, people_of
 from brain.console.approvals import Card
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
-from brain.core.redaction import ChannelPayload
 from brain.gate.admission import admit_card_press, verbs_for_channel
 from brain.gate.context import Channel
 from brain.gate.ingress import Binding, Unrecognised, identity_hash
@@ -352,24 +352,6 @@ def carries_cards(channel: Channel) -> bool:
     )
 
 
-def card_payload(shown: Card) -> ChannelPayload:
-    """What an approval card shows: `brain.console.approvals.Card`'s own fields, no more.
-
-    `shown` is what the Approvals screen shows this reader, so the card cannot show them anything
-    that screen would not. No entity and no id on the record, since the card's first line names
-    the approval already.
-    """
-    return ChannelPayload(
-        records=(
-            {
-                "request": shown.artefact,
-                "runs as": shown.runs_as,
-                "until": shown.expires_at.isoformat(timespec="minutes"),
-            },
-        )
-    )
-
-
 def controls_for(approve: Mapping[str, str], reject: Mapping[str, str]) -> tuple[CardAction, ...]:
     """Approve as a button, and Reject as a choice of the reasons the console offers.
 
@@ -400,16 +382,17 @@ def built(
     """The card for this approval at this reach: the body the Approvals screen shows them.
 
     One card id per approval, reader and action, so the card offered and the card closed are the
-    same card and a send is keyed once for each reader. `CardRefusedError` from
-    `build_approval_card` for a body computed at any reach but the reader's own.
+    same card and a send is keyed once for each reader. `shown` is what the Approvals screen shows
+    this reader, so the card cannot show them anything that screen would not. `CardRefusedError`
+    from `build_approval_card` for a request rendered for anybody but the reader at their reach.
     """
     key = _key(suspension.id, reach.principal_id, suspension.action_digest)
     return build_approval_card(
         card_id=f"card.{key}",
         suspension_id=suspension.id,
         action_digest=suspension.action_digest,
-        payload=card_payload(shown),
-        body_ent_hash=reach.ent_hash(),
+        request=shown.request,
+        runs_as=shown.runs_as,
         approver=reach,
         raised_at=suspension.raised_at,
         expires_at=suspension.expires_at,
