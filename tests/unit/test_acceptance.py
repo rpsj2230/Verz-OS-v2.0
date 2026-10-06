@@ -34,6 +34,7 @@ from brain.ops import (
     acceptance_checks_class_pools,
     acceptance_checks_recovery,
     acceptance_checks_services,
+    acceptance_operations_console,
     acceptance_run,
 )
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
@@ -672,6 +673,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # `tests/unit/test_acceptance_templates.py` signs the catalogue on and runs it.
     assert outcomes.pop("every_built_in_template_is_on_file_and_installs_at_shadow")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
+    assert outcomes.pop("rate_limits_and_capacity_answer_their_readers")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
@@ -760,6 +762,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # Nothing started the application against this database, so nothing furnished it;
+    # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
+    assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (
+        NOT_RUN,
+        acceptance_operations_console.NOTHING_HAS_FURNISHED_THIS_DATABASE,
+    )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)
