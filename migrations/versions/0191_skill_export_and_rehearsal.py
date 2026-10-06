@@ -35,7 +35,7 @@ from sqlalchemy.dialects import postgresql
 revision = "0191"
 # Written over 0178, the head of origin/main on the day; re-pointed at its turn in the train. Its
 # trigger appends `skill`, already in the action list, and it re-states no constraint.
-down_revision = "0190"
+down_revision = "0203"
 branch_labels = None
 depends_on = None
 
