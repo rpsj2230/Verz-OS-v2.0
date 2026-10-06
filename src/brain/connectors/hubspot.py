@@ -172,6 +172,7 @@ from brain.connectors.manifest import (
     ToolDeclaration,
 )
 from brain.connectors.projection import ProjectedRecord, ProjectedValue, RefreshPromise
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import ID_TARGET, RestOperation, RestSpec, load_spec
 from brain.connectors.throttle import CallOutcome, ceiling_for, classify, retry_delay
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord
@@ -184,6 +185,7 @@ from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import MAX_BACKOFF_SECONDS, ConnectorLimit, connector_ceiling
 from brain.ops.secrets import SecretRef
+from brain.resolution.canonical import EntityType
 from brain.tools.fetch import Fetcher, Resolver
 
 # ------------------------------------------------------------------ written-down reasons
@@ -2184,5 +2186,13 @@ CONNECTOR: Final = ConnectorDeclaration(
     scopes=KeyScopes(
         request=required_scopes(),
         refuse=("crm.objects.*.write", "anything touching settings"),
+    ),
+    resolves=(
+        # A CRM company is a client; its contacts project no name, so they are not read here.
+        ResolvesAs(
+            entity=ENTITY_CLIENT,
+            entity_type=EntityType.COMPANY,
+            fields={"name": "name", "domain": "domain"},
+        ),
     ),
 )

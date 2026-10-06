@@ -186,6 +186,7 @@ from brain.connectors.manifest import (
     ToolDeclaration,
 )
 from brain.connectors.projection import ProjectedRecord, ProjectedValue, RefreshPromise
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import (
     DatabaseTransport,
@@ -206,6 +207,7 @@ from brain.knowledge.rows import assert_takes_no_sql
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
+from brain.resolution.canonical import EntityType
 from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
 
 # ------------------------------------------------------------------ written-down reasons
@@ -2477,5 +2479,14 @@ CONNECTOR: Final = ConnectorDeclaration(
     scopes=KeyScopes(
         request=("SELECT on the allowlisted views only",),
         refuse=("SELECT on tables", "any write"),
+    ),
+    resolves=(
+        # A client view row is a client, and it carries the contract value.
+        ResolvesAs(
+            entity=ENTITY_CLIENT,
+            entity_type=EntityType.COMPANY,
+            fields={"name": "name"},
+            carries_money=True,
+        ),
     ),
 )

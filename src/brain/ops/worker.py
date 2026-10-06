@@ -149,6 +149,7 @@ asks this module's own `preflight`, `declared_slots` and `plan_for` of the conta
 in on every deploy, and shows `preflight` refusing that environment with one class taken away.
 
 Task ids: M32.4.1.4
+Task ids: M22.2.2
 """
 
 from __future__ import annotations
@@ -192,7 +193,9 @@ from brain.knowledge.parse_budget import (
     parse_budget_note,
     parse_worker_gaps,
 )
+from brain.ops.admission import WorkloadClass
 from brain.ops.checkpoints import channel_policy_gaps, connection_refusals
+from brain.ops.class_pools import Follower, Routing, queued_class, routed_url
 from brain.ops.connections import (
     WORKER_CHECKPOINTER_CONNECTIONS,
     WORKER_QUEUE_CONNECTIONS,
@@ -334,6 +337,12 @@ THE_SCHEDULE_RUNS_AS_THE_OWNER: Final = (
     "hands every variable to every container, ticked as brain_app and failed every control on "
     "permission denied for table control_run. A worker left on brain_app is refused at start."
 )
+
+#: The class the schedule's own transactions are in: the advisory lock each run holds while it
+#: runs, and the record of its start and finish. Background, because nobody is waiting on them,
+#: and never the run's own class: a batch run's lock is one connection held for the length of the
+#: run, and holding it in the batch pool would leave the run one connection short of its share.
+SCHEDULE_CLASS: Final = WorkloadClass.BACKGROUND
 
 # ------------------------------------------------------------------------ the environment
 #: Where the worker looks for its queue. A name of its own rather than `DATABASE_URL`,
@@ -1011,11 +1020,14 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
     except QueueError as exc:
         print(f"the queue driver will not be started: {exc}", file=sys.stderr)
         return EXIT_MISCONFIGURED
+    # What this process reads about its class pooler, shared by the schedule that refreshes it and
+    # the jobs that connect by it (`brain.ops.class_pools`).
+    routing = Routing(commit=settings_from(env).resolved_commit())
     if database_url is not None:
         # Only a worker that schedules registers the control run, for the reason it is the only
         # one that ticks: a control reads the application's tables, and the parse worker has
         # neither that connection nor the memory for a sweep.
-        register_tasks(app, database_url=database_url, env=env)
+        register_tasks(app, database_url=database_url, env=env, routing=routing)
     shards = worker_shards(allocation, slot_class)
     # Asked of the tasks that are ours rather than of the registry, because the driver puts a
     # housekeeping task of its own on every app it builds. Asking the registry made this
@@ -1037,7 +1049,7 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
     path = heartbeat_path(env)
     try:
         asyncio.run(
-            serve(app, shards, beat=lambda: beat(path), database_url=database_url),
+            serve(app, shards, beat=lambda: beat(path), database_url=database_url, routing=routing),
             loop_factory=_loop_factory(),
         )
     except QueueError as exc:
@@ -1119,6 +1131,7 @@ async def tick_controls(
     now: datetime,
     database_url: str,
     clock: Callable[[], datetime] = _utc_now,
+    running: bool = False,
 ) -> tuple[ControlTick, ...]:
     """Start every control owed at `now`, once, and record what each came to.
 
@@ -1182,6 +1195,7 @@ async def tick_controls(
                 now=now,
                 database_url=database_url,
                 clock=clock,
+                running=running,
             )
         )
     return tuple(found)
@@ -1195,6 +1209,7 @@ async def start_owed(
     now: datetime,
     database_url: str,
     clock: Callable[[], datetime] = _utc_now,
+    running: bool = False,
 ) -> ControlTick:
     """One control: take its lock, record its start, run it off the loop, record its finish.
 
@@ -1204,13 +1219,21 @@ async def start_owed(
     `A_QUEUED_CONTROL_IS_THE_SCHEDULED_RUN_BY_ANOTHER_DOOR`. One transaction, because the lock
     lives exactly as long as one, and a raise from the runner is the run's recorded failure
     rather than an exception out of here.
+
+    The run is handed its class's URL while the class pooler runs (`running`), and the URL it was
+    given otherwise; the lock and the record stay on `sessions`. See
+    `brain.ops.schedule_runner.A_CONTROL_IS_CLASSED_BY_WHAT_IT_IS`.
     """
+    workload = runner_for(name).workload
+    run_url = (
+        database_url if workload is None else routed_url(database_url, workload, running=running)
+    )
     async with sessions() as session, session.begin():
         if not await take_the_lock(session, name):
             return ControlTick(name, Ticked.LOCKED_ELSEWHERE)
         run_id = await record_start(session, name, at=now, report_only=report_only)
         try:
-            detail = await asyncio.to_thread(_start, name, report_only, now, database_url)
+            detail = await asyncio.to_thread(_start, name, report_only, now, run_url)
         except Exception as exc:
             reason = describe(exc)
             await record_finish(
@@ -1263,12 +1286,17 @@ def control_job(name: str) -> Job:
 
 
 async def run_control_job(
-    name: str, *, database_url: str, clock: Callable[[], datetime] = _utc_now
+    name: str,
+    *,
+    database_url: str,
+    clock: Callable[[], datetime] = _utc_now,
+    running: bool = False,
 ) -> str:
     """What the registered task does: one control, through `start_owed`, on the application's
     database. See `A_QUEUED_CONTROL_IS_THE_SCHEDULED_RUN_BY_ANOTHER_DOOR`."""
     control_job(name)
-    engine = make_app_engine(database_url)
+    # The run's own bookkeeping, as the schedule's is: background. See `SCHEDULE_CLASS`.
+    engine = make_app_engine(routed_url(database_url, SCHEDULE_CLASS, running=running))
     try:
         sessions = make_session_factory(engine)
         now = clock()
@@ -1283,6 +1311,7 @@ async def run_control_job(
             now=now,
             database_url=database_url,
             clock=clock,
+            running=running,
         )
     finally:
         await engine.dispose()
@@ -1298,6 +1327,7 @@ def register_tasks(
     database_url: str,
     embedding_service: EmbeddingService | None = None,
     env: Mapping[str, str] | None = None,
+    routing: Routing | None = None,
 ) -> None:
     """Put this worker's tasks on the queue driver: the control run and the embedding of a window.
 
@@ -1312,18 +1342,28 @@ def register_tasks(
     The sessions run as the application role, because `know.chunk`'s policy binds that role and
     the job reads and writes as the document's owner: see
     `brain.knowledge.chunk_store.THE_STORE_RUNS_AS_THE_OWNER_AND_NEVER_AS_ITSELF`.
+
+    `routing` is what the schedule in this process last read about the class pooler, and each job
+    connects with its class's URL while it runs: a queued control by its runner's class, the rest
+    through `brain.ops.class_pools.queued_class`. None, as for a process that enqueues and runs
+    nothing, leaves every job on the URL it was given.
     """
     held: list[EmbeddingService] = [] if embedding_service is None else [embedding_service]
 
+    def moved() -> bool:
+        return routing is not None and routing.running
+
     async def run_control(name: str) -> str:
-        return await run_control_job(name, database_url=database_url)
+        return await run_control_job(name, database_url=database_url, running=moved())
 
     async def run_embed(
         document_id: str, first_ordinal: int, last_ordinal: int, model: str, owner_id: str
     ) -> str:
         if not held:
             held.append(make_client(env=env))
-        engine = make_app_engine(database_url)
+        engine = make_app_engine(
+            routed_url(database_url, queued_class(EMBED_TRAFFIC_CLASS), running=moved())
+        )
         try:
             return await run_embed_job(
                 document_id=document_id,
@@ -1342,7 +1382,7 @@ def register_tasks(
     register_task(app, CONTROL_TASK, run_control, traffic_class=TrafficClass.SYSTEM)
     register_task(app, EMBED_TASK, run_embed, traffic_class=EMBED_TRAFFIC_CLASS)
     # Queued uploads (M7.1.5): a standard-slot task and a parse-worker task, each read here.
-    register_ingest_tasks(app, database_url=database_url, env=env)
+    register_ingest_tasks(app, database_url=database_url, env=env, routing=routing)
 
 
 async def enqueue_control(app: Any, name: str) -> int:
@@ -1371,6 +1411,8 @@ async def run_schedule(
     refresh: Callable[[async_sessionmaker[AsyncSession]], Awaitable[tuple[str, ...]]] = (
         refresh_changed
     ),
+    routing: Routing | None = None,
+    follower: Follower | None = None,
 ) -> None:
     """Tick the schedule for ever, on `brain.ops.schedule.TICK` aligned by `next_tick`.
 
@@ -1382,10 +1424,19 @@ async def run_schedule(
     `tick_probes` makes the connection tests people asked for and `tick_staff_trial` the trial
     read of the staff source, and a pass that raises is printed and the next tick tried, for the
     same reason.
+
+    Before each tick `routing` reads again whether this release's class pooler runs, and
+    `follower` moves the schedule's own sessions onto the background class's pool or back; every
+    control the tick starts is handed its class's URL from the same reading. See
+    `brain.ops.class_pools.A_PROCESS_USES_ITS_CLASS_POOLER_ONLY_WHEN_THIS_RELEASE_SAW_IT_RUNNING`.
     Cancellation is not an `Exception` and is not caught, so stopping the worker stops this.
     """
     while True:
         now = clock()
+        if routing is not None:
+            running = await routing.refresh(sessions)
+            if follower is not None:
+                await follower.follow(running)
         try:
             changed = await refresh(sessions)
         except Exception as exc:
@@ -1398,7 +1449,13 @@ async def run_schedule(
             if changed:
                 print(f"installation settings now held: {', '.join(changed)}", file=sys.stderr)
         try:
-            ticked = await tick_controls(sessions, now=now, database_url=database_url, clock=clock)
+            ticked = await tick_controls(
+                sessions,
+                now=now,
+                database_url=database_url,
+                clock=clock,
+                running=routing is not None and routing.running,
+            )
         except Exception as exc:
             print(
                 f"  ! the control schedule could not tick at {now.isoformat()}: {describe(exc)}",
@@ -1408,8 +1465,11 @@ async def run_schedule(
             for one in ticked:
                 if one.ticked is Ticked.FAILED:
                     print(f"  ! control {one.name} failed: {one.detail}", file=sys.stderr)
+        # The connection tests and the staff trial a person asked for are background work, handed
+        # the background class's URL from the same reading as the controls.
+        asked_url = database_url if routing is None else routing.url(database_url, SCHEDULE_CLASS)
         try:
-            await tick_probes(sessions, now=now, database_url=database_url)
+            await tick_probes(sessions, now=now, database_url=asked_url)
         except Exception as exc:
             print(
                 f"  ! the connection tests asked for could not be made at {now.isoformat()}: "
@@ -1417,7 +1477,7 @@ async def run_schedule(
                 file=sys.stderr,
             )
         try:
-            await tick_staff_trial(sessions, now=now, database_url=database_url)
+            await tick_staff_trial(sessions, now=now, database_url=asked_url)
         except Exception as exc:
             print(
                 f"  ! the trial read of the staff source asked for could not be made at "
@@ -1428,7 +1488,12 @@ async def run_schedule(
 
 
 async def serve(
-    app: Any, shards: Sequence[Shard], *, beat: Callable[[], None], database_url: str | None
+    app: Any,
+    shards: Sequence[Shard],
+    *,
+    beat: Callable[[], None],
+    database_url: str | None,
+    routing: Routing | None = None,
 ) -> None:
     """Run the queue's shards, and the control schedule beside them when there is a URL for it.
 
@@ -1441,8 +1506,13 @@ async def serve(
         await run_shards(app, shards, beat=beat)
         return
     engine = make_app_engine(database_url)
+    sessions = make_session_factory(engine)
+    # The schedule's own transactions, the locks and the run records, are background work.
+    follower = (
+        None if routing is None else Follower(sessions, url=database_url, workload=SCHEDULE_CLASS)
+    )
     ticking = asyncio.create_task(
-        run_schedule(make_session_factory(engine), database_url=database_url)
+        run_schedule(sessions, database_url=database_url, routing=routing, follower=follower)
     )
     try:
         await run_shards(app, shards, beat=beat)
@@ -1450,6 +1520,8 @@ async def serve(
         ticking.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await ticking
+        if follower is not None:
+            await follower.close()
         await engine.dispose()
 
 

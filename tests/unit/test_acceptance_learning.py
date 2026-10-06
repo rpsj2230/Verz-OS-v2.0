@@ -358,6 +358,7 @@ def test_the_ready_rule_check_fails_when_a_scheduled_job_writes_learning_records
     import dataclasses
 
     from brain.ops import controls, schedule_runner
+    from brain.ops.admission import WorkloadClass
 
     writer = dataclasses.replace(
         controls.CONTROLS[0],
@@ -370,7 +371,11 @@ def test_the_ready_rule_check_fails_when_a_scheduled_job_writes_learning_records
         "RUNNERS",
         (
             *schedule_runner.RUNNERS,
-            schedule_runner.Runner(name="acceptance_rule_writer", run=schedule_runner.canary_run),
+            schedule_runner.Runner(
+                name="acceptance_rule_writer",
+                run=schedule_runner.canary_run,
+                workload=WorkloadClass.BATCH,
+            ),
         ),
     )
 
