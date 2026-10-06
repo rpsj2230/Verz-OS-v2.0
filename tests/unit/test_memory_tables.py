@@ -130,13 +130,19 @@ def test_the_persistent_table_has_no_confidence_to_decay() -> None:
     share a query, and the first loop written over both would then decay everything a person
     ever stated on the adaptive curve.
 
+    **And none for a confirmation to reset.** Since `0163` an inference also carries
+    `last_confirmed_at`, when the person last said it again, which decay runs from (M16.7.2). A
+    stated memory does not decay, so it has no clock to reset, and that is the second column the
+    two tables are decided to differ by and the last one.
+
     Delete this and the column arrives, and it arrives looking like a simplification."""
     persistent = set(PERSISTENT.columns.keys())
     adaptive = set(ADAPTIVE.columns.keys())
 
     assert "formed_confidence" not in persistent
     assert "formed_confidence" in adaptive
-    assert adaptive - persistent == {"formed_confidence"}, (
+    assert "last_confirmed_at" not in persistent
+    assert adaptive - persistent == {"formed_confidence", "last_confirmed_at"}, (
         "the two tables differ by something other than confidence, so a memory promoted "
         "between them would lose or gain a field nobody decided about"
     )

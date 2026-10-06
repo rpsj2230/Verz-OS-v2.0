@@ -102,6 +102,8 @@ class KeptPrompts:
 
     sent: list[tuple[DriverMessage, ...]] = field(default_factory=list)
     categories: list[tuple[str, ...]] = field(default_factory=list)
+    #: The output cap each call was made with, as `brain.gate.effort` pinned it for the lane.
+    caps: list[int | None] = field(default_factory=list)
 
     async def complete(
         self,
@@ -122,6 +124,7 @@ class KeptPrompts:
 
         self.sent.append(tuple(messages))
         self.categories.append(tuple(one.value for one in categories))
+        self.caps.append(max_output_tokens)
         meter.attempted()
         response = DriverResponse(
             deployment_id="acceptance_stand_in",
@@ -139,13 +142,16 @@ class KeptPrompts:
 
 
 # ------------------------------------------------------------------------ the application
-async def memory_app(h: Harness, model: KeptPrompts | None = None) -> FastAPI:
+async def memory_app(
+    h: Harness, model: KeptPrompts | None = None, *, recorded: bool = False
+) -> FastAPI:
     """The state `/answer` reads, each part over the check's transaction.
 
     What `brain.app.lifespan` installs, as `brain.ops.acceptance_models.asking_app` builds it, with
-    no recorders, so no request row or cost is written, and with `model` behind the model service
-    when the check needs an answer from one. With none, a question no rule answers is abstained
-    on, which is what a stated memory must survive.
+    `model` behind the model service when the check needs an answer from one. With none, a question
+    no rule answers is abstained on, which is what a stated memory must survive. `recorded` adds
+    the request row's recorder, for a check that reads the ledger; the cost is never recorded,
+    because the stand-in has no price.
     """
     import httpx
     from fastapi import FastAPI
@@ -156,6 +162,7 @@ async def memory_app(h: Harness, model: KeptPrompts | None = None) -> FastAPI:
     from brain.knowledge.row_store import SessionRowSource
     from brain.models.calls import ModelCalls
     from brain.ops.model_service import ModelService
+    from brain.ops.telemetry_store import TelemetryRecorder
     from brain.ops.trace_sink import CountingTraceSink
     from brain.tools.startup import build_registry
 
@@ -173,7 +180,7 @@ async def memory_app(h: Harness, model: KeptPrompts | None = None) -> FastAPI:
     )
     state.fast_path_rules = rules
     state.trace_sink = CountingTraceSink()
-    state.request_recorders = ()
+    state.request_recorders = (TelemetryRecorder(h.sessions),) if recorded else ()
     if model is not None:
         client = httpx.Client()
         h.removes(client.close)

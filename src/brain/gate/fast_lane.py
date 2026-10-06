@@ -89,7 +89,15 @@ application's pool. The first thing that composition found here was the keying d
 `entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached with the seeded
 demo.
 
-Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2
+**Every read `respond` makes is marked as the fast lane's (M6.1.3)**, inside
+`brain.knowledge.rows.read_as_the_fast_lane`, and `SessionRowSource` reads a marked read as
+`brain_fastlane`, which holds `SELECT` on the projected records and an uploaded table's rows and
+nothing else. So a statement this lane ran that reached past them would be refused by the
+database, whatever this module's code had come to do. The marker is on the read and not a
+reader of the lane's own, because the readers are the registry's, behind the switch that stops a
+tool.
+
+Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2, M6.1.3
 """
 
 from __future__ import annotations
@@ -115,7 +123,7 @@ from brain.core.fast_path import (
 )
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.classify import is_a_name_not_a_phrase
-from brain.knowledge.rows import RowRecord, RowRequest
+from brain.knowledge.rows import RowRecord, RowRequest, read_as_the_fast_lane
 
 log = structlog.get_logger()
 
@@ -605,7 +613,10 @@ async def respond(
     if len(found) > 1 and not asked_of_several_places(found):
         _two_rules_matched(found)
         return None
-    answers = [await _read(match, readers, entitlement=entitlement, now=now) for match in found]
+    # Every read is marked as the fast lane's, so a source that runs SQL reads it as the lane's
+    # own role (M6.1.3). See `brain.knowledge.rows.read_as_the_fast_lane`.
+    with read_as_the_fast_lane():
+        answers = [await _read(match, readers, entitlement=entitlement, now=now) for match in found]
     held = [one for one in answers if one.result.records]
     if sum(len(one.result.records) for one in held) > 1:
         log.warning("fast_lane.two_records_matched", rules=sorted(one.rule_id for one in held))

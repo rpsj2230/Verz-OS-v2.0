@@ -185,6 +185,7 @@ from brain.gate.review_store import (
     held_by,
 )
 from brain.govern_routes import placed_assignment, placed_grant
+from brain.identity.departments_from import DepartmentsFrom, departments_from
 from brain.identity.organisation_store import (
     Attribution,
     OrganisationRecords,
@@ -1656,6 +1657,10 @@ async def source_departments(request: Request, asked: Asked) -> SourceDepartment
     factory = sessions_of(request)
     if not may_found_or_retire_departments(asked.reach, asked.now) or factory is None:
         return SourceDepartmentsView(to_found=[], registered=[])
+    if departments_from() is DepartmentsFrom.CONSOLE:
+        # Departments are managed on People; the list's are not offered. See
+        # `UNDER_THE_CONSOLE_THE_SYNC_MOVES_NOBODY`.
+        return SourceDepartmentsView(to_found=[], registered=[])
     named = await named_departments(factory, value_of(STAFF_SOURCE_SETTING))
     return SourceDepartmentsView(
         to_found=[SourceDepartmentView(name=one.name, slug=one.slug) for one in named.to_found],
@@ -1680,6 +1685,8 @@ async def found_source_departments(
     factory = sessions_of(request)
     if factory is None:
         raise Failed("no database on this process")
+    if departments_from() is DepartmentsFrom.CONSOLE:
+        return SourceDepartmentsFounded(created=[], not_founded=sorted(body.slugs))
     named = await named_departments(factory, value_of(STAFF_SOURCE_SETTING))
     done = await found_named(
         structure_records_of(request), named, confirmed=frozenset(body.slugs), by=_by(asked)

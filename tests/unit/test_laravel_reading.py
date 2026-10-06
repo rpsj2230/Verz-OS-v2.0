@@ -22,6 +22,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any, Final, cast
 
 import pymysql
@@ -541,8 +542,14 @@ def test_a_view_that_fills_its_cap_is_read_as_far_as_one_run_reads() -> None:
         def begin(self) -> Sessions:
             return self
 
-        async def execute(self, statement: Any) -> None:
-            written.append(statement)
+        async def execute(self, statement: Any) -> Any:
+            # The index rows written, and nothing else: the worker also reads the rows a page
+            # names before writing it, and counts a change in the source's epoch.
+            if getattr(statement, "table", None) is not None and (
+                statement.table.fullname == "proj.record"
+            ):
+                written.append(statement)
+            return SimpleNamespace(all=list, scalars=lambda: SimpleNamespace(all=list))
 
     done = asyncio.run(
         attempt(
@@ -710,6 +717,6 @@ def test_laravel_is_offered_because_it_reads_and_would_not_be_without_its_readin
     assert offers == {}
     assert listed[laravel.CONNECTOR_NAME].why == THIS_INSTALL_CANNOT_READ_IT_YET
 
-    unmeasured = dataclasses.replace(real, name="nowhere")
+    unmeasured = dataclasses.replace(real, name="nowhere", ceiling=None)
     offers, listed = offered({"nowhere": unmeasured})
     assert offers == {} and listed["nowhere"].why == THIS_INSTALL_CANNOT_READ_IT_YET

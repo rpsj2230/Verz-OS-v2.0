@@ -152,7 +152,7 @@ from brain.core.envelope import IdentityMode, SideEffect
 from brain.core.errors import Degraded, Outcome
 from brain.gate.provenance import Freshness
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility, VisibilityError
-from brain.ops.limits import SOURCE_CEILINGS
+from brain.ops.limits import source_ceilings
 from brain.ops.secrets import SecretRef, VaultRole
 from brain.tools import sop_import
 from tests.fixtures.cassettes import CASSETTES, Cassette, Origin, Source, for_source, limit_for
@@ -648,7 +648,7 @@ def test_a_ceiling_nobody_verified_is_refused_rather_than_invented() -> None:
     for the sources somebody measured, and a connector naming an unmeasured one would run
     against no limit at all. This is what stops the fix for the test above being to add
     `lark_wiki` to the manifest and move on."""
-    assert not any(ceiling.name == LARK_WIKI for ceiling in SOURCE_CEILINGS)
+    assert not any(ceiling.name == LARK_WIKI for ceiling in source_ceilings())
 
     named_after_itself = replace(a_manifest(), ceiling=LARK_WIKI)
 

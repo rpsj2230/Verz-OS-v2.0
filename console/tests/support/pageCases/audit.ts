@@ -29,6 +29,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     answers: { "/api/v1/audit": LEDGER },
   },
   "/audit/verify": { address: "/audit/verify", signedIn: true, drawsValues: false, answers: {} },
+  // Reading a trace: a form, and nothing asked until it is sent.
+  "/audit/trace": { address: "/audit/trace", signedIn: true, drawsValues: false, answers: {} },
+  "/audit/trace/:traceId": { address: "/audit/trace/trace-0a1b2c", signedIn: true, drawsValues: false, answers: {} },
   // One subject's page: every entry about it, and a person's access changes as its second view.
   "/audit/subject/:kind/:id": {
     address: "/audit/subject/principal/u_wide",
