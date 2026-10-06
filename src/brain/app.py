@@ -179,8 +179,8 @@ from brain.reviewed_connectors import install_tools
 from brain.routers import ROUTERS
 from brain.session import (
     check_login_row_security,
-    check_reachable,
     check_row_security,
+    database_probe,
     dispose,
     make_app_engine,
     make_application_sessions,
@@ -440,12 +440,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # for the Logs screen; standard output is unchanged. See `brain.ops.log_capture`.
         app.state.log_store = start_log_store(app.state.db_sessions, settings)
         engine = app.state.db_engine
-
-        async def database_probe() -> bool:
-            return await check_reachable(engine)
-
-        readings.probes[DATABASE_PART] = database_probe
-        app.state.ready[DATABASE_PART] = await database_probe()
+        # The engine requests use at the moment the probe runs, which is the class pooler's while
+        # the sessions have moved there. See `brain.session.READINESS_ASKS_THE_ENGINE_REQUESTS_USE`.
+        probe_database = database_probe(app.state.db_sessions, engine)
+        readings.probes[DATABASE_PART] = probe_database
+        app.state.ready[DATABASE_PART] = await probe_database()
         # Named and not counted: every install deployed before the migration login existed logs
         # in as the owner, and failing readiness for that would take each of them down on update.
         app.state.reported[DATABASE_LOGIN_PART] = await check_login_row_security(engine)

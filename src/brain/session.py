@@ -24,12 +24,12 @@ exactly what `0001`'s docstring says it exists to prevent. The login cannot simp
 `brain_app` either: the same URL runs the migrations inside the lifespan, and those create
 extensions and roles. See `THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`.
 
-Task ids: M0.3.4, M31.2.1.2, M31.2.1.3, M31.2.1.4, M31.4.2
+Task ids: M0.3.4, M31.2.1.2, M31.2.1.3, M31.2.1.4, M31.4.2, M22.2.2
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager
 from typing import Any, Final
 
@@ -262,6 +262,34 @@ async def check_reachable(engine: AsyncEngine) -> bool:
         log.warning("database unreachable", error=describe(exc)[:200])
         return False
     return True
+
+
+#: Why readiness asks the engine requests are using now, and not the one the process started on.
+READINESS_ASKS_THE_ENGINE_REQUESTS_USE: Final = (
+    "A process's sessions can move onto its workload class's pooler and back while it runs "
+    "(brain.ops.class_pools), and the engine it was started with stays behind as the one to come "
+    "home to. Asked of that engine, readiness answered for a pooler no request was going "
+    "through, so a class pooler that had stopped was noticed only by the requests it refused. "
+    "So the probe asks whichever engine the sessions are bound to at the moment it runs."
+)
+
+
+def bound_engine(sessions: async_sessionmaker[AsyncSession], home: AsyncEngine) -> AsyncEngine:
+    """The engine a session opened now would use: the factory's current bind, else `home`."""
+    bound = sessions.kw.get("bind")
+    return bound if isinstance(bound, AsyncEngine) else home
+
+
+def database_probe(
+    sessions: async_sessionmaker[AsyncSession], home: AsyncEngine
+) -> Callable[[], Coroutine[Any, Any, bool]]:
+    """Readiness for the database as requests reach it. See
+    `READINESS_ASKS_THE_ENGINE_REQUESTS_USE`."""
+
+    async def probe() -> bool:
+        return await check_reachable(bound_engine(sessions, home))
+
+    return probe
 
 
 async def dispose(engine: AsyncEngine | None) -> None:
