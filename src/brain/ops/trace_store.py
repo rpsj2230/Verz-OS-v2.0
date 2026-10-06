@@ -63,6 +63,7 @@ from sqlalchemy import insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.gate.finish import Finished
+from brain.gate.turn_context import ContextNote
 from brain.ops.sensitive_read_store import disclosed_payload
 from brain.ops.telemetry import status_of_finished
 from brain.ops.tracing import (
@@ -187,6 +188,11 @@ def steps_of(
     if usage is not None:
         root["model"] = usage.model or UNNAMED
         root["token_count"] = usage.tokens_in + usage.tokens_out
+    context = getattr(request.outcome, "context", None)
+    if isinstance(context, ContextNote):
+        # Part names and reasons only (M16.6.1). See
+        # `brain.gate.turn_context.A_PART_LEFT_OUT_IS_NAMED_WITH_ITS_REASON_AND_NEVER_ITS_CONTENTS`.
+        root.update(context.attributes())
     steps = [
         Step(
             step=0,

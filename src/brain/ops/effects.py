@@ -362,6 +362,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.knowledge.document_tools:RecordStore.get": Repeat.READS,
         "brain.knowledge.document_tools:RecordStore.set": Repeat.DERIVED_STATE,
         "brain.gate.compose:TraceSink.emit": Repeat.DERIVED_STATE,
+        # Where a turn's remembered statements are read, for its context (M16.6.1).
+        "brain.gate.turn_context:Recollection.hints": Repeat.READS,
         "brain.gate.finish:RequestRecorder.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The answer lane's model step: passages found at a reach, and a model that answers and
         # forgets, whose attempt rows are written through `AttemptLog`'s own doors.
