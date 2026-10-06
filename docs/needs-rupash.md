@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**45 items are open: 168,** what a brand-new install ships with, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**46 items are open: 169,** when to switch on spending limits that really stop requests, **168,** what a brand-new install ships with, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,35 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 169. When should spending limits start to really stop requests?
+
+**In plain terms:** you chose how a spending limit should behave: warn first, then stop until the next
+period. Departments and agents have limits stored and versioned, and your screens show allowances. But
+**nothing enforces them today**: a department can spend past its limit with nothing stopping it, because
+the part that decides "this request is over the limit" is built and tested and not yet called by any
+request. That is the opposite of the risk you might expect, and it means no agent has ever been held at
+a limit.
+
+I am building enforcement **switched off**, as every new feature ships. While it is off, each request
+that *would have been stopped* is noted (the limit and the department, never the question), and the
+Spend screen shows those, so you can see what switching it on would do before it does it. When it is on,
+the first request over a limit opens a stop, warns the limit's owner, and every request in that
+department gets a plain sentence that a spending limit has been reached, until the next period starts.
+If the Brain cannot read the limits or the spend, requests are answered as they are today: a fault in
+the budget records never stops people working.
+
+**Option A: switch it on after you have seen a week of "would have stopped" figures.** I bring you
+the figures and you say when.
+
+**Option B: switch it on as soon as it ships.** Every limit already set starts to bite at once.
+
+**Option C: keep it off.** Limits stay warnings on the screens.
+
+**My recommendation:** A. Switching it on blind could start refusing requests on the day it ships.
+
+**What I need from you:** nothing yet. I will bring the figures after the first week, or reply "169: B"
+or "169: C".
 
 ## 168. What a brand-new install ships with: the roles and permission sets, and what it does not
 

@@ -1,7 +1,7 @@
 """The agent builder's acceptance checks: registered, passing on a real schema, and able to fail.
 
 Task ids: M13.2.7, M13.1.1, M13.2.4, M20.1.5, M20.2.2, M20.2.3, M20.2.4, M20.1.2, M13.9.4, M13.8.18
-Task ids: M20.4.6
+Task ids: M20.4.6, M20.4.1, M20.4.4
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ HAND_BUILT = "a_hand_built_agent_takes_the_template_path_and_records_setters"
 CANVAS = "an_authored_list_is_intent_and_the_canvas_draws_five_kinds_only"
 GALLERY = "the_form_is_the_manifest_and_a_template_installs_in_one_press"
 HISTORY = "a_second_publish_is_recorded_with_exactly_the_paths_it_changed"
+GATE = "the_publish_gate_refuses_what_blocks_and_decides_the_rung"
 
 
 def mine() -> dict[str, Check]:
@@ -28,7 +29,7 @@ def mine() -> dict[str, Check]:
 def test_the_builder_checks_are_listed_in_their_page_order() -> None:
     """Every check this module registers, in page order. Delete this and a check can drop out of
     the module with the page simply listing one fewer row."""
-    assert checks_in(MODULE) == [HAND_BUILT, CANVAS, GALLERY, HISTORY]
+    assert checks_in(MODULE) == [HAND_BUILT, CANVAS, GALLERY, HISTORY, GATE]
     assert MODULE in check_modules()
 
 
@@ -45,6 +46,7 @@ def test_on_a_real_database_the_builder_checks_pass_and_nothing_is_left_behind()
         CANVAS: (PASSED, ""),
         GALLERY: (PASSED, ""),
         HISTORY: (PASSED, ""),
+        GATE: (PASSED, ""),
     }
     assert after == before
 
@@ -237,7 +239,45 @@ def _published_by_somebody(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _rung_not_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    import brain.agent_builder_routes as routes
+
+    monkeypatch.setattr(routes, "raised_rungs", lambda manifest: ())
+
+
+def _gate_blind_to_effects(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dataclasses
+
+    import brain.agent_builder_routes as routes
+    from brain.builder.agent_drafts import publish_decision
+
+    kept = publish_decision
+
+    def blind(**kwargs: Any) -> Any:
+        return dataclasses.replace(kept(**kwargs), widenings=())
+
+    monkeypatch.setattr(routes, "publish_decision", blind)
+
+
+def _gate_keeps_the_rung(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dataclasses
+
+    import brain.agent_builder_routes as routes
+    from brain.builder.agent_drafts import publish_decision
+    from brain.gate.injection import AutonomyTier
+
+    kept = publish_decision
+
+    def keeps(**kwargs: Any) -> Any:
+        return dataclasses.replace(kept(**kwargs), rung=AutonomyTier.ASSISTED)
+
+    monkeypatch.setattr(routes, "publish_decision", keeps)
+
+
 BREAKS: dict[str, tuple[str, Any, str]] = {
+    "rung_not_refused": (GATE, _rung_not_refused, "RAISED_PASSED"),
+    "gate_blind_to_effects": (GATE, _gate_blind_to_effects, "EFFECT_NOT_A_WIDENING"),
+    "gate_keeps_the_rung": (GATE, _gate_keeps_the_rung, "NOT_DECIDED_AT_SHADOW"),
     "one_publish_kept": (HISTORY, _one_publish_kept, "NO_HISTORY"),
     "stamps_counted": (HISTORY, _stamps_counted, "WRONG_PATHS"),
     "published_by_somebody": (HISTORY, _published_by_somebody, "NOT_WHO"),

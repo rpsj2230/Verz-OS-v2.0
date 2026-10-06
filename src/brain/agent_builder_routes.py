@@ -30,6 +30,16 @@ publish is listed to exactly the people who could approve it, filtered and never
 nothing here computes a reach, and the rehearsal's reach is `brain.agents.install.rehearse`'s, which
 calls `EntitlementSet.intersect` as the real gate does.
 
+**What stops a publish, which rung it lands on and how many people it needs are
+`brain.builder.publish.decide`'s one answer** (M20.4.1, M20.4.4), asked once by the check and again
+when anything is written, so an approval by somebody who did not run the author's check is held to
+the same gate. The checks are the system's own: the draft is filled in, nothing starts above Shadow,
+the agent has not moved, and the install's permission canaries last passed. An author's own test
+could never block (`A_TEST_THE_AUTHOR_WROTE_IS_A_TEST_THE_AUTHOR_CAN_REWRITE` in
+`brain.builder.publish`), and none is run, because no model answers for an agent yet (M20.3.1).
+The router collision (M20.4.5) is not asked: nothing on this install stores an agent's binding to
+a route, so there is nothing for a draft to collide with; see `needs-rupash` on what a route is.
+
 **A rehearsal says what it cannot do.** It runs the draft through the real gate as the person
 asking, at Shadow, and reports whether a run would start for them, which tools it would reach for
 them and the test questions it would ask. It does not ask the questions: no model answers for an
@@ -45,7 +55,7 @@ draft can be written, saved, checked and rehearsed meanwhile.
 **A new module rather than `brain.agent_lifecycle_routes`**, because that router moves an agent that
 exists and this one makes and changes one; they share its three questions and its 409 body.
 
-Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4
+Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4, M20.4.1, M20.4.4
 """
 
 from __future__ import annotations
@@ -103,6 +113,7 @@ from brain.builder.agent_drafts import (
     Act,
     AgentDraft,
     approval_refusal,
+    at_rung,
     becomes,
     blank_seed,
     carrier,
@@ -112,12 +123,15 @@ from brain.builder.agent_drafts import (
     name_of,
     next_version,
     plain,
+    publish_decision,
     published,
     raised_rungs,
     republished,
+    rung_of,
     second_people_needed,
     seed,
     state_of,
+    system_check,
     widenings,
 )
 from brain.builder.compose import BuilderError
@@ -133,10 +147,12 @@ from brain.builder.drafts import (
 )
 from brain.builder.form import form_document
 from brain.builder.procedure import read_drawing, skill_markdown
+from brain.builder.publish import Check, PublishDecision, blocking_failures
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
+from brain.gate.injection import AutonomyTier
 from brain.gate.screening import NOTHING_MATCHED
 from brain.routing_routes import sessions_of
 from brain.tools.registry import ToolRegistry
@@ -226,6 +242,16 @@ PUBLISHED_EDIT: Final = (
     "something it needs is missing here, in which case it was switched off."
 )
 SENT_BACK: Final = "Sent back to its author. Nothing was published."
+#: What a check that passed is called, for the three the system makes of every draft.
+COMPLETE: Final = "The draft is filled in."
+MADE_HERE: Final = "The draft makes an agent on this install."
+STARTS_AT_SHADOW: Final = "Every action starts at Shadow."
+NOT_MOVED: Final = "The agent is as this draft started from it."
+CANARIES_GREEN: Final = "The permission canaries passed on their latest run."
+CANARIES_RED: Final = (
+    "Nothing can be published while the permission checks this install runs on itself are "
+    "failing. Ask an administrator to look at Quality and canaries, then check this draft again."
+)
 RUNG_PROBLEM: Final = (
     "Supervision, approval settings: every action starts at Shadow, and a rung is raised from "
     "evidence of the agent's own runs rather than from a draft. Set {targets} to Shadow."
@@ -412,6 +438,9 @@ class DraftCheckView(BaseModel):
     #: What it reaches that the agent did not, in the manifest's own words.
     widened: list[str]
     second_person_needed: bool
+    #: The rung a publish of this revision would land on, decided by the publish gate: Shadow when
+    #: it widens, otherwise the rung the agent is on.
+    rung_after: str = "shadow"
     publish_unavailable: str | None = None
 
 
@@ -460,9 +489,27 @@ class DraftPublishView(BaseModel):
     agent_id: str
     sentence: str
     widened: list[str]
+    #: The rung the agent went on at, which the publish gate decided.
+    rung: str = "shadow"
 
 
 # ------------------------------------------------------------------------ the store
+async def canaries_red(request: Request) -> bool:
+    """Whether the install's permission canaries last failed (M20.4.1).
+
+    `app.state.canaries_red` when a test put one there, the newest finished run of the `canary_run`
+    control otherwise, and no on a process with no database, which has no run to have failed. See
+    `brain.builder.publication_store.A_RED_CANARY_RUN_STOPS_A_PUBLISH_AND_NO_RUN_DOES_NOT`.
+    """
+    from brain.builder.publication_store import canaries_are_red
+
+    found = getattr(request.app.state, "canaries_red", None)
+    if found is not None:
+        return bool(await found())
+    sessions = sessions_of(request)
+    return False if sessions is None else await canaries_are_red(sessions)
+
+
 def drafts_of(request: Request) -> AgentDraftStore:
     """`app.state.agent_drafts` when something put one there, and the database otherwise."""
     found = getattr(request.app.state, "agent_drafts", None)
@@ -709,15 +756,22 @@ def _view(
 
 
 def _signed(
-    revision: Revision, *, agent_id: str, version: int, publisher: str, key: str, at: datetime
+    revision: Revision,
+    *,
+    agent_id: str,
+    version: int,
+    publisher: str,
+    key: str,
+    at: datetime,
+    rung: AutonomyTier,
 ) -> SignedManifest:
-    """The version a publish keeps, signed with this install's key."""
+    """The version a publish keeps, signed with this install's key, at the rung the gate decided."""
     manifest, problems = manifest_of(
         revision.document(), agent_id=agent_id, version=version, publisher=publisher
     )
     if manifest is None:
         raise BuilderError("; ".join(plain(one) for one in problems))
-    return publish(manifest, key=key, signed_by=publisher, at=at)
+    return publish(at_rung(manifest, rung), key=key, signed_by=publisher, at=at)
 
 
 async def _publish(
@@ -729,8 +783,11 @@ async def _publish(
     acts: Sequence[Act],
     asked: Asking,
     key: str,
+    decision: PublishDecision,
 ) -> JSONResponse:
-    """Write the agent the latest revision makes, with the acts that say so, or say why not."""
+    """Write the agent the latest revision makes, with the acts that say so, or say why not.
+
+    At the rung `decision` landed on, which is the publish gate's and not this function's."""
     revision = _latest(draft)
     publisher = asked.caller.principal.id
     tools = _tools(request)
@@ -743,6 +800,7 @@ async def _publish(
             publisher=publisher,
             key=key,
             at=asked.now,
+            rung=decision.rung,
         )
         # The channels the publishing act carries, which are what the author ticked.
         channels = next((one.channels for one in acts if one.act is DraftAct.PUBLISHED), ())
@@ -770,6 +828,7 @@ async def _publish(
             publisher=publisher,
             key=key,
             at=asked.now,
+            rung=decision.rung,
         )
         settled = republished(
             signed,
@@ -811,7 +870,11 @@ async def _publish(
         sentence = PUBLISHED_EDIT
     log.info("agent draft published", draft=draft.draft_id, agent=draft.agent_id, by=publisher)
     body = DraftPublishView(
-        state=DraftState.PUBLISHED.value, agent_id=draft.agent_id, sentence=sentence, widened=[]
+        state=DraftState.PUBLISHED.value,
+        agent_id=draft.agent_id,
+        sentence=sentence,
+        widened=[],
+        rung=decision.rung.name.lower(),
     )
     return JSONResponse(status_code=201, content=body.model_dump(mode="json"))
 
@@ -1101,8 +1164,14 @@ async def save_agent_draft(
 
 async def _check(
     request: Request, draft: AgentDraft, found: FoundAgent | None, asked: Asking
-) -> tuple[DraftCheckView, Installation | None]:
-    """Everything the check says about the latest revision, and what it would become."""
+) -> tuple[DraftCheckView, Installation | None, PublishDecision | None]:
+    """Everything the check says about the latest revision, what it would become, and the gate.
+
+    What stops a publish is the publish gate's own answer (`brain.builder.publish.decide`) over
+    checks of system origin, and the rung, the widenings and the second person the view carries are
+    the same decision's. The decision is None when the draft does not make an agent yet, because a
+    gate has nothing to compare then and the checks alone say why.
+    """
     revision = _latest(draft)
     manifest, problems = manifest_of(
         revision.document(),
@@ -1110,40 +1179,67 @@ async def _check(
         version=FIRST_VERSION,
         publisher=asked.caller.principal.id,
     )
-    stops = [plain(one) for one in problems]
+    checks: list[Check] = [system_check(COMPLETE, plain(one), failed=True) for one in problems]
     settled: Installation | None = None
-    widened: tuple[str, ...] = ()
     if manifest is not None:
         raised = raised_rungs(manifest)
-        if raised:
-            stops.append(RUNG_PROBLEM.format(targets=", ".join(raised)))
+        checks.append(
+            system_check(
+                STARTS_AT_SHADOW,
+                RUNG_PROBLEM.format(targets=", ".join(raised)),
+                failed=bool(raised),
+            )
+        )
         audience = (
             found.record.audience if found is not None else new_audience(draft.owner_id, None)
         )
+        made_failing = ""
         try:
             settled = await _becomes(request, draft, manifest, audience, asked)
         except BuilderError as refused:
-            stops.append(str(refused))
-        if settled is not None:
-            before = None if found is None else found.record
-            widened = widenings(before, settled.record, now=asked.now)
-    if draft.kind is DraftKind.EDIT and (
-        found is None
-        or found.effective_hash != draft.base_hash
-        or found.record.state is AgentState.ARCHIVED
-    ):
-        stops.append(AGENT_MOVED)
+            made_failing = str(refused)
+        checks.append(system_check(MADE_HERE, made_failing, failed=bool(made_failing)))
+    checks.append(
+        system_check(
+            NOT_MOVED,
+            AGENT_MOVED,
+            failed=draft.kind is DraftKind.EDIT
+            and (
+                found is None
+                or found.effective_hash != draft.base_hash
+                or found.record.state is AgentState.ARCHIVED
+            ),
+        )
+    )
+    checks.append(system_check(CANARIES_GREEN, CANARIES_RED, failed=await canaries_red(request)))
+    decision: PublishDecision | None = None
+    stops: tuple[str, ...] = blocking_failures(checks)
+    widened: tuple[str, ...] = ()
+    if settled is not None:
+        decision = publish_decision(
+            agent_id=draft.agent_id,
+            before=None if found is None else found.record,
+            after=settled.record,
+            current_rung=rung_of(
+                None if found is None or found.install is None else found.install[0]
+            ),
+            checks=checks,
+            now=asked.now,
+        )
+        stops = decision.refusals
+        widened = decision.widenings
     view = DraftCheckView(
         revision=revision.number,
         passed=not stops,
-        problems=stops,
+        problems=list(stops),
         missing=[] if settled is None else _missing_words(settled),
         company_details=_company_details(draft),
         widened=list(widened),
         second_person_needed=second_people_needed(widened) > 0,
+        rung_after=(STARTING_RUNG if decision is None else decision.rung).name.lower(),
         publish_unavailable=NO_SIGNING_KEY_HERE if template_key_of(request) is None else None,
     )
-    return view, settled
+    return view, settled, decision
 
 
 @router.post(CHECK_PATH, response_model=DraftCheckView, responses=_TOLD)
@@ -1157,7 +1253,7 @@ async def check_agent_draft(
     store, draft = await _own(request, draft_id, asked)
     if _latest(draft).number != body.revision:
         return _not_changed(MOVED, NOT_THE_LATEST)
-    view, _ = await _check(request, draft, await _target(store, draft), asked)
+    view, _, _ = await _check(request, draft, await _target(store, draft), asked)
     if view.passed and not published(draft):
         await store.record(
             draft.draft_id,
@@ -1185,7 +1281,7 @@ async def rehearse_agent_draft(
     store, draft = await _own(request, draft_id, asked)
     if _latest(draft).number != body.revision:
         return _not_changed(MOVED, NOT_THE_LATEST)
-    view, settled = await _check(request, draft, await _target(store, draft), asked)
+    view, settled, _ = await _check(request, draft, await _target(store, draft), asked)
     if settled is None:
         return _not_changed(REFUSED, " ".join(view.problems))
     manifest = settled.effective.manifest
@@ -1247,8 +1343,8 @@ async def publish_agent_draft(
     if state is not DraftState.CHECKED:
         return _not_changed(REFUSED, CHECK_FIRST)
     found = await _target(store, draft)
-    view, settled = await _check(request, draft, found, asked)
-    if not view.passed or settled is None:
+    view, settled, decision = await _check(request, draft, found, asked)
+    if not view.passed or settled is None or decision is None:
         return _not_changed(REFUSED, " ".join(view.problems))
     audience = await _audience_asked(store, draft, found, body.for_department)
     if isinstance(audience, str):
@@ -1284,7 +1380,7 @@ async def publish_agent_draft(
         for_department=body.for_department,
         channels=body.channels,
     )
-    return await _publish(request, store, draft, audience, found, (done,), asked, key)
+    return await _publish(request, store, draft, audience, found, (done,), asked, key, decision)
 
 
 async def _decided(
@@ -1339,7 +1435,12 @@ async def approve_agent_draft(
             channels=requested.channels if requested is not None else (),
         ),
     )
-    return await _publish(request, store, draft, audience, found, acts, asked, key)
+    # The gate is asked again at the moment of writing: an approval is a publish by somebody who
+    # did not run the author's check, and what is written is what the gate says now.
+    _, _, decision = await _check(request, draft, found, asked)
+    if decision is None or not decision.may_publish:
+        return _not_changed(REFUSED, " ".join(() if decision is None else decision.refusals))
+    return await _publish(request, store, draft, audience, found, acts, asked, key, decision)
 
 
 @router.post(DECLINE_PATH, response_model=DraftPublishView, responses=_TOLD)
