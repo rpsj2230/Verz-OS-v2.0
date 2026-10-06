@@ -236,7 +236,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
-from brain.ops.halt_store import Work, read_state, refusal_in
+from brain.ops.halt_store import Work, read_state, refusal_for, refusal_in
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
@@ -1984,13 +1984,15 @@ def agent_runtime_for(
     sessions = getattr(request.app.state, "db_sessions", None)
 
     async def halted() -> str:
-        # The agent axis joins `Work` with the halt store's agent slice; until then a run is
-        # stopped by a halt on everything, its person or their department.
+        # Asked at every step of the loop, with the agent this run is, so a stop declared on the
+        # agent, its person, their department or everything halts a run already under way
+        # (M13.7.3).
         return await refusal_for(
             sessions,
             Work(
                 person=asking.principal.id,
                 department=asking.principal.primary_department or "",
+                agent=agent.agent_id,
             ),
         )
 
