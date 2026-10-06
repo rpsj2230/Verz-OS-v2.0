@@ -73,15 +73,16 @@ that subject in the statement, which is the subject's own page in the console. E
 the display names of the people on its own rows (`brain.people_names`), read after the view has
 decided which rows those are, so a name is never looked up for an entry the reader is not shown.
 
-**A person's history is their entries and their grants' entries, and only for somebody the reader
-may name.** `0003` files a capability grant and its removal under `grant:<id>`, so a history read
-under `principal:<id>` alone never showed one. For a person the route first asks the People
-screen's own `nameable` about them, answering anybody it does not admit with the one 404 before
-anything else is read, and only then asks `0200`'s `gate.grant_ids_of` which grants were theirs,
-removed ones included, and reads those entries too, every one through the same view. So the
-function is never asked about a person the reader could not be shown, and a person the reader may
-not name has no history here, which is the answer the People page gives them about that person.
-See `A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`.
+**A person's history is their entries and their grants' entries, for a reader who may name them or
+already audits them.** `0003` files a capability grant and its removal under `grant:<id>`, so a
+history read under `principal:<id>` alone never showed one. For a person the route first asks
+whether the People screen's own `nameable` admits the reader to them, or whether the reader's audit
+reach covers entries about them (`brain.audit.view.may_audit`, the view's own rule asked before
+there is an entry), and answers anybody admitted by neither with the one 404 before anything else
+is read. Only then does it ask `0200`'s `gate.grant_ids_of` which grants were theirs, removed ones
+included, and read those entries too, every one through the same view. An auditor who could read
+the person's entries yesterday still can; a reader who could neither be shown nor audit the person
+is told nothing. See `A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`.
 
 Task ids: M27.7.13, M27.8.6, M24.1.2, M24.3.3, M27.16.1, M33.4.1.2
 """
@@ -125,6 +126,7 @@ from brain.audit.view import (
     AuditRow,
     AuditView,
     cursor_after,
+    may_audit,
     position_of,
 )
 from brain.console.auditor import GRANT_KIND, PERMISSION_ACTIONS, permission_history
@@ -181,10 +183,11 @@ PERSON_KIND: Final = "principal"
 #: Why a person's grants are looked up only after the People screen has admitted the reader.
 A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME: Final = (
     "Which grants were a person's is read past the grant table's policy, by a function that "
-    "returns ids and nothing else. It is asked only after the People screen's own nameable has "
-    "admitted the reader to that person, and a reader it does not admit is given the one 404 "
-    "before anything is read, so the function never answers about somebody the reader could not "
-    "be shown, and a person they may not name has no history here."
+    "returns ids and nothing else. It is asked only for a reader the People screen would show "
+    "that person to, or whose audit reach already covers entries about them, which is the reach "
+    "the audit view applies to every entry. Anybody else is given the one 404 before anything is "
+    "read, so the function never answers about somebody the reader could neither be shown nor "
+    "audit."
 )
 
 #: The most grants of one person a history reads the entries of. A resource bound.
@@ -681,7 +684,15 @@ async def audit_history(
         # See `A_PERSONS_GRANTS_ARE_READ_ONLY_FOR_SOMEBODY_THE_READER_MAY_NAME`.
         people = person_grants_of(request)
         member = await people.person(subject_id)
-        if member is None or not nameable([member], asked.reach, asked.now):
+        named = member is not None and nameable([member], asked.reach, asked.now)
+        audited = may_audit(
+            asked.reach,
+            subject_kind=PERSON_KIND,
+            subject_id=subject_id,
+            actions=PERMISSION_ACTIONS,
+            now=asked.now,
+        )
+        if not (named or audited):
             log.info("history not answerable", principal=asked.caller.principal.id)
             raise _not_answerable()
         grants = frozenset(await people.grant_ids(subject_id))
