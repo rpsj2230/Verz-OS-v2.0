@@ -413,6 +413,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.runtime:SideEffects.simulate": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.gate.runtime:SideEffects.policy_for": Repeat.READS,
         "brain.gate.runtime:SideEffects.assessment_for": Repeat.READS,
+        "brain.gate.runtime:SideEffects.describe": Repeat.READS,
         "brain.gate.runtime:SideEffects.hold": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The items behind cited documents, read for their badges at the reader's reach.
         "brain.gate.model_lane:ItemLookup.items": Repeat.READS,
@@ -759,6 +760,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # alone.
         "brain.connectors.declaration:ProposesAction.target_of": Repeat.READS,
         "brain.connectors.declaration:ProposesAction.action_for": Repeat.READS,
+        "brain.connectors.declaration:ProposesAction.described": Repeat.READS,
         "brain.connectors.declaration:SimulatesAction.simulate": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.ops.connector_write_run:SourceSender.send": Repeat.ISSUES,
         # Running an approved action with nobody present (M13.7.6). Every executor runs one

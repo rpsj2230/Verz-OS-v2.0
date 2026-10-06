@@ -201,6 +201,10 @@ class ConnectorSideEffects:
     def assessment_for(self, action: Action) -> RiskAssessment:
         return action_assessment(action)
 
+    def describe(self, action: Action) -> str:
+        prepared = self._preparer(action.tool)
+        return "an action" if prepared is None else prepared[1].described(action)
+
     async def hold(self, suspension: SuspendedAction, reach: EntitlementSet, now: datetime) -> None:
         async with self.suspensions.holding(reach, now) as rows:
             await put_suspension(rows.session, suspension)

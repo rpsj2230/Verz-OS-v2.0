@@ -1869,6 +1869,10 @@ class TicketReplyProposal:
             department=settings.get(DEPARTMENT_SETTING, ""),
         )
 
+    def described(self, action: Action) -> str:
+        """The reply as its asker is told of it: the ticket they named, and nothing of the text."""
+        return f"a reply to ticket {ticket_reply_of(action).ticket}"
+
 
 class TicketReplyWrites:
     """How an approved reply is sent and how the ticket read back is judged (M11.8.12).
