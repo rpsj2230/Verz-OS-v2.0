@@ -15,10 +15,11 @@ build from the person asking. See
 
 **It goes with the conversation.** It is read only through `SessionRecollection`, which the answer
 route binds after it has found the conversation as the asker's own and live, so a conversation
-erased or retired has no session memory any reader can reach from the moment it goes. The bytes
-themselves expire with the conversation's idle lifetime, `SESSION_IDLE_SECONDS`, moved forward by
-every write, which is the longest they can outlive the conversation. Valkey is the only place it is
-kept: no table, no log line and no trace carries a statement.
+retired has no session memory any reader can reach from the moment it goes, and its bytes expire
+with the conversation's idle lifetime, `SESSION_IDLE_SECONDS`, moved forward by every write. **An
+erasure request deletes them**: the erasure drain deletes the key of every conversation the person
+had, as part of their memories (`brain.ops.erasure_store.SessionMemoryEraser`). Valkey is the only
+place it is kept: no table, no log line and no trace carries a statement.
 
 **Silent, which is tier zero.** A session statement is `Change.SESSION_CONTEXT`, `Tier.SESSION`:
 it is in no digest (`brain.memory.digest.DIGEST_TIERS` stops above it), no review and no notice,
@@ -32,9 +33,11 @@ Rejected: a table beside `mem.persistent`. It would outlive the conversation by 
 erasure declaration and a retention sweep to be made to forget, and be one join away from a list of
 what everybody said in every conversation.
 
-Rejected: a delete command on the client, for the reason `brain.cache.ValkeyClient` gives about
-its own: the read gate already makes an erased conversation's notes unreachable, and a delete that
-exists is a delete somebody points at a pattern.
+Rejected: a delete command on this store's client, for the reason `brain.cache.ValkeyClient`
+gives about its own. A conversation retired is unreachable through the read gate. An erasure
+request is a promise that the person's data is gone, so the erasure drain alone holds a client that
+deletes, and deletes only the keys it names from the person's conversation ids
+(`brain.ops.erasure_store.SessionMemoryEraser`).
 
 Task ids: M16.1.1, M16.3.1
 """
@@ -66,9 +69,10 @@ A_SESSION_MEMORY_IS_ONE_PERSONS_ONE_CONVERSATION_AND_GOES_WITH_IT: Final = (
     "Session memory is kept in Valkey only, under a key naming one person and one conversation, "
     "so it is never shared between people: two people on one thread id have two keys, and "
     "nothing here lists or matches keys. It is read only once the conversation has been found "
-    "as the asker's own and live, so a conversation erased or retired takes its session memory "
-    "with it from every reader at once, and the bytes expire with the conversation's idle "
-    "lifetime. No table, log or trace holds a statement."
+    "as the asker's own and live, so a retired conversation takes its session memory with it "
+    "from every reader at once and the bytes expire with its idle lifetime, and an erasure "
+    "request deletes the key of every conversation the person had. No table, log or trace "
+    "holds a statement."
 )
 
 #: Why a failure is an empty memory.

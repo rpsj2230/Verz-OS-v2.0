@@ -356,6 +356,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.SAME_RESULT_WHEN_REPEATED
         ),
         "brain.deployment.database:Executor.execute": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # An erased person's session memory, by the keys their conversations name (M16.1.1).
+        "brain.ops.erasure_store:SessionKeys.exists": Repeat.READS,
+        "brain.ops.erasure_store:SessionKeys.delete": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The gate.
         "brain.gate.answer_cache:AnswerStore.get": Repeat.READS,
         "brain.gate.answer_cache:AnswerStore.set": Repeat.DERIVED_STATE,

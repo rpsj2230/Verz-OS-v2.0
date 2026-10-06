@@ -85,7 +85,7 @@ from brain.ops.canary_run import run_canaries_now
 from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.denial_digest_run import run_denial_digest_now
-from brain.ops.erasure_store import drain_erasure_queue
+from brain.ops.erasure_store import drain_erasure_queue, session_keys_for
 from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
@@ -450,8 +450,12 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
     a connection row-level security narrows, because a row a policy hides is a row the erasure
     would neither count nor retire. `prepare_threshold=None` for the reason `retention_sweep` gives.
     """
+    # The cache this process's settings name, for the person's session memory (M16.1.1); none
+    # configured is none kept. See the erasure store's reason constant about session memory.
+    valkey_url = settings_from(process_environment()).valkey_url
+    sessions = session_keys_for(valkey_url) if valkey_url else None
     with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
-        return drain_erasure_queue(conn, now=now, report_only=report_only)
+        return drain_erasure_queue(conn, now=now, report_only=report_only, sessions=sessions)
 
 
 def canary_run(now: datetime, report_only: bool, database_url: str) -> str:
