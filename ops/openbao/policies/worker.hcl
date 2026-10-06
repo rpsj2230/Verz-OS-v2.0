@@ -61,6 +61,14 @@ path "providers/data/deepseek" {
   capabilities = ["read"]
 }
 
+# The trace ledger's project keys, read by the install check that sends one run to the ledger and
+# finds it there (brain.ops.acceptance_checks_services, M32.1.2.6), and by a worker that sends the
+# runs it answers. Read and nothing more: the application keeps them, with its own token, when the
+# release hands them over (brain.ops.ledger_export). One path, named, for the reason above.
+path "providers/data/trace_ledger" {
+  capabilities = ["read"]
+}
+
 # The join-key pepper, read to hash the identifiers of the source records the worker registers for
 # entity resolution (brain.ops.join_key_pepper). Read and nothing more: the application creates it
 # once, and a process nobody watches must not be able to create or replace the value every stored

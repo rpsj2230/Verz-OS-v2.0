@@ -563,6 +563,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/artifacts",
       "/api/v1/records/{entity}/access",
       "/api/v1/resolution/review*",
+      "/api/v1/resolution/weights*",
     ],
     tables: [
       "know.item",

@@ -36,15 +36,20 @@ store refuses a second connection, and the install's own connection is the proof
 **The CRM is HubSpot.** HubSpot's own module calls itself a CRM, and the Laravel connector calls its
 database the portal, which is the maintenance portal (M11.9.9) and not on this module.
 
-**What the Drive and Lark checks stop short of, said once.** A Drive file's words are handed to the
-model step as a passage, so the Drive walk asks the application's own passage reader, at the
-person's reach and at the bound agent's run reach, rather than a model. Lark is connected on
-Connect Lark, which keeps which Base is switched on as installation settings the whole process
-reads, so the Lark walk writes those settings in its transaction through the save's own store and
-reads them back through `brain.install.value_of` with what it saved, and does not hold them for the
-running process.
+**What the Drive, Slack and Lark checks stop short of, said once.** A Drive file's words and a
+Slack message are each handed to the model step as a passage, so those walks ask the application's
+own passage reader, at the person's reach and at each agent's run reach, rather than a model.
+Slack's reader is handed the connection the store holds on each question, as
+`brain.ops.live_read_run.slack_passages_for` reads it, and matches the person to their Slack account
+by the digest of their work address, which the walk binds with the People page's own statement
+(`brain.identity.work_email.binding`): a step on the console, never one at the server. Lark is
+connected on Connect Lark, which keeps which Base is switched on as installation settings the whole
+process reads, so the Lark walk writes those settings in its transaction through the save's own
+store and reads them back through `brain.install.value_of` with what it saved, and does not hold
+them for the running process.
 
-Task ids: M11.9.3, M11.9.4, M11.9.6, M11.9.7, M11.9.8, M11.9.10, M11.9.11, M11.9.13, M11.9.14
+Task ids: M11.9.3, M11.9.4, M11.9.5, M11.9.6, M11.9.7, M11.9.8
+Task ids: M11.9.10, M11.9.11, M11.9.13, M11.9.14
 """
 
 from __future__ import annotations
@@ -666,6 +671,88 @@ async def lark_is_ready_for_a_person_and_its_agent_once_connected(h: Harness) ->
         raise CheckFailedError("an agent bound to a connected source could not use it")
     refused, nothing = await ask(beside, name), await ask(beside, h.word())
     if canary in _prose(refused) or _prose(refused) != _prose(nothing):
+        raise CheckFailedError("an agent not bound to a source was answered from it")
+
+
+# -------------------------------------------------------------------- M11.9.5: Slack
+@check(
+    leaves=("M11.9.5",),
+    sentence=(
+        "A Slack workspace made up for the check is connected from its form and indexed by the "
+        "worker, nothing else set: a permitted person in a channel is handed its message read "
+        "from Slack on the next question, an agent naming Slack installs ready and is handed it "
+        "too, and an agent not bound to it is handed what a subject Slack never mentions hands it."
+    ),
+)
+async def slack_is_ready_for_a_person_and_its_agent_once_connected(h: Harness) -> None:
+    from brain.connectors import slack_messages as slack
+    from brain.connectors.minimal_index import fresh_canary
+    from brain.identity.staff_roster import digest_of
+    from brain.identity.work_email import binding
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.ops.acceptance_checks_slack import _RecordedSlack, _slack_id
+    from brain.ops.connector_store import StoredConnections
+    from brain.ops.slack_messages_live import READ_MESSAGE, SlackPassages
+    from brain.tools.startup import build_registry
+
+    await h.found_departments()
+    word, channel, member = h.word(), _slack_id("C"), _slack_id("U")
+    address, said = f"{h.word().lower()}@acceptance.invalid", fresh_canary("ACCEPTANCE")
+    workspace = _RecordedSlack(
+        channels={channel: ("general", False)},
+        members={member: (address, (channel,))},
+        histories={channel: (("1600000000.000100", f"{said} {word}"),)},
+    )
+    await _from_the_console(
+        h,
+        slack.CONNECTOR_NAME,
+        {slack.WORKSPACE_SETTING: _slack_id("T"), slack.DEPARTMENT_SETTING: A},
+        workspace,
+    )
+
+    # The person's work address, bound by the People page's own statement: what matches them to
+    # their Slack account, and a step taken on the console rather than at the server.
+    reads = (READ_MESSAGE.value,)
+    reader = h.principal(A, "reader")
+    await h.person(reader, department=A, grants=tuple((one, Scope.department(A)) for one in reads))
+    await h.execute(*h.attributed(), binding(reader, digest_of(address)))
+    stored = StoredConnections(h.sessions)
+
+    # The connection read from the store on each question, as `slack_passages_for` reads it, so
+    # what is handed over came from what the Connectors screen wrote and from nothing held.
+    async def connected() -> Connection | None:
+        return next(
+            (one for one in await stored.connected() if one.connector == slack.CONNECTOR_NAME),
+            None,
+        )
+
+    passages = SlackPassages(
+        connected,
+        sessions=h.sessions,
+        keys=_Keys(),
+        caller=workspace,
+        resolver=_Resolver(),
+        clock=lambda: h.now,
+    )
+
+    async def handed(reach: EntitlementSet, subject: str) -> tuple[str, ...]:
+        found = await passages.passages(
+            f"What was said about {subject}?", entitlement=reach, now=h.now
+        )
+        return tuple(one.document for one in found.records)
+
+    tools = build_registry(source=h.settings.tool_source, records=SessionRowSource(h.sessions))
+    bound, unbound = await _two_agents(
+        h, slack.CONNECTOR_NAME, reads, Scope.department(A), served=await _served(h), tools=tools
+    )
+    own, through, beside = await _run_reaches(h, reader, bound, unbound)
+
+    if not any(said in one for one in await handed(own, word)):
+        raise CheckFailedError("a permitted person's question was not answered from the source")
+    if not any(said in one for one in await handed(through, word)):
+        raise CheckFailedError("an agent bound to a connected source could not use it")
+    refused, nothing = await handed(beside, word), await handed(beside, h.word())
+    if any(said in one for one in refused) or refused != nothing:
         raise CheckFailedError("an agent not bound to a source was answered from it")
 
 

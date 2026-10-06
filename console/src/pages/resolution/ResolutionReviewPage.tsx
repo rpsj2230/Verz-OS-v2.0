@@ -31,7 +31,11 @@
  * about the evidence somebody is acting on (`brain.resolution.review.
  * A_READER_JUDGING_EVIDENCE_IS_TOLD_WHETHER_ANYTHING_MEASURED_IT`).
  *
- * Task ids: M14.6.4, M14.8.5
+ * **Under the queue, how pairs are weighed** (`WeightsSection`): the weights that produced the
+ * evidence above, and the weekly fit waiting for the same reviewers to approve it. It is read on
+ * its own, so a queue that fails to load still leaves the weights readable and the other way round.
+ *
+ * Task ids: M14.6.4, M14.8.5, M14.4.4, M14.8.3
  */
 
 import { useId, useState } from "react";
@@ -93,6 +97,7 @@ import {
   type ReviewRecord,
 } from "../resolutionReviewQuery";
 import { when } from "../sessionsQuery";
+import { WeightsSection } from "./WeightsSection";
 
 /** What the page was told after a decision: done, or somebody else's decision in the API's words. */
 interface Told {
@@ -340,6 +345,7 @@ export function ResolutionReviewPage() {
         </div>
       )}
       {content}
+      <WeightsSection />
     </div>
   );
 }

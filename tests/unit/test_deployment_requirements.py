@@ -58,8 +58,8 @@ REPO = Path(__file__).resolve().parents[2]
 EXPECTED: dict[str, tuple[int, int, int, int]] = {
     # profile: (memory MiB, containers, cores, disk GiB)
     "lite": (3968, 4, 2, 28),
-    "standard": (11008, 14, 6, 38),
-    "full": (14976, 22, 8, 52),
+    "standard": (11136, 15, 6, 38),
+    "full": (15104, 23, 8, 52),
 }
 
 
