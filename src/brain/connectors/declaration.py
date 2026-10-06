@@ -143,6 +143,7 @@ from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
 from brain.connectors.write_verification import ReadBack, builds_a_manifest
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
+from brain.core.field_policy import FieldRule
 from brain.ops.connect_steps import GuideStep
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import ConnectorLimit
@@ -1022,11 +1023,13 @@ class WriteCall:
 class PreparesWrite(Protocol):
     """How a connector turns an approved action into its call, and judges the record read back."""
 
-    def call_for(self, action: Action) -> WriteCall:
+    def call_for(self, action: Action, *, settings: Mapping[str, str]) -> WriteCall:
         """The call that sends this approved action. Raises for an action it cannot send.
 
         Builds the call and sends nothing, which is why it is not named `call`: `brain.ops.effects`
-        presumes a method of that name issues, and this one only reads the action.
+        presumes a method of that name issues, and this one only reads the action. `settings` are
+        the connection's, so a source reached at an address of its own (a helpdesk, say) is sent
+        the change there and never at an address the action carries.
         """
         ...
 
@@ -1055,6 +1058,9 @@ class WriteGrant:
     credential_shape: CredentialShape = CredentialShape.KEY
     #: What its own key must be allowed to do and never be given, which its slot is defined with.
     scopes: KeyScopes | None = None
+    #: The fields its tools write that no read classifies, each behind its own capability. See
+    #: `A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT`.
+    fields: tuple[FieldRule, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -1070,6 +1076,10 @@ class WriteGrant:
                     "and what an approver is told without it"
                 )
                 raise DeclarationError(msg)
+        named = [(one.entity, one.field) for one in self.fields]
+        if len(set(named)) != len(named):
+            msg = f"write grant {self.name!r} classifies one field twice"
+            raise DeclarationError(msg)
 
 
 @dataclass(frozen=True)
@@ -1323,6 +1333,30 @@ def discover(package: ModuleType) -> Mapping[str, ConnectorDeclaration]:
 def shipped() -> Mapping[str, ConnectorDeclaration]:
     """Every connector this release ships. Found once per process, at start-up."""
     return discover(brain.connectors)
+
+
+#: Why a write grant classifies the fields its tools write.
+A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT: Final = (
+    "The gate's mask check withholds every field no rule classifies, and every argument of an "
+    "action is a field it touches, so a write is held only when each field it writes is "
+    "classified. A read classifies the fields a record holds. A write that creates something, a "
+    "reply to a ticket, writes a field no record holds, and putting it among the read's fields "
+    "would offer it on Ask as something a ticket has. So the grant that writes it classifies it, "
+    "and the policy an action is decided under is the read's rules and the grant's together."
+)
+
+
+def written_fields(source: str, entity: str) -> tuple[FieldRule, ...]:
+    """The fields `source`'s write grants declare their tools write on `entity`.
+
+    See `A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT`.
+    """
+    declared = shipped().get(source)
+    if declared is None:
+        return ()
+    return tuple(
+        rule for grant in declared.writes for rule in grant.fields if rule.entity == entity
+    )
 
 
 def write_grant_for(tool: str) -> tuple[str, WriteGrant] | None:

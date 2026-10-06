@@ -757,6 +757,39 @@ def evening_digest(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why approved actions run nothing in report-only mode.
+AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING: Final = (
+    "Running an approved action changes a system somebody else owns, so a run asked to only "
+    "report runs none and says so; the approvals stay approved, inside their windows."
+)
+
+
+def approved_actions(now: datetime, report_only: bool, database_url: str) -> str:
+    """Run every approved action that is waiting, each once, and say what the runs came to.
+
+    `brain.ops.approved_runs.run_approved_now` is the literal call the registry reads, with the
+    worker's vault for a write's own key. Declines in report-only mode, see
+    `AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING`, and takes the worker's event loop for
+    the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no approved action was run. "
+            f"{AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING}"
+        )
+    from brain.ops.approved_runs import run_approved_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_approved_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    ).summary()
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -890,6 +923,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
     # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
     Runner(name="evening_digest", run=evening_digest, workload=WorkloadClass.BATCH),
+    # Wired on 2026-10-06 with `gate.approved_to_run` (`0176`). See `brain.ops.approved_runs`.
+    Runner(name="approved_actions", run=approved_actions, workload=WorkloadClass.BACKGROUND),
 )
 
 
@@ -956,6 +991,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return side_effect_resume(now, report_only, database_url)
         case "evening_digest":
             return evening_digest(now, report_only, database_url)
+        case "approved_actions":
+            return approved_actions(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

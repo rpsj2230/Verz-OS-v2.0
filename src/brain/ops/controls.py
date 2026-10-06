@@ -1035,6 +1035,32 @@ CONTROLS: Final[tuple[Control, ...]] = (
         invoked_by=Invocation.IN_PROCESS,
         daily_at="INSTALL_DIGEST_TIME",
     ),
+    Control(
+        name="approved_actions",
+        # Since 2026-10-06 (`0176`, M13.7.6). The worker's schedule starts `run_approved_now`,
+        # which reads each approved action through `gate.approved_to_run` and runs it once
+        # through `brain.gate.leash.resume` at its requester's reach as it is now.
+        symbols=(
+            "brain.ops.approved_runs:run_approved_now",
+            "brain.ops.approved_runs:run_approved",
+        ),
+        guards=(
+            "that an action a person approved is carried out once, without its requester coming "
+            "back, at their reach as it is when it runs, and that a rejected, changed or lapsed "
+            "one never is"
+        ),
+        lost_silently=(
+            "The approver pressed approve and the card closed, and nothing was sent: the reply "
+            "never reaches the customer and the DNS record never changes, while the screen says "
+            "the action was approved. Nobody is told, because the approval itself succeeded."
+        ),
+        # Five minutes, restated rather than imported: `brain.ops.approved_runs` reaches the
+        # tables, which import this registry for the control-run name constraint.
+        every=_FIVE_MINUTELY,
+        cadence_from="brain.ops.approved_runs:RUNS_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
 )
 
 

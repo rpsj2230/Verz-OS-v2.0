@@ -187,7 +187,8 @@ def test_the_real_registry_gives_this_scheduler_twenty_three_of_the_twenty_four_
     arrived to be started by the worker, and twenty with `vault_audit_ship` that evening.
     Twenty-one on 2026-09-28, with `acceptance_run`, which the worker starts too, twenty-two on
     2026-09-30 with `escalation_expiry` (M8.3.4), twenty-three with `evening_digest`, and
-    twenty-four on 2026-10-06 with `entity_resolution` (M14.1).
+    twenty-four on 2026-10-06 with `entity_resolution` (M14.1), and twenty-five with
+    `approved_actions` (M13.7.6).
 
     Delete this and a control moved onto an external schedule silently keeps a second caller
     inside the process."""

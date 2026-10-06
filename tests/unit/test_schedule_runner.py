@@ -495,6 +495,9 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And to one later that day.** `start_control` calls the weekly fit's runner, so
     `resolution_calibration` left the list.
 
+    **And twenty-five that evening, with one orphan still.** `approved_actions` arrived already
+    wired, with `gate.approved_to_run` and `brain.ops.approved_runs`.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
@@ -514,6 +517,7 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "escalation_expiry" not in {one.name for one in orphans()}
     assert "evening_digest" not in {one.name for one in orphans()}
     assert "entity_resolution" not in {one.name for one in orphans()}
+    assert "approved_actions" not in {one.name for one in orphans()}
     assert len(CONTROLS) == 24
 
 
@@ -557,6 +561,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "entity_resolution",
         "evening_digest",
         "resolution_calibration",
+        "approved_actions",
     }
 
 

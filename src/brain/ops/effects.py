@@ -715,6 +715,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:PreparesWrite.call_for": Repeat.READS,
         "brain.connectors.declaration:PreparesWrite.differs": Repeat.READS,
         "brain.ops.connector_write_run:SourceSender.send": Repeat.ISSUES,
+        # Running an approved action with nobody present (M13.7.6). Every executor runs one
+        # approval through `brain.gate.leash.resume`, whose `run_real` keys it in the operation
+        # ledger by the approval's id, so a second run of the same approval is answered by the
+        # ledger and the far end is left as the first left it. The tools, the agent's standing and
+        # the requester's reach are reads.
+        "brain.ops.approved_runs:Executor.tools": Repeat.READS,
+        "brain.ops.approved_runs:Executor.run": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.approved_runs:Standings.standing": Repeat.READS,
+        "brain.ops.approved_runs:Reaches.load": Repeat.READS,
         # A POST to a source is one of two things (M11.7.1): a report asked for with a body, which
         # changes nothing, or a Google key file exchanged for a token, of which a second exists
         # until its hour ends and is never read. The stronger of the two is what is recorded.
