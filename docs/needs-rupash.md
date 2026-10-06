@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**46 items are open: 170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**49 items are open: 173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,92 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 173. Connect Google Workspace so each person's own mail, calendar and documents can be asked about
+
+**In plain terms:** the Brain can read a person's own Gmail, Google Calendar and Google Drive to answer
+their questions, but only with that person's own consent, only when they ask, and only what Google lets
+them see. Nothing is copied into the Brain: each answer is read live and nothing is kept in a table.
+It ships switched off, and it does nothing until you do the steps below. Each person then connects their
+own Google account from **My workspace**.
+
+I have built it and recorded Google's answers for the tests, but **nothing has run against Google or on
+your install yet**, so I cannot claim it works until you have done this and I have run its install check.
+
+**What you do (about twenty minutes, once):**
+
+1. In the Google Cloud console, create a project for the Brain (or use your organisation's existing one)
+   and enable only the APIs of the services you will read: Gmail for mail, Google Calendar for calendar,
+   Google Drive for documents.
+2. Set the OAuth consent screen to **Internal**, so only your own people can connect, and add only the
+   read-only scopes of the services you chose: `gmail.readonly`, `calendar.readonly`, `drive.readonly`.
+3. Create an OAuth client of type **Web application**, and add your console's address followed by
+   `/connector-consent` as its authorised redirect address.
+4. In the console, connect Google Workspace with the client id, the services you chose and the
+   department whose people may use it, and paste the client secret into the masked field. It goes into
+   the vault; you type it, I never see it, and it never appears in chat. A service you did not choose is
+   never called and its permission is never asked of anybody.
+5. **Do not grant domain-wide delegation.** It would read every mailbox as anybody; this design reads
+   each person's own account with that person's own consent and nothing wider.
+6. Tell me you are done, and I run the install check
+   `a_persons_own_workspace_is_read_with_their_token_for_them_alone` on your install.
+
+**Who may ask:** a reader needs the `read:google_workspace` grant in the connection's department, so
+nobody gets it by default.
+
+**Option A: connect it now.** Do the steps above; useful as soon as the first person connects.
+
+**Option B: leave it off for now.** Nothing changes; the code is there and switched off.
+
+**My recommendation:** A, once the other connectors you have chosen (Xero, HubSpot, Freshdesk) are
+connected, because this is the first connector that reads one person's own mail and calendar, so it is
+worth having your own account connected and checked first.
+
+**What I need from you:** the steps above, or reply "173: B".
+
+## 172. When an automation keeps failing and is paused, should its agent's questions stop too?
+
+**In plain terms:** you can now stop one agent on its own (the stop screen's agent scope), and a stop on
+an agent refuses that agent's questions and its automations. Separately, when an automation fails
+repeatedly the Brain pauses it, so it stops running on its schedule until a person looks. The pause
+builds the same kind of stop, but today only the automation's schedule is held: the agent keeps
+answering people's questions.
+
+**Option A: a pause holds the schedule only (what is built).** A failing automation is a fault in one
+job. People can still ask the agent things, and the steward is told the automation was paused.
+
+**Option B: a pause also stops the agent's questions.** Safer if a failing automation might mean the
+agent itself is misbehaving, but it takes the agent away from everybody for a fault in one job, which is
+wider than a failing automation asked for, and it would stay stopped until somebody lifts it.
+
+**My recommendation:** A. A person who wants the whole agent stopped has the stop screen for that, with
+a written reason.
+
+**What I need from you:** nothing, or reply "172: B".
+
+## 171. Does a test that drives a real browser count as proof that a task works?
+
+**In plain terms:** a task is only closed when a test names it, and until now the check that enforces
+that read only the Python tests and the console's own tests. Four tasks about the console proving itself
+in a browser (two tabs refreshing, a page leaking nothing internal) were proved by the browser tests
+under `e2e/`, which the check never read, so it called them unproved and the build turned red. The
+browser tests are real: they open the product in a browser and press things, which is closer to your
+install than a test over stand-ins.
+
+I have made the check read the browser tests under `e2e/specs` and `e2e/lib` (not the page stubs under
+`e2e/pages`, which assert nothing), the same way it already reads the console's tests. Three deliberate
+breakages of that rule were each caught by a test.
+
+**Option A: browser tests count (what is built).** A task can be closed by a browser test that names it,
+as it can by a Python test or a console test.
+
+**Option B: they do not.** Those four tasks would need a Python test naming them, which would claim a
+Python test proves something that only a browser can show.
+
+**My recommendation:** A. A browser test is stronger evidence than a unit test, and the check still
+refuses a task that no test names.
+
+**What I need from you:** nothing, or reply "171: B".
 
 ## 170. Which parts of an agent does the builder list as sections of its own?
 

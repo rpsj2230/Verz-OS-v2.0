@@ -50,7 +50,9 @@ from brain.memory.digest import Learning, Undo, undo
 from brain.memory.review import Edit, edit
 from brain.memory.signals import Signal
 from brain.mine_routes import (
+    A_PERSON_UNDOES_WHAT_WAS_LEARNT_FROM_THEM_ON_THEIR_SIGN_IN_ALONE,
     FORGET_AND_EDIT_SAY,
+    LEARNING_UNDO_PATH,
     MAX_OWN_RUNS,
     MORE_SPEND_THAN_THIS_PAGE_READS,
     month_start,
@@ -540,3 +542,57 @@ def test_somebody_elses_memory_is_refused_as_a_missing_one_and_reaches_no_store(
     assert [one.status_code for one in refused] == [404] * 5
     assert len({one.json()["message"] for one in refused[:4]}) == 1
     assert (records.undone, records.edited) == ([], [])
+
+
+# ------------------------------------------------------------ the digest's undo (M16.5.1)
+UNDO = f"{API_PREFIX}{LEARNING_UNDO_PATH}"
+
+
+def test_a_person_holding_no_grant_at_all_undoes_what_was_learnt_from_them(
+    client: TestClient, rows: dict[type, list[Any]], records: KeptRecords
+) -> None:
+    """**The digest's undo works for everybody it is sent to.** A person holding no grant at all,
+    and one holding every console screen and not the member grant, each undo a learning formed from
+    their own words, where Forget on the workspace refuses them both. Delete this and the weekly
+    digest can link an undo its recipient is refused, which reads as an undo that does nothing."""
+    assert "by nothing an administrator grants" in (
+        A_PERSON_UNDOES_WHAT_WAS_LEARNT_FROM_THEM_ON_THEIR_SIGN_IN_ALONE
+    )
+    rows[PersistentMemoryRow] = [
+        stated("mem_none", "Mondays first", subject="u_none"),
+        stated("mem_admin", "Tables over prose", subject="u_admin"),
+    ]
+    rows[LearningRow] = [learnt("mem_none", agent_id=None), learnt("mem_admin", agent_id=None)]
+
+    assert post(client, "u_none", FORGET, {"memory_id": "mem_none"}).status_code == 404
+    done = [
+        post(client, "u_none", UNDO, {"memory_id": "mem_none"}),
+        post(client, "u_admin", UNDO, {"memory_id": "mem_admin"}),
+    ]
+
+    assert [one.status_code for one in done] == [200, 200], [one.text for one in done]
+    assert all(one.json()["took_effect"] is True for one in done)
+    assert [(one.memory_id, actor) for one, actor in records.undone] == [
+        ("mem_none", "u_none"),
+        ("mem_admin", "u_admin"),
+    ]
+
+
+def test_the_digests_undo_refuses_somebody_elses_learning_as_a_missing_one(
+    client: TestClient, rows: dict[type, list[Any]], records: KeptRecords
+) -> None:
+    """Authorship is the whole of the gate, so it has to hold: another person's memory and one that
+    does not exist are the one 404, in one sentence, and nothing reaches the store. Delete this and
+    a grant-free route undoes anybody's memory by its id."""
+    memories_with_records(rows)
+
+    refused = [
+        post(client, ME, UNDO, {"memory_id": "mem_theirs"}),
+        post(client, ME, UNDO, {"memory_id": "mem_nothing"}),
+        post(client, "u_none", UNDO, {"memory_id": "mem_mine"}),
+    ]
+
+    assert [one.status_code for one in refused] == [404] * 3
+    assert len({one.json()["message"] for one in refused}) == 1
+    assert records.undone == []
+    assert post(client, ME, UNDO, {"memory_id": "mem_mine"}).status_code == 200

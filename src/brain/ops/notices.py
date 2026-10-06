@@ -231,8 +231,13 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="What the system learnt from your work",
         told="Each person, about their own work.",
         about="What was learnt that week, with a way to undo it.",
-        how="By email or chat, once a week. Nothing sends it yet.",
+        how=(
+            "Once a week, in the chat each person last wrote to the system on, naming each thing "
+            "learnt from them and where to undo it. Nobody is sent one for a week nothing was "
+            "learnt from them."
+        ),
         composed_by="brain.memory.digest:weekly_digest",
+        sent_by="brain.learning_told:send_learning_digests",
     ),
     Notice(
         kind=NoticeKind.CONTROL_NOT_RUN,

@@ -327,6 +327,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/memory",
       "/api/v1/agents/{agent_id}/memory/{memory_id}/deletion",
       "/api/v1/agents/{agent_id}/memory/{memory_id}/edit",
+      "/api/v1/agent-links/landing",
       "/api/v1/agents/{agent_id}/artifacts",
       "/api/v1/agents/{agent_id}/artifacts/latest",
       "/api/v1/agents/{agent_id}/artifacts/{artifact_id}/download",
@@ -583,6 +584,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/memory",
       "/memory/:subject",
       "/memory/:subject/:view",
+      "/me/undo/:memoryId",
       "/records",
       "/records/:entity",
       "/classification",
@@ -608,6 +610,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/learning/settings*",
       "/api/v1/govern/memory",
       "/api/v1/me/memory*",
+      "/api/v1/me/learning/undo",
       "/api/v1/records/{entity}",
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",
@@ -756,8 +759,19 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Usage, activity and system statistics": {
-    screens: ["/usage", "/adoption", "/spend", "/questions", "/quality", "/service-levels", "/me"],
-    routes: ["/api/v1/report/*", "/api/v1/me/workspace"],
+    screens: [
+      "/usage",
+      "/adoption",
+      "/spend",
+      "/questions",
+      "/quality",
+      "/service-levels",
+      "/me",
+      "/company/estate",
+      "/company/activity",
+      "/company/consumption",
+    ],
+    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*"],
     tables: [
       "ops.question_asked",
       "ops.question_gap",
@@ -804,16 +818,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
     gaps: [],
   },
   "System health and the state of every service": {
-    screens: ["/", "/models", "/runs"],
+    screens: ["/", "/models", "/runs", "/stop"],
     routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview", "/api/v1/halts*"],
     tables: ["ops.halt"],
     installation: [],
-    gaps: [
-      {
-        what: "The install cannot be stopped or resumed from the console yet: GET, POST /api/v1/halts and POST /api/v1/halts/resume stop and resume through brain.ops.halt_store, and no Stop screen or header control calls them.",
-        leaf: "M27.12.4",
-      },
-    ],
+    gaps: [],
   },
   "Backup and recovery": {
     screens: [

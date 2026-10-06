@@ -74,6 +74,9 @@ from brain.agent_group_routes import router as agent_group_router
 # breaker reads, and the supervision pin and its reviews.
 from brain.agent_leash_routes import router as agent_leash_router
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
+
+# Where a link to one tab of one agent lands for the person following it, or the one 404.
+from brain.agent_link_routes import router as agent_link_router
 from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
@@ -156,6 +159,10 @@ from brain.cited_document_routes import router as cited_document_router
 # write verb is `admin` rather than `write` because what it governs is what other people
 # may see. The same `asking` dependency, imported rather than re-declared.
 from brain.classification_routes import router as classification_router
+
+# The Super Admin's company pages: everything in the install, all activity and what the company
+# spent, each narrowed by `brain.console.global_surfaces`. See `brain.company_routes`.
+from brain.company_routes import router as company_router
 
 # The Compliance screen: a sensitive topic's named person and the referrals routed to them, the
 # processing register per connector, and breach cases with the PDPA clock, behind

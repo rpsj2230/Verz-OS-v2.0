@@ -278,3 +278,39 @@ def test_a_stop_a_person_made_is_not_read_and_a_gone_agent_falls_back_to_the_own
         found = _read(url, after=NOW - timedelta(days=30), until=paused_at + timedelta(hours=1))
 
     assert [(one.steward_id, one.agent_id) for one in found] == [(OWNER, "gone_agent")]
+
+
+def test_the_notice_ends_with_the_agents_automations_tab_when_the_install_has_an_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**M39.1.2.4's alert.** With an address of its own, the notice ends with the agent's
+    Automations tab on this install's console, made by `workspace.deep_link` on the address the
+    chat's Ask link is made from; with none, it carries no link rather than half of one. Delete
+    this and the alert says what stopped and leaves the steward to find where."""
+    from brain import chat_answer
+    from brain.automation_paused_told import OPEN_IT
+
+    monkeypatch.setattr(chat_answer, "ask_link", lambda: "https://brain.example.test/ask")
+    linked = paused_text(ONE)
+    monkeypatch.setattr(chat_answer, "ask_link", lambda: "")
+    plain = paused_text(ONE)
+
+    assert linked.endswith(f"{OPEN_IT} https://brain.example.test/agents/quote_helper/automations")
+    assert linked.startswith(plain)
+    assert OPEN_IT not in plain and "https://" not in plain
+
+
+def test_the_approvals_link_and_an_agents_link_share_one_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`approval_cards.approvals_link` and the agent link are both `chat_answer.console_link`
+    over the same Ask address, so two links in two messages cannot disagree about where this
+    install is. Delete this and a second derivation of the address drifts from the first."""
+    from brain import approval_cards, chat_answer
+
+    monkeypatch.setattr(chat_answer, "ask_link", lambda: "https://brain.example.test/ask")
+
+    assert approval_cards.approvals_link() == "https://brain.example.test/approvals"
+    assert chat_answer.console_link("/agents/x/memory") == (
+        "https://brain.example.test/agents/x/memory"
+    )

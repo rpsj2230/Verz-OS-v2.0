@@ -26,7 +26,10 @@ and the person told are the same person.
 **What they are told is `OwnerNotice.render`, and nothing about why it failed.** The sentence
 names the automation, the agent and the count, and never a run's failure text, which
 `agent_automations.AutomationRun` keeps from the steward's page for the reason that failure text
-can carry the data a run read.
+can carry the data a run read. **It ends with the address of the agent's Automations tab**
+(`workspace.deep_link`, on the install's own console address), so the alert points at the exact
+place (M39.1.2.4); whoever follows it is answered by `brain.agent_link_routes` and the page, with
+the one 404 for anybody the tab is not theirs to open.
 
 **Once, whatever runs it.** Each message is keyed by the steward and the pause row's own id
 through the operation ledger, so every web process can run the loop, a pass looking back over a
@@ -38,7 +41,7 @@ no switch, by `A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH`; the loop ask
 before each pass as every sender does, so the day somebody gives it a switch the sender already
 honours it.
 
-Task ids: M39.6.2.3
+Task ids: M39.6.2.3, M39.1.2.4
 """
 
 from __future__ import annotations
@@ -55,7 +58,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.requests import Request
 
+from brain.chat_answer import console_link
 from brain.console.agent_automations import FAILURES_BEFORE_PAUSE, OwnerNotice
+from brain.console.workspace import Tab, deep_link
 from brain.ops.automation_run import RUNNER_ACTOR, PausedBecause
 from brain.ops.automation_run_store import RUN_EVERY
 from brain.ops.notices import NoticeKind, notice_is_on
@@ -87,6 +92,10 @@ MOST_TOLD_PER_PASS: Final = 200
 #: The key each message is sent once under, per pause.
 INTENT_PREFIX: Final = "automation_paused"
 
+#: The words before the link to the agent's Automations tab, which `brain.agent_link_routes`
+#: answers for whoever follows it.
+OPEN_IT: Final = "Open it:"
+
 #: The runner's own pauses for failing, with the steward `run_one` addresses the notice to.
 #: Written out so no statement here is assembled at run time.
 _READ: Final = text(
@@ -112,14 +121,17 @@ class Paused:
 
 
 def paused_text(one: Paused) -> str:
-    """What the steward reads: `OwnerNotice.render`, for the count that paused it."""
-    return OwnerNotice(
+    """What the steward reads: `OwnerNotice.render`, for the count that paused it, and the address
+    of the agent's Automations tab when this install has an address of its own (M39.1.2.4)."""
+    said = OwnerNotice(
         owner_id=one.steward_id,
         automation_id=one.automation_id,
         agent_id=one.agent_id,
         consecutive_failures=FAILURES_BEFORE_PAUSE,
         at=one.paused_at,
     ).render()
+    link = console_link(deep_link(one.agent_id, Tab.AUTOMATIONS))
+    return f"{said} {OPEN_IT} {link}" if link else said
 
 
 def intent_ref_for(one: Paused) -> str:

@@ -173,7 +173,7 @@ def test_a_reader_holding_every_screen_in_one_department_is_given_that_departmen
         ["People"],
         ["Agents", "Skills and tools"],
         ["Connectors", "Knowledge", "Learning and memory"],
-        ["Runs and queue"],
+        ["Runs and queue", "Stop"],
         ["Audit log"],
         ["Questions and gaps", "Usage and cost"],
     ]
@@ -299,11 +299,16 @@ def test_the_departments_named_are_read_off_the_readers_own_grants() -> None:
     assert departments_held(people_screen, EntitlementSet(principal_id="u", grants=()), NOW) == ()
 
 
-def test_the_navigation_has_three_fields_and_none_of_them_counts_anything() -> None:
-    """Delete this and a `withheld` or a `total` can be added beside the sections, and the menu
-    publishes how much of the console the reader was not given."""
+def test_the_navigation_has_four_fields_and_none_of_them_counts_anything() -> None:
+    """The fourth is the header's stop offer, a word from a closed set and never a number. Delete
+    this and a `withheld` or a `total` can be added beside the sections, and the menu publishes
+    how much of the console the reader was not given."""
+    from brain.navigation_routes import STOP_DEPARTMENTS, STOP_EVERYTHING
+
     assert [one.name for one in fields(ConsoleNavigation)] == ["kind", "departments", "sections"]
-    assert set(NavigationView.model_fields) == {"console", "departments", "sections"}
+    assert set(NavigationView.model_fields) == {"console", "departments", "sections", "stop"}
+    assert NavigationView.model_fields["stop"].annotation is str
+    assert {STOP_EVERYTHING, STOP_DEPARTMENTS} == {"everything", "departments"}
 
 
 # ------------------------------------------------------------------------------ what it offers
@@ -556,6 +561,7 @@ def test_the_route_answers_each_reader_the_console_their_grants_give_them(
         "library",
         "learning",
         "runs",
+        "halt",
         "audit",
         "questions",
         "usage",
@@ -570,9 +576,39 @@ def test_the_route_answers_each_reader_the_console_their_grants_give_them(
     assert [one["group"] for one in company["sections"]] == [one.value for one in ModuleGroup]
     assert company == navigation_view(
         ConsoleNavigation(kind=ConsoleKind.COMPANY, sections=COMPANY_NAVIGATION)
-    ).model_dump(mode="json")
+    ).model_copy(update={"stop": "everything"}).model_dump(mode="json")
     assert none.status_code == 200
-    assert none.json() == {"console": "department", "departments": [], "sections": []}
+    assert none.json() == {"console": "department", "departments": [], "sections": [], "stop": ""}
+
+
+def test_the_menu_offers_the_header_s_stop_as_far_as_each_reader_s_stop_reaches() -> None:
+    """**M27.15.14, decided on the server.** A reader whose stop reaches everything is offered a
+    stop on everything; a department administrator, their departments; a reader with the screen's
+    capability and not its plane, one whose stop names no department, and a reader holding nothing,
+    no stop at all. Delete this and the
+    header can offer a stop the API refuses, or a department administrator a stop on the company,
+    with every browser test green because they are handed the offer."""
+    from brain.console.reads import Plane, plane_capability
+    from brain.navigation_routes import STOP_DEPARTMENTS, STOP_EVERYTHING, stop_offered
+    from brain.ops.halt import HALT_CAPABILITY
+
+    def holding(scope: Scope, *, plane: bool = True) -> EntitlementSet:
+        grants = [Grant(capability=HALT_CAPABILITY, scope=scope)]
+        if plane:
+            grants.append(Grant(capability=plane_capability(Plane.CONFIGURATION), scope=scope))
+        return EntitlementSet(principal_id="u_reader", grants=tuple(grants))
+
+    def offered(reach: EntitlementSet) -> str:
+        return stop_offered(console_for(reach, NOW), reach, NOW)
+
+    assert offered(holding(Scope.unrestricted())) == STOP_EVERYTHING
+    assert offered(holding(Scope.department(MAINTENANCE))) == STOP_DEPARTMENTS
+    assert offered(holding(Scope.unrestricted(), plane=False)) == ""
+    # A stop held over connectors alone opens the screen and names no department, so one press
+    # would stop nothing: no control rather than a button that does nothing.
+    connectors = Scope(clauses=(Clause(field="scope", op=Op.EQ, value="connector"),))
+    assert offered(holding(connectors)) == ""
+    assert offered(EntitlementSet(principal_id="u_reader", grants=())) == ""
 
 
 # ---------------------------------------------------------------------------- seeing less
@@ -644,6 +680,25 @@ def open_runs(reader: EntitlementSet) -> frozenset[str]:
     """Live runs: a scheduled control belongs to no department, so any row is placed nowhere."""
     started = [("retention_sweep", NOW - timedelta(minutes=3), False)]
     return frozenset(NO_DEPARTMENT for _ in unattended_running(started, (), reader, NOW))
+
+
+def open_halt(reader: EntitlementSet) -> frozenset[str]:
+    """Stop: the departments the department halts shown name. A halt on everything is shown to
+    everybody it stops, so none is placed here, and each department's halt is the row."""
+    from brain.console.operate import stopped_for
+    from brain.ops.halt import Halt, HaltScope, in_force
+
+    state = in_force(
+        Halt(
+            scope=HaltScope.DEPARTMENT,
+            target=one,
+            declared_by="u_admin",
+            at=NOW,
+            reason="the department's agents are misbehaving",
+        )
+        for one in (MAINTENANCE, FINANCE)
+    )
+    return frozenset(one.target for one in stopped_for(state, reader, NOW))
 
 
 def open_connectors(reader: EntitlementSet) -> frozenset[str]:
@@ -780,6 +835,7 @@ OPENERS: dict[
 ] = {
     "overview": (open_usage, open_usage),
     "runs": (open_runs, open_runs),
+    "halt": (open_halt, open_halt),
     "connectors": (open_connectors, open_connectors),
     "people": (open_people, open_people),
     "agents": (

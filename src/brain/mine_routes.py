@@ -57,11 +57,19 @@ bound. So the budget is withheld with a sentence rather than shown short. See
 and when an item was verified or how often it was used: each has a sentence, so a card with
 nothing under it is never read as nothing having happened.
 
+**A learning a weekly digest named is undone on the person's sign-in alone, since 2026-10-06**
+(M16.5.1). `POST /me/learning/undo` is the digest's undo: the same `forgotten` as the Forget button,
+for a memory formed from the caller's own words and nothing else, refused alike for somebody else's
+and for one that does not exist, and gated on no grant at all. The workspace page stays on the
+member grant; undoing what was learnt from oneself does not, because it only ever narrows what the
+system holds about one and the digest goes to everybody it learnt from. See
+`A_PERSON_UNDOES_WHAT_WAS_LEARNT_FROM_THEM_ON_THEIR_SIGN_IN_ALONE`.
+
 **What has never run.** No PostgreSQL here, so the loads have not been executed against one. What
 is tested is the statements they compile to, every refusal and its order, and each decision
 reached through the real application.
 
-Task ids: M27.7.28, M16.4.2
+Task ids: M27.7.28, M16.4.2, M16.5.1
 """
 
 from __future__ import annotations
@@ -176,6 +184,19 @@ A_PERSON_FORGETS_AND_EDITS_WHAT_WAS_FORMED_FROM_THEIR_OWN_WORDS: Final = (
     "through the store the Learning screen's undo writes through, so nothing is ever deleted and "
     "the next recall, the next answer and the Memory screen all read the change at once."
 )
+
+#: Why the digest's undo is gated on authorship and on no grant.
+A_PERSON_UNDOES_WHAT_WAS_LEARNT_FROM_THEM_ON_THEIR_SIGN_IN_ALONE: Final = (
+    "The weekly digest goes to everybody the system learnt from, and its undo has to work for each "
+    "of them. Undoing a memory formed from one's own words only ever narrows what the system holds "
+    "about one, so it is decided by authorship alone, which brain.console.own_things decides, and "
+    "by nothing an administrator grants or takes away: a person whose member grant was removed can "
+    "still stop the system using what it learnt from them. Somebody else's memory and one that "
+    "does not exist are refused alike."
+)
+
+#: Where a person undoes one learning a weekly digest named. See the constant above.
+LEARNING_UNDO_PATH: Final = "/me/learning/undo"
 
 #: What the connected accounts card says.
 ACCOUNTS_ARE_NOT_READ_HERE: Final = (
@@ -688,6 +709,37 @@ async def forget_my_memory(
         log.info("own memory not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
     log.info("own memory forgotten", principal=asked.caller.principal.id, took=done.took_effect)
+    return done
+
+
+@router.post(LEARNING_UNDO_PATH, response_model=MineMemoryChangedView, responses=COMMON_RESPONSES)
+async def undo_my_learning(
+    request: Request, body: MineMemoryAsked, asked: Asked
+) -> MineMemoryChangedView:
+    """Undo one learning formed from this person's own words, on their sign-in alone.
+
+    See `A_PERSON_UNDOES_WHAT_WAS_LEARNT_FROM_THEM_ON_THEIR_SIGN_IN_ALONE`. `forgotten` decides and
+    writes, exactly as Forget does; what differs is that no member grant is asked for. Somebody
+    else's memory and one that does not exist are the one 404, and a second undo is answered 200
+    with `took_effect` false and the store's sentence.
+    """
+    sessions = sessions_of(request)
+    records = memory_records_of(request)
+    if sessions is None or records is None:
+        raise Failed("no database on this process")
+    done = await forgotten(
+        sessions,
+        records,
+        principal_id=asked.caller.principal.id,
+        memory_id=body.memory_id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=bound_trace_id(request),
+        now=asked.now,
+    )
+    if done is None:
+        log.info("own learning not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    log.info("own learning undone", principal=asked.caller.principal.id, took=done.took_effect)
     return done
 
 

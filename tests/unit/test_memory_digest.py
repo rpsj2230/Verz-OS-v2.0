@@ -725,6 +725,15 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     `tests/unit/test_acceptance_workspace.py`, which reads the agent's memory at a reach wider
     than the reader's and watches a colleague be shown somebody else's memory.
 
+    **`brain.learning_told` arrived on 2026-10-06**, for M16.5.1, the weekly digest's sender. It
+    builds no listing of its own: a person's week is `weekly_digest` at the reach their store
+    loads for them now, over the learnings formed from their own conversations, which
+    `own_things.is_own` admits by authorship before recall decides, so a colleague's learning is
+    in nobody else's week even where recall would admit it. Its siblings are
+    `test_somebody_elses_learning_is_never_in_a_persons_week_even_when_they_may_recall_it` and
+    `test_a_learning_the_person_may_no_longer_recall_is_not_named` in
+    `tests/unit/test_learning_told.py`.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
     assert _callers_of("brain.memory.review") == [
@@ -739,6 +748,7 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
         "brain.console.own_things",
         "brain.console.reach_view",
         "brain.estate_routes",
+        "brain.learning_told",
         "brain.member_activity",
         "brain.mine_routes",
         "brain.ops.memory_store",
