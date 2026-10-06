@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T18:07:35.223621+00:00",
-  "commit": "ad331ea7",
-  "commit_subject": "The proof sweep is a command: it reads an install's two newest acceptance runs and writes the Closes lines and evidence rows they prove (#427)",
+  "generated_at": "2026-10-06T18:14:42.020118+00:00",
+  "commit": "d3e722f2",
+  "commit_subject": "An agent can be published to the whole company by somebody other than its steward, and retired (#383)",
   "total": 1596,
   "done": 684,
   "percent": 42.9,
