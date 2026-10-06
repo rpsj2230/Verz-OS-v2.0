@@ -13,7 +13,14 @@ sentence, "a mark alone alters nothing a later answer retrieves", measured on th
 **A pause is proved on an agent the check installs**, with `brain.ops.acceptance_checks_skills`'
 own helper, in acceptance_a, and addressed on Ask as a person would pick it.
 
-Task ids: M16.7.4, M16.7.13, M16.7.5
+**A preference said again is proved across three instants.** Two preferences are formed weeks
+before the check's own instant by `StoredFormations`, the store the answer route hands its turns
+to, since the route answers a past instant from nothing uploaded after it; one is said again on
+Ask at the check's instant, and recall is asked days after it. The distances are worked out from
+the half-life in force (`brain.ops.tuning`), so the check means the same on an install that
+changed it. The confirmation is stamped by the database's clock, which is the check's own instant.
+
+Task ids: M16.7.4, M16.7.13, M16.7.5, M16.7.2
 """
 
 from __future__ import annotations
@@ -221,3 +228,140 @@ async def _in_a_rule(h: Harness, word: str) -> bool:
         )
     ).first()
     return found is not None
+
+
+# ------------------------------------------- M16.7.2 said again, it is kept; never, it fades
+async def confirmed_at(h: Harness, memory_id: str) -> object:
+    """When this inference was last confirmed, as its row says, or None."""
+    return (
+        await h.execute(
+            text("SELECT last_confirmed_at FROM mem.adaptive WHERE id = :memory").bindparams(
+                memory=memory_id
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def still_held(h: Harness, memory_id: str) -> bool:
+    """Whether this memory's row and its learning record are both still in the tables."""
+    found = (
+        await h.execute(
+            text(
+                "SELECT count(*) FROM mem.adaptive a JOIN mem.learning l ON l.memory_id = a.id"
+                " WHERE a.id = :memory"
+            ).bindparams(memory=memory_id)
+        )
+    ).scalar_one()
+    return int(found) == 1
+
+
+async def confirmations_in_the_ledger(h: Harness, memory_id: str) -> list[str]:
+    """The actor of every ledger entry confirming this memory, in order."""
+    import json
+
+    rows = (
+        await h.execute(
+            text(
+                "SELECT actor_id, details FROM obs.audit_entry WHERE action = 'memory'"
+                " AND subject = :subject ORDER BY seq"
+            ).bindparams(subject=f"memory:{memory_id}")
+        )
+    ).all()
+    return [
+        str(actor)
+        for actor, details in rows
+        if (details if isinstance(details, dict) else json.loads(details)).get("change")
+        == "confirmed"
+    ]
+
+
+@check(
+    leaves=("M16.7.2",),
+    sentence=(
+        "Of two preferences a person let slip weeks ago, the one they say again on Ask is "
+        "stamped confirmed with a ledger entry and is recalled days on, the other falls below "
+        "the floor on schedule with its row and record kept, and a helpful mark on an answer "
+        "the other was a hint to confirms nothing."
+    ),
+)
+async def an_inference_said_again_is_kept_and_one_not_fades(h: Harness) -> None:
+    from datetime import timedelta
+
+    from brain.memory.turn import Turn
+    from brain.ops.acceptance_checks_memory import (
+        PREFERENCE_QUESTION,
+        answered_at,
+        recalled_for,
+        shown_about,
+        unending,
+    )
+    from brain.ops.learning_signal_store import StoredMarks
+    from brain.ops.memory_store import StoredFormations
+    from brain.ops.tuning import inferred_half_life_days, inferred_lifetime_days
+
+    placed = await people(h)
+    words = await a_document(h)
+    stand_in = KeptPrompts()
+    app = await memory_app(h, stand_in, recorded=True)
+    # The one said again is the document's own word, so the question saying it is answered; the
+    # other is never asked about.
+    kept, faded = words.pref, h.word()
+
+    # Both let slip on one day, as many days ago as leaves each still recalled today, formed by the
+    # store the answer route forms through: the route answers a past instant from nothing the
+    # check uploaded since, so the turns are handed to the store as the route would hand them.
+    lasts = inferred_lifetime_days(inferred_half_life_days())
+    earlier = h.now - timedelta(days=lasts - 2)
+    formations = StoredFormations(h.sessions)
+    reach = answered_at(await h.reach(placed.member))
+    for n, pref in ((1, kept), (2, faded)):
+        await formations.form(
+            Turn(
+                trace_id=trace_of(h, n),
+                principal_id=placed.member,
+                said=PREFERENCE_QUESTION.format(pref=pref, key=words.key),
+                answered=True,
+                reach=reach,
+                at=earlier,
+                department=A,
+            )
+        )
+    ids = {one.statement: one.memory_id for one in await memories_of(h, placed.member)}
+    kept_id, faded_id = ids.get(f"I prefer {kept} answers"), ids.get(f"I prefer {faded} answers")
+    if kept_id is None or faded_id is None:
+        raise CheckFailedError("a preference said in an answered question was not kept")
+
+    # Today one is said again, and an answer the other is a hint to is marked helpful.
+    await asked(h, app, placed.member, PREFERENCE_QUESTION.format(pref=kept, key=words.key), 3)
+    stamped = await confirmed_at(h, kept_id)
+    if stamped is None or await confirmed_at(h, faded_id) is not None:
+        raise CheckFailedError("an inference said again was not confirmed")
+    if await confirmations_in_the_ledger(h, kept_id) != [placed.member]:
+        raise CheckFailedError("a confirmation was not in the ledger once, under its person")
+
+    member = unending(await h.reach(placed.member))
+    worth = await shown_about(h, placed.member, member, h.now)
+    await asked(h, app, placed.member, PAIRED_QUESTION.format(key=words.key), 4)
+    hinted = " ".join(one.content for one in stand_in.sent[-1])
+    if f"I prefer {faded} answers" not in hinted:
+        raise CheckFailedError("the answer the check marks was not given the memory as a hint")
+    if not await StoredMarks(h.sessions).mark(
+        principal_id=placed.member, trace_id=trace_of(h, 4), helpful=True, now=h.now
+    ):
+        raise CheckFailedError("a person could not mark an answer they were given")
+    if await confirmed_at(h, faded_id) is not None or await confirmed_at(h, kept_id) != stamped:
+        raise CheckFailedError("a helpful mark confirmed a memory")
+    if await shown_about(h, placed.member, member, h.now) != worth:
+        raise CheckFailedError("a helpful mark changed what a memory is worth")
+
+    # Days on, the one said again is recalled and the other has faded, row and record kept.
+    later = h.now + timedelta(days=4)
+    recalled = await recalled_for(h, member, A, later)
+    if f"I prefer {kept} answers" not in recalled:
+        raise CheckFailedError("an inference said again faded as if it had not been said")
+    if f"I prefer {faded} answers" in recalled or f"I prefer {faded} answers" in (
+        await shown_about(h, placed.member, member, later)
+    ):
+        raise CheckFailedError("an inference never said again was still recalled past its schedule")
+    if not await still_held(h, faded_id):
+        raise CheckFailedError("a faded memory's row or its learning record was deleted")

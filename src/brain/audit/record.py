@@ -183,6 +183,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "channel_binding": AuditAction.CHANNEL_BINDING,
         "pack": AuditAction.PACK,
         "browser_session": AuditAction.BROWSER_SESSION,
+        "entity_unmerge": AuditAction.ENTITY_UNMERGE,
     }
 )
 
@@ -391,15 +392,19 @@ class ErasureChange(enum.StrEnum):
 
 
 class MemoryChange(enum.StrEnum):
-    """What a correction did to a memory. The two values `0061`'s trigger writes.
+    """What happened to a memory: a correction marked it, or the person confirmed it.
 
-    The words of `brain.memory.correction.Correction`, restated rather than imported for the reason
-    the `TYPE_CHECKING` block above gives about keeping this package underneath the layers that
-    record into it, and held equal to that enum by a test.
+    The first two are the words of `brain.memory.correction.Correction`, which `0061`'s trigger
+    writes, restated rather than imported for the reason the `TYPE_CHECKING` block above gives
+    about keeping this package underneath the layers that record into it, and held equal to that
+    enum by a test. The third is `0163`'s trigger's, when a person says an inference again
+    (M16.7.2); it corrects nothing, so it is not a `Correction`.
     """
 
     SUPERSEDED = "superseded"
     DEMOTED = "demoted"
+    #: The person said a standing inference again, and its decay starts again from then.
+    CONFIRMED = "confirmed"
 
 
 class OrganisationChange(enum.StrEnum):
@@ -410,7 +415,9 @@ class OrganisationChange(enum.StrEnum):
     column moving, which is the one change the console makes to a live row; `CHANGED` is any other
     column moving, which only a statement typed by hand does, and names the columns; `RETIRED` is
     `deleted_at` being set. A scope's name is its `label`, and since `0141` the console renames one,
-    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1).
+    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1). `MOVED` is a
+    person put in another department, which `0170`'s trigger writes under the person, naming the
+    department they were moved to (M1.6.20).
     """
 
     JOINED = "joined"
@@ -421,6 +428,7 @@ class OrganisationChange(enum.StrEnum):
     RENAMED = "renamed"
     CHANGED = "changed"
     RETIRED = "retired"
+    MOVED = "moved"
 
 
 #: Which of the placement changes are about a team, and which about leading a department. Two sets
@@ -846,6 +854,7 @@ class AuditRecorder:
         kept_entity_id: str,
         merged_entity_id: str,
         changed: Sequence[str] = (),
+        merge_id: str = "",
     ) -> tuple[AuditEntry, AuditEntry]:
         """Record that two entities were merged, as two entries: one per side.
 
@@ -859,12 +868,43 @@ class AuditRecorder:
 
         Both entries share the recorder's trace id, so the pair is one event again to anybody
         querying by trace.
+
+        `merge_id` names the `er.merge` row holding who decided, on what evidence, and the
+        pre-image, as `0183`'s trigger writes it. A 32-hex id, which the redaction keeps as a
+        digest; empty for a merge no store recorded, which writes no key rather than an empty one.
         """
         details: dict[str, object] = {}
         _with_names(details, "changed", changed)
+        if merge_id:
+            details["merge_id"] = merge_id
         kept = self._write(AuditAction.ENTITY_MERGE, subject("entity", kept_entity_id), details)
         merged = self._write(AuditAction.ENTITY_MERGE, subject("entity", merged_entity_id), details)
         return kept, merged
+
+    def entity_unmerge(
+        self,
+        *,
+        kept_entity_id: str,
+        restored_entity_id: str,
+        merge_id: str = "",
+        unmerge_id: str = "",
+    ) -> tuple[AuditEntry, AuditEntry]:
+        """Record that a merge was reversed, as two entries: one per side, the survivor first.
+
+        Two entries for `entity_merge`'s reason: the id that came back has to be findable by its
+        own subject. Written in a deployed database by `0183`'s trigger function on
+        `er.canonical`, which this is held to by `tests/unit/test_merge_store.py`. The two ids are
+        the `er.merge` and `er.unmerge` rows, both 32-hex, and both are written or neither.
+        """
+        details: dict[str, object] = {}
+        if merge_id and unmerge_id:
+            details["merge_id"] = merge_id
+            details["unmerge_id"] = unmerge_id
+        kept = self._write(AuditAction.ENTITY_UNMERGE, subject("entity", kept_entity_id), details)
+        restored = self._write(
+            AuditAction.ENTITY_UNMERGE, subject("entity", restored_entity_id), details
+        )
+        return kept, restored
 
     def publish(self, *, artifact_id: str, fields: Sequence[str] = ()) -> AuditEntry:
         """Record that an artefact was published.
@@ -1266,10 +1306,12 @@ class AuditRecorder:
         )
 
     def memory(self, *, memory_id: str, change: MemoryChange) -> AuditEntry:
-        """Record that a correction marked a memory: superseded it, or demoted it.
+        """Record that a correction marked a memory, superseded or demoted, or that the person
+        confirmed it by saying it again.
 
         Written in a deployed database by `0061`'s trigger on `mem.correction`, on the insert, and
-        held to this method's details by a test. **Never what the memory says, and never the memory
+        by `0163`'s on `mem.adaptive`, when `last_confirmed_at` moves, each held to this method's
+        details by a test. **Never what the memory says, and never the memory
         that replaced it**: the statement is `brain.memory.correction`'s refusal to keep a
         transcript in a correction log, and the replacement is on the correction's own row. There is
         no parameter through which either could arrive.

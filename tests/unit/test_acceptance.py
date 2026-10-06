@@ -31,6 +31,7 @@ from brain.ops import (
     acceptance_audit,
     acceptance_checks_accounts,
     acceptance_checks_channels,
+    acceptance_checks_class_pools,
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_run,
@@ -556,7 +557,18 @@ WRITTEN_BY_CHECKS = (
     "ops.spend_actual",
     "ops.sensitive_read",
     "er.canonical",
+    "er.alias",
+    "er.identifier",
+    "er.link",
+    "er.observation",
+    "er.blocked_value",
+    # The merge checks plant their own entities and merge and unmerge them (`0183`).
+    "er.merge",
+    "er.unmerge",
+    "er.review_item",
     "proj.record",
+    "proj.record_retired",
+    "proj.source_epoch",
     "ops.connector_connection",
     "ops.connector_sync",
     "ops.setting",
@@ -697,6 +709,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "every_trace_ledger_service_runs_under_its_budgeted_limit",
     ):
         assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
+    # No class pooler runs here; `tests/unit/test_class_pools.py` stands a limited login in for
+    # the batch pool, reports it running and passes.
+    assert outcomes.pop("a_batch_job_holding_its_share_cannot_take_a_persons_connection") == (
+        NOT_RUN,
+        acceptance_checks_class_pools.NOT_RUNNING_HERE,
+    )
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)

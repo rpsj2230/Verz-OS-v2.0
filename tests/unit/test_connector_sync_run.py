@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from structlog.testing import capture_logs
 
 from brain.connectors import hubspot, xero
+from brain.connectors.declaration import Reading
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.minimal_index import fresh_canary, planted, sightings
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -66,7 +67,6 @@ from brain.ops.connector_sync import (
     SOURCE_UNREACHABLE,
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
-    SourceReading,
 )
 from brain.ops.connector_sync_run import (
     THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES,
@@ -106,7 +106,13 @@ OTHER_TENANT: Final = "99999999-8888-7777-6666-555555555555"
 PUBLIC: Final = "93.184.216.34"
 
 #: The tables a sync reads and writes.
-SYNC_TABLES: Final = ("ops.connector_connection", "ops.connector_sync", "proj.record")
+SYNC_TABLES: Final = (
+    "ops.connector_connection",
+    "ops.connector_sync",
+    "proj.record",
+    "proj.record_retired",
+    "proj.source_epoch",
+)
 
 #: What connecting through `StoredConnections.connect` reads besides the connection: the data
 #: steward's appointment, which a connection grants to in its own transaction, and the principals
@@ -281,7 +287,7 @@ def sync(
     *,
     at: datetime = NOW,
     keys: Any = None,
-    readings: Mapping[str, SourceReading] | None = None,
+    readings: Mapping[str, Reading] | None = None,
 ) -> SyncRun:
     clock = iter(at + timedelta(seconds=n) for n in range(10_000))
 
@@ -468,7 +474,7 @@ def test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again
     routes. Connected through the store the route writes with, the source is read on the next run
     and its attempt is listed for the Connectors screen; disconnected through the same store, the
     next run calls nothing, records nothing, and the screen's read lists no attempt for it, while
-    the records it already wrote stay, ageing, as `A_SYNC_RETIRES_NOTHING` says.
+    the records it already wrote stay, ageing: nothing reads the source, so nothing retires them.
 
     Delete this and a disconnected source could go on being read with the key its administrator
     was told to revoke, or a connected one could be listed and never read."""
@@ -685,6 +691,53 @@ def test_a_record_somebody_retired_stays_retired_whatever_the_source_still_says(
     assert last_seen_at == NOW - timedelta(days=30)
     assert deleted_at == NOW - timedelta(days=1)
     assert after["records"] == []
+
+
+@pytest.mark.needs_db
+def test_a_record_a_read_retired_serves_again_when_returned_and_its_retirement_is_kept() -> None:
+    """**M11.8.11's last clause.** A record a complete read retired a day ago, kept in
+    `proj.record_retired` with that instant, and the source lists it again. The next read serves it
+    again from its row, carrying this reading, which a reader in its tenant is handed, and the
+    retirement stays exactly as it was kept.
+
+    Delete this and a returned record can stay out of every answer for good, or its return can
+    rewrite the record of when it went, which is what
+    `A_RETURNED_RECORD_SERVES_AGAIN_AND_ITS_RETIREMENT_IS_KEPT` refuses."""
+    noticed = NOW - timedelta(days=1)
+    with a_database("brain_connector_sync_returned") as url:
+        connect(url)
+        sql(
+            url,
+            "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at, deleted_at) "
+            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            INVOICE_ID,
+            NOW - timedelta(days=30),
+            noticed,
+        )
+        sql(
+            url,
+            "INSERT INTO proj.record_retired "
+            "(source, entity, source_id, fields, last_seen_at, noticed_at) "
+            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            INVOICE_ID,
+            NOW - timedelta(days=30),
+            noticed,
+        )
+        ran = sync(url, Replay([answer_for("XERO-200-invoices"), NO_CONTACTS]))
+        rows = projected(url)
+        kept = sql(
+            url,
+            "SELECT source_id, fields, last_seen_at, noticed_at FROM proj.record_retired",
+        )
+        after = read_as(url, ENTITLED)
+
+    assert ran.read == 1
+    ((_, _, source_id, fields, seen, deleted_at),) = rows
+    assert (source_id, deleted_at) == (INVOICE_ID, None)
+    assert fields["tenant_id"] == TENANT
+    assert seen >= NOW
+    assert kept == [(INVOICE_ID, {}, NOW - timedelta(days=30), noticed)]
+    assert [one["id"] for one in after["records"]] == [INVOICE_ID]
 
 
 @pytest.mark.needs_db
