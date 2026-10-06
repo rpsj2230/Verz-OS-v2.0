@@ -355,7 +355,7 @@ async def _ceiling_and_spend(sessions: async_sessionmaker[AsyncSession], spent: 
                 effective_from=now - timedelta(days=400),
                 reason="the test's ceiling",
             ),
-            ent_hash="hash",
+            ent_hash="0" * 32,
             trace_id="t-setter",
         )
         await session.execute(
