@@ -55,9 +55,24 @@ from brain.core.scope import Clause, Op, Scope
 AGENT = "support_triage"
 AUTHOR = "p_author"
 
-#: The seven the work breakdown names, written out here so the enum is compared against the
-#: leaf's own list rather than against itself.
-SEVEN_SECTIONS = ("identity", "persona", "knowledge", "skills", "tools", "leash", "tests")
+#: The leaf's own list, written out here so the enum is compared against it rather than against
+#: itself: the eleven M20.1.1 names, and which of them the manifest can hold. Channels, workflows
+#: and memory are not manifest paths, so each would be a heading with nothing under it.
+THE_LEAFS_ELEVEN = (
+    "identity",
+    "persona",
+    "knowledge",
+    "skills",
+    "tools",
+    "connectors",
+    "channels",
+    "workflows",
+    "memory",
+    "leash",
+    "tests",
+)
+NOT_MANIFEST_PATHS = ("channels", "workflows", "memory")
+SEVEN_SECTIONS = tuple(one for one in THE_LEAFS_ELEVEN if one not in NOT_MANIFEST_PATHS)
 
 
 def a_tool(name: str, capability: str) -> ToolDefinition:
@@ -88,8 +103,9 @@ def a_department_scope(name: str) -> Scope:
 # --- the seven sections cover the manifest (M20.1.1) ------------------------------------------
 
 
-def test_the_form_has_exactly_the_seven_sections_the_work_breakdown_names() -> None:
-    """**M20.1.1.** The seven are the list the composer is arranged by. A section that
+def test_the_form_has_the_sections_the_leaf_names_that_the_manifest_can_hold() -> None:
+    """**M20.1.1.** The eight are the leaf's eleven less the three that are not manifest paths,
+    and they are the list the composer is arranged by. A section that
     disappeared in a refactor takes its manifest paths off the form with it, and every
     remaining check would still pass because each one asks about the sections that are there.
     Deleting this leaves the count free to be anything.
