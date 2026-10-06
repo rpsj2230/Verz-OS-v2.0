@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from brain.agents.binding import provider_of
 from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord, entitlement_ceiling
 from brain.audit.ledger import FIELD_NAME
 from brain.console import agent_automations
@@ -108,9 +109,18 @@ def an_agent(*capabilities: str, agent_id: str = AGENT) -> AgentRecord:
         display_name="Quote helper",
         persona="Answers pricing questions.",
         audience=AgentAudience(level=Visibility.COMPANY, owner_id="u_steward"),
-        authority=AgentAuthority(capabilities=tuple(Capability(value=one) for one in capabilities)),
+        authority=AgentAuthority(
+            capabilities=tuple(Capability(value=one) for one in capabilities),
+            connectors=sources_of(capabilities),
+        ),
         created_by="u_builder",
     )
+
+
+def sources_of(capabilities: tuple[str, ...]) -> tuple[str, ...]:
+    """The connectors providing these capabilities' entities, which an agent holding them names."""
+    named = (provider_of(Capability(value=one).noun) for one in capabilities)
+    return tuple(sorted({one for one in named if one is not None}))
 
 
 def installer_reach() -> EntitlementSet:

@@ -126,7 +126,7 @@ def test_a_family_carries_money_when_any_record_is_of_a_money_entity_and_otherwi
     money-free, and a record nothing declares makes it unchecked.
 
     Delete this and the money boundary reads the wrong answer for a family of mixed sources."""
-    assert money_of([("xero", "contact")], DECLARED) is MoneyBearing.CARRIES_FINANCIAL_RECORDS
+    assert money_of([("xero", "xero_contact")], DECLARED) is MoneyBearing.CARRIES_FINANCIAL_RECORDS
     assert money_of([("hubspot", COMPANY)], DECLARED) is MoneyBearing.NO_FINANCIAL_RECORDS_FOUND
     mixed = [("hubspot", COMPANY), ("laravel", "laravel_client")]
     assert money_of(mixed, DECLARED) is MoneyBearing.CARRIES_FINANCIAL_RECORDS
@@ -167,7 +167,7 @@ def test_close_names_are_matched_at_stage_three_and_names_alone_wait_for_a_perso
         write(url, sql, company(1), name="Contoso Pharmaceuticals"),
         write(url, sql, company(2), name="Contosso Pharmaceuticals"),
         write(url, sql, company(3), name="Fabrikam Studio"),
-        write(url, sql, SourceRef("xero", "contact", "x1"), name="Fabrikam Studio"),
+        write(url, sql, SourceRef("xero", "xero_contact", "x1"), name="Fabrikam Studio"),
         write(url, sql, company(4), name="Unrelated Holdings"),
     )
 
@@ -225,7 +225,9 @@ def test_a_match_across_the_money_boundary_waits_for_a_person(
     one = write(
         url, sql, SourceRef("laravel", "laravel_client", "l1"), name="Acmee Holdings International"
     )
-    two = write(url, sql, SourceRef("xero", "contact", "x1"), name="Acme Holdings International")
+    two = write(
+        url, sql, SourceRef("xero", "xero_contact", "x1"), name="Acme Holdings International"
+    )
 
     run(url, one, two, unattended=True)
 
@@ -319,7 +321,7 @@ def test_a_pair_is_raised_once_and_a_rejected_pair_is_never_raised_again(
     Delete this and the queue fills with the same question every ten minutes."""
     url, sql = schema
     one = write(url, sql, company(1), name="Fabrikam Studio")
-    two = write(url, sql, SourceRef("xero", "contact", "x1"), name="Fabrikam Studio")
+    two = write(url, sql, SourceRef("xero", "xero_contact", "x1"), name="Fabrikam Studio")
     run(url, one, two)
     again = run(url, one, two)
     assert again.queued == 0 and again.compared == 0

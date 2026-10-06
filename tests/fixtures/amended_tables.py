@@ -21,7 +21,7 @@ from sqlalchemy.schema import CreateTable
 ADDED_LATER: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
         "ops.model_attempt": ("data_categories",),
-        "agent.agent": ("model_pin_provider", "model_pin_model"),
+        "agent.agent": ("model_pin_provider", "model_pin_model", "connectors"),
     }
 )
 
