@@ -19,9 +19,6 @@ name: Browser
 # day it does). The setup code is minted beside its instant exactly as the installer mints them.
 
 on:
-  # ITERATION ONLY, removed before the pull request opens.
-  push:
-    branches: [M0/keycloak-explicit-heap]
   pull_request:
     paths:
       - "console/**"

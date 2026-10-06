@@ -958,8 +958,9 @@ KEYCLOAK_PLANNED_SHARE = 0.85
 
 #: Why the heap is a figure. See `docker-compose.keycloak.yml`.
 KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE = (
-    "Keycloak's own JVM sized its heap from the host's memory, not the container's limit, so a "
-    "percentage became an 8 GiB heap in a 1024M cgroup. A fixed -Xmx does not depend on what the "
+    "Keycloak's JVM reads whether a memory limit exists from /proc/cgroups, which kernels from "
+    "6.12 can report as disabled, and then sizes its heap from the host: a percentage became an "
+    "8 GiB heap in a 1024M cgroup. A fixed -Xmx does not depend on what the "
     "JVM believes about the machine, and the figure can be held against the limit."
 )
 

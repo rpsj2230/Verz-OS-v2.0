@@ -22,13 +22,18 @@
 # while collecting.
 #
 # **So the heap is a fixed figure, `-Xmx420m`, and never a percentage.** This file said until
-# 2026-10-06 that `MaxRAMPercentage` reads the cgroup limit rather than the host. A plain `java`
-# in this container does see the 1.00G limit, but Keycloak's own JVM does not: measured with
-# `jcmd` on the browser harness's runner, it ran with `MaxRAM=16766414848`, the host's memory, so
-# 50 per cent was an 8 GiB heap reserved and 3.3 GiB committed inside a 1024M cgroup, and the
-# kernel killed it at 1026900 kB resident on its first sign-ins. A fixed `-Xmx` does not depend on
-# what the JVM believes about the machine, and its figure can be held against the limit.
-# See `KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE`.
+# 2026-10-06 that `MaxRAMPercentage` reads the cgroup limit rather than the host, and whether it
+# does depends on the kernel the install runs on. The JDK in the Keycloak 26.0 image (21.0.6)
+# decides whether the memory controller exists by reading `/proc/cgroups`, and kernels from 6.12
+# built without cgroup v1 memory accounting report it there as disabled. HotSpot then logs
+# "controller memory is not enabled" and sizes everything from the host. Measured with `jcmd` on
+# the browser harness's runner: `MaxRAM=16766414848`, the host's memory, so 50 per cent was an
+# 8 GiB heap reserved and 3.3 GiB committed inside a 1024M cgroup, and the kernel killed it at
+# 1026900 kB resident on its first sign-ins. The same image on an older kernel reads its limit
+# correctly, which is why one install has run for weeks on a percentage, and why it would stop
+# the day that server's kernel is upgraded. The JDK's fix (JDK-8349988, in 21.0.10) stops reading
+# that file. A fixed `-Xmx` does not depend on what the JVM believes about the machine on any
+# kernel, and its figure can be held against the limit. See `KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE`.
 #
 # 420 MiB of heap beside what lives outside it. Measured with native memory tracking on the same
 # run: metaspace 117 MiB committed (capped at 256m by Keycloak itself), the code cache 56 to
