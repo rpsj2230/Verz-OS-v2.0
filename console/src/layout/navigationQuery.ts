@@ -67,6 +67,18 @@ export interface ConsoleAnswer {
   readonly departments: readonly string[];
   /** The console's groups, in the order sent. */
   readonly groups: readonly NavGroup[];
+  /**
+   * What the header's Stop control stops in one press, as `brain.navigation_routes.stop_offered`
+   * decided it: everything, the reader's departments, or nothing, when no control is drawn.
+   */
+  readonly stop: StopOffer;
+}
+
+/** `NavigationView.stop`. */
+export type StopOffer = "everything" | "departments" | "";
+
+function stopOf(value: unknown): StopOffer {
+  return value === "everything" || value === "departments" ? value : "";
 }
 
 function isText(value: unknown): value is string {
@@ -122,7 +134,7 @@ export function readNavigation(payload: unknown): ConsoleAnswer | null {
   if (typeof payload !== "object" || payload === null) {
     return null;
   }
-  const body = payload as { console?: unknown; departments?: unknown; sections?: unknown };
+  const body = payload as { console?: unknown; departments?: unknown; sections?: unknown; stop?: unknown };
   if (body.console !== "company" && body.console !== "department") {
     return null;
   }
@@ -140,6 +152,7 @@ export function readNavigation(payload: unknown): ConsoleAnswer | null {
     console: body.console,
     departments: body.departments as string[],
     groups: groups as NavGroup[],
+    stop: stopOf(body.stop),
   };
 }
 
