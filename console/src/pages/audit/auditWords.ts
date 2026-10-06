@@ -98,6 +98,7 @@ const CHANGE_LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> 
     renamed: "Department or team renamed",
     changed: "Department or team changed by hand",
     retired: "Department or team retired",
+    moved: "Moved to another department",
   }),
   principal_state: Object.freeze({
     disabled: "Sign-in disabled",

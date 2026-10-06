@@ -365,6 +365,7 @@ export const CHANGE_PHRASES: Readonly<Record<string, Readonly<Record<string, str
     renamed: "renamed",
     changed: "changed by hand",
     retired: "retired",
+    moved: "moved to another department:",
   }),
   principal_state: Object.freeze({
     disabled: "disabled the sign-in of",
