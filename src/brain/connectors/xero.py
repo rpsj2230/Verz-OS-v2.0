@@ -181,6 +181,7 @@ from brain.connectors.manifest import (
     ToolDeclaration,
 )
 from brain.connectors.projection import ProjectedRecord, ProjectedValue, RefreshPromise
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import ID_TARGET, RestOperation, RestSpec, load_spec
 from brain.connectors.throttle import CallOutcome, ceiling_for, classify, retry_delay
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord
@@ -193,6 +194,7 @@ from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import ConnectorLimit, LimitDecision
 from brain.ops.secrets import SecretRef
+from brain.resolution.canonical import EntityType
 from brain.tools.fetch import Fetcher, Resolver
 
 # ------------------------------------------------------------------ written-down reasons
@@ -1600,7 +1602,24 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="xero",
+    per_minute=60,
+    per_day=5_000,
+    raisable=False,
+    note=(
+        "5,000 calls a day per tenant, shared with every other integration the client "
+        "runs, so our own share is smaller than the number suggests. The ceiling is on "
+        "the client's tenant rather than on our subscription, so there is no plan we "
+        "can buy that moves it. This is the ceiling a backfill reaches first."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CONNECTOR_NAME,
     label="Xero",
     guide=GUIDE,
@@ -1673,5 +1692,14 @@ CONNECTOR: Final = ConnectorDeclaration(
     scopes=KeyScopes(
         request=("accounting.transactions.read", "accounting.contacts.read"),
         refuse=("any .write scope",),
+    ),
+    resolves=(
+        # An accounting contact is the client billed, and it carries the invoices.
+        ResolvesAs(
+            entity=ENTITY_CONTACT,
+            entity_type=EntityType.COMPANY,
+            fields={"name": "name"},
+            carries_money=True,
+        ),
     ),
 )

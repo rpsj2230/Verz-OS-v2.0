@@ -24,10 +24,10 @@
  * the paragraph explaining where undo is offered, the three stacked tables on one page, and the
  * sentence under the figures.
  *
- * Task ids: M27.7.21, M27.16.1
+ * Task ids: M27.7.21, M27.16.1, M16.6.8, M16.5.4
  */
 
-import { BookOpenCheck, CircleSlash, Hourglass, Info, Undo2 } from "lucide-react";
+import { BookOpenCheck, CircleSlash, Hourglass, Info, TriangleAlert, Undo2 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
@@ -61,6 +61,7 @@ import { cn } from "../../lib/utils";
 import { dayWords, whenWords } from "../access/formParts";
 import {
   LEARNING_API_PATH,
+  LEARNING_SETTINGS,
   LEARNING_VIEWS,
   LEARNING_VIEW_LABELS,
   RECENT_DAYS,
@@ -78,6 +79,7 @@ import {
   type TierThree,
   type TierTwo,
 } from "../learningQuery";
+import { LimitSettings } from "../operations/LimitSettings";
 import { Narrowing } from "../requirement-checks/Narrowing";
 import { UNAVAILABLE, changeWords, undoWritesWords } from "./learningActions";
 
@@ -87,6 +89,12 @@ export const LEARNING_LEDE =
 export const LOADING_LEARNING = "Loading what the system has learnt.";
 export const VIEWS_LABEL = "Learning views";
 export const UNDO_LABEL = "Undo";
+
+/** How the week's answers were marked, over the whole install, and what that count changes. */
+export const MARKS_LABEL = "How answers were marked";
+export const MARKED_HELPFUL = `Marked helpful in ${String(7)} days`;
+export const MARKED_NOT_HELPFUL = `Marked not helpful in ${String(7)} days`;
+export const MARKS_SUB = "counted; a mark changes nothing by itself";
 export const KEEP_IT = "Keep it";
 export const DETAILS_LABEL = "Details";
 export const NOT_UNDONE = "The learning was not undone";
@@ -402,6 +410,12 @@ function Waiting({ review, onOpen }: { readonly review: Review; readonly onOpen:
       lede="Changes that would widen who sees what, routed to the department that decides each."
       action={<UnavailableAction label={UNAVAILABLE.decide.label} text={UNAVAILABLE.decide.label} reason={UNAVAILABLE.decide.reason} />}
     >
+      {review.queueAlarm?.raised === true ? (
+        <p role="alert" data-slot="queue-alarm" className="m-0 mb-3 flex items-start gap-2 rounded-md bg-warn-wash px-3 py-2 text-[13px] text-warn">
+          <TriangleAlert aria-hidden className="mt-[2px] size-4 shrink-0" />
+          <span className="min-w-0">{review.queueAlarm.says}</span>
+        </p>
+      ) : null}
       {waiting.length === 0 ? (
         <EmptyState title={NOTHING_IN_TIER} description="A learned change that would widen who sees what waits here for a person." icon={<Hourglass aria-hidden />} />
       ) : (
@@ -465,6 +479,7 @@ function About({ review }: { readonly review: Review }) {
           What a learning says is read on <Link to="/memory" className="text-acc-text underline-offset-4 hover:underline">Memory</Link>, one person at a time.
         </p>
       </SectionCard>
+      <LimitSettings screen={LEARNING_SETTINGS} />
     </div>
   );
 }
@@ -561,12 +576,20 @@ function LearningDrawer({
 function Figures({ review }: { readonly review: Review }) {
   const withheld = review.tierThree === null;
   return (
-    <KpiStrip label="Learnings you may see" count={withheld ? 3 : 4}>
-      <StatCard label={`Learned in ${String(RECENT_DAYS)} days`} value={String(learnedRecently(review))} sub="tiers one and two" />
-      <StatCard label="Applied automatically" value={String(review.tierOne.length)} sub="each can be undone" />
-      <StatCard label="In shadow" value={String(review.tierTwo.length)} sub="proving themselves" />
-      {review.tierThree === null ? null : <StatCard label="Waiting on a person" value={String(review.tierThree.length)} sub="tier three" />}
-    </KpiStrip>
+    <>
+      <KpiStrip label="Learnings you may see" count={withheld ? 3 : 4}>
+        <StatCard label={`Learned in ${String(RECENT_DAYS)} days`} value={String(learnedRecently(review))} sub="tiers one and two" />
+        <StatCard label="Applied automatically" value={String(review.tierOne.length)} sub="each can be undone" />
+        <StatCard label="In shadow" value={String(review.tierTwo.length)} sub="proving themselves" />
+        {review.tierThree === null ? null : <StatCard label="Waiting on a person" value={String(review.tierThree.length)} sub="tier three" />}
+      </KpiStrip>
+      {review.marks === null ? null : (
+        <KpiStrip label={MARKS_LABEL} count={2}>
+          <StatCard label={MARKED_HELPFUL} value={String(review.marks.helpful)} sub={MARKS_SUB} />
+          <StatCard label={MARKED_NOT_HELPFUL} value={String(review.marks.unhelpful)} sub={MARKS_SUB} />
+        </KpiStrip>
+      )}
+    </>
   );
 }
 

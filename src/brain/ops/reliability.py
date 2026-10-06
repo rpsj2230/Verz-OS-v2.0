@@ -1136,6 +1136,28 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
         ),
     ),
     FailureMode(
+        component="pgbouncer-classes",
+        fails=(
+            "the class pooler the release started has stopped, or one class has reached its "
+            "share of server connections"
+        ),
+        presents_as=(
+            "stopped is a connection refused on the paths that moved to it, until the release's "
+            "observation is read again a minute later and they fall back to the application's "
+            "pooler. At a class's share, that class's next connection waits and then fails with "
+            "a query wait timeout while the other two classes carry on"
+        ),
+        blocks=("app", "scheduled work", "background jobs"),
+        retry=RetryClass.AFTER_VERIFICATION,
+        response=(
+            "brain.ops.class_pools uses the pooler only while this release's observation says it "
+            "runs, so a stopped pooler costs about a minute of refusals; the next release starts "
+            "it again where the server has room. A class at its share is that class's own work "
+            "outgrowing admission.POOL_SHARE, which is the isolation working: raise the split, "
+            "never the pool behind the other classes' backs"
+        ),
+    ),
+    FailureMode(
         component="cache",
         fails="Valkey is unreachable",
         presents_as=(

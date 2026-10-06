@@ -13,7 +13,11 @@
  * **Money is minor units, shown as `spendQuery.majorUnits` shows it**, because nothing on an
  * install says which currency a ceiling is in and the Spend screen already decided how to draw one.
  *
- * Task ids: M27.7.28
+ * **Forget and edit are the person's own, on the API's two routes.** `FORGET_API_PATH` and
+ * `EDIT_API_PATH` take a memory's id and nothing naming a person; the API decides the memory is
+ * theirs and refuses anybody else's as a memory that does not exist.
+ *
+ * Task ids: M27.7.28, M16.4.2
  */
 
 import type { components } from "../api/schema";
@@ -27,6 +31,40 @@ export type MyItem = components["schemas"]["MineItemView"];
 export type Learned = components["schemas"]["MineLearnedView"];
 
 export const WORKSPACE_API_PATH = "/me/workspace";
+
+/** Where a person forgets one memory formed from their own words, and edits one. */
+export const FORGET_API_PATH = "/me/memory/forget";
+export const EDIT_API_PATH = "/me/memory/edit";
+
+/** The body a forget sends: the memory's id and nothing else, as `MineMemoryAsked` declares. */
+export function forgetBody(memoryId: string): { readonly memory_id: string } {
+  return { memory_id: memoryId };
+}
+
+/** The body an edit sends: the memory's id and the words to keep instead. */
+export function editBody(
+  memoryId: string,
+  statement: string,
+): { readonly memory_id: string; readonly statement: string } {
+  return { memory_id: memoryId, statement: statement.trim() };
+}
+
+/** What a forget or an edit did, from `MineMemoryChangedView`, read without trusting its shape. */
+export interface Changed {
+  readonly tookEffect: boolean;
+  readonly told: string;
+}
+
+export function readChanged(payload: unknown): Changed {
+  if (typeof payload !== "object" || payload === null) {
+    return { tookEffect: false, told: "" };
+  }
+  const body = payload as { took_effect?: unknown; told?: unknown };
+  return {
+    tookEffect: body.took_effect === true,
+    told: typeof body.told === "string" ? body.told : "",
+  };
+}
 
 export { wasRead };
 

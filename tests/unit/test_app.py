@@ -27,6 +27,7 @@ from brain.app import TRACE_ID_RE, Settings, create_app
 from brain.channels.widget import WidgetConfigurationError
 from brain.core.errors import Absent, Degraded, Denied, Unresolved
 from brain.ops.release_manifest import ReleaseManifest
+from brain.tools.website_check import WEBSITE_CHECK_TOOL
 
 
 @pytest.fixture
@@ -619,10 +620,35 @@ def test_readiness_says_the_same_thing_whether_the_catalogue_can_answer_or_not()
         assert body["checks"]["tools"] is True
 
         had_a_source = app.state.db_sessions is not None
-        assert (len(app.state.tools) > 0) is had_a_source, (
+        # The row-backed tools, which is every tool but the website check: that one reads a
+        # site rather than a row, so it is registered with or without a database (see the test
+        # below), and counting it here made this test red on every machine with no database
+        # from the day it was added.
+        reads_rows = set(app.state.tools.names()) - {WEBSITE_CHECK_TOOL}
+        assert bool(reads_rows) is had_a_source, (
             "the catalogue no longer follows whether a row source was available, so either a "
             "tool is registered with nothing to read or a source was passed and dropped"
         )
+        assert WEBSITE_CHECK_TOOL in app.state.tools.names()
+
+
+def test_a_tool_that_reads_no_rows_is_registered_with_no_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The website check is in the catalogue on an install with no database at all.
+
+    It reads a site over HTTPS, not a row, so whether a row source exists has nothing to say about
+    it. The test above holds the row tools to the database and this holds the one tool that is not
+    a row tool to being there anyway, so the two together pin the line between them. Delete this
+    and the website check could be gated on a database it never reads, and a lite install would
+    lose it with readiness still green.
+    """
+    for name in ("DATABASE_URL", "BRAIN_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    app = create_app(Settings(env="development", commit_sha="abc1234"))
+    with TestClient(app):
+        assert app.state.db_sessions is None
+        assert app.state.tools.names() == (WEBSITE_CHECK_TOOL,)
 
 
 def test_the_gap_between_a_valid_catalogue_and_a_useful_one_is_written_down() -> None:

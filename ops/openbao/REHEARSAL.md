@@ -81,7 +81,7 @@ docker exec -e BAO_TOKEN brain-vault bao token lookup -accessor <each accessor>
 Expected: no token with policy `root` other than the one just made; one with `application,
 default` and one with `default, worker`, each `period 768h`, `renewable true`, `orphan true`; one
 with `deploy` only, `period 8760h`, `orphan true`. `bao secrets list` shows `providers/`,
-`webhooks/`, `connector_keys/` and `template_signing/` as `kv` version 2, `bao audit list` shows
+`webhooks/`, `connector_keys/`, `template_signing/` and `resolution/` as `kv` version 2, `bao audit list` shows
 `file/` and `stdout/`, `bao policy list` shows every file in `ops/openbao/policies`. Revoke the
 root token.
 
@@ -120,6 +120,24 @@ kv metadata get providers/anthropic` shows version 1. Nothing was typed into `/o
 - `docker compose <files> restart app`, then the metadata still shows version 1 and the log shows
   `template signing key held minted_here=False` for every process.
 - **Credentials** says "Template signing key: held"; publish an agent from a draft and install it.
+- Revoke the root token.
+
+## 5c. The join-key pepper is created once and cannot be replaced (M14.7.3)
+
+- The installer printed `step N of M: keep this install's join-key pepper - already done,
+  skipping` (the application created it at start), or ran it and printed `Join-key pepper:
+  created in its vault slot, once, and never written over.`
+- With a root token from the recovery key: `docker exec -e BAO_TOKEN brain-vault bao kv metadata get
+  -mount=resolution pepper` shows `current_version 1`.
+- The application's token cannot write it again: pipe `{"data":{"value":"x"}}` into
+  `docker exec -i -e BAO_TOKEN brain-vault bao write resolution/data/pepper -` with `BAO_TOKEN`
+  set from `/opt/brain/.env`'s `BRAIN_VAULT_TOKEN`. It is refused with `permission denied`, and the
+  metadata still shows version 1. The same write with the worker's `BRAIN_WORKER_VAULT_TOKEN` is
+  refused too.
+- `docker compose <files> restart app`, then the metadata still shows version 1 and the log shows
+  `join-key pepper held created_here=False` for every process.
+- `docker compose <files> exec app python -m brain.ops.join_key_pepper --held; echo $?` prints `0`
+  and nothing else.
 - Revoke the root token.
 
 ## 6. A restart, a reboot, then an update that changes a policy
