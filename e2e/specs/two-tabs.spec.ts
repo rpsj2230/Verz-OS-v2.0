@@ -34,11 +34,25 @@ function isRefresh(response: Response): boolean {
   );
 }
 
-/** Open a page and wait for the token refresh it has to make on the way. */
-async function refreshedOpening(page: Page, to: string): Promise<number> {
-  const refreshed = page.waitForResponse(isRefresh, { timeout: 30_000 });
+/** Every token refresh a tab makes, by status, from the moment this is called. */
+function refreshesOf(page: Page): number[] {
+  const seen: number[] = [];
+  page.on("response", (response) => {
+    if (isRefresh(response)) {
+      seen.push(response.status());
+    }
+  });
+  return seen;
+}
+
+/**
+ * Open a page this tab has not loaded yet, so it has to ask the API, and wait until the tab has
+ * refreshed. Counted from before the clock moved rather than awaited after the click, because a
+ * timer the clock fires on its way forward may be what asks first.
+ */
+async function refreshedOpening(page: Page, seen: readonly number[], to: string): Promise<void> {
   await openFromMenu(page, to, PEOPLE);
-  return (await refreshed).status();
+  await expect.poll(() => seen.length, { timeout: 30_000, message: "the tab refreshed its tokens" }).toBeGreaterThan(0);
 }
 
 test("a second tab signs in from the first tab's session and both keep working", async ({ browser }, info) => {
@@ -76,18 +90,22 @@ test("a second tab signs in from the first tab's session and both keep working",
   await openFromMenu(second, "/sessions", PEOPLE);
   await checkPage(second, secondSeen, "second tab after the first reloaded", info);
 
-  // Both tabs' access tokens expire; each refreshes, and neither refresh signs the other out.
+  // Both tabs' access tokens expire; each refreshes, and neither refresh signs the other out. Each
+  // opens a page it has not loaded since it last signed in: a page it already holds is drawn from
+  // what it fetched before the clock moved, and nothing on it would need a token.
+  const firstRefreshes = refreshesOf(first);
+  const secondRefreshes = refreshesOf(second);
   await context.clock.fastForward(PAST_THE_TOKEN);
   reset(firstSeen);
-  expect(await refreshedOpening(first, "/people"), "the first tab's refresh is accepted").toBe(200);
+  await refreshedOpening(first, firstRefreshes, "/sessions");
+  expect(firstRefreshes.every((status) => status === 200), "the first tab's refreshes are accepted").toBe(true);
   await checkPage(first, firstSeen, "first tab after refreshing", info);
   reset(secondSeen);
-  // A page this tab has not opened yet, so it has to ask the API: a page it already holds is
-  // drawn from what it fetched before the clock moved, and nothing would need a token.
-  expect(await refreshedOpening(second, "/sign-in-links"), "the second tab's refresh is accepted").toBe(200);
+  await refreshedOpening(second, secondRefreshes, "/sign-in-links");
+  expect(secondRefreshes.every((status) => status === 200), "the second tab's refreshes are accepted").toBe(true);
   await checkPage(second, secondSeen, "second tab after refreshing", info);
   reset(firstSeen);
-  await openFromMenu(first, "/sessions", PEOPLE);
+  await openFromMenu(first, "/people", PEOPLE);
   await checkPage(first, firstSeen, "first tab after the second refreshed", info);
   await expect(first.locator("#username"), "neither tab was sent back to sign in").toHaveCount(0);
   await expect(second.locator("#username")).toHaveCount(0);
