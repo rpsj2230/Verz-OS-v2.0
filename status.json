@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T06:06:43.635758+00:00",
-  "commit": "7dd3308b",
-  "commit_subject": "Six skill and builder leaves are proved: four by install checks through the routes their pages call, two by page tests (#356)",
+  "generated_at": "2026-10-06T06:24:13.126101+00:00",
+  "commit": "f5984cd2",
+  "commit_subject": "The console's reports and long lists get install checks: the landing screen, usage, unanswered questions, the canaries, erasure and a paged list (#365)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
