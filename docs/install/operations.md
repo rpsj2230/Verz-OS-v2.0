@@ -343,14 +343,15 @@ install's own hour.
 | `vault_audit_ship` | that every call the secrets vault answered about a credential slot reaches the tamper-evident audit ledger within minutes | `in_process` |
 | `acceptance_run` | that every task proved on this install goes on being proved after each deploy, by checks whose test data is rolled back | `in_process` |
 | `escalation_expiry` | that a question handed to a person does not stay open for ever once nobody picked it up, and that the person who asked is told so | `in_process` |
+| `entity_resolution` | that every record a connector declares for resolution is registered, so a merge, a review and an answer that names one have something to point at | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
 `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue`,
 `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`,
-`model_health_probes`, `acceptance_run` and `escalation_expiry` it is: the general worker ticks the
-control schedule and starts all thirteen.
+`model_health_probes`, `acceptance_run`, `escalation_expiry` and `entity_resolution` it is: the
+general worker ticks the control schedule and starts all fourteen.
 The token renewal renews the worker's own vault token twice a day once less than half its period
 is left, and the application renews its own from inside its own process on the same rule, because
 a vault token is renewed only by whoever holds it; a `lite` install has no worker and no worker

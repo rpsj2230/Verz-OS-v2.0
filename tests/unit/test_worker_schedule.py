@@ -79,6 +79,7 @@ STARTED = [
     ("directory_sync", False),
     ("knowledge_reverification", False),
     ("escalation_expiry", False),
+    ("entity_resolution", False),
     ("queue_redrive", False),
     ("side_effect_resume", False),
     ("model_health_probes", False),
@@ -158,7 +159,7 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_nineteen_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
@@ -166,9 +167,10 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
     runner and the connector sync after it, and the vault audit shipper last. The staff sync
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
     2026-09-28 and the install acceptance checks the same day, and the escalation expiry, the
-    two recovery sweeps and the evening digest on 2026-09-30, in the registry's own order.
+    two recovery sweeps and the evening digest on 2026-09-30, and the entity registry on
+    2026-10-06, in the registry's own order.
 
-    Delete this and every assertion below that names the seventeen could be satisfied by a table
+    Delete this and every assertion below that names the nineteen could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -177,6 +179,7 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
         "directory_sync",
         "knowledge_reverification",
         "escalation_expiry",
+        "entity_resolution",
         "queue_redrive",
         "side_effect_resume",
         "model_health_probes",
@@ -479,6 +482,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("connector_sync", "ok", False, "connector_sync ran"),
             ("denial_digest", "ok", False, "denial_digest ran"),
             ("directory_sync", "ok", False, "directory_sync ran"),
+            ("entity_resolution", "ok", False, "entity_resolution ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("escalation_expiry", "ok", False, "escalation_expiry ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
@@ -582,6 +586,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             "connector_sync",
             "denial_digest",
             "directory_sync",
+            "entity_resolution",
             "erasure_queue",
             "escalation_expiry",
             "knowledge_reverification",
@@ -619,6 +624,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("connector_sync", "ok", "connector_sync ran"),
             ("denial_digest", "ok", "denial_digest ran"),
             ("directory_sync", "ok", "directory_sync ran"),
+            ("entity_resolution", "ok", "entity_resolution ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("escalation_expiry", "ok", "escalation_expiry ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
@@ -690,6 +696,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("denial_digest", False),
         ("directory_sync", False),
         ("escalation_expiry", False),
+        ("entity_resolution", False),
         ("queue_redrive", False),
         ("side_effect_resume", False),
         ("model_health_probes", False),

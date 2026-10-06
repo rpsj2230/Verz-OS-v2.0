@@ -150,6 +150,9 @@ MIGRATION_ESCALATION = VERSIONS / "0168_escalation.py"
 MIGRATION_STEWARDS = VERSIONS / "0167_stewards_and_self_grants.py"
 MIGRATION_RECORD_LIVES = VERSIONS / "0179_record_lives_and_source_epochs.py"
 MIGRATION_SKILL_SCRIPTS = VERSIONS / "0178_skill_scripts.py"
+MIGRATION_REGISTRY_OBSERVATIONS = VERSIONS / "0182_entity_registry_observations.py"
+MIGRATION_ENTITY_MERGES = VERSIONS / "0183_entity_merges.py"
+MIGRATION_REVIEW_ITEMS = VERSIONS / "0184_entity_review_items.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -426,6 +429,15 @@ STEWARDS_TABLES: tuple[str, ...] = ("ops.connector_steward", "gate.self_grant")
 RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.record_retired", "proj.source_epoch")
 #: And the one 0178 adds: the bytes of every script a stored skill carries.
 SKILL_SCRIPT_TABLES: tuple[str, ...] = ("agent.skill_script",)
+#: And the two 0182 adds: each record's comparison keys, and the join keys an install blocks.
+REGISTRY_OBSERVATION_TABLES: tuple[str, ...] = (
+    "er.observation",
+    "er.blocked_value",
+)
+#: And the two 0183 adds: a merge with its evidence and pre-image, and the unmerge reversing one.
+ENTITY_MERGE_TABLES: tuple[str, ...] = ("er.merge", "er.unmerge")
+#: And the one 0184 adds: a pair of records waiting for a person.
+REVIEW_ITEM_TABLES: tuple[str, ...] = ("er.review_item",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -501,6 +513,9 @@ ALL_TABLES = (
     + STEWARDS_TABLES
     + RECORD_LIVES_TABLES
     + SKILL_SCRIPT_TABLES
+    + REGISTRY_OBSERVATION_TABLES
+    + ENTITY_MERGE_TABLES
+    + REVIEW_ITEM_TABLES
 )
 
 
@@ -1335,6 +1350,12 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert record_lives.TABLES == RECORD_LIVES_TABLES
     skill_scripts = migration_module(MIGRATION_SKILL_SCRIPTS)
     assert skill_scripts.TABLES == SKILL_SCRIPT_TABLES
+    registry_observations = migration_module(MIGRATION_REGISTRY_OBSERVATIONS)
+    assert registry_observations.TABLES == REGISTRY_OBSERVATION_TABLES
+    entity_merges = migration_module(MIGRATION_ENTITY_MERGES)
+    assert entity_merges.TABLES == ENTITY_MERGE_TABLES
+    review_items = migration_module(MIGRATION_REVIEW_ITEMS)
+    assert review_items.TABLES == REVIEW_ITEM_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1432,6 +1453,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(stewards.TABLES)
         + tuple(record_lives.TABLES)
         + tuple(skill_scripts.TABLES)
+        + tuple(registry_observations.TABLES)
+        + tuple(entity_merges.TABLES)
+        + tuple(review_items.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1510,6 +1534,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(stewards.TABLES),
         set(record_lives.TABLES),
         set(skill_scripts.TABLES),
+        set(registry_observations.TABLES),
+        set(entity_merges.TABLES),
+        set(review_items.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

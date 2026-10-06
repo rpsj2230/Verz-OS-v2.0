@@ -534,6 +534,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/classification",
       "/classification/:entity",
       "/classification/:entity/:column",
+      "/duplicates",
       "/artifacts",
     ],
     routes: [
@@ -554,6 +555,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",
       "/api/v1/records/{entity}/access",
+      "/api/v1/resolution/review*",
     ],
     tables: [
       "know.item",
@@ -569,6 +571,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.artifact",
       "know.classified_table",
       "know.classified_row",
+      "er.review_item",
+      "er.merge",
+      "er.unmerge",
+      "er.observation",
+      "er.blocked_value",
     ],
     installation: [
       "INSTALL_VECTOR_STORE",

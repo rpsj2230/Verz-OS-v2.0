@@ -128,6 +128,7 @@ from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
+from brain.ops.join_key_pepper import pepper_at_start
 from brain.ops.live_read_run import live_records_for
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.matrix_gate_run import InstallMatrixGate
@@ -352,6 +353,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if app.state.template_key_state is TemplateKeyState.UNREAD
         else None
     )
+    # This install's join-key pepper, created in its write-once slot if the slot has never held one,
+    # which is how an install made before the slot existed comes to hold one with nobody at the
+    # server. Only made sure of here: the processes that hash join keys read it when they hash.
+    # Never raises; a vault that was sealed or silent is asked again at the next start. See
+    # `brain.ops.join_key_pepper`.
+    await asyncio.to_thread(pepper_at_start, settings.vault_address, settings.vault_token)
     # A vault the install names decides readiness; one it does not name is shown as not
     # configured. See `brain.readiness.A_PART_NOBODY_CONFIGURED_IS_NAMED_AND_NEVER_COUNTED`.
     if vault_configured(settings.vault_address, settings.vault_token):

@@ -45,12 +45,13 @@ chooses pairs for Splink and none for this statement, and an unblocked self join
 record against every other however cheap each term is. See
 `THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN`.
 
-**None of these columns exists.** `cascade.SQL_PREDICATES` says so about the comparison columns
-and the same is true of the key columns here: no migration in this repository creates a table
-this statement could run against, no pg_trgm extension is installed, and nothing has executed
-it against PostgreSQL. What has been executed is the arithmetic, in SQLite, against the Python
-scorer, which is what makes the agreement between the two halves a measurement rather than a
-reading. See `NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
+**The table exists and nothing has scored against it yet.** Migration 0182 created
+`er.observation` with the columns `cascade.SQL_PREDICATES` names, `brain.resolution.registry_store`
+writes it, and pg_trgm has been installed since 0001 (`EXTENSIONS`), which this paragraph denied
+until 2026-10-06. What has not happened is a scoring run: nothing calls this statement yet, and
+what has been executed is the arithmetic, in SQLite, against the Python scorer, which is what
+makes the agreement between the two halves a measurement rather than a reading. See
+`NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
 
 Rejected: rendering the whole thing in `cascade`. That module states, in its own scope note,
 that nothing in it opens a connection or knows a table, and a statement needs a table name. The
@@ -71,13 +72,13 @@ Task ids: M14.3.6
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Final
 
 from brain.core.scope import Scope
 from brain.core.scope_sql import ColumnLayout, CompiledPredicate, compile_where
-from brain.resolution.canonical import ResolutionError
+from brain.resolution.canonical import ResolutionError, SourceRef
 from brain.resolution.cascade import (
     DECLARED_THRESHOLDS,
     DECLARED_WEIGHTS,
@@ -140,8 +141,8 @@ THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN: Final = (
 
 #: The gap this module does not close, kept as a constant so it has to be deleted.
 NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES: Final = (
-    "No migration in this repository creates a table with these columns, the pg_trgm extension "
-    "is not installed by anything here, and no deployment has executed this statement. What "
+    "Migration 0182 creates er.observation with these columns and pg_trgm has been installed "
+    "since 0001, but nothing calls this statement yet and no deployment has executed it. What "
     "has been executed is the arithmetic: the rendered expression is evaluated in SQLite "
     "against the Python scorer, over pairs chosen to hit every branch, which is what makes the "
     "agreement between the two halves a measurement rather than a reading. The parts that "
@@ -176,6 +177,33 @@ RIGHT_PARAM_PREFIX: Final = "rreach"
 #: What the upper trigram threshold binds under. Named by `cascade.SQL_PREDICATES` itself,
 #: which is why it is read from there rather than declared twice.
 THRESHOLD_PARAM: Final = "upper"
+
+#: What the lower trigram threshold binds under, for the candidate blocking below.
+LOWER_PARAM: Final = "lower"
+
+#: The pairs worth scoring online, and the half of the cost claim this module used to leave out.
+#:
+#: One entity type, and at least one join key or name key in common, or two names close enough
+#: to reach the review band (M14.3.3). A pair agreeing on none of these cannot reach any stage
+#: of the cascade, so scoring it is the unblocked self join
+#: `THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN` refused to call free. Every
+#: comparison here is an equality on an indexed digest or key, or pg_trgm's similarity, which
+#: 0001 installs.
+CANDIDATE_BLOCKING: Final = (
+    f"{LEFT_ALIAS}.entity_type = {RIGHT_ALIAS}.entity_type AND ("
+    + " OR ".join(
+        f"{LEFT_ALIAS}.{column} = {RIGHT_ALIAS}.{column}"
+        for column in (
+            "uen_hash",
+            "tax_id_hash",
+            "domain_hash",
+            "email_hash",
+            "phone_hash",
+            "name_key",
+        )
+    )
+    + f" OR similarity({LEFT_ALIAS}.name_key, {RIGHT_ALIAS}.name_key) >= :{LOWER_PARAM})"
+)
 
 #: A table this statement may be built over: a bare name or a schema-qualified one. Identifiers
 #: cannot be parameterised, so they are constrained rather than quoted, which is the reasoning
@@ -240,6 +268,7 @@ def score_query(
     weights: WeightTable = DECLARED_WEIGHTS,
     thresholds: Thresholds = DECLARED_THRESHOLDS,
     layout: ColumnLayout | None = None,
+    touching: Sequence[SourceRef] = (),
 ) -> ScoreQuery:
     """The candidate scan: every visible pair with its additive score (M14.3.6).
 
@@ -248,15 +277,19 @@ def score_query(
     second copy of it. The filter is `compile_where`, compiled once per side, for the same
     reason in the permission direction.
 
-    `table` is required and has no default. A default would be a table name this repository
-    does not create, written where a reader would take it for one that exists; the columns are
-    already invented and saying so once is enough. See `NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
+    `table` is required and has no default. The table this is meant for is `er.observation`,
+    and the caller names it, so a statement over a test's own table and over the install's are
+    the same text with a different name in it. See `NOTHING_HAS_RUN_THIS_AGAINST_POSTGRES`.
 
     The join condition is a row comparison over the three key columns, which yields each
     unordered pair exactly once and never a record against itself. Written as a row comparison
     rather than as three ORs because the three-OR spelling is where somebody eventually drops a
     parenthesis and turns a strict ordering into one that admits the reflexive pair, and a
     record compared against itself agrees on every feature and scores the maximum.
+
+    `touching` is the online scan (M14.3.6): only pairs with at least one of these records on
+    either side, and only pairs `CANDIDATE_BLOCKING` admits. Empty, it is the whole table,
+    which is what the offline export and the tests compare against.
     """
     if not _TABLE_RE.match(table):
         msg = (
@@ -275,17 +308,32 @@ def score_query(
         f"{LEFT_ALIAS}.{one} AS left_{one}, {RIGHT_ALIAS}.{one} AS right_{one}"
         for one in RECORD_KEY_COLUMNS
     )
+    where = reach.where
+    touched: dict[str, Any] = {}
+    if touching:
+        rows = []
+        for n, one in enumerate(touching):
+            names = tuple(f"t{n}_{column}" for column in RECORD_KEY_COLUMNS)
+            touched.update(zip(names, (one.source, one.entity, one.source_id), strict=True))
+            rows.append("(" + ", ".join(f":{name}" for name in names) + ")")
+        listed = ", ".join(rows)
+        where = (
+            f"({where}) AND {CANDIDATE_BLOCKING}"
+            f" AND (({left_key}) IN ({listed}) OR ({right_key}) IN ({listed}))"
+        )
+        touched[LOWER_PARAM] = thresholds.lower
     sql = (
         f"SELECT {selected},\n"
         f"{sql_score_expression()} AS match_weight\n"
         f"FROM {table} {LEFT_ALIAS} JOIN {table} {RIGHT_ALIAS}\n"
         f"  ON ({left_key}) < ({right_key})\n"
-        f"WHERE {reach.where}"
+        f"WHERE {where}"
     )
     params: dict[str, Any] = {
         **weight_parameters(weights),
         THRESHOLD_PARAM: thresholds.upper,
         **reach.params,
+        **touched,
     }
     return ScoreQuery(
         sql=sql,

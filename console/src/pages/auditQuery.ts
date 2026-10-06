@@ -317,6 +317,8 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   deny: "was refused, about",
   leash_change: "changed the leash on",
   entity_merge: "merged",
+  // A merge reversed and the entity's own records given back to it (0183); the subject is either side.
+  entity_unmerge: "separated",
   publish: "published",
   break_glass: "opened break glass on",
   compose_change: "changed what is attached to",

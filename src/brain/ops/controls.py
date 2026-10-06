@@ -649,6 +649,29 @@ CONTROLS: Final[tuple[Control, ...]] = (
         invoked_by=Invocation.NOTHING,
     ),
     Control(
+        name="entity_resolution",
+        # Since 2026-10-06 (`0182`, M14.1). The worker's schedule starts `run_registry_now`, which
+        # reads the records connectors declare for resolution and gives each an entity, its names,
+        # its hashed join keys and its comparison row, then compares the records it read with
+        # their candidates (`brain.resolution.matching_store`, `0184`). Two records become one only
+        # by a merge, and on an install with unattended merging off, only by a person's.
+        symbols=("brain.resolution.registry_store:run_registry_now",),
+        guards=(
+            "that every record a connector declares for resolution is registered, so a merge, a "
+            "review and an answer that names one have something to point at"
+        ),
+        lost_silently=(
+            "New records stop being registered. Nothing fails: questions are answered as before, "
+            "and the only sign is that resolution knows nothing added since the last run."
+        ),
+        # Ten minutes, restated rather than imported for `connector_sync`'s reason: the store
+        # imports the tables, and the tables import this registry.
+        every=timedelta(minutes=10),
+        cadence_from="brain.resolution.registry_store:EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
         name="queue_redrive",
         # Two halves since 2026-09-09. `verdict_for` decides what an orphaned row deserves
         # and `brain.ops.crash.redrive` is the driver that asks it and joins the answer with

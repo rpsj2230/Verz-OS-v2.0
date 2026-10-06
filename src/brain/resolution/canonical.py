@@ -61,12 +61,11 @@ is what makes the pointer worth having, and it is why an id issued before a merg
 resolves afterwards: resolution follows the pointer rather than depending on rows having been
 rewritten. See `A_MERGE_MOVES_ONE_POINTER_AND_NOTHING_ELSE`.
 
-**Nothing here records who merged, or why.** `merged_at` says when. There is no approver, no
-evidence, no pre-image and no audit row anywhere in this module or in the tables it declares.
-A merge performed today can be undone by clearing one pointer and cannot be explained. That is
-M14.5.1 and M14.5.4 and it is not built. See
-`NOTHING_HERE_RECORDS_WHO_MERGED_OR_ON_WHAT_EVIDENCE`, which is a constant so the gap has to
-be deleted rather than merely forgotten.
+**Nothing here records who merged, or why, and that is now somebody else's job.** `merged_at`
+says when. Who decided, on what evidence, and every row as it stood before are `er.merge`'s,
+written by `brain.resolution.merge_store` in the transaction that moves the pointer, and an
+unmerge is `er.unmerge`'s (M14.5.1, M14.5.4). The constant that said none of it was built was
+deleted when it was.
 
 **There is deliberately no `same_entity(a, b)` predicate**, and its absence is a decision
 rather than an omission. Answering "are these two the same" for a caller who reaches only one
@@ -160,17 +159,6 @@ A_MERGE_MOVES_ONE_POINTER_AND_NOTHING_ELSE = (
     "child rows to point at the survivor, which is faster to read and destroys the only copy "
     "of where each row came from, so an unmerge has nothing to restore from and the audit "
     "question 'what did this look like before' has no answer at all."
-)
-
-#: The gap this task group does not close, kept as a constant so it has to be deleted.
-NOTHING_HERE_RECORDS_WHO_MERGED_OR_ON_WHAT_EVIDENCE = (
-    "merged_at records when an entity stopped being current. Nothing in this module or in "
-    "er.canonical records who decided it, what evidence they had, or what the membership "
-    "looked like beforehand, and there is no merge audit row and no pre-image table. A merge "
-    "is therefore reversible, because clearing one pointer restores the entity and nothing "
-    "else was written, and it is not explainable. M14.5.1 asks for the pre-image and M14.5.4 "
-    "for the full audit of who, when and on what evidence; neither is built, and this "
-    "constant is here so that claiming otherwise requires deleting it."
 )
 
 #: Why an identifier row cannot hold the value it identifies.
