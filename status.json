@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T02:13:06.994394+00:00",
-  "commit": "7ea41f21",
-  "commit_subject": "A fresh install's identity provider survives its first start: the server build runs in a one-shot, and the server has 1024M with half of it for heap (#417)",
+  "generated_at": "2026-10-06T02:31:45.892023+00:00",
+  "commit": "4650e5e5",
+  "commit_subject": "Asking through an agent is proved on an install to answer at the narrower reach, on the web and in Lark, and an agent's audience is shown to be separate from its authority (#379)",
   "total": 1595,
   "done": 604,
   "percent": 37.9,
