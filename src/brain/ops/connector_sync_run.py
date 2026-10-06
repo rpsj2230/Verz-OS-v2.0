@@ -208,6 +208,7 @@ from brain.ops.connector_sync_store import (
 )
 from brain.ops.credentials import KEY_FIELD, USER_FIELD
 from brain.ops.custom_code_run import CodeRunFailedError, installed_runner, read_once
+from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import HttpsTokenIssuer, index_if_due
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import Limit, LimiterState, check
@@ -841,15 +842,25 @@ class SyncRun:
     #: What the switched-on Lark Base's index run did, or empty with no Base switched on. See
     #: `brain.ops.lark_base_index.IndexRun.summary`, which names no Base and no table.
     base: str = ""
+    #: Sources a halt stopped, which are not read and keep their place. See `brain.ops.halt_store`.
+    held: int = 0
 
     def summary(self) -> str:
         after = f"; {self.base}" if self.base else ""
-        if not (self.read or self.waiting or self.failed or self.not_due or self.cannot_be_read):
+        if not (
+            self.read
+            or self.waiting
+            or self.failed
+            or self.not_due
+            or self.cannot_be_read
+            or self.held
+        ):
             return f"no source is connected{after}"
+        stopped = f", {self.held} stopped by a halt" if self.held else ""
         return (
             f"{self.read} read, {self.waiting} waiting for a source's allowance, "
             f"{self.failed} failed, {self.not_due} not yet due, "
-            f"{self.cannot_be_read} that cannot be read{after}"
+            f"{self.cannot_be_read} that cannot be read{stopped}{after}"
         )
 
 
@@ -1543,12 +1554,20 @@ async def sync_on(
     poster: SourcePoster | None = None,
     runner: ScriptRunner | None = None,
 ) -> SyncRun:
-    """Every live connection that may be read and is due, read once, and each attempt recorded."""
+    """Every live connection that may be read and is due, read once, and each attempt recorded.
+
+    A source a halt stops, on itself or on everything, or every source when the halts cannot be
+    read, is not read and records no attempt, so it is due again the moment the halt is lifted.
+    """
+    halts = await read_state(sessions)
     async with sessions() as session, session.begin():
         live = await read_live(session)
         states = await read_states(session)
-    read = waiting = failed = not_due = cannot = 0
+    read = waiting = failed = not_due = cannot = held = 0
     for one in live:
+        if refusal_in(halts, Work(connector=one.connection.connector)):
+            held += 1
+            continue
         previous = states.get(one.id)
         plan = plan_for(one.connection, last=previous, now=now, readings=readings, runner=runner)
         if plan.refused:
@@ -1579,7 +1598,12 @@ async def sync_on(
         else:
             failed += 1
     return SyncRun(
-        read=read, waiting=waiting, failed=failed, not_due=not_due, cannot_be_read=cannot
+        read=read,
+        waiting=waiting,
+        failed=failed,
+        not_due=not_due,
+        cannot_be_read=cannot,
+        held=held,
     )
 
 

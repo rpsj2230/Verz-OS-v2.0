@@ -140,6 +140,7 @@ from brain.knowledge.visibility import (
     approve_promotion,
 )
 from brain.ops.halt import ENFORCED_AXES, HALT_CAPABILITY, Halt, HaltScope, stop_everything
+from brain.ops.halt_store import may_act
 from brain.ops.jobs import hidden_count_fields
 from brain.ops.spend import Actual, Dimension, spend_by, total_minor
 
@@ -565,12 +566,14 @@ KILL_SWITCH: Final = Capability(value="admin:halt")
 def may_stop(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
     """Whether this reader may stop the whole install (M33.1.1.4).
 
-    The capability and nothing else. No scope is matched against a row, and that absence is
-    the statement: a halt on everything covers every department, so narrowing the check to a
-    row would be asking whether they may stop a department they named, which is a different
-    and currently inert control. `brain.ops.halt.ENFORCED_AXES` says why.
+    The capability, in a scope that matches a halt on everything as a row, which names no
+    department. Until 2026-10-06 this asked for the capability alone, in any scope, so a
+    department administrator offered the stop for their own department could stop every
+    department's work, which is what M27.15.2 says must not happen. The row is
+    `brain.ops.halt_store`'s, so this and the route that writes a halt ask one question. See
+    `brain.ops.halt_store.A_SCOPED_STOP_STOPS_ONLY_WHAT_ITS_SCOPE_NAMES`.
     """
-    return entitlement.scope_for(KILL_SWITCH, now) is not None
+    return may_act(entitlement, HaltScope.EVERYTHING, "", now)
 
 
 def press_stop(
