@@ -204,7 +204,7 @@ from brain.gate.finish import (
     finish,
 )
 from brain.gate.live_records import LiveRecords, PartialRead
-from brain.gate.model_lane import ModelLane, draft
+from brain.gate.model_lane import ModelLane, draft, waiting_text
 from brain.gate.provenance import (
     SEED_HORIZONS,
     UNCITED_TEXT,
@@ -213,6 +213,7 @@ from brain.gate.provenance import (
     provenance_for,
 )
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
+from brain.gate.turn_context import ContextNote
 from brain.knowledge.rows import RowRecord, RowRequest
 from brain.models.metering import Meter, ModelRoute
 from brain.resolution.guardrails import (
@@ -407,6 +408,13 @@ class Answered:
     #: by that path without the question's words and must be written down nowhere else, a
     #: person's thread included (M24.2.2, M9.1.1).
     referred: bool = False
+    #: True when the abstention was handed to a person named for a skill's queue and the asker
+    #: was told so (M8.3.1). A fact about what the asker was told, which the learning signal reads
+    #: as `brain.memory.signals.Signal.ESCALATED` once the exchange is kept (M16.2.4, M16.2.8).
+    escalated: bool = False
+    #: Which parts of the turn's context a model was shown and which were left out (M16.6.1), on
+    #: a question a model was asked about. Names only; `brain.ops.trace_store` keeps it.
+    context: ContextNote | None = None
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -875,27 +883,58 @@ async def _answered_by_model(
     only thing of the model's that reaches a frame.
     """
     frames.append(stream.step(at_tool_input_start()))
-    drafted = await draft(
-        question,
-        lane=model,
-        entitlement=entitlement,
-        scope=scope,
-        sink=sink,
-        now=now,
-        meter=meter,
-        trace_id=trace_id,
-        searching=calls.start,
-        entering=None if recorder is None else recorder.enter,
-        horizons=horizons,
-        using=calls.use,
-    )
+    if model.runtime is not None:
+        # The agent's tool loop, the one place a model is handed tools (M13.7.1). It returns
+        # what `draft` returns, so every frame below is the same code for both.
+        drafted = await model.runtime.drafted(
+            question,
+            lane=model,
+            scope=scope,
+            sink=sink,
+            now=now,
+            meter=meter,
+            trace_id=trace_id,
+            started=calls.start,
+            horizons=horizons,
+        )
+    else:
+        drafted = await draft(
+            question,
+            lane=model,
+            entitlement=entitlement,
+            scope=scope,
+            sink=sink,
+            now=now,
+            meter=meter,
+            trace_id=trace_id,
+            searching=calls.start,
+            entering=None if recorder is None else recorder.enter,
+            horizons=horizons,
+            using=calls.use,
+        )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:
         frames.append(stream.step(Progress.COMPOSING))
+    told = waiting_text(drafted.waiting)
     if isinstance(drafted.outcome, Abstention):
-        return _abstained(stream, frames, gaps, drafted.outcome)
+        if told:
+            waiting = _waiting(stream, frames, gaps, drafted.outcome, told)
+            return replace(waiting, context=drafted.context)
+        return replace(_abstained(stream, frames, gaps, drafted.outcome), context=drafted.context)
     said = "" if drafted.trimmed is None else drafted.trimmed.sentence()
-    return _answered(stream, frames, gaps, drafted.outcome, scope, drafted.provenance, said=said)
+    if told:
+        said = f"{said} {told}" if said else told
+    answered = _answered(
+        stream,
+        frames,
+        gaps,
+        drafted.outcome,
+        scope,
+        drafted.provenance,
+        said=said,
+        kept=not told,
+    )
+    return replace(answered, context=drafted.context)
 
 
 def _withheld_or_absent(
@@ -1012,6 +1051,26 @@ def with_evidence_notice(text: str, provenance: Provenance) -> str:
     """The answer, followed by what it says about its evidence: old, or none at all."""
     said = UNCITED_TEXT if provenance.is_empty else provenance.notice()
     return f"{text} {said}" if said else text
+
+
+def _waiting(
+    stream: AnswerStream,
+    frames: list[str],
+    gaps: Sequence[Gap],
+    declined: Abstention,
+    told: str,
+) -> Answered:
+    """Close the stream with what the asker's own run held for a person, in the product's words.
+
+    The run read nothing it could answer from, so the abstention is still what the audit records,
+    and it is not what the asker is told: they are told what they asked to have prepared is
+    waiting. No text is kept for the cache, so nobody else is ever handed it. See
+    `brain.gate.model_lane.AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES`.
+    """
+    return Answered(
+        frames=(*frames, stream.text(_with_gaps(told, gaps)), stream.done()),
+        abstention=declined,
+    )
 
 
 def _abstained(

@@ -8,7 +8,7 @@ the asker holding nothing apart from an absence (M28.2.1), and a projection that
 persona every tool (M28.2.3). Each fails with its own sentence, and every table the checks write
 holds afterwards what it held before.
 
-Task ids: M12.2.7, M5.7.3, M28.2.1, M28.2.3
+Task ids: M12.2.7, M5.7.3, M28.2.1, M28.2.3, M13.2.5
 """
 
 from __future__ import annotations
@@ -30,10 +30,12 @@ MODULE = "brain.ops.acceptance_checks_skill_pins"
 SKILL = "each_agent_runs_the_skill_version_it_is_pinned_to"
 MODEL = "an_agent_s_pinned_model_is_tried_first_with_its_level_behind"
 CANARIES = "three_personas_are_told_one_absence_and_offered_their_own_tools"
+KEYED = "an_assigned_skill_moves_the_key_an_answer_is_cached_under"
 
 #: Each check, in page order, and the leaves it proves.
 LEAVES = {
     SKILL: ("M12.2.7",),
+    KEYED: ("M13.2.5",),
     MODEL: ("M5.7.3",),
     CANARIES: ("M28.2.1", "M28.2.3"),
 }
@@ -71,10 +73,10 @@ def test_the_skill_pin_checks_are_listed_in_their_page_order() -> None:
 
 
 @pytest.mark.needs_db
-def test_on_a_real_database_the_three_checks_pass_and_leave_nothing(
+def test_on_a_real_database_the_four_checks_pass_and_leave_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """**The three checks as the worker runs them on a hosted install, against PostgreSQL at
+    """**The four checks as the worker runs them on a hosted install, against PostgreSQL at
     head.** Each passes, and every table a check writes holds afterwards what it held before.
     Delete this and a version lock, a model pin or a canary could stop working on the owner's
     install with nothing there saying so."""
@@ -207,4 +209,29 @@ def test_a_projection_that_offers_every_tool_fails_the_canaries(
     assert outcome == (
         FAILED,
         "a persona was offered a tool its grants do not admit, or not one",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_roster_keyed_on_the_record_alone_fails_the_key_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M13.2.5: the roster hashes the agent record and ignores the install's stored hash, which is
+    how `/answer` keyed its cache until 2026-10-06. Assigning a skill then leaves the key where it
+    was and the check fails. Delete this and a key that cannot see a skill could pass the
+    install."""
+    from brain.gate import roster
+
+    original = roster.setup_of
+
+    def record_only(record: Any, tool_names: Any, install_hash: Any = None) -> Any:
+        del install_hash
+        return original(record, tool_names)
+
+    monkeypatch.setattr(roster, "setup_of", record_only)
+    with at_head("brain_acceptance_skill_pins_keyed") as url:
+        outcome = run_one(url, KEYED)
+    assert outcome == (
+        FAILED,
+        "assigning a skill left the key an answer is cached under where it was",
     )

@@ -62,6 +62,26 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         total: null,
         truncated: false,
       },
+      // The head's budget against time and what the department knows, each drawn as sent.
+      "/api/v1/console/department/pace": {
+        department: UNBROKEN,
+        paces: [
+          {
+            period: "month",
+            started_at: "2019-03-01T00:00:00Z",
+            ends_at: "2019-04-01T00:00:00Z",
+            spent_fraction: 0.25,
+            elapsed_fraction: 0.4,
+            ahead: false,
+          },
+        ],
+        not_recorded: [],
+      },
+      "/api/v1/console/department/coverage": {
+        department: UNBROKEN,
+        areas: [{ area: UNBROKEN, items: 3, by_freshness: { live: 1, ageing: 1, stale: 0, unstated: 1 } }],
+        unread: "",
+      },
       "/api/v1/report/questions": {
         start: "2019-02-26T09:00:00Z",
         end: "2019-03-05T09:00:00Z",

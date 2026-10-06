@@ -96,11 +96,11 @@ the ambiguous ones, and neither is reachable through a module that owns a socket
 
 **It is called now, which it was not when this docstring was written.** `brain.gate.answer`
 calls `respond` for `POST /api/v1/answer`, over the readers `brain.api_routes.row_readers`
-builds from the registry and the rules `brain.gate.rule_store.load_rules` reads, and
-`brain.knowledge.row_store.SessionRowSource` implements the row source against the
-application's pool. The first thing that composition found here was the keying described under
-`entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached with the seeded
-demo.
+builds from the registry and the rules `brain.gate.rule_store.rules_for_asker` reads on every
+question (M6.5.1), and `brain.knowledge.row_store.SessionRowSource` implements the row source
+against the application's pool. The first thing that composition found here was the keying
+described under `entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached
+with the seeded demo.
 
 **Every read `respond` makes is marked as the fast lane's (M6.1.3)**, inside
 `brain.knowledge.rows.read_as_the_fast_lane`, and `SessionRowSource` reads a marked read as

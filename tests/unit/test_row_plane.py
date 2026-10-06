@@ -507,6 +507,44 @@ def test_a_filter_on_a_column_that_does_not_exist_is_answered_the_same_way() -> 
     assert "FALSE" in rendered(query)
 
 
+def test_a_record_id_is_one_more_bound_condition_beside_the_scope_not_instead_of_it() -> None:
+    """**`A_RECORD_ID_ONLY_NARROWS`, the positive half.** A request naming one record adds
+    `source_id` equal to its id as a bound parameter, and the tool's pin, the retired-row rule and
+    the caller's scope are all still in the statement. Delete this and an agent run's read of the
+    record a write is about reads every record, or reads the one it asked for without the
+    reader's scope."""
+    scoped = ents(*SEES_SUBJECT, scope=Scope(clauses=(Clause(field="web", op=Op.EQ, value="x"),)))
+    plain = compile_row_query(TICKET_TOOL, RowRequest(), entitlement=scoped)
+    one = compile_row_query(TICKET_TOOL, RowRequest(record_id="4242"), entitlement=scoped)
+
+    assert "source_id = " not in rendered(plain)
+    assert "source_id = '4242'" in rendered(one)
+    assert "4242" in bound(one).values() and "4242" not in parameterised(one)
+    for kept in ("entity = 'ticket'", "source = 'freshdesk'", "deleted_at IS NULL", "web"):
+        assert kept in rendered(one)
+    assert one.certainly_empty is False
+
+
+def test_a_record_id_never_reaches_a_record_the_reader_has_no_grant_to() -> None:
+    """The refusal sibling: a reader holding no read of the entity asks for one record by id and the
+    statement cannot return a row, so the id is no way past the grant. Delete this and an id becomes
+    a way to ask whether a record exists to somebody who may read none of them."""
+    query = compile_row_query(
+        TICKET_TOOL, RowRequest(record_id="4242"), entitlement=ents("read:client.name")
+    )
+    assert query.certainly_empty is True
+
+
+def test_a_record_id_is_one_non_empty_bounded_string() -> None:
+    """An empty id, an id past the width of the column and a non-string are refused before any
+    statement exists; a plain id is not. Delete this and an id can be any value a model sends."""
+    for bad in ("", "x" * 129, 5, ["1"]):
+        with pytest.raises(ValidationError):
+            RowRequest(record_id=bad)  # type: ignore[arg-type]
+    assert RowRequest(record_id="x" * 128).record_id == "x" * 128
+    assert RowRequest().record_id is None
+
+
 def test_a_request_cannot_ask_for_an_unbounded_number_of_rows() -> None:
     """One question must not become a table scan on a database the whole company shares.
     Deleting the bound lets a model ask for every row of a projected entity, and the cost

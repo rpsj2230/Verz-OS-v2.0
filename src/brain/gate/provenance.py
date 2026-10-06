@@ -380,10 +380,17 @@ class DocumentCitation:
     anchor: Anchor
     source: str = ""
     fetched_at: str = ""
+    #: The passage's one-based place in the list the person was shown, or nought when it was not
+    #: placed. The page following a citation sends it back for the retrieval log (M15.3.4); it is
+    #: a place in the reader's own list, never a count of anything they were not shown.
+    position: int = 0
 
     def __post_init__(self) -> None:
         if not _REFERENCE_RE.match(self.document_id):
             msg = f"document id {self.document_id!r} is not a reference"
+            raise ValueError(msg)
+        if self.position < 0:
+            msg = f"position {self.position} is not a place in a list"
             raise ValueError(msg)
 
     def describe(self) -> str:
@@ -591,6 +598,7 @@ class Evidence:
                 title=cited.title,
                 where=cited.anchor.describe(),
                 anchor=cited.anchor.fragment(),
+                position=str(cited.position) if cited.position else "",
             )
         elif isinstance(cited, Citation):
             fields.update(

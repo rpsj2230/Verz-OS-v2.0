@@ -103,6 +103,8 @@ class Console:
     kid: str
     _subjects: dict[str, str] = field(default_factory=dict)
     _sessions: int = 0
+    #: The request the last `asked` authenticated, where `asking` left what a refusal is told.
+    last: Request | None = None
 
     def request(self, bearer: str = "") -> Request:
         """A request on the console's application, carrying `bearer` when given one."""
@@ -183,8 +185,10 @@ class Console:
                 session=session or self.session(),
                 amr=WITH_AN_AUTHENTICATOR if strong else PASSWORD_ONLY,
             )
+        request = self.request(bearer)
+        self.last = request
         with structlog.contextvars.bound_contextvars(trace_id=self.h.trace_id):
-            return await asking(self.request(bearer))
+            return await asking(request)
 
     def as_route(self) -> Any:
         """Bind the run's trace id for a route call, as the trace middleware does for a request."""
@@ -222,6 +226,7 @@ async def console(h: Harness) -> Console:
     from brain.identity.keycloak_tokens import jwks_url_for, keycloak_authority
     from brain.identity.principal_directory import StoredDirectory
     from brain.identity.roles import IdentityError
+    from brain.identity.sign_in_binding import sign_in_bindings
     from brain.install import InstallError, value_of
 
     try:
@@ -260,6 +265,7 @@ async def console(h: Harness) -> Console:
     app = FastAPI()
     app.state.settings = h.settings
     app.state.db_sessions = h.sessions
+    app.state.sign_in_bindings = sign_in_bindings(h.sessions)
     app.state.gate = GateWiring(
         authority=authority,
         versions=PostgresVersionSource(h.sessions),

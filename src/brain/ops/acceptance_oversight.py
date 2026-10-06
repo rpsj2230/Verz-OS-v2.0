@@ -267,8 +267,11 @@ async def repeated_refusals_raise_a_denial_notice(h: Harness) -> None:
 
 
 # -------------------------------------------------------------- M1.8.3 a head's audit
+# M33.2.1.2, a department head's view of their department's activity, is this same reading: the
+# Activity screen's own route, narrowed by the staff sync's rewrite to the people the roster
+# places in the head's department. A second check would prove it twice, so it is named here.
 @check(
-    leaves=("M1.8.3",),
+    leaves=("M1.8.3", "M33.2.1.2"),
     sentence=(
         "The head of acceptance_a, given audit reads by the staff sync's own rewrite, reads the "
         "entries of the people the roster places there and nobody else's; a person joining is "

@@ -121,7 +121,7 @@ from typing import Final
 
 from brain.agents.model import AgentRecord, entitlement_ceiling
 from brain.audit.view import DEFAULT_PAGE_SIZE, AuditFilter, AuditPage, AuditView
-from brain.console.operate import CoverageRow, coverage
+from brain.console.operate import CoverageRow, Covered, coverage
 from brain.console.reach_view import OPERATION_EFFECT, Operation, PromotionEvidence, may_raise
 from brain.console.screens import screen
 from brain.console.spend_view import Pace, pace
@@ -130,13 +130,13 @@ from brain.core.scope import Scope
 from brain.core.scope_sql import scope_narrows
 from brain.gate.injection import AutonomyTier
 from brain.gate.leash import LeashEntry
+from brain.gate.provenance import DOCUMENT_HORIZON
 from brain.identity.lifecycle import Adoption
 from brain.identity.packs import SubjectGrant
 from brain.identity.roles import DEPUTY_MAX, RoleGrant, appoint_deputy
 from brain.identity.staff_sync import GRANT_LIFETIME
 from brain.identity.staff_sync import due_at as next_read_due
 from brain.identity.staff_sync import is_due as read_is_due
-from brain.knowledge.item import KnowledgeItem
 from brain.ops.budgets import Allowance, BudgetLevel
 from brain.tools.registry import rung_ceiling
 
@@ -786,9 +786,20 @@ HEADING_A_DEPARTMENT_IS_NOT_THE_SAME_AS_READING_IT: Final = (
 )
 
 
+#: Why a department's coverage judges freshness on the document horizon and not the default.
+A_DOCUMENT_AGES_IN_MONTHS_AND_NOT_IN_MINUTES: Final = (
+    "operate.coverage defaults to the row horizon, live for fifteen minutes and stale after a "
+    "day, which is right for a figure read from a system at question time. A document's "
+    "verification is when somebody vouched for its words, and words age in months: provenance."
+    "DOCUMENT_HORIZON is live for a quarter and stale after a year. Judged on the row horizon, "
+    "a department whose every document was checked last week reads as wholly stale, and a gap "
+    "report that is always red is one nobody reads."
+)
+
+
 def department_coverage(
     department: str,
-    items: Sequence[KnowledgeItem],
+    items: Sequence[Covered],
     entitlement: EntitlementSet,
     *,
     headed: Sequence[str],
@@ -818,6 +829,11 @@ def department_coverage(
     Both narrowings still apply. A head sees their own department's areas, and within them
     only what their own grant reaches, because `coverage` asks that second question and this
     module does not repeat it.
+
+    **Freshness is judged on the document horizon**, `brain.gate.provenance.DOCUMENT_HORIZON`.
+    `coverage` defaults to the row horizon, under which a document verified yesterday is stale,
+    and the first route to serve this page would have shown a department whose every document
+    was checked last week as wholly stale. See `A_DOCUMENT_AGES_IN_MONTHS_AND_NOT_IN_MINUTES`.
     """
     if not department.strip():
         msg = "a department coverage report needs a department; over none it is the company's"
@@ -829,6 +845,7 @@ def department_coverage(
         entitlement,
         areas=tuple(areas_of.get(department, ())),
         now=now,
+        horizon=DOCUMENT_HORIZON,
     )
 
 

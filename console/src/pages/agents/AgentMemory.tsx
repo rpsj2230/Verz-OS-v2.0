@@ -12,7 +12,12 @@
  * correction replaces what it says. The undo of an automatic change is the Learning screen's own
  * route, offered on the rows the API marked, and confirmed the same way.
  *
- * Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.4
+ * **Promote is offered on a learned rule only where the API said so** (M39.4.2.3): to a reader who
+ * may promote it where it would answer, with how many separate conversations would have used it.
+ * The press is confirmed, and its answer is drawn as the route said it: promoted, waiting for a
+ * second person, or why not.
+ *
+ * Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.3, M39.4.2.4
  */
 
 import { Brain } from "lucide-react";
@@ -33,6 +38,8 @@ import {
   agentMemoryApiPath,
   memoryDeletionApiPath,
   memoryEditApiPath,
+  PROMOTION_STATE_WORDS,
+  promotionApiPath,
   readAgentMemory,
   type AgentMemory as Memory,
   type MemoryItem,
@@ -52,7 +59,24 @@ export const LOADING_MEMORY = "Loading what this agent remembers.";
 type Asking =
   | { readonly kind: "delete"; readonly item: MemoryItem }
   | { readonly kind: "edit"; readonly item: MemoryItem; readonly statement: string }
-  | { readonly kind: "undo"; readonly memoryId: string; readonly change: string };
+  | { readonly kind: "undo"; readonly memoryId: string; readonly change: string }
+  | { readonly kind: "promote"; readonly memoryId: string; readonly change: string };
+
+export const PROMOTE = "Promote";
+export const PROMOTE_QUESTION = "Promote this rule?";
+export const PROMOTE_CONSEQUENCE =
+  "From the next question it answers in its department with no model call, and the promotion is on the audit log. A rule that answers with money or a confidential column waits for a second person.";
+
+/** How many separate conversations would have used a rule, in words. */
+export function agreeingWords(count: number): string {
+  return count === 1 ? "1 separate conversation would have used it" : `${count} separate conversations would have used it`;
+}
+
+/** What a press came to, as the route said it, or null for an answer that is not one. */
+export function pressedWords(payload: unknown): string | null {
+  const body = typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : {};
+  return typeof body["said"] === "string" && body["said"] !== "" ? body["said"] : null;
+}
 
 function Confidence({ value }: { readonly value: number }) {
   return <span className="font-mono text-[11px] text-dim">{`${String(Math.round(value * 100))}% sure`}</span>;
@@ -216,6 +240,13 @@ function Tiers({ memory, onAsk }: { readonly memory: Memory; readonly onAsk: (as
                 <span className="text-ink">{changeWords(one.change)}</span>
                 <span className="text-dim">{one.evidence.length === 0 ? "no evidence yet" : `noticed: ${one.evidence.join(", ")}`}</span>
                 <span className="text-dim">{one.promoteReady ? "ready to promote" : "not yet agreed by separate conversations"}</span>
+                {one.state === undefined ? null : <span className="text-dim">{PROMOTION_STATE_WORDS[one.state] ?? one.state}</span>}
+                {one.agreeing === undefined ? null : <span className="text-dim">{agreeingWords(one.agreeing)}</span>}
+                {one.promoteOffered ? (
+                  <Button className="ml-auto" variant="ghost" size="xs" onClick={() => onAsk({ kind: "promote", memoryId: one.memoryId, change: one.change })}>
+                    {PROMOTE}
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -246,6 +277,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const [told, setTold] = useState<string | null>(null);
   const onAsk = useCallback((next: Asking) => {
     setAsking(next);
   }, []);
@@ -257,10 +289,13 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
         ? await request<unknown>(memoryDeletionApiPath(agentId, one.item.memoryId), { method: "POST" })
         : one.kind === "edit"
           ? await request<unknown>(memoryEditApiPath(agentId, one.item.memoryId), { method: "POST", body: { statement: one.statement } })
-          : await request<unknown>(UNDO_API_PATH, { method: "POST", body: undoBody(one.memoryId) });
+          : one.kind === "promote"
+            ? await request<unknown>(promotionApiPath(one.memoryId), { method: "POST" })
+            : await request<unknown>(UNDO_API_PATH, { method: "POST", body: undoBody(one.memoryId) });
     setBusy(false);
     setAsking(null);
     setSaid(result.ok ? null : result.failure.message);
+    setTold(result.ok && one.kind === "promote" ? pressedWords(result.data) : null);
     setVersion((count) => count + 1);
   };
 
@@ -276,6 +311,11 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
       {said === null ? null : (
         <p role="alert" className="m-0 text-[12.5px] text-crit">
           {said}
+        </p>
+      )}
+      {told === null ? null : (
+        <p role="status" className="m-0 text-[12.5px] text-ink">
+          {told}
         </p>
       )}
       <div className="[display:grid] min-w-0 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -304,18 +344,30 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
       </div>
       <ConfirmDialog
         open={asking !== null}
-        question={asking === null ? "" : asking.kind === "delete" ? "Delete this memory?" : asking.kind === "edit" ? "Save this correction?" : `Undo ${changeWords(asking.change).toLowerCase()}?`}
+        question={
+          asking === null
+            ? ""
+            : asking.kind === "delete"
+              ? "Delete this memory?"
+              : asking.kind === "edit"
+                ? "Save this correction?"
+                : asking.kind === "promote"
+                  ? PROMOTE_QUESTION
+                  : `Undo ${changeWords(asking.change).toLowerCase()}?`
+        }
         consequence={
           asking?.kind === "delete"
             ? "It stops being recalled for everybody from now on. It stays on the record, and the delete is on the audit log."
             : asking?.kind === "edit"
               ? "The corrected words replace what it said from now on. The earlier words stay in the history, and the change is on the audit log."
-              : "The change stops taking effect from now on, and the undo is on the audit log."
+              : asking?.kind === "promote"
+                ? PROMOTE_CONSEQUENCE
+                : "The change stops taking effect from now on, and the undo is on the audit log."
         }
         details={asking?.kind === "edit" ? <p className="m-0 text-[13px] text-ink">{asking.statement}</p> : undefined}
-        confirmLabel={asking?.kind === "delete" ? "Delete" : asking?.kind === "edit" ? "Save correction" : "Undo"}
+        confirmLabel={asking?.kind === "delete" ? "Delete" : asking?.kind === "edit" ? "Save correction" : asking?.kind === "promote" ? PROMOTE : "Undo"}
         cancelLabel="Keep it"
-        danger={asking?.kind !== "edit"}
+        danger={asking?.kind !== "edit" && asking?.kind !== "promote"}
         busy={busy}
         onConfirm={() => {
           if (asking !== null) {

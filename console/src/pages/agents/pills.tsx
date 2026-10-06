@@ -7,7 +7,7 @@
  * the plain tone, which is `ui/Status.tsx`' rule: inventing a meaning for an unknown state is the
  * guess that fails in the wrong direction.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M13.4.2
  */
 
 import { cn } from "../../lib/utils";
@@ -54,5 +54,21 @@ export function LeashPill({ rung, upTo = false }: { readonly rung: string; reado
     </span>
   ) : (
     <span data-slot="leash-pill">{word}</span>
+  );
+}
+
+/**
+ * A newer version of the agent's template is waiting and nobody has said no to it (M13.4.2). Drawn
+ * only for `available`: a version somebody turned away is not a badge, which is how a decline stops
+ * the page nagging about the decision it was told not to nag about.
+ */
+export function UpgradePill({ version }: { readonly version: number }) {
+  return (
+    <span
+      data-slot="upgrade-pill"
+      className="inline-block rounded-[2px] bg-warn-wash px-1.5 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.03em] text-warn"
+    >
+      {`Version ${String(version)} available`}
+    </span>
   );
 }

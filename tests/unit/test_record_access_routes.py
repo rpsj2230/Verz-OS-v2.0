@@ -5,7 +5,7 @@ over a row source that honours the asker's id filter and nothing else. The calle
 therefore applied by the redactor, the second enforcement point the records route relies on, so
 a person is counted as seeing a record only when both points would show it to them.
 
-Task ids: M1.9.1
+Task ids: M1.9.1, M13.7.6
 """
 
 from __future__ import annotations
@@ -61,6 +61,9 @@ PRICE_READS = (
 )
 
 
+TICKET_READS = ("read:ticket", "read:ticket.subject")
+
+
 def _grants(values: Sequence[str], scope: Scope) -> tuple[Grant, ...]:
     return tuple(Grant(capability=Capability(value=one), scope=scope) for one in values)
 
@@ -68,8 +71,12 @@ def _grants(values: Sequence[str], scope: Scope) -> tuple[Grant, ...]:
 PEOPLE_READ = ("read:grant", plane_capability(Plane.CONFIGURATION).value)
 
 GRANTS: dict[str, tuple[Grant, ...]] = {
-    # Sees both rows and may open the People screen everywhere.
-    "u_admin": (*_grants(PRICE_READS, WHOLE), *_grants(PEOPLE_READ, WHOLE)),
+    # Sees both rows and may open the People screen everywhere, and reads the helpdesk's tickets.
+    "u_admin": (
+        *_grants(PRICE_READS, WHOLE),
+        *_grants(PEOPLE_READ, WHOLE),
+        *_grants(TICKET_READS, WHOLE),
+    ),
     # Sees both rows and may not open the People screen.
     "u_wide": _grants(PRICE_READS, WHOLE),
     "u_narrow": _grants(PRICE_READS, WHOLE),
@@ -218,3 +225,52 @@ def test_the_answer_carries_no_count_of_anybody_withheld(client: TestClient) -> 
     """Delete this and a total beside a narrowed list is the subtraction CLAUDE.md forbids."""
     body = who_sees(client, "u_elsewhere", WEB).json()
     assert set(body) == {"people", "truncated"}
+
+
+class TicketRows:
+    """One helpdesk ticket for every statement, whatever it names."""
+
+    async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+        del query
+        return [{"entity": "ticket", "id": "4242", "subject": "Refund"}]
+
+
+@pytest.fixture
+def ticket_client() -> Iterator[TestClient]:
+    app: FastAPI = create_app(Settings(env="development"))
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = GateWiring(
+            authority=TokenAuthority(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                keys=Keys(),
+                verify=verifier,
+                directory=Directory(),
+            ),
+            versions=Versions(),
+            store=Store(),
+            cache=NoCache(),
+        )
+        app.state.tools = build_registry(source=SOURCE, records=TicketRows())
+        app.state.db_sessions = async_sessionmaker(class_=Session)
+        yield c
+
+
+def test_an_entity_a_connector_also_writes_is_still_one_row_tool_to_this_route(
+    ticket_client: TestClient,
+) -> None:
+    """**M13.7.6.** The helpdesk's reply is registered on the same entity as its ticket row tool, so
+    the entity has two tools, and the route that finds the one tool that reads an entity chooses the
+    row tool and does not read an entity with two tools as one it cannot name. Delete this and
+    registering a connector's write turns every record view of its entity into a refusal."""
+    registry = ticket_client.app.state.tools  # type: ignore[attr-defined]
+    assert len([d for d in registry.definitions() if d.entity == "ticket"]) == 2
+
+    answer = ticket_client.get(
+        f"{API_PREFIX}/records/ticket/access",
+        headers={"authorization": f"Bearer {token_for('u_admin', claims=SECOND_FACTOR)}"},
+        params=[(FILTER_PARAM, "subject:Refund")],
+    )
+
+    assert answer.status_code == 200, answer.text
+    assert ids(answer) == ["u_admin"]
