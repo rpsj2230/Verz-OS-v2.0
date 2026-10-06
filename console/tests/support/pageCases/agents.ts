@@ -261,6 +261,21 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         may_change_tools: true,
         may_change_connectors: true,
       },
+      // Where it answers, for its steward: `LifecycleView`, whose widest value is a channel's name.
+      "/api/v1/agents/quote-helper/lifecycle": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        state: "enabled",
+        owner_id: UNBROKEN,
+        effective_hash: "a".repeat(64),
+        may_change: false,
+        may_duplicate: false,
+        duplicate_unavailable: null,
+        channels: ["console"],
+        channel_choices: [{ name: "console", label: UNBROKEN }],
+        channels_note: UNBROKEN,
+        may_change_channels: true,
+      },
     },
   },
   // New agent: start from scratch, or from a template the gallery offers.

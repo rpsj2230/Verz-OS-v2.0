@@ -13,16 +13,18 @@
  * agent on have routes and work (the skill on the Skills page, where an approved skill is chosen, and
  * the hand-over through the page's confirmed lifecycle act); adding a source and changing permissions
  * are changes to the agent's manifest, so each starts a draft of the agent through the page's
- * confirmed Edit as a draft. A rung is changed, and supervision pinned and reviewed, in the leash
- * block (`AgentLeash.tsx`) for a holder of the leash role. Choosing channels, changing who can find
- * it and browser use have no route and are `UnavailableAction`s with `agentActions.ts`' sentences.
- * Computer use is a sentence, because the product has nothing behind a switch.
+ * confirmed Edit as a draft. Where the agent answers is its own card (`AgentChannels.tsx`), switched
+ * by its steward or an administrator through a confirmation. A rung is changed, and supervision
+ * pinned and reviewed, in the leash block (`AgentLeash.tsx`) for a holder of the leash role.
+ * Changing who can find it and browser use have no route and are `UnavailableAction`s with
+ * `agentActions.ts`' sentences. Computer use is a sentence, because the product has nothing behind a
+ * switch.
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
  * principal ids and the template's id are how the system names them; the cards show names and
  * words, and `kit/parts.tsx`' `Advanced` holds the rest for a support request.
  *
- * Task ids: M27.10.2, M5.7.3, M27.11.6
+ * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -51,6 +53,8 @@ import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, UNAVAILABLE, WORKS
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
 import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
+import { AgentChannels } from "./AgentChannels";
+import { WHERE_IT_ANSWERS } from "./ChannelChoices";
 import { LeashPill } from "./pills";
 
 export const CAPABILITIES_HEADING = "Capabilities";
@@ -227,8 +231,7 @@ function Capabilities({
         <CapabilityRow
           icon={<Radio aria-hidden />}
           label="Channels"
-          add={<UnavailableAction size="icon-sm" icon={<span aria-hidden>+</span>} label="Choose where this agent answers" reason={UNAVAILABLE.chatGroup.reason} />}
-          note={<Note>The chats and email that could carry this agent's answers to you, not the ones switched on.</Note>}
+          note={<Note>The chats and email that could carry this agent's answers to you. The ones switched on are under {WHERE_IT_ANSWERS}.</Note>}
         >
           {channels.map((one) => (
             <Chip key={one.channel} mono>
@@ -540,6 +543,7 @@ export function AgentProfile({
             onDetailsChanged={onDetailsChanged}
             onEditDraft={onEditDraft}
           />
+          <AgentChannels agentId={agent.agentId} />
           {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
           <Availability facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
           <Learning />
