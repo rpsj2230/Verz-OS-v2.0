@@ -161,6 +161,7 @@ MIGRATION_RETRIEVAL_EVENT = VERSIONS / "0193_retrieval_event.py"
 MIGRATION_ARTIFACT_CHANGE = VERSIONS / "0194_artifact_change_and_client.py"
 MIGRATION_LEASH = VERSIONS / "0195_leash_changes_and_supervision.py"
 MIGRATION_TOOL_ATTACHMENT = VERSIONS / "0196_tool_attachments.py"
+MIGRATION_GROUP_INSTALL = VERSIONS / "0205_group_install.py"
 MIGRATION_SIGNAL_LOG = VERSIONS / "0197_signal_log.py"
 MIGRATION_LEARNING_CANDIDATES = VERSIONS / "0198_learning_candidates.py"
 MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
@@ -472,6 +473,8 @@ LEASH_TABLES: tuple[str, ...] = (
 )
 #: And the one 0196 adds: a tool attached to an agent, or detached.
 TOOL_ATTACHMENT_TABLES: tuple[str, ...] = ("agent.tool_attachment",)
+#: And the two 0205 adds: the rooms the bot is in, and the agent installed into each.
+GROUP_INSTALL_TABLES: tuple[str, ...] = ("ops.channel_room", "agent.group_install")
 #: And the one 0197 adds: what was noticed about each answer, by id and never in words.
 SIGNAL_LOG_TABLES: tuple[str, ...] = ("mem.signal",)
 #: And the two 0198 adds: a proposed fix to a document, and every correction that proposed it.
@@ -567,6 +570,7 @@ ALL_TABLES = (
     + SIGNAL_LOG_TABLES
     + LEARNING_CANDIDATE_TABLES
     + LEARNED_RULE_TABLES
+    + GROUP_INSTALL_TABLES
 )
 
 
@@ -1423,6 +1427,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert leash.TABLES == LEASH_TABLES
     tool_attachment = migration_module(MIGRATION_TOOL_ATTACHMENT)
     assert tool_attachment.TABLES == TOOL_ATTACHMENT_TABLES
+    group_install = migration_module(MIGRATION_GROUP_INSTALL)
+    assert group_install.TABLES == GROUP_INSTALL_TABLES
     signal_log = migration_module(MIGRATION_SIGNAL_LOG)
     assert signal_log.TABLES == SIGNAL_LOG_TABLES
     learning_candidates = migration_module(MIGRATION_LEARNING_CANDIDATES)
@@ -1540,6 +1546,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(signal_log.TABLES)
         + tuple(learning_candidates.TABLES)
         + tuple(learned_rules.TABLES)
+        + tuple(group_install.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1632,6 +1639,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(signal_log.TABLES),
         set(learning_candidates.TABLES),
         set(learned_rules.TABLES),
+        set(group_install.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

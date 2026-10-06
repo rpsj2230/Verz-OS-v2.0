@@ -92,6 +92,7 @@ from brain.tables.gate import (
     ScopeRow,
     TeamRow,
 )
+from brain.tables.group_install import ChannelRoomRow, GroupInstallRow
 from brain.tables.group_role_rule import GroupRoleRuleRow
 from brain.tables.halt import HaltRow
 from brain.tables.identity import (
@@ -495,6 +496,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # occurrence at the learned rule it would have used.
     "mem.learned_rule",
     "mem.rule_occurrence",
+    # 0205_group_install. A room and an install each point at nothing.
+    "ops.channel_room",
+    "agent.group_install",
 )
 
 __all__ = [
@@ -531,6 +535,7 @@ __all__ = [
     "ChainDepthAlertRow",
     "ChannelDeliveryRow",
     "ChannelEventRow",
+    "ChannelRoomRow",
     "ChannelRow",
     "ClassifiedRecordRow",
     "ClassifiedTableRow",
@@ -560,6 +565,7 @@ __all__ = [
     "FieldPolicyRow",
     "GoldenQuestionRow",
     "GrantsVersionRow",
+    "GroupInstallRow",
     "GroupRoleRuleRow",
     "HaltRow",
     "KnowledgeItemRow",
