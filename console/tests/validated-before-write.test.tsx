@@ -52,6 +52,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/pages/audit/VerifyPage.tsx": [{ pattern: "/audit/verify", index: 0, writes: true }],
   // The one form names a trace and says why; sending it writes the row recording who read it.
   "src/pages/audit/TracePage.tsx": [{ pattern: "/audit/trace", index: 0, writes: true }],
+  // One department is stopped on the case, so its resume form comes first and the stop form second.
+  // A blank resume says it needs a reason; a blank stop says which one to stop.
+  "src/pages/operations/StopPage.tsx": [
+    { pattern: "/stop", index: 0, writes: true },
+    { pattern: "/stop", index: 1, writes: true },
+  ],
   // One column's editor (a rule, or a mark for an uploaded table), the one form on a table's page;
   // and on the module's first page, the naming form and then the upload.
   "src/pages/classification/ClassificationPage.tsx": [

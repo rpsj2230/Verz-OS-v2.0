@@ -124,6 +124,7 @@ describe("the menu a department is given", () => {
       "/library",
       "/learning",
       "/runs",
+      "/stop",
       "/audit",
       "/questions",
       "/usage",
@@ -182,6 +183,7 @@ describe("reading the answer", () => {
       "console",
       "departments",
       "sections",
+      "stop",
     ]);
     expect(backendModelFields("src/brain/navigation_routes.py", "SectionView")).toEqual([
       "group",

@@ -59,7 +59,7 @@ REASON_CHARS: Final = 2000
 router = APIRouter(prefix=API_PREFIX, tags=["halt"])
 
 
-class HaltView(BaseModel):
+class StoppedView(BaseModel):
     """One halt in force, as an administrator who may see it reads it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -82,7 +82,7 @@ class HaltsView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     known: bool
-    halts: list[HaltView]
+    halts: list[StoppedView]
     gaps: list[str]
     not_asked_yet: list[HaltScope]
     may_stop_everything: bool
@@ -123,8 +123,8 @@ _REFUSED: Final[dict[int | str, dict[str, object]]] = {
 }
 
 
-def _view(one: Halt) -> HaltView:
-    return HaltView(
+def _view(one: Halt) -> StoppedView:
+    return StoppedView(
         scope=one.scope,
         target=one.target,
         declared_by=one.declared_by,
@@ -159,8 +159,8 @@ async def halts(request: Request, asked: Asked) -> HaltsView:
     )
 
 
-@router.post(HALTS_PATH, status_code=201, response_model=HaltView, responses=_REFUSED)
-async def stop_now(request: Request, asked: Asked, body: StopAsked) -> HaltView | JSONResponse:
+@router.post(HALTS_PATH, status_code=201, response_model=StoppedView, responses=_REFUSED)
+async def stop_now(request: Request, asked: Asked, body: StopAsked) -> StoppedView | JSONResponse:
     """Stop something at once. No confirmation, and no reason required."""
     _opened(asked)
     if not may_act(asked.reach, body.scope, body.target.strip(), asked.now):

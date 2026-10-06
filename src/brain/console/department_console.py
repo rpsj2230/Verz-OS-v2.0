@@ -416,6 +416,7 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
         entries=(
             _one("Runs and queue", "/runs", "runs"),
             _one("Background jobs", "/jobs"),
+            _one("Stop", "/stop", "halt"),
             Entry(
                 label="Logs and errors",
                 pages=(Page(label="Logs", to="/logs"), Page(label="Errors", to="/errors")),
@@ -506,7 +507,11 @@ DEPARTMENT_NAVIGATION: Final[tuple[Section, ...]] = (
         ),
         _one("Learning and memory", "/learning", "learning"),
     ),
-    department_section(ModuleGroup.OPERATIONS, _one("Runs and queue", "/runs", "runs")),
+    department_section(
+        ModuleGroup.OPERATIONS,
+        _one("Runs and queue", "/runs", "runs"),
+        _one("Stop", "/stop", "halt"),
+    ),
     # Not drawn in SCREEN 2 until item 48 was decided. See
     # `A_HEAD_READS_THEIR_PEOPLES_ACTIVITY_FROM_THEIR_OWN_CONSOLE`.
     department_section(ModuleGroup.GOVERNANCE, _one("Audit log", "/audit", "audit")),
