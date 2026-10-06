@@ -46,7 +46,6 @@ async def _web(h: Harness) -> FastAPI:
     """The state `/answer` and the thread routes read, over the check's transaction, no model."""
     from fastapi import FastAPI
 
-    from brain.gate.rule_store import load_rules
     from brain.knowledge.row_store import SessionRowSource
     from brain.ops.trace_sink import CountingTraceSink
     from brain.tools.startup import build_registry
@@ -58,11 +57,9 @@ async def _web(h: Harness) -> FastAPI:
     state.tools = build_registry(
         source=h.settings.tool_source, records=SessionRowSource(h.sessions)
     )
-    try:
-        state.fast_path_rules = await load_rules(h.sessions)
-    except Exception:
-        # The lifespan's choice for a rule table that cannot be read: an empty rule set.
-        state.fast_path_rules = ()
+    # The answer route reads the rule table itself on every question (M6.5.1), so nothing is
+    # handed to it here: a preloaded copy would be matched beside the live one, twice.
+    state.fast_path_rules = ()
     state.trace_sink = CountingTraceSink()
     return app
 

@@ -537,6 +537,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/classification/:entity",
       "/classification/:entity/:column",
       "/duplicates",
+      "/rules",
       "/artifacts",
     ],
     routes: [
@@ -560,6 +561,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/records/{entity}/access",
       "/api/v1/resolution/review*",
       "/api/v1/resolution/weights*",
+      "/api/v1/rules*",
     ],
     tables: [
       "know.item",

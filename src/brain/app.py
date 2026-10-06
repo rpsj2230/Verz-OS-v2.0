@@ -606,12 +606,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # The answer lane's two remaining pieces, and both are decisions rather than plumbing.
     #
-    # The rules are read once. A rule set fetched per request would put a database round trip
-    # in front of the lane whose entire purpose is answering without one, and refreshing on a
-    # timer would give two answers to one question inside a minute with nothing saying which
-    # rule set produced either. So a rule added or retired takes effect at the next restart,
-    # and the count below is where somebody wondering why their new rule does nothing finds
-    # out. See `rule_store.A_RULE_SET_THAT_CHANGES_MID_FLIGHT_GIVES_TWO_ANSWERS_TO_ONE_QUESTION`.
+    # The rules are not read here. The answer route reads the rule table on every question,
+    # for the asker's department and the whole install's, so a rule an administrator adds
+    # answers the next question rather than the next restart (M6.5.1). See
+    # `rule_store.A_RULE_ANSWERS_FROM_THE_NEXT_QUESTION`. `fast_path_rules` stays, empty, for
+    # the rules a test or a check hands the lane directly.
     #
     # The sink records that a trace happened and drops the payload, because the only
     # destination available today is the application log and a post-redaction payload there is
@@ -724,20 +723,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
-            app.state.fast_path_rules = await load_rules(app.state.db_sessions)
+            # Counted once for the startup log, and never held: what a question is matched
+            # against is read when it is asked. A table that cannot be read is said here too.
+            standing = await load_rules(app.state.db_sessions)
+            log.info("fast path rules standing", rules=len(standing), ids=rule_ids(standing))
         except Exception as exc:
-            # A rule table that cannot be read is an empty rule set, not a dead process. The
-            # lane abstains for every question, which is the same answer it gives when no rule
-            # matches, and the log line says which of the two this is. Refusing to start would
-            # take down `/records` and `/me` as well, over configuration that only one route
-            # reads.
             log.warning("fast path rules unavailable", error=type(exc).__name__)
-    log.info(
-        "fast path rules loaded",
-        rules=len(app.state.fast_path_rules),
-        ids=rule_ids(app.state.fast_path_rules),
-        refreshes="on restart",
-    )
 
     # The gate and the automation route, built only over a database: every store in both reads
     # it, and without one there is nothing a caller could be resolved against. The HTTP client

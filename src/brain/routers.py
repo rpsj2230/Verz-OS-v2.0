@@ -350,6 +350,11 @@ from brain.retention_routes import router as retention_router
 # `asking` dependency, which `api_routes` declares once and this imports.
 from brain.routing_routes import router as routing_router
 
+# Fast-lane rules: a department's administrator lists, adds, tests and retires their own, under
+# the classification grants at the rule's place, live from the next question (M6.5.1). See
+# `brain.rule_routes`.
+from brain.rule_routes import router as rule_router
+
 # Service accounts: an integration registered at its owner's reach, a key shown once, and both
 # taken away, behind `admin:credential`. See `brain.service_account_routes`.
 from brain.service_account_routes import router as service_account_router
