@@ -274,7 +274,7 @@ def test_the_two_newest_runs_are_read_from_a_real_database() -> None:
             sql(
                 url,
                 "INSERT INTO ops.acceptance_result (run_id, commit, occasion, check_name, leaves,"
-                " outcome, reason, started_at, checked_at) VALUES (%s, %s, 'deploy', 'x',"
+                " outcome, reason, started_at, checked_at) VALUES (%s, %s, 'deploy', 'a_check',"
                 " 'M1.1.1', 'passed', NULL, %s, %s)",
                 run,
                 commit,
