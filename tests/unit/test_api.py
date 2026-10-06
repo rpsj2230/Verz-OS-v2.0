@@ -277,6 +277,10 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     `brain.agent_builder_routes` answers every write on a draft with the same body, for the same
     reason: a draft saved since, a publish that is not checked, an agent that moved.
 
+    **Installing an agent into a group chat is another, for its 409** (`brain.agent_group_routes`):
+    a chat that already has an agent, that the bot has left, or a channel the agent does not answer
+    on is the same `NotChangedView`, so the confirmation can say why nothing was installed.
+
     **A decision on the Resolution review screen and promoting its weights are the last, for
     their 409s.** `brain.resolution_routes` answers a pair somebody else decided first, and a fit
     that is no longer the one waiting, with the same `NotChangedView`, so the confirmation can
@@ -294,6 +298,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         REHEARSE_PATH,
         SAVE_PATH,
     )
+    from brain.agent_group_routes import GROUPS_PATH
     from brain.agent_lifecycle_routes import (
         ARCHIVE_PATH,
         CHANNELS_PATH,
@@ -303,6 +308,8 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         INSTALL_PATH,
         TRANSFER_PATH,
     )
+    from brain.agent_upgrade_routes import ACCEPT_PATH as UPGRADE_ACCEPT_PATH
+    from brain.agent_upgrade_routes import DECLINE_PATH as UPGRADE_DECLINE_PATH
     from brain.credential_routes import CREDENTIALS_PATH
     from brain.resolution_routes import DECISION_PATH, PROMOTE_PATH
     from brain.sign_in_routes import SIGN_INS_PATH
@@ -360,6 +367,9 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         },
         (f"{API_PREFIX}{DECISION_PATH}", "409"): "#/components/schemas/NotChangedView",
         (f"{API_PREFIX}{PROMOTE_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{GROUPS_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{UPGRADE_ACCEPT_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{UPGRADE_DECLINE_PATH}", "409"): "#/components/schemas/NotChangedView",
     }
 
     checked = 0

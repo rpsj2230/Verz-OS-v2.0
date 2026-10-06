@@ -178,6 +178,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
       "/api/v1/agents/quote-helper/automations": AGENT_AUTOMATIONS,
+      // The header badge asks whether a newer template version is on offer; this agent is current.
+      "/api/v1/agents/quote-helper/upgrade": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        badge: "current",
+        from_version: 1,
+        conflicts: [],
+        updates: [],
+        nothing: UNBROKEN,
+      },
     },
   },
   // The Profile, the view with the most on it: the capabilities, the permissions, the leash and the
@@ -224,6 +234,28 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         },
       },
       "/api/v1/routing/rungs": MATRIX,
+      // A newer version of the template, with a conflict and the widest values its columns draw
+      // (M13.4.3), so the card is held to a phone.
+      "/api/v1/agents/quote-helper/upgrade": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        badge: "available",
+        from_version: 1,
+        to_version: 2,
+        expected_hash: "a".repeat(64),
+        conflicts: [
+          {
+            path: "persona",
+            where: UNBROKEN,
+            was: UNBROKEN,
+            now: UNBROKEN,
+            local: UNBROKEN,
+            owner: { source: "instance", set_by: UNBROKEN, set_at: "2019-03-04T09:00:00Z" },
+          },
+        ],
+        updates: [{ path: "tier", where: UNBROKEN, was: UNBROKEN, now: UNBROKEN, sealed: true }],
+        accept_unavailable: UNBROKEN,
+      },
       // The capability detail, whose widest values are a source, a projected field, a skill and a
       // predicate value, each a token with nowhere to break.
       "/api/v1/agents/quote-helper/capabilities": {
@@ -260,6 +292,12 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         connectors: [UNBROKEN],
         may_change_tools: true,
         may_change_connectors: true,
+      },
+      // Group chats, for its steward: an install and a chat the bot is in, each value a token.
+      "/api/v1/agents/quote-helper/groups": {
+        agent_id: "quote-helper",
+        installs: [{ id: "g-1", channel: "lark", room_ref: UNBROKEN, name: UNBROKEN, present: false, answering: false, installed_at: "2019-03-04T09:00:00Z" }],
+        rooms: [{ channel: "lark", room_ref: UNBROKEN, name: UNBROKEN }],
       },
       // Where it answers, for its steward: `LifecycleView`, whose widest value is a channel's name.
       "/api/v1/agents/quote-helper/lifecycle": {

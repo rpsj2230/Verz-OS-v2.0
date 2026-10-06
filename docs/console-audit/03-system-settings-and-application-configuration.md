@@ -1,7 +1,7 @@
 ### System settings and application configuration
 
 - **Screens:** `/install`, `/settings`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
-- **Tables:** `ops.setting`, `ops.budget_version`
+- **Tables:** `ops.setting`, `ops.budget_version`, `ops.budget_stop`
 - **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`, `INSTALL_DIGEST_DESTINATION`, `INSTALL_DIGEST_TIME`, `INSTALL_SERVICES`
 - **Measured here:** 15 routes, 1 called by no screen; 8 write routes, 6 with all three proofs; 1 gaps.
 

@@ -38,14 +38,18 @@
  * across one agent's views and holds the Dashboard's period, so a trip to the Profile and back finds
  * the period where it was left and asks nothing again.
  *
+ * **A newer version of the agent's template** (`AgentUpgrade.tsx`) is drawn above the Profile for a
+ * reader the API lets act on the agent, and nothing at all for anybody else or for an agent already on
+ * the newest version.
+ *
  * **The Memory section** (`AgentMemory.tsx`) is at `/agents/{id}/memory` for a reader whose strip
  * holds it, which the API sends for every agent to a reader of the Memory tab. **The Artifacts
  * section** (`AgentArtifacts.tsx`) is at `/agents/{id}/artifacts` on the same terms.
  *
- * Task ids: M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
+ * Task ids: M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6, M13.4.2
  */
 
-import { ChevronDown, IdCard, Info, LayoutDashboard, MessageSquarePlus, Settings } from "lucide-react";
+import { ChevronDown, IdCard, Info, LayoutDashboard, Settings } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
@@ -61,7 +65,6 @@ import {
   Note,
   SectionCard,
   StatCard,
-  UnavailableAction,
   ViewSwitch,
   type DetailView,
 } from "../../components/kit";
@@ -79,7 +82,7 @@ import { agentAutomationsApiPath } from "../agentAutomationsQuery";
 import { agentWorkspaceApiPath, readAgentWorkspace } from "../agentQuery";
 import { AUTOMATIONS_TAB, automationGalleryApiPath } from "../automationGalleryQuery";
 import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
-import { UNAVAILABLE, WORKS_AT } from "./agentActions";
+import { WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
 import { AgentConversations } from "./AgentConversations";
 import { AgentArtifacts } from "./AgentArtifacts";
@@ -88,10 +91,12 @@ import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabili
 import { AgentDashboard, usePeriod } from "./AgentDashboard";
 import { daysSince, readHeaderFacts, readProfile, spendIsRecorded, type HeaderFacts } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
+import { AgentUpgrade, useUpgradeReview } from "./AgentUpgrade";
+import { hasAnOffer } from "./agentUpgradeQuery";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { useDraftStart } from "./DraftStart";
 import { useLifecycleActs } from "./LifecycleActs";
-import { LeashPill, StatePill } from "./pills";
+import { LeashPill, StatePill, UpgradePill } from "./pills";
 import "../../styles/agent-workspace.css";
 
 /** The three views, in the owner's order. The first is where the bare address lands. */
@@ -295,6 +300,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
   }, []);
   const lifecycle = useLifecycleActs(onMoved, agentAddress);
   const drafting = useDraftStart();
+  const upgrade = useUpgradeReview(agentId);
   const [period, setPeriod] = usePeriod();
   const answer = useResource<unknown>(agentWorkspaceApiPath(agentId), agentVersion);
   const workspace = useMemo(() => readAgentWorkspace(answer.data), [answer.data]);
@@ -365,6 +371,9 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
         <>
           {facts.state === undefined ? null : <StatePill state={facts.state} />}
           {facts.leashUpTo === undefined ? null : <LeashPill rung={facts.leashUpTo} upTo />}
+          {hasAnOffer(upgrade.review) && upgrade.review.badge === "available" ? (
+            <UpgradePill version={upgrade.review.toVersion} />
+          ) : null}
         </>
       }
       subline={subline}
@@ -379,12 +388,6 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
               busy={lifecycle.busy || drafting.busy}
             />
           )}
-          <UnavailableAction
-            text="Add to a chat group"
-            label="Add to a chat group"
-            icon={<MessageSquarePlus aria-hidden />}
-            reason={UNAVAILABLE.chatGroup.reason}
-          />
         </>
       }
       figures={
@@ -436,6 +439,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           onAutomationsChanged={onChanged}
         />
       ) : null}
+      {view === "profile" ? <AgentUpgrade agentId={agentId} upgrade={upgrade} onChanged={onMoved} /> : null}
       {view === "profile" ? (
         <AgentProfile
           agent={agent}

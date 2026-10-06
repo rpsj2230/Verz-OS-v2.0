@@ -31,6 +31,16 @@ import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { leashRowId, readHeaderFacts, readProfile } from "../src/pages/agents/agentDetailQuery";
 import { COMPUTER_HEADING, takenOverWords } from "../src/pages/agents/AgentProfile";
 import { ANSWERS_NOWHERE, CHANGE_CHANNELS, CHANNELS_DONE, CHANNELS_QUESTION, SAVE_CHANNELS } from "../src/pages/agents/AgentChannels";
+import {
+  CHOOSE_A_CHAT,
+  GROUP_CHATS,
+  INSTALL_HERE,
+  INSTALL_QUESTION,
+  NO_GROUPS,
+  PAUSED,
+  REMOVE_QUESTION,
+  THE_BOT_LEFT,
+} from "../src/pages/agents/AgentGroups";
 import { WHERE_IT_ANSWERS } from "../src/pages/agents/ChannelChoices";
 import { rungWords } from "../src/pages/agents/agentActions";
 import { VIEWS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
@@ -262,8 +272,12 @@ function agentAnswers(agentId: string, workspace: unknown, extra: Readonly<Recor
 
 async function consoleAt(path: string, answers: Readonly<Record<string, Answer>>): Promise<Mounted> {
   const idp = fakeIdentityProvider({
-    api(url) {
-      const answer = answers[new URL(url, CONSOLE_ORIGIN).pathname];
+    api(url, init) {
+      // A key may name the method (`POST /api/...`) where one path answers a read and a write
+      // differently; a bare path answers every method, as it always has.
+      const pathname = new URL(url, CONSOLE_ORIGIN).pathname;
+      const method = (init?.method ?? "GET").toUpperCase();
+      const answer = answers[`${method} ${pathname}`] ?? answers[pathname];
       if (answer === undefined) {
         return null;
       }
@@ -529,9 +543,9 @@ describe("the Profile", () => {
     // Four since 2026-09-29: adding a source and changing permissions start a draft of the agent
     // now, and a preview as a person is asked of its own route, so none of the three is among these.
     // Since 2026-10-06 choosing where the agent answers is the live card `where the agent answers`
-    // below holds, and a rung is changed in the leash block, so adding it to a group chat and
-    // changing who can find it are what is left.
-    expect(inert.length).toBeGreaterThanOrEqual(2);
+    // below holds, a rung is changed in the leash block, and installing it into a group chat is the
+    // Group chats card (M39.2.4.4), so changing who can find it is what is left.
+    expect(inert.length).toBeGreaterThanOrEqual(1);
     const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
       (one) => one.textContent === "Change permissions",
     );
@@ -957,6 +971,106 @@ async function profileWith(lifecycle: Answer, extra: Readonly<Record<string, Ans
   });
   return mounted;
 }
+
+// ------------------------------------------------------------------------ group chats (M39.2.4.4)
+
+const GROUPS_API = "/api/v1/agents/quote-helper/groups";
+const GROUP_REMOVAL_API = "/api/v1/agents/quote-helper/groups/removal";
+
+/** `AgentGroupsView` on the wire: one install, and one chat the bot is in that it could go into. */
+function groupsWire(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    agent_id: "quote-helper",
+    installs: [
+      { id: "11111111-1111-4111-8111-000000000001", channel: "lark", room_ref: "oc_sales", name: "Sales team", present: true, answering: true, installed_at: "2019-03-04T09:00:00Z" },
+    ],
+    rooms: [{ channel: "lark", room_ref: "oc_pricing", name: "Pricing desk" }],
+    ...overrides,
+  };
+}
+
+function groupPosts(idp: FakeIdp): { readonly path: string; readonly body: unknown }[] {
+  return idp.calls
+    .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith(GROUPS_API))
+    .map((call) => ({ path: new URL(call.url, CONSOLE_ORIGIN).pathname, body: JSON.parse(String(call.init?.body ?? "null")) }));
+}
+
+function groupsCard(container: HTMLElement): HTMLElement | null {
+  const found = [...container.querySelectorAll('[data-slot="section-card"]')].find((card) => card.querySelector("h2")?.textContent === GROUP_CHATS);
+  return (found as HTMLElement | undefined) ?? null;
+}
+
+async function withGroups(groups: Answer, extra: Readonly<Record<string, Answer>> = {}): Promise<{ readonly mounted: Mounted; readonly card: HTMLElement }> {
+  const mounted = await profileWith({ body: lifecycleWire() }, { [GROUPS_API]: groups, ...extra });
+  const card = await waitFor(() => {
+    const found = groupsCard(mounted.container);
+    if (found === null) {
+      throw new Error("no card");
+    }
+    return found;
+  });
+  return { mounted, card };
+}
+
+describe("group chats", () => {
+  test("a chat the bot is in is installed and an install taken out, each through a confirmation that sends the chat it named", async () => {
+    // What breaks if this is deleted: the one live control for M39.2.4.4, or a write sent before the
+    // person agreed to it, or one naming a chat other than the one chosen.
+    const { mounted, card } = await withGroups({ body: groupsWire() }, { [GROUP_REMOVAL_API]: { body: groupsWire({ installs: [] }) } });
+    expect(card.textContent).toContain("Sales team");
+    fireEvent.change(within(card).getByLabelText(CHOOSE_A_CHAT), { target: { value: "lark:oc_pricing" } });
+    fireEvent.click(within(card).getByRole("button", { name: INSTALL_HERE }));
+    const asking = await screen.findByRole("alertdialog", { name: INSTALL_QUESTION("Pricing desk") });
+    expect(groupPosts(mounted.idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(asking).getByRole("button", { name: "Install it" }));
+    });
+    await waitFor(() => {
+      expect(groupPosts(mounted.idp)).toEqual([{ path: GROUPS_API, body: { channel: "lark", room_ref: "oc_pricing" } }]);
+    });
+
+    fireEvent.click(within(groupsCard(mounted.container) as HTMLElement).getByRole("button", { name: "Take this agent out of Sales team" }));
+    const removing = await screen.findByRole("alertdialog", { name: REMOVE_QUESTION("Sales team") });
+    await act(async () => {
+      fireEvent.click(within(removing).getByRole("button", { name: "Take it out" }));
+    });
+    await waitFor(() => {
+      expect(groupPosts(mounted.idp)[1]).toEqual({ path: GROUP_REMOVAL_API, body: { install_id: "11111111-1111-4111-8111-000000000001" } });
+    });
+  });
+
+  test("a reader the groups route refuses is shown no card, and an agent in no chat says how one is offered", async () => {
+    // What breaks if this is deleted: a heading over nothing for somebody who may not install, which
+    // says there are chats they may not see, or an empty card a steward reads as still loading.
+    const refused = await profileWith({ body: lifecycleWire() }, { [GROUPS_API]: { status: 404, body: { message: "No such agent." } } });
+    await waitFor(() => {
+      expect(refused.idp.urls.some((url) => new URL(url, CONSOLE_ORIGIN).pathname === GROUPS_API)).toBe(true);
+    });
+    expect(groupsCard(refused.container)).toBeNull();
+    const { card } = await withGroups({ body: groupsWire({ installs: [], rooms: [] }) });
+    expect(card.textContent).toContain(NO_GROUPS);
+    expect(within(card).queryByRole("button", { name: INSTALL_HERE })).toBeNull();
+  });
+
+  test("an install the route refuses is its own sentence, and a chat the bot left says so", async () => {
+    // What breaks if this is deleted: a 409 drawn as installed, or an install in a chat the bot has
+    // left drawn as if it still answers there.
+    const { card } = await withGroups(
+      { body: groupsWire({ installs: [{ id: "i-1", channel: "lark", room_ref: "oc_old", name: "Old chat", present: false, answering: false, installed_at: "2019-03-04T09:00:00Z" }] }) },
+      { [`POST ${GROUPS_API}`]: { status: 409, body: { outcome: "refused", sentence: "That group chat could not take this agent." } } },
+    );
+    expect(card.textContent).toContain(THE_BOT_LEFT);
+    // Switched off the channel, it is shown paused rather than live.
+    expect(card.textContent).toContain(PAUSED);
+    fireEvent.change(within(card).getByLabelText(CHOOSE_A_CHAT), { target: { value: "lark:oc_pricing" } });
+    fireEvent.click(within(card).getByRole("button", { name: INSTALL_HERE }));
+    const asking = await screen.findByRole("alertdialog", { name: INSTALL_QUESTION("Pricing desk") });
+    await act(async () => {
+      fireEvent.click(within(asking).getByRole("button", { name: "Install it" }));
+    });
+    await screen.findByText("That group chat could not take this agent.");
+  });
+});
 
 describe("where the agent answers", () => {
   test("the steward sees the channels it answers on and switches them through a confirmation that sends what was drawn", async () => {

@@ -66,6 +66,10 @@ from brain.agent_capability_routes import router as agent_capability_router
 # and how each run ended, a failed one included.
 from brain.agent_conversation_routes import router as agent_conversation_router
 
+# An agent installed into a group chat the bot is in, and taken out of one, by whoever switches its
+# channels (M39.2.4.4). See `brain.agent_group_routes`.
+from brain.agent_group_routes import router as agent_group_router
+
 # One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
 # breaker reads, and the supervision pin and its reviews.
 from brain.agent_leash_routes import router as agent_leash_router
@@ -79,6 +83,7 @@ from brain.agent_model_routes import router as agent_model_router
 # again: who may see an agent is its audience rather than a capability, and a hidden agent
 # and a missing one are one answer. The same `asking` dependency, imported.
 from brain.agent_routes import router as agent_router
+from brain.agent_upgrade_routes import router as agent_upgrade_router
 from brain.agent_workspace_routes import router as agent_workspace_router
 
 # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
@@ -316,6 +321,10 @@ from brain.model_health_routes import router as model_health_router
 # the shell renders an answer rather than a permission check of its own. See
 # `brain.navigation_routes`.
 from brain.navigation_routes import router as navigation_router
+
+# Nominating a person for a role, and the third person who confirms it into a role grant or
+# declines it. See `brain.nomination_routes`.
+from brain.nomination_routes import router as nomination_router
 
 # Notifications: every notice this product composes, who is told what and whether anything
 # sends it, the switch that stops one, and the email relay with its password in the vault and

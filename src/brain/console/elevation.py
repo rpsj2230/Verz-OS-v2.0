@@ -60,6 +60,13 @@ two anchors, so a handful of elevation entries can be anchored and published on 
 cadence rather than depending on somebody anchoring the whole ledger often enough. See
 `A_SECOND_CHAIN_IS_A_SECOND_ANCHOR_AND_NOT_A_STRONGER_LEDGER`.
 
+**On an install the entry is in both chains, as twins** (`0209`). The database's own approval
+writes the break-glass session to the main ledger, where the Audit screen and the export read it,
+and the same entry to the elevation chain, whose head and anchor are the separation; moving it out
+of the main chain would take it off the Audit screen. `chain_findings` therefore asks that every
+elevation entry in either chain has its twin in the other, saying the same thing. See
+`A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN`.
+
 **Rejected: a chain field on `AuditEntry`, or a chain-aware `append`.** Both are edits to the
 ledger, both change `HASH_SCHEMA` or the routing underneath it, and neither is needed: an
 `AuditRecorder` is already constructed per writer, so routing is a choice of writer at the
@@ -502,29 +509,40 @@ def record_elevation(recorder: AuditRecorder, session: BreakGlassSession) -> Aud
     )
 
 
-def chain_findings(*, main: AuditChain, elevation: AuditChain) -> tuple[str, ...]:
-    """Everything about a two-chain arrangement that would make the separation a name only.
+#: Why a break-glass entry is in both chains, and what keeps the two copies honest (`0209`).
+A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN: Final = (
+    "Since 0209 the database writes each break-glass session entry twice, in one transaction: to "
+    "the main ledger, so the Audit screen and the export an auditor already reads still show it, "
+    "and to the elevation chain, whose own head and anchor are the separation. A copy is safe "
+    "only while the two agree, so every elevation entry in either chain has a twin in the other "
+    "with the same subject, actor, instant and details, and a twin that says something else is "
+    "a finding. A main-chain entry older than the elevation chain's first entry is history from "
+    "before the second chain existed and is not asked about."
+)
 
-    Two checks and they are different failures. An elevation entry in the main chain is a
-    recorder built with the wrong writer, which is the failure this whole leaf is about and
-    is invisible on any screen: the entry exists, it verifies, and it is anchored with a
-    million rows of routine traffic. Anything that is not an elevation in the elevation chain
-    is the opposite mistake, and it matters because the value of the second chain is that its
-    head moves only when somebody elevates.
 
-    Takes both chains rather than reading a registry, on
-    `brain.console.govern.govern_gaps`' argument about its own parameters: a diagnostic that
-    found its own inputs could only be run against a healthy tree, so switching off either
-    refusal would change nothing observable and both would survive a mutation.
+def chain_findings(
+    *, main: AuditChain, elevation: AuditChain, since: datetime | None = None
+) -> tuple[str, ...]:
+    """Everything about the two chains that would make the separation a name only (M33.7.1.3).
+
+    Four checks. An ordinary entry in the elevation chain moves its head for something that is not
+    an elevation, which is what the second head exists to be free of. And the copies: since `0209`
+    each break-glass session is in both chains (see
+    `A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN`), so an elevation entry in the
+    main chain with no twin in the elevation chain, one in the elevation chain with no twin in the
+    main chain, and a twin that says something different are each the two copies drifting apart,
+    which is invisible on any screen: both entries exist and both chains verify.
+
+    `since` is when the elevation chain began to be written, and the elevation chain's own first
+    entry when it is not given. With neither, every elevation entry in the main chain is asked
+    about, which is the direction that reports rather than excuses.
+
+    Takes both chains rather than reading a registry, on `brain.console.govern.govern_gaps`'
+    argument about its own parameters: a diagnostic that found its own inputs could only be run
+    against a healthy tree, so switching off any check would change nothing observable.
     """
     findings: list[str] = []
-    findings.extend(
-        f"seq {one.seq} in the main chain is a {one.action.value} entry, so the elevation "
-        f"chain is a name in a details field rather than a chain. "
-        f"{A_SECOND_CHAIN_IS_A_SECOND_ANCHOR_AND_NOT_A_STRONGER_LEDGER}"
-        for one in main.entries
-        if one.action in ELEVATION_ACTIONS
-    )
     findings.extend(
         f"seq {one.seq} in the {ELEVATION_CHAIN} chain is a {one.action.value} entry, so the "
         "chain's head moves for something that is not an elevation and comparing it says "
@@ -532,6 +550,38 @@ def chain_findings(*, main: AuditChain, elevation: AuditChain) -> tuple[str, ...
         for one in elevation.entries
         if one.action not in ELEVATION_ACTIONS
     )
+    in_main = {one.subject: one for one in main.entries if one.action in ELEVATION_ACTIONS}
+    in_elevation = {
+        one.subject: one for one in elevation.entries if one.action in ELEVATION_ACTIONS
+    }
+    began = (
+        since if since is not None else min((one.at for one in in_elevation.values()), default=None)
+    )
+    findings.extend(
+        f"seq {one.seq} in the main chain is a {one.action.value} entry with no twin in the "
+        f"{ELEVATION_CHAIN} chain, so the separate head never moved for it. "
+        f"{A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN}"
+        for subject, one in in_main.items()
+        if subject not in in_elevation and (began is None or one.at >= began)
+    )
+    for subject, one in in_elevation.items():
+        twin = in_main.get(subject)
+        if twin is None:
+            findings.append(
+                f"seq {one.seq} in the {ELEVATION_CHAIN} chain has no twin in the main chain, so "
+                "the Audit screen does not show an elevation the separate chain records. "
+                f"{A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN}"
+            )
+        elif (twin.actor_id, twin.at, dict(twin.details)) != (
+            one.actor_id,
+            one.at,
+            dict(one.details),
+        ):
+            findings.append(
+                f"seq {one.seq} in the {ELEVATION_CHAIN} chain and seq {twin.seq} in the main "
+                "chain record the same session differently. "
+                f"{A_BREAK_GLASS_ENTRY_IS_IN_BOTH_CHAINS_AND_EACH_HAS_ITS_TWIN}"
+            )
     return tuple(findings)
 
 

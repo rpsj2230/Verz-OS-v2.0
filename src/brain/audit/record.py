@@ -547,6 +547,19 @@ class AgentChange(enum.StrEnum):
     CHANNELS_CHANGED = "channels_changed"
 
 
+class AgentUpgradeChange(enum.StrEnum):
+    """What happened to an agent's place on its template. The two words `0204`'s triggers write.
+
+    Under the `agent` action beside `AgentChange`, and a separate enum on purpose: `0137`'s trigger
+    writes the seven words of `AgentChange` and a test holds the two equal, and these two are a
+    different trigger's on a different table. `UPGRADED` is the pinned version moving, and
+    `UPGRADE_DECLINED` is a version somebody read and turned away.
+    """
+
+    UPGRADED = "upgraded"
+    UPGRADE_DECLINED = "upgrade_declined"
+
+
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
     """Attach a list of field names under `key`, or attach nothing.
 
@@ -1284,8 +1297,8 @@ class AuditRecorder:
         return self._write(AuditAction.INSTRUCTIONS, subject("agent", agent_id), details)
 
     def webhook(self, *, subscriber_id: str, change: WebhookChange) -> AuditEntry:
-        """Record that a webhook subscriber was registered, had its secret replaced, or was switched
-        off (M27.8.12).
+        """Record that a webhook subscriber was registered, had its secret replaced, was switched
+        off or back on, or had a delivery given up replayed (M27.8.12, M27.15.44).
 
         Written in a deployed database by `0059`'s trigger on `ops.webhook_change`, one entry per
         change row, and held to this method's details by a test. The subject is the subscriber and
@@ -1529,16 +1542,23 @@ class AuditRecorder:
         )
 
     def agent(
-        self, *, agent_id: str, change: AgentChange, actor_inferred: bool = False
+        self,
+        *,
+        agent_id: str,
+        change: AgentChange | AgentUpgradeChange,
+        actor_inferred: bool = False,
     ) -> AuditEntry:
-        """Record that an agent was created, enabled, disabled, archived or published.
+        """Record that an agent was created, enabled, disabled, archived or published, or moved to
+        a newer version of its template or turned one away.
 
         Written in a deployed database by `0137`'s trigger on `agent.agent`, on the insert and on
         an update that moves a lifecycle timestamp or the audience level, and held to
         this method's details by a test. The subject is the agent. **Never the steward**: there is
         no parameter through which a principal id could arrive, because one is not a field name
         and the ledger would keep the marker in its place. `actor_inferred` is the detail the
-        trigger adds when nobody named the actor, as `instructions` adds it.
+        trigger adds when nobody named the actor, as `instructions` adds it. `0204`'s two triggers
+        write the two `AgentUpgradeChange` words under this same action, so there is still one
+        method for the one action.
         """
         details: dict[str, object] = {"change": change.value}
         if actor_inferred:

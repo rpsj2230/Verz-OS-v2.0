@@ -297,6 +297,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
         # when it would leave fewer than two Super Admins, so an erasure cannot lock the install.
         "gate.role_grant": "principal_id",
+        # A person proposed for a role (`0208`). The table grants no DELETE and has no retirement,
+        # because the row is the record of who proposed whom and who decided, so an erasure keeps
+        # these and reports them kept.
+        "gate.role_nomination": "principal_id",
         "gate.suspension": "principal_id",
         "gate.team_membership": "principal_id",
         "know.chunk": "owner_id",
@@ -434,6 +438,11 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A tool attached to an agent or detached (`0196`): the person who pressed is an actor,
         # and the row is about an agent's tools, never about a person.
         "agent.tool_attachment",
+        # An agent installed into a group chat (`0205`): who installed and removed it are actors,
+        # and the row is about an agent and a conversation, never about a person.
+        "agent.group_install",
+        # A group chat the bot is in (`0205`): the vendor's conversation and its name, nobody's.
+        "ops.channel_room",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).
@@ -528,6 +537,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A retrieval keeps which retrievers ran, three counts, the places followed and a duration:
         # `0193` keeps no document, no question and no principal, so nothing in it is anybody's.
         "ops.retrieval_event",
+        # A budget stop keeps a ceiling's key, a period and an enforcement flag, with the ids of the
+        # request that found it used up and of the people told: actors, and a stop is the budget's
+        # period rather than anybody's record (`0211`).
+        "ops.budget_stop",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

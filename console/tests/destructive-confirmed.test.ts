@@ -186,9 +186,12 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/departments/StructureDrawers.tsx MEMBERSHIP_API_PATH":
     "Places somebody in a team. It ends nothing and changes nobody's access; taking them out is the " +
     "confirmed control beside their name.",
-  "src/pages/roles/RoleDrawers.tsx APPOINTMENT_API_PATH":
-    "Appoints somebody to a role. A role grant replaces nothing and grants no capability, and taking " +
-    "one away is the removal beside it, which is confirmed.",
+  "src/pages/roles/RoleDrawers.tsx nominating ? NOMINATIONS_API_PATH : APPOINTMENT_API_PATH":
+    "Either appoints somebody to a role or only proposes them for one; a nomination grants nothing, and a " +
+    "role grant replaces nothing and is removed by the confirmed control beside it.",
+  "src/pages/roles/RoleDrawers.tsx nominationDecisionApiPath(nomination.id)":
+    "Confirms a nomination into a role grant or declines it. A decline appoints nobody and a confirmation " +
+    "only adds a role, and taking a role grant away is the confirmed removal beside it.",
   "src/pages/roles/RoleDrawers.tsx DEPUTY_API_PATH":
     "Appoints a deputy for at most thirty days beside the standing holder, who keeps the role; the " +
     "deputy lapses on its own, and removing one is confirmed.",

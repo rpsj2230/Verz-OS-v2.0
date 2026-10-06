@@ -161,9 +161,13 @@ MIGRATION_RETRIEVAL_EVENT = VERSIONS / "0193_retrieval_event.py"
 MIGRATION_ARTIFACT_CHANGE = VERSIONS / "0194_artifact_change_and_client.py"
 MIGRATION_LEASH = VERSIONS / "0195_leash_changes_and_supervision.py"
 MIGRATION_TOOL_ATTACHMENT = VERSIONS / "0196_tool_attachments.py"
+MIGRATION_GROUP_INSTALL = VERSIONS / "0205_group_install.py"
 MIGRATION_SIGNAL_LOG = VERSIONS / "0197_signal_log.py"
 MIGRATION_LEARNING_CANDIDATES = VERSIONS / "0198_learning_candidates.py"
 MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
+MIGRATION_ROLE_NOMINATIONS = VERSIONS / "0208_role_nominations.py"
+MIGRATION_ELEVATION_CHAIN = VERSIONS / "0209_elevation_chain.py"
+MIGRATION_BUDGET_STOP = VERSIONS / "0211_budget_stop.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -472,12 +476,20 @@ LEASH_TABLES: tuple[str, ...] = (
 )
 #: And the one 0196 adds: a tool attached to an agent, or detached.
 TOOL_ATTACHMENT_TABLES: tuple[str, ...] = ("agent.tool_attachment",)
+#: And the two 0205 adds: the rooms the bot is in, and the agent installed into each.
+GROUP_INSTALL_TABLES: tuple[str, ...] = ("ops.channel_room", "agent.group_install")
 #: And the one 0197 adds: what was noticed about each answer, by id and never in words.
 SIGNAL_LOG_TABLES: tuple[str, ...] = ("mem.signal",)
 #: And the two 0198 adds: a proposed fix to a document, and every correction that proposed it.
 LEARNING_CANDIDATE_TABLES: tuple[str, ...] = ("know.learning_candidate", "know.candidate_evidence")
 #: And the two 0206 adds: a learned rule held until promoted, and the questions it would have used.
 LEARNED_RULE_TABLES: tuple[str, ...] = ("mem.learned_rule", "mem.rule_occurrence")
+#: And the one 0208 adds: a person proposed for a role, and the decision on it.
+ROLE_NOMINATION_TABLES: tuple[str, ...] = ("gate.role_nomination",)
+#: And the one 0209 adds: the second chain, of elevations alone (M33.7.1.3).
+ELEVATION_CHAIN_TABLES: tuple[str, ...] = ("obs.elevation_entry",)
+#: And the one 0211 adds: every used-up budget, stopped or only said.
+BUDGET_STOP_TABLES: tuple[str, ...] = ("ops.budget_stop",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -567,6 +579,10 @@ ALL_TABLES = (
     + SIGNAL_LOG_TABLES
     + LEARNING_CANDIDATE_TABLES
     + LEARNED_RULE_TABLES
+    + GROUP_INSTALL_TABLES
+    + ROLE_NOMINATION_TABLES
+    + ELEVATION_CHAIN_TABLES
+    + BUDGET_STOP_TABLES
 )
 
 
@@ -1423,12 +1439,20 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert leash.TABLES == LEASH_TABLES
     tool_attachment = migration_module(MIGRATION_TOOL_ATTACHMENT)
     assert tool_attachment.TABLES == TOOL_ATTACHMENT_TABLES
+    group_install = migration_module(MIGRATION_GROUP_INSTALL)
+    assert group_install.TABLES == GROUP_INSTALL_TABLES
     signal_log = migration_module(MIGRATION_SIGNAL_LOG)
     assert signal_log.TABLES == SIGNAL_LOG_TABLES
     learning_candidates = migration_module(MIGRATION_LEARNING_CANDIDATES)
     assert learning_candidates.TABLES == LEARNING_CANDIDATE_TABLES
     learned_rules = migration_module(MIGRATION_LEARNED_RULES)
     assert learned_rules.TABLES == LEARNED_RULE_TABLES
+    role_nominations = migration_module(MIGRATION_ROLE_NOMINATIONS)
+    assert role_nominations.TABLES == ROLE_NOMINATION_TABLES
+    elevation_chain = migration_module(MIGRATION_ELEVATION_CHAIN)
+    assert elevation_chain.TABLES == ELEVATION_CHAIN_TABLES
+    budget_stop = migration_module(MIGRATION_BUDGET_STOP)
+    assert budget_stop.TABLES == BUDGET_STOP_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1540,6 +1564,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(signal_log.TABLES)
         + tuple(learning_candidates.TABLES)
         + tuple(learned_rules.TABLES)
+        + tuple(group_install.TABLES)
+        + tuple(role_nominations.TABLES)
+        + tuple(elevation_chain.TABLES)
+        + tuple(budget_stop.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1632,6 +1660,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(signal_log.TABLES),
         set(learning_candidates.TABLES),
         set(learned_rules.TABLES),
+        set(group_install.TABLES),
+        set(role_nominations.TABLES),
+        set(elevation_chain.TABLES),
+        set(budget_stop.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

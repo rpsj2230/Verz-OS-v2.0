@@ -54,6 +54,7 @@ import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQu
 import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
 import { AgentChannels } from "./AgentChannels";
+import { AgentGroups } from "./AgentGroups";
 import { WHERE_IT_ANSWERS } from "./ChannelChoices";
 import { LeashPill } from "./pills";
 
@@ -544,6 +545,7 @@ export function AgentProfile({
             onEditDraft={onEditDraft}
           />
           <AgentChannels agentId={agent.agentId} />
+          <AgentGroups agentId={agent.agentId} />
           {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
           <Availability facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
           <Learning />

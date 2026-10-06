@@ -55,7 +55,7 @@ from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.attachment import ToolAttachmentRow
-from brain.tables.audit import AuditEntryRow
+from brain.tables.audit import AuditEntryRow, ElevationEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
@@ -63,6 +63,7 @@ from brain.tables.binding_code import BindingCodeRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
+from brain.tables.budget_stop import BudgetStopRow
 from brain.tables.channel import ChannelDeliveryRow, ChannelRow
 from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
@@ -92,6 +93,7 @@ from brain.tables.gate import (
     ScopeRow,
     TeamRow,
 )
+from brain.tables.group_install import ChannelRoomRow, GroupInstallRow
 from brain.tables.group_role_rule import GroupRoleRuleRow
 from brain.tables.halt import HaltRow
 from brain.tables.identity import (
@@ -145,6 +147,7 @@ from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionR
 from brain.tables.retrieval import RetrievalEventRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
+from brain.tables.role_nomination import RoleNominationRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
@@ -495,6 +498,16 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # occurrence at the learned rule it would have used.
     "mem.learned_rule",
     "mem.rule_occurrence",
+    # 0205_group_install. A room and an install each point at nothing.
+    "ops.channel_room",
+    "agent.group_install",
+    # 0208_role_nominations. A confirmed nomination points at the role grant it wrote.
+    "gate.role_nomination",
+    # 0209_elevation_chain. Points at nothing: the second chain, of elevations alone.
+    "obs.elevation_entry",
+    # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
+    # values, so a stop's row outlives a ceiling's next version and a person leaving.
+    "ops.budget_stop",
 )
 
 __all__ = [
@@ -521,6 +534,7 @@ __all__ = [
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
+    "BudgetStopRow",
     "BudgetVersionRow",
     "CandidateEvidenceRow",
     "CanonicalEntityRow",
@@ -531,6 +545,7 @@ __all__ = [
     "ChainDepthAlertRow",
     "ChannelDeliveryRow",
     "ChannelEventRow",
+    "ChannelRoomRow",
     "ChannelRow",
     "ClassifiedRecordRow",
     "ClassifiedTableRow",
@@ -547,6 +562,7 @@ __all__ = [
     "DepartmentRow",
     "DeploymentRecordRow",
     "DirectoryRoleGrantRow",
+    "ElevationEntryRow",
     "ElevationRequestRow",
     "EntityAliasRow",
     "EntityIdentifierRow",
@@ -560,6 +576,7 @@ __all__ = [
     "FieldPolicyRow",
     "GoldenQuestionRow",
     "GrantsVersionRow",
+    "GroupInstallRow",
     "GroupRoleRuleRow",
     "HaltRow",
     "KnowledgeItemRow",
@@ -603,6 +620,7 @@ __all__ = [
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",
+    "RoleNominationRow",
     "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",
