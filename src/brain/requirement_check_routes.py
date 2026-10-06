@@ -37,7 +37,7 @@ the row's proof leaves. It is product data about this release, as public as that
 records a check: only a person's sentence does that. Rejected: the console fetching the public page
 itself and matching leaves, which would be a second place deciding which check proves which row.
 
-Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M11.8.13, M12.4.15, M7.7.7, M11.8.8
+Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M11.8.13, M12.4.15, M7.7.7
 """
 
 from __future__ import annotations
@@ -91,21 +91,6 @@ CHECKED_BY: Final[Mapping[str, str]] = {
     "Connectors": "M11.8.13",
     "Tools": "M12.4.15",
     "Knowledge": "M7.7.7",
-}
-
-#: Why an area's recorded checks also prove leaves beside the one that asks for them.
-A_LIVE_HALF_IS_PROVED_BY_A_PERSON: Final = (
-    "Some leaves ask for a proof no check may make: an answer from the company's own live data, "
-    "read for a real question. A check only stands up reserved people in reserved departments, "
-    "so it never reads the company's records, and that rule stays whole. The automated half of "
-    "such a leaf is a check over a source made up for it, and its live half is the owner's own "
-    "recorded check on this screen, so the area names the leaf its recorded checks also prove."
-)
-
-#: The leaves an area's recorded checks also prove, beside `CHECKED_BY`'s. See
-#: `A_LIVE_HALF_IS_PROVED_BY_A_PERSON`.
-ALSO_PROVED_BY: Final[Mapping[str, tuple[str, ...]]] = {
-    "Connectors": ("M11.8.8",),
 }
 
 #: Where the register lives in the image, and in a checkout: `docs/` beside `src/`.
@@ -182,8 +167,6 @@ class RequirementAreaView(BaseModel):
     area: str
     #: The leaf that asks for this area's checks, or None when none does.
     proves: str | None
-    #: Further leaves this area's recorded checks prove, whose live half no check may make.
-    also_proves: list[str] = Field(default_factory=list)
     requirements: int
     passed: int
     failed: int
@@ -238,7 +221,6 @@ def areas_of(
             RequirementAreaView(
                 area=area,
                 proves=CHECKED_BY.get(area),
-                also_proves=list(ALSO_PROVED_BY.get(area, ())),
                 requirements=len(rows),
                 passed=passed,
                 failed=failed,

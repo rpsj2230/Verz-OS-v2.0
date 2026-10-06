@@ -370,7 +370,6 @@ def test_a_check_is_recorded_as_the_person_asking_on_the_running_release_and_rea
         "passed": 0,
         "failed": 1,
         "unchecked": 1,
-        "also_proves": [],
     }
     assert [one.outcome for one in checks.kept] == [CheckOutcome.PASSED, CheckOutcome.FAILED]
 
@@ -483,22 +482,3 @@ def test_the_migration_builds_the_table_exactly_as_the_model_declares_it() -> No
     upgrade = squash(rendered("upgrade", migration))
     assert expected in upgrade
     assert "UPDATE ON ops.requirement_check" not in upgrade
-
-
-# ------------------------------------------------------------- the live half a person proves
-def test_the_connectors_area_names_the_live_answers_leaf_its_recorded_checks_prove() -> None:
-    """`A_LIVE_HALF_IS_PROVED_BY_A_PERSON`. M11.8.8 asks for live answers from the company's own
-    helpdesk, which no check may read, so the owner's recorded checks in the Connectors area are
-    its live proof, and the screen says so beside the area. And the register's Connectors rows name
-    it as their proof, so a check recorded against one of them is evidence for it. Delete this and
-    the area can stop naming the leaf, leaving its live half proved by nothing anybody can find."""
-    from brain.requirement_check_routes import ALSO_PROVED_BY, DOCS, areas_of
-
-    register = load_register(DOCS / REGISTER_IN_DOCS)
-    connectors = [row for row in register.requirements if row.area == "Connectors"]
-    assert any("M11.8.8" in row.proof for row in connectors)
-    [area] = [one for one in areas_of(register, {}) if one.area == "Connectors"]
-    assert (area.proves, area.also_proves) == ("M11.8.13", ["M11.8.8"])
-    # Only the Connectors area carries it, so no other area claims a proof it does not record.
-    assert ALSO_PROVED_BY == {"Connectors": ("M11.8.8",)}
-    assert all(one.also_proves == [] for one in areas_of(register, {}) if one.area != "Connectors")

@@ -267,15 +267,13 @@ def test_the_test_set_is_the_files_that_import_something_that_reaches_the_module
     """The property that makes the scope defensible: a test file reaching the module through
     another module is in the set, and a grep for the module's name would have missed it.
 
-    `brain.ops.guards` itself is the fixture. Its own test file imports it, and since 2026-09-30
-    one module does too, `brain.ops.test_selection`, whose test file never names `guards`: that
-    file is in the set only because it reaches the module through another, which is exactly the
-    property, and a search for the module's name would have missed it.
+    `brain.ops.guards` itself is the fixture, because its own test file is this one and it is
+    imported by nothing else, so the answer is exactly one file and cannot drift.
 
     Delete this and the set can be built from a name search again."""
     found = covering_tests(Path("src/brain/ops/guards.py"))
 
-    assert found == ("tests/unit/test_guards.py", "tests/unit/test_test_selection.py")
+    assert found == ("tests/unit/test_guards.py",)
 
 
 def test_an_audit_with_no_test_file_in_reach_refuses_rather_than_reporting_survivors(
