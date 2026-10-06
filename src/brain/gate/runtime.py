@@ -83,7 +83,7 @@ import inspect
 import json
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Final, Protocol, assert_never
 
@@ -442,6 +442,11 @@ class SideEffects(Protocol):
         """The injection screen over what the action carries."""
         ...
 
+    def describe(self, action: Action) -> str:
+        """What the action is, as the person who asked for it may be told. See
+        `brain.gate.model_lane.AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES`."""
+        ...
+
     async def hold(self, suspension: SuspendedAction, reach: EntitlementSet, now: datetime) -> None:
         """Keep the suspension, at the reach of the person whose run it is, for an approver."""
         ...
@@ -531,6 +536,8 @@ class _Run:
     #: The suspension each action this run has held is, by the action's digest. See
     #: `ONE_PROPOSAL_IS_ONE_SUSPENSION_IN_A_RUN`.
     held: dict[str, str] = field(default_factory=dict)
+    #: What each action held was, as the asker is told of it, in the order held.
+    waiting: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -611,7 +618,8 @@ class AgentRuntime:
                 run=run,
                 bounds=bounds,
             )
-            return drafted
+            # Whatever way the run ended, the asker is told what it held for a person.
+            return replace(drafted, waiting=tuple(run.waiting)) if run.waiting else drafted
         finally:
             if self.runs is not None:
                 await self.runs.record(
@@ -860,6 +868,7 @@ class AgentRuntime:
             return TOOL_NOT_AVAILABLE
         await effects.hold(suspension, asker, now)
         run.held[digest] = suspension.id
+        run.waiting.append(effects.describe(action))
         return HELD_FOR_A_PERSON
 
     async def _record_of(

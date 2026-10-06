@@ -1128,6 +1128,12 @@ class ProposesAction(Protocol):
         """The action to hold for a person. Reads nothing and sends nothing."""
         ...
 
+    def described(self, action: Action) -> str:
+        """What the action is, in a phrase the person who asked for it may be told, such as "a
+        reply to ticket 4242": only what they named or may read, never the approver, a reason or
+        the arguments beyond the reference they already gave."""
+        ...
+
 
 @runtime_checkable
 class SimulatesAction(Protocol):

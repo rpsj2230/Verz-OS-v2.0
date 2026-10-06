@@ -794,6 +794,28 @@ class Drafted:
     #: Set when the passages found were more than the largest model could read and the answer
     #: was drawn from fewer (M15.4.1); the answer says so in `Trimmed.sentence`.
     trimmed: Trimmed | None = None
+    #: What the run held for a person, each as a phrase the asker may be told ("a reply to ticket
+    #: 4242"), in the order it was held. Empty beside every run that held nothing. See
+    #: `AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES`.
+    waiting: tuple[str, ...] = ()
+
+
+#: What an asker is told of an action their run prepared and a person has yet to decide.
+WAITING_FOR_A_PERSON: Final = "I have prepared {what} and it is waiting for a person to approve it."
+
+#: Why the sentence is the product's, built from the asker's own proposal, and kept off the cache.
+AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES: Final = (
+    "A run that held an action for a person ends by saying so to the person who asked, in the "
+    "product's words and not the model's, naming only what the asker themselves proposed: the "
+    "kind of action and the reference they gave. It names no approver, no reason and no "
+    "argument, replaces the abstention a run that read nothing would have ended with, and is "
+    "never kept for the next asker, because what one person's run held is that person's."
+)
+
+
+def waiting_text(waiting: Sequence[str]) -> str:
+    """One sentence for each action held, in order, from the product's own words."""
+    return " ".join(WAITING_FOR_A_PERSON.format(what=one) for one in waiting)
 
 
 #: Why a request too long for every model is answered from fewer passages, and says so.

@@ -56,7 +56,7 @@ from brain.ops.idempotency import IdempotencyError
 from brain.tools.proposed_writes import register_proposed_writes
 from brain.tools.registry import ToolRegistry
 from tests.unit.test_agent_runtime import Model, Runs
-from tests.unit.test_answer_lane import Sink
+from tests.unit.test_answer_lane import ACME, CLIENTS, HOURS, Rows, Sink, readers_for
 from tests.unit.test_freshdesk_reply import (
     DEPARTMENT,
     DOMAIN,
@@ -256,6 +256,9 @@ class Preparer:
     def policy_for(self, action: Action) -> FieldPolicy:
         del action
         return self.policy
+
+    def describe(self, action: Action) -> str:
+        return f"a change to note {action.row['id']}"
 
     def assessment_for(self, action: Action) -> RiskAssessment:
         del action
@@ -1477,3 +1480,160 @@ def test_a_process_with_a_suspension_store_and_no_database_session_offers_no_wri
     )
 
     assert effects is None and leash == Leash()
+
+
+# =========================================================================== what the asker is told
+def _lane_answer(made: World, *, asker: str = "u_asker") -> Any:
+    """The answer lane over a run, as a person asking is answered: the frames, read as the web reads
+    them. The question names no fast-path rule, so the model step is the one that answers."""
+    from brain.core.principal import Employment, Principal, PrincipalKind
+    from brain.gate.answer import answer_lane
+    from brain.gate.context import Channel
+    from brain.gate.finish import Origin
+
+    person = Principal(
+        id=asker, kind=PrincipalKind.HUMAN, employment=Employment.STAFF, display_name="Asker"
+    )
+    return asyncio.run(
+        answer_lane(
+            "please update the note",
+            origin=Origin(trace_id="t-effects-1", principal=person, channel=Channel.CONSOLE),
+            recorders=(),
+            rules=(HOURS,),
+            readers=readers_for(Rows(ACME)),
+            entitlement=made.runtime.asker,
+            policies={"client": CLIENTS.policy()},
+            reachable_sources=("laravel",),
+            sink=Sink(),
+            now=NOW,
+            clock=lambda: NOW,
+            model=ModelLane(search=cast(Any, None), model=made.model, runtime=made.runtime),
+        )
+    )
+
+
+def _prose(answered: Any) -> str:
+    from brain.ops.acceptance_checks_chat import heard
+
+    return str(heard(answered.frames).prose)
+
+
+HELD_SENTENCE: Final = (
+    "I have prepared a change to note n1 and it is waiting for a person to approve it."
+)
+
+
+def test_a_run_that_held_an_action_says_so_to_its_asker_instead_of_the_abstention() -> None:
+    """**`AN_ASKER_IS_TOLD_WHAT_THEIR_RUN_HELD_AND_NOTHING_ABOUT_WHO_DECIDES`.** A run whose only
+    act was a held write ends with the product's own sentence naming what the asker asked to have
+    prepared and the reference they gave, and not the "could not find that" its empty reading
+    would have been. The audit still records the abstention, and no text is kept for the cache.
+    Delete this and a person who asked for a reply is told the system found nothing."""
+    from brain.gate.abstain import NOT_FOUND_TEXT
+
+    made = note_world([update(), ANSWER])
+
+    answered = _lane_answer(made)
+
+    assert _prose(answered) == HELD_SENTENCE
+    assert NOT_FOUND_TEXT not in _prose(answered)
+    assert answered.abstention is not None and answered.text is None
+
+
+def test_the_sentence_names_no_approver_no_reason_and_no_argument_the_asker_did_not_name() -> None:
+    """The sentence is the product's template filled with the kind of action and the reference,
+    and nothing else: not the change's amount, the department, the suspension, the agent or who
+    decides. Delete this and the sentence grows a field that is a fact about somebody else."""
+    made = note_world([update(amount="123456"), ANSWER])
+
+    said = _prose(_lane_answer(made))
+    [(suspension, _, _)] = made.effects.kept
+
+    for withheld in ("123456", suspension.id, NOTE_AGENT, "approver", "finance", "because"):
+        assert withheld not in said
+
+
+def test_a_run_that_held_nothing_is_answered_exactly_as_it_was_before() -> None:
+    """**The sibling.** With nothing held, the asker is told the abstention's own sentence, word
+    for word what a run with no side effects at all is told, whether the write was refused, would
+    have executed, or was never asked for. Delete this and the held sentence can leak into every
+    run that offered a write."""
+    plain = _prose(_lane_answer(note_world([ANSWER], attached=False)))
+    for made in (
+        note_world([update(), ANSWER], rung=AutonomyTier.AUTONOMOUS),
+        note_world([update(), ANSWER], asker=holding("read:note", "write:note")),
+        note_world([ANSWER]),
+        note_world([update(), ANSWER], rung=None),
+    ):
+        answered = _lane_answer(made)
+        assert _prose(answered) == plain
+        assert made.effects.kept == [] and answered.abstention is not None
+
+
+def test_an_answer_that_also_held_an_action_says_so_after_it_and_is_not_kept() -> None:
+    """A run that read a note and answered and also held a write is answered with both: the answer,
+    then the sentence. Its text is not kept for the next asker, who must not be handed what one
+    person's run held; the same run without the write keeps its text. Delete this and the held
+    sentence is cached and told to somebody whose run held nothing."""
+    read = json.dumps({"tool": NOTE_READ.name, "arguments": {}})
+    answer = json.dumps({"answer": "Hosting is 40."})
+
+    held = _lane_answer(note_world([read, update(), answer]))
+    unheld = _lane_answer(note_world([read, answer]))
+
+    assert held.composed is not None and held.text is None
+    assert _prose(held).index("Hosting is 40.") < _prose(held).index(HELD_SENTENCE)
+    assert unheld.composed is not None and unheld.text is not None
+    assert HELD_SENTENCE not in unheld.text
+
+
+def test_a_second_askers_run_is_never_told_what_the_first_askers_held() -> None:
+    """What a run held is the run's, kept on the run: another asker, with the same question and the
+    same agent, is answered from their own run, which held nothing. Delete this and the sentence
+    is a fact about the agent and not about the person who asked."""
+    first = note_world([update(), ANSWER])
+    second = note_world([ANSWER], asker=holding(*NOTE_CAPABILITIES, principal="u_other"))
+
+    told_first = _prose(_lane_answer(first))
+    told_second = _prose(_lane_answer(second, asker="u_other"))
+
+    assert told_first == HELD_SENTENCE
+    assert HELD_SENTENCE not in told_second and "waiting" not in told_second
+
+
+def test_two_different_actions_held_are_told_in_the_order_they_were_held_and_a_repeat_once() -> (
+    None
+):
+    """Each action held is one sentence, in order; the same request repeated is the one. Delete
+    this and a repeat is told twice, or the second request is never told."""
+    two = note_world([update(note="n1"), update(note="n1"), update(amount="60"), ANSWER])
+
+    drafted = asking(two)
+
+    assert drafted.waiting == ("a change to note n1", "a change to note n1")
+    assert len(two.effects.kept) == 2
+
+
+def test_a_freshdesk_reply_is_told_as_a_reply_to_the_ticket_the_asker_named() -> None:
+    """The real preparer's phrase is a reply to the ticket the asker named, and the words of the
+    reply are not in it. Delete this and the asker is told a reply is waiting without saying which
+    ticket, or is shown text they wrote and no approver has read."""
+    made = desk_world([reply_to(), ANSWER])
+
+    drafted = asking(made)
+
+    assert drafted.waiting == (f"a reply to ticket {TICKET_ID}",)
+    assert WORDS not in " ".join(drafted.waiting)
+
+
+def test_the_waiting_sentence_is_one_per_action_in_order_and_empty_for_none() -> None:
+    """Each phrase becomes the product's sentence, in the order held, and nothing held is no text at
+    all rather than a sentence about nothing. Delete this and a second held action is never told,
+    or a run that held nothing says something."""
+    from brain.gate.model_lane import waiting_text
+
+    assert waiting_text(()) == ""
+    assert waiting_text(("a reply to ticket 1", "a reply to ticket 2")) == (
+        "I have prepared a reply to ticket 1 and it is waiting for a person to approve it. "
+        "I have prepared a reply to ticket 2 and it is waiting for a person to approve it."
+    )
