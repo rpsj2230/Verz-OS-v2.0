@@ -279,6 +279,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # own row with a conflict clause; ending and unlinking are guarded writes to its own
         # tables, where a second call finds the row already ended or already gone.
         "brain.audit_routes:LedgerWindows.window": Repeat.READS,
+        "brain.audit_routes:PagedView.page": Repeat.READS,
         "brain.audit_routes:PersonGrants.person": Repeat.READS,
         "brain.audit_routes:PersonGrants.grant_ids": Repeat.READS,
         # The window's runs of refusals for the Audit screen's statistics: the digest's grouped

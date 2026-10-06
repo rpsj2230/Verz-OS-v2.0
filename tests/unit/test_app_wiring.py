@@ -408,7 +408,7 @@ async def _answers(*_args: object) -> bool:
 def reachable_database(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every database probe answers as a reachable, correctly bound database would, so what a test
     reads off readiness is decided by the part under test and not by the unanswered address."""
-    monkeypatch.setattr("brain.app.check_reachable", _answers)
+    monkeypatch.setattr("brain.session.check_reachable", _answers)
     monkeypatch.setattr("brain.app.check_row_security", _answers)
     monkeypatch.setattr("brain.app.check_login_row_security", _answers)
 
@@ -603,7 +603,7 @@ def test_a_database_that_goes_away_after_start_turns_readiness_to_503(
     async def database(_engine: object) -> bool:
         return reachable[0]
 
-    monkeypatch.setattr("brain.app.check_reachable", database)
+    monkeypatch.setattr("brain.session.check_reachable", database)
     with TestClient(wired_app()) as c:
         first = c.get("/health/ready").status_code
         reachable[0] = False

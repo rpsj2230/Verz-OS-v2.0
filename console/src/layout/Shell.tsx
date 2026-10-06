@@ -62,6 +62,7 @@ import { useResource } from "../api/useResource";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
+import { StopControl } from "../pages/operations/StopControl";
 import { OWN_WORK } from "../routes/registry";
 import { Chip } from "../ui/Chip";
 import { ConsoleSidebar, MenuButton, type MenuState } from "./ConsoleSidebar";
@@ -93,6 +94,7 @@ export function Shell() {
             {departments.length > 0 ? <Chip label={departments.join(", ")} /> : null}
           </div>
           <div className="shell__header-actions">
+            <StopControl stop={given?.stop ?? ""} departments={departments} />
             <ThemeControl />
             <button
               type="button"

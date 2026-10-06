@@ -135,6 +135,38 @@ def test_an_agent_offering_another_read_tool_runs_the_loop() -> None:
     assert found.asker is question.reach
 
 
+def test_the_halt_asked_at_every_step_names_the_agent_the_run_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stop declared on one agent has to reach a run already under way, and the loop asks
+    `halted` at each step. The question carries the asker's person and department, as it did,
+    and now also the agent, which is what lets a stop on that agent refuse its next step.
+    Delete this and the answer route can ask only at the start while the loop never names the
+    agent, so a stop on the agent waits for the next question to be felt."""
+    asked: list[Any] = []
+
+    async def told(sessions: object, work: Any) -> str:
+        asked.append(work)
+        return "stopped"
+
+    monkeypatch.setattr(api_routes, "refusal_for", told)
+    found = api_routes.agent_runtime_for(
+        REQUEST,
+        agent=agent(SEARCH_DOCUMENTS, "notes.read_note"),
+        asking=asking(),
+        registry=registry(),
+        assessment=NOTHING_MATCHED,
+    )
+
+    assert isinstance(found, AgentRuntime)
+
+    async def ask() -> str:
+        return await found.halted()
+
+    assert asyncio.run(ask()) == "stopped"
+    assert [(one.person, one.agent) for one in asked] == [("u_asker", "pricing_desk")]
+
+
 def test_a_caller_nothing_can_resolve_keeps_its_admitted_reach() -> None:
     """**A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH.** A principal that is not a person
     with no authenticated caller is not re-resolved by id, which would drop whatever narrowed it.

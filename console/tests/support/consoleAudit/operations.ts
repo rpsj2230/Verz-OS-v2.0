@@ -10,10 +10,25 @@
 import { EXPORTS_API_PATH } from "../../../src/pages/dataTransferQuery";
 import { actionPath } from "../../../src/pages/jobsQuery";
 import { LEARNING_SETTINGS_API_PATH } from "../../../src/pages/learningQuery";
+import { HALTS_API_PATH, RESUME_API_PATH } from "../../../src/pages/stopQuery";
 import { TUNING_API_PATH, knobPath } from "../../../src/pages/tuningQuery";
 import { at, type Proofs, SETTINGS_PRESSED, t, type WriteRoute } from "../auditClaims";
 
+/**
+ * A stop and its resume on PostgreSQL as the application role: the wordless stop's row and its
+ * ledger entry naming the reach and the trace, the resume refused without words, and the row and
+ * entry it leaves when it has them (M27.15.10, M27.15.15).
+ */
+const A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES = t(
+  "test_halt_store",
+  "test_on_a_real_database_a_stop_needs_no_words_and_a_resume_does",
+  true,
+);
+
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/operations/StopControl.tsx HALTS_API_PATH": [at("POST /api/v1/halts", "HALTS_API_PATH", HALTS_API_PATH)],
+  "src/pages/operations/StopPage.tsx HALTS_API_PATH": [at("POST /api/v1/halts", "HALTS_API_PATH", HALTS_API_PATH)],
+  "src/pages/operations/StopPage.tsx RESUME_API_PATH": [at("POST /api/v1/halts/resume", "RESUME_API_PATH", RESUME_API_PATH)],
   "src/pages/operations/DataTransferPage.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
   "src/pages/operations/JobActs.tsx actionPath(asked.action, asked.row.control)": [
     at("POST /api/v1/jobs/{name}/pause", "actionPath", actionPath("pause", "spend_report_refresh")),
@@ -28,6 +43,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/halts": {
+    row: A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES,
+    audit: A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES,
+    behaviour: t("test_halt_store", "test_a_question_asked_while_everything_is_stopped_is_turned_away_in_the_halt_s_words", true),
+  },
+  "POST /api/v1/halts/resume": {
+    row: A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES,
+    audit: A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES,
+    behaviour: t("test_halt_store", "test_a_resume_from_the_screen_needs_words_and_says_whose_stop_it_lifts", true),
+  },
   "PUT /api/v1/install/tuning/{name}": {
     row: t("test_tuning", "test_saving_a_window_writes_its_row_as_the_person_and_the_next_request_counts_against_it"),
     audit: t("test_acceptance_capacity", "test_on_a_real_database_the_capacity_checks_pass_or_say_why_not_and_leave_nothing_behind", true),

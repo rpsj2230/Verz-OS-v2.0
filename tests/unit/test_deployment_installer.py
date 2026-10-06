@@ -694,6 +694,9 @@ def test_the_check_still_sees_every_container_of_this_product_in_the_real_files(
         "docker-compose.lite.yml: app",
         "docker-compose.matcher.yml: record-matcher",
         "docker-compose.parse-worker.yml: brain-parse-worker",
+        # The script sandbox runs this product's own image under gVisor (brain.ops.overlays).
+        "docker-compose.sandbox.yml: script-sandbox",
+        "docker-compose.sandbox.yml: script-sandbox-executor",
         "docker-compose.staging.yml: app",
         "docker-compose.worker.yml: brain-worker",
         "docker-compose.yml: app",

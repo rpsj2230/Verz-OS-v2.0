@@ -58,6 +58,7 @@ from brain.browsing.launcher import overlays_for as browser_overlays_for
 from brain.deployment.app_environment import VAULT_OVERLAY, worker_vault_overlays_for
 from brain.deployment.requirements import COMPOSE_FILES_FOR, files_for
 from brain.ops.compose import FULL_PROFILE_FILE
+from brain.ops.overlays import OVERLAYS
 from brain.ops.split import overlays_for as split_overlays_for
 from brain.ops.streaming_replica import OVERLAY as REPLICA_OVERLAY
 from brain.ops.tunnel import overlays_for
@@ -160,6 +161,12 @@ def compositions() -> dict[str, tuple[str, ...]]:
         # `brain.browsing.launcher`.
         if browser_overlays_for(files):
             found[f"{profile} with the browser"] = (*files, *browser_overlays_for(files))
+    # Each optional service is composed as a project of its own beside the application's
+    # (`brain.ops.overlays`), so the product's files among its own are a composition of their own.
+    for one in OVERLAYS:
+        found[f"optional service {one.name}"] = tuple(
+            name for name in one.files if (REPO / name).exists()
+        )
     return found
 
 

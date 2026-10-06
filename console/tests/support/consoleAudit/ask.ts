@@ -7,8 +7,10 @@
  * Task ids: none
  */
 
+import { ATTACHMENTS_API_PATH } from "../../../src/pages/askAttachQuery";
 import { ANSWER_API_PATH, MARK_API_PATH } from "../../../src/pages/askQuery";
 import { retrievalUsesPath } from "../../../src/pages/citedDocumentQuery";
+import { uploadPath } from "../../../src/pages/knowledgeQuery";
 import { correctionPath, exportPath } from "../../../src/pages/threadsQuery";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
@@ -29,6 +31,13 @@ const A_FOLLOWED_CITATION_IS_KEPT_AS_A_PLACE = t(
 const A_CORRECTION_IS_KEPT_AND_COUNTED = t(
   "test_acceptance_threads",
   "test_every_thread_check_passes_on_an_install_and_leaves_nothing",
+  true,
+);
+
+/** The install check attaching a document its owner may read and reading it through its tool (M12.3.6). */
+const AN_ATTACHED_FILE_IS_READ_BY_ITS_OWNER_ALONE = t(
+  "test_acceptance_attachments",
+  "test_on_a_real_database_an_attached_file_is_read_by_its_owner_alone",
   true,
 );
 
@@ -60,6 +69,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       correctionPath("3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b"),
     ),
   ],
+  'src/pages/AskAttach.tsx uploadPath(kind, "personal", "")': [
+    at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "personal", "").split("?")[0] ?? ""),
+  ],
+  "src/pages/AskAttach.tsx ATTACHMENTS_API_PATH": [
+    at("POST /api/v1/threads/attachments", "ATTACHMENTS_API_PATH", ATTACHMENTS_API_PATH),
+  ],
   "src/pages/Ask.tsx exportPath(thread)": [
     at("POST /api/v1/threads/{thread_id}/export", "exportPath", exportPath("3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b")),
   ],
@@ -80,6 +95,14 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       "test_answer_route_memory",
       "test_a_person_marks_an_answer_they_were_given_with_one_action_and_no_words",
     ),
+  },
+  "POST /api/v1/threads/attachments": {
+    row: t("test_chat_attachments", "test_a_document_is_attached_once_to_the_person_s_own_thread_or_a_new_one", true),
+    audit: {
+      notApplicable:
+        "Attaching a document to one's own conversation changes no setting and nobody's access; the note is kept in the asker's own thread, and the document was added, and audited, by its own upload.",
+    },
+    behaviour: AN_ATTACHED_FILE_IS_READ_BY_ITS_OWNER_ALONE,
   },
   "POST /api/v1/retrievals/{event_id}/uses": {
     row: A_FOLLOWED_CITATION_IS_KEPT_AS_A_PLACE,
