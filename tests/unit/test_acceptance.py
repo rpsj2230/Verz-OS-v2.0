@@ -31,6 +31,7 @@ from brain.ops import (
     acceptance_audit,
     acceptance_checks_accounts,
     acceptance_checks_channels,
+    acceptance_checks_class_pools,
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_run,
@@ -556,7 +557,18 @@ WRITTEN_BY_CHECKS = (
     "ops.spend_actual",
     "ops.sensitive_read",
     "er.canonical",
+    "er.alias",
+    "er.identifier",
+    "er.link",
+    "er.observation",
+    "er.blocked_value",
+    # The merge checks plant their own entities and merge and unmerge them (`0183`).
+    "er.merge",
+    "er.unmerge",
+    "er.review_item",
     "proj.record",
+    "proj.record_retired",
+    "proj.source_epoch",
     "ops.connector_connection",
     "ops.connector_sync",
     "ops.setting",
@@ -587,6 +599,8 @@ WRITTEN_BY_CHECKS = (
     "agent.learning_pause",
     "ops.operation",
     "ops.budget_version",
+    # A Lark Base indexed by a check offers its table's grants on the grants screen.
+    "gate.capability_registry",
 )
 
 
@@ -651,6 +665,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     suite = [one.name for one in registered()]
     assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
+    # No vault here, so the start signed no built-in template;
+    # `tests/unit/test_acceptance_templates.py` signs the catalogue on and runs it.
+    assert outcomes.pop("every_built_in_template_is_on_file_and_installs_at_shadow")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
@@ -690,8 +707,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for ledger_check in (
         "the_trace_ledger_runs_as_its_five_services",
         "every_trace_ledger_service_runs_under_its_budgeted_limit",
+        "a_run_sent_to_the_ledger_is_found_there_with_its_model_call",
     ):
         assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
+    # No class pooler runs here; `tests/unit/test_class_pools.py` stands a limited login in for
+    # the batch pool, reports it running and passes.
+    assert outcomes.pop("a_batch_job_holding_its_share_cannot_take_a_persons_connection") == (
+        NOT_RUN,
+        acceptance_checks_class_pools.NOT_RUNNING_HERE,
+    )
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)

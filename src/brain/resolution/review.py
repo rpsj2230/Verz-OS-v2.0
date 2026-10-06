@@ -35,10 +35,12 @@ names such a field arrives under are enumerated in `brain.ops.jobs` and a test r
 over the two types here, because the field is added by somebody making a screen more useful
 rather than by somebody being careless.
 
-**This is not a page and there is no page.** No route serves it, no console screen is wired to
-it, and `brain.console.reads` requires every console read to be a tool call with a required
-capability, which nothing here is. What exists is the data such a screen would render and the
-filter that decides whose data it is. See `NO_SCREEN_IS_WIRED_TO_ANY_OF_THIS`.
+**This is not a page, and the page renders exactly this.** `brain.resolution_routes` serves these
+cards and the console's Possible duplicates screen (`console/src/pages/resolution/`) draws them,
+with the lines as given and `by_strongest` as the only figures. Until that screen existed a
+constant here said no screen was wired to any of this, so that claiming one required deleting the
+sentence; the screen deleted it. What lives here is still the data and the filter, and nothing
+renders.
 
 Rejected: ordering the queue by evidence strength, which is what a reviewer would ask for. The
 position of an item would then be a statement about evidence they have not read yet, and two
@@ -87,16 +89,6 @@ A_READER_JUDGING_EVIDENCE_IS_TOLD_WHETHER_ANYTHING_MEASURED_IT: Final = (
     "the declared table, so the card names the weight table and says whether it came from a "
     "calibration export. That is a fact about the evidence rather than a caveat about the "
     "product, and it belongs on the surface where somebody is being asked to act on it."
-)
-
-#: The gap this module does not close, kept as a constant so it has to be deleted.
-NO_SCREEN_IS_WIRED_TO_ANY_OF_THIS: Final = (
-    "There is no route, no console screen and no ConsoleRead for the review queue. "
-    "brain.console.reads requires every console read to name a tool and a required capability, "
-    "and nothing here is one, so this is the data a screen would render rather than a screen. "
-    "Nothing produces review items either: cascade answers about a pair it was handed and "
-    "nothing in the running system hands it one. Said in a constant so that claiming a review "
-    "queue exists requires deleting the sentence that says it does not."
 )
 
 

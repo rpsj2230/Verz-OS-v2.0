@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**30 items are open: 154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**39 items are open: 162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,249 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 162. May a new agent be put on your website's chat widget?
+
+**In plain terms:** an agent now answers only on the channels switched on for it, and the switch offers
+a channel only where the agent is allowed to work on it (M13.7.4 and M39.2.4.2). The console and the
+API answer the person asking, in their own signed-in session, so they are offered by name. Your
+website's chat widget is different: it answers visitors who are not signed in, and you decided it gives
+public knowledge only and never asks anybody to log in (item 26). Nothing yet says which agents are
+safe to face the public, so **the switch does not offer the widget at all**. An agent already on it
+keeps it and can be switched off it; no agent can be newly put on it.
+
+**Option A: allow it for an agent that can read only public knowledge.** The widget is offered on an
+agent whose ceiling holds nothing but the knowledge you marked public, checked by the same rule that
+decides what any channel may carry. An agent that can read anything more is never offered it.
+
+**Option B: keep it as built.** The widget keeps whichever agents answer on it today, and a new one is
+put there only by a change to the product.
+
+**My recommendation:** A. It keeps item 26's promise by construction, and lets you replace the website's
+agent without a release. I will not build it until you answer.
+
+**What I need from you:** reply "162: A" or "162: B".
+
+## 161. Before a skill is approved, its examples are rehearsed: what "rehearsed" means for now
+
+**In plain terms:** your plan says a skill's examples are rehearsed before anyone may approve it
+(M12.3.4). A skill will carry its examples inside its own file, each a task and the tools it should
+need, so a new version brings its own. Approving a version will be refused until its examples have
+been rehearsed against that exact version.
+
+Today a rehearsal asks no AI model anything. It checks that an agent holding the skill can reach every
+tool each example needs, for the person approving it, and records that. It does not yet judge whether
+the answer an example would get is a good one.
+
+**That is the narrowing.** Agents can now run with tools through one path (the agent runtime, being
+landed now), so the next step is a rehearsal that actually runs each example and shows the approver
+what it did, with nothing sent or changed. The record is built so that result can be added to it
+later.
+
+**Option A: build the reach check now, and add the real run once the agent runtime is live.**
+Approval is checked for what it can be today, and the screen says what was and was not checked.
+
+**Option B: hold approval-by-rehearsal until examples can be run for real.** Skills are approved as
+today until then.
+
+One more choice inside A: **a skill version with no examples at all is not held**, so the skills
+already in the library can still be reviewed. That also means somebody could leave examples out to
+skip the rehearsal. The alternative is to require at least one example on every new version.
+
+**My recommendation:** A, and versions without examples not held for now. I am building it that way.
+
+**What I need from you:** nothing, or reply "161: B", or "161: A, but require examples".
+
+## 160. May a department's administrator stop one of that department's agents?
+
+**In plain terms:** the Stop control can now stop one agent on its own (M13.7.3), as well as a
+connector, a department, a person or everything. Today only an administrator for the whole company can
+stop a single agent, because a stopped agent is recorded without a department, and a department's
+administrator may only stop things inside their department.
+
+**Option A: allow it.** When a department's administrator presses Stop on an agent, the Brain looks up
+the agent's department at that moment and records it, so the stop is theirs to make and theirs to lift.
+An agent with no department, or one shared across departments, stays a company-wide administrator's to
+stop.
+
+**Option B: keep it as built.** A department's administrator who wants an agent stopped stops their
+whole department, or asks a company-wide administrator.
+
+**My recommendation:** A. A department's administrator is the person nearest to an agent misbehaving
+in their department, and stopping is the safe direction. I will not build it until you answer.
+
+**What I need from you:** reply "160: A" or "160: B".
+
+## 159. When a client's name matches two records you can both see, the Brain says so
+
+**In plain terms:** ask "what does Acme owe us?" when two client records answer to "Acme" (one in
+Xero, one in HubSpot, say) and the Brain has not decided whether they are the same client. Today it
+gives the same sentence it gives when there is no such client at all. Your plan asks for the opposite
+(M14.6.5): say that the name matches more than one client, and never add their figures together.
+
+The rule it changes is one of the Brain's strictest: a person is never told *which kind* of nothing
+happened, because "two records matched" and "nothing exists" must not be told apart when one of the
+records is hidden from them. **That still holds.** The new sentence is given only when every matching
+record is one the person may already read, so it tells them nothing they could not look up. If one of
+the two is hidden from them, they are answered from the one they can see, exactly as if the hidden one
+did not exist, and a test checks the two replies are identical.
+
+Whoever may confirm a merge also gets a link to the "Possible duplicates" review; everybody else gets
+the plain sentence.
+
+**My recommendation:** allow it, as described. I am building it that way.
+
+**What I need from you:** nothing, or reply "159: no" to keep the old single sentence.
+
+## 158. May an automation's canvas have a step where an agent thinks? (optional)
+
+**In plain terms:** every agent now runs through one path, with tools it may call while it answers
+(M13.7.1). The plan says an automation "enters the same agent runtime". The automation canvas you
+have today is deliberately step by step: every step does one fixed thing, and no step asks a model
+anything, so a flow does the same thing every time it runs. That was decided when the canvas was
+built (item 30 and item 124).
+
+So an automation reaches an agent this way instead: **a schedule or a trigger starts an agent**, at
+the reach of the person the automation runs for, and the agent's answer is what the flow produces.
+Nothing changes on the canvas.
+
+**Option A, as built: the canvas stays fixed steps, and an agent is started by a schedule or a
+trigger.** A flow is predictable, and its steps can be read and checked.
+
+**Option B: add an "ask an agent" step inside a canvas.** A flow can then decide things midway, which
+also means it can do something different each time it runs, and its runs are harder to check.
+
+**My recommendation:** A. Nothing waits on this; I am building A.
+
+**Two things I decided for you while building, as you asked me to decide routine items** (tell me if
+either is wrong):
+
+- **Which channels an agent answers on.** An agent now answers only on the channels an administrator
+  switched on for it (M13.7.4). Agents that already exist keep every channel they reach today, so
+  nobody loses anything. A new agent starts with none, and the agent builder asks which channels to
+  switch on, so a new agent is never silent without anybody noticing. Asking for an agent on a channel
+  it is not on gets exactly the same reply as asking for an agent that does not exist.
+- **Where the client-matching weights are kept.** Your decision (f) put them in the exports volume. On
+  an install whose compose file Coolify stores, a release cannot add that volume to the application,
+  so the weights would never be written. They are kept in the Brain's own settings instead, readable
+  only by the worker and by whoever may confirm a merge. The offline matcher still writes its export to
+  the volume where the full install has one.
+
+**What I need from you:** nothing, or reply "158: B" if you want the canvas step.
+
+## 157. One line for your install's database pooler
+
+**In plain terms:** the Brain reaches your database through a pooler that lends out a fixed number of
+connections. The pooler counted its limit per login, and the application uses two logins, so on a busy
+day it could open twice the 20 connections the Brain plans for. The product now caps it at 20 across
+logins (#378). **Your install does not have that cap yet, because a release never edits the copy of
+the compose file Coolify keeps.** Nothing is broken today; this keeps it that way under load.
+
+**Option A: I do it.** Over SSH, through the tunnel to Coolify, I add the one line below to the
+`pgbouncer` service's `environment` in Coolify's copy, beside `DEFAULT_POOL_SIZE`, and redeploy once.
+Requests wait at the pooler for a moment while it restarts.
+
+```yaml
+      MAX_DB_CONNECTIONS: "20"
+```
+
+**Option B: you do it.**
+
+1. Open Coolify and choose the Brain application.
+2. Open the compose file editor.
+3. Find the `pgbouncer` service, then the line `DEFAULT_POOL_SIZE: "20"` under `environment`.
+4. Below it, add the line above with the same indentation.
+5. Press Save, then Redeploy.
+
+**My recommendation:** A.
+
+**What I need from you:** reply "157: A" or "157: B, done".
+
+## 156. What is your "maintenance portal"?
+
+**In plain terms:** the Maintenance Agent you asked for (Wave 3, M38.5.3 and M39.8.7) answers a
+maintenance question from your uploaded maintenance knowledge and the ticket desk, and the plan names
+a third source: "the maintenance portal" (M11.9.9). Nothing the Brain reads today is one, and I will
+not guess what it is. It is closely tied to item 137 (where client projects live).
+
+**Option A: maintenance records in your Laravel application.** If each website's maintenance plan,
+its scheduled work and its history sit in the Laravel database, whoever looks after it adds one more
+read-only view for maintenance beside the clients and staff views (and the project view, if you
+choose B in item 137). I write the view for them; the Brain reads only what it shows.
+
+**Option B: a separate system with its own web address and API.** If the portal is another product
+(a maintenance or hosting dashboard with an API), it connects through the new "Add an API" screen:
+you give its API description, a second person approves it, and it is read like any other source.
+
+**Option C: there is no separate portal.** If maintenance lives in Freshdesk tickets and your uploaded
+maintenance documents, the Maintenance Agent uses those two and nothing more, and I drop the third.
+
+**My recommendation:** tell me which is true today; if it is A, choose it together with item 137's B,
+so one change in Laravel adds both views.
+
+**What I need from you:** reply "156: A", "156: B (the portal's name)" or "156: C".
+
+## 155. Recognising the same client across your systems: two choices before it is switched on
+
+**In plain terms:** the Brain can tell that "Acme Pte Ltd" in Xero, "ACME" in HubSpot and a Freshdesk
+requester at acme are the same client, so a question about one client gathers what every connected
+system knows (Wave 3, M14). The matching code is written and nothing uses it yet. Before it runs, two
+choices are yours.
+
+**1. A little more in the index.** You set the rule that connectors never copy your data: the Brain
+keeps only a small index and reads the rest live when somebody asks. Matching clients needs one more
+thing in that index for each record: a scrambled fingerprint of its email address, phone number or
+company registration number, made with a secret key the Brain keeps in its vault. The fingerprint
+cannot be turned back into the address or number, and nothing else is copied.
+
+- **Option A:** allow the fingerprints in the index, so clients are matched in the background.
+- **Option B:** no fingerprints. Clients are matched only by name, which finds far fewer and needs a
+  person to confirm almost every match.
+
+**My recommendation: A.** It keeps your rule's purpose (none of your data is copied in readable form)
+and makes matching useful.
+
+**2. Matching without a person, for the clearest cases only.** When two records share the same email
+address or registration number and neither carries money (no invoices or deals), the Brain can join
+them by itself, recorded and reversible with one press. Anything less certain, and anything touching
+money, waits for a person.
+
+- **Option A:** join the clearest cases automatically, with a switch to turn it off.
+- **Option B:** a person confirms every match.
+
+**My recommendation: A.** It saves confirming hundreds of obvious matches, and anything involving
+money always waits for a person.
+
+**What I decided myself (tell me if you disagree):**
+
+- Only an Owner or an Admin may confirm or undo a match, as a new permission you can grant to others.
+- The secret key for the fingerprints is created by the installer on every install.
+- Each connector says in its own description which records carry money.
+
+**What I need from you:** reply "155: 1A 2A" (my recommendation), or the options you prefer.
+
+## 151. Connect Slack as a source (ready now)
+
+**In plain terms:** the Brain can now answer from Slack messages, and each person is read only the
+channels Slack says they are in. Nothing is kept: a message is read when asked. This is a separate
+Slack app from the one that answers questions in Slack. In the console open **Knowledge and data**,
+**Connectors**, **Slack**, **Connect**:
+
+1. **Make a Slack app.** On Slack's **Your Apps** page (the console's step links to it) press
+   **Create New App**, **From scratch**, name it after the Brain and pick your workspace.
+2. **Give it read scopes only.** **OAuth & Permissions**, **Bot Token Scopes**: add channels:read,
+   groups:read, channels:history, groups:history, users:read and users:read.email. Nothing that
+   writes.
+3. **Install it and invite it.** **Install to Workspace**, **Allow**. Then in each channel the Brain
+   may read, type /invite and the app's name. A channel it is not in is never read.
+4. **Connect it.** Type the workspace id (it starts with T, on the app's **Basic Information** page),
+   the department whose people may be told what Slack holds, paste the **Bot User OAuth Token** from
+   **OAuth & Permissions** and press **Connect Slack**.
+5. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:slack_message`, scoped to that department, with a reason. A person is matched to their
+   Slack account by their verified work email, and is read only their own channels.
+
+Tell me "connected Slack" afterwards and I prove it on your install.
 
 ## 154. One server change for the sealed sandbox: probably no downtime
 
@@ -579,6 +822,9 @@ sent through the relay on Notifications* passes.
 
 **Part 2, mine with your go-ahead: three server steps.**
 
+The first step also lets item 120's optional services start: the personal-data detector and
+Langfuse are started by the updated deploy script after each release, so they wait for this too.
+
 - Install the updated deploy script, so releases set up the accounts client and apply their own
   vault changes (this is also item 129's prerequisite).
 - Run the accounts-client setup once, which creates the sign-in service client the sync uses and
@@ -629,15 +875,19 @@ picture of each step. Paste keys only into the console, never into chat.
 3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
    **Connect Xero**.
 
-**HubSpot** (contacts and deals, read only)
+**HubSpot** (companies, contacts and deals, read only)
 
 1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
    (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
    Name it "Company Brain".
-2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
-   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+2. On the **Scopes** tab tick `crm.objects.companies.read`, `crm.objects.contacts.read` and
+   `crm.objects.deals.read`, and nothing with "write" in it or touching settings. Press **Create
+   app**, confirm, and copy the access token.
 3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
    account's settings) and the token, and press **Connect HubSpot**.
+4. Give people the read: **People and access**, **People**, the person, **Grant a capability**:
+   `read:hubspot_company`, `read:hubspot_contact` and `read:hubspot_deal`, and the fields they may
+   see (a deal's amount is its own grant).
 
 **Freshdesk** (tickets, read live)
 
@@ -4471,6 +4721,16 @@ nothing was ever exposed. The difference is that when they are wired, the leak c
 reintroduced by writing the natural code.
 
 ---
+
+**REOPENED 2026-10-06: the gap came back, and is being fixed again.** A check written on 2026-10-06
+found that the approval screens built since then show the approver the requester's whole request,
+values included: the console's Approvals card since 2026-09-09, and the Lark card since #258
+(2026-09-30). The guard described above was still there and still passing, but the request travelled
+in a free-form part of the card the guard did not look at, and the reach check compared a value the
+caller asserted rather than one it worked out. Nobody was shown anything: agent actions do not reach
+approvers on your install yet, and no sources are connected. The fix renders every approval at the
+approver's own reach on both screens, shows locked any field the approver cannot read, and extends
+the guard to the whole card, with a check on your install that proves it. Nothing for you to do.
 
 ## 13. Can a leash rule say "supervise everywhere except maintenance"? - DECIDED: strictest wins
 

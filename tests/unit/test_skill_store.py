@@ -12,6 +12,7 @@ Task ids: M42.6.4
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -997,3 +998,107 @@ def test_the_tables_refuse_a_source_or_a_decision_that_does_not_say_what_it_is()
         decided_rows = sql(url, "SELECT digest, self_decided FROM agent.skill_review")
 
     assert decided_rows == [(one.digest, True)]
+
+
+# ------------------------------------------------------- 0178: scripts and their bytes (M12.4.11)
+def test_a_skills_scripts_are_stored_with_it_and_read_back_inside_its_digest() -> None:
+    """**Through the store and the application role, at head.** A skill added with a script writes
+    the script's row in the same transaction; the library reads the skill back with the script's
+    hash, digesting to the key it was stored under, and runnable once approved; the run's read
+    returns the exact bytes. Then a script changed by hand, hash and all, makes the skill read as
+    moved, so its approval no longer covers it. Delete this and the bytes can be stored outside
+    the digest, or lost between the import and the run. **Skips without a server.**"""
+    from tests.unit.test_acceptance import at_head
+    from tests.unit.test_skill_library import a_zip, text_with
+
+    script = b"print('renewal due')\n"
+    package = read_package(
+        "skill.zip",
+        a_zip(
+            {
+                "SKILL.md": text_with(scripts="[scripts/check.py]").encode("utf-8"),
+                "scripts/check.py": script,
+            }
+        ),
+    )
+    one = added(package, by=IMPORTER, at=NOW)
+    good = decided(one, reviewer=REVIEWER, approve=True, at=NOW)
+
+    with at_head("brain_skill_scripts") as url:
+
+        async def round_trip() -> tuple[bool, tuple[LibrarySkill, ...], dict[str, bytes]]:
+            engine = app_engine(url)
+            try:
+                store = StoredSkills(make_session_factory(engine))
+                written = await store.add(one, ent_hash="a" * 32, trace_id="trace-add")
+                await store.decide(good, ent_hash="b" * 32, trace_id="trace-decide")
+                return written, await store.library(), await store.script_bytes(one.digest)
+            finally:
+                await engine.dispose()
+
+        written, library, held = run(round_trip)
+        sql(
+            url,
+            "UPDATE agent.skill_script SET content = %s, sha256 = encode(sha256(%s), 'hex')",
+            b"print('changed')\n",
+            b"print('changed')\n",
+        )
+
+        async def after_the_hand_edit() -> tuple[LibrarySkill, ...]:
+            engine = app_engine(url)
+            try:
+                return await StoredSkills(make_session_factory(engine)).library()
+            finally:
+                await engine.dispose()
+
+        moved = run(after_the_hand_edit)
+
+    assert written is True
+    (stored,) = library
+    assert stored.digest == one.digest and not stored.moved
+    assert stored.imported.skill.script_sha256 == one.imported.skill.script_sha256
+    assert stored.imported.is_executable() is True
+    assert held == {"scripts/check.py": script}
+    (edited,) = moved
+    assert edited.moved
+    assert edited.imported.is_executable() is False
+
+
+def test_the_table_refuses_a_hash_that_is_not_the_sha256_of_its_bytes() -> None:
+    """`0178`'s check computes the hash itself, so a row whose hash describes other bytes cannot
+    be written by any route, a superuser's included. Delete this and a store bug writes an
+    approval of bytes nobody reviewed. **Skips without a server.**"""
+    from tests.unit.test_acceptance import at_head
+
+    one = added(read_package("SKILL.md", SKILL_MD.encode("utf-8")), by=IMPORTER, at=NOW)
+    with at_head("brain_skill_script_check") as url:
+
+        async def add() -> None:
+            engine = app_engine(url)
+            try:
+                await StoredSkills(make_session_factory(engine)).add(
+                    one, ent_hash="a" * 32, trace_id="trace-add"
+                )
+            finally:
+                await engine.dispose()
+
+        run(add)
+        sql(
+            url,
+            "INSERT INTO agent.skill_script (digest, path, sha256, content)"
+            " VALUES (%s, %s, %s, %s)",
+            one.digest,
+            "run.py",
+            hashlib.sha256(b"x").hexdigest(),
+            b"x",
+        )
+        with pytest.raises(psycopg.errors.CheckViolation):
+            sql(
+                url,
+                "INSERT INTO agent.skill_script (digest, path, sha256, content)"
+                " VALUES (%s, %s, %s, %s)",
+                one.digest,
+                "other.py",
+                hashlib.sha256(b"y").hexdigest(),
+                b"z",
+            )

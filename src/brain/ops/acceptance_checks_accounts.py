@@ -38,7 +38,7 @@ joined to their row by their address's digest, and a second read makes nobody. T
 is named as a reserved principal through `new_id`, so nothing outside the harness's rolled-back
 transaction ever holds them.
 
-Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15, M40.7.1, M1.10.3
+Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15, M40.7.1, M1.10.3, M1.6.20, M1.6.21
 """
 
 from __future__ import annotations
@@ -50,6 +50,8 @@ from sqlalchemy import insert, select
 from brain.directory_routes import live_people
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
+from brain.identity.departments_from import as_the_console_places_them
+from brain.identity.organisation_store import moving_people
 from brain.identity.organisation_sync import sync_actor
 from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
 from brain.identity.principal_state_store import StoredPrincipalStates
@@ -80,6 +82,7 @@ from brain.ops.acceptance_run import Harness
 from brain.ops.staff_accounts_run import person_for
 from brain.ops.staff_people_run import provide_people
 from brain.ops.standing_run import apply_standing, plan_standing
+from brain.tables.audit import AuditEntryRow
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
 
 #: Where this module's checks stand on the Install page, before every larger key. See
@@ -411,3 +414,69 @@ async def the_staff_list_puts_every_active_person_on_people(
     again = await provide_people(h.sessions, roster, now=h.now, new_id=lambda: leaver)
     if again.made != 0:
         raise CheckFailedError("a second read of the same list made another person")
+
+
+@check(
+    leaves=("M1.6.20", "M1.6.21"),
+    sentence=(
+        "On reserved people: moving two of them to the other reserved department in one statement, "
+        "as People moves them, puts both there and records each move under the person who made it; "
+        "one already there is not recorded as moved; and the Starter pack step, with departments "
+        "managed on People, reads where People put them and not where the list says."
+    ),
+)
+async def people_moved_on_people_are_recorded_and_read_by_the_sync(
+    h: Harness,
+) -> None:
+    first, second = RESERVED_DEPARTMENTS
+    await h.found_departments()
+    one, two, there = (
+        h.principal(first, "one"),
+        h.principal(first, "two"),
+        h.principal(second, "one"),
+    )
+    for pid, department in ((one, first), (two, first), (there, second)):
+        await h.person(pid, department=department)
+        await _joined(h, pid)
+    await h.execute(*h.attributed(), moving_people([one, two], second))
+    await h.execute(*h.attributed(), moving_people([there], second))
+
+    placed = await h.execute(
+        select(PrincipalRow.id, PrincipalRow.primary_department).where(
+            PrincipalRow.id.in_([one, two, there])
+        )
+    )
+    if {str(pid): str(slug) for pid, slug in placed.all()} != dict.fromkeys(
+        (one, two, there), second
+    ):
+        raise CheckFailedError("the people moved are not in the department they were moved to")
+    recorded = await h.execute(
+        select(AuditEntryRow.subject, AuditEntryRow.actor_id, AuditEntryRow.details).where(
+            AuditEntryRow.action == "organisation",
+            AuditEntryRow.subject.in_([f"principal:{pid}" for pid in (one, two, there)]),
+        )
+    )
+    moves = {
+        (
+            str(subject),
+            str(actor),
+            str((details or {}).get("change")),
+            str((details or {}).get("department")),
+        )
+        for subject, actor, details in recorded.all()
+    }
+    if moves != {(f"principal:{pid}", h.actor, "moved", second) for pid in (one, two)}:
+        raise CheckFailedError("a move is not on the ledger under its mover, or a non-move is")
+
+    listed = Roster(
+        source=SOURCE,
+        complete=True,
+        asserts=DEFAULT_TRUST["lark"],
+        people=tuple(
+            StaffRecord(_address(h, pid), "Acceptance check", department=first, leads=True)
+            for pid in (one, two)
+        ),
+    )
+    as_placed = as_the_console_places_them(listed, {_address(h, pid): second for pid in (one, two)})
+    if {(p.department, p.leads) for p in as_placed.people} != {(second, False)}:
+        raise CheckFailedError("under People the sync still reads the list's department or lead")

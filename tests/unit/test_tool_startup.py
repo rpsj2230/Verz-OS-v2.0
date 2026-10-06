@@ -34,6 +34,7 @@ import pytest
 from brain import demo
 from brain.api_routes import MAX_FILTERS, row_readers
 from brain.app import Settings, create_app
+from brain.chat.attachments import READ_ATTACHMENT
 from brain.connectors.declaration import shipped
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import IdentityMode
@@ -250,7 +251,10 @@ def test_the_demos_source_registers_its_own_entities_beside_the_built_ins() -> N
         len(row_entities_for(demo.DEMO_SOURCE))
         + len(knowledge_tools(_Rows()))
         + len(CONNECTOR_TOOLS)
+        # A file the asker attached to their conversation (M12.3.6), on the document plane.
+        + 1
     )
+    assert registry.get(READ_ATTACHMENT).definition.entity == KNOWLEDGE_ENTITY
 
 
 def test_no_install_reading_another_source_registers_anything_the_demo_brings() -> None:

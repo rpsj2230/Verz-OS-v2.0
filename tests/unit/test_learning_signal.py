@@ -8,7 +8,7 @@ refused by the database, and a paused agent's turn forms no memory while a resum
 
 **The database half skips when there is no server**, and CI always has one.
 
-Task ids: M16.6.4, M16.7.4, M16.7.13
+Task ids: M16.7.2, M16.6.4, M16.7.4, M16.7.13
 """
 
 from __future__ import annotations
@@ -272,3 +272,87 @@ def test_a_paused_agents_turn_forms_nothing_and_a_resumed_or_other_ones_does(
         (),
     ]
     assert Path(MIGRATION).exists()
+
+
+@pytest.mark.needs_db
+def test_a_helpful_mark_on_an_answer_that_recalled_a_memory_leaves_the_memory_as_it_was(
+    database: str,
+) -> None:
+    """**A mark by itself confirms nothing** (M16.7.4, M16.3.2), and M16.7.2 is where somebody will
+    want it to. An inference the person's answer recalled, the answer marked helpful: the memory's
+    `last_confirmed_at` is still unset and recall gives it the same confidence as before the mark.
+    Saying it again is what confirms it, and that is shown beside. Delete this and a helpful mark
+    can start refreshing every memory an answer used, which is a thumb deciding what is kept."""
+    from brain.memory.turn import recall_place
+    from brain.ops.memory_store import StoredRecall
+
+    trace = "t-recalled"
+    answered(database, trace, ME)
+
+    async def go(sessions: Any) -> tuple[object, ...]:
+        formations = StoredFormations(sessions)
+        made = await formations.form(a_turn("I prefer terse answers.", agent_id=None, trace="t-1"))
+        [memory] = made.memory_ids
+        reader = a_turn("", agent_id=None, trace="t-2").reach
+        where = recall_place(ME, "web")
+        before = await StoredRecall(sessions).recalled(reader, where=where, now=NOW)
+        marked = await StoredMarks(sessions).mark(
+            principal_id=ME, trace_id=trace, helpful=True, now=NOW
+        )
+        after = await StoredRecall(sessions).recalled(reader, where=where, now=NOW)
+        return memory, before, marked, after
+
+    memory, before, marked, after = with_sessions(database, go)
+    stamped = sql(database, "SELECT last_confirmed_at FROM mem.adaptive WHERE id = %s", memory)
+
+    assert marked is True
+    assert before == after
+    assert "I prefer terse answers" in before  # type: ignore[operator]
+    assert stamped == [(None,)]
+
+    said_again = with_sessions(
+        database,
+        lambda sessions: StoredFormations(sessions).form(
+            a_turn("I prefer terse answers.", agent_id=None, trace="t-3")
+        ),
+    )
+    assert said_again.confirmed == (memory,)
+    assert sql(
+        database, "SELECT last_confirmed_at IS NOT NULL FROM mem.adaptive WHERE id = %s", memory
+    ) == [(True,)]
+
+
+@pytest.mark.needs_db
+def test_a_confirmation_is_refused_back_dated_or_in_somebody_elses_name(database: str) -> None:
+    """`0163`'s policy, asked as the application role: a confirmation stamped with any time but the
+    statement's own is refused, one in another person's name moves no row, and one in the person's
+    own name at the statement's time is admitted. Delete this and a confirmation could be written
+    to keep a memory alive for ever, or for somebody else."""
+    import psycopg
+
+    async def go(sessions: Any) -> str:
+        made = await StoredFormations(sessions).form(
+            a_turn("I prefer blunt answers.", agent_id=None, trace="t-policy")
+        )
+        return made.memory_ids[0]
+
+    memory = with_sessions(database, go)
+
+    def as_the_application(principal: str, stamp: str) -> tuple[str | None, int]:
+        with psycopg.connect(database) as conn:
+            try:
+                conn.execute("SET LOCAL ROLE brain_app")
+                conn.execute("SELECT set_config('app.principal_id', %s, true)", (principal,))
+                moved = conn.execute(
+                    f"UPDATE mem.adaptive SET last_confirmed_at = {stamp} WHERE id = %s",  # noqa: S608
+                    (memory,),
+                ).rowcount
+            except psycopg.Error as refused:
+                conn.rollback()
+                return str(refused.sqlstate), 0
+            conn.rollback()
+        return None, moved
+
+    assert as_the_application(ME, "statement_timestamp() - interval '30 days'")[0] == "42501"
+    assert as_the_application(SOMEBODY, "statement_timestamp()") == (None, 0)
+    assert as_the_application(ME, "statement_timestamp()") == (None, 1)

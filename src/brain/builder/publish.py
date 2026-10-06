@@ -714,6 +714,81 @@ def record_publish(
     )
 
 
+# ------------------------------------------------------- the publish history, read (M20.4.6)
+#: The paths a publish writes itself, which every version changes and no author did.
+STAMPED_PATHS: Final[tuple[str, ...]] = ("identity.published_by", "identity.version")
+
+#: Why the publish history is computed from the stored versions and never kept beside them.
+THE_PUBLISH_RECORD_IS_READ_FROM_THE_VERSIONS: Final = (
+    "Every publish keeps its signed version in agent.template_version, which the application may "
+    "insert and never update, and the ledger keeps who and when. A table of publish records "
+    "beside them would be a second copy of what changed, and the copy is the one that could "
+    "disagree. So the record is record_publish run over consecutive stored versions, on read, "
+    "and nothing about it is written anywhere."
+)
+
+
+@dataclass(frozen=True)
+class PublishedVersion:
+    """One stored version as the history reads it: who signed it, when, and its document."""
+
+    version: int
+    published_by: str
+    published_at: datetime
+    document: Mapping[str, object]
+
+
+def released_rung(document: Mapping[str, object]) -> AutonomyTier:
+    """The lowest rung the version's leash names, which is the rung it went out at.
+
+    A version naming no target goes out at `brain.gate.leash.MISSING_ENTRY_RUNG`, Shadow.
+    """
+    leash = document.get("guardrails.leash")
+    rungs = [
+        AutonomyTier(int(one["rung"]))
+        for one in (leash if isinstance(leash, list) else [])
+        if isinstance(one, Mapping) and "rung" in one
+    ]
+    return min(rungs, default=AutonomyTier.SHADOW)
+
+
+def publication_history(
+    agent_id: str,
+    versions: Iterable[PublishedVersion],
+    approvers: Mapping[int, Sequence[str]],
+) -> tuple[PublishRecord, ...]:
+    """Every publish of one agent, oldest first, each `record_publish` over it and the one before.
+
+    The first version is compared with nothing, so every path it holds is a path it set.
+    `STAMPED_PATHS` are left out of both sides, because the publish writes them and no author
+    changed them. `approvers` is by version. See `THE_PUBLISH_RECORD_IS_READ_FROM_THE_VERSIONS`.
+    """
+    records: list[PublishRecord] = []
+    before: Mapping[str, object] = {}
+    for one in sorted(versions, key=lambda version: version.version):
+        after = {path: value for path, value in one.document.items() if path not in STAMPED_PATHS}
+        named = tuple(approvers.get(one.version, ()))
+        records.append(
+            record_publish(
+                agent_id=agent_id,
+                actor_id=one.published_by,
+                at=one.published_at,
+                before=before,
+                after=after,
+                decision=PublishDecision(
+                    agent_id=agent_id,
+                    rung=released_rung(one.document),
+                    approvers=len(named),
+                    widenings=(),
+                    refusals=(),
+                ),
+                approvers=named,
+            )
+        )
+        before = after
+    return tuple(records)
+
+
 # ------------------------------------------------------------------------- the diagnostic
 #: The types a reader of this surface is handed. Listed rather than discovered, following
 #: `brain.console.workspace.WORKSPACE_SURFACE`.
