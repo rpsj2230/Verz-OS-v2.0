@@ -250,10 +250,10 @@ def test_a_note_s_attributes_survive_the_trace_mask_and_an_empty_one_adds_none()
 
 
 def test_the_agent_runtime_is_shown_the_same_assembled_parts_and_names_them() -> None:
-    """**The second answer path takes the same value.** An agent run with a hint and a session note
-    shows the model both in its user turn, built by `tool_loop_turn` from the assembled parts,
-    declares the hint as carried, and its answer names the parts with knowledge left out because
-    its tools read it.
+    """**The second answer path takes the same value.** An agent run with an earlier question, a
+    hint and a session note shows the model all three in its user turn, built by `tool_loop_turn`
+    from the assembled parts, declares the hint as carried, and its answer names the parts with
+    knowledge left out because its tools read it.
 
     Delete this and the runtime can go back to sending the bare question, so an agent's answer
     forgets what the person said for this conversation while the model lane's remembers."""
@@ -275,6 +275,7 @@ def test_the_agent_runtime_is_shown_the_same_assembled_parts_and_names_them() ->
         model=made.model,
         hints=FixedHints(("I prefer the figure first HINTAMBER",)),
         session=Said(),
+        follow_up=model_lane.FollowUp(earlier=("what about EARLIERCOBALT",)),
     )
     drafted = asyncio.run(
         made.runtime.drafted(
@@ -291,8 +292,9 @@ def test_the_agent_runtime_is_shown_the_same_assembled_parts_and_names_them() ->
 
     first_user = made.model.shown[0][1].content
     assert "HINTAMBER" in first_user and "SESSIONTEAL" in first_user
+    assert first_user.index("EARLIERCOBALT") < first_user.index("Question:")
     assert first_user.index("Question:") < first_user.index("HINTAMBER")
     assert DataCategory.MEMORY_HINTS in made.model.categories[0]
     assert drafted.context is not None
-    assert drafted.context.included == (Part.SESSION, Part.ASKER_MEMORY)
+    assert drafted.context.included == (Part.CONVERSATION, Part.SESSION, Part.ASKER_MEMORY)
     assert (Part.KNOWLEDGE, LeftOut.BY_TOOLS) in drafted.context.left_out
