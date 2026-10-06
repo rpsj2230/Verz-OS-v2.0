@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-06T17:11:15.944074+00:00",
-  "commit": "1ea86c46",
-  "commit_subject": "The co-author can be asked for changes to a draft and the author takes the ones they choose (#461)",
+  "generated_at": "2026-10-06T17:22:42.636406+00:00",
+  "commit": "1c9a550d",
+  "commit_subject": "The browser harness proves two tabs refresh, no page leaks an internal name or another host, and a drawer works under the console's style policy (#451)",
   "total": 1596,
-  "done": 680,
-  "percent": 42.6,
+  "done": 684,
+  "percent": 42.9,
   "acts": 47,
   "decided": 131,
   "current_wave": 1,
@@ -52,12 +52,12 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 578,
-      "done": 189,
-      "percent": 32.7,
+      "done": 193,
+      "percent": 33.4,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 388,
+      "open": 384,
       "acts": 1,
       "decided": 56
     },
@@ -350,7 +350,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 40,
+      "done": 44,
       "acts": 0,
       "decided": 22
     },
@@ -810,9 +810,11 @@
     "M27.10.4",
     "M27.10.6",
     "M27.15.10",
+    "M27.15.13",
     "M27.15.15",
     "M27.15.16",
     "M27.15.2",
+    "M27.15.53",
     "M27.15.64",
     "M27.15.65",
     "M27.15.67",
@@ -822,6 +824,8 @@
     "M27.15.77",
     "M27.15.78",
     "M27.15.80",
+    "M27.15.81",
+    "M27.15.82",
     "M27.2.3",
     "M27.3.13",
     "M27.3.18",
@@ -3121,11 +3125,6 @@
       "why": "PRIOR WORK (checked 2026-10-06, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_people_console_2); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: PR #364 (M27/w3b-people-3)",
       "updated": "2026-10-06"
     },
-    "M27.15.81": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-06, branches of the last 8 weeks): MORE ELSEWHERE, read before building: PR #451 (M27/harness-console-proofs); branch M27/w3-harness-console-proofs, no PR",
-      "updated": "2026-10-06"
-    },
     "M27.16.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-06, branches of the last 8 weeks): PARTLY WIRED: wired in access_request_routes, audit_routes, automations_routes +255 more; NOT wired: pages/AccessReview.route.tsx, pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx +36 more. MORE ELSEWHERE, read before building: PR #413 (M12/w3-skill-export-rehearsal); PR #435 (M33/people-history-grants); PR #460 (M38/migration-train-0190-0207); +30 more",
@@ -4634,7 +4633,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 77,
+  "closed_today": 81,
   "next_up": [
     "M1.6.13",
     "M1.6.16",
@@ -4643,6 +4642,12 @@
     "M1.6.19"
   ],
   "recent": [
+    {
+      "sha": "1c9a550",
+      "at": "2026-10-06T17:14:23+00:00",
+      "subject": "The browser harness proves two tabs refresh, no page leaks an internal name or another host, and a drawer works under the console's style policy (#451)",
+      "closed": "M27.15.13,M27.15.53,M27.15.81,M27.15.82"
+    },
     {
       "sha": "4647570",
       "at": "2026-10-06T08:11:27+00:00",
@@ -4756,12 +4761,6 @@
       "at": "2026-09-29T03:16:19+00:00",
       "subject": "Seven tasks close: a replaced key is used without a restart, and six console build guarantees are held by CI (#195)",
       "closed": "M27.15.73,M27.15.74,M27.15.76,M27.15.77,M27.15.80,M27.7.1,M31.3.2.5"
-    },
-    {
-      "sha": "b1d139e",
-      "at": "2026-09-29T02:57:30+00:00",
-      "subject": "Three tasks close: the route is on the request row, a console question stays in its department, and Models shows provider health beside the matrix (#192)",
-      "closed": "M27.2.3,M3.6.3,M38.2.2.2"
     }
   ]
 }
