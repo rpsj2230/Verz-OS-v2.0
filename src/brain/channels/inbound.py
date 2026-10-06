@@ -104,6 +104,7 @@ from brain.channels.adapter import (
     ChannelWire,
     Conversation,
 )
+from brain.channels.marks import MARK_ACKNOWLEDGEMENT, AnswerMarks, read_mark
 from brain.channels.outbound import Outgoing
 from brain.channels.webhook import WebhookRefusedError
 from brain.gate.addressing import Address, from_mention
@@ -570,6 +571,7 @@ async def reply_for(
     binder: ChatBinder | None = None,
     offerer: ApprovalOfferer | None = None,
     addresses: AddressBook | None = None,
+    marks: AnswerMarks | None = None,
 ) -> tuple[Outgoing, ...] | None:
     """What to send back to an accepted message: None when nothing on this install answers it,
     and nothing at all for a shared conversation's message that was not for the bot.
@@ -621,6 +623,26 @@ async def reply_for(
         )
     if addresses is not None:
         await addresses.remember(event.channel, event.channel_identity)
+    marked = read_mark(inbound.address.question)
+    if marked is not None:
+        # A word and a reference, from the person the answer was given to or not: one sentence
+        # whatever it came to (M16.6.4). See `marks.EVERY_MARK_IS_ACKNOWLEDGED_ALIKE`.
+        if marks is not None:
+            await marks.mark(
+                principal_id=binding.principal_id,
+                trace_id=marked.trace_id,
+                helpful=marked.helpful,
+                now=now,
+            )
+        shared = conversation is not None and conversation.shared
+        return (
+            Outgoing(
+                channel=event.channel,
+                to=conversation.sender_to if shared and conversation else receipt.reply_to,
+                intent=reply_intent(record, event),
+                text=MARK_ACKNOWLEDGEMENT,
+            ),
+        )
     if is_decision_reply(inbound.address.question):
         # Never the answerer's, and never a decision. See `A_MESSAGE_NEVER_DECIDES_AN_APPROVAL`.
         if offerer is not None:
