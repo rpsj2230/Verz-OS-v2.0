@@ -276,6 +276,12 @@ describe("the console audit", () => {
           const found = pythonTest(proof.test);
           const imports = /from tests\.fixtures\.scratch_postgres import \(?([^)\n]*(?:\n[^)]*)*)\)?/.exec(found.file)?.[1] ?? "";
           const names = imports.split(/[\s,()]+/).filter((one) => /^[a-z_]+$/.test(one));
+          // An install acceptance check runs in a scratch database at head that
+          // `tests/unit/test_acceptance.py`'s `at_head` makes from the same fixture, so importing it
+          // is importing a scratch database too.
+          if (/from tests\.unit\.test_acceptance import [^\n]*\bat_head\b/.test(found.file)) {
+            names.push("at_head");
+          }
           if (proof.database) {
             expect(names.length, `${route}: ${proof.test} is marked as needing a database and its file imports no scratch database`).toBeGreaterThan(0);
           } else {

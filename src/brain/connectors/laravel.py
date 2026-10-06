@@ -186,6 +186,7 @@ from brain.connectors.manifest import (
     ToolDeclaration,
 )
 from brain.connectors.projection import ProjectedRecord, ProjectedValue, RefreshPromise
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import (
     DatabaseTransport,
@@ -204,7 +205,9 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.knowledge.rows import assert_takes_no_sql
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
+from brain.ops.limits import ConnectorLimit
 from brain.ops.secrets import SecretRef
+from brain.resolution.canonical import EntityType
 from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
 
 # ------------------------------------------------------------------ written-down reasons
@@ -348,7 +351,7 @@ THE_VIEW_IS_THE_UNIT_OF_ACCESS = (
 # ------------------------------------------------------------------------------- names
 CONNECTOR_NAME: Final = "laravel"
 
-#: The row of `brain.ops.limits.SOURCE_CEILINGS` every read of this connector is admitted by.
+#: The row of `brain.ops.limits.source_ceilings()` every read of this connector is admitted by.
 #: This connector's own name, held equal to it by a test. See `THERE_IS_NO_MEASURED_CEILING_HERE`.
 CEILING_NAME: Final = "laravel"
 
@@ -2408,7 +2411,25 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="laravel",
+    per_minute=30,
+    raisable=False,
+    note=(
+        "Ours, not a vendor's: nobody publishes a rate for a company's own database. Thirty "
+        "bounded reads a minute across the worker and every question together, one every two "
+        "seconds on average, each stopped at its own row cap and time bound: a load a database "
+        "serving an application does not notice, and a burst of questions is held to it rather "
+        "than read as fast as it is asked. Not raisable by buying anything; a release changes "
+        "it."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CONNECTOR_NAME,
     label="Laravel database views",
     guide=GUIDE,
@@ -2458,5 +2479,14 @@ CONNECTOR: Final = ConnectorDeclaration(
     scopes=KeyScopes(
         request=("SELECT on the allowlisted views only",),
         refuse=("SELECT on tables", "any write"),
+    ),
+    resolves=(
+        # A client view row is a client, and it carries the contract value.
+        ResolvesAs(
+            entity=ENTITY_CLIENT,
+            entity_type=EntityType.COMPANY,
+            fields={"name": "name"},
+            carries_money=True,
+        ),
     ),
 )

@@ -307,7 +307,7 @@ def test_every_model_check_passes_against_answering_providers_and_leaves_nothing
     pass, one that commits a ladder, or one that shows a provider a company document by distance,
     reaches the owner's server first."""
     embedder = Embedder()
-    monkeypatch.setattr("brain.tools.startup.question_embedder", lambda *_: embedder)
+    monkeypatch.setattr("brain.tools.startup.question_embedder", lambda *_, **__: embedder)
     with at_head("brain_acceptance_models") as url:
         laddered(url)
         before, ladder = counts(url), live_ladder(url)

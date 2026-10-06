@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 from brain.ops.credentials import SLOTS
-from brain.ops.limits import SOURCE_CEILINGS
+from brain.ops.limits import source_ceilings
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
 from brain.ops.secrets import VaultRole, policy_of
 
@@ -189,10 +189,10 @@ def _keyless() -> frozenset[str]:
 
 
 @pytest.mark.parametrize(
-    "connector", sorted(c.name for c in SOURCE_CEILINGS if c.name not in _keyless())
+    "connector", sorted(c.name for c in source_ceilings() if c.name not in _keyless())
 )
 def test_every_connector_the_code_knows_about_has_a_credential_slot(connector: str) -> None:
-    """Parametrised from `SOURCE_CEILINGS`, which is the closed list of sources this system
+    """Parametrised from `source_ceilings()`, which is the closed list of sources this system
     has measured a ceiling for. A connector in that list with no slot in the document is a
     connector whose scopes have not been argued about.
 
@@ -611,3 +611,60 @@ def test_no_other_role_reaches_the_template_signing_engine() -> None:
     for name in ("worker", "connector-run", "browser-runner"):
         granted = _granted_paths((POLICIES / f"{name}.hcl").read_text(encoding="utf-8"))
         assert not [path for path in granted if path.startswith("template_signing")], name
+
+
+# ------------------------------------------------- the join-key pepper, created once (M14.7.3)
+def test_the_application_may_create_and_read_the_pepper_and_never_replace_it() -> None:
+    """One exact rule under the resolution engine: create, so the application puts the pepper into
+    an empty slot at the installer's step and at start, and read, so it hashes a value an
+    administrator enters to block it. No update, which is what kv version 2 asks for whenever the
+    slot already holds a version, so nothing this token does can replace the pepper; no delete,
+    patch or metadata, so its history cannot be erased from here; and no wildcard, so no second
+    slot beside it is writable. See
+    `brain.ops.join_key_pepper.THE_PEPPER_IS_CREATED_ONCE_AND_NEVER_WRITTEN_OVER`.
+
+    Delete this and `update` can be added in a debugging session, and a request can replace the
+    value every stored join key was hashed with, which unjoins every one of them silently."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    mount, _, rest = PEPPER_SLOT.partition("/")
+    resolution = {path: sorted(caps) for path, caps in granted.items() if path.startswith(mount)}
+    assert resolution == {f"{mount}/data/{rest}": ["create", "read"]}
+
+
+def test_the_worker_reads_the_pepper_and_may_neither_create_nor_replace_it() -> None:
+    """The worker hashes the identifiers of the source records it registers, so it reads the one
+    slot, and nothing more: a process nobody watches creating the pepper would be a second creator
+    racing the first, and one replacing it would unjoin every stored digest. Delete this and a copy
+    of the application's rule into the worker's policy reads as consistency."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
+    mount, _, rest = PEPPER_SLOT.partition("/")
+    resolution = {path: sorted(caps) for path, caps in granted.items() if path.startswith(mount)}
+    assert resolution == {f"{mount}/data/{rest}": ["read"]}
+
+
+def test_no_role_but_the_application_and_the_worker_reaches_the_resolution_engine() -> None:
+    """A connector run, a channel send and the browser runner hash no join key, and the deploy
+    token writes no secret value, so none of them names the engine. Delete this and the pepper can
+    be read by a token minted for one run against somebody else's system, or created by the token
+    every release runs as, which would change the deploy policy every install already running
+    cannot load by itself."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    mount = PEPPER_SLOT.split("/", 1)[0]
+    others = sorted(
+        set(POLICIES.glob("*.hcl"))
+        - {_policy_file(r) for r in (VaultRole.APPLICATION, VaultRole.WORKER)}
+    )
+    assert {one.stem for one in others} >= {
+        "connector-run",
+        "channel-send",
+        "browser-runner",
+        "deploy",
+    }
+    for path in others:
+        granted = _granted_paths(path.read_text(encoding="utf-8"))
+        assert not [rule for rule in granted if rule.startswith(f"{mount}/")], path.stem

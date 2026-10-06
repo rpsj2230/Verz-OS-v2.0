@@ -44,13 +44,13 @@ from brain.console.needs_you import (
     NeedsYouError,
     Queue,
     Waiting,
-    halt_state,
     needs_you,
     waiting,
     worker_last_seen,
 )
 from brain.console.workspace import RANGE_DAYS, Basis, Range
 from brain.ops.connector_sync import SyncOutcome
+from brain.ops.halt_store import halt_state
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.ops.telemetry import RequestStatus
 from brain.tables.channel import DeliveryOutcome, Direction

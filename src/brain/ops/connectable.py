@@ -54,7 +54,12 @@ Rejected: a `ConnectorRegistry` built from these at start. The registry is a run
 somebody installed; this is the product's list of what could be, and a registry holding every
 connectable source would read on the screen as every source connected.
 
-Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7
+**A source whose connector is custom code is offered only where the install runs a sandbox for
+it (M11.1.5).** Its form and its reading are not enough: the code runs only through the sandbox
+runner `brain.ops.custom_code_run.installed_runner` names, which no install has until the sandbox
+service runs, and with none the source is listed as not connectable yet and never offered.
+
+Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7, M11.1.5
 """
 
 from __future__ import annotations
@@ -67,6 +72,7 @@ from typing import Final
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import (
     DEFAULT_SETTING_CHARS,
+    CodeReading,
     ConnectorDeclaration,
     CredentialShape,
     Setting,
@@ -78,8 +84,10 @@ from brain.connectors.manifest import ConnectorManifest
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
 from brain.ops.credentials import connector_key_slot
+from brain.ops.custom_code_run import installed_runner
 from brain.ops.limits import connector_ceiling
 from brain.ops.secrets import SecretRef, VaultRole
+from brain.tools.run_skill import ScriptRunner
 
 # ------------------------------------------------------------ written-down reasons
 
@@ -172,11 +180,15 @@ class NotConnectableError(Exception):
 
 
 # ------------------------------------------------------------------------ the sources
-def reads(declaration: ConnectorDeclaration) -> bool:
+def reads(declaration: ConnectorDeclaration, *, runner: ScriptRunner | None = None) -> bool:
     """Whether this install can read the source: a reading or a live lookup, and a ceiling.
 
-    See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`.
+    See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`. A source whose connector is custom
+    code is read only in the sandbox `runner` is, so with none it is not read here
+    (`brain.connectors.custom_code.A_CUSTOM_SOURCE_WITH_NO_RUNNER_IS_NOT_READ`).
     """
+    if isinstance(declaration.reading, CodeReading) and runner is None:
+        return False
     has_a_way = declaration.reading is not None or declaration.live is not None
     return has_a_way and connector_ceiling(declaration.name) is not None
 
@@ -192,18 +204,20 @@ def answers(declaration: ConnectorDeclaration) -> bool:
 
 def offered(
     declarations: Mapping[str, ConnectorDeclaration],
+    *,
+    runner: ScriptRunner | None = None,
 ) -> tuple[dict[str, Connectable], dict[str, NotConnectable]]:
     """The sources the console offers, and the ones it lists with the reason it does not.
 
     A declaration with a form that this install cannot read is listed with
     `THIS_INSTALL_CANNOT_READ_IT_YET` and no steps, since its steps end in the form it is not
-    offered.
+    offered. `runner` is the install's sandbox runner, which only a custom-code source needs.
     """
     forms = declared_forms(declarations)
     offers = {
         name: form
         for name, form in forms.items()
-        if reads(declarations[name]) and answers(declarations[name])
+        if reads(declarations[name], runner=runner) and answers(declarations[name])
     }
     listed: dict[str, NotConnectable] = {}
     for name, one in declarations.items():
@@ -238,7 +252,7 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
     }
 
 
-_OFFERED, _LISTED = offered(shipped())
+_OFFERED, _LISTED = offered(shipped(), runner=installed_runner())
 
 #: Every console form this build declares, offered or not. See `declared_forms`.
 DECLARED_FORMS: Final[Mapping[str, Connectable]] = MappingProxyType(declared_forms(shipped()))

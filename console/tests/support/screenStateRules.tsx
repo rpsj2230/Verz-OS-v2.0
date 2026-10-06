@@ -58,6 +58,13 @@ export const ASKS_NOTHING_ON_ARRIVAL: Readonly<Record<string, string>> = {
   "/audit/verify":
     "Verifying the ledger asks nothing until somebody walks it; what the walk says when it is refused " +
     "or cannot reach the API is held in tests/requirement-checks-page.test.tsx.",
+  "/audit/trace":
+    "Reading a trace asks nothing until somebody names a trace and a reason; what the read says when " +
+    "it is refused, or answers with something that is not a finished run, is held in " +
+    "tests/trace-page.test.tsx.",
+  "/audit/trace/:traceId":
+    "The trace id is filled in from the address and nothing is asked until a reason is given and the " +
+    "form sent, which tests/trace-page.test.tsx holds.",
   "/memory":
     "The bare address is a form that names a person and opens /memory/:subject, which asks and is " +
     "held here.",
