@@ -9,7 +9,7 @@
  * card for an approval already read, and carries every other card in the order it arrived.
  *
  * **Seven fields a card, and the card has no eighth.** They are `Card`'s own: which suspension,
- * the artefact exactly as it was rendered, whose reach it runs under, when it was raised, when it
+ * the request as this reader may see it, whose reach it runs under, when it was raised, when it
  * lapses, whether taking the work over is offered, which is true for an agent's prepared action
  * and false for a person's own request, and why approving it would send nothing, which is empty
  * for nearly every card and says "this install has not allowed DNS changes" for a Cloudflare
@@ -17,9 +17,9 @@
  * state beside a card reaches nothing here, because the reader never takes it. See
  * `AN_APPROVAL_CARD_DRAWS_WHAT_WILL_HAPPEN_AND_COUNTS_NOTHING`.
  *
- * **The artefact is carried byte for byte.** Not trimmed, not collapsed, not re-rendered: an
- * approval of a re-rendered artefact is an approval of something nobody read, and trimming is
- * the smallest re-render there is.
+ * **The request is carried byte for byte.** It is rendered by the API at this reader's own reach,
+ * every argument they may not read locked (M33.8.1, needs-rupash 14), and this file neither trims,
+ * collapses nor re-renders it: what the approver reads is exactly what the API rendered for them.
  *
  * **A decision is three shapes and this file will not build a fourth.** Approving sends the
  * verdict alone; rejecting and taking over send the verdict with one of the route's reason codes
@@ -28,12 +28,12 @@
  * this console does not offer for that verdict, so a click with nothing chosen sends nothing. See
  * `A_DECISION_IS_SENT_AS_THE_ROUTE_TAKES_IT_OR_NOT_AT_ALL`.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M33.6.1.3, M11.7.3
+ * Task ids: M35.3.1.2, M35.3.1.1, M33.6.1.3, M11.7.3, M33.8.1
  */
 
 /** Written down because an approvals screen is tempted by a count above it and a call below it. */
 export const AN_APPROVAL_CARD_DRAWS_WHAT_WILL_HAPPEN_AND_COUNTS_NOTHING =
-  "An approval card is what will happen, shown as it was rendered, and who it runs as. A tool " +
+  "An approval card is what will happen, rendered at the reader's reach, and who it runs as. A tool " +
   "call beside it is the permission model and the client's own data on a screen chosen for " +
   "authority over an action, and a total above the queue is the number of approvals the " +
   "reader was not offered. So the page draws the cards the API sent, in its order, and no " +
@@ -50,7 +50,8 @@ export function approvalApiPath(suspensionId: string): string {
 /** One approval as this console holds it. `Card`'s seven fields, under this console's names. */
 export interface ApprovalCardView {
   readonly suspensionId: string;
-  readonly artefact: string;
+  /** What will happen, rendered by the API at this reader's reach, locked where they may not read. */
+  readonly request: string;
   readonly runsAs: string;
   readonly raisedAt: string;
   readonly expiresAt: string;
@@ -91,13 +92,13 @@ function fieldsOf(payload: unknown): Readonly<Record<string, unknown>> | undefin
 export function readApprovalCard(payload: unknown): ApprovalCardView | null {
   const fields = fieldsOf(payload);
   const suspensionId = said(fields?.["suspension_id"]);
-  const artefact = said(fields?.["artefact"]);
+  const request = said(fields?.["request"]);
   const runsAs = said(fields?.["runs_as"]);
   const raisedAt = instant(fields?.["raised_at"]);
   const expiresAt = instant(fields?.["expires_at"]);
   if (
     suspensionId === undefined ||
-    artefact === undefined ||
+    request === undefined ||
     runsAs === undefined ||
     raisedAt === undefined ||
     expiresAt === undefined
@@ -107,7 +108,7 @@ export function readApprovalCard(payload: unknown): ApprovalCardView | null {
   // Only a literal true offers taking over: a body that does not say is a card with two choices.
   return {
     suspensionId,
-    artefact,
+    request,
     runsAs,
     raisedAt,
     expiresAt,

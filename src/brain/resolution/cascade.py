@@ -285,9 +285,11 @@ WHAT_CALLS_THE_CASCADE = (
     "The worker's entity_resolution control, since 2026-10-06: the registry reads the records "
     "connectors declare, and brain.resolution.matching_store compares each with its candidates "
     "through entities.resolve_pair, which is this module's cascade() with a type's narrowing "
-    "applied. Nothing on the request path calls it: brain.gate, brain.tools and brain.channels "
-    "import nothing from this package, and an answer does not yet resolve a named client to an "
-    "entity. This sentence replaces NOTHING_HERE_IS_CALLED_BY_THE_RUNNING_SYSTEM, which said "
+    "applied. Nothing on the request path calls it. Since M14.6.5 an answer reads the registry "
+    "for which client each record it read is (brain.resolution.ambiguity_store) and takes its "
+    "unresolved sentence from brain.resolution.guardrails, and neither imports this module, so "
+    "the request path reads entities the worker resolved and never resolves one itself. This "
+    "sentence replaces NOTHING_HERE_IS_CALLED_BY_THE_RUNNING_SYSTEM, which said "
     "nothing called it and asked to be deleted the day something did."
 )
 
