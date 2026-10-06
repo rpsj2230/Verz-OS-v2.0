@@ -401,6 +401,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.model_lane:PassageSearch.passages": Repeat.READS,
         "brain.gate.model_lane:AskerHints.hints": Repeat.READS,
         "brain.gate.model_lane:AnswerModel.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # The co-author's one model call, asked of the executor the answer lane's is: the model
+        # answers and forgets, and a second ask is a second proposal that nobody has applied.
+        "brain.agent_coauthor_routes:CoauthorCalls.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.gate.model_lane:ToolLoop.drafted": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.gate.runtime:ToolCaller.call": Repeat.ISSUES,
         "brain.gate.runtime:RunLog.record": Repeat.DERIVED_STATE,

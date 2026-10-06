@@ -24,6 +24,7 @@ import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../
 import { agentChannelsApiPath, agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
 import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
 import { agentGroupRemovalApiPath, agentGroupsApiPath } from "../../../src/pages/agents/agentGroupsQuery";
+import { suggestApiPath, takeApiPath } from "../../../src/pages/agents/agentCoauthorQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
 import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
 
@@ -52,6 +53,13 @@ const LIFECYCLE_PRESSED = t(
 const PUBLICATION_PRESSED = t(
   "test_agent_lifecycle_store",
   "test_a_publication_pressed_reaches_its_row_and_one_published_entry_naming_the_person",
+  true,
+);
+
+/** A co-author's change taken over HTTP against PostgreSQL: one more revision, and the save on the ledger. */
+const COAUTHOR_TAKEN_PRESSED = t(
+  "test_agent_draft_store",
+  "test_the_changes_a_co_author_proposed_are_taken_as_one_revision_and_asking_wrote_nothing",
   true,
 );
 
@@ -162,6 +170,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       "automationStopApiPath",
       automationStopApiPath("quote-helper", "auto_one"),
     ),
+  ],
+  "src/pages/agents/CoauthorPanel.tsx suggestApiPath(draftId)": [
+    at("POST /api/v1/agent-drafts/{draft_id}/suggestions", "suggestApiPath", suggestApiPath("d-1")),
+  ],
+  "src/pages/agents/CoauthorPanel.tsx takeApiPath(draftId)": [
+    at("POST /api/v1/agent-drafts/{draft_id}/suggestions/take", "takeApiPath", takeApiPath("d-1")),
   ],
   "src/pages/agents/AgentUpgrade.tsx agentUpgradeAcceptApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/upgrade/accept", "agentUpgradeAcceptApiPath", agentUpgradeAcceptApiPath("quote-helper")),
@@ -364,6 +378,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: DRAFT_DECLINED_PRESSED,
     audit: DRAFT_DECLINED_PRESSED,
     behaviour: t("test_agent_builder_routes", "test_a_publish_sent_back_publishes_nothing_and_returns_to_its_author"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/suggestions": {
+    row: { notApplicable: "Asking the co-author writes no row: the proposal travels in the response and nothing is kept between asking and taking." },
+    audit: { notApplicable: "Asking changes nothing, so there is nothing for the ledger to record; the call's cost is on the usage ledger under the provider's row." },
+    behaviour: t("test_agent_coauthor_routes", "test_asking_proposes_changes_in_the_forms_words_and_writes_nothing"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/suggestions/take": {
+    row: COAUTHOR_TAKEN_PRESSED,
+    audit: COAUTHOR_TAKEN_PRESSED,
+    behaviour: t("test_agent_coauthor_routes", "test_taking_a_change_saves_exactly_that_change_as_the_next_revision_and_rejects_the_rest"),
   },
   "POST /api/v1/agents/{agent_id}/enable": {
     row: LIFECYCLE_PRESSED,

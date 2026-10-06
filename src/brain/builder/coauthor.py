@@ -81,21 +81,28 @@ same text for every author and every draft and sits in the cacheable prefix. It 
 here**, which would be a second description of the manifest, the one that goes stale without
 failing. See `THE_PROMPT_IS_THE_AUTHORS_OWN_DRAFT_AND_THE_SCHEMA`.
 
-**No table, no route and no audit row, and each is a decision.** A proposal is not stored. It is
+**No table and no audit row of its own, and each is a decision.** A proposal is not stored. It is
 carried by whoever asked for it and needs no authenticity, because everything in it is something
 the author could have saved by typing, and the two things that do matter, the base binding and
 the withheld paths, are checked on the value when it comes back rather than on where it has been.
 A table of proposals would be a table of suggestions nobody decided, holding copies of draft
-values, so no migration is written. There is no route because drafts have none and no durable
-store (`drafts` says a draft does not yet survive a restart), and a route in front of an
-in-memory store is a route in front of nothing. And there is no ledger entry because a draft save
-writes none and accepting is a save; `Resolution` is the record a route would write when drafts
-do, and it holds paths and never values, for the reason `publish.PublishRecord` does.
+values, so no migration is written. And there is no ledger entry of its own because a draft save
+writes one and accepting is a save; `Resolution` is the record, and it holds paths and never
+values, for the reason `publish.PublishRecord` does.
 
-**What this does not do.** It does not choose a model: `propose` is handed a `ModelDriver` and the
-`RoutingRung` routing already chose, and nothing in the application assembles a driver yet. It
-does not meter, rate-limit or admit the call; whoever composes a route puts it behind the same
-admission and spend a question goes through. And there is no screen.
+**The route** (`brain.agent_builder_routes`, 2026-10-06) serves `propose` and `accept` over drafts
+that now have a durable store, and adds nothing to the rules above. It sends the same messages
+(`coauthor_messages`) through the async executor rather than a sync driver, so the call is routed,
+metered and recorded like any other model call, under the data category `AGENT_DRAFT`. It carries
+the proposal in its response and rebuilds it from the request on accept, where `Hunk` and `accept`
+judge every change again against the draft as it now is, which is what makes a proposal that was
+carried to a browser and back safe to apply. There is no route for `reject`: it writes nothing, so
+a page that drops the proposal has rejected it, and a request that did nothing would be a request.
+
+**What this module does not do.** It does not choose a model: `propose` is handed a `ModelDriver`
+and the `RoutingRung` routing already chose, and the route hands the messages to the executor,
+which chooses. It does not meter, rate-limit or admit the call; the route puts it behind the
+same admission and records the spend a question is recorded under.
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock; every
 instant is a parameter and the model is a parameter.
@@ -414,23 +421,47 @@ def system_prompt() -> str:
     return f"{INSTRUCTION}\n\nPaths you may propose: {paths}\n\nThe manifest schema:\n{schema}"
 
 
+def checked_ask(ask: str) -> str:
+    """The author's request, or a refusal in words when it is blank or too long.
+
+    Before anything is read or sent, for `propose` and for a route that calls the executor itself,
+    so both refuse in the same sentences and neither costs a model call.
+    """
+    if not ask.strip():
+        msg = "say what you would like the co-author to change, and it will propose it"
+        raise BuilderError(msg)
+    if len(ask) > ASK_CHARS:
+        msg = f"a request to the co-author is at most {ASK_CHARS} characters; shorten it"
+        raise BuilderError(msg)
+    return ask
+
+
+def coauthor_messages(document: Mapping[str, Any], ask: str) -> tuple[DriverMessage, ...]:
+    """The two messages of a proposal's one call: the system prompt, then the draft and request.
+
+    Handed a document and a string, and nothing it could read anything else through. Both
+    `coauthor_request`, for a driver a rung has chosen, and a route that hands the messages to
+    the async executor take them from here, so the prompt is one text however it is sent.
+    """
+    return (
+        DriverMessage(role=Role.SYSTEM, content=system_prompt()),
+        DriverMessage(
+            role=Role.USER,
+            content=canonical_value({"draft": dict(document), "request": ask}),
+        ),
+    )
+
+
 def coauthor_request(document: Mapping[str, Any], ask: str, *, rung: RoutingRung) -> DriverRequest:
     """The one call a proposal makes: the system prompt, then the author's draft and request.
 
-    Handed a document and a string, and nothing it could read anything else through. The rung
-    is routing's decision and supplies the deployment, the model and the timeout, which is
-    `DriverRequest`'s own rule that an adapter never chooses.
+    The rung is routing's decision and supplies the deployment, the model and the timeout, which
+    is `DriverRequest`'s own rule that an adapter never chooses.
     """
     return DriverRequest(
         deployment_id=rung.deployment.id,
         model=rung.model,
-        messages=(
-            DriverMessage(role=Role.SYSTEM, content=system_prompt()),
-            DriverMessage(
-                role=Role.USER,
-                content=canonical_value({"draft": dict(document), "request": ask}),
-            ),
-        ),
+        messages=coauthor_messages(document, ask),
         timeout_seconds=rung.timeout_seconds,
         max_output_tokens=REPLY_TOKENS,
     )
@@ -554,12 +585,7 @@ def propose(
     `ProviderUnavailable` from the driver, and nothing has changed.
     """
     revisions = history(store, draft_id, principal_id=by)
-    if not ask.strip():
-        msg = "say what you would like the co-author to change, and it will propose it"
-        raise BuilderError(msg)
-    if len(ask) > ASK_CHARS:
-        msg = f"a request to the co-author is at most {ASK_CHARS} characters; shorten it"
-        raise BuilderError(msg)
+    checked_ask(ask)
     base = revisions[-1] if revisions else None
     document = {} if base is None else base.document()
     response = driver.complete(coauthor_request(document, ask, rung=rung))

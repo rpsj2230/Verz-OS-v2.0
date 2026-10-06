@@ -58,6 +58,11 @@ from brain.agent_attachment_routes import router as agent_attachment_router
 from brain.agent_builder_routes import router as agent_builder_router
 from brain.agent_capability_routes import router as agent_capability_router
 
+# The co-author: ask for changes to a draft, and take the ones the author chooses. Its own router
+# because it is the builder's one model call and the builder's router writes none. See
+# `brain.agent_coauthor_routes`.
+from brain.agent_coauthor_routes import router as agent_coauthor_router
+
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its

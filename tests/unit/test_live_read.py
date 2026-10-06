@@ -158,6 +158,21 @@ def read(
     )
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _the_first_read_has_paid_for_its_imports_before_any_budget_starts() -> None:
+    """One throwaway read before the first test, so no test's budget pays for a cold process.
+
+    Measured on 2026-10-07: the first live read in a fresh interpreter took 653 ms against 0 ms for
+    the second, because it imports the connector registry (and with it a few hundred modules) while
+    its budget is running. The budget is 1600 ms and a timeout 800, so on a loaded CI machine that
+    first read spent the whole budget before a source was called (`(0, 0)` calls in the delegated
+    read test) or overran a timeout by more than the stopwatch test allows, and which test failed
+    depended on which one the shard ran first.
+
+    Delete this and those two tests fail one run in a few, on whichever of them goes first."""
+    read(call("xero"), sources=Sources({"xero": Source("xero")}))
+
+
 # ------------------------------------------------------------------ the owner's budget
 
 

@@ -31,12 +31,17 @@ export interface ModulePage {
 export async function openFromMenu(page: Page, to: string, heading?: string): Promise<void> {
   const link = page.locator(`a[href="${to}"]`).first();
   await expect(link, `a link to ${to}`).toBeAttached({ timeout: 20_000 });
-  if (!(await link.isVisible()) && heading !== undefined) {
+  if (heading !== undefined) {
     const group = page
       .locator('nav[aria-label="Sections"]')
       .getByRole("button", { name: heading, exact: true });
-    if ((await group.getAttribute("aria-expanded")) !== "true") {
-      await group.click();
+    // Asked again rather than once: the menu keeps which groups are open in the browser's storage,
+    // and another tab of the same console changing it folds or unfolds this one under the harness.
+    for (let attempt = 0; attempt < 5 && !(await link.isVisible()); attempt += 1) {
+      if ((await group.getAttribute("aria-expanded")) !== "true") {
+        await group.click();
+      }
+      await page.waitForTimeout(300);
     }
   }
   await expect(link, `the link to ${to} can be seen`).toBeVisible({ timeout: 10_000 });

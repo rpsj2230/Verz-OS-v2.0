@@ -36,6 +36,7 @@ from brain.ops import (
     acceptance_checks_services,
     acceptance_operations_console,
     acceptance_operations_console_5,
+    acceptance_operations_console_6,
     acceptance_people_console_2,
     acceptance_run,
 )
@@ -752,8 +753,17 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
     # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
+    # The co-author asks a model too, with no tools;
+    # `tests/unit/test_acceptance_coauthor.py` runs it.
+    assert outcomes.pop("the_coauthor_proposes_and_nothing_changes_until_taken")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    # No vault answers here, so the Credentials screen offers no write;
+    # `tests/unit/test_acceptance_operations_console_6.py` answers with one holding every slot.
+    assert outcomes.pop("every_slot_is_listed_and_written_from_the_screen_never_read_back") == (
+        NOT_RUN,
+        acceptance_operations_console_6.THE_SCREEN_OFFERS_NO_WRITE_HERE,
+    )
     # No object store is connected here; `tests/unit/test_acceptance_operations_console_5.py`
     # connects one over a bucket holding a copy and its rehearsal, and passes.
     assert outcomes.pop("the_recovery_screen_reads_this_installs_backups") == (

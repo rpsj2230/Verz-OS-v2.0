@@ -32,6 +32,7 @@ on:
       - "src/brain/setup_routes.py"
       - "src/brain/sign_in_routes.py"
       - "src/brain/navigation_routes.py"
+      - "src/brain/console_static.py"
       - "src/brain/serve.py"
       - "src/brain/runtime.py"
       - "src/brain/identity/**"

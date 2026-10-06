@@ -66,7 +66,7 @@ share an origin. See `NO_INSTALLS_VALUES_ARE_BUILT_INTO_THE_BUNDLE`. The install
 arrives the same way, already turned into the colours the console draws with it and measured
 for contrast in both themes, which `served_accent` argues, and so do its names and logo.
 
-Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4, M41.1.4
+Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4, M41.1.4, M27.15.81
 """
 
 from __future__ import annotations
@@ -428,6 +428,21 @@ def mount_console_fallback(app: FastAPI) -> None:
     app.router.default = console_or_unmatched
 
 
+#: The console's content security policy for styles, sent with its entry document.
+CONSOLE_STYLE_POLICY: Final = "style-src 'self' 'unsafe-inline'"
+
+#: Why that policy keeps inline styles rather than moving to nonces, as the recorded choice.
+THE_CONSOLE_KEEPS_INLINE_STYLES_FOR_ITS_DIALOGS: Final = (
+    "The console's dialogs and drawers lock the page's scroll by writing a style element and "
+    "style attributes at the moment they open, and a style policy without 'unsafe-inline' refuses "
+    "both, so a drawer opens over a page that still scrolls and its focus trap misplaces. "
+    "Nonces would need the server to mint one per response and every component to carry it, "
+    "for styles that load no code. So the policy keeps inline styles, from the console's own "
+    "origin only, as admin-console-architecture section 5.7 records; the browser harness opens "
+    "a drawer under it and fails on anything the browser refuses."
+)
+
+
 def _entry_response(entry: Path) -> FileResponse:
     """The entry document, never cached.
 
@@ -441,5 +456,9 @@ def _entry_response(entry: Path) -> FileResponse:
     return FileResponse(
         entry,
         media_type="text/html",
-        headers={"cache-control": "no-store"},
+        headers={
+            "cache-control": "no-store",
+            # See `THE_CONSOLE_KEEPS_INLINE_STYLES_FOR_ITS_DIALOGS`.
+            "content-security-policy": CONSOLE_STYLE_POLICY,
+        },
     )
