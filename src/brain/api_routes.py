@@ -224,6 +224,7 @@ from brain.knowledge.rows import (
 )
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.memory.turn import Turn, recall_place, session_statements, turn_of
+from brain.ops.budget_stop_store import Asker, budget_refusal_for
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
@@ -1718,6 +1719,17 @@ class Halted:
     told: str
 
 
+@dataclass(frozen=True)
+class BudgetStopped(Halted):
+    """A question a used-up budget refused, told `budget_stop_store.SPENDING_LIMIT_REACHED`.
+
+    A halt's subclass because both are a question turned away before it costs anything, with one
+    sentence and nothing else, and every place that answers a halt answers this the same way. The
+    two stay told apart for whoever reads the type: a halt ends with a person and a budget stop
+    with its period, which `brain.ops.budget_stop` argues in a constant of its own.
+    """
+
+
 def halted_reply(request: Request, halted: Halted) -> JSONResponse:
     """The 503 a halted question is, with no `Retry-After`.
 
@@ -1984,6 +1996,23 @@ async def answered_for(
     )
     if told:
         return Halted(told)
+
+    # Stopped by a budget that is used up, while `budget_enforcement` is on; recorded as one the
+    # install would have stopped while it is off. After the halt and before any lane, so a stopped
+    # question costs nothing, and a budget store that cannot be read answers the question. See
+    # `brain.ops.budget_stop_store.BUDGET_ENFORCEMENT_FAILS_SAFE_FOR_THE_ASKER`.
+    spent = await budget_refusal_for(
+        getattr(request.app.state, "db_sessions", None),
+        Asker(
+            principal_id=asking.principal.id,
+            department=asking.principal.primary_department or "",
+            agent_id=ask.agent,
+        ),
+        at=asking.now,
+        trace_id=bound_trace_id(request),
+    )
+    if spent:
+        return BudgetStopped(spent)
 
     # Uploaded classified tables (Classification screen) join the fast lane beside the
     # built-in rules, each column answered only to who may read it.

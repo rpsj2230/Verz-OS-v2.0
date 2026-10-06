@@ -106,6 +106,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.install_routes",
         "brain.staff_source_routes",
         "brain.resolution.merge_store",
+        "brain.ops.budget_stop_store",
     }
 
 
@@ -221,6 +222,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "schedule_control": True,
         "release_check": False,
         "unattended_entity_merge": False,
+        "budget_enforcement": False,
     }
 
 

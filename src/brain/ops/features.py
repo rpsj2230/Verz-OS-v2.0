@@ -242,12 +242,32 @@ UNATTENDED_ENTITY_MERGE: Final = Feature(
     read_by=("brain.resolution.merge_store:merge_entities",),
 )
 
+#: Stopping questions when a budget is used up. Off until the owner decides needs-rupash 169: the
+#: stop is the hard one he chose, and `brain.ops.budget_stop` records the argument against it. While
+#: off, a used-up budget is still recorded as one the install would have stopped, and those records
+#: are what the decision is made on.
+BUDGET_ENFORCEMENT: Final = Feature(
+    name="budget_enforcement",
+    title="Stop questions when a budget is used up",
+    what=(
+        "When a budget runs out, whoever can raise it is told, and questions it covers are not "
+        "answered until its period ends: the next day for a daily budget, the first of the "
+        "month for a monthly one. Raising the budget lifts the stop at once."
+    ),
+    while_off=(
+        "No question is refused for a budget. A budget that runs out is recorded on the Spend "
+        "screen as one the install would have stopped, with when its period ends."
+    ),
+    read_by=("brain.ops.budget_stop_store:budget_refusal_for",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
     SCHEDULE_CONTROL,
     RELEASE_CHECK,
     UNATTENDED_ENTITY_MERGE,
+    BUDGET_ENFORCEMENT,
 )
 
 

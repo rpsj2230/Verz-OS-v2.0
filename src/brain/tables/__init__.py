@@ -62,6 +62,7 @@ from brain.tables.binding_code import BindingCodeRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
+from brain.tables.budget_stop import BudgetStopRow
 from brain.tables.channel import ChannelDeliveryRow, ChannelRow
 from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
@@ -449,6 +450,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
     # outlives both.
     "ops.agent_run",
+    # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
+    # values, so a stop's row outlives a ceiling's next version and a person leaving.
+    "ops.budget_stop",
 )
 
 __all__ = [
@@ -473,6 +477,7 @@ __all__ = [
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
+    "BudgetStopRow",
     "BudgetVersionRow",
     "CanonicalEntityRow",
     "CapabilityGrantRow",
