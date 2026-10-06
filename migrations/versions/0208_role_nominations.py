@@ -20,7 +20,7 @@ left its role grant, which stays.
 Task ids: M33.1.2.3
 
 Revision ID: 0208
-Revises: 0189
+Revises: 0205
 """
 
 from __future__ import annotations

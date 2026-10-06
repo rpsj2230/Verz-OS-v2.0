@@ -537,6 +537,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A retrieval keeps which retrievers ran, three counts, the places followed and a duration:
         # `0193` keeps no document, no question and no principal, so nothing in it is anybody's.
         "ops.retrieval_event",
+        # A budget stop keeps a ceiling's key, a period and an enforcement flag, with the ids of the
+        # request that found it used up and of the people told: actors, and a stop is the budget's
+        # period rather than anybody's record (`0211`).
+        "ops.budget_stop",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

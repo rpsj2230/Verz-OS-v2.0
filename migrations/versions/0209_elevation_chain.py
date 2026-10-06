@@ -33,7 +33,7 @@ loses the separate head and anchor and nothing else.
 Task ids: M33.7.1.3
 
 Revision ID: 0209
-Revises: 0189
+Revises: 0208
 """
 
 from __future__ import annotations
@@ -182,6 +182,48 @@ CREATE TRIGGER elevation_request_is_chained
     FOR EACH ROW EXECUTE FUNCTION gate.record_elevation_chain()
 """
 
+#: The control-run names, with and without `elevation_anchor`. The second is `0201`'s. The anchor
+#: control is read by the anchor workflow on a route, and the run it reports is recorded here.
+WITH_ELEVATION_ANCHOR = (
+    "name IN ('acceptance_run', 'approved_actions', 'audit_anchor', 'automation_run', "
+    "'backup_exposure', 'canary_run', 'connector_sync', 'denial_digest', 'directory_sync', "
+    "'elevation_anchor', 'entity_resolution', 'erasure_queue', 'escalation_expiry', "
+    "'evening_digest', 'knowledge_reverification', 'model_health_probes', 'outbox_dispatch', "
+    "'queue_redrive', 'resolution_calibration', 'restore_drill', 'retention_sweep', "
+    "'side_effect_resume', 'spend_correction', 'spend_report_refresh', 'vault_audit_ship', "
+    "'vault_token_renewal')"
+)
+WITHOUT_ELEVATION_ANCHOR = (
+    "name IN ('acceptance_run', 'approved_actions', 'audit_anchor', 'automation_run', "
+    "'backup_exposure', 'canary_run', 'connector_sync', 'denial_digest', 'directory_sync', "
+    "'entity_resolution', 'erasure_queue', 'escalation_expiry', 'evening_digest', "
+    "'knowledge_reverification', 'model_health_probes', 'outbox_dispatch', 'queue_redrive', "
+    "'resolution_calibration', 'restore_drill', 'retention_sweep', 'side_effect_resume', "
+    "'spend_correction', 'spend_report_refresh', 'vault_audit_ship', 'vault_token_renewal')"
+)
+
+#: What this migration replaces: `0201`'s control-run names.
+SUPERSEDES: dict[str, str] = {WITHOUT_ELEVATION_ANCHOR: WITH_ELEVATION_ANCHOR}
+
+#: Drops the control-run name constraint by whichever name it has. See `0030`, which `0133` copies.
+DROP_THE_NAME_CONSTRAINT = """
+DO $$
+DECLARE
+    v_name text;
+BEGIN
+    FOR v_name IN
+        SELECT c.conname
+          FROM pg_constraint c
+         WHERE c.conrelid = 'ops.control_run'::regclass
+           AND c.contype = 'c'
+           AND right(c.conname, 16) = 'control_run_name'
+    LOOP
+        EXECUTE 'ALTER TABLE ops.control_run DROP CONSTRAINT ' || quote_ident(v_name);
+    END LOOP;
+END
+$$
+"""
+
 
 def upgrade() -> None:
     assert all(APP_ROLE in statement for statement in GRANTS)
@@ -228,9 +270,21 @@ def upgrade() -> None:
         op.execute(statement)
     op.execute(CHAIN_FUNCTION)
     op.execute(CHAIN_TRIGGER)
+    op.execute(DROP_THE_NAME_CONSTRAINT)
+    op.create_check_constraint(
+        "control_run_name", "control_run", WITH_ELEVATION_ANCHOR, schema="ops"
+    )
 
 
 def downgrade() -> None:
+    op.execute(DROP_THE_NAME_CONSTRAINT)
+    op.create_check_constraint(
+        "control_run_name",
+        "control_run",
+        WITHOUT_ELEVATION_ANCHOR,
+        schema="ops",
+        postgresql_not_valid=True,
+    )
     op.execute("DROP TRIGGER IF EXISTS elevation_request_is_chained ON gate.elevation_request")
     op.execute("DROP FUNCTION IF EXISTS gate.record_elevation_chain()")
     op.execute("DROP TABLE IF EXISTS obs.elevation_entry")

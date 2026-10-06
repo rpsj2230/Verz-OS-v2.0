@@ -306,7 +306,7 @@ async def record(
             principal_id=asker.principal_id,
             trace_id=trace_id,
         )
-        .on_conflict_do_nothing(constraint="one_stop_per_period")
+        .on_conflict_do_nothing(constraint="uq_budget_stop_one_stop_per_period")
     )
 
 

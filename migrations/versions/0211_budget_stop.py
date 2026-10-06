@@ -27,7 +27,7 @@ rows still describe.
 Task ids: M27.12.5, M27.7.15
 
 Revision ID: 0211
-Revises: 0189
+Revises: 0210
 """
 
 from __future__ import annotations
@@ -132,7 +132,12 @@ def upgrade() -> None:
             name="addressed_to_somebody_or_said_to_nobody",
         ),
         sa.UniqueConstraint(
-            "level", "subject", "period", "until", "enforced", name="one_stop_per_period"
+            "level",
+            "subject",
+            "period",
+            "until",
+            "enforced",
+            name="uq_budget_stop_one_stop_per_period",
         ),
         schema="ops",
     )

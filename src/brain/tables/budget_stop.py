@@ -72,7 +72,12 @@ class BudgetStopRow(Base):
             name="addressed_to_somebody_or_said_to_nobody",
         ),
         UniqueConstraint(
-            "level", "subject", "period", "until", "enforced", name="one_stop_per_period"
+            "level",
+            "subject",
+            "period",
+            "until",
+            "enforced",
+            name="uq_budget_stop_one_stop_per_period",
         ),
         Index("ix_ops_budget_stop_until", "until"),
         {"schema": "ops"},

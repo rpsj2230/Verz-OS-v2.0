@@ -308,6 +308,8 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         INSTALL_PATH,
         TRANSFER_PATH,
     )
+    from brain.agent_upgrade_routes import ACCEPT_PATH as UPGRADE_ACCEPT_PATH
+    from brain.agent_upgrade_routes import DECLINE_PATH as UPGRADE_DECLINE_PATH
     from brain.credential_routes import CREDENTIALS_PATH
     from brain.resolution_routes import DECISION_PATH, PROMOTE_PATH
     from brain.sign_in_routes import SIGN_INS_PATH
@@ -366,6 +368,8 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         (f"{API_PREFIX}{DECISION_PATH}", "409"): "#/components/schemas/NotChangedView",
         (f"{API_PREFIX}{PROMOTE_PATH}", "409"): "#/components/schemas/NotChangedView",
         (f"{API_PREFIX}{GROUPS_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{UPGRADE_ACCEPT_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{UPGRADE_DECLINE_PATH}", "409"): "#/components/schemas/NotChangedView",
     }
 
     checked = 0

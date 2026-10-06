@@ -21,7 +21,7 @@ reason `0047` gives against editing a function every grant goes through.
 Task ids: M39.2.4.4
 
 Revision ID: 0205
-Revises: 0207
+Revises: 0204
 """
 
 from __future__ import annotations
