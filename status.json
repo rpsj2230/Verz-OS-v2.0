@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T17:43:03.794953+00:00",
-  "commit": "73027b16",
-  "commit_subject": "The live-read tests no longer let their first read pay for a cold process out of its budget (#471)",
+  "generated_at": "2026-10-06T18:07:35.223621+00:00",
+  "commit": "ad331ea7",
+  "commit_subject": "The proof sweep is a command: it reads an install's two newest acceptance runs and writes the Closes lines and evidence rows they prove (#427)",
   "total": 1596,
   "done": 684,
   "percent": 42.9,
