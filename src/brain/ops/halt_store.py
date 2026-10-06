@@ -31,9 +31,10 @@ department is written as a row naming that department, so a grant scoped to it m
 scoped to another does not; a halt on everything names no department, so only a grant with no
 department in its scope may write one. See `A_SCOPED_STOP_STOPS_ONLY_WHAT_ITS_SCOPE_NAMES`. The
 agent axis is refused here until something that starts an agent's work asks it, rather than stored
-as a halt that refuses nothing (M13.7.3 is that work).
+as a halt that refuses nothing. Since M13.7.3 the agent is asked too: an answer names the agent it
+was routed to and an automation the agent it runs, so all five axes are enforced.
 
-Task ids: M27.15.10, M27.15.15, M27.15.16, M27.15.2
+Task ids: M27.15.10, M27.15.15, M27.15.16, M27.15.2, M13.7.3
 """
 
 from __future__ import annotations
@@ -117,6 +118,9 @@ class Work:
     person: str = ""
     department: str = ""
     connector: str = ""
+    #: The agent the work runs as, or empty for work no agent does. Optional, so a caller written
+    #: before the agent axis was asked keeps its meaning (M13.7.3).
+    agent: str = ""
 
 
 #: One row of `ops.halt` as the state reading needs it: scope, target, act, actor, reason, instant.
@@ -182,7 +186,12 @@ def refusal_in(state: HaltState, work: Work) -> str:
     `HaltState.refusal`, which names the scope and never the reason or who declared it, and which
     has its own sentence for a state nobody could read.
     """
-    return state.refusal(person=work.person, department=work.department, connector=work.connector)
+    return state.refusal(
+        person=work.person,
+        department=work.department,
+        connector=work.connector,
+        agent=work.agent,
+    )
 
 
 async def refusal_for(sessions: async_sessionmaker[AsyncSession] | None, work: Work) -> str:

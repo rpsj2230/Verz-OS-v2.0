@@ -37,9 +37,9 @@ halts could be declared, validated, stored, reloaded and rendered on a screen, a
 request was admitted anyway. `brain.ops.admission.decide` asked first, and was handed a
 connector and nothing else, and every live caller handed it `NOTHING_HALTED`, so for a while
 the fifth lie was only better hidden. Since 2026-10-06 `brain.ops.halt_store` reads the table
-and every path that starts work asks it: an answer, an automation, a connector read. The
-agent axis is still asked by nothing, so `ENFORCED_AXES` says which axes are real and
-`halt_gaps` reports a halt declared on another rather than letting it read as working.
+and every path that starts work asks it: an answer, an automation, a connector read, each with
+the person, department, connector and agent it knows. `ENFORCED_AXES` says which axes are real
+and `halt_gaps` reports a halt declared on any other rather than letting it read as working.
 
 **Reading fails closed, which is the opposite of everything else here.** Every cache in this
 system treats "I could not tell" as "carry on", because a cache that fails closed turns a
@@ -200,13 +200,19 @@ TARGETED: Final[frozenset[HaltScope]] = frozenset(
 #: The scopes something actually consults. Everything else is a halt that refuses nothing.
 #:
 #: `brain.ops.halt_store.refusal_in` is asked by every path that starts work: an answer names
-#: its person and their department, an automation the person it runs as and theirs, a connector
-#: read its connector, and `brain.ops.admission.decide` its connector too. Nothing that starts
-#: an agent's work names the agent yet, so a halt on one agent can be declared and stop nothing,
-#: and `halt_gaps` reports one, because the administrator declaring it is not in a position to go
-#: and read which call sites exist. Widen this set when a call site that knows the axis asks.
+#: its person, their department and the agent it was routed to, an automation the person it runs
+#: as, theirs and its agent, a connector read its connector, and `brain.ops.admission.decide` its
+#: connector too. Since M13.7.3 that is every axis. An axis added to `HaltScope` and not here is a
+#: halt that can be declared and stop nothing, and `halt_gaps` reports one, because the
+#: administrator declaring it is not in a position to go and read which call sites exist.
 ENFORCED_AXES: Final[frozenset[HaltScope]] = frozenset(
-    {HaltScope.EVERYTHING, HaltScope.CONNECTOR, HaltScope.DEPARTMENT, HaltScope.PERSON}
+    {
+        HaltScope.EVERYTHING,
+        HaltScope.CONNECTOR,
+        HaltScope.DEPARTMENT,
+        HaltScope.PERSON,
+        HaltScope.AGENT,
+    }
 )
 
 

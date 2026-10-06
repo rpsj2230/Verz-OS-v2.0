@@ -16,6 +16,7 @@ asked through `/answer`'s own function, so nothing here is a second copy of eith
 - A resume with no reason is refused and lifts nothing; a resume with one, by the other
   administrator, lifts it and says it overrides somebody else's stop, and the member is
   admitted again.
+- An agent's stop refuses work that names that agent and admits another agent's (M13.7.3).
 - A stop on everything turns a question away in the halt's own sentence before any lane runs.
 - Each state is read through a new session and a reader built for the read, and the store holds
   nothing between reads, so what refuses is the table and not the process. The literal restart,
@@ -28,7 +29,7 @@ asked through `/answer`'s own function, so nothing here is a second copy of eith
 **Nothing is committed.** Every row, and every ledger entry its trigger writes, is in the check's
 transaction and is rolled back with it, so no member of the install is stopped by the check.
 
-Task ids: M27.15.10, M27.15.15, M27.15.16, M27.15.2
+Task ids: M27.15.10, M27.15.15, M27.15.16, M27.15.2, M13.7.3
 """
 
 from __future__ import annotations
@@ -76,11 +77,12 @@ async def _signed_in_strongly(h: Harness, principal_id: str) -> Any:
 
 
 @check(
-    leaves=("M27.15.2", "M27.15.10", "M27.15.15", "M27.15.16"),
+    leaves=("M27.15.2", "M27.15.10", "M27.15.15", "M27.15.16", "M13.7.3"),
     sentence=(
         "A department administrator stops their own department in one press with no reason and "
         "nothing wider; its member is told without the reason and the other department is not; "
-        "a resume needs a written reason and says whose stop it lifts; a stop on everything turns "
+        "a resume needs a written reason and says whose stop it lifts; an agent's stop refuses "
+        "that agent's work alone; a stop on everything turns "
         "a question away first; and a halt store that cannot be read refuses."
     ),
 )
@@ -135,7 +137,7 @@ async def a_stop_reaches_only_what_its_holder_may_stop(
             continue
         raise CheckFailedError("a department administrator stopped beyond their department")
     screen = await halts(_request(app), await _signed_in_strongly(h, scoped))
-    if screen.may_stop_everything or HaltScope.AGENT not in screen.not_asked_yet:
+    if screen.may_stop_everything or screen.not_asked_yet:
         raise CheckFailedError("the Stop screen offered more than its reader may stop")
     if [(one.scope, one.target) for one in screen.halts] != [(HaltScope.DEPARTMENT, A)]:
         raise CheckFailedError("the Stop screen did not list the stop its reader had made")
@@ -166,6 +168,17 @@ async def a_stop_reaches_only_what_its_holder_may_stop(
         raise CheckFailedError("a resume did not say it lifted somebody else's stop")
     if await told(member_a, A):
         raise CheckFailedError("a resumed department was still stopped")
+
+    helper, other = f"{h.word().lower()}_helper", f"{h.word().lower()}_other"
+    await stop_now(
+        _request(app),
+        await _signed_in_strongly(h, whole),
+        StopAsked(scope=HaltScope.AGENT, target=helper),
+    )
+    agent_refused = refusal_in(await read_state(h.sessions), Work(person=member_b, agent=helper))
+    agent_admitted = refusal_in(await read_state(h.sessions), Work(person=member_b, agent=other))
+    if not agent_refused or agent_admitted:
+        raise CheckFailedError("an agent stop did not stop exactly that agent's work")
 
     await stop_now(
         _request(app), await _signed_in_strongly(h, whole), StopAsked(scope=HaltScope.EVERYTHING)
