@@ -224,7 +224,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
-from brain.ops.halt_store import Work, refusal_for
+from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
@@ -1700,13 +1700,12 @@ async def answered_for(
     # cannot be read. First of all, before any table is read for the lanes, so a database that
     # cannot be read refuses in the halt's own words rather than failing in a lane. See
     # `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
-    told = await refusal_for(
-        getattr(request.app.state, "db_sessions", None),
-        Work(
-            person=asking.principal.id,
-            department=asking.principal.primary_department or "",
-        ),
+    halts = await read_state(getattr(request.app.state, "db_sessions", None))
+    work = Work(
+        person=asking.principal.id,
+        department=asking.principal.primary_department or "",
     )
+    told = refusal_in(halts, work)
     if told:
         return Halted(told)
 
@@ -1794,6 +1793,11 @@ async def answered_for(
             now=asking.now,
             caching=caching,
         )
+        # The agent it was routed to, once it is known and before anything is counted or read at
+        # its reach: a stopped agent answers nobody (M13.7.3), from the state read above.
+        told = refusal_in(halts, replace(work, agent=front.selection.agent_id))
+        if told:
+            return Halted(told)
         # Every window, the agent's included, and the one call that records. See
         # A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED.
         counted = await windows_say(

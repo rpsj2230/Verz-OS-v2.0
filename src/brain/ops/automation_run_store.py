@@ -328,6 +328,7 @@ async def run_one(
             Work(
                 person=owner_id,
                 department="" if owner is None else owner.primary_department or "",
+                agent=row.agent_id,
             ),
         )
         if held:

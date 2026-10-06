@@ -301,24 +301,30 @@ def test_a_due_automation_runs_as_its_owner_and_writes_its_run_its_event_and_its
     assert scheduled == next_run_after(QUESTIONS.cadence, NOW)
 
 
-def test_an_automation_whose_owner_is_stopped_is_held_and_runs_once_the_stop_is_lifted() -> None:
-    """**HELD_BY_A_HALT_IS_NOT_A_FAILED_RUN.** A halt on the person it runs as leaves it unrun,
-    unrecorded and still due, so no failure counts towards a pause; once the halt is resumed the
-    next tick runs it. Delete this and a stop can be ignored by the scheduler, or turn every
-    automation it touches into a pause somebody has to find and undo."""
+@pytest.mark.parametrize("scope", ["person", "agent"])
+def test_an_automation_whose_owner_is_stopped_is_held_and_runs_once_the_stop_is_lifted(
+    scope: str,
+) -> None:
+    """**HELD_BY_A_HALT_IS_NOT_A_FAILED_RUN.** A halt on the person it runs as, or on the agent it
+    runs (M13.7.3), leaves it unrun, unrecorded and still due, so no failure counts towards a
+    pause; once the halt is resumed the next tick runs it. Delete this and a stop can be ignored by
+    the scheduler, or turn every automation it touches into a pause somebody has to find and
+    undo."""
+    target = OWNER if scope == "person" else AGENT
 
     def act(kind: str, reason: str, at: datetime) -> None:
         sql(
             url,
             "INSERT INTO ops.halt (act, scope, target, actor_id, actor_role, reason, at)"
-            " VALUES (%s, 'person', %s, 'u_admin', 'install administrator', %s, %s)",
+            " VALUES (%s, %s, %s, 'u_admin', 'install administrator', %s, %s)",
             kind,
-            OWNER,
+            scope,
+            target,
             reason,
             at,
         )
 
-    with through_0067("brain_automation_run_halted") as url:
+    with through_0067(f"brain_automation_run_halted_{scope}") as url:
         seeded(url)
         act("halt", "the account was phished on Tuesday", NOW - timedelta(minutes=5))
         held = tick(url)
