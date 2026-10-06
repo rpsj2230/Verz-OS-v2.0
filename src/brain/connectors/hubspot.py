@@ -172,6 +172,7 @@ from brain.connectors.manifest import (
     ToolDeclaration,
 )
 from brain.connectors.projection import ProjectedRecord, ProjectedValue, RefreshPromise
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import ID_TARGET, RestOperation, RestSpec, load_spec
 from brain.connectors.throttle import CallOutcome, ceiling_for, classify, retry_delay
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord
@@ -184,6 +185,7 @@ from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
 from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import MAX_BACKOFF_SECONDS, ConnectorLimit, connector_ceiling
 from brain.ops.secrets import SecretRef
+from brain.resolution.canonical import EntityType
 from brain.tools.fetch import Fetcher, Resolver
 
 # ------------------------------------------------------------------ written-down reasons
@@ -2077,7 +2079,25 @@ GUIDE: Final = keyed(
 )
 
 
+#: This source's verified rate ceiling, which `brain.ops.limits.connector_ceiling` finds
+#: on this declaration. See `brain.ops.limits.A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+CEILING: Final = ConnectorLimit(
+    name="hubspot",
+    per_minute=100,
+    per_day=250_000,
+    note=(
+        "A private app may make 100 calls per 10 seconds, and the account 250,000 calls a day, "
+        "on the Free and Starter tiers; Professional and Enterprise allow 190 per 10 seconds "
+        "and 625,000 or 1,000,000 a day, and the API Limit Increase add-on raises both "
+        "(HubSpot's usage guidelines, read 2026-09-30, cited in brain.connectors.hubspot). "
+        "Recorded at the lowest tier, and the ten-second allowance as the minute's, so no "
+        "burst inside a minute can reach HubSpot's ten-second window."
+    ),
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
+    ceiling=CEILING,
     name=CONNECTOR_NAME,
     label="HubSpot",
     guide=GUIDE,
@@ -2166,5 +2186,13 @@ CONNECTOR: Final = ConnectorDeclaration(
     scopes=KeyScopes(
         request=required_scopes(),
         refuse=("crm.objects.*.write", "anything touching settings"),
+    ),
+    resolves=(
+        # A CRM company is a client; its contacts project no name, so they are not read here.
+        ResolvesAs(
+            entity=ENTITY_CLIENT,
+            entity_type=EntityType.COMPANY,
+            fields={"name": "name", "domain": "domain"},
+        ),
     ),
 )

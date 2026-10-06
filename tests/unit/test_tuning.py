@@ -238,7 +238,9 @@ def test_a_reader_of_the_screen_sees_every_knob_and_may_not_change_one(
     client, stub = served
     body = get(client, "u_wide", SCREEN).json()
     assert body["may_change"] is False
-    assert [one["name"] for one in body["knobs"]] == [one.name for one in tuning.KNOBS]
+    assert [one["name"] for one in body["knobs"]] == [
+        one.name for one in tuning.KNOBS if one.kind in tuning.LIMIT_KINDS
+    ]
     assert put(client, "u_wide", "person_per_minute", 12).status_code == 404
     assert stub.statements == []
 

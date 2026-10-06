@@ -20,17 +20,30 @@ the compose file's health check and proves the model loaded, not that the recogn
 needs are the ones running. A result names no data (`brain.ops.acceptance.A_RESULT_NAMES_NO_DATA`),
 so a failure names the entity types missed, which are product words, and never a probe.
 
-Task ids: M32.2.1.1
+**The trace ledger is judged on what the server's docker said, because nothing else can say it.**
+Whether a container is running, healthy and held to a memory limit is invisible from inside the
+worker, which cannot read another container's ceiling. The deploy step asks docker once the
+services are up and keeps the answer for the release (`brain.ops.overlays`,
+`THE_SERVER_REPORTS_WHAT_RUNS_AND_THE_CHECK_READS_IT`), and these checks read only the report
+for the release they are checking. Rejected: probing each service from the worker, which would
+mean joining the worker to the ledger's network for a check, and would still say nothing about
+limits; and accepting a report from an earlier release, which would judge containers that may
+no longer exist.
+
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2
 """
 
 from __future__ import annotations
 
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 import structlog
 
 from brain.ops.acceptance import CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_run import Harness
+
+if TYPE_CHECKING:
+    from brain.ops.overlays import Seen
 
 #: Where this module's checks stand on the Install page, before every larger key. See
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
@@ -115,3 +128,92 @@ async def the_detector_finds_every_entity_the_scrub_relies_on_it_for(h: Harness)
     log.info("acceptance.detector_asked", asked=len(PRESIDIO_BUILT_INS), missed=sorted(missed))
     if missed:
         raise CheckFailedError(THE_DETECTOR_MISSED_AN_ENTITY)
+
+
+# ------------------------------------------------------------------------ the trace ledger
+#: Said where the install runs no trace ledger.
+NO_LEDGER_HERE: Final = (
+    "this install has not switched the trace ledger on: INSTALL_SERVICES does not name langfuse"
+)
+
+#: Said where the deploy step has not reported this release's services.
+NOT_REPORTED_FOR_THIS_RELEASE: Final = (
+    "the deploy step has not reported this release's optional services yet, so there is nothing "
+    "the server said to judge; it reports them after every deploy that starts them"
+)
+
+#: Said where one of the ledger's services is absent, stopped or unhealthy.
+A_LEDGER_SERVICE_IS_NOT_RUNNING: Final = (
+    "one of the trace ledger's five services is not running and healthy on this release as the "
+    "server reported it; the worker's log names which"
+)
+
+#: Said where one of them runs under a limit other than its budget, or none.
+A_LEDGER_SERVICE_IS_NOT_HELD_TO_ITS_BUDGET: Final = (
+    "one of the trace ledger's five services runs under a memory limit other than the one the "
+    "product's budget gives it; the worker's log names which"
+)
+
+
+async def _ledger_as_reported(h: Harness) -> tuple[tuple[str, ...], dict[str, Seen]]:
+    """The ledger's components and what the deploy step reported of them for this release.
+
+    Not run, rather than failed, where the install has not switched the ledger on or the step has
+    not reported this release: neither is the ledger being wrong.
+    """
+    from brain.ops.overlays import BY_NAME, OBSERVED_KEY, seen_in, switched_on_here
+    from brain.ops.setting_store import read_namespace
+
+    ledger = BY_NAME["langfuse"]
+    if ledger not in switched_on_here():
+        raise CheckNotRunError(NO_LEDGER_HERE)
+    namespace = OBSERVED_KEY.split(".", 1)[0]
+    async with h.sessions() as session:
+        held = await read_namespace(session, namespace)
+    row = held.get(OBSERVED_KEY)
+    seen = None if row is None else seen_in(row.value, commit=h.settings.resolved_commit())
+    if seen is None:
+        raise CheckNotRunError(NOT_REPORTED_FOR_THIS_RELEASE)
+    return ledger.components, dict(seen)
+
+
+@check(
+    leaves=("M32.1.1.1",),
+    sentence=(
+        "The trace ledger this install has switched on runs as its five services, web, worker, "
+        "column store, cache and file store, each running and reported healthy by the server's "
+        "own docker on this release, as the deploy step recorded it."
+    ),
+)
+async def the_trace_ledger_runs_as_its_five_services(h: Harness) -> None:
+    components, seen = await _ledger_as_reported(h)
+    down = sorted(
+        name
+        for name in components
+        if name not in seen or (seen[name].state, seen[name].health) != ("running", "healthy")
+    )
+    log.info("acceptance.ledger_services", asked=len(components), down=down)
+    if down:
+        raise CheckFailedError(A_LEDGER_SERVICE_IS_NOT_RUNNING)
+
+
+@check(
+    leaves=("M32.1.1.2",),
+    sentence=(
+        "Each of the trace ledger's five services runs under a memory limit equal to the one the "
+        "product's budget gives it, as the server's own docker reported it on this release, so "
+        "none can take memory the application needs."
+    ),
+)
+async def every_trace_ledger_service_runs_under_its_budgeted_limit(h: Harness) -> None:
+    from brain.ops.wiring import component
+
+    components, seen = await _ledger_as_reported(h)
+    off = sorted(
+        name
+        for name in components
+        if name not in seen or seen[name].limit_mib != component(name).memory_mib
+    )
+    log.info("acceptance.ledger_limits", asked=len(components), off_budget=off)
+    if off:
+        raise CheckFailedError(A_LEDGER_SERVICE_IS_NOT_HELD_TO_ITS_BUDGET)

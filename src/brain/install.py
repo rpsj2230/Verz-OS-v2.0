@@ -302,6 +302,16 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="regular,intern,labour_dispatch,consultant,contractor,other",
     ),
+    Setting(
+        name="INSTALL_DEPARTMENTS_FROM",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "Where each person's department comes from: staff_source, the department the staff "
+            "list names, which the nightly sync keeps up to date; or console, set on People, "
+            "several people at a time, where the sync places and moves nobody (needs-rupash 115)."
+        ),
+        default="staff_source",
+    ),
     # --- models and providers, M41.1.6
     Setting(
         name="INSTALL_MODEL_PROFILE",
@@ -501,8 +511,8 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         meaning=(
             "Comma-separated optional services this server runs beside its profile, started by "
             "the next release only where the server's measured memory has room for them: "
-            "presidio for the personal data detector. `none` runs none of them. Changed on "
-            "Install, Settings."
+            "presidio for the personal data detector, langfuse for the trace ledger and its file "
+            "store. `none` runs none of them. Changed on Install, Settings."
         ),
         default="none",
     ),

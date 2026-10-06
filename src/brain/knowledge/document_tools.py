@@ -106,11 +106,12 @@ Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1, M10.7.2
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 import sqlalchemy as sa
 import structlog
@@ -122,9 +123,21 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.errors import Degraded
 from brain.core.scope import Clause, Op, Scope
+from brain.gate.cache_key import NotCacheableError
+from brain.gate.caches import (
+    EMBEDDING_TTL_SECONDS,
+    RETRIEVAL_TTL_SECONDS,
+    CachedEmbedding,
+    CachedRetrieval,
+    CacheLayerError,
+    CallerKey,
+    embedding_key,
+    retrieval_key,
+)
+from brain.gate.resolve import Resolved
 from brain.knowledge.assembly import RetrievedChunk, by_chunk, by_document
 from brain.knowledge.embed import embed_question
-from brain.knowledge.embed_policy import EmbeddingLeg, outage_response
+from brain.knowledge.embed_policy import EmbeddingLeg, outage_response, served_embedding_model
 from brain.knowledge.embed_queue import EmbeddingService
 from brain.knowledge.embedding import EmbeddedVector, EmbeddingError
 from brain.knowledge.item import ITEM_ID_PATTERN
@@ -152,12 +165,51 @@ from brain.knowledge.search import (
     session_settings,
     vector_query,
 )
-from brain.tables.gate import DepartmentRow
+from brain.tables.gate import DepartmentRow, PolicyEpochRow
 from brain.tables.knowledge import KnowledgeItemRow
 
 log = structlog.get_logger(__name__)
 
 # ------------------------------------------------------------------ written-down reasons
+
+#: What a cached retrieval may and may not decide (M6.2.3).
+A_CACHED_RETRIEVAL_IS_RE_READ_UNDER_THE_CALLERS_REACH: Final = (
+    "A cached retrieval is a ranked list of passage references and nothing else, keyed on the "
+    "caller, their departments, the corpus they can see, the kinds asked about and the number "
+    "of passages. On a hit the ranking is skipped and the bodies are fetched exactly as on a "
+    "miss, by passages_query under the caller's reach now, so a reference the caller can no "
+    "longer read returns nothing. The key decides how fast an answer is; only the re-read "
+    "decides what the caller is told."
+)
+
+#: What the embedding cache holds and why nothing about the caller is in its key (M6.2.4).
+A_QUESTIONS_VECTOR_IS_CACHED_BY_ITS_WORDS_AND_ITS_MODEL: Final = (
+    "A question's vector is kept under a digest of its exact words and the identity of the "
+    "model that embedded it, and is fetched only by somebody holding those exact words. It is "
+    "a vector and no text, so it tells nobody what was asked, and the model in the key makes a "
+    "vector from other weights unreachable rather than checked after it was read."
+)
+
+
+@dataclass(frozen=True)
+class KnowledgeCaches:
+    """The two caches the document plane reads through on a process with a cache configured."""
+
+    retrievals: RecordStore[CachedRetrieval]
+    embeddings: RecordStore[CachedEmbedding]
+
+
+class RecordStore[T](Protocol):
+    """A cache this module reads through: `brain.cache.ValkeyRecordCache` on a running install.
+
+    A miss, an outage and a refused entry are all None, so a cache can only make a search slower
+    or faster and never change what it finds.
+    """
+
+    def get(self, key: str) -> T | None: ...
+
+    def set(self, key: str, value: T, ttl_seconds: int) -> None: ...
+
 
 #: Why nothing in this module decides what a caller may retrieve.
 THE_DOCUMENT_PLANE_IS_READ_THROUGH_ITS_OWN_REACH: Final = (
@@ -546,6 +598,9 @@ class QuestionEmbedder:
 
     service: EmbeddingService
     revision: str
+    #: Where a question's vector is kept between askings (M6.2.4), or None for a process with no
+    #: cache. See `A_QUESTIONS_VECTOR_IS_CACHED_BY_ITS_WORDS_AND_ITS_MODEL`.
+    cache: RecordStore[CachedEmbedding] | None = None
 
     async def vector(self, question: str) -> EmbeddedVector:
         """The question's vector, off the event loop, because the service is a blocking call.
@@ -555,16 +610,34 @@ class QuestionEmbedder:
         outage policy's sentence and the exception's type, never the question.
         """
 
+        try:
+            model = served_embedding_model(revision=self.revision)
+        except (EmbeddingError, SearchError) as exc:
+            raise _degraded(exc) from exc
+        key = None if self.cache is None else embedding_key(question, model=model.identity)
+        if self.cache is not None and key is not None:
+            kept = self.cache.get(key)
+            if kept is not None:
+                return EmbeddedVector(model=model, values=kept.values)
+
         # Called by name inside the function handed to the thread, for the reason
         # `brain.knowledge.chunk_store.run_embed_job` gives about its own.
         def embed() -> EmbeddedVector:
             return embed_question(question, service=self.service, revision=self.revision)
 
         try:
-            return await asyncio.to_thread(embed)
+            found = await asyncio.to_thread(embed)
         except (EmbeddingError, SearchError) as exc:
-            detail = f"{outage_response(EmbeddingLeg.QUERY).reason} ({type(exc).__name__})"
-            raise Degraded(detail) from exc
+            raise _degraded(exc) from exc
+        if self.cache is not None and key is not None:
+            entry = CachedEmbedding(key=key, model=model.identity, values=found.values)
+            self.cache.set(key, entry, EMBEDDING_TTL_SECONDS)
+        return found
+
+
+def _degraded(exc: Exception) -> Degraded:
+    """The outage policy's sentence and the exception's type, never the question."""
+    return Degraded(f"{outage_response(EmbeddingLeg.QUERY).reason} ({type(exc).__name__})")
 
 
 async def reach_through(
@@ -631,7 +704,9 @@ def _result(
 
 
 def searcher(
-    records: RowSource, embedder: QuestionEmbedder | None = None
+    records: RowSource,
+    embedder: QuestionEmbedder | None = None,
+    retrievals: RecordStore[CachedRetrieval] | None = None,
 ) -> Callable[..., Awaitable[TypedResult[KnowledgePassage]]]:
     """The handler for `knowledge.search_documents`, bound to where the chunks are read.
 
@@ -650,10 +725,94 @@ def searcher(
         reach = await reach_through(records, entitlement, now)
         if reach is None:
             return _result((), now, truncated=False)
-        found, truncated = await search_within(records, embedder, request, reach=reach)
-        return _result(found, now, truncated=truncated)
+        key = None
+        if retrievals is not None:
+            key = await retrieval_key_for(
+                records, request, reach=reach, entitlement=entitlement, now=now
+            )
+        kept = None if retrievals is None or key is None else retrievals.get(key)
+        if kept is not None:
+            page = list(kept.chunk_ids)
+        else:
+            page = await ranked(records, embedder, request, reach=reach)
+            if retrievals is not None and key is not None:
+                retrieved = CachedRetrieval(key=key, chunk_ids=tuple(page))
+                retrievals.set(key, retrieved, RETRIEVAL_TTL_SECONDS)
+        # Hit or miss, the bodies are read here under the caller's reach now. See
+        # A_CACHED_RETRIEVAL_IS_RE_READ_UNDER_THE_CALLERS_REACH.
+        found = await bodies_of(records, page, reach=reach)
+        return _result(found, now, truncated=len(page) == request.limit)
 
     return search
+
+
+def corpus_query(reach: Reach) -> RowQuery:
+    """The global policy epoch, and how many passages this reach sees and when one last changed.
+
+    What the retrieval key's corpus epoch is made of: an upload adds passages, a removal or a
+    withdrawal takes them out of the reach's count, and an edit moves the newest change, so each
+    makes a new key and the old list is never read again. Read under the reach, as every chunk
+    statement here is, so the count is of what this caller can see.
+    """
+    policy = sa.select(PolicyEpochRow.epoch).where(PolicyEpochRow.id == 1).scalar_subquery()
+    statement = sa.select(
+        policy.label("policy_epoch"),
+        sa.func.count().label("passages"),
+        sa.func.max(CHUNK.c.updated_at).label("changed"),
+    ).where(reach_predicate(reach))
+    return _query(
+        KNOWLEDGE_ENTITY,
+        ("policy_epoch", "passages", "changed"),
+        statement,
+        empty=False,
+        settings=session_settings(reach),
+    )
+
+
+def corpus_epoch_of(row: Mapping[str, Any]) -> int:
+    """The corpus epoch a retrieval key carries, from `corpus_query`'s row."""
+    changed = row["changed"]
+    blob = f"{int(row['passages'])}|{'' if changed is None else changed.isoformat()}"
+    return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:15], 16)
+
+
+async def retrieval_key_for(
+    records: RowSource,
+    request: DocumentSearch,
+    *,
+    reach: Reach,
+    entitlement: EntitlementSet,
+    now: datetime | None,
+) -> str | None:
+    """The key this search's references are kept under, or None when nothing may be kept.
+
+    None without a clock, because `CallerKey.of` asks it whether the caller is past their time
+    bound, and None for an expired caller or a set whose hash it refuses. The set is the run's
+    own, so a search through an agent is keyed on the narrowed reach and never shares an entry
+    with the same person asking directly. `grants_version` is carried as zero because no key
+    reads it; see `brain.gate.caches.CallerKey`.
+    """
+    if now is None:
+        return None
+    [row] = await records.rows(corpus_query(reach))
+    resolved = Resolved(
+        entitlements=entitlement,
+        ent_hash=entitlement.ent_hash(),
+        grants_version=0,
+        from_cache=False,
+    )
+    try:
+        caller = CallerKey.of(resolved, policy_epoch=int(row["policy_epoch"] or 0), now=now)
+        return retrieval_key(
+            request.question,
+            caller,
+            departments=reach.departments,
+            corpus_epoch=corpus_epoch_of(row),
+            kinds=[one.value for one in request.kinds],
+            limit=request.limit,
+        )
+    except (NotCacheableError, CacheLayerError):
+        return None
 
 
 async def search_within(
@@ -670,6 +829,19 @@ async def search_within(
     reach again. `search.PUBLIC_IS_A_PROPERTY_OF_THE_KNOWLEDGE_AND_NEVER_OF_THE_QUESTION` is why
     the public reach is a reach and not a filter over this.
     """
+    page = await ranked(records, embedder, request, reach=reach)
+    return await bodies_of(records, page, reach=reach), len(page) == request.limit
+
+
+async def ranked(
+    records: RowSource,
+    embedder: QuestionEmbedder | None,
+    request: DocumentSearch,
+    *,
+    reach: Reach | PublicReach,
+) -> list[str]:
+    """The references a question ranks within one reach: the lexical legs, the vector leg when
+    the install embeds questions, fused and cut to the number asked for. No body is read."""
     vector = None if embedder is None else await embedder.vector(request.question)
     legs = [
         await records.rows(query)
@@ -681,10 +853,16 @@ async def search_within(
     nearest: tuple[str, ...] = ()
     if vector is not None:
         nearest = await nearest_passages(records, vector, reach=reach, kinds=request.kinds)
-    page = [one.ref for one in hybrid(lexical=lexical, vector=nearest, limit=request.limit)]
+    return [one.ref for one in hybrid(lexical=lexical, vector=nearest, limit=request.limit)]
+
+
+async def bodies_of(
+    records: RowSource, page: Sequence[str], *, reach: Reach | PublicReach
+) -> tuple[KnowledgePassage, ...]:
+    """The passages a ranking named, fetched under the reach again, in the ranking's order."""
     bodies = passages_query(page, reach=reach)
     rows = () if bodies.certainly_empty else await records.rows(bodies)
-    return _passages(page, rows), len(page) == request.limit
+    return _passages(page, rows)
 
 
 #: How many passages one widget question is answered from. Fewer than a person's page: a stranger
@@ -791,13 +969,16 @@ def read_definition() -> ToolDefinition:
 
 
 def knowledge_tools(
-    records: RowSource, embedder: QuestionEmbedder | None = None
+    records: RowSource,
+    embedder: QuestionEmbedder | None = None,
+    retrievals: RecordStore[CachedRetrieval] | None = None,
 ) -> tuple[tuple[ToolDefinition, Callable[..., Awaitable[TypedResult[KnowledgePassage]]]], ...]:
     """Both tools, each with its handler bound to `records`, for `build_registry` to register.
 
-    The embedder reaches the search alone: reading one document by its reference ranks nothing.
+    The embedder and the retrieval cache reach the search alone: reading one document by its
+    reference ranks nothing, so there is nothing of it to keep.
     """
     return (
-        (search_definition(), searcher(records, embedder)),
+        (search_definition(), searcher(records, embedder, retrievals)),
         (read_definition(), reader(records)),
     )
