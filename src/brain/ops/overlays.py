@@ -83,10 +83,13 @@ import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from brain.install import value_of
 from brain.ops.wiring import HOST_RESERVE_MIB, WiringError, component, set_cost_mib
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 #: The installation setting that names the optional services. See `brain.install.INSTALLATION`.
 SERVICES_SETTING: Final = "INSTALL_SERVICES"
@@ -113,6 +116,16 @@ A_PLAN_THAT_CANNOT_BE_MADE_STOPS_NOTHING: Final = (
     "'nothing' whenever it could not read the setting would take the personal data detector "
     "away on the day the database was restarting. A plan that cannot be made exits non-zero, "
     "and the script then leaves every running service as it is."
+)
+
+
+#: Why a service that needs gVisor is refused rather than started under docker's own runtime.
+AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED: Final = (
+    "The script sandbox runs code nobody here wrote, and gVisor is the isolation it is sized and "
+    "argued for. Started under docker's own runtime it would run the same code against the host's "
+    "kernel with every other property unchanged, which looks like a sandbox and is not one. So a "
+    "server whose docker has no gVisor runtime is told so, at save and in the plan, and nothing "
+    "starts."
 )
 
 
@@ -148,6 +161,10 @@ class Overlay:
     #: Planned on every deploy, and not a name `INSTALL_SERVICES` may carry. See
     #: `AN_OVERLAY_THE_PRODUCT_ALWAYS_RUNS_IS_STILL_COSTED`.
     always: bool = False
+    #: The container runtime the overlay's files name, when it is not docker's own. An overlay
+    #: that needs one the server's docker does not have is refused by the plan and at save, and
+    #: never started on a weaker runtime. See `AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED`.
+    needs_runtime: str = ""
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z][a-z0-9-]*", self.name):
@@ -218,6 +235,16 @@ OVERLAYS: Final[tuple[Overlay, ...]] = (
         prepare=("langfuse.prepare.sh",),
         after=("langfuse.hand.sh",),
     ),
+    Overlay(
+        name="sandbox",
+        what="the script sandbox",
+        # The front that answers on the internal network and the executor that runs a script with
+        # no network at all, both under gVisor. See `docker-compose.sandbox.yml`.
+        components=("script-sandbox", "script-sandbox-executor"),
+        files=("docker-compose.sandbox.yml",),
+        joins=(("sandbox", ("app", "brain-worker")),),
+        needs_runtime="runsc",
+    ),
 )
 
 #: The overlays an install chooses, which are the only names `INSTALL_SERVICES` may carry.
@@ -264,6 +291,32 @@ def services_problem(value: str) -> str:
     return ""
 
 
+async def runtime_problem(session: AsyncSession, value: str) -> str:
+    """Why a value naming a service whose runtime the server lacks may not be saved, or empty.
+
+    Read from the last report the deploy step kept (`OBSERVED_KEY`): which runtimes the server's
+    docker offers is known to the server and to nothing in the application. No report yet is no
+    runtime, for `AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED`'s reason: a switch saved on a guess
+    is a sandbox started on one.
+    """
+    from brain.ops.setting_store import read_namespace
+
+    wanting = [one for one in switched_on(value) if one.needs_runtime]
+    if not wanting:
+        return ""
+    held = await read_namespace(session, OBSERVED_KEY.split(".", 1)[0])
+    row = held.get(OBSERVED_KEY)
+    offered = runtimes_in(row.value) if row is not None else None
+    for one in wanting:
+        if offered is None or one.needs_runtime not in offered:
+            return (
+                f"This server cannot run {one.what} yet: it needs the gVisor runtime, and the "
+                "server's docker has not reported one. Install gVisor on the server first, then "
+                "save this after the next update."
+            )
+    return ""
+
+
 def switched_on_here(
     env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
 ) -> tuple[Overlay, ...]:
@@ -286,6 +339,8 @@ class Host:
     reserved_mib: int
     #: What every running container without a limit is using, outside that project.
     unlimited_used_mib: int
+    #: The container runtimes the server's docker offers, by name.
+    runtimes: frozenset[str] = frozenset({"runc"})
 
     @property
     def unlimited_floor_mib(self) -> int:
@@ -324,7 +379,7 @@ def mebibytes(amount: str) -> float:
 
 
 def read_host(facts: Iterable[str], *, project: str) -> Host:
-    """The server, from the three sections the script writes: meminfo, inspect and stats.
+    """The server, from the sections the script writes: meminfo, inspect, stats and runtimes.
 
     `inspect` lines are `name|compose project|limit in bytes`, and `stats` lines are
     `name|used / limit`. A container in `project`, the overlays' own, is left out of both
@@ -336,6 +391,7 @@ def read_host(facts: Iterable[str], *, project: str) -> Host:
     limits: dict[str, int] = {}
     projects: dict[str, str] = {}
     used: dict[str, float] = {}
+    runtimes: set[str] = set()
     for raw in facts:
         line = raw.rstrip("\n")
         if line.startswith("## "):
@@ -353,6 +409,8 @@ def read_host(facts: Iterable[str], *, project: str) -> Host:
         elif section == "stats":
             name, usage = line.split("|", 1)
             used[name.lstrip("/")] = mebibytes(usage.split("/", 1)[0])
+        elif section == "runtimes":
+            runtimes.add(line.strip())
     if total_kib <= 0:
         msg = "the server's facts carry no MemTotal line, so nothing here can be costed"
         raise OverlayError(msg)
@@ -363,6 +421,7 @@ def read_host(facts: Iterable[str], *, project: str) -> Host:
         total_mib=total_kib // 1024,
         reserved_mib=reserved,
         unlimited_used_mib=math.ceil(unlimited),
+        runtimes=frozenset(runtimes) or frozenset({"runc"}),
     )
 
 
@@ -376,12 +435,24 @@ class Plan:
     available_mib: int
 
 
+def runtime_refusal(one: Overlay) -> str:
+    """The sentence for an overlay whose runtime the server lacks, in the plan and at save."""
+    return (
+        f"{one.what} ({one.name}) needs the {one.needs_runtime} runtime, which this server's "
+        "docker does not have, so it is not started; installing gVisor on the server is the "
+        "step that gives it one"
+    )
+
+
 def plan(switched: Sequence[Overlay], host: Host) -> Plan:
     """Each switched-on overlay started while it fits, in declaration order, or refused in words."""
     remaining = host.available_mib
     start: list[Overlay] = []
     refused: list[tuple[Overlay, str]] = []
     for one in switched:
+        if one.needs_runtime and one.needs_runtime not in host.runtimes:
+            refused.append((one, runtime_refusal(one)))
+            continue
         if one.cost_mib <= remaining:
             start.append(one)
             remaining -= one.cost_mib
@@ -457,6 +528,8 @@ class Seen:
     limit_mib: int
     state: str
     health: str
+    #: The runtime docker started it under, `runc` unless its file named another.
+    runtime: str = ""
 
 
 def read_seen(lines: Iterable[str]) -> tuple[Seen, ...]:
@@ -466,7 +539,9 @@ def read_seen(lines: Iterable[str]) -> tuple[Seen, ...]:
         line = raw.strip()
         if not line:
             continue
-        service, limit, state, health = [*line.split("|"), "", "", ""][:4]
+        if line.startswith("runtime|"):
+            continue
+        service, limit, state, health, runtime = [*line.split("|"), "", "", "", ""][:5]
         if not service:
             continue
         found.append(
@@ -475,20 +550,56 @@ def read_seen(lines: Iterable[str]) -> tuple[Seen, ...]:
                 limit_mib=int(limit or 0) // (1024 * 1024),
                 state=state,
                 health=health,
+                runtime=runtime,
             )
         )
     return tuple(found)
 
 
-def observation(seen: Iterable[Seen], *, commit: str) -> dict[str, object]:
-    """The row's value: the release and each service as it was seen."""
+def read_runtimes(lines: Iterable[str]) -> tuple[str, ...]:
+    """The `runtime|name` lines the step writes for the server's docker, sorted."""
+    return tuple(
+        sorted(
+            {
+                line.strip().split("|", 1)[1]
+                for line in lines
+                if line.strip().startswith("runtime|") and line.strip().split("|", 1)[1]
+            }
+        )
+    )
+
+
+def observation(
+    seen: Iterable[Seen], *, commit: str, runtimes: Sequence[str] = ()
+) -> dict[str, object]:
+    """The row's value: the release, the server's runtimes and each service as it was seen."""
     return {
         "commit": commit,
+        "runtimes": list(runtimes),
         "services": {
-            one.service: {"limit_mib": one.limit_mib, "state": one.state, "health": one.health}
+            one.service: {
+                "limit_mib": one.limit_mib,
+                "state": one.state,
+                "health": one.health,
+                "runtime": one.runtime,
+            }
             for one in seen
         },
     }
+
+
+def runtimes_in(value: object) -> frozenset[str] | None:
+    """The runtimes a stored observation reports for the server, whatever release it was, or None.
+
+    Not tied to a release, unlike `seen_in`: whether the server has gVisor is a fact about the
+    server, and the last deploy's report of it is the freshest there is.
+    """
+    if not isinstance(value, Mapping):
+        return None
+    runtimes = value.get("runtimes")
+    if not isinstance(runtimes, list):
+        return None
+    return frozenset(one for one in runtimes if isinstance(one, str))
 
 
 def seen_in(value: object, *, commit: str) -> dict[str, Seen] | None:
@@ -512,6 +623,7 @@ def seen_in(value: object, *, commit: str) -> dict[str, Seen] | None:
             limit_mib=limit if isinstance(limit, int) else 0,
             state=str(body.get("state", "")),
             health=str(body.get("health", "")),
+            runtime=str(body.get("runtime", "")),
         )
     return found
 
@@ -603,8 +715,11 @@ def _observe() -> int:
     from brain.settings import Settings
 
     try:
-        seen = read_seen(sys.stdin)
-        _record(observation(seen, commit=Settings().resolved_commit()))
+        lines = list(sys.stdin)
+        seen = read_seen(lines)
+        _record(
+            observation(seen, commit=Settings().resolved_commit(), runtimes=read_runtimes(lines))
+        )
     except Exception as error:
         from brain.ops.safe_error import describe
 

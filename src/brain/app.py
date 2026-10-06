@@ -144,6 +144,7 @@ from brain.ops.model_service import (
 )
 from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.openbao import OpenBaoVault
+from brain.ops.overlays import OverlayError, components_switched_on, switched_on_here
 from brain.ops.pii import analyzer_address
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
@@ -645,10 +646,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # per call from the ladder, the provider switches and the keys this process holds, so a
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
-    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9). No
-    # installation switches it on until the sandbox overlay lands with its switch; until then
-    # the set of switched services is empty and every skill with scripts is refused at the door.
-    app.state.sandbox_address = sandbox_address(settings.sandbox_url, frozenset())
+    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9): switched on
+    # by `INSTALL_SERVICES` naming `sandbox`, read after the saved settings are held above, and
+    # started by the release only under gVisor (brain.ops.overlays). A value nobody declared runs
+    # no sandbox rather than stopping the start.
+    try:
+        switched = components_switched_on(switched_on_here())
+    except OverlayError:
+        switched = frozenset()
+    app.state.sandbox_address = sandbox_address(settings.sandbox_url, switched)
     # Every request to a third-party model is scrubbed of personal data on its way out, by the
     # rules and by the install's analyser where its profile deploys one (`brain.ops.egress`).
     app.state.models = model_service_at_start(
