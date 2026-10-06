@@ -110,6 +110,7 @@ from brain.tables.agent import AgentRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.review import STALE_AFTER, QueueEntry
+from brain.tools.skill_examples import Rehearsal
 from brain.tools.skills import (
     ImportedSkill,
     Skill,
@@ -338,6 +339,12 @@ class Library:
         self.records: list[AssignmentRecord] = []
         self.detachments: list[DetachmentRecord] = []
         self.detached: list[Detachment] = []
+        #: The script bytes each added version carries, as `agent.skill_script` holds them (`0178`).
+        self.script_files: dict[str, dict[str, bytes]] = {}
+        #: Every export row, oldest first (`0191`): the digest and who exported it.
+        self.exported: list[tuple[str, str]] = []
+        #: Every rehearsal row, oldest first (`0191`).
+        self.rehearsed: list[Rehearsal] = []
 
     async def retirements(self, digests: Sequence[str]) -> Mapping[str, Retirement]:
         self.calls.append("retirements")
@@ -352,6 +359,26 @@ class Library:
     ) -> None:
         self.calls.append("retire")
         self.retired.append(Retirement(digest=digest, retired=retired, set_by=by, at=NOW))
+
+    async def script_bytes(self, digest: str) -> dict[str, bytes]:
+        self.calls.append("script_bytes")
+        return dict(self.script_files.get(digest, {}))
+
+    async def export(self, digest: str, *, by: str, ent_hash: str, trace_id: str) -> None:
+        self.calls.append("export")
+        self.exported.append((digest, by))
+
+    async def rehearse(self, made: Rehearsal, *, ent_hash: str, trace_id: str) -> None:
+        self.calls.append("rehearse")
+        self.rehearsed.append(made)
+
+    async def rehearsals(self, digests: Sequence[str]) -> Mapping[str, tuple[Rehearsal, ...]]:
+        self.calls.append("rehearsals")
+        found: dict[str, list[Rehearsal]] = {}
+        for one in self.rehearsed:
+            if one.digest in digests:
+                found.setdefault(one.digest, []).append(one)
+        return {digest: tuple(made) for digest, made in found.items()}
 
     def _write_install(self, made: Assignment | Detachment) -> None:
         instance_row, _ = self.stored.installs[made.agent_id]
@@ -428,6 +455,9 @@ class Library:
         if one.digest in self.skills:
             return False
         self.skills[one.digest] = one
+        # The bytes are kept beside the skill, as `agent.skill_script` keeps them, and read back
+        # only by `script_bytes`: a skill read back carries none, as the store's does.
+        self.script_files[one.digest] = dict(one.scripts)
         return True
 
     async def decide(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
@@ -1015,15 +1045,17 @@ def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
 # --------------------------------------------------------------- what it will not say
 
 
-def test_the_writes_are_ten_posts_and_no_read_answers_one_skill_by_name(
+def test_the_writes_are_twelve_posts_and_no_read_answers_one_skill_by_name(
     client: TestClient,
 ) -> None:
-    """Under `/skills` there are two GETs, neither taking a path parameter, and ten POSTs: add a
+    """Under `/skills` there are two GETs, neither taking a path parameter, and twelve POSTs: add a
     package, import from a repository or an address, import a written procedure (M12.2.10), save
     an edit as a version, set categories, decide about one, assign one, retire and reinstate a
-    version, and detach one from an agent. Read off the application's own document.
+    version, detach one from an agent, export an approved version (M12.3.1), a POST because it
+    records who took it, and rehearse a version's examples (M12.3.4). Read off the application's
+    own document.
 
-    Delete this and an eleventh write, an approval folded into an import say, or a GET answering
+    Delete this and a thirteenth write, an approval folded into an import say, or a GET answering
     one skill by name, can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
@@ -1040,6 +1072,8 @@ def test_the_writes_are_ten_posts_and_no_read_answers_one_skill_by_name(
         f"{SKILLS}/{{digest}}/retirement": {"post"},
         f"{SKILLS}/{{digest}}/reinstatement": {"post"},
         f"{SKILLS}/{{digest}}/detachments": {"post"},
+        f"{SKILLS}/{{digest}}/export": {"post"},
+        f"{SKILLS}/{{digest}}/rehearsals": {"post"},
     }
     assert [path for path, methods in mine.items() if "get" in methods and "{" in path] == []
 

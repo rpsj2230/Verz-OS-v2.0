@@ -100,6 +100,7 @@ from brain.estate_routes import (
     remembered_about,
 )
 from brain.knowledge.search import PRINCIPAL_SETTING
+from brain.locale import currency_or_unset
 from brain.member.shell import disclosure_line, member_screen
 from brain.member_activity import my_agents, personal_budget
 from brain.memory.digest import Learning
@@ -178,8 +179,9 @@ A_PERSON_FORGETS_AND_EDITS_WHAT_WAS_FORMED_FROM_THEIR_OWN_WORDS: Final = (
 
 #: What the connected accounts card says.
 ACCOUNTS_ARE_NOT_READ_HERE: Final = (
-    "Which of your own accounts are connected is not read by this page. Connecting one never "
-    "widens what you can see: it adds a source that is already yours, on your own access."
+    "Below are the sources you may connect your own account with, and whether you have. "
+    "Connecting one never widens what you can see: it adds a source that is already yours, read "
+    "only for your own questions."
 )
 
 #: What the knowledge card does not show.
@@ -221,6 +223,9 @@ class MineCeilingView(BaseModel):
     ceiling_minor: int
     spent_minor: int
     headroom_minor: int
+    #: The ISO 4217 code the minor units are in, `XXX` when the install chose none. See
+    #: `brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`.
+    currency: str
     alerts_crossed: list[float]
 
 
@@ -449,6 +454,7 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
         now=now,
     )
 
+    code = currency_or_unset()
     budget: list[MineCeilingView] | None = None
     budget_unread = MORE_SPEND_THAN_THIS_PAGE_READS
     if len(runs) < MAX_OWN_RUNS:
@@ -459,6 +465,7 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
                 ceiling_minor=one.ceiling_minor,
                 spent_minor=one.spent_minor,
                 headroom_minor=one.headroom_minor,
+                currency=code,
                 alerts_crossed=list(one.alerts_crossed),
             )
             for one in personal_budget(

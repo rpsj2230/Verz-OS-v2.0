@@ -37,7 +37,13 @@ who wants to change them. On a process with no signing key the gallery says inst
 unavailable, installing changes nothing, and no setting this product reads can hold a key.
 
 Task ids: M13.2.7, M13.1.1, M13.2.4, M20.1.5, M20.2.2, M20.2.3, M20.2.4, M20.1.2, M13.9.4, M13.8.18
-Task ids: M20.4.6
+**The publish gate is asked, and what it says is what a person is told (M20.4.1, M20.4.4).** A draft
+naming a rung above Shadow fails its check in the gate's words and cannot be published; the same
+draft at Shadow publishes and says it went on at Shadow, with no leash entry above it in the
+version that was kept; and a draft that only allows a bigger side effect, which no entitlement
+ceiling shows, is a widening that asks for a second person.
+
+Task ids: M20.4.6, M20.4.1, M20.4.4
 """
 
 from __future__ import annotations
@@ -86,6 +92,11 @@ NO_LONG_WAY: Final = "a template could not be opened in the builder to change it
 NOT_SAID_UNAVAILABLE: Final = "the gallery did not say installing is unavailable without a key"
 INSTALLED_WITHOUT_A_KEY: Final = "a template was installed on a process with no signing key"
 A_KEY_SETTING: Final = "a setting this product reads could hold a template signing key"
+RAISED_PASSED: Final = "a draft naming a rung above Shadow passed its check"
+RAISED_PUBLISHED: Final = "a draft naming a rung above Shadow was published"
+NOT_DECIDED_AT_SHADOW: Final = "a published draft did not say it went on at Shadow"
+LEASH_ABOVE_DECIDED: Final = "a published version kept a leash entry above the rung decided"
+EFFECT_NOT_A_WIDENING: Final = "a draft allowing a bigger side effect was not a widening"
 
 #: The persona a check's hand-built agent is given, and the one its editor changes it to.
 PERSONA: Final = "Answers an install acceptance check about the knowledge library and nobody else."
@@ -194,7 +205,7 @@ async def _publish(
     answered = await publish_agent_draft(
         _request(app),
         draft_id,
-        DraftPublishAsked(revision=revision, for_department=True),
+        DraftPublishAsked(revision=revision, for_department=True, channels=("console",)),
         await _asking(h, builder),
     )
     return answered.status_code, _body(answered)
@@ -546,3 +557,105 @@ async def a_second_publish_is_recorded_with_exactly_the_paths_it_changed(h: Harn
         raise CheckFailedError(WRONG_PATHS)
     if any(one.published_by != builder for one in history):
         raise CheckFailedError(NOT_WHO)
+
+
+# ------------------------------------------------------------ M20.4.1, M20.4.4: the publish gate
+@check(
+    leaves=("M20.4.1", "M20.4.4"),
+    sentence=(
+        "A draft naming a rung above Shadow fails its check in words and is not published; at "
+        "Shadow it publishes, says it went on at Shadow and keeps no leash entry above it; a "
+        "bigger side effect alone is a widening that asks a second person."
+    ),
+)
+async def the_publish_gate_refuses_what_blocks_and_decides_the_rung(h: Harness) -> None:
+    from brain.agent_builder_routes import (
+        DraftRevisionAsked,
+        DraftSaveAsked,
+        check_agent_draft,
+        save_agent_draft,
+    )
+    from brain.tables.template import TemplateVersionRow
+
+    builder = await _builder(h, "gate")
+    app = _gallery(h, secrets.token_hex(32))
+    asking = await _asking(h, builder)
+    draft = await _draft(h, app, builder)
+    agent_id = str(draft["agent_id"])
+
+    raised = _document(agent_id, persona=PERSONA)
+    raised["guardrails"] = {
+        **raised["guardrails"],
+        "leash": [
+            {
+                "target": KNOWLEDGE_VERB,
+                "scope": Scope.unrestricted().model_dump(mode="json"),
+                "rung": 1,
+            }
+        ],
+    }
+    saved = _body(
+        await save_agent_draft(
+            _request(app),
+            draft["draft_id"],
+            DraftSaveAsked(document=raised, base=draft["revision"]),
+            asking,
+        )
+    )
+    revision = int(saved["revision"])
+    gate = _body(
+        await check_agent_draft(
+            _request(app), draft["draft_id"], DraftRevisionAsked(revision=revision), asking
+        )
+    )
+    if gate["passed"] or not gate["problems"]:
+        raise CheckFailedError(RAISED_PASSED)
+    status, _ = await _publish(h, app, builder, draft["draft_id"], revision)
+    if status == 201:
+        raise CheckFailedError(RAISED_PUBLISHED)
+
+    at_shadow = await _saved_and_checked(
+        h,
+        app,
+        builder,
+        {"draft_id": draft["draft_id"], "revision": revision},
+        _document(agent_id, persona=PERSONA),
+    )
+    status, published = await _publish(h, app, builder, draft["draft_id"], at_shadow)
+    if status != 201 or published.get("rung") != "shadow":
+        raise CheckFailedError(NOT_DECIDED_AT_SHADOW)
+    leash = (
+        await h.execute(
+            select(TemplateVersionRow.document["guardrails.leash"]).where(
+                TemplateVersionRow.template_id == agent_id
+            )
+        )
+    ).scalar_one()
+    if any(int(one.get("rung", 0)) > 0 for one in leash or []):
+        raise CheckFailedError(LEASH_ABOVE_DECIDED)
+
+    acting = await _draft(h, app, builder)
+    effect = _document(str(acting["agent_id"]), persona=PERSONA)
+    effect["guardrails"] = {**effect["guardrails"], "max_side_effect": "draft"}
+    saved = _body(
+        await save_agent_draft(
+            _request(app),
+            acting["draft_id"],
+            DraftSaveAsked(document=effect, base=acting["revision"]),
+            asking,
+        )
+    )
+    verdict = _body(
+        await check_agent_draft(
+            _request(app),
+            acting["draft_id"],
+            DraftRevisionAsked(revision=int(saved["revision"])),
+            asking,
+        )
+    )
+    if (
+        verdict["widened"] != ["draft"]
+        or verdict["second_person_needed"] is not True
+        or verdict["rung_after"] != "shadow"
+    ):
+        raise CheckFailedError(EFFECT_NOT_A_WIDENING)

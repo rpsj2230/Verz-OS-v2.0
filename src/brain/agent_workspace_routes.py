@@ -45,6 +45,7 @@ from brain.attribution import trace_of_request
 from brain.console.scoped_authority import within_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Scope
+from brain.locale import currency_or_unset
 from brain.ops.budget_store import append, in_force
 from brain.ops.budgets import BudgetError, BudgetLevel, BudgetPeriod, BudgetRow
 
@@ -95,6 +96,9 @@ class BudgetView(BaseModel):
 
     agent_id: str
     ceiling_minor: int
+    #: The ISO 4217 code the minor units are in, `XXX` when the install chose none. See
+    #: `brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`.
+    currency: str
     version: int
     effective_from: datetime
 
@@ -205,6 +209,7 @@ async def set_agent_budget(
     return BudgetView(
         agent_id=agent_id,
         ceiling_minor=row.ceiling_minor,
+        currency=currency_or_unset(),
         version=row.version,
         effective_from=row.effective_from,
     )

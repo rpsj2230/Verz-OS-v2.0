@@ -51,6 +51,7 @@ never stored beside the hits, so a limit lowered while windows are in flight app
 at once, which is the case `WindowState.retry_after` was written for.
 
 Task ids: M23.1.1, M23.1.2, M23.1.3, M23.1.4, M23.1.5, M23.2.1, M23.2.2, M23.2.3
+Task ids: M11.7.8
 """
 
 from __future__ import annotations
@@ -457,8 +458,23 @@ _BY_NAME: Mapping[str, ConnectorLimit] | None = None
 
 
 def ceilings_by_name() -> Mapping[str, ConnectorLimit]:
-    """Every verified source ceiling, by its name. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`."""
-    return _discovered() if _BY_NAME is None else _BY_NAME
+    """Every verified source ceiling, by its name. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
+
+    The shipped connectors' ceilings, and beneath them the ceilings of the connectors reviewed on
+    this install (M11.7.8), each cited from its vendor's page when it was submitted. A shipped
+    name wins, as it does in `brain.ops.connector_catalogue.declarations`.
+    """
+    if _BY_NAME is not None:
+        return _BY_NAME
+    # Imported here and not at the top, for `_discovered`'s reason.
+    from brain.ops.connector_catalogue import reviewed
+
+    extra = {
+        one.ceiling.name: one.ceiling for one in reviewed().values() if one.ceiling is not None
+    }
+    if not extra:
+        return _discovered()
+    return MappingProxyType({**extra, **_discovered()})
 
 
 def source_ceilings() -> tuple[ConnectorLimit, ...]:

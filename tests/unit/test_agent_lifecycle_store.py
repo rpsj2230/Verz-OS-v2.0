@@ -34,6 +34,7 @@ from sqlalchemy.pool import NullPool
 
 from brain.agent_lifecycle_routes import (
     ARCHIVE_PATH,
+    CHANNELS_PATH,
     DISABLE_PATH,
     DUPLICATE_PATH,
     ENABLE_PATH,
@@ -88,15 +89,17 @@ def recorder() -> AuditRecorder:
 
 
 def function() -> str:
-    """The trigger function as the migration executes it, whitespace collapsed."""
-    return " ".join(migration_module(MIGRATION).AGENT_TRIGGER_FUNCTION.split())
+    """The trigger function as it stands at head, whitespace collapsed: `0137`'s, as `0190`
+    replaces it with the channels branch and `0196` with the connectors branch after that."""
+    attachments = migration_module(MIGRATION.with_name("0196_tool_attachments.py"))
+    return " ".join(attachments.AGENT_TRIGGER_FUNCTION.split())
 
 
 # ------------------------------------------------------------------ the trigger's shape
 
 
 def test_the_agent_trigger_writes_the_recorders_words_in_the_recorders_order() -> None:
-    """Every word the trigger appends is an `AgentChange`, all seven appear, and in the enum's
+    """Every word the trigger appends is an `AgentChange`, every one appears, and in the enum's
     order, which is the order entries land in when one statement moves several columns.
 
     Delete this and the trigger can write a word the recorder does not know, which the audit
@@ -106,6 +109,32 @@ def test_the_agent_trigger_writes_the_recorders_words_in_the_recorders_order() -
     assert re.findall(r"v_changes := v_changes \|\| '(\w+)'::text;", body) == [
         one.value for one in AgentChange
     ]
+
+
+def test_0190_replaces_the_last_definition_and_what_replaces_it_since_starts_from_it() -> None:
+    """`0190` rebuilds the function from `0137`'s text, so it is right only while `0137` is the
+    last migration before it to define `agent.record_agent_change`, and it stays right only while
+    nothing after it does so without starting from `0190`'s result. Checked on main and on every
+    open migration branch the day `0190` was written: `0137` was the only definition. `0196`
+    defines it since, and is held here to start from `0190`'s result.
+
+    Delete this and a later migration that adds a branch to the trigger can be undone silently by
+    `0190` on an install that applies them in revision order, or can undo `0190`'s branch, and the
+    ledger stops recording channel switches with every other test green."""
+    defining = sorted(
+        path.name[:4]
+        for path in VERSIONS.glob("*.py")
+        if "record_agent_change" in path.read_text(encoding="utf-8")
+        or "AGENT_TRIGGER_FUNCTION" in path.read_text(encoding="utf-8")
+    )
+
+    assert defining == ["0137", "0190", "0196"]
+    # `0196` is the one later definition, and it starts from `0190`'s result rather than `0137`'s.
+    channels = migration_module(MIGRATION.with_name("0190_agent_channels_audited.py"))
+    attachments = migration_module(MIGRATION.with_name("0196_tool_attachments.py"))
+    as_0190 = channels.replaced(migration_module(MIGRATION).AGENT_TRIGGER_FUNCTION)
+    assert as_0190 == attachments.AS_SHIPPED_BEFORE
+    assert attachments.with_connectors(as_0190) == attachments.AGENT_TRIGGER_FUNCTION
 
 
 def test_an_insert_is_attributed_to_its_builder_and_an_update_to_the_person_the_route_named() -> (
@@ -253,6 +282,68 @@ def test_a_lifecycle_write_compares_the_three_columns_it_read_and_writes_only_th
         "archived_at",
         "disabled_at",
         "owner_id",
+        "updated_at",
+    ]
+
+
+def test_a_channel_switch_compares_the_channels_it_read_and_writes_only_those() -> None:
+    """`change_channels`' statement, compiled: the row must still hold the channels the route
+    read, and nothing but the channels (and the row's own timestamp) is written.
+
+    Delete this and the compare-and-set can lose its one column, so two stewards pressing at once
+    both win and the second silently undoes the first; the route's own `expected` check reads the
+    row before this statement runs and cannot see that race."""
+    captured: list[Any] = []
+
+    class Nothing:
+        def scalar_one_or_none(self) -> None:
+            return None
+
+    class Capturing:
+        """A session and its transaction in one: every statement kept, and no row matched."""
+
+        async def __aenter__(self) -> Capturing:
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        def begin(self) -> Capturing:
+            return self
+
+        async def execute(self, statement: Any) -> Nothing:
+            captured.append(statement)
+            return Nothing()
+
+    before = AgentRecord(
+        agent_id="pricing_desk",
+        display_name="Pricing desk",
+        persona="Answer briefly.",
+        audience=AgentAudience(level=Visibility.COMPANY, owner_id="u_steward"),
+        authority=AgentAuthority(scope=Scope.unrestricted()),
+        created_by="u_builder",
+        channels=("console",),
+    )
+    after = before.model_copy(update={"channels": ("console", "lark")})
+    store = StoredAgentLifecycles(Capturing)  # type: ignore[arg-type]
+    written = run(
+        lambda: store.change_channels(
+            before, after, actor_id="u_steward", ent_hash="e" * 32, trace_id="t"
+        )
+    )
+
+    dialect = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
+    [update] = [one for one in captured if "UPDATE" in str(one)]
+    compiled = update.compile(dialect=dialect)
+    sql_text = str(compiled)
+    assert written is False
+    assert "AND agent.agent.channels = %(channels_1)s" in sql_text
+    assert compiled.params["channels_1"] == ["console"]
+    assert compiled.params["channels"] == ["console", "lark"]
+    assert "RETURNING agent.agent.id" in sql_text
+    assigned = sql_text.split(" SET ", 1)[1].split(" WHERE ", 1)[0]
+    assert sorted(part.split("=")[0].strip() for part in assigned.split(", ")) == [
+        "channels",
         "updated_at",
     ]
 
@@ -563,3 +654,37 @@ def test_a_publication_pressed_reaches_its_row_and_one_published_entry_naming_th
     assert [dict(one.details) for one in published] == [
         dict(recorder().agent(agent_id=agent_id, change=AgentChange.PUBLISHED).details)
     ]
+
+
+def test_a_channel_switch_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person() -> None:
+    """**M13.7.4's change, on the ledger.** An administrator switches an installed agent onto two
+    channels over HTTP: the row holds them, one `channels_changed` entry names the person, and a
+    second press from a page that still shows none is a 409 that writes neither. Delete this and a
+    channel can be switched with nothing recording who did it. **Skips without a server.**"""
+    with through_0137("brain_agent_channel_switch") as url:
+        digest = a_published_version(url)
+
+        async def switch(client: httpx.AsyncClient) -> tuple[str, int, int]:
+            made = await post(
+                client,
+                INSTALL_PATH.format(template_id=TEMPLATE_ID, version=VERSION),
+                {"expected_digest": digest},
+            )
+            agent_id = made.json()["agent"]["agent_id"]
+            path = CHANNELS_PATH.format(agent_id=agent_id)
+            first = await post(client, path, {"channels": ["lark", "console"], "expected": []})
+            stale = await post(client, path, {"channels": ["email"], "expected": []})
+            return agent_id, first.status_code, stale.status_code
+
+        before = len(agent_entries(url))
+        agent_id, first, stale = pressed(url, switch)
+        [stored] = sql(url, "SELECT channels FROM agent.agent WHERE id = %s", agent_id)
+        switched = [
+            one
+            for one in agent_entries(url)[before:]
+            if one.details.get("change") == "channels_changed"
+        ]
+
+    assert (first, stale) == (200, 409)
+    assert stored == (["console", "lark"],)
+    assert [(one.actor_id, one.subject) for one in switched] == [("u_admin", f"agent:{agent_id}")]

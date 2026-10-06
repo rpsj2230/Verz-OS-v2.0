@@ -154,7 +154,7 @@ from brain.memory.correction import Demotion, Supersession
 from brain.memory.digest import Learning
 from brain.memory.formation import may_recall, place_of
 from brain.memory.review import agent_memory
-from brain.memory.tiers import Tier
+from brain.memory.tiers import Occurrence, Tier
 from brain.ops.jobs import hidden_count_fields
 from brain.tools.review import QueueEntry, QueueSummary, summarise
 
@@ -750,8 +750,13 @@ def learning_estate(
     now: datetime,
     supersessions: Iterable[Supersession] = (),
     demotions: Iterable[Demotion] = (),
+    occurrences: Mapping[str, Sequence[Occurrence]] | None = None,
 ) -> LearningReview:
     """The learning review over what the install stores, for this caller (M27.7.21).
+
+    `occurrences` is what `brain.memory.promotion_store` counted for each learned rule
+    (M39.4.2.3), so a tier-two row is ready when that many separate conversations would have used
+    it; absent, no row is ready, which is `tier_two_rows`' own default.
 
     Every decision is somebody else's and is called rather than restated: which learnings the caller
     may be told of is `learnings_in_view`, the rows per agent are `brain.console.reach_view`'s three
@@ -783,7 +788,7 @@ def learning_estate(
         ones[agent_id] = tier_one_rows(
             theirs, agent_id=agent_id, supersessions=marks, demotions=marked_down
         )
-        twos[agent_id] = tier_two_rows(theirs, agent_id=agent_id, now=now)
+        twos[agent_id] = tier_two_rows(theirs, agent_id=agent_id, occurrences=occurrences, now=now)
         routed: list[TierThreeRouting] = []
         for one in theirs:
             try:

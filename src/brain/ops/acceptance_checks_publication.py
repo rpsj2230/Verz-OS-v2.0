@@ -78,6 +78,7 @@ async def _asking(h: Harness, principal_id: str) -> Any:
 
 async def _offered(h: Harness, principal_id: str, agent_id: str) -> bool:
     """Whether `/answer` would let this person choose the agent: the roster it reads."""
+    from brain.gate.context import Channel
     from brain.gate.roster import answer_roster, viewer_for
     from brain.identity.principal_store import StoredPrincipals
     from brain.ops.acceptance_routing import roster_over
@@ -85,7 +86,17 @@ async def _offered(h: Harness, principal_id: str, agent_id: str) -> bool:
     person = await StoredPrincipals(h.sessions).live_principal(principal_id)
     if person is None:
         raise CheckFailedError("a reserved person was not live in the directory")
-    roster = answer_roster(await roster_over(h)(), viewer_for(person), default={}, tool_names=())
+    stored = await roster_over(h)()
+    # The console channel, which `_an_agent` enables the agent on: an agent answers only where it
+    # is enabled (M13.7.4), and the route reads the install hashes with the records.
+    roster = answer_roster(
+        stored.records,
+        viewer_for(person),
+        channel=Channel.CONSOLE,
+        default={},
+        tool_names=(),
+        install_hashes=stored.install_hashes,
+    )
     return agent_id in roster.visible
 
 

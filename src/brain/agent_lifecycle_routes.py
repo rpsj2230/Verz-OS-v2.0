@@ -72,13 +72,13 @@ list of what is missing. `app.state.connector_registry` still wins when a test p
 is changing under another package; these are writes, and a write and the read it changes are
 already separate modules for the Prompts screen and the Skills screen.
 
-Task ids: M27.11.6, M27.11.7, M11.9.4
+Task ids: M27.11.6, M27.11.7, M11.9.4, M13.7.4, M39.2.4.2
 """
 
 from __future__ import annotations
 
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Literal, Protocol, runtime_checkable
@@ -86,12 +86,19 @@ from typing import Final, Literal, Protocol, runtime_checkable
 import structlog
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.agent_routes import TEMPLATE_SCREEN, _tool_registry, record_of, viewer_of
+from brain.agent_routes import (
+    TEMPLATE_SCREEN,
+    _tool_registry,
+    declared_channels,
+    product_field_policy,
+    record_of,
+    viewer_of,
+)
 from brain.agents.creation import (
     AGENT_INSTALL_CAPABILITY,
     duplicate_draft,
@@ -117,7 +124,16 @@ from brain.agents.lifecycle import (
     publish,
     transfer_ownership,
 )
-from brain.agents.model import DISPLAY_NAME_CHARS, AgentAudience, AgentError, AgentRecord
+from brain.agents.model import (
+    ASKING_CHANNELS,
+    DISPLAY_NAME_CHARS,
+    AgentAudience,
+    AgentError,
+    AgentRecord,
+    EnabledChannels,
+    answering_on,
+    enabled_channels,
+)
 from brain.agents.model import visible_agent_ids as _visible_agent_ids
 from brain.agents.template import SignedManifest, TemplateError, TemplateInstance
 from brain.api import API_PREFIX, COMMON_RESPONSES
@@ -130,6 +146,7 @@ from brain.automation_schedule_routes import NotChangedView
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.manifest import ManifestError, manifest_digest
 from brain.connectors.registry import ConnectorRegistry, ConnectorState, RegisteredConnector
+from brain.console.agent_tabs import channel_rows
 from brain.console.global_surfaces import may_publish, publishable
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
@@ -137,6 +154,7 @@ from brain.console.screens import screen
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
 from brain.core.principal import Principal
+from brain.gate.context import Channel
 from brain.gate.leash import Leash
 from brain.identity.principal_store import StoredPrincipals
 from brain.ops.connectable import NotConnectableError, manifest_for
@@ -190,6 +208,7 @@ PUBLICATION_PATH: Final = "/agents/{agent_id}/publish"
 TRANSFER_PATH: Final = "/agents/{agent_id}/transfer"
 DUPLICATE_PATH: Final = "/agents/{agent_id}/duplicate"
 LEARNING_PATH: Final = "/agents/{agent_id}/learning"
+CHANNELS_PATH: Final = "/agents/{agent_id}/channels"
 VERSION_PATH: Final = "/agent-templates/{template_id}/versions/{version}"
 INSTALL_PATH: Final = "/agent-templates/{template_id}/versions/{version}/install"
 
@@ -250,6 +269,44 @@ STARTS_DISABLED_AT_SHADOW: Final = (
 
 
 # ------------------------------------------------------------------------ the shapes
+#: What each channel an agent may be enabled on is called on a screen (M13.7.4). A product word,
+#: the same on every install, and the same word `brain.binding_routes.CHANNEL_LABELS` uses for
+#: every channel both name, which a test holds. Keyed by `ASKING_CHANNELS`, which a test holds too.
+AGENT_CHANNEL_LABELS: Final[Mapping[str, str]] = {
+    Channel.CONSOLE.value: "Web console",
+    Channel.LARK.value: "Lark",
+    Channel.WHATSAPP.value: "WhatsApp",
+    Channel.EMAIL.value: "Email",
+    Channel.TELEGRAM.value: "Telegram",
+    Channel.API.value: "Programs using a service key",
+    Channel.WEBHOOK.value: "Webhook",
+    Channel.WIDGET.value: "Website widget",
+    Channel.SLACK.value: "Slack",
+    Channel.TEAMS.value: "Microsoft Teams",
+}
+
+#: The one sentence beside the boxes, so nobody makes a mute agent without being told.
+NO_CHANNEL_ANSWERS_NOWHERE: Final = (
+    "An agent with no channel ticked answers nowhere: nobody can ask it anything until one is."
+)
+
+
+class ChannelChoiceView(BaseModel):
+    """One channel a new agent may be switched on for, as a box on the page."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+
+
+def channel_choices() -> list[ChannelChoiceView]:
+    """Every channel an agent may answer on, in `Channel`'s order, none of them ticked."""
+    return [
+        ChannelChoiceView(name=name, label=AGENT_CHANNEL_LABELS[name]) for name in ASKING_CHANNELS
+    ]
+
+
 class LifecycleView(BaseModel):
     """One agent's state, its steward and what this reader may do with it.
 
@@ -280,6 +337,29 @@ class LifecycleView(BaseModel):
     #: Holds the visibility authority, is not the steward, and the agent is neither archived nor
     #: already company-wide. Presentation only: `publish_agent` asks every question again.
     may_publish: bool = False
+    #: The channels this agent answers on now (M13.7.4), as stored: sorted names.
+    channels: list[str] = Field(default_factory=list)
+    #: Every channel it could be switched on for, as boxes. See `channel_choices`.
+    channel_choices: list[ChannelChoiceView] = Field(default_factory=channel_choices)
+    #: `NO_CHANNEL_ANSWERS_NOWHERE`.
+    channels_note: str = NO_CHANNEL_ANSWERS_NOWHERE
+    #: Its steward, or a holder of the lifecycle authority over its row. Presentation only: the
+    #: route asks again. See `A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`.
+    may_change_channels: bool = False
+
+
+class ChannelsAsked(BaseModel):
+    """The channels an agent should answer on, and the channels the page drew."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    channels: list[str] = Field(max_length=len(ASKING_CHANNELS))
+    expected: list[str] = Field(max_length=len(ASKING_CHANNELS))
+
+    @field_validator("channels", "expected")
+    @classmethod
+    def _askable(cls, value: list[str]) -> list[str]:
+        return list(enabled_channels(value))
 
 
 class LeashRungView(BaseModel):
@@ -316,6 +396,10 @@ class TemplateVersionView(BaseModel):
     starts: str
     #: Why this version cannot be installed here, when it cannot.
     unavailable: str | None = None
+    #: The channels the new agent may be switched on for, offered unticked (M13.7.4).
+    channels: list[ChannelChoiceView] = Field(default_factory=channel_choices)
+    #: `NO_CHANNEL_ANSWERS_NOWHERE`.
+    channels_note: str = NO_CHANNEL_ANSWERS_NOWHERE
 
 
 class LifecycleStateAsked(BaseModel):
@@ -381,6 +465,8 @@ class TemplateInstallAsked(BaseModel):
     display_name: str | None = Field(default=None, max_length=DISPLAY_NAME_CHARS)
     expected_digest: str = Field(pattern=DIGEST)
     for_department: bool = False
+    #: The channels the new agent answers on, as the person ticked them; none answers nowhere.
+    channels: EnabledChannels = ()
 
 
 # ------------------------------------------------------------------------ the store
@@ -434,7 +520,18 @@ class AgentLifecycles(Protocol):
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        channels: tuple[str, ...] = (),
     ) -> Finished: ...
+
+    async def change_channels(
+        self,
+        before: AgentRecord,
+        after: AgentRecord,
+        *,
+        actor_id: str,
+        ent_hash: str,
+        trace_id: str,
+    ) -> bool: ...
 
 
 class StoredAgentLifecycles:
@@ -560,6 +657,36 @@ class StoredAgentLifecycles:
             ).scalar_one_or_none()
         return written is not None
 
+    async def change_channels(
+        self,
+        before: AgentRecord,
+        after: AgentRecord,
+        *,
+        actor_id: str,
+        ent_hash: str,
+        trace_id: str,
+    ) -> bool:
+        """Write the channels if they still hold what `before` read. A compare-and-set, as `change`.
+
+        `0190`'s trigger appends `channels_changed` to the ledger from this statement, attributed
+        by the same three settings.
+        """
+        async with self._sessions() as session, session.begin():
+            for statement in attributed_to(actor_id=actor_id, ent_hash=ent_hash, trace_id=trace_id):
+                await session.execute(statement)
+            written = (
+                await session.execute(
+                    update(AgentRow)
+                    .where(
+                        AgentRow.id == before.agent_id,
+                        AgentRow.channels == list(before.channels),
+                    )
+                    .values(channels=list(after.channels))
+                    .returning(AgentRow.id)
+                )
+            ).scalar_one_or_none()
+        return written is not None
+
     async def create(
         self,
         draft: InstallDraft,
@@ -571,6 +698,7 @@ class StoredAgentLifecycles:
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        channels: tuple[str, ...] = (),
     ) -> Finished:
         return await StoredAgentInstalls(self._sessions).finish(
             draft,
@@ -581,6 +709,7 @@ class StoredAgentLifecycles:
             at=at,
             ent_hash=ent_hash,
             trace_id=trace_id,
+            channels=channels,
         )
 
 
@@ -688,6 +817,61 @@ def holds(capability: Capability, record: AgentRecord, asked: Asking) -> bool:
     return _in_reach(asked.reach, capability, agent_scope_row(record), asked.now)
 
 
+#: Who may switch an agent's channels, and why the steward is enough.
+A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS: Final = (
+    "An agent's channels are changed by its steward or by a holder of the lifecycle authority "
+    "over its row, and by nobody else. The steward is enough because a channel moves where people "
+    "who may already ask the agent can ask it, never who may find it or what it may reach: its "
+    "audience and its ceiling are untouched. Anybody else is answered as an agent that does not "
+    "exist, and the change reaches the ledger from the row as channels_changed."
+)
+
+
+#: The surfaces an agent answers on that no channel adapter declares, and why each is offered.
+ANSWERED_IN_THE_ASKERS_OWN_SESSION: Final[frozenset[str]] = frozenset(
+    {Channel.CONSOLE.value, Channel.API.value}
+)
+
+#: Where a channel may be switched on (M39.2.4.2), and the one place that decides it.
+A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED: Final = (
+    "A channel with an adapter is switched on only where brain.console.agent_tabs.channel_rows "
+    "offers it: the channel's own may_carry asked of the most sensitive thing a run of this "
+    "agent by this reader could return, which is the workspace's one decision and not a copy. "
+    "The web console and a service key's API answer the person who asked, in their own "
+    "session, through the gate's redaction at their reach, and declare no adapter; they are "
+    "offered by name. Every other surface with no adapter (the website widget today) is not "
+    "offered until it declares what it can carry. Only switching a channel on is judged: one "
+    "already on may stay on or be switched off."
+)
+
+
+def switchable_channels(record: AgentRecord, asked: Asking) -> frozenset[str]:
+    """The channels this reader may switch this agent on for. See the reason constant above."""
+    rows = channel_rows(
+        asked.reach,
+        record,
+        declared_channels(),
+        product_field_policy(),
+        enabled=(),
+        now=asked.now,
+    )
+    return frozenset(row.channel.value for row in rows) | ANSWERED_IN_THE_ASKERS_OWN_SESSION
+
+
+#: What a switch onto a channel that cannot carry this agent's answers is told.
+CANNOT_CARRY_IT: Final = (
+    "That channel cannot carry what this agent may answer, so it was not switched on and "
+    "nothing was changed."
+)
+
+
+def may_change_channels(record: AgentRecord, asked: Asking) -> bool:
+    """Whether this caller may switch this agent's channels. See the reason constant."""
+    return record.audience.owner_id == asked.caller.principal.id or holds(
+        AGENT_LIFECYCLE_CAPABILITY, record, asked
+    )
+
+
 def visible(record: AgentRecord, asked: Asking) -> bool:
     """Whether the caller's audience covers this agent, by the one answer to that question."""
     return record.agent_id in _visible_agent_ids((record,), viewer_of(asked))
@@ -718,7 +902,17 @@ def lifecycle_view(found: FoundAgent, asked: Asking, key: str | None) -> Lifecyc
         duplicate_unavailable=unavailable,
         level=record.audience.level.value,
         may_publish=bool(publishable((record,), asked.reach, asked.now)),
+        channels=list(record.channels),
+        channel_choices=channel_choices_for(record, asked),
+        may_change_channels=may_change_channels(record, asked),
     )
+
+
+def channel_choices_for(record: AgentRecord, asked: Asking) -> list[ChannelChoiceView]:
+    """The boxes: every channel this reader may switch on, and every one already on, so a channel
+    on today can be switched off whatever it would be offered now."""
+    shown = switchable_channels(record, asked) | frozenset(record.channels)
+    return [one for one in channel_choices() if one.name in shown]
 
 
 def leash_view(leash: Leash) -> list[LeashRungView]:
@@ -755,21 +949,18 @@ _TOLD: Final[dict[int | str, dict[str, object]]] = {
 
 @router.get(LIFECYCLE_PATH, response_model=LifecycleView, responses=COMMON_RESPONSES)
 async def agent_lifecycle(request: Request, agent_id: str, asked: Asked) -> LifecycleView:
-    """One agent's state and steward, for a reader who may change or duplicate it.
+    """One agent's state, steward and channels, for a reader who may change any of them.
 
-    Either authority over the agent's row opens it, and neither is the one 404.
+    Either authority over the agent's row opens it, and so does being its steward, who may switch
+    its channels; anybody else is the one 404.
     """
-    if (
-        asked.reach.scope_for(AGENT_LIFECYCLE_CAPABILITY, asked.now) is None
-        and asked.reach.scope_for(AGENT_INSTALL_CAPABILITY, asked.now) is None
-    ):
-        raise _no_agent_here(asked, "capability")
     found = await lifecycles_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_agent_here(asked, "agent")
     if not (
         holds(AGENT_LIFECYCLE_CAPABILITY, found.record, asked)
         or holds(AGENT_INSTALL_CAPABILITY, found.record, asked)
+        or may_change_channels(found.record, asked)
     ):
         raise _no_agent_here(asked, "scope")
     return lifecycle_view(found, asked, template_key_of(request))
@@ -900,6 +1091,42 @@ async def transfer_agent(
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
 
 
+@router.post(CHANNELS_PATH, response_model=LifecycleView, responses=_TOLD)
+async def change_agent_channels(
+    request: Request, agent_id: str, body: ChannelsAsked, asked: Asked
+) -> JSONResponse:
+    """Switch the channels an agent answers on (M13.7.4), for its steward or an administrator.
+
+    See `A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`. The page sends the channels
+    it drew; a row that moved since is a 409 and nothing is written.
+    """
+    store = lifecycles_of(request)
+    found = await store.agent(agent_id)
+    if found is None or not visible(found.record, asked):
+        raise _no_agent_here(asked, "agent")
+    if not may_change_channels(found.record, asked):
+        raise _no_agent_here(asked, "scope")
+    before = found.record
+    if tuple(body.expected) != before.channels:
+        return _not_changed(MOVED, IT_MOVED)
+    switched_on = frozenset(body.channels) - frozenset(before.channels)
+    if not switched_on <= switchable_channels(before, asked):
+        return _not_changed(REFUSED, CANNOT_CARRY_IT)
+    after = answering_on(before, body.channels)
+    if after.channels != before.channels and not await store.change_channels(
+        before,
+        after,
+        actor_id=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    ):
+        return _not_changed(MOVED, IT_MOVED)
+    log.info("agent channels switched", agent=agent_id, principal=asked.caller.principal.id)
+    moved = FoundAgent(record=after, install=found.install, effective_hash=found.effective_hash)
+    view = lifecycle_view(moved, asked, template_key_of(request))
+    return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
+
+
 def _audience_for(asked: Asking, for_department: bool) -> AgentAudience | str:
     """The new agent's audience, or the sentence saying why it cannot be the one asked for."""
     department = asked.caller.principal.primary_department
@@ -917,10 +1144,12 @@ async def _create(
     for_department: bool,
     asked: Asking,
     source: AgentRecord | None,
+    channels: tuple[str, ...],
 ) -> JSONResponse:
     """Make one agent from a draft, for a caller already admitted, or say why not.
 
     `draft_for` builds the draft from a minted id, so the id is minted here and nowhere else.
+    `channels` has no default, so each way of making an agent says where it answers (M13.7.4).
     """
     key = template_key_of(request)
     if key is None:
@@ -960,6 +1189,7 @@ async def _create(
             at=asked.now,
             ent_hash=asked.reach.ent_hash(),
             trace_id=_trace_id(),
+            channels=channels,
         )
     except (InstallStoreError, TemplateError) as refused:
         return _not_changed(REFUSED, str(refused))
@@ -1017,6 +1247,8 @@ async def duplicate_agent(
         for_department=body.for_department,
         asked=asked,
         source=found.record,
+        # A copy answers where the agent it copies answers, so duplicating never makes a mute one.
+        channels=found.record.channels,
     )
 
 
@@ -1091,6 +1323,7 @@ async def install_version(
         for_department=body.for_department,
         asked=asked,
         source=None,
+        channels=body.channels,
     )
 
 

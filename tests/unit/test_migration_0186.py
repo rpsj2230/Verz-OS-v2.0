@@ -91,6 +91,9 @@ def _agent_rows(url: str) -> None:
     )
     row = agent_values(effective.record)
     del row["connectors"]
+    # And the three 0189 adds after it.
+    for later in ("channels", "max_turns", "max_tool_calls"):
+        del row[later]
     engine = create_engine(url.replace("postgresql://", "postgresql+psycopg://", 1))
     try:
         with engine.begin() as conn:
@@ -370,6 +373,8 @@ def test_every_table_with_a_source_and_an_entity_is_renamed_or_argued_for() -> N
         *module.NOT_REWRITTEN,
         "er.canonical",
         "er.review_item",
+        # Created by 0206, after this rename, so it only ever held the source-named entities.
+        "mem.learned_rule",
     }
 
 

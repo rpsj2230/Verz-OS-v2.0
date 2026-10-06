@@ -15,8 +15,14 @@
  * copy starts disabled and at Shadow (`STARTS_DISABLED_AT_SHADOW`). A refusal is the API's own
  * sentence, read by `readNotChanged`, never one written here.
  *
- * Task ids: M27.11.6, M27.11.7
+ * **The channels an agent answers on are read here too** (M13.7.4), because the same route serves them
+ * and its steward may switch them without holding either authority over the row. The page sends the
+ * channels it drew as `expected`, the same stale-page check as every move.
+ *
+ * Task ids: M27.11.6, M27.11.7, M13.7.4
  */
+
+import { readChannelChoices, type ChannelChoice } from "./agents/agentDraftsQuery";
 
 export { readNotChanged } from "./agentAutomationsQuery";
 
@@ -38,6 +44,11 @@ export function agentMoveApiPath(agentId: string, act: LifecycleAct): string {
   return under(agentId, act);
 }
 
+/** `brain.agent_lifecycle_routes.CHANNELS_PATH`. */
+export function agentChannelsApiPath(agentId: string): string {
+  return under(agentId, "channels");
+}
+
 /** One agent as a reader who may act on it sees it: `LifecycleView`. */
 export interface AgentLifecycle {
   readonly agentId: string;
@@ -52,6 +63,13 @@ export interface AgentLifecycle {
   readonly level: string;
   /** Whether this reader may show it to the whole company (`LifecycleView.may_publish`). */
   readonly mayPublish: boolean;
+  /** The channels it answers on now, as stored. */
+  readonly channels: readonly string[];
+  /** Every channel it could answer on, as boxes, in the API's order. */
+  readonly channelChoices: readonly ChannelChoice[];
+  /** The sentence that an agent with no channel ticked answers nowhere. */
+  readonly channelsNote: string;
+  readonly mayChangeChannels: boolean;
 }
 
 function said(value: unknown): string | undefined {
@@ -86,7 +104,30 @@ export function readLifecycle(payload: unknown): AgentLifecycle | null {
     ...(duplicateUnavailable === undefined ? {} : { duplicateUnavailable }),
     level: said(fields["level"]) ?? "",
     mayPublish: fields["may_publish"] === true,
+    channels: Array.isArray(fields["channels"])
+      ? fields["channels"].filter((one): one is string => said(one) !== undefined)
+      : [],
+    channelChoices: readChannelChoices(fields["channel_choices"]),
+    channelsNote: said(fields["channels_note"]) ?? "",
+    mayChangeChannels: fields["may_change_channels"] === true,
   };
+}
+
+/**
+ * The body a channel switch sends: the ticked names in the order the boxes are offered, and the
+ * channels the page drew, which the route compares with the row.
+ */
+export function channelsBody(shown: AgentLifecycle, chosen: ReadonlySet<string>): Record<string, unknown> {
+  return {
+    channels: shown.channelChoices.filter((one) => chosen.has(one.name)).map((one) => one.name),
+    expected: [...shown.channels],
+  };
+}
+
+/** What each stored channel is called, from the boxes the API sent; a name it did not label is its own name. */
+export function channelLabels(shown: AgentLifecycle): string[] {
+  const labels = new Map(shown.channelChoices.map((one) => [one.name, one.label]));
+  return shown.channels.map((name) => labels.get(name) ?? name);
 }
 
 /** The acts a lifecycle word offers, before anybody asks who may press them. */

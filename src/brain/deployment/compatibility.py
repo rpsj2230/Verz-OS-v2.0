@@ -123,6 +123,15 @@ A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: 
     "column from not null, since the previous release could write nothing else."
 )
 
+#: Why a restriction that binds only a word the previous release could not write is not a narrowing.
+A_RESTRICTION_ON_A_WORD_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: Final = (
+    "A check reading `<column> <> 'word' OR ...` is true for every row whose column is not that "
+    "word, so it binds only rows that hold it. When the opposite direction restores an IN list "
+    "for the same column that does not contain the word, the previous release's own constraint "
+    "refused it, so it never wrote one and the new check binds nothing it can write. This is "
+    "how a new state is given its own invariant, and 0210 is the first to need it."
+)
+
 #: Why a policy dropped and written again is unreadable rather than breaking.
 A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED: Final = (
     "A policy dropped and written again in one body changes which rows each command admits, "
@@ -653,6 +662,32 @@ def _check_predicates(calls: tuple[_Call, ...]) -> dict[tuple[str, str, str], st
     return out
 
 
+#: `<column> <> 'word' OR ...`, the head of a check that binds only rows holding one word.
+_WORD_GUARD = re.compile(r"^\s*(?P<column>\w+)\s*<>\s*'(?P<word>[^']+)'\s+OR\s", re.IGNORECASE)
+
+
+def _binds_only_a_new_word(
+    condition: str, schema: str, table: str, reversed_by: dict[tuple[str, str, str], str]
+) -> bool:
+    """Whether a check binds only a word the opposite direction's IN list for that column lacks.
+
+    See `A_RESTRICTION_ON_A_WORD_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING`.
+    """
+    head = _WORD_GUARD.match(condition)
+    if head is None:
+        return False
+    for (one_schema, one_table, _), predicate in reversed_by.items():
+        if (one_schema, one_table) != (schema.lower(), table.lower()):
+            continue
+        listed = _IN_LIST.match(predicate.strip())
+        if listed is None or listed.group("column").lower() != head.group("column").lower():
+            continue
+        words = {one.strip() for one in listed.group("items").split(",")}
+        if f"'{head.group('word')}'" not in words:
+            return True
+    return False
+
+
 def _table_of(statement: str) -> str | None:
     """The `schema.table` a `CREATE ... ON <table>` statement restricts, unqualified aside.
 
@@ -1003,6 +1038,12 @@ def _from_check_constraint(
             Verdict.UNREADABLE, "check constraint with no readable predicate", ast.unparse(node)
         )
     previous = reversed_by.get((schema.lower(), table.lower(), name.lower()))
+    if previous is None and _binds_only_a_new_word(condition[0], schema, table, reversed_by):
+        return Change(
+            Verdict.SAFE,
+            "restriction on a word the previous release never writes",
+            ast.unparse(node),
+        )
     if previous is None:
         return Change(
             Verdict.BREAKING,

@@ -55,6 +55,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         told: UNBROKEN,
       },
+      "/api/v1/me/accounts": {
+        accounts: [{ connector: "xero", label: UNBROKEN, connected: false, told: "" }],
+        told: UNBROKEN,
+      },
     },
   },
 };

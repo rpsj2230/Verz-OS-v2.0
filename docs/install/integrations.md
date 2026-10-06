@@ -51,6 +51,15 @@ spending it is your outage: the accounting connector's allowance is five thousan
 your whole organisation, shared with every other integration you run, and it does not refill until
 midnight.
 
+**What happens when a source renames a field.** Every source is read on a schedule at least once a
+day, and each read is also the check of what the source sends. When a record that carried one of
+the fields this system keeps is read again without it, and no record of the read carries it, the
+source's health on the Connectors screen turns to degraded and says which field, by its name here
+and never with a value. Until a later read finds the field again, a question that would read that
+kind of record from the source is told the source could not be read, rather than given records with
+the field missing. A field that is only ever read live, and never kept, is not judged this way,
+because nothing holds what it used to be.
+
 ## The table
 
 Every cell below except the last column is read out of the connector's manifest by
@@ -121,9 +130,11 @@ token with DNS Write or any Edit permission, and never the Global API Key.
 
 **A DNS change is only ever prepared.** An agent asking to change a record prepares the change for
 a person to approve, and the gate holds it whatever the agent's leash says, because changing DNS
-is one of the effects that always waits for a person. An approved change is not sent by this
-release: sending one needs a second token with DNS Write, which is a decision for whoever owns the
-install, and until then the change is made in Cloudflare by a person.
+is one of the effects that always waits for a person. Sending an approved change needs a second
+token with DNS Edit, given on the Cloudflare connector's page under **Allow approved DNS changes**,
+which is a decision for whoever owns the install. Once it is given, the worker sends each approved
+change within five minutes, once, and reports it done only after reading the record back; until
+then the approval waits inside its window and the change is made in Cloudflare by a person.
 
 **What it does not narrow.** The token is one user's, and Cloudflare counts 1,200 calls per five
 minutes across every token that user holds and the dashboard, so another integration on the same
@@ -156,6 +167,16 @@ the custom fields are read live when a question needs them and never kept.
 **Create** an agent API key with read scope. Not an administrator key: an administrator key can
 change service levels and delete tickets. The key sees what its agent sees, so choose an agent who
 sees the tickets this system should answer about and no more.
+
+**A reply to a ticket is only ever prepared.** An agent replying to a customer prepares the reply
+for a person in the helpdesk's department to approve, and the gate holds it whatever the agent's
+leash says, because a message to a customer always waits for a person. Sending an approved reply
+needs a second key: on the Freshdesk connector's page use **Allow approved replies to tickets** and
+paste the API key of an agent whose role may reply to tickets, never an administrator's. Once it
+is given, the worker posts each approved reply within five minutes, once, and reports it done only
+after reading the ticket's conversations back and finding a public reply with the approved words.
+A ticket with more conversations than one page of a hundred holds can report a posted reply as not
+done, because the read-back reads the first page only.
 
 **Know this before you rely on it.** Freshdesk's search returns at most three hundred records,
 ever. Not per page: a hard ceiling on the result set, and the three-hundredth record and the
