@@ -35,6 +35,7 @@ from brain.ops import (
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_operations_console,
+    acceptance_operations_console_5,
     acceptance_people_console_2,
     acceptance_run,
 )
