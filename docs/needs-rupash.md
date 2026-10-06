@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**38 items are open: 161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**39 items are open: 162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,28 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 162. May a new agent be put on your website's chat widget?
+
+**In plain terms:** an agent now answers only on the channels switched on for it, and the switch offers
+a channel only where the agent is allowed to work on it (M13.7.4 and M39.2.4.2). The console and the
+API answer the person asking, in their own signed-in session, so they are offered by name. Your
+website's chat widget is different: it answers visitors who are not signed in, and you decided it gives
+public knowledge only and never asks anybody to log in (item 26). Nothing yet says which agents are
+safe to face the public, so **the switch does not offer the widget at all**. An agent already on it
+keeps it and can be switched off it; no agent can be newly put on it.
+
+**Option A: allow it for an agent that can read only public knowledge.** The widget is offered on an
+agent whose ceiling holds nothing but the knowledge you marked public, checked by the same rule that
+decides what any channel may carry. An agent that can read anything more is never offered it.
+
+**Option B: keep it as built.** The widget keeps whichever agents answer on it today, and a new one is
+put there only by a change to the product.
+
+**My recommendation:** A. It keeps item 26's promise by construction, and lets you replace the website's
+agent without a release. I will not build it until you answer.
+
+**What I need from you:** reply "162: A" or "162: B".
 
 ## 161. Before a skill is approved, its examples are rehearsed: what "rehearsed" means for now
 
