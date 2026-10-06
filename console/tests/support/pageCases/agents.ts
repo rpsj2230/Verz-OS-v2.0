@@ -261,6 +261,12 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         may_change_tools: true,
         may_change_connectors: true,
       },
+      // Group chats, for its steward: an install and a chat the bot is in, each value a token.
+      "/api/v1/agents/quote-helper/groups": {
+        agent_id: "quote-helper",
+        installs: [{ id: "g-1", channel: "lark", room_ref: UNBROKEN, name: UNBROKEN, present: false, installed_at: "2019-03-04T09:00:00Z" }],
+        rooms: [{ channel: "lark", room_ref: UNBROKEN, name: UNBROKEN }],
+      },
       // Where it answers, for its steward: `LifecycleView`, whose widest value is a channel's name.
       "/api/v1/agents/quote-helper/lifecycle": {
         agent_id: "quote-helper",

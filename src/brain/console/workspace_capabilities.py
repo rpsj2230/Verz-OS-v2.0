@@ -83,8 +83,9 @@ overflow rule beside them.
 member, on the argument that the enum is closed and adding one with nothing behind it would be
 a capability an adapter declares and nothing honours. That objection was answered rather than
 ignored: `Feature.GROUP_INSTALL` exists and `agent_tabs.install_to_group` refuses an install
-on a surface that does not declare it, so the member has a code path behind it. No adapter
-declares it yet, and a test asserts that so the day one does prompts a read. Corrected here
+on a surface that does not declare it, so the member has a code path behind it. Lark declares it
+since `0205`, when its wire began reading the bot's own joining and leaving events, and a test
+asserts that no other adapter does, so the day one does prompts a read. Corrected here
 because a docstring that describes a gap somebody has since filled is how ten documents came
 to agree with each other and none of them with the code.
 

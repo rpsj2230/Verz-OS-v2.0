@@ -434,6 +434,11 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A tool attached to an agent or detached (`0196`): the person who pressed is an actor,
         # and the row is about an agent's tools, never about a person.
         "agent.tool_attachment",
+        # An agent installed into a group chat (`0205`): who installed and removed it are actors,
+        # and the row is about an agent and a conversation, never about a person.
+        "agent.group_install",
+        # A group chat the bot is in (`0205`): the vendor's conversation and its name, nobody's.
+        "ops.channel_room",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).

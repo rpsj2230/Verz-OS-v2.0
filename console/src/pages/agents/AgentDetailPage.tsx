@@ -45,7 +45,7 @@
  * Task ids: M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
  */
 
-import { ChevronDown, IdCard, Info, LayoutDashboard, MessageSquarePlus, Settings } from "lucide-react";
+import { ChevronDown, IdCard, Info, LayoutDashboard, Settings } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
@@ -61,7 +61,6 @@ import {
   Note,
   SectionCard,
   StatCard,
-  UnavailableAction,
   ViewSwitch,
   type DetailView,
 } from "../../components/kit";
@@ -79,7 +78,7 @@ import { agentAutomationsApiPath } from "../agentAutomationsQuery";
 import { agentWorkspaceApiPath, readAgentWorkspace } from "../agentQuery";
 import { AUTOMATIONS_TAB, automationGalleryApiPath } from "../automationGalleryQuery";
 import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
-import { UNAVAILABLE, WORKS_AT } from "./agentActions";
+import { WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
 import { AgentConversations } from "./AgentConversations";
 import { AgentArtifacts } from "./AgentArtifacts";
@@ -379,12 +378,6 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
               busy={lifecycle.busy || drafting.busy}
             />
           )}
-          <UnavailableAction
-            text="Add to a chat group"
-            label="Add to a chat group"
-            icon={<MessageSquarePlus aria-hidden />}
-            reason={UNAVAILABLE.chatGroup.reason}
-          />
         </>
       }
       figures={
