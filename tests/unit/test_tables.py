@@ -165,6 +165,7 @@ MIGRATION_GROUP_INSTALL = VERSIONS / "0205_group_install.py"
 MIGRATION_SIGNAL_LOG = VERSIONS / "0197_signal_log.py"
 MIGRATION_LEARNING_CANDIDATES = VERSIONS / "0198_learning_candidates.py"
 MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
+MIGRATION_ROLE_NOMINATIONS = VERSIONS / "0208_role_nominations.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -481,6 +482,8 @@ SIGNAL_LOG_TABLES: tuple[str, ...] = ("mem.signal",)
 LEARNING_CANDIDATE_TABLES: tuple[str, ...] = ("know.learning_candidate", "know.candidate_evidence")
 #: And the two 0206 adds: a learned rule held until promoted, and the questions it would have used.
 LEARNED_RULE_TABLES: tuple[str, ...] = ("mem.learned_rule", "mem.rule_occurrence")
+#: And the one 0208 adds: a person proposed for a role, and the decision on it.
+ROLE_NOMINATION_TABLES: tuple[str, ...] = ("gate.role_nomination",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -571,6 +574,7 @@ ALL_TABLES = (
     + LEARNING_CANDIDATE_TABLES
     + LEARNED_RULE_TABLES
     + GROUP_INSTALL_TABLES
+    + ROLE_NOMINATION_TABLES
 )
 
 
@@ -1435,6 +1439,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert learning_candidates.TABLES == LEARNING_CANDIDATE_TABLES
     learned_rules = migration_module(MIGRATION_LEARNED_RULES)
     assert learned_rules.TABLES == LEARNED_RULE_TABLES
+    role_nominations = migration_module(MIGRATION_ROLE_NOMINATIONS)
+    assert role_nominations.TABLES == ROLE_NOMINATION_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1547,6 +1553,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(learning_candidates.TABLES)
         + tuple(learned_rules.TABLES)
         + tuple(group_install.TABLES)
+        + tuple(role_nominations.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1640,6 +1647,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(learning_candidates.TABLES),
         set(learned_rules.TABLES),
         set(group_install.TABLES),
+        set(role_nominations.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

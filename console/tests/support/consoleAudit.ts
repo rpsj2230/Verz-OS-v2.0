@@ -149,6 +149,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/roles/deputy",
       "/api/v1/govern/roles/removal",
       "/api/v1/govern/roles/group-rules*",
+      "/api/v1/govern/roles/nominations*",
     ],
     tables: [
       "auth.principal",
@@ -171,6 +172,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.access_request",
       "gate.access_request_handled",
       "gate.role_grant",
+      "gate.role_nomination",
       "auth.group_role_rule",
       "gate.break_glass_notice",
       "gate.self_grant",

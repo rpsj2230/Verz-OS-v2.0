@@ -146,6 +146,7 @@ from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionR
 from brain.tables.retrieval import RetrievalEventRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
+from brain.tables.role_nomination import RoleNominationRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
@@ -499,6 +500,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0205_group_install. A room and an install each point at nothing.
     "ops.channel_room",
     "agent.group_install",
+    # 0208_role_nominations. A confirmed nomination points at the role grant it wrote.
+    "gate.role_nomination",
 )
 
 __all__ = [
@@ -609,6 +612,7 @@ __all__ = [
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",
+    "RoleNominationRow",
     "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",

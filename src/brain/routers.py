@@ -322,6 +322,10 @@ from brain.model_health_routes import router as model_health_router
 # `brain.navigation_routes`.
 from brain.navigation_routes import router as navigation_router
 
+# Nominating a person for a role, and the third person who confirms it into a role grant or
+# declines it. See `brain.nomination_routes`.
+from brain.nomination_routes import router as nomination_router
+
 # Notifications: every notice this product composes, who is told what and whether anything
 # sends it, the switch that stops one, and the email relay with its password in the vault and
 # a test message, behind `admin:notification` over everything. See
