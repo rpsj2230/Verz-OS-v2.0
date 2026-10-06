@@ -215,7 +215,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Departments, teams and client configuration": {
     screens: ["/departments", "/departments/:slug", "/departments/:slug/:view", "/department", "/department/:view"],
-    routes: ["/api/v1/govern/departments*"],
+    // The head's own budget against pace and knowledge coverage, drawn on the Department page.
+    routes: ["/api/v1/govern/departments*", "/api/v1/console/department/pace", "/api/v1/console/department/coverage"],
     tables: ["gate.department", "gate.team", "gate.team_membership", "gate.department_lead"],
     installation: ["INSTALL_COMPANY_NAME", "INSTALL_PRODUCT_NAME", "INSTALL_LOGO_URL", "INSTALL_ACCENT_COLOUR"],
     gaps: [
