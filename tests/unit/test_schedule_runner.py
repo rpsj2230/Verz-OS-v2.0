@@ -514,7 +514,10 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "escalation_expiry" not in {one.name for one in orphans()}
     assert "evening_digest" not in {one.name for one in orphans()}
     assert "entity_resolution" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 24
+    # Twenty-five with `elevation_anchor` (M33.7.1.3), which a workflow reads on a route and so is
+    # never an orphan of this runner, as `audit_anchor` is not.
+    assert "elevation_anchor" not in {one.name for one in orphans()}
+    assert len(CONTROLS) == 25
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------

@@ -748,6 +748,27 @@ CONTROLS: Final[tuple[Control, ...]] = (
         schedule_file=".github/workflows/anchor.yml",
     ),
     Control(
+        name="elevation_anchor",
+        # The elevation chain's head (`0209`, M33.7.1.3), published beside the main ledger's and
+        # read by the same workflow, so its few entries are anchored on their own cadence.
+        symbols=("brain.audit.chain_check:published_head",),
+        guards=(
+            "that an approved elevation cannot be removed from the end of the elevation chain "
+            "without it being detectable, whatever the main ledger's anchor says"
+        ),
+        lost_silently=(
+            "The elevation chain still verifies after its newest entries are removed, and the "
+            "main ledger's anchor says nothing about it: the main chain still holds each "
+            "request's decision, but the separate head that moves only when somebody is elevated "
+            "would no longer be recorded anywhere the database administrator cannot reach."
+        ),
+        every=_SIX_HOURLY,
+        severity=Severity.RAISED,
+        invoked_by=Invocation.ON_A_ROUTE,
+        route="/api/audit/elevation-anchor",
+        schedule_file=".github/workflows/anchor.yml",
+    ),
+    Control(
         name="model_health_probes",
         # The run joined on 2026-09-22: the worker's schedule starts it every minute, it reads the
         # ladder and the stored rings, asks `next_probes` which deployments are due, and appends

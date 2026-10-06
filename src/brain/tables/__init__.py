@@ -54,7 +54,7 @@ from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactRow
-from brain.tables.audit import AuditEntryRow
+from brain.tables.audit import AuditEntryRow, ElevationEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
@@ -449,6 +449,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
     # outlives both.
     "ops.agent_run",
+    # 0209_elevation_chain. Points at nothing: the second chain, of elevations alone.
+    "obs.elevation_entry",
 )
 
 __all__ = [
@@ -497,6 +499,7 @@ __all__ = [
     "DepartmentRow",
     "DeploymentRecordRow",
     "DirectoryRoleGrantRow",
+    "ElevationEntryRow",
     "ElevationRequestRow",
     "EntityAliasRow",
     "EntityIdentifierRow",
