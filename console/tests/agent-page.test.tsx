@@ -37,6 +37,7 @@ import {
   INSTALL_HERE,
   INSTALL_QUESTION,
   NO_GROUPS,
+  PAUSED,
   REMOVE_QUESTION,
   THE_BOT_LEFT,
 } from "../src/pages/agents/AgentGroups";
@@ -981,7 +982,7 @@ function groupsWire(overrides: Readonly<Record<string, unknown>> = {}): Record<s
   return {
     agent_id: "quote-helper",
     installs: [
-      { id: "11111111-1111-4111-8111-000000000001", channel: "lark", room_ref: "oc_sales", name: "Sales team", present: true, installed_at: "2019-03-04T09:00:00Z" },
+      { id: "11111111-1111-4111-8111-000000000001", channel: "lark", room_ref: "oc_sales", name: "Sales team", present: true, answering: true, installed_at: "2019-03-04T09:00:00Z" },
     ],
     rooms: [{ channel: "lark", room_ref: "oc_pricing", name: "Pricing desk" }],
     ...overrides,
@@ -1055,10 +1056,12 @@ describe("group chats", () => {
     // What breaks if this is deleted: a 409 drawn as installed, or an install in a chat the bot has
     // left drawn as if it still answers there.
     const { card } = await withGroups(
-      { body: groupsWire({ installs: [{ id: "i-1", channel: "lark", room_ref: "oc_old", name: "Old chat", present: false, installed_at: "2019-03-04T09:00:00Z" }] }) },
+      { body: groupsWire({ installs: [{ id: "i-1", channel: "lark", room_ref: "oc_old", name: "Old chat", present: false, answering: false, installed_at: "2019-03-04T09:00:00Z" }] }) },
       { [`POST ${GROUPS_API}`]: { status: 409, body: { outcome: "refused", sentence: "That group chat could not take this agent." } } },
     );
     expect(card.textContent).toContain(THE_BOT_LEFT);
+    // Switched off the channel, it is shown paused rather than live.
+    expect(card.textContent).toContain(PAUSED);
     fireEvent.change(within(card).getByLabelText(CHOOSE_A_CHAT), { target: { value: "lark:oc_pricing" } });
     fireEvent.click(within(card).getByRole("button", { name: INSTALL_HERE }));
     const asking = await screen.findByRole("alertdialog", { name: INSTALL_QUESTION("Pricing desk") });

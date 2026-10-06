@@ -37,6 +37,7 @@ from brain.channels.inbound import Inbound
 from brain.channels.lark import BOT_ADDED, BOT_REMOVED, LARK_FEATURES, ROOM_PREFIX, read_room
 from brain.chat_answer import (
     A_GROUP_CHAT_IS_ANSWERED_BY_ITS_INSTALLED_AGENT_WHEN_NONE_IS_NAMED,
+    AN_INSTALL_IS_PAUSED_WHILE_ITS_AGENT_DOES_NOT_ANSWER_ON_THE_CHANNEL,
     installed_agent_addressed,
 )
 from brain.console.agent_tabs import GroupInstall
@@ -50,7 +51,7 @@ from brain.tables import group_install
 from brain.tables.identity import one_of
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_acceptance import at_head
-from tests.unit.test_agent_lifecycle_routes import COMPANY, SALES, Console, console
+from tests.unit.test_agent_lifecycle_routes import COMPANY, SALES, Console, Memory, console
 from tests.unit.test_approval_cards import client, world
 from tests.unit.test_automation_owner_store import app_engine
 from tests.unit.test_review_store import entries
@@ -179,18 +180,28 @@ class Installs(StoredGroupInstalls):
 
 
 class State:
-    def __init__(self, installs: StoredGroupInstalls) -> None:
+    def __init__(self, installs: StoredGroupInstalls, agents: Memory) -> None:
         self.group_installs = installs
+        self.agent_lifecycles = agents
 
 
 class App:
-    def __init__(self, installs: StoredGroupInstalls) -> None:
-        self.state = State(installs)
+    def __init__(self, installs: StoredGroupInstalls, agents: Memory) -> None:
+        self.state = State(installs, agents)
 
 
 class Request:
-    def __init__(self, installs: StoredGroupInstalls) -> None:
-        self.app = App(installs)
+    def __init__(self, installs: StoredGroupInstalls, agents: Memory | None = None) -> None:
+        self.app = App(installs, agents if agents is not None else on_lark(Memory(), COMPANY))
+
+
+def on_lark(agents: Memory, agent_id: str, *, answering: bool = True) -> Memory:
+    """The in-memory agents with this one answering on Lark, or on nothing."""
+    found = agents.agents[agent_id]
+    agents.agents[agent_id] = replace(
+        found, record=answering_on(found.record, ["lark"] if answering else [])
+    )
+    return agents
 
 
 def a_message(agent_id: str | None) -> Inbound:
@@ -217,7 +228,7 @@ def test_a_group_chats_message_naming_no_agent_is_answered_by_its_installed_agen
     shared chat with an install and no agent named is the installed agent's; a message naming an
     agent keeps it; a private chat and a chat with no install are as before. Delete this and a
     group install chooses nothing, or overrides the agent somebody named."""
-    request: Any = Request(Installs({(Channel.LARK, ROOM): "pricing_desk"}))
+    request: Any = Request(Installs({(Channel.LARK, ROOM): COMPANY}))
     empty: Any = Request(Installs({}))
 
     async def go() -> tuple[Inbound, ...]:
@@ -231,13 +242,41 @@ def test_a_group_chats_message_naming_no_agent_is_answered_by_its_installed_agen
         )
 
     installed, named, private, none = run(go)
-    assert installed.address.agent_id == "pricing_desk"
+    assert installed.address.agent_id == COMPANY
     assert installed.address.question == "how much is it"
     assert named.address.agent_id == "sales_helper"
     assert (private.address.agent_id, none.address.agent_id) == (None, None)
     assert "floor" in A_GROUP_CHAT_IS_ANSWERED_BY_ITS_INSTALLED_AGENT_WHEN_NONE_IS_NAMED
     assert "floor" in A_ROOM_ANSWERS_AT_ITS_FLOOR_WHICHEVER_AGENT_IS_INSTALLED
     assert set(GroupInstall.__dataclass_fields__) == {"agent_id", "channel", "room_ref"}
+
+
+def test_an_install_whose_agent_was_switched_off_the_channel_is_paused_and_resumes_when_on() -> (
+    None
+):
+    """`AN_INSTALL_IS_PAUSED_WHILE_ITS_AGENT_DOES_NOT_ANSWER_ON_THE_CHANNEL`: with the agent's Lark
+    channel switched off, a message in its chat goes exactly where it would with no install, and
+    switching the channel back on resumes the same install with nobody installing it again. Delete
+    this and switching a channel off leaves the agent answering in every chat it was installed in,
+    or an install has to be made again after every switch."""
+    installs = Installs({(Channel.LARK, ROOM): COMPANY})
+    agents = on_lark(Memory(), COMPANY, answering=False)
+    switched_off: Any = Request(installs, agents)
+    no_install: Any = Request(Installs({}), agents)
+
+    async def ask(request: Any) -> Inbound:
+        return await installed_agent_addressed(request, a_message(None), a_room(shared=True))
+
+    paused = run(lambda: ask(switched_off))
+    without = run(lambda: ask(no_install))
+    on_lark(agents, COMPANY, answering=True)
+    resumed = run(lambda: ask(switched_off))
+
+    assert paused == without
+    assert paused.address.agent_id is None
+    assert resumed.address.agent_id == COMPANY
+    assert installs.installed == {(Channel.LARK, ROOM): COMPANY}
+    assert "back on" in AN_INSTALL_IS_PAUSED_WHILE_ITS_AGENT_DOES_NOT_ANSWER_ON_THE_CHANNEL
 
 
 # ------------------------------------------------------------------------ on a server
@@ -287,6 +326,13 @@ def test_a_steward_installs_their_agent_in_a_chat_the_bot_is_in_and_takes_it_out
         "u_admin", GROUPS_PATH.format(agent_id=COMPANY), {"channel": "lark", "room_ref": ROOM}
     )
     [install] = made.json()["installs"]
+    # Switched off Lark, the install is shown paused; switched back on, it answers again, and it is
+    # the same install throughout.
+    found = console.memory.agents[SALES]
+    console.memory.agents[SALES] = replace(found, record=answering_on(found.record, []))
+    paused = console.get("u_wide", GROUPS_PATH.format(agent_id=SALES)).json()["installs"]
+    answering_on_lark(console, SALES)
+    resumed = console.get("u_wide", GROUPS_PATH.format(agent_id=SALES)).json()["installs"]
     removed = console.post(
         "u_wide", REMOVAL_PATH.format(agent_id=SALES), {"install_id": install["id"]}
     )
@@ -303,6 +349,9 @@ def test_a_steward_installs_their_agent_in_a_chat_the_bot_is_in_and_takes_it_out
         True,
     )
     assert made.json()["rooms"] == []
+    assert install["answering"] is True
+    assert [(one["id"], one["answering"]) for one in paused] == [(install["id"], False)]
+    assert [(one["id"], one["answering"]) for one in resumed] == [(install["id"], True)]
     # One agent per room: another agent is refused in the one sentence, and nothing is written.
     assert (again.status_code, again.json()["sentence"]) == (409, NOT_INSTALLED)
     assert removed.status_code == 200, removed.text
