@@ -378,6 +378,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "know.classified_row",
         # A provider's call and probe outcomes, per deployment: about a provider, not a person.
         "ops.provider_health",
+        # An API's connector as submitted and reviewed (`0203`): about an API, and the people named
+        # are who submitted and who reviewed it, actors and not owners.
+        "ops.custom_connector",
         # A question that fell past its tier's primary: a trace id, tier and depth, no person.
         "ops.chain_depth_alert",
         # Which regions a scope's questions may go to; its author is an actor, not an owner.

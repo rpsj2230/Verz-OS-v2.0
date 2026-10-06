@@ -103,6 +103,9 @@ async def an_approved_action_runs_once_and_no_other_does(h: Harness) -> None:
         asker,
         capabilities=(CAPABILITY,),
         allowed_tools=(target,),
+        # A ticket is the helpdesk's entity, and an agent's capability on it holds only while the
+        # agent names that connector: brain.agents.binding.AN_AGENT_READS_ONLY_THE_SOURCES_IT_NAMES.
+        connectors=("freshdesk",),
         suffix="_approved",
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.WRITE,

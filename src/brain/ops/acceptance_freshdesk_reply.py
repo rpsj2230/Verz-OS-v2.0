@@ -242,6 +242,9 @@ async def _approved_reply(h: Harness) -> _Approved:
         asker,
         capabilities=(write, see),
         allowed_tools=(freshdesk.TICKET_REPLY_TOOL.name,),
+        # The agent names the helpdesk, as one built to reply on it does: a capability on its
+        # ticket holds only while the agent names it (`brain.agents.binding`).
+        connectors=(freshdesk.CONNECTOR_NAME,),
         suffix="_reply",
         scope=scope,
         guardrails=ManifestGuardrails(
