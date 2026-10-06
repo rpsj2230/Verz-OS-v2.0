@@ -1309,21 +1309,25 @@ def test_a_match_carries_a_confidence_and_a_refusal_cannot() -> None:
     assert merged.confidence is not None
 
 
-def test_the_cascade_is_not_called_by_anything_in_the_running_system() -> None:
-    """Said in a constant so that claiming otherwise means deleting it.
+def test_the_cascade_is_reached_by_the_worker_run_and_by_nothing_on_the_request_path() -> None:
+    """Said in a constant and held to the source in both directions.
 
-    Nothing outside `brain.resolution` imports this module: no route reaches it, no worker runs
-    it, and the columns the rendered SQL names exist in no migration. Everything here is
-    callable and nothing calls it.
+    The worker's registry run reaches the cascade through `matching_store`, which is inside the
+    package; outside it, only the matching run's own install check imports this module, for the
+    feature names and the scorer it compares the database's total with. Nothing in the gate, the
+    tools or the channels imports it, because no answer resolves a named client yet.
 
     Imports are parsed rather than searched for, because half the package is quoted by name in
-    other modules' prose. The one module outside the package that does import from
-    `brain.resolution` is `brain.tables.resolution`, which reads widths and grammars off
-    `canonical` to build columns with, and that is a declaration rather than a call.
+    other modules' prose.
 
-    Delete this and the gap stops being written down, and the next reader assumes a module this
-    carefully argued is in the request path."""
-    assert cascade_module.NOTHING_HERE_IS_CALLED_BY_THE_RUNNING_SYSTEM
+    Delete this and either direction can drift unseen: a request-path import would put the
+    cascade where the constant says it is not, and losing the worker's caller would leave a
+    constant saying it is called."""
+    from brain.resolution import matching_store, registry_store
+
+    assert "matching_store" in cascade_module.WHAT_CALLS_THE_CASCADE
+    assert "resolve_pair(" in inspect.getsource(matching_store.StoredMatching.match)
+    assert "StoredMatching" in inspect.getsource(registry_store.register_pending)
 
     package = Path(inspect.getfile(cascade_module)).parent
     root = package.parent
@@ -1340,4 +1344,4 @@ def test_the_cascade_is_not_called_by_anything_in_the_running_system() -> None:
             if "brain.resolution.cascade" in named:
                 importers.append(str(path.relative_to(root)))
 
-    assert importers == []
+    assert importers == ["ops/acceptance_checks_matching.py"]

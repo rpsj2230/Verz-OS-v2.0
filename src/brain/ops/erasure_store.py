@@ -386,6 +386,16 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "er.canonical",
         "er.identifier",
         "er.link",
+        # A merge and the unmerge reversing it (`0183`): `decided_by` and `performed_by` are actors,
+        # not owners, and each row is about two canonical entities, which hold no person's fields.
+        "er.merge",
+        "er.unmerge",
+        # A record's comparison keys, a blocked join key, and a pair waiting for a reviewer
+        # (`0182`, `0184`): digests, name keys and two source references, whose fields are the
+        # source record's and are erased with it there. `blocked_by` and `decided_by` are actors.
+        "er.observation",
+        "er.blocked_value",
+        "er.review_item",
         # Which directory group confers which role (`0109`): `created_by` is an actor, not an owner.
         "auth.group_role_rule",
         "gate.capability_pack",

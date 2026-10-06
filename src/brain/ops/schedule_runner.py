@@ -96,6 +96,7 @@ from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
 from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
+from brain.resolution.registry_store import run_registry_now
 from brain.settings import process_environment, settings_from
 
 #: Why the two questions are two columns.
@@ -360,6 +361,43 @@ def escalation_expiry(now: datetime, report_only: bool, database_url: str) -> st
     if expired == 0:
         return "no escalation was due to expire"
     return f"{expired} escalation(s) past their deadline marked expired; each asker is told so"
+
+
+#: Why the registry declines in report-only mode, though it removes nothing.
+A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING: Final = (
+    "The registry only adds: an entity, its names, its keys. Report-only mode exists for controls "
+    "that remove data, so brain.ops.schedule never asks for it here, and asked anyway the run "
+    "writes nothing and says so rather than ignoring the mode it was given."
+)
+
+
+def entity_resolution(now: datetime, report_only: bool, database_url: str) -> str:
+    """Give every record a connector declares for resolution its entity, and say how many (M14.1).
+
+    `brain.resolution.registry_store.run_registry_now` does it as the worker's login, with the
+    install's join-key pepper read from the vault with the worker's own token
+    (`brain.ops.join_key_pepper`); this is the literal call the registry reads. A pepper that
+    cannot be read stops the run with the vault's reason and never a value, because hashing with
+    anything else would write digests that join nothing the next run writes. Declines in
+    report-only mode, see `A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING`.
+    """
+    if report_only:
+        return (
+            "report only: no record was registered. "
+            f"{A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING}"
+        )
+    from brain.ops.join_key_pepper import pepper_vault, read_pepper
+    from brain.ops.secrets import VaultRole
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    pepper = read_pepper(
+        pepper_vault(settings.vault_address, settings.vault_token, VaultRole.WORKER)
+    )
+    ran = run_registry_now(
+        database_url, now=now, pepper=pepper.reveal(), loop_factory=_loop_factory()
+    )
+    return ran.summary()
 
 
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
@@ -779,6 +817,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     ),
     # Wired on 2026-09-30 with `gate.escalation` (`0168`). See `brain.ops.escalation_store`.
     Runner(name="escalation_expiry", run=escalation_expiry, workload=WorkloadClass.BACKGROUND),
+    # Wired on 2026-10-06 with `er.observation` (`0182`). See `brain.resolution.registry_store`.
+    Runner(name="entity_resolution", run=entity_resolution, workload=WorkloadClass.BATCH),
     # For whoever builds it: the feature observations `drift` measures over, which are
     # resolution decisions nobody records for this purpose yet. The fit is weekly.
     Runner(
@@ -860,6 +900,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return knowledge_reverification(now, report_only, database_url)
         case "escalation_expiry":
             return escalation_expiry(now, report_only, database_url)
+        case "entity_resolution":
+            return entity_resolution(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case "outbox_dispatch":
