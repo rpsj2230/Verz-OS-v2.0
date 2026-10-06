@@ -30,8 +30,9 @@
 # "controller memory is not enabled" and sizes everything from the host. Measured with `jcmd` on
 # that runner: `MaxRAM=16766414848`, the host's memory, so 50 per cent was an
 # 8 GiB heap reserved and 3.3 GiB committed inside a 1024M cgroup, and the kernel killed it at
-# 1026900 kB resident on its first sign-ins. Another install on the same image and JDK reads its
-# limit correctly, so a percentage is right or wrong by the kernel a server happens to run, which
+# 1026900 kB resident on its first sign-ins. Another install on the same image and JDK, on kernel
+# 6.8, still has `memory` in that file and reads its limit correctly (`MaxRAM` equal to its
+# limit), so a percentage is right or wrong by the kernel a server happens to run, which
 # is not something the product can hold, and an upgrade of that kernel would change it silently.
 # The JDK's fix (JDK-8349988, in 21.0.10) stops reading that file. A fixed `-Xmx` does not depend
 # on what the JVM believes about the machine on any kernel, and its figure can be held against the
