@@ -628,3 +628,74 @@ def test_the_store_adds_reads_per_department_and_retires(database: str) -> None:
     assert "sales__store" not in studio
     assert listed == (SALES,)
     assert "sales__store" not in after
+
+
+@pytest.mark.needs_db
+def test_a_live_rules_words_are_fixed_and_its_retirement_is_not(database: str) -> None:
+    """**`A_LIVE_RULES_WORDS_ARE_FIXED`.** An update that keeps a rule live and changes its words,
+    its answering field or its department is refused, as the application role and as the table's
+    owner alike; retiring it, which changes `deleted_at`, still works.
+
+    Delete this and the trigger can go, so a rule that answered in March can say something else
+    under the same id in April, which is the gap a REVOKE would have closed in two releases."""
+    import psycopg
+
+    as_app(database, insert("fixed", "fixed price of item {sku}", None))
+    # Written out whole rather than interpolated, so no statement is assembled from parts.
+    for changed in (
+        "UPDATE gate.fast_path_rule SET template = 'other price of item {sku}'"
+        " WHERE rule_id = 'fixed'",
+        "UPDATE gate.fast_path_rule SET answer_field = 'cost' WHERE rule_id = 'fixed'",
+        "UPDATE gate.fast_path_rule SET department = 'sales' WHERE rule_id = 'fixed'",
+    ):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            as_app(database, changed)
+        with psycopg.connect(database) as owner, pytest.raises(psycopg.errors.CheckViolation):
+            owner.execute(changed)
+    retired = as_app(
+        database,
+        "UPDATE gate.fast_path_rule SET deleted_at = statement_timestamp()"
+        " WHERE rule_id = 'fixed' AND deleted_at IS NULL",
+    )
+    assert retired == [1]
+
+
+@pytest.mark.needs_db
+def test_a_rule_added_and_retired_is_on_the_ledger_under_whoever_did_it(database: str) -> None:
+    """**`A_RETIREMENT_NAMES_ITS_RETIRER`.** An addition is a ledger entry under its writer, a
+    retirement one under its retirer, each naming the change and the template only as a digest,
+    and a retirement with no actor set is refused.
+
+    Delete this and a retirement can again record nobody, so a rule that stopped answering cannot
+    be traced to the person who stopped it."""
+    import hashlib
+
+    import psycopg
+
+    template = "ledgered price of item {sku}"
+    as_app(database, insert("ledgered", template, None))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        as_app(
+            database,
+            "UPDATE gate.fast_path_rule SET deleted_at = statement_timestamp()"
+            " WHERE rule_id = 'ledgered'",
+            actor=None,
+        )
+    as_app(
+        database,
+        "UPDATE gate.fast_path_rule SET deleted_at = statement_timestamp()"
+        " WHERE rule_id = 'ledgered'",
+        actor="u_retirer",
+    )
+    with psycopg.connect(database) as owner:
+        rows = owner.execute(
+            "SELECT actor_id, details FROM obs.audit_entry"
+            " WHERE subject = 'setting:fast_path_rule.ledgered' ORDER BY seq"
+        ).fetchall()
+    assert [(actor, details["change"]) for actor, details in rows] == [
+        ("u_admin", "added"),
+        ("u_retirer", "retired"),
+    ]
+    digest = hashlib.sha256(template.encode("utf-8")).hexdigest()
+    assert all(details["template_digest"] == digest for _, details in rows)
+    assert all(template not in str(details) for _, details in rows)

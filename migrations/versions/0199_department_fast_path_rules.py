@@ -45,18 +45,31 @@ written here: that release writes a rule as the application role only from the i
 acceptance checks, each of which runs `Harness.attributed()` and names the same actor in
 `created_by`, and the seed and the demo write as the table's owner, whom no policy binds.
 
-**What this does not close: a live rule's words can still be rewritten under its id.** `0045`
-left the update policy retire-only for a row's `deleted_at`, and the application role still
-holds `UPDATE` on every column, so a statement that keeps a rule live can change its template,
-and "which rule answered that question in March" would name a row that no longer says what it
-said in March. Narrowing the grant to `deleted_at` was written here first and is refused by
-`brain.deployment.compatibility`, rightly by its own rule: a `REVOKE` on a table that was
-already there narrows what the previous release may do, and the gate admits no per-file waiver.
-Nothing in this product updates a rule's words (`brain.gate.rule_store.StoredRules` retires and
-adds), so the gap is one a statement written elsewhere would have to use. Closing it is a
-two-release change and is left for that.
+**A live rule's words are fixed, by a trigger rather than a grant.** `0045` left the update
+policy retire-only for a row's `deleted_at`, and the application role still holds `UPDATE` on every
+column, so a statement that kept a rule live could change its template, and "which rule answered
+that question in March" would name a row that no longer said what it said in March. Narrowing the
+grant to `deleted_at` was written here first and is refused by `brain.deployment.compatibility`,
+rightly by its own rule: a `REVOKE` narrows what the previous release may do, and the gate admits
+no per-file waiver. `gate.rule_words_are_fixed` refuses, before it happens, any update that keeps
+a rule live and changes a column other than `deleted_at` and `updated_at`, whoever runs it. No
+release writes a rule's words after adding it (`brain.gate.rule_store.StoredRules` adds and
+retires, and every acceptance helper inserts), so the previous release loses nothing, which the
+gate reads and passes. See `A_LIVE_RULES_WORDS_ARE_FIXED`.
 
-**The downgrade** puts back `0019`'s index and insert policy and drops the column. It is refused
+**Every rule added and retired is on the ledger, under whoever did it.**
+`gate.record_fast_path_rule` appends a `setting` entry under `setting:fast_path_rule.<id>` on an
+addition and on a retirement, naming the change, the department and the answering source, entity
+and fields, and the template only as a sha256 digest, because the ledger refuses anything that
+is not a name or a digest. The actor is the transaction's `brain.actor_id`, and an addition with
+none set (the seed and the demo, writing as the table's owner) is marked inferred from
+`created_by`, as `0109` marks a group rule.
+A retirement with no actor set is refused: the retirer is the one fact a retired row cannot
+otherwise say, and inferring it from the author would name the wrong person. See
+`A_RETIREMENT_NAMES_ITS_RETIRER`.
+
+**The downgrade** drops both triggers and their functions, puts back `0019`'s index and insert
+policy and drops the column. It is refused
 while two live rules share a template, which only department rules can have made, so a
 downgrade never builds an index the rows it finds would violate.
 
@@ -113,6 +126,181 @@ DOWNGRADE_RLS: tuple[str, ...] = (
     """,
 )
 
+#: Why a live rule's words are fixed by a trigger.
+A_LIVE_RULES_WORDS_ARE_FIXED = (
+    "A rule that answered a question is named by its id in that request's record, so a live "
+    "rule's words cannot change under its id: change them by retiring it and adding another. "
+    "A trigger refuses it rather than a narrowed grant, because a REVOKE narrows the previous "
+    "release and the compatibility gate refuses that in one release."
+)
+
+#: Why a retirement with no actor set is refused.
+A_RETIREMENT_NAMES_ITS_RETIRER = (
+    "A retired rule's row says who wrote it and not who retired it, so the ledger entry is the "
+    "only record of the retirer, and a retirement with no brain.actor_id set is refused rather "
+    "than inferred from the author, who may be somebody else."
+)
+
+#: The columns a live rule may change: its retirement and the stamp that comes with it.
+MAY_CHANGE: tuple[str, ...] = ("deleted_at", "updated_at")
+
+#: Every other column of the table, which a live rule keeps as written.
+FIXED: tuple[str, ...] = (
+    "rule_id",
+    "template",
+    "slot",
+    "source",
+    "entity",
+    "match_field",
+    "answer_field",
+    "created_by",
+    "department",
+    "created_at",
+)
+
+WORDS_ARE_FIXED_FUNCTION = (
+    """
+CREATE FUNCTION gate.rule_words_are_fixed() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.deleted_at IS NULL AND ("""
+    + ", ".join(f"NEW.{one}" for one in FIXED)
+    + ") IS DISTINCT FROM ("
+    + ", ".join(f"OLD.{one}" for one in FIXED)
+    + """) THEN
+        RAISE EXCEPTION USING
+            MESSAGE = 'a live rule''s words are fixed; retire it and add another',
+            ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$
+"""
+)
+
+WORDS_ARE_FIXED_TRIGGER = """
+CREATE TRIGGER rule_words_are_fixed
+    BEFORE UPDATE ON gate.fast_path_rule
+    FOR EACH ROW EXECUTE FUNCTION gate.rule_words_are_fixed()
+"""
+
+#: `0120`'s block over one change, copied for `0046`'s reason: a migration describes the database
+#: it built.
+_APPEND = """
+    PERFORM pg_advisory_xact_lock(8274419004);
+    SELECT COALESCE(max(e.seq) + 1, 0) INTO v_seq FROM obs.audit_entry e;
+    SELECT COALESCE(
+        (SELECT e.entry_hash FROM obs.audit_entry e ORDER BY e.seq DESC LIMIT 1),
+        repeat('0', 64)
+    ) INTO v_prev;
+    v_ent_hash := COALESCE(NULLIF(current_setting('brain.ent_hash', true), ''), repeat('0', 32));
+    v_trace := COALESCE(
+        NULLIF(current_setting('brain.trace_id', true), ''),
+        'tx.' || pg_current_xact_id()::text
+    );
+    v_entry := obs.audit_entry_hash(
+        v_seq, v_at, v_actor, v_action, v_subject, v_ent_hash, v_trace, v_details, v_prev
+    );
+
+    MERGE INTO obs.audit_entry AS t
+    USING (SELECT v_seq AS seq) AS s
+       ON t.seq = s.seq
+    WHEN NOT MATCHED THEN
+        INSERT (seq, at, actor_id, action, subject, ent_hash, trace_id,
+                details, prev_hash, entry_hash)
+        VALUES (v_seq, v_at, v_actor, v_action, v_subject, v_ent_hash, v_trace,
+                v_details, v_prev, v_entry);
+
+    GET DIAGNOSTICS v_written = ROW_COUNT;
+    IF v_written <> 1 THEN
+        RAISE EXCEPTION USING
+            MESSAGE = 'the ledger already holds seq ' || v_seq
+                      || '; the audit entry was not appended',
+            ERRCODE = 'restrict_violation',
+            HINT = 'an append that is discarded silently is the failure this refuses';
+    END IF;
+"""
+
+RULE_SUBJECT_PREFIX = "setting:fast_path_rule."
+RULE_AUDIT_DETAILS: tuple[str, ...] = (
+    "change",
+    "source",
+    "department",
+    "answers_from",
+    "entity",
+    "match_field",
+    "answer_field",
+    "template_digest",
+)
+
+RULE_AUDIT_FUNCTION = """
+CREATE FUNCTION gate.record_fast_path_rule() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, gate
+AS $$
+DECLARE
+    v_action text := 'setting';
+    v_actor text;
+    v_supplied text;
+    v_subject text := '__PREFIX__' || NEW.rule_id;
+    v_details jsonb;
+    v_seq bigint;
+    v_prev text;
+    v_entry text;
+    v_at timestamptz := now();
+    v_ent_hash text;
+    v_trace text;
+    v_written integer;
+BEGIN
+    v_supplied := NULLIF(current_setting('brain.actor_id', true), '');
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.deleted_at IS NOT NULL THEN
+            RETURN NULL;
+        END IF;
+        v_details := jsonb_build_object('change', 'added');
+        v_actor := COALESCE(v_supplied, NEW.created_by);
+        IF v_supplied IS NULL THEN
+            v_details := v_details || jsonb_build_object('actor', 'inferred');
+        END IF;
+    ELSE
+        IF OLD.deleted_at IS NOT NULL OR NEW.deleted_at IS NULL THEN
+            RETURN NULL;
+        END IF;
+        IF v_supplied IS NULL THEN
+            RAISE EXCEPTION USING
+                MESSAGE = 'a rule is retired in somebody''s name; set brain.actor_id first',
+                ERRCODE = 'insufficient_privilege';
+        END IF;
+        v_details := jsonb_build_object('change', 'retired');
+        v_actor := v_supplied;
+    END IF;
+    v_details := v_details || jsonb_build_object(
+        'source', 'fast_path_rule',
+        'department', COALESCE(NEW.department, 'install'),
+        'answers_from', NEW.source,
+        'entity', NEW.entity,
+        'match_field', NEW.match_field,
+        'answer_field', NEW.answer_field,
+        'template_digest', encode(sha256(convert_to(NEW.template, 'UTF8')), 'hex')
+    );
+__APPEND__
+    RETURN NULL;
+END;
+$$
+""".replace("__APPEND__", _APPEND).replace("__PREFIX__", RULE_SUBJECT_PREFIX)
+
+RULE_AUDIT_TRIGGER = """
+CREATE TRIGGER fast_path_rule_is_audited
+    AFTER INSERT OR UPDATE ON gate.fast_path_rule
+    FOR EACH ROW EXECUTE FUNCTION gate.record_fast_path_rule()
+"""
+
+TRIGGERS: tuple[tuple[str, str, str], ...] = (
+    ("rule_words_are_fixed", "gate.fast_path_rule", "gate.rule_words_are_fixed()"),
+    ("fast_path_rule_is_audited", "gate.fast_path_rule", "gate.record_fast_path_rule()"),
+)
+
 #: The downgrade's refusal, for rows the one-per-template index would not admit.
 REFUSE_TWO_LIVE_RULES_IN_ONE_TEMPLATE = """
 DO $$
@@ -154,10 +342,18 @@ def upgrade() -> None:
     )
     for statement in UPGRADE_RLS:
         op.execute(statement)
+    op.execute(WORDS_ARE_FIXED_FUNCTION)
+    op.execute(WORDS_ARE_FIXED_TRIGGER)
+    op.execute(RULE_AUDIT_FUNCTION)
+    op.execute(RULE_AUDIT_TRIGGER)
 
 
 def downgrade() -> None:
     op.execute(REFUSE_TWO_LIVE_RULES_IN_ONE_TEMPLATE)
+    op.execute("DROP TRIGGER fast_path_rule_is_audited ON gate.fast_path_rule")
+    op.execute("DROP FUNCTION gate.record_fast_path_rule()")
+    op.execute("DROP TRIGGER rule_words_are_fixed ON gate.fast_path_rule")
+    op.execute("DROP FUNCTION gate.rule_words_are_fixed()")
     for statement in DOWNGRADE_RLS:
         op.execute(statement)
     op.drop_index(

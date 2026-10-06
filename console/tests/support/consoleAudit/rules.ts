@@ -10,9 +10,9 @@
  * administrators against PostgreSQL at head, and asks the next question through the answer route
  * after each write.
  *
- * **No ledger entry, and the reason is on the row.** A rule names its author in `created_by`, which
- * `0199` holds to the writer's own name, and its retirement is stamped by its own statement; no
- * trigger writes either to the audit ledger in this release.
+ * **Both writes are on the ledger.** `0199`'s trigger appends an entry under the writer for an
+ * addition and under the retirer for a retirement, and refuses a retirement nobody is named for;
+ * the database test follows each to its entry.
  *
  * Task ids: M6.5.1
  */
@@ -28,6 +28,8 @@ const THE_INSTALLS_RULE_CHECK = t(
 
 const A_RULE_IS_STORED_AND_RETIRED = t("test_rule_routes", "test_the_store_adds_reads_per_department_and_retires", true);
 
+const A_RULE_IS_LEDGERED = t("test_rule_routes", "test_a_rule_added_and_retired_is_on_the_ledger_under_whoever_did_it", true);
+
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/rules/RulesPage.tsx RULES_API_PATH": [at("POST /api/v1/rules", "RULES_API_PATH", RULES_API_PATH)],
   "src/pages/rules/RulesPage.tsx TRY_API_PATH": [at("POST /api/v1/rules/test", "TRY_API_PATH", TRY_API_PATH)],
@@ -39,9 +41,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/rules": {
     row: A_RULE_IS_STORED_AND_RETIRED,
-    audit: {
-      none: "A rule names its author on its own row, held to the writer's name by migration 0199's policy, and is not written to the audit ledger in this release.",
-    },
+    audit: A_RULE_IS_LEDGERED,
     behaviour: THE_INSTALLS_RULE_CHECK,
   },
   "POST /api/v1/rules/test": {
@@ -51,9 +51,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/rules/{rule_id}/retire": {
     row: A_RULE_IS_STORED_AND_RETIRED,
-    audit: {
-      none: "A retirement is stamped on the rule's own row by its own statement, and is not written to the audit ledger in this release.",
-    },
+    audit: A_RULE_IS_LEDGERED,
     behaviour: THE_INSTALLS_RULE_CHECK,
   },
 };
