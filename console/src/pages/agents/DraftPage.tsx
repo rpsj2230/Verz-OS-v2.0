@@ -8,6 +8,9 @@
  * merged into the draft (`agentDraftsQuery.withSection`) and saved as a new version, naming the
  * version it was edited from, so a second tab that saved first is told rather than overwritten.
  *
+ * **The Write step opens with the co-author** (`CoauthorPanel.tsx`): ask for changes and take the ones
+ * you choose, each a new version of the draft through the same save a typed edit goes through.
+ *
  * **The Procedure step mounts `ProcedureCanvas`**, offering the tools this draft is allowed on this
  * install and nothing else, and turns a drawing into the skill document the server writes. Nothing is
  * kept: a skill enters the library through its review on the Skills page, which this step links to.
@@ -21,7 +24,7 @@
  * **Loaded on demand**: the form library and the canvas are the heaviest things the console mounts,
  * and somebody who never opens a draft does not download them.
  *
- * Task ids: M27.11.6, M27.15.31, M27.16.1, M20.1.2, M20.2.2
+ * Task ids: M27.11.6, M27.15.31, M27.16.1, M20.1.2, M20.2.2, M20.1.3
  */
 
 import { CheckCircle2, ClipboardCheck, Hammer, PenLine, Send, Workflow } from "lucide-react";
@@ -57,6 +60,7 @@ import { FailureNotice } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { ChannelChoices, ticked } from "./ChannelChoices";
+import { CoauthorPanel } from "./CoauthorPanel";
 import {
   ACT_WORDS,
   APPROVE_CONSEQUENCE,
@@ -473,35 +477,44 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
     body = !draft.yours ? (
       <Summary draft={draft} />
     ) : (
-      <SectionCard title={WRITE_HEADING} action={<PenLine aria-hidden className="size-4 text-dim" />}>
-        <div className="flex min-w-0 flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <Note>{NOTHING_IS_LIVE}</Note>
-            <Note>{FORM_HINT}</Note>
-          </div>
-          {draft.problems.length === 0 ? null : (
+      <>
+        <CoauthorPanel
+          draftId={draftId}
+          revision={draft.revision}
+          onTaken={() => {
+            setVersion((count) => count + 1);
+          }}
+        />
+        <SectionCard title={WRITE_HEADING} action={<PenLine aria-hidden className="size-4 text-dim" />}>
+          <div className="flex min-w-0 flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <p className="m-0 text-sm font-semibold text-ink">{PROBLEMS_HEADING}</p>
-              <Words items={draft.problems} />
+              <Note>{NOTHING_IS_LIVE}</Note>
+              <Note>{FORM_HINT}</Note>
             </div>
-          )}
-          {form.failure !== null ? (
-            <FailureState failure={form.failure} />
-          ) : form.busy ? (
-            <LoadingState label={LOADING_FORM} />
-          ) : (
-            <ManifestForm
-              caption={draft.name}
-              sections={sections}
-              draft={draft.document}
-              busy={sending}
-              onSubmit={(section, data, heading) => {
-                ask({ verb: "revisions", section, heading, data });
-              }}
-            />
-          )}
-        </div>
-      </SectionCard>
+            {draft.problems.length === 0 ? null : (
+              <div className="flex flex-col gap-1">
+                <p className="m-0 text-sm font-semibold text-ink">{PROBLEMS_HEADING}</p>
+                <Words items={draft.problems} />
+              </div>
+            )}
+            {form.failure !== null ? (
+              <FailureState failure={form.failure} />
+            ) : form.busy ? (
+              <LoadingState label={LOADING_FORM} />
+            ) : (
+              <ManifestForm
+                caption={draft.name}
+                sections={sections}
+                draft={draft.document}
+                busy={sending}
+                onSubmit={(section, data, heading) => {
+                  ask({ verb: "revisions", section, heading, data });
+                }}
+              />
+            )}
+          </div>
+        </SectionCard>
+      </>
     );
   } else if (step === "procedure") {
     body = !draft.yours ? (
