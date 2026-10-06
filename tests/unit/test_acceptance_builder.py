@@ -1,6 +1,7 @@
 """The agent builder's acceptance checks: registered, passing on a real schema, and able to fail.
 
 Task ids: M13.2.7, M13.1.1, M13.2.4, M20.1.5, M20.2.2, M20.2.3, M20.2.4, M20.1.2, M13.9.4, M13.8.18
+Task ids: M20.4.6, M20.4.1, M20.4.4
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ MODULE = "brain.ops.acceptance_checks_builder"
 HAND_BUILT = "a_hand_built_agent_takes_the_template_path_and_records_setters"
 CANVAS = "an_authored_list_is_intent_and_the_canvas_draws_five_kinds_only"
 GALLERY = "the_form_is_the_manifest_and_a_template_installs_in_one_press"
+HISTORY = "a_second_publish_is_recorded_with_exactly_the_paths_it_changed"
+GATE = "the_publish_gate_refuses_what_blocks_and_decides_the_rung"
 
 
 def mine() -> dict[str, Check]:
@@ -26,7 +29,7 @@ def mine() -> dict[str, Check]:
 def test_the_builder_checks_are_listed_in_their_page_order() -> None:
     """Every check this module registers, in page order. Delete this and a check can drop out of
     the module with the page simply listing one fewer row."""
-    assert checks_in(MODULE) == [HAND_BUILT, CANVAS, GALLERY]
+    assert checks_in(MODULE) == [HAND_BUILT, CANVAS, GALLERY, HISTORY, GATE]
     assert MODULE in check_modules()
 
 
@@ -38,7 +41,13 @@ def test_on_a_real_database_the_builder_checks_pass_and_nothing_is_left_behind()
         before = counts(url)
         outcome = run_checks(url, tuple(mine().values()))
         after = counts(url)
-    assert outcome == {HAND_BUILT: (PASSED, ""), CANVAS: (PASSED, ""), GALLERY: (PASSED, "")}
+    assert outcome == {
+        HAND_BUILT: (PASSED, ""),
+        CANVAS: (PASSED, ""),
+        GALLERY: (PASSED, ""),
+        HISTORY: (PASSED, ""),
+        GATE: (PASSED, ""),
+    }
     assert after == before
 
 
@@ -202,7 +211,76 @@ def _a_key_setting(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "Settings", WithAKey)
 
 
+def _one_publish_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    import brain.builder.publication_store as store
+    from brain.builder.publish import publication_history as kept
+
+    monkeypatch.setattr(store, "publication_history", lambda *args: kept(*args)[-1:])
+
+
+def _stamps_counted(monkeypatch: pytest.MonkeyPatch) -> None:
+    import brain.builder.publish as publish
+
+    monkeypatch.setattr(publish, "STAMPED_PATHS", ())
+
+
+def _published_by_somebody(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dataclasses
+
+    import brain.builder.publication_store as store
+    from brain.builder.publish import publication_history as kept
+
+    monkeypatch.setattr(
+        store,
+        "publication_history",
+        lambda *args: tuple(
+            dataclasses.replace(one, actor_id="u_somebody_else") for one in kept(*args)
+        ),
+    )
+
+
+def _rung_not_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    import brain.agent_builder_routes as routes
+
+    monkeypatch.setattr(routes, "raised_rungs", lambda manifest: ())
+
+
+def _gate_blind_to_effects(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dataclasses
+
+    import brain.agent_builder_routes as routes
+    from brain.builder.agent_drafts import publish_decision
+
+    kept = publish_decision
+
+    def blind(**kwargs: Any) -> Any:
+        return dataclasses.replace(kept(**kwargs), widenings=())
+
+    monkeypatch.setattr(routes, "publish_decision", blind)
+
+
+def _gate_keeps_the_rung(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dataclasses
+
+    import brain.agent_builder_routes as routes
+    from brain.builder.agent_drafts import publish_decision
+    from brain.gate.injection import AutonomyTier
+
+    kept = publish_decision
+
+    def keeps(**kwargs: Any) -> Any:
+        return dataclasses.replace(kept(**kwargs), rung=AutonomyTier.ASSISTED)
+
+    monkeypatch.setattr(routes, "publish_decision", keeps)
+
+
 BREAKS: dict[str, tuple[str, Any, str]] = {
+    "rung_not_refused": (GATE, _rung_not_refused, "RAISED_PASSED"),
+    "gate_blind_to_effects": (GATE, _gate_blind_to_effects, "EFFECT_NOT_A_WIDENING"),
+    "gate_keeps_the_rung": (GATE, _gate_keeps_the_rung, "NOT_DECIDED_AT_SHADOW"),
+    "one_publish_kept": (HISTORY, _one_publish_kept, "NO_HISTORY"),
+    "stamps_counted": (HISTORY, _stamps_counted, "WRONG_PATHS"),
+    "published_by_somebody": (HISTORY, _published_by_somebody, "NOT_WHO"),
     "from_a_template": (HAND_BUILT, _start_from_a_template, "NOT_FROM_BLANK"),
     "signed_elsewhere": (HAND_BUILT, _signed_elsewhere, "NOT_THE_TEMPLATE_PATH"),
     "row_without_persona": (HAND_BUILT, _row_without_its_persona, "ROW_INCOMPLETE"),
@@ -235,8 +313,9 @@ def test_each_builder_check_fails_where_the_product_is_broken(
     that is not a scope predicate admitted (M20.2.3), a code step admitted (M20.2.4), a form that
     is not the manifest's schema or is served to anybody (M20.1.2), a one-press install under
     another name or a template that opens blank (M13.9.4), and a gallery that never says it cannot
-    install or a setting that could hold the key (M13.8.18). Delete this and any of these checks
-    can pass with its property gone."""
+    install or a setting that could hold the key (M13.8.18), and a publish history that drops a
+    publish, counts the publish's own stamps as changes or names another publisher (M20.4.6).
+    Delete this and any of these checks can pass with its property gone."""
     import brain.ops.acceptance_checks_builder as module
 
     name, setup, reason = BREAKS[broken]

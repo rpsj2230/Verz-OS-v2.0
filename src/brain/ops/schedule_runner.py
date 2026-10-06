@@ -64,6 +64,7 @@ would fill the table with rows for runs that never happened, and "this control h
 of attempts and no successes" would then mean two different things.
 
 Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5, M1.6.12, M5.4.7
+Task ids: M22.2.2
 """
 
 from __future__ import annotations
@@ -78,12 +79,13 @@ import psycopg
 
 from brain.db import libpq_conninfo
 from brain.knowledge.item_store import run_reverification_now
+from brain.ops.admission import WorkloadClass
 from brain.ops.automation_run_store import run_automations_now
 from brain.ops.canary_run import run_canaries_now
 from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.denial_digest_run import run_denial_digest_now
-from brain.ops.erasure_store import drain_erasure_queue
+from brain.ops.erasure_store import drain_erasure_queue, session_keys_for
 from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
@@ -96,6 +98,8 @@ from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
 from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
+from brain.resolution.calibration_store import run_calibration_now
+from brain.resolution.registry_store import run_registry_now
 from brain.settings import process_environment, settings_from
 
 #: Why the two questions are two columns.
@@ -192,6 +196,18 @@ SCHEDULER_LOCK_NAMESPACE: Final = 0x5C4E
 STALLED_AFTER: Final = timedelta(minutes=10)
 
 
+#: Why every control that runs says which class it is in, and how the classes were chosen.
+A_CONTROL_IS_CLASSED_BY_WHAT_IT_IS: Final = (
+    "A control has no traffic class or lane, because nobody asked for it, so admission's "
+    "workload_class_for has nothing to read. It is classed by what it does: a connector or "
+    "directory sync, an ingestion of logs, a re-verification of knowledge, a sweep or a report "
+    "is batch; tasks, agents, automations, deliveries, probes and the checks are background. "
+    "Nothing a control does is interactive, so a control can never hold a connection the "
+    "request path's pool keeps. A control that runs and names no class is refused, because a "
+    "default would put the next sweep somebody writes on whichever pool the default named."
+)
+
+
 class RunnerError(Exception):
     """Raised when a schedule is asked to run something it cannot describe."""
 
@@ -215,6 +231,9 @@ class Runner:
     needs: str = ""
     #: The call, when there is one.
     run: Callable[[datetime, bool, str], str] | None = None
+    #: Which class's connections the run is given, required exactly when there is a call. See
+    #: `A_CONTROL_IS_CLASSED_BY_WHAT_IT_IS`.
+    workload: WorkloadClass | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -231,6 +250,12 @@ class Runner:
             msg = (
                 f"{self.name!r} can be run and also says what it still needs, which reads as "
                 "a control that is wired and is not"
+            )
+            raise RunnerError(msg)
+        if self.run is not None and self.workload is None:
+            msg = (
+                f"{self.name!r} can be run and names no workload class, so nothing says which "
+                f"connections it may hold. {A_CONTROL_IS_CLASSED_BY_WHAT_IT_IS}"
             )
             raise RunnerError(msg)
 
@@ -341,6 +366,66 @@ def escalation_expiry(now: datetime, report_only: bool, database_url: str) -> st
     return f"{expired} escalation(s) past their deadline marked expired; each asker is told so"
 
 
+#: Why the registry declines in report-only mode, though it removes nothing.
+A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING: Final = (
+    "The registry only adds: an entity, its names, its keys. Report-only mode exists for controls "
+    "that remove data, so brain.ops.schedule never asks for it here, and asked anyway the run "
+    "writes nothing and says so rather than ignoring the mode it was given."
+)
+
+
+def entity_resolution(now: datetime, report_only: bool, database_url: str) -> str:
+    """Give every record a connector declares for resolution its entity, and say how many (M14.1).
+
+    `brain.resolution.registry_store.run_registry_now` does it as the worker's login, with the
+    install's join-key pepper read from the vault with the worker's own token
+    (`brain.ops.join_key_pepper`); this is the literal call the registry reads. A pepper that
+    cannot be read stops the run with the vault's reason and never a value, because hashing with
+    anything else would write digests that join nothing the next run writes. Declines in
+    report-only mode, see `A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING`.
+    """
+    if report_only:
+        return (
+            "report only: no record was registered. "
+            f"{A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING}"
+        )
+    from brain.ops.join_key_pepper import pepper_vault, read_pepper
+    from brain.ops.secrets import VaultRole
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    pepper = read_pepper(
+        pepper_vault(settings.vault_address, settings.vault_token, VaultRole.WORKER)
+    )
+    ran = run_registry_now(
+        database_url, now=now, pepper=pepper.reveal(), loop_factory=_loop_factory()
+    )
+    return ran.summary()
+
+
+#: Why the calibration declines in report-only mode, though it removes nothing.
+A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING: Final = (
+    "A fit only adds a setting row a reviewer may promote. Report-only mode exists for controls "
+    "that remove data, so brain.ops.schedule never asks for it here, and asked anyway the run "
+    "fits nothing and says so rather than ignoring the mode it was given."
+)
+
+
+def resolution_calibration(now: datetime, report_only: bool, database_url: str) -> str:
+    """Fit the week's candidate pairs into a weight table and keep it for a reviewer (M14.4.4).
+
+    `brain.resolution.calibration_store.run_calibration_now` does it as the worker's login; this is
+    the literal call the registry reads. Nothing it keeps is in force until a reviewer promotes
+    it, so a run can never change how records are scored. Declines in report-only mode, see
+    `A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING`.
+    """
+    if report_only:
+        return f"report only: nothing was fitted. {A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING}"
+    from brain.ops.worker import _loop_factory
+
+    return run_calibration_now(database_url, now=now, loop_factory=_loop_factory()).summary()
+
+
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
     """Record the re-verification nags owed at `now`, and say what the run did.
 
@@ -379,8 +464,14 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
             )
         except ValueError:
             vault = None
+    # The cache this process's settings name, for the person's session memory (M16.1.1); none
+    # configured is none kept. See the erasure store's reason constant about session memory.
+    valkey_url = settings.valkey_url
+    sessions = session_keys_for(valkey_url) if valkey_url else None
     with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
-        return drain_erasure_queue(conn, now=now, report_only=report_only, own_tokens=vault)
+        return drain_erasure_queue(
+            conn, now=now, report_only=report_only, own_tokens=vault, sessions=sessions
+        )
 
 
 def canary_run(now: datetime, report_only: bool, database_url: str) -> str:
@@ -686,6 +777,39 @@ def evening_digest(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why approved actions run nothing in report-only mode.
+AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING: Final = (
+    "Running an approved action changes a system somebody else owns, so a run asked to only "
+    "report runs none and says so; the approvals stay approved, inside their windows."
+)
+
+
+def approved_actions(now: datetime, report_only: bool, database_url: str) -> str:
+    """Run every approved action that is waiting, each once, and say what the runs came to.
+
+    `brain.ops.approved_runs.run_approved_now` is the literal call the registry reads, with the
+    worker's vault for a write's own key. Declines in report-only mode, see
+    `AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING`, and takes the worker's event loop for
+    the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no approved action was run. "
+            f"{AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING}"
+        )
+    from brain.ops.approved_runs import run_approved_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_approved_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    ).summary()
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -733,11 +857,11 @@ A_JOBS_NEEDS_IS_WRITTEN_FOR_AN_ADMINISTRATOR: Final = (
 #: code name or option letter in it (`A_JOBS_NEEDS_IS_WRITTEN_FOR_AN_ADMINISTRATOR`), and the
 #: piece of work behind it, read from the entry point's own signature, is the comment above it.
 RUNNERS: Final[tuple[Runner, ...]] = (
-    Runner(name="retention_sweep", run=retention_sweep),
+    Runner(name="retention_sweep", run=retention_sweep, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17. The askers are every live reach through the one resolver and one
     # the directory does not hold, and what they are compared over is the answer lane itself:
     # `brain.ops.canary_run` says why the store scan is the fixture suite's and not this run's.
-    Runner(name="canary_run", run=canary_run),
+    Runner(name="canary_run", run=canary_run, workload=WorkloadClass.BACKGROUND),
     # For whoever builds it: `drill_due` takes the last verification and `verification_of` reads
     # one, and no backup or verification is written by anything yet; needs-rupash item 44.
     Runner(
@@ -758,34 +882,36 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     ),
     # Wired on 2026-09-28: `brain.ops.denial_digest_run` reads the hour's refusals from the
     # ledger, resolves every live person's reach, and keeps what `digest` raises in the cache.
-    Runner(name="denial_digest", run=denial_digest),
+    Runner(name="denial_digest", run=denial_digest, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-21 with `auth.staff_member`, `auth.staff_sync_run` and the staff source's
     # slot among the connector keys. See `brain.ops.staff_sync_run`.
-    Runner(name="directory_sync", run=directory_sync),
+    Runner(name="directory_sync", run=directory_sync, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-15. `know.item` holds the items, the outbox is the log, and the rule
     # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
     # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
-    Runner(name="knowledge_reverification", run=knowledge_reverification),
+    Runner(
+        name="knowledge_reverification", run=knowledge_reverification, workload=WorkloadClass.BATCH
+    ),
     # Wired on 2026-09-30 with `gate.escalation` (`0168`). See `brain.ops.escalation_store`.
-    Runner(name="escalation_expiry", run=escalation_expiry),
-    # For whoever builds it: the feature observations `drift` measures over, which are
-    # resolution decisions nobody records for this purpose yet. The fit is weekly.
+    Runner(name="escalation_expiry", run=escalation_expiry, workload=WorkloadClass.BACKGROUND),
+    # Wired on 2026-10-06 with `er.observation` (`0182`). See `brain.resolution.registry_store`.
+    Runner(name="entity_resolution", run=entity_resolution, workload=WorkloadClass.BATCH),
+    # Wired on 2026-10-06: the weekly fit over the registry's candidate pairs, kept as a setting
+    # until a reviewer promotes it. See `brain.resolution.calibration_store`.
     Runner(
         name="resolution_calibration",
-        needs=(
-            "a record of the decisions made when two records were matched as the same person or "
-            "company, which this install does not keep yet"
-        ),
+        run=resolution_calibration,
+        workload=WorkloadClass.BATCH,
     ),
     # Wired on 2026-09-30: `brain.ops.recovery_run.sweep_queue` re-drives an orphaned or failed
     # job its task declares safe and sets aside the rest, over the worker's own queue connection.
-    Runner(name="queue_redrive", run=queue_redrive),
+    Runner(name="queue_redrive", run=queue_redrive, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-30: `brain.ops.recovery_run.resume_side_effects` reads back an interrupted
     # operation where its connector declares a read-back and lists the rest for a person.
-    Runner(name="side_effect_resume", run=side_effect_resume),
+    Runner(name="side_effect_resume", run=side_effect_resume, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-22 with `ops.provider_health` and the worker's read of the model provider
     # slots. See `brain.ops.model_probe_run`.
-    Runner(name="model_health_probes", run=model_health_probes),
+    Runner(name="model_health_probes", run=model_health_probes, workload=WorkloadClass.BACKGROUND),
     # For whoever builds it: the closest to wireable. `correct` already has a caller in
     # `brain.console.spend_view`; the estimate and actual figures for the period are assembled
     # when somebody opens the usage screen and by nothing on a schedule.
@@ -798,25 +924,27 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     ),
     # Wired on 2026-09-17, with the sender, the worker's reader of signing secrets and the
     # resolver `brain.ops.webhook_delivery` implements.
-    Runner(name="outbox_dispatch", run=outbox_dispatch),
-    Runner(name="spend_report_refresh", run=spend_report_refresh),
+    Runner(name="outbox_dispatch", run=outbox_dispatch, workload=WorkloadClass.BACKGROUND),
+    Runner(name="spend_report_refresh", run=spend_report_refresh, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17 with `ops.erasure_request`. See `brain.ops.erasure_store`.
-    Runner(name="erasure_queue", run=erasure_queue),
+    Runner(name="erasure_queue", run=erasure_queue, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17 with the installer's vault, the day it was registered.
-    Runner(name="vault_token_renewal", run=vault_token_renewal),
+    Runner(name="vault_token_renewal", run=vault_token_renewal, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-17 with `agent.automation_run`. See `brain.ops.automation_run_store`.
-    Runner(name="automation_run", run=automation_run),
+    Runner(name="automation_run", run=automation_run, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-17 with `ops.connector_sync`, the worker's reader of connector keys and the
     # readings `brain.ops.connector_sync` declares. See `brain.ops.connector_sync_run`.
-    Runner(name="connector_sync", run=connector_sync),
+    Runner(name="connector_sync", run=connector_sync, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-17 with `ops.vault_access` and the worker overlay's read-only mount of the
     # vault's log. See `brain.ops.vault_audit_ship`.
-    Runner(name="vault_audit_ship", run=vault_audit_ship),
+    Runner(name="vault_audit_ship", run=vault_audit_ship, workload=WorkloadClass.BATCH),
     # Wired on 2026-09-28 with `ops.acceptance_result`. See `brain.ops.acceptance_run`.
-    Runner(name="acceptance_run", run=acceptance_run),
+    Runner(name="acceptance_run", run=acceptance_run, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
     # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
-    Runner(name="evening_digest", run=evening_digest),
+    Runner(name="evening_digest", run=evening_digest, workload=WorkloadClass.BATCH),
+    # Wired on 2026-10-06 with `gate.approved_to_run` (`0201`). See `brain.ops.approved_runs`.
+    Runner(name="approved_actions", run=approved_actions, workload=WorkloadClass.BACKGROUND),
 )
 
 
@@ -849,6 +977,10 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return knowledge_reverification(now, report_only, database_url)
         case "escalation_expiry":
             return escalation_expiry(now, report_only, database_url)
+        case "entity_resolution":
+            return entity_resolution(now, report_only, database_url)
+        case "resolution_calibration":
+            return resolution_calibration(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case "outbox_dispatch":
@@ -879,6 +1011,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return side_effect_resume(now, report_only, database_url)
         case "evening_digest":
             return evening_digest(now, report_only, database_url)
+        case "approved_actions":
+            return approved_actions(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

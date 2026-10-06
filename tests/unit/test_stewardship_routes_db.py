@@ -39,6 +39,7 @@ from brain.connector_routes import (
     STEWARD_PATH,
     STEWARD_REFUSED,
 )
+from brain.connectors import xero
 from brain.connectors.registry import INSTALL_AUTHORITY
 from brain.console.reads import Plane, plane_capability
 from brain.core.entitlement import Capability, Grant
@@ -69,6 +70,11 @@ LOOKER: Final = "u_wide"
 WHOLE: Final = Scope.unrestricted()
 PLANE: Final = Grant(capability=plane_capability(Plane.CONTENT), scope=WHOLE)
 
+#: Every field of Xero's invoices, by the entity name Xero declares, which names its source since
+#: `brain.agents.binding.AN_ENTITY_NAMES_ONE_SOURCE`: a grant on another source's invoices is not
+#: one on Xero's, so it makes nobody Xero's steward.
+XERO_INVOICES: Final = f"read:{xero.ENTITY_INVOICE}.*"
+
 #: The field grants a passage is read under, as `test_knowledge_lifecycle_db` grants them.
 PASSAGE_FIELDS: Final = (
     "read:knowledge.document",
@@ -92,7 +98,7 @@ GRANTS: Final[dict[str, tuple[Grant, ...]]] = {
         Grant(capability=INSTALL_AUTHORITY, scope=WHOLE),
         *_in("web", KNOWLEDGE_UPLOAD.value, KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
     ),
-    READER: (PLANE, Grant(capability=Capability(value="read:invoice.*"), scope=WHOLE)),
+    READER: (PLANE, Grant(capability=Capability(value=XERO_INVOICES), scope=WHOLE)),
     LOOKER: (PLANE, Grant(capability=CONNECTORS_READ, scope=WHOLE)),
 }
 
@@ -263,7 +269,7 @@ def test_a_steward_is_told_of_a_grant_somebody_made_to_themselves_and_nobody_els
             }
 
         first = pressed(url, before)
-        granted_to_themselves(url, ADMIN, "read:invoice.*", Scope.department("finance"))
+        granted_to_themselves(url, ADMIN, XERO_INVOICES, Scope.department("finance"))
         granted_to_themselves(url, READER, KNOWLEDGE_READ.value, Scope.department("web"))
 
         async def after(client: httpx.AsyncClient) -> dict[str, Any]:
@@ -278,7 +284,7 @@ def test_a_steward_is_told_of_a_grant_somebody_made_to_themselves_and_nobody_els
     assert first["reader"] == first["admin"] == {"items": [], "told": TOLD}
     [to_reader] = said["reader"]["items"]
     assert (to_reader["person_id"], to_reader["person_name"]) == (ADMIN, ADMIN)
-    assert to_reader["capabilities"] == ["read:invoice.*"]
+    assert to_reader["capabilities"] == [XERO_INVOICES]
     assert to_reader["reached"] == [{"kind": "source", "object_id": "xero", "label": "Xero"}]
     assert "finance" not in json.dumps(to_reader)
     [to_admin] = said["admin"]["items"]

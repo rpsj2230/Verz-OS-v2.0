@@ -380,20 +380,26 @@ def ar_and_renewal_chaser() -> TemplateManifest:
     also what keeps it from being `accountant_agent` under a second name, and it keeps a
     figure owed out of a draft somebody might forward.
 
+    **Version 2 reads the fields Xero maps.** Version 1 named `read:invoice.number` and
+    `read:client.name`, which Xero does not map (its field is `invoice_number`, and a client in
+    the ledger is a contact), so it read nothing from the ledger it names. Its entities are also
+    named for Xero now; see `brain.agents.binding.AN_ENTITY_NAMES_ONE_SOURCE`. Version 1 stays
+    on file as signed.
+
     **Renewals have no source yet, and the golden set says so rather than guessing.** No
     connector in this repository maps a contract end or a renewal date, so the renewal half
     is a case about declining rather than a capability for a field nothing produces. The
     day a connector declares one, the capability joins this ceiling and the case changes.
     """
     tools = (
-        "invoice.read",
-        "invoice.search",
+        "xero_invoice.read",
+        "xero_invoice.search",
         "reminder.draft",
     )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="ar_and_renewal_chaser",
-            version=1,
+            version=2,
             published_by=PUBLISHER,
             display_name="AR and Renewal Chaser",
         ),
@@ -405,10 +411,10 @@ def ar_and_renewal_chaser() -> TemplateManifest:
         authority=ManifestAuthority(
             scope=_department("finance"),
             capabilities=(
-                Capability(value="read:invoice.number"),
-                Capability(value="read:invoice.status"),
-                Capability(value="read:invoice.due_date"),
-                Capability(value="read:client.name"),
+                Capability(value="read:xero_invoice.invoice_number"),
+                Capability(value="read:xero_invoice.status"),
+                Capability(value="read:xero_invoice.due_date"),
+                Capability(value="read:xero_contact.name"),
             ),
             allowed_tools=tools,
         ),
@@ -445,15 +451,21 @@ def accountant_agent() -> TemplateManifest:
     `SideEffect.NONE`: reading a ledger and moving money are different verbs, and a template
     that could do the second because it needed the first is how a reconciliation agent
     becomes a payment agent.
+
+    **Version 2 reads the fields Xero maps.** Version 1 named `read:invoice.number`,
+    `read:invoice.amount` and `read:client.name`, none of which Xero maps (its fields are
+    `invoice_number` and `amount_due`, and a client in the ledger is a contact), so it read
+    nothing from the ledger it names. Its entities are also named for Xero now; see
+    `brain.agents.binding.AN_ENTITY_NAMES_ONE_SOURCE`. Version 1 stays on file as signed.
     """
     tools = (
-        "invoice.read",
-        "invoice.search",
+        "xero_invoice.read",
+        "xero_invoice.search",
     )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="accountant_agent",
-            version=1,
+            version=2,
             published_by=PUBLISHER,
             display_name="Accountant Agent",
         ),
@@ -466,10 +478,10 @@ def accountant_agent() -> TemplateManifest:
         authority=ManifestAuthority(
             scope=_department("finance"),
             capabilities=(
-                Capability(value="read:invoice.number"),
-                Capability(value="read:invoice.amount"),
-                Capability(value="read:invoice.status"),
-                Capability(value="read:client.name"),
+                Capability(value="read:xero_invoice.invoice_number"),
+                Capability(value="read:xero_invoice.amount_due"),
+                Capability(value="read:xero_invoice.status"),
+                Capability(value="read:xero_contact.name"),
             ),
             allowed_tools=tools,
         ),

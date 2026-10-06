@@ -568,18 +568,21 @@ def test_only_lite_may_decline_the_vault_as_only_its_files_run_no_worker_or_obje
     assert DECLINABLE_PROFILES == ("lite",)
 
 
-def test_the_engines_enabled_are_the_four_the_product_writes_and_the_policy_names() -> None:
+def test_the_engines_enabled_are_the_five_the_product_writes_and_the_policy_names() -> None:
     """Delete this and an engine the console writes to is one no release ever enabled, which
     reads as the vault refusing: a 404 on a write is an engine that is not mounted. The template
-    signing key's engine is granted on its one slot rather than on every name, which is
-    `brain.ops.template_key`'s write-once rule, so it is held to that exact path."""
-    assert ENGINES == ("providers", "webhooks", "connector_keys", "template_signing")
+    signing key's and the join-key pepper's engines are granted on their one slot rather than on
+    every name, which is the write-once rule of `brain.ops.template_key` and
+    `brain.ops.join_key_pepper`, so each is held to that exact path."""
+    assert ENGINES == ("providers", "webhooks", "connector_keys", "template_signing", "resolution")
     assert tuple(one.rstrip("/") for one in STATIC_PREFIXES) == ENGINES
     policy = (REPO / "ops/openbao/policies/application.hcl").read_text(encoding="utf-8")
-    for engine in ENGINES[:-1]:
+    for engine in ENGINES[:-2]:
         assert f'path "{engine}/data/+"' in policy
     assert 'path "template_signing/data/key"' in policy
     assert 'path "template_signing/data/+"' not in policy
+    assert 'path "resolution/data/pepper"' in policy
+    assert 'path "resolution/data/+"' not in policy
     applied = (REPO / APPLY_SCRIPT).read_text(encoding="utf-8").splitlines()
     assert applied.count(f"for engine in {' '.join(ENGINES)}; do") == 2
 
@@ -932,6 +935,46 @@ def test_a_release_applies_its_own_changes_reads_them_back_and_a_second_run_writ
     assert writes == []
     for secret in (DEPLOY_TOKEN, ROOT):
         assert secret not in first.stdout + first.stderr + again.stdout + again.stderr
+
+
+def test_a_release_enables_the_pepper_engine_and_never_writes_or_reads_inside_it(
+    tmp_path: Path,
+) -> None:
+    """**The join-key pepper survives every release, rollback and re-run, because none of them
+    touches it.** The apply script enables the `resolution` engine where it is missing and does
+    nothing else there: no read, no write, no metadata, under the root token at install or the
+    deploy token after. The deploy policy names no path in the engine at all, so even an edited
+    script could not reach the pepper with the token a release runs as. See
+    `brain.ops.join_key_pepper.THE_RELEASE_SCRIPT_CANNOT_CREATE_IT_SO_THE_APPLICATION_DOES`.
+
+    Delete this and a later edit can teach the release to create the pepper, which needs the
+    deploy token's own policy changed and holds back every release on every install already
+    running (`test_a_release_that_changes_the_deploy_policy_is_refused_in_words`), or to write it,
+    which unjoins every stored digest."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    mount = PEPPER_SLOT.split("/", 1)[0]
+    deploy = _granted(REPO / "ops/openbao/policies/deploy.hcl")
+    assert not [path for path in deploy if path.startswith(f"{mount}/")]
+
+    state = tmp_path / "vault"
+    state.mkdir()
+    (state / "policy.deploy").write_text(
+        (REPO / "ops/openbao/policies/deploy.hcl").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    for run in ("first", "again"):
+        done, _ = applying(tmp_path / run, state=state)
+        assert done.returncode == 0, done.stderr
+    touching = [one.split("|", 1)[1] for one in lines(state / "calls") if mount in one]
+    assert touching == [f"secrets enable -path={mount} kv-v2"]
+
+
+def _granted(path: Path) -> set[str]:
+    """Every path a policy file names in a `path "..."` rule, comments cut off."""
+    text = "\n".join(
+        line.split("#", 1)[0] for line in path.read_text(encoding="utf-8").splitlines()
+    )
+    return set(re.findall(r'path\s+"([^"]+)"', text))
 
 
 def test_a_release_that_changes_the_deploy_policy_is_refused_in_words(tmp_path: Path) -> None:

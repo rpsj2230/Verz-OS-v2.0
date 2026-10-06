@@ -73,6 +73,7 @@ from brain.agent_routes import (
     steward_names,
     viewer_of,
 )
+from brain.agents.attachments import narrowed
 from brain.agents.model import AgentRecord, AgentViewer
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, sources_at
@@ -113,6 +114,7 @@ from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.lifecycle import StoredItem, authority_for
 from brain.knowledge.lifecycle_store import MAX_ITEMS, as_person, live_items
 from brain.knowledge_routes import live_departments
+from brain.ops.attachment_store import changes_in
 from brain.ops.connector_store import Connection
 from brain.ops.skill_store import MAX_LIBRARY
 from brain.prompt_routes import agent_scope_row
@@ -580,6 +582,8 @@ async def agent_capabilities(
         rows = (
             await session.execute(invocations_of(agent_id, since, basis=basis, caller_id=caller_id))
         ).all()
+        # The tools it carries now, so a connector shows attached exactly when a run could use it.
+        record = narrowed(record, await changes_in(session, (agent_id,)))
     install = install_of(pair[0], pair[1], record) if pair is not None else None
     strip = tab_strip(asked.reach, populated=POPULATED_HERE, now=asked.now)
     reads_skills = holds_settings(strip) and permitted(

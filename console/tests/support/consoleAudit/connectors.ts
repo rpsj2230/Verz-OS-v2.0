@@ -11,6 +11,7 @@ import { CONNECTORS_API_PATH, disconnectApiPath } from "../../../src/pages/conne
 import { callbackPath, consentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { probeApiPath } from "../../../src/pages/connectors/connectorProbe";
 import { acceptApiPath } from "../../../src/pages/connectors/DeclarationDrift";
+import { DEFINITIONS_API_PATH } from "../../../src/pages/connectors/CustomConnectorsPage";
 import { editApiPath, exportApiPath, keyApiPath, stewardApiPath } from "../../../src/pages/connectors/connectorSources";
 import {
   LARK_API_PATH,
@@ -60,6 +61,13 @@ export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> =
   },
 };
 
+/** A definition submitted, reviewed by a second person and written to the ledger, against PostgreSQL. */
+const CUSTOM_CONNECTOR_KEPT_AND_REVIEWED = t(
+  "test_custom_connector_store",
+  "test_a_definition_is_kept_waiting_reviewed_by_a_second_person_and_written_to_the_ledger",
+  true,
+);
+
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/connectors/SourceActs.tsx disconnectApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/disconnect", "disconnectApiPath", disconnectApiPath("xero")),
@@ -93,9 +101,29 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/connectors/LarkCard.tsx LARK_SWITCH_OFF_API_PATH": [
     at("POST /api/v1/connectors/lark-app/switch-off", "LARK_SWITCH_OFF_API_PATH", LARK_SWITCH_OFF_API_PATH),
   ],
+  "src/pages/connectors/CustomConnectorsPage.tsx DEFINITIONS_API_PATH": [
+    at("POST /api/v1/custom-connectors", "DEFINITIONS_API_PATH", DEFINITIONS_API_PATH),
+  ],
+  "src/pages/connectors/CustomConnectorsPage.tsx `${DEFINITIONS_API_PATH}/${one.name}/review`": [
+    at(
+      "POST /api/v1/custom-connectors/{name}/review",
+      "DEFINITIONS_API_PATH",
+      `${DEFINITIONS_API_PATH}/acme_crm/review`,
+    ),
+  ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/custom-connectors": {
+    row: CUSTOM_CONNECTOR_KEPT_AND_REVIEWED,
+    audit: CUSTOM_CONNECTOR_KEPT_AND_REVIEWED,
+    behaviour: t("test_custom_connector_routes", "test_a_caller_without_the_connect_authority_is_refused_and_one_with_it_is_kept"),
+  },
+  "POST /api/v1/custom-connectors/{name}/review": {
+    row: CUSTOM_CONNECTOR_KEPT_AND_REVIEWED,
+    audit: CUSTOM_CONNECTOR_KEPT_AND_REVIEWED,
+    behaviour: t("test_custom_connector_routes", "test_a_submitter_is_told_in_words_that_they_cannot_approve_their_own"),
+  },
   "POST /api/v1/connectors/{connector}/consent": {
     row: t("test_connector_consent", "test_a_consent_is_taken_once_by_its_own_person_before_it_expires", true),
     audit: {

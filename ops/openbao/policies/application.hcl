@@ -1,6 +1,6 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M11.9.2, M13.8.10, M11.8.6
+# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M11.9.2, M13.8.10, M14.7.3, M11.8.6
 #
 # The application answers questions. It borrows connector credentials for the length of one
 # request and gives them back, which is why most rules below are about *creating and
@@ -173,6 +173,20 @@ path "template_signing/data/key" {
   capabilities = ["create", "read"]
 }
 
+# This install's join-key pepper, created once and never written over. See brain.ops.join_key_pepper,
+# whose A_NEW_PEPPER_UNJOINS_EVERY_STORED_DIGEST is why: every join key entity resolution stores is
+# an HMAC under it, and a replaced pepper silently unjoins every one.
+#
+# create, so the application puts it into an empty slot, at the installer's step and at every start;
+# the write carries kv's check-and-set at version 0 as well. No update, so nothing this token does
+# can replace it once the slot holds a version. read, because this process hashes a value an
+# administrator enters to block it. One exact path and no wildcard, no delete, no destroy and no
+# metadata. Created here rather than by apply-release.sh because the deploy token writes no secret
+# value: brain.ops.join_key_pepper.THE_RELEASE_SCRIPT_CANNOT_CREATE_IT_SO_THE_APPLICATION_DOES.
+path "resolution/data/pepper" {
+  capabilities = ["create", "read"]
+}
+
 # Deny by omission is the default here, so the following are listed only to say they were
 # considered and refused rather than forgotten:
 #
@@ -184,3 +198,4 @@ path "template_signing/data/key" {
 #   providers/metadata/* update or delete: see above
 #   providers/delete/*   and destroy/*: removing a provider key is done at the server
 #   template_signing/*   update, delete, destroy and metadata: the key is created once, above
+#   resolution/*         update, delete, destroy and metadata: the pepper is created once, above

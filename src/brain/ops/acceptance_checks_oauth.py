@@ -13,7 +13,7 @@ install has Xero connected. See `A_CONSENTED_SOURCE_IS_STOOD_UP_FOR_THE_RUN`.
 
 **Each step is the product's own code.** The consent is started and answered by
 `brain.connector_routes.start_consent` and `finish_consent`, which are the two console routes'
-bodies, over the consent table `0180` made (`brain.ops.connector_consent.StoredConsents`) as the
+bodies, over the consent table `0202` made (`brain.ops.connector_consent.StoredConsents`) as the
 application's role; the client secret and the refresh token are kept by `Credentials.keep`, which
 records each write in the ledger; the worker's read is `brain.ops.connector_sync_run.attempt` under
 `plan_for`, with `WorkerConnectorKeys` leasing every value. What the check stands in for is the
@@ -363,7 +363,7 @@ class _Consented:
 def consented_xero() -> tuple[ConnectorDeclaration, _Consented]:
     """Xero's declaration with a consent declared on it, and the reading that renews by it."""
     from brain.connectors import xero
-    from brain.connectors.declaration import Setting, ViewReading
+    from brain.connectors.declaration import CodeReading, Setting, ToolReading, ViewReading
     from brain.connectors.oauth import OAuthConsent
 
     declared = xero.CONNECTOR
@@ -375,7 +375,7 @@ def consented_xero() -> tuple[ConnectorDeclaration, _Consented]:
         client_id_setting=CLIENT_ID_SETTING,
     )
     inner = declared.reading
-    if isinstance(inner, ViewReading):
+    if isinstance(inner, ViewReading | ToolReading | CodeReading):
         raise CheckFailedError("Xero's reading is no longer a REST reading")
     reading = _Consented(inner, consent)
     client_id = Setting(

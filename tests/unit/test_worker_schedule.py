@@ -79,6 +79,8 @@ STARTED = [
     ("directory_sync", False),
     ("knowledge_reverification", False),
     ("escalation_expiry", False),
+    ("resolution_calibration", False),
+    ("entity_resolution", False),
     ("queue_redrive", False),
     ("side_effect_resume", False),
     ("model_health_probes", False),
@@ -90,6 +92,7 @@ STARTED = [
     ("connector_sync", False),
     ("vault_audit_ship", False),
     ("acceptance_run", False),
+    ("approved_actions", False),
 ]
 
 
@@ -158,7 +161,7 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_twenty_one_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
@@ -166,9 +169,10 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
     runner and the connector sync after it, and the vault audit shipper last. The staff sync
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
     2026-09-28 and the install acceptance checks the same day, and the escalation expiry, the
-    two recovery sweeps and the evening digest on 2026-09-30, in the registry's own order.
+    two recovery sweeps and the evening digest on 2026-09-30, and the entity registry, the
+    weekly fit and the approved actions on 2026-10-06, in the registry's own order.
 
-    Delete this and every assertion below that names the seventeen could be satisfied by a table
+    Delete this and every assertion below that names the twenty-one could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -177,6 +181,8 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
         "directory_sync",
         "knowledge_reverification",
         "escalation_expiry",
+        "entity_resolution",
+        "resolution_calibration",
         "queue_redrive",
         "side_effect_resume",
         "model_health_probes",
@@ -189,6 +195,7 @@ def test_the_wired_runners_are_the_seventeen_the_schedule_is_meant_to_start() ->
         "vault_audit_ship",
         "acceptance_run",
         "evening_digest",
+        "approved_actions",
     ]
 
 
@@ -474,17 +481,20 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert starts.calls == STARTED
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
             ("acceptance_run", "ok", False, "acceptance_run ran"),
+            ("approved_actions", "ok", False, "approved_actions ran"),
             ("automation_run", "ok", False, "automation_run ran"),
             ("canary_run", "ok", False, "canary_run ran"),
             ("connector_sync", "ok", False, "connector_sync ran"),
             ("denial_digest", "ok", False, "denial_digest ran"),
             ("directory_sync", "ok", False, "directory_sync ran"),
+            ("entity_resolution", "ok", False, "entity_resolution ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("escalation_expiry", "ok", False, "escalation_expiry ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
             ("model_health_probes", "ok", False, "model_health_probes ran"),
             ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
             ("queue_redrive", "ok", False, "queue_redrive ran"),
+            ("resolution_calibration", "ok", False, "resolution_calibration ran"),
             ("retention_sweep", "refused", True, "retention_sweep ran"),
             ("side_effect_resume", "ok", False, "side_effect_resume ran"),
             ("spend_report_refresh", "ok", False, "spend_report_refresh ran"),
@@ -542,8 +552,9 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
     starts: Starts,
 ) -> None:
     """A second tick thirty seconds later starts nothing and records nothing; a tick a day and a
-    minute after the first starts every wired control again. Thirty seconds rather than a minute
-    since the webhook dispatch, whose cadence is a minute, joined the schedule.
+    minute after the first starts every wired control again except the weekly fit, whose cadence
+    is a week. Thirty seconds rather than a minute since the webhook dispatch, whose cadence is a
+    minute, joined the schedule.
 
     Delete this and the loop could restart every wired control on every thirty-second tick, which
     is a retention sweep two thousand eight hundred and eighty times a day."""
@@ -556,8 +567,9 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
         assert not any(one.name in WIRED for one in later)
 
         tick(url, at=NOW + timedelta(days=1, minutes=1))
-        assert len(starts.calls) == 2 * len(STARTED)
-        assert len(recorded(url)) == 2 * len(STARTED)
+        daily = [one for one in STARTED if one[0] != "resolution_calibration"]
+        assert starts.calls == STARTED + daily
+        assert len(recorded(url)) == len(STARTED) + len(daily)
 
 
 def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_are(
@@ -577,17 +589,20 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
         assert starts.calls == [one for one in STARTED if one[0] != "spend_report_refresh"]
         assert [row[0] for row in recorded(url)] == [
             "acceptance_run",
+            "approved_actions",
             "automation_run",
             "canary_run",
             "connector_sync",
             "denial_digest",
             "directory_sync",
+            "entity_resolution",
             "erasure_queue",
             "escalation_expiry",
             "knowledge_reverification",
             "model_health_probes",
             "outbox_dispatch",
             "queue_redrive",
+            "resolution_calibration",
             "retention_sweep",
             "side_effect_resume",
             "vault_audit_ship",
@@ -614,17 +629,20 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
         assert fake.calls == STARTED
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
             ("acceptance_run", "ok", "acceptance_run ran"),
+            ("approved_actions", "ok", "approved_actions ran"),
             ("automation_run", "ok", "automation_run ran"),
             ("canary_run", "ok", "canary_run ran"),
             ("connector_sync", "ok", "connector_sync ran"),
             ("denial_digest", "ok", "denial_digest ran"),
             ("directory_sync", "ok", "directory_sync ran"),
+            ("entity_resolution", "ok", "entity_resolution ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("escalation_expiry", "ok", "escalation_expiry ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
             ("model_health_probes", "ok", "model_health_probes ran"),
             ("outbox_dispatch", "ok", "outbox_dispatch ran"),
             ("queue_redrive", "ok", "queue_redrive ran"),
+            ("resolution_calibration", "ok", "resolution_calibration ran"),
             ("retention_sweep", "failed", "RuntimeError: retention_sweep broke on purpose"),
             ("side_effect_resume", "ok", "side_effect_resume ran"),
             ("spend_report_refresh", "ok", "spend_report_refresh ran"),
@@ -690,6 +708,8 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("denial_digest", False),
         ("directory_sync", False),
         ("escalation_expiry", False),
+        ("resolution_calibration", False),
+        ("entity_resolution", False),
         ("queue_redrive", False),
         ("side_effect_resume", False),
         ("model_health_probes", False),
@@ -701,6 +721,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("connector_sync", False),
         ("vault_audit_ship", False),
         ("acceptance_run", False),
+        ("approved_actions", False),
     ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.

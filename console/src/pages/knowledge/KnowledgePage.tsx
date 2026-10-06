@@ -23,7 +23,7 @@
  * the "What the company view adds" table, which described the screen rather than the documents; the
  * item's internal reference as the row's name; the sentences explaining absent columns and absent
  * controls; and the lifecycle, intake and solutions cards stacked above the list, which are now a
- * document's own page, the Add menu and the Solutions tab.
+ * document's own page, the Add menu, and the Solutions and Corrections tabs.
  *
  * Task ids: M27.15.40, M27.16.1, M7.6.3, M7.1.2, M7.1.5
  */
@@ -71,6 +71,7 @@ import {
   readDocRows,
   readTasks,
   SOLUTIONS_ADDRESS,
+  CORRECTIONS_ADDRESS,
   stateWords,
   verifiedWords,
   VERIFICATIONS_API_PATH,
@@ -90,6 +91,7 @@ export const FILTERS_LABEL = "Narrow the documents";
 export const SEARCH_HINT = "Search titles and stewards";
 export const ADD_LABEL = "Add documents";
 export const SOLUTIONS_LINK = "Solutions";
+export const CORRECTIONS_LINK = "Corrections";
 export const EXPORT_LABEL = "Export inventory";
 export const TASKS_HEADING = "Your tasks";
 export const MORE_DOCUMENTS = "More documents are on file than one reading covers; search or filter to reach the rest.";
@@ -389,6 +391,9 @@ export function KnowledgePage() {
           <>
             <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
               <Link to={SOLUTIONS_ADDRESS}>{SOLUTIONS_LINK}</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+              <Link to={CORRECTIONS_ADDRESS}>{CORRECTIONS_LINK}</Link>
             </Button>
             <UnavailableAction label={EXPORT_LABEL} text={EXPORT_LABEL} icon={<Download aria-hidden />} reason={UNAVAILABLE.exportInventory.reason} />
           </>

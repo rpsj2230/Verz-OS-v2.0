@@ -89,7 +89,14 @@ has never held a version. The policy grants create and read there and no update,
 refuses an overwrite even from a caller that left the check-and-set out. See
 `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
 
-Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M27.15.50, M13.8.10
+**A fifth prefix, `resolution/`, holds the join-key pepper, and it is written once for the same
+reason.** Entity resolution stores every join key as an HMAC under the pepper
+(`brain.resolution.canonical.identifier_hash`), so a pepper replaced under stored digests unjoins
+every one of them without an error anywhere. `write_static_kv` refuses this prefix as it refuses the
+template key's, and `brain.ops.join_key_pepper` creates the one slot with the check-and-set at
+version 0. See `WRITE_ONCE_PREFIXES`.
+
+Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M27.15.50, M13.8.10, M14.7.3
 """
 
 from __future__ import annotations
@@ -129,8 +136,23 @@ CONNECTOR_KEY_PREFIX = "connector_keys/"
 #: `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
 TEMPLATE_KEY_PREFIX = "template_signing/"
 
+#: The join-key pepper entity resolution hashes every identifier with, created once and never
+#: written over. See `brain.ops.join_key_pepper`.
+RESOLUTION_PREFIX = "resolution/"
+
 #: Every prefix the kv methods admit, and nothing else in the vault is stored rather than leased.
-STATIC_PREFIXES = (STATIC_PREFIX, SIGNING_PREFIX, CONNECTOR_KEY_PREFIX, TEMPLATE_KEY_PREFIX)
+STATIC_PREFIXES = (
+    STATIC_PREFIX,
+    SIGNING_PREFIX,
+    CONNECTOR_KEY_PREFIX,
+    TEMPLATE_KEY_PREFIX,
+    RESOLUTION_PREFIX,
+)
+
+#: The prefixes whose one slot is created once and never written over, so the ordinary write
+#: refuses them and only `create_static_kv_once` reaches them. See
+#: `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
+WRITE_ONCE_PREFIXES = (TEMPLATE_KEY_PREFIX, RESOLUTION_PREFIX)
 
 #: The check-and-set version that makes a kv version 2 write a create: the vault accepts it only
 #: while the slot has never held a version, and answers 400 otherwise.
@@ -273,16 +295,16 @@ def assert_static_path(path: str) -> None:
     Public and separate so the refusal can be tested directly rather than only through a
     call that needs a server. `providers/anthropic` is a key nobody can lease;
     `connectors/creds/xero` is one somebody should, and reading the second one this way
-    would work perfectly and be invisible. `webhooks/`, `connector_keys/` and `template_signing/`
-    are the three other prefixes admitted; see
+    would work perfectly and be invisible. `webhooks/`, `connector_keys/`, `template_signing/`
+    and `resolution/` are the four other prefixes admitted; see
     `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`,
     `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT` and
     `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
     """
     if not any(path.startswith(prefix) for prefix in STATIC_PREFIXES):
         msg = (
-            f"{path!r} is not a provider key, a signing secret, a connected source's key or the "
-            "template signing key. "
+            f"{path!r} is not a provider key, a signing secret, a connected source's key, the "
+            "template signing key or the join-key pepper. "
             "Everything outside "
             f"{list(STATIC_PREFIXES)!r} is leased "
             "through brain.ops.secrets.borrow, which revokes it when the run ends; reading "
@@ -473,11 +495,12 @@ class OpenBaoVault:
         The prefix refusal is `assert_static_path`, the read's own, because a writer that could
         reach `connectors/creds/xero` would be storing a value over a path the leasing design
         says the vault mints. kv version 2 takes writes on `<mount>/data/<rest>` and wraps the
-        fields in `data`, which is the shape `read_static_kv` unwraps. The template key's prefix is
-        refused: see `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
+        fields in `data`, which is the shape `read_static_kv` unwraps. The template key's and the
+        join-key pepper's prefixes are refused: see
+        `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
         """
         assert_static_path(path)
-        if path.startswith(TEMPLATE_KEY_PREFIX):
+        if path.startswith(WRITE_ONCE_PREFIXES):
             msg = (
                 f"{path!r} is written once, by create_static_kv_once, and never written over. "
                 f"{A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT}"

@@ -32,13 +32,14 @@ list a person chose (M7.6.1), which `0115`'s library read returns. SCREEN 7 draw
 eight columns and this answers three; `only_existence_and_reach_are_shown` is that fact on the
 response. See `A_LIBRARY_ROW_SAYS_AN_ITEM_EXISTS_AND_HOW_WIDELY_IT_REACHES`.
 
-**Freshness and use are not measured here, and the reason is the row rather than a choice.**
-SCREEN 7's Fresh figure and its coverage bars are `brain.console.operate.coverage`, which
-takes whole `KnowledgeItem`s, and a `KnowledgeItem` refuses to construct without its text.
-`know.item` holds no text on purpose: its own docstring says a second copy of the corpus
-outside the reach predicate is the thing it refuses to be. Never retrieved and Used 30d need a
-count of retrievals per document, and nothing records one. See
-`FRESHNESS_NEEDS_A_WHOLE_DOCUMENT_AND_THE_ROW_HOLDS_NONE`.
+**Freshness and use are not measured here.** SCREEN 7's Fresh figure and its coverage bars are
+`brain.console.operate.coverage`, which until 2026-10-06 took whole `KnowledgeItem`s, and a
+`KnowledgeItem` refuses to construct without its text, which `know.item` holds none of on purpose.
+It now takes `operate.Covered`, which a `know.item` row satisfies, and a department head's
+coverage is served from the row by `brain.department_view_routes`; this library's load still
+reads the four columns an item is placed by and no verification, so its Fresh column is not
+drawn. Never retrieved and Used 30d need a count of retrievals per document, and nothing records
+one. See `FRESHNESS_NEEDS_A_WHOLE_DOCUMENT_AND_THE_ROW_HOLDS_NONE`.
 
 **The library's load is never narrowed by a parameter, because a narrowed load makes
 `truncated` an oracle.** A department filter answering "the load came back full" tells a reader who
@@ -134,9 +135,8 @@ from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import Basis
-from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
-from brain.core.scope import Scope
 from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.listing import Column, ListAsked, Listing
@@ -153,6 +153,7 @@ from brain.ops.memory_store import (
     StoredMemoryRecords,
     corrections_naming,
     corrections_of,
+    formation_of,
     inferred_named,
     learnings_named,
     learnings_of_agents,
@@ -184,12 +185,13 @@ A_LIBRARY_ROW_SAYS_AN_ITEM_EXISTS_AND_HOW_WIDELY_IT_REACHES: Final = (
 
 #: Why the freshness and use figures on SCREEN 7 have no source here.
 FRESHNESS_NEEDS_A_WHOLE_DOCUMENT_AND_THE_ROW_HOLDS_NONE: Final = (
-    "brain.console.operate.coverage decides freshness per department and takes whole "
-    "KnowledgeItem values, and KnowledgeItem refuses to construct without its text. know.item "
-    "stores no text, deliberately, so the decision has no input that could be built from the "
-    "table without inventing the corpus. Never retrieved and Used 30d need a count of "
-    "retrievals per document and nothing records one. The response says both are unmeasured "
-    "rather than drawing a figure of zero, which would read as a library nobody uses."
+    "brain.console.operate.coverage decides freshness per department. It took whole "
+    "KnowledgeItem values until it was widened to operate.Covered, which a know.item row "
+    "satisfies without the text the table deliberately does not store; the library's load reads "
+    "where an item is placed and not when it was verified, so this screen does not draw it. "
+    "Never retrieved and Used 30d need a count of retrievals per document and nothing records "
+    "one. The response says both are unmeasured rather than drawing a figure of zero, which "
+    "would read as a library nobody uses."
 )
 
 #: Why the library's search, level filter and order never narrow what is loaded.
@@ -661,14 +663,7 @@ def stored_memory(
     try:
         kind = MemoryKind(row.kind)
         provenance_of(kind)
-        formation = Formation(
-            principal_id=row.principal_id,
-            capabilities=tuple(Capability(value=one) for one in row.capability_tags),
-            scope=Scope.model_validate(row.scope),
-            ent_hash=row.ent_hash,
-            formed_at=row.formed_at,
-            kind=kind,
-        )
+        formation = formation_of(row)
     except (ValueError, MemoryViewError) as exc:
         log.warning("memory row does not construct", memory=row.id, error=type(exc).__name__)
         return None

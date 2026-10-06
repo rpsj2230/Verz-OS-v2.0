@@ -633,7 +633,14 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="resolution_calibration",
-        symbols=("brain.resolution.calibration:due", "brain.resolution.calibration:drift"),
+        # Since 2026-10-06 (M14.4.4). The worker's schedule starts `run_calibration_now`, which
+        # fits the install's candidate pairs and keeps the fit as a setting until a reviewer
+        # promotes it on the Possible duplicates screen; `due` is what keeps a run from fitting
+        # twice in one week.
+        symbols=(
+            "brain.resolution.calibration_store:run_calibration_now",
+            "brain.resolution.calibration:due",
+        ),
         guards=(
             "that the weights deciding whether two records are the same person stay fitted "
             "to the data as it is now rather than as it was when they were trained"
@@ -646,7 +653,30 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=CALIBRATION_PERIOD,
         cadence_from="brain.resolution.calibration:CALIBRATION_PERIOD",
         severity=Severity.NOTICED,
-        invoked_by=Invocation.NOTHING,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="entity_resolution",
+        # Since 2026-10-06 (`0182`, M14.1). The worker's schedule starts `run_registry_now`, which
+        # reads the records connectors declare for resolution and gives each an entity, its names,
+        # its hashed join keys and its comparison row, then compares the records it read with
+        # their candidates (`brain.resolution.matching_store`, `0184`). Two records become one only
+        # by a merge, and on an install with unattended merging off, only by a person's.
+        symbols=("brain.resolution.registry_store:run_registry_now",),
+        guards=(
+            "that every record a connector declares for resolution is registered, so a merge, a "
+            "review and an answer that names one have something to point at"
+        ),
+        lost_silently=(
+            "New records stop being registered. Nothing fails: questions are answered as before, "
+            "and the only sign is that resolution knows nothing added since the last run."
+        ),
+        # Ten minutes, restated rather than imported for `connector_sync`'s reason: the store
+        # imports the tables, and the tables import this registry.
+        every=timedelta(minutes=10),
+        cadence_from="brain.resolution.registry_store:EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="queue_redrive",
@@ -715,6 +745,27 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.RAISED,
         invoked_by=Invocation.ON_A_ROUTE,
         route="/api/audit/anchor",
+        schedule_file=".github/workflows/anchor.yml",
+    ),
+    Control(
+        name="elevation_anchor",
+        # The elevation chain's head (`0209`, M33.7.1.3), published beside the main ledger's and
+        # read by the same workflow, so its few entries are anchored on their own cadence.
+        symbols=("brain.audit.chain_check:published_head",),
+        guards=(
+            "that an approved elevation cannot be removed from the end of the elevation chain "
+            "without it being detectable, whatever the main ledger's anchor says"
+        ),
+        lost_silently=(
+            "The elevation chain still verifies after its newest entries are removed, and the "
+            "main ledger's anchor says nothing about it: the main chain still holds each "
+            "request's decision, but the separate head that moves only when somebody is elevated "
+            "would no longer be recorded anywhere the database administrator cannot reach."
+        ),
+        every=_SIX_HOURLY,
+        severity=Severity.RAISED,
+        invoked_by=Invocation.ON_A_ROUTE,
+        route="/api/audit/elevation-anchor",
         schedule_file=".github/workflows/anchor.yml",
     ),
     Control(
@@ -1004,6 +1055,32 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.NOTICED,
         invoked_by=Invocation.IN_PROCESS,
         daily_at="INSTALL_DIGEST_TIME",
+    ),
+    Control(
+        name="approved_actions",
+        # Since 2026-10-06 (`0201`, M13.7.6). The worker's schedule starts `run_approved_now`,
+        # which reads each approved action through `gate.approved_to_run` and runs it once
+        # through `brain.gate.leash.resume` at its requester's reach as it is now.
+        symbols=(
+            "brain.ops.approved_runs:run_approved_now",
+            "brain.ops.approved_runs:run_approved",
+        ),
+        guards=(
+            "that an action a person approved is carried out once, without its requester coming "
+            "back, at their reach as it is when it runs, and that a rejected, changed or lapsed "
+            "one never is"
+        ),
+        lost_silently=(
+            "The approver pressed approve and the card closed, and nothing was sent: the reply "
+            "never reaches the customer and the DNS record never changes, while the screen says "
+            "the action was approved. Nobody is told, because the approval itself succeeded."
+        ),
+        # Five minutes, restated rather than imported: `brain.ops.approved_runs` reaches the
+        # tables, which import this registry for the control-run name constraint.
+        every=_FIVE_MINUTELY,
+        cadence_from="brain.ops.approved_runs:RUNS_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
     ),
 )
 

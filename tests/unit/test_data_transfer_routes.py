@@ -263,10 +263,12 @@ def test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_onl
     )
     assert [one["reason_reference"] for one in listed["exports"]] == ["MATTER-2019/004"]
     assert store.asked[-1] == "taken_by:u_admin"
-    # The certification report runs too, and is taken from Access review rather than this form.
+    # The certification report runs too, and is taken from Access review rather than this form,
+    # and a person's conversation runs and is taken by that person on Ask.
     assert [one["key"] for one in listed["catalogue"] if one["runs"]] == [
         "audit_trail",
         "access_certification",
+        "conversation_history",
     ]
     assert listed["reasons"] == [one.value for one in ExportReason]
     partial = client.get(LISTING, headers=headers("u_elsewhere")).json()

@@ -73,7 +73,13 @@ from typing import Any, Final
 from urllib.parse import quote, urlencode
 
 from brain.connectors.contract import DECIDING_TYPE_NAMES, FetchRequest, assert_fetches_only
-from brain.connectors.transports import RestTransport, SourceRecord, TransportError, normalise
+from brain.connectors.transports import (
+    FieldMapping,
+    RestTransport,
+    SourceRecord,
+    TransportError,
+    normalise,
+)
 from brain.core.envelope import TypedResult
 from brain.tools.fetch import Fetchable, Fetcher, Resolver, assert_fetchable, fetch
 
@@ -631,6 +637,36 @@ def _resolve(node: Any, steps: Sequence[str | int]) -> Any:
     return current
 
 
+def mapped_row(row: Mapping[str, Any], fields: Sequence[FieldMapping]) -> dict[str, Any]:
+    """One record holding only what the mapping names, built fresh. See `RestOperation.project`.
+
+    Public because every transport that declares a `FieldMapping` (REST, MCP, custom code) maps a
+    row by this one walk, so a path means the same thing whichever transport carried the row.
+    """
+    mapped: dict[str, Any] = {}
+    for field in fields:
+        value = _resolve(row, _steps(field.source_path))
+        if value is not _MISSING:
+            mapped[field.target] = value
+    return mapped
+
+
+def rows_at(body: Any, path: str) -> tuple[Mapping[str, Any], ...] | None:
+    """The records a decoded body holds at an already-validated path, or None when it holds none.
+
+    An empty path is the body itself. A list is the records; one object is one record, which is
+    how a source answers a read of one record. Anything else at the path, or a list holding
+    something other than objects, is None: a shape the declaration does not describe, never an
+    empty list, because an empty list reads as a source with nothing in it.
+    """
+    found = _resolve(body, _steps(path)) if path else body
+    if isinstance(found, Mapping):
+        return (found,)
+    if not isinstance(found, list) or not all(isinstance(one, Mapping) for one in found):
+        return None
+    return tuple(found)
+
+
 # ------------------------------------------------------------------------- the adapter
 @dataclass(frozen=True)
 class RestOperation:
@@ -766,12 +802,7 @@ class RestOperation:
                     "object, so there is nothing for a field mapping to name"
                 )
                 raise RestSpecError(msg)
-            mapped: dict[str, Any] = {}
-            for field in self.transport.fields:
-                value = _resolve(row, _steps(field.source_path))
-                if value is not _MISSING:
-                    mapped[field.target] = value
-            projected.append(mapped)
+            projected.append(mapped_row(row, self.transport.fields))
         return tuple(projected)
 
     def records(

@@ -9,7 +9,10 @@
  * The citation fields are the ones `brain.gate.provenance.Evidence.view` writes, read out of the
  * Python source, so a key renamed there fails here rather than drawing a blank.
  *
- * Task ids: M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9
+ * A followed citation sends its passage's place back against the answer's `x-retrieval-id`, once,
+ * from the page it opens, with the chunk kept in the fragment (M15.3.4).
+ *
+ * Task ids: M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M15.3.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -30,7 +33,9 @@ import {
   CITED_PASSAGE_GONE,
   CITED_PASSAGE_NOT_SHOWN,
   citedDocumentAddress,
+  followedOf,
   MORE_THAN_SHOWN,
+  retrievalUsesPath,
   UNTITLED,
 } from "../src/pages/citedDocumentQuery";
 import { recordsAddress } from "../src/pages/recordsQuery";
@@ -153,13 +158,27 @@ interface Mounted {
   readonly router: ReturnType<typeof createMemoryRouter>;
 }
 
+/** The retrieval the stand-in answer names, as `brain.api_routes.RETRIEVAL_HEADER` carries it. */
+const RETRIEVAL = "3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b";
+
 /** The console at `path`, with the stand-in API answering the answer and the document routes. */
-async function mounted(path: string, frames: string, document: () => Response): Promise<Mounted> {
+async function mounted(
+  path: string,
+  frames: string,
+  document: () => Response,
+  retrieval = "",
+): Promise<Mounted> {
   const idp = fakeIdentityProvider({
     api(url) {
       const at = new URL(url, CONSOLE_ORIGIN).pathname;
       if (at === ANSWER_API) {
-        return new Response(frames, { status: 200, headers: { "content-type": EVENT_STREAM } });
+        return new Response(frames, {
+          status: 200,
+          headers: { "content-type": EVENT_STREAM, "x-retrieval-id": retrieval },
+        });
+      }
+      if (at === `/api/v1${retrievalUsesPath(RETRIEVAL)}`) {
+        return json({ recorded: true });
       }
       return at === DOCUMENT_API ? document() : null;
     },
@@ -177,8 +196,12 @@ async function mounted(path: string, frames: string, document: () => Response): 
   return { container, idp, router };
 }
 
-async function asked(frames: string, document: () => Response = () => json(HANDBOOK)): Promise<Mounted> {
-  const at = await mounted(ASK_ADDRESS, frames, document);
+async function asked(
+  frames: string,
+  document: () => Response = () => json(HANDBOOK),
+  retrieval = "",
+): Promise<Mounted> {
+  const at = await mounted(ASK_ADDRESS, frames, document, retrieval);
   const field = at.container.querySelector("textarea") as HTMLTextAreaElement;
   fireEvent.change(field, { target: { value: QUESTION } });
   const button = [...at.container.querySelectorAll("button")].find((one) => one.textContent === ASK_LABEL);
@@ -355,5 +378,71 @@ describe("the page a document citation opens", () => {
     for (const wording of [/permission/i, /denied/i, /not allowed/i, /access/i]) {
       expect(page).not.toMatch(wording);
     }
+  });
+});
+
+// ------------------------------------------------------------- a followed citation (M15.3.4)
+
+const PLACED = evidence({ ...(JSON.parse(DOCUMENT) as Record<string, string>), position: "2" });
+
+function usesSent(idp: FakeIdp): unknown[] {
+  return idp.calls
+    .filter((call) => new URL(call.url, CONSOLE_ORIGIN).pathname === `/api/v1${retrievalUsesPath(RETRIEVAL)}`)
+    .map((call) => [call.init?.method, JSON.parse(String(call.init?.body ?? "null"))]);
+}
+
+describe("a followed citation's place", () => {
+  test("the header the page reads and the address it sends to are the ones the API names", () => {
+    // What breaks if this is deleted: the route renames its header or its path and no place is ever
+    // sent, with every test here still green against a stand-in using the old names.
+    expect(readRepoFile("src/brain/api_routes.py")).toMatch(/RETRIEVAL_HEADER: Final = "x-retrieval-id"/);
+    expect(readRepoFile("console/src/api/client.ts")).toContain('response.headers.get("x-retrieval-id")');
+    expect(readRepoFile("src/brain/retrieval_routes.py")).toMatch(
+      /USES_PATH: Final = "\/retrievals\/\{event_id\}\/uses"/,
+    );
+    expect(retrievalUsesPath("a b")).toBe("/retrievals/a%20b/uses");
+  });
+
+  test("travels in the fragment beside the passage, and only when the answer named its retrieval", () => {
+    // What breaks if this is deleted: the retrieval and the place put where a request log keeps the
+    // passage beside them, or a link that names a retrieval the answer never had.
+    const view = readCitation(PLACED);
+    const address = citationAddress(view, RETRIEVAL);
+
+    expect(view.position).toBe("2");
+    expect(address).toBe(`/ask/documents/doc_handbook#chunk=doc_handbook.0002&retrieval=${RETRIEVAL}&position=2`);
+    expect(citationAddress(view)).toBe("/ask/documents/doc_handbook#chunk=doc_handbook.0002");
+    const hash = `#chunk=doc_handbook.0002&retrieval=${RETRIEVAL}&position=2`;
+    expect(anchorOf(hash)).toBe("doc_handbook.0002");
+    expect(followedOf(hash)).toEqual({ retrievalId: RETRIEVAL, position: 2 });
+    expect(followedOf("#chunk=doc_handbook.0002")).toBeNull();
+    expect(followedOf(`#retrieval=${RETRIEVAL}&position=0`)).toBeNull();
+  });
+
+  test("is sent once from the page the citation opens, and the passage is still marked", async () => {
+    // What breaks if this is deleted: the learning signal never hears a citation was followed, or
+    // hears it on every render of the page.
+    const { container, idp } = await asked(answerFrames("Twenty five days.", [PLACED]), () => json(HANDBOOK), RETRIEVAL);
+    fireEvent.click(sources(container)[0]?.querySelector("a") as HTMLAnchorElement);
+
+    await waitFor(() => {
+      expect(container.querySelector(".cited__passage--cited")).not.toBeNull();
+    });
+    await waitFor(() => {
+      expect(usesSent(idp)).toEqual([["POST", { position: 2 }]]);
+    });
+  });
+
+  test("a document opened without a retrieval in its address sends nothing", async () => {
+    // The positive case's sibling: a page opened from a bookmark or an answer with no retrieval
+    // sends no place, rather than a place against nothing.
+    const { container, idp } = await mounted("/ask/documents/doc_handbook#chunk=doc_handbook.0002", "", () =>
+      json(HANDBOOK),
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".cited__passage--cited")).not.toBeNull();
+    });
+    expect(usesSent(idp)).toEqual([]);
   });
 });

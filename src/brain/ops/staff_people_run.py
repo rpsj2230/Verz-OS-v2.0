@@ -175,13 +175,16 @@ async def provide_people(
     now: datetime,
     trial: bool = False,
     new_id: Callable[[], str] | None = None,
+    place: bool = True,
 ) -> PeopleRun:
     """Make a Brain person for every active person on the list who has none, in one transaction.
 
     A trial counts them and writes nothing. Every person and join is attributed to the source's
     sync in the ledger, the way the accounts step's are. `new_id` names each new person and is given
     only by the install check, whose people must be reserved ones; everybody else is `u_` and a
-    random hex.
+    random hex. A person made is placed in the department the list names when `place`, and in
+    none when departments are managed on People (`brain.identity.departments_from`), the same
+    rule as the accounts step's.
     """
     actor = sync_actor(roster.source)
     async with sessions() as session, session.begin():
@@ -217,7 +220,9 @@ async def provide_people(
                     employment=employment_of(person).value,
                     not_after=engaged_until(person, now),
                     display_name=person.display_name,
-                    primary_department=departments.get(department_key(person.department)),
+                    primary_department=(
+                        departments.get(department_key(person.department)) if place else None
+                    ),
                 )
             )
             await session.execute(

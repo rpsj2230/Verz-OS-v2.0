@@ -21,22 +21,23 @@ by the demo, for the demo's source, and registered only by an install that reads
 at the end hold both halves, because a registration that leaked onto every install and one that
 happened nowhere each pass a test that looks at one install.
 
-Task ids: M12.1.5
+Task ids: M12.1.5, M13.7.6
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from brain import demo
 from brain.api_routes import MAX_FILTERS, row_readers
 from brain.app import Settings, create_app
-from brain.connectors.declaration import shipped
+from brain.chat.attachments import READ_ATTACHMENT
+from brain.connectors.declaration import proposers, shipped
 from brain.core.entitlement import Capability, EntitlementSet, Grant
-from brain.core.envelope import IdentityMode
+from brain.core.envelope import IdentityMode, SideEffect
 from brain.core.field_policy import Classification
 from brain.core.scope import Scope
 from brain.identity.lifecycle import STARTER_PACK
@@ -49,6 +50,7 @@ from brain.knowledge.document_tools import (
 )
 from brain.knowledge.rows import RowQuery
 from brain.knowledge.search import reach_for
+from brain.ops.connector_catalogue import declarations
 from brain.tools import startup
 from brain.tools.registry import ToolRegistrationError, ToolRegistry
 from brain.tools.startup import (
@@ -72,9 +74,12 @@ class _Rows:
 
 
 def _row_tool_names(registry: ToolRegistry) -> tuple[str, ...]:
-    """The row tools alone: the definitions naming a source, which is what the answer lane reads
-    as a reader of rows. The document tools name none, which a test below holds."""
-    return tuple(d.name for d in registry.definitions() if d.source)
+    """The row tools alone: the definitions naming a source that only read, which is what the
+    answer lane reads as a reader of rows. The document tools name none, which a test below
+    holds, and a connector's write names its source and is not a row tool."""
+    return tuple(
+        d.name for d in registry.definitions() if d.source and d.side_effect is SideEffect.NONE
+    )
 
 
 #: Every connected source's own entities, registered on every install with a row source since
@@ -87,6 +92,10 @@ CONNECTOR_PAIRS = frozenset(
 )
 CONNECTOR_TOOLS = frozenset(f"{source}.read_{entity}" for source, entity in CONNECTOR_PAIRS)
 CONNECTOR_ENTITIES = frozenset(entity for _, entity in CONNECTOR_PAIRS)
+
+#: The writes a connector declares a preparer for, registered beside the row tool that reads their
+#: record (M13.7.6). Read off the declarations, so a connector preparing another moves this with it.
+PROPOSED_WRITES = frozenset(proposers(declarations()))
 
 
 def _own(names: Sequence[str]) -> tuple[str, ...]:
@@ -239,7 +248,9 @@ def test_the_demos_source_registers_its_own_entities_beside_the_built_ins() -> N
     rows = [
         d
         for d in registry.definitions()
-        if d.entity != KNOWLEDGE_ENTITY and d.name not in CONNECTOR_TOOLS
+        if d.entity != KNOWLEDGE_ENTITY
+        and d.name not in CONNECTOR_TOOLS
+        and d.name not in PROPOSED_WRITES
     ]
 
     assert {d.entity for d in registry.definitions()} == (
@@ -250,7 +261,11 @@ def test_the_demos_source_registers_its_own_entities_beside_the_built_ins() -> N
         len(row_entities_for(demo.DEMO_SOURCE))
         + len(knowledge_tools(_Rows()))
         + len(CONNECTOR_TOOLS)
+        + len(PROPOSED_WRITES)
+        # A file the asker attached to their conversation (M12.3.6), on the document plane.
+        + 1
     )
+    assert registry.get(READ_ATTACHMENT).definition.entity == KNOWLEDGE_ENTITY
 
 
 def test_no_install_reading_another_source_registers_anything_the_demo_brings() -> None:
@@ -462,3 +477,41 @@ def test_an_install_that_has_declared_its_weights_embeds_questions_with_them() -
     assert built.revision == "v1.0.0"
     assert isinstance(built.service, InferenceEmbeddingClient)
     assert built.service.url == embed_url(endpoint)
+
+
+# ---------------------------------------------------- a connector's write a model may ask for
+def test_a_connectors_write_is_registered_beside_the_row_tool_that_reads_it_and_refuses_calls() -> (
+    None
+):
+    """**M13.7.6.** Freshdesk's reply, which its grant declares a preparer for, is in the registry
+    as the sensitive client-message write it is, beside its ticket row tool, and the handler the
+    registry holds for it refuses whoever calls it. Delete this and a connector's write is still
+    only a name inside a grant, which no agent's catalogue can offer, or is a tool anybody who finds
+    it by name can call."""
+    import asyncio
+
+    from brain.connectors.freshdesk import TICKET_REPLY_TOOL
+    from brain.ops.idempotency import IdempotencyError
+    from brain.tools.registry import SensitiveEffect
+
+    registry = build_registry(source="xero", records=_Rows())
+
+    registered = registry.get(TICKET_REPLY_TOOL.name)
+    assert registered.definition == TICKET_REPLY_TOOL
+    assert registered.sensitive_effect is SensitiveEffect.CLIENT_MESSAGE
+    assert registry.has("freshdesk.read_ticket")
+    handler = cast(Any, registered.handler)
+    with pytest.raises(IdempotencyError, match="refuses to be called"):
+        asyncio.run(
+            handler(object(), entitlement=EntitlementSet(principal_id="u_any", grants=()), now=None)
+        )
+
+
+def test_without_a_row_source_no_connector_write_is_registered() -> None:
+    """A write needs the row tool that reads its record, and a registry with no row source has
+    none, so it registers no write: a tool that can never find its record would be offered to a
+    model and always refused. The sibling above registers it. Delete this and the registry offers
+    a write on an install that can read nothing."""
+    registry = build_registry(source="xero")
+
+    assert not any(d.side_effect is not SideEffect.NONE for d in registry.definitions())

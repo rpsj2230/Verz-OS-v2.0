@@ -46,6 +46,8 @@ export interface SkillDetail {
   readonly pinned: SkillLibraryRow | null;
   /** The agents this reader may give a skill to or take one off. */
   readonly agents: readonly AgentChoice[];
+  /** The agents a reviewer may rehearse a waiting version through (M12.3.4). */
+  readonly rehearsalAgents: readonly AgentChoice[];
   readonly registryIsAbsent: boolean;
 }
 
@@ -57,7 +59,14 @@ export function readSkillDetail(payload: unknown, name: string): SkillDetail | n
   if (versions.length === 0 && pinned === null) {
     return null;
   }
-  return { name, versions, pinned, agents: page.agents, registryIsAbsent: page.registryIsAbsent };
+  return {
+    name,
+    versions,
+    pinned,
+    agents: page.agents,
+    rehearsalAgents: page.rehearsalAgents,
+    registryIsAbsent: page.registryIsAbsent,
+  };
 }
 
 /** The version the header speaks for: the newest that is not retired, or the newest of all. */

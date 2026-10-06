@@ -31,7 +31,7 @@ with a row cap of one, as the user its slot keeps, and the row is dropped like a
 through the same `connector_sync_run.presented`, so a withdrawn consent fails a test with the same
 `CONSENT_WITHDRAWN` a scheduled read leaves.
 
-Task ids: M27.15.8, M11.6.1, M11.7.1, M11.8.6
+Task ids: M27.15.8, M11.6.1, M11.7.1, M11.8.6, M11.7.8
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ from typing import Final
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import FetchRequest
-from brain.connectors.declaration import DatabaseLogin
+from brain.connectors.declaration import CodeReading, DatabaseLogin, Reading, ToolReading
 from brain.connectors.google_token import TokenNotIssuedError
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
@@ -62,6 +62,7 @@ from brain.ops.connector_probe import (
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
     PROBE_ANSWERED,
+    PROBE_NOT_BUILT,
     PROBE_NOT_SENT_SHARE_SPENT,
     PROBE_NOT_SENT_WHILE_WAITING,
     PROBE_REFUSED_FOR_NOW,
@@ -103,6 +104,7 @@ from brain.ops.connector_sync_store import (
     read_probe_targets,
     read_states,
 )
+from brain.ops.custom_connector_store import refresh
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import check
 from brain.ops.schedule_store import take_the_lock
@@ -302,6 +304,10 @@ def probe_one(
     limits = probe_limits(manifest)
     if not check(now=started, limits=limits, state=windows_after(recent, limits)).allowed:
         return finish(PROBE_NOT_SENT_SHARE_SPENT)
+    if isinstance(reading, ToolReading | CodeReading):
+        # A test on request of an MCP server or of custom code is not built: its scheduled read
+        # is what says whether it works, and no key is read for a test that makes no call.
+        return finish(PROBE_NOT_BUILT)
     lease = borrowed(keys, reading, manifest.credential.ref, now=clock())
     try:
         done = _call_under(
@@ -329,15 +335,17 @@ async def probe_on(
     caller: SourceCaller,
     resolver: Resolver,
     clock: Callable[[], datetime],
-    readings: Mapping[str, SourceReading | ViewReading] = READINGS,
+    readings: Mapping[str, Reading] = READINGS,
     poster: SourcePoster | None = None,
 ) -> ProbeRun:
     """Every test owed at `now`, made once and recorded, under the scheduled read's lock.
 
     The lock is held for the whole pass in a transaction of its own, which is
     `brain.ops.schedule_store.take_the_lock`'s constraint, and the requests are read again inside
-    it, so two replicas that both saw a request make one test between them.
+    it, so two replicas that both saw a request make one test between them. The connectors
+    reviewed on this install are read first, as the scheduled read reads them (M11.7.8).
     """
+    await refresh(sessions)
     async with sessions() as held, held.begin():
         if not await take_the_lock(held, PROBE_LOCK):
             return ProbeRun(held_by_a_read=True)

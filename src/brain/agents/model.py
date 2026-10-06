@@ -81,7 +81,16 @@ since it was written. Inventing a request pipeline here to give these a caller w
 second pipeline for the real one to be reconciled with later, which is the shape
 `brain.ops.automation_piece` refused for the same reason.
 
-Task ids: M13.1.1, M13.1.2, M13.1.3
+**Where an agent answers is a third axis, and it is neither of the other two.** `channels` names
+the channels an administrator enabled it on (M13.7.4), and `brain.gate.roster.answer_roster` leaves
+an agent out of a request's roster when that request's channel is not among them, so a name for it
+finds what a name nobody created finds. It sits on the record rather than on `AgentAudience`
+because the audience is who, and the knowledge layer's predicate shape has no place for where;
+and not on `AgentAuthority` because switching a channel on reaches nothing a run could read.
+`max_turns` and `max_tool_calls` are stored here for the runtime that bounds a run (M13.7.2) and
+are decided nowhere in this module.
+
+Task ids: M13.1.1, M13.1.2, M13.1.3, M13.8.1, M13.7.4, M13.7.2
 """
 
 from __future__ import annotations
@@ -90,15 +99,16 @@ import enum
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Final
+from typing import Annotated, Final
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
 
 from brain.core.department import SLUG_PATTERN
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect
 from brain.core.scope import Scope
 from brain.gate.catalogue import AgentCeiling
+from brain.gate.context import Channel, TrafficClass, traffic_class_for
 from brain.knowledge.visibility import Visibility, scope_for
 from brain.models.registry import ModelPin
 from brain.models.routing import DEFAULT_TIER, TIER_LADDER, Tier
@@ -155,6 +165,71 @@ DEPARTMENT_CHARS: Final = 60
 
 #: An agent slug, bounded like every other slug in the shared namespace.
 AGENT_ID_CHARS: Final = 60
+
+#: Which channels an agent may be enabled on, and why the list is every channel but one.
+ASKING_CHANNELS_ARE_EVERY_ROUTE_TO_THE_ROSTER: Final = (
+    "An agent is enabled per channel, and a channel belongs on the list when a question arriving "
+    "on it reaches the roster an agent is selected from. Today that is every channel but the "
+    "scheduler. The console and a service account's key reach it through /answer, which names "
+    "them console and api; every chat channel with a receiver (Lark, WhatsApp, email, Telegram, "
+    "Slack, Teams and the company's own signed webhook) reaches it through the chat answerer, "
+    "which calls the same function; and the website widget is a person asking, so it is offered "
+    "now rather than becoming a channel no agent can be switched on for on the day it is wired. "
+    "The scheduler is the install's own housekeeping: the permission canary asks the answer lane "
+    "directly and never selects an agent, so a box for it would switch nothing on. The list is "
+    "derived from Channel and traffic_class_for rather than written out, so a new channel is "
+    "offered the day it is declared unless somebody calls it housekeeping."
+)
+
+#: The channels an agent may be enabled on, in `Channel`'s order. See
+#: `ASKING_CHANNELS_ARE_EVERY_ROUTE_TO_THE_ROSTER`.
+ASKING_CHANNELS: Final[tuple[str, ...]] = tuple(
+    channel.value for channel in Channel if traffic_class_for(channel) is not TrafficClass.SYSTEM
+)
+
+#: Why an agent enabled on no channel is a legal record and answers nowhere.
+AN_AGENT_ANSWERS_ONLY_ON_THE_CHANNELS_ENABLED_FOR_IT: Final = (
+    "An agent answers on the channels enabled for it and on no other (M13.7.4). Empty is legal "
+    "and means it answers nowhere, which is the direction a default has to fail in: a new agent "
+    "is switched on for a channel by somebody ticking it, never by a channel being added to the "
+    "product. An agent not enabled on a request's channel is left out of the roster that request "
+    "selects from, so naming it takes the path a name nobody created takes, and the person is "
+    "told the same words in the same shape."
+)
+
+#: The most turns a steward may allow one run. A run that needs more is looping, not working,
+#: and the bound exists so that a loop costs a known amount. NULL on the row is the product's
+#: default, which the runtime holds; this is only how high a steward may raise it.
+MAX_TURNS_CAP: Final = 50
+
+#: The most tool calls a steward may allow one run. At least one per turn, so a run allowed its
+#: every turn can call a tool on each, and at least a cached plan's length
+#: (`brain.gate.caches.MAX_PLAN_TOOLS`), so a plan this install would replay fits inside it.
+MAX_TOOL_CALLS_CAP: Final = 200
+
+
+def enabled_channels(value: object) -> tuple[str, ...]:
+    """Channel names as an agent stores them: sorted, without repeats, each one askable.
+
+    The one check, used by `AgentRecord` and by every request body that names channels, so the
+    list a console form may send and the list a record may hold cannot drift apart.
+    """
+    if isinstance(value, str) or not isinstance(value, Iterable):
+        msg = "channels is a list of channel names"
+        raise ValueError(msg)
+    names = {str(one) for one in value}
+    unknown = sorted(names - set(ASKING_CHANNELS))
+    if unknown:
+        msg = (
+            f"{unknown} cannot be enabled for an agent; an agent answers on {list(ASKING_CHANNELS)}"
+        )
+        raise ValueError(msg)
+    return tuple(sorted(names))
+
+
+#: A request field naming the channels a person ticked, checked by `enabled_channels`. A channel
+#: nothing can be asked on is a 422 with the list it may name, before any route code runs.
+EnabledChannels = Annotated[tuple[str, ...], BeforeValidator(enabled_channels)]
 
 
 class AgentError(Exception):
@@ -241,6 +316,12 @@ class AgentAuthority(BaseModel):
     #: for an agent somebody configured and is deliberately not what a canvas flow gets.
     required_tools: frozenset[str] = frozenset()
     max_side_effect: SideEffect = SideEffect.NONE
+    #: The connectors this agent is bound to, as its template names them. A capability on an
+    #: entity a connector provides is in the ceiling only when that connector is named here, so
+    #: an empty list reaches no connected source at all. Compiled by `entitlement_ceiling`
+    #: through `brain.agents.binding.bound_capabilities` and decided nowhere else. See
+    #: `brain.agents.binding.AN_AGENT_READS_ONLY_THE_SOURCES_IT_NAMES`.
+    connectors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -304,6 +385,32 @@ class AgentRecord(BaseModel):
     disabled_at: datetime | None = None
     #: Terminal. See `ARCHIVE_IS_TERMINAL` in `brain.agents.lifecycle`.
     archived_at: datetime | None = None
+    #: The channels this agent answers on (M13.7.4), sorted and without repeats. Reachability,
+    #: like the audience, and not authority: it decides where the agent may be asked, never what
+    #: a run reaches. Empty answers nowhere. See
+    #: `AN_AGENT_ANSWERS_ONLY_ON_THE_CHANNELS_ENABLED_FOR_IT`.
+    channels: tuple[str, ...] = ()
+    #: The most turns one run may take, or None for the product's default. Not authority either:
+    #: a bound on how long a run goes on says nothing about what it may reach.
+    max_turns: Annotated[int, Field(ge=1, le=MAX_TURNS_CAP)] | None = None
+    #: The most tool calls one run may make, or None for the product's default.
+    max_tool_calls: Annotated[int, Field(ge=1, le=MAX_TOOL_CALLS_CAP)] | None = None
+
+    @field_validator("channels", mode="before")
+    @classmethod
+    def _one_order(cls, v: object) -> tuple[str, ...]:
+        """Any collection of channel names, as one sorted tuple without repeats.
+
+        **A set is never dumped.** `brain.gate.roster.setup_of` hashes `model_dump`, and a set of
+        strings iterates in an order that changes from one process to the next, so one agent
+        would have a different cache key on every replica. Sorting here means every record built
+        from the same channels is the same value, whatever order they arrived in.
+
+        A channel nothing can be asked on is refused rather than dropped: kept, it is a box that
+        reads as ticked and switches nothing on; dropped, the steward's choice is edited without
+        their being told.
+        """
+        return enabled_channels(v)
 
     @field_validator("tier")
     @classmethod
@@ -431,6 +538,16 @@ def runnable_agent_ids(records: Iterable[AgentRecord], viewer: AgentViewer) -> f
     )
 
 
+def answering_on(record: AgentRecord, channels: Iterable[str]) -> AgentRecord:
+    """The record enabled on exactly these channels, validated again.
+
+    Rebuilt through the constructor rather than `model_copy`, which skips validation, so a channel
+    nothing can be asked on is refused here as it is on any other record.
+    """
+    fields = {name: getattr(record, name) for name in type(record).model_fields}
+    return AgentRecord.model_validate({**fields, "channels": tuple(channels)})
+
+
 # -------------------------------------------------------------- authority, and only authority
 def tool_ceiling(record: AgentRecord) -> AgentCeiling:
     """The tool ceiling, in the type `brain.gate.catalogue.project` already takes.
@@ -511,8 +628,16 @@ def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
     read verbs only, by `records_implied_by`, and bound to the same scope as everything else.
     They confer no column: `covers` never lets `read:client` stand in for
     `read:client.contract_value`. See `A_COLUMN_A_CEILING_NAMES_IS_ON_A_ROW_THE_CEILING_ADMITS`.
+
+    **A capability on a connector's entity is kept only when the agent names that connector**
+    (M13.8.1). The connector list is compiled here, on the right-hand side of the one
+    intersection, and nowhere else decides connector access. Imported here rather than at the
+    top because `brain.tables.agent` imports this module and the binding reads the shipped
+    connector declarations. See `brain.agents.binding.AN_AGENT_READS_ONLY_THE_SOURCES_IT_NAMES`.
     """
-    declared = record.authority.capabilities
+    from brain.agents.binding import bound_capabilities
+
+    declared = bound_capabilities(record.authority.capabilities, record.authority.connectors)
     return EntitlementSet(
         principal_id=f"{CEILING_PRINCIPAL_PREFIX}{record.agent_id}",
         grants=tuple(

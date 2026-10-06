@@ -6,8 +6,8 @@
 # 1. The settings files the files mount: ClickHouse's memory ceiling and the object store's
 #    provisioning script, copied from the image if they are not there, never overwritten (an
 #    install may have tuned them). `docs/install/coolify.md` step 3 is this, done by hand.
-# 2. The ledger's secrets, minted on this server from /dev/urandom the first time and kept in an
-#    environment file only root can read. They never leave the server and are never printed.
+# 2. The ledger's secrets and its project keys, minted on this server from /dev/urandom the first
+#    time and kept in an environment file only root can read. They never leave the server and are never printed.
 # 3. The object store's access file, written from those secrets every time, with one identity
 #    that may read, write and list the ledger's bucket and nothing else. Never the repository's
 #    placeholder identity: a placeholder key in a running store is a key anybody can read.
@@ -53,6 +53,13 @@ mint LANGFUSE_S3_SECRET_ACCESS_KEY 32
 mint LANGFUSE_NEXTAUTH_SECRET 32
 mint LANGFUSE_SALT 32
 mint LANGFUSE_ENCRYPTION_KEY 32
+# The ledger's project keys, in the shapes the ledger gives its own: its first start creates the
+# project with them (langfuse.attach.yml), and langfuse.hand.sh gives them to the application,
+# which keeps them in the vault (brain.ops.ledger_export).
+grep -q "^LANGFUSE_INIT_PROJECT_PUBLIC_KEY=." "$ENV_FILE" ||
+  printf 'LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-%s\n' "$(hex 16)" >> "$ENV_FILE"
+grep -q "^LANGFUSE_INIT_PROJECT_SECRET_KEY=." "$ENV_FILE" ||
+  printf 'LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-%s\n' "$(hex 32)" >> "$ENV_FILE"
 # Not a secret: the address the ledger's own console calls itself. It is reached over the
 # server's network only, so the default names the service; an install that gives it an address
 # of its own writes that here and it is kept.

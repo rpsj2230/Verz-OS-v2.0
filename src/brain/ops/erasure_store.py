@@ -55,6 +55,16 @@ implementation over a real backend plugs into. The answer cache has no delete by
 not reached. **Every erasure is therefore incomplete today**, and the queue says so with the stores
 named, which is the honest state rather than a defect in the queue.
 
+**A person's session memory is deleted with their memories, from keys named and never matched.**
+Session memory lives in Valkey under `brain.memory.formation.session_key(thread, person)`, one key
+per conversation (M16.1.1). The person's conversation ids are read inside the request's transaction
+before anything is erased, because the conversation store is erased before the memory store and the
+ids go with it, and `SessionMemoryEraser` deletes exactly the keys those ids name, as part of the
+memory store's removal. No pattern, no scan: a key this run did not build from the person and one
+of their conversations is never touched. A process with no cache configured holds no session
+memory, so there is nothing to reach. See
+`AN_ERASED_PERSONS_SESSION_MEMORY_IS_DELETED_NOT_LEFT_TO_EXPIRE`.
+
 **A legal hold wins, judged when the request is carried out.** The holds are read inside the drain's
 own transaction by `brain.ops.retention_store.active_holds`, and a held request is finished as held
 with the holds that stopped it and nothing touched. It is not left waiting: a hold can stand for
@@ -98,10 +108,10 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, cast, runtime_checkable
 
 import psycopg
 from psycopg import sql
@@ -110,6 +120,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.memory.formation import session_key
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.ops.erasure import (
     Deletion,
@@ -247,6 +258,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # `0067` grants no way for a row to leave, so an erasure keeps these and reports them kept.
         "agent.automation_run": "principal_id",
         "agent.browser_envelope": "asked_by",
+        # An action an agent took or simulated, for the person it ran for (`0195`). `0195` grants
+        # no way for a row to leave, so an erasure keeps these and reports them kept.
+        "agent.supervised_action": "principal_id",
         # A draft of an agent, for the person who started it (`0149`), as `agent.agent` is its
         # owner's. `0149` grants no way for a row to leave, so an erasure keeps these and reports
         # them kept, and the ledger entries each row appended were never the erasure's to reach.
@@ -283,10 +297,20 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
         # when it would leave fewer than two Super Admins, so an erasure cannot lock the install.
         "gate.role_grant": "principal_id",
+        # A person proposed for a role (`0208`). The table grants no DELETE and has no retirement,
+        # because the row is the record of who proposed whom and who decided, so an erasure keeps
+        # these and reports them kept.
+        "gate.role_nomination": "principal_id",
         "gate.suspension": "principal_id",
         "gate.team_membership": "principal_id",
         "know.chunk": "owner_id",
         "know.item": "owner_id",
+        # What a person said the right answer is, and each correction that said it (`0198`). Like a
+        # captured solution, `0198` grants no way for a row to leave, so an erasure keeps these and
+        # reports them kept; an approved one is a passage of a document by then, which is the
+        # document's.
+        "know.candidate_evidence": "principal_id",
+        "know.learning_candidate": "raised_by",
         # A solution a person captured, in their words, and a task addressed to a person (`0120`).
         # `0120` grants no way for a row to leave, so an erasure keeps these and reports them kept.
         "know.solution": "captured_by",
@@ -297,6 +321,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # them kept.
         "mem.mark": "principal_id",
         "mem.persistent": "principal_id",
+        # What was noticed about an answer the person was given, naming the message by id and never
+        # a word (`0197`). `0197` grants no way for a row to leave, so an erasure keeps these and
+        # reports them kept, as it does a mark.
+        "mem.signal": "principal_id",
         "obs.request_telemetry": "principal",
         # A budget's subject is a person, a department or an agent; only a person's id matches.
         "ops.budget_version": "subject",
@@ -304,7 +332,11 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # person it is asked as; `0097` grants no way for a row to leave, so an erasure keeps these
         # and reports them kept, and a question asked as nobody is refused by the resolver.
         "ops.golden_question": "asked_as",
-        # A consent a person started at a vendor (`0180`), theirs whatever its kind. Removed on
+        # One finished agent run, for the person it ran for (`0188`): counts and names from closed
+        # lists and nothing the run read. `0188` grants no way for a row to leave, so an erasure
+        # keeps these and reports them kept, as it does a question asked.
+        "ops.agent_run": "principal_id",
+        # A consent a person started at a vendor (`0202`), theirs whatever its kind. Removed on
         # erasure although the application may never delete one: see `REMOVED`. The refresh
         # token a person's own consent bought is in the vault: `erase_own_refresh_tokens`.
         "ops.oauth_consent": "principal_id",
@@ -348,6 +380,18 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
         "agent.manifest_act": Through(
             parent="agent.manifest_draft", key="draft_id", parent_key="id"
         ),
+        # A supersession or an archive is the person's an artifact was produced for, through the
+        # artifact (`0194`): the person who changed it is an actor, not an owner. `0194` grants no
+        # way for a row to leave, so an erasure keeps these and reports them kept, as it keeps the
+        # artifact.
+        "agent.artifact_change": Through(
+            parent="agent.artifact", key="artifact_id", parent_key="artifact_id"
+        ),
+        # A verdict on an action is the person's the action ran for, through the action (`0195`):
+        # the reviewer is an actor, not an owner. Kept, as the action is.
+        "agent.action_verdict": Through(
+            parent="agent.supervised_action", key="action_digest", parent_key="action_digest"
+        ),
         # A request's handled mark is the asker's through the request it marks (`0146`): the owner
         # who marked it is an actor, not an owner. `0146` grants no way for a row to leave, so an
         # erasure keeps these and reports them kept, as it keeps the request.
@@ -374,6 +418,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "know.classified_row",
         # A provider's call and probe outcomes, per deployment: about a provider, not a person.
         "ops.provider_health",
+        # An API's connector as submitted and reviewed (`0203`): about an API, and the people named
+        # are who submitted and who reviewed it, actors and not owners.
+        "ops.custom_connector",
         # A question that fell past its tier's primary: a trace id, tier and depth, no person.
         "ops.chain_depth_alert",
         # Which regions a scope's questions may go to; its author is an actor, not an owner.
@@ -384,6 +431,18 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # Every pause, resume, schedule change, removal and adoption (`0145`): the person who made
         # it is an actor, and an adopter is the automation's new owner, never a subject of it.
         "agent.automation_change",
+        # A rung moved and a supervision pin reviewed (`0195`): the changer, the approvers and the
+        # reviewer are actors, and each row is about an agent's leash, never about a person.
+        "agent.leash_change",
+        "agent.supervision_pin",
+        # A tool attached to an agent or detached (`0196`): the person who pressed is an actor,
+        # and the row is about an agent's tools, never about a person.
+        "agent.tool_attachment",
+        # An agent installed into a group chat (`0205`): who installed and removed it are actors,
+        # and the row is about an agent and a conversation, never about a person.
+        "agent.group_install",
+        # A group chat the bot is in (`0205`): the vendor's conversation and its name, nobody's.
+        "ops.channel_room",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).
@@ -391,8 +450,16 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A version retired or reinstated, and a skill taken off an agent (`0139`): `set_by` and
         # `detached_by` are actors, not owners, and each row is about a skill and an agent.
         "agent.skill_detachment",
+        # An approved skill version taken as a file, and a rehearsal of its examples (`0191`):
+        # `exported_by` and `rehearsed_by` are actors, and each row is about a skill version and
+        # an agent's reach to its tools, never about a person.
+        "agent.skill_export",
+        "agent.skill_rehearsal",
         "agent.skill_retirement",
         "agent.skill_review",
+        # The bytes of a script a stored skill version carries (`0178`): about a skill, never a
+        # person.
+        "agent.skill_script",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.
         "agent.tool_definition",
@@ -404,6 +471,16 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "er.canonical",
         "er.identifier",
         "er.link",
+        # A merge and the unmerge reversing it (`0183`): `decided_by` and `performed_by` are actors,
+        # not owners, and each row is about two canonical entities, which hold no person's fields.
+        "er.merge",
+        "er.unmerge",
+        # A record's comparison keys, a blocked join key, and a pair waiting for a reviewer
+        # (`0182`, `0184`): digests, name keys and two source references, whose fields are the
+        # source record's and are erased with it there. `blocked_by` and `decided_by` are actors.
+        "er.observation",
+        "er.blocked_value",
+        "er.review_item",
         # Which directory group confers which role (`0109`): `created_by` is an actor, not an owner.
         "auth.group_role_rule",
         "gate.capability_pack",
@@ -414,6 +491,12 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "gate.department",
         "gate.fast_path_rule",
         "gate.field_policy",
+        # A learned fast-lane rule and the questions it would have used (`0206`): a rule's words
+        # are configuration, its proposer and promoters are actors and not owners, and an
+        # occurrence names a conversation and a day and never a person, so it says nothing once
+        # the conversation it names is erased.
+        "mem.learned_rule",
+        "mem.rule_occurrence",
         "gate.policy_epoch",
         "gate.scope",
         "gate.team",
@@ -451,6 +534,13 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A source's steward names the person who answers for it, an actor and not an owner, and
         # the source itself is nobody's (`0167`), as `ops.connector_connection`'s actors are.
         "ops.connector_steward",
+        # A retrieval keeps which retrievers ran, three counts, the places followed and a duration:
+        # `0193` keeps no document, no question and no principal, so nothing in it is anybody's.
+        "ops.retrieval_event",
+        # A budget stop keeps a ceiling's key, a period and an enforcement flag, with the ids of the
+        # request that found it used up and of the people told: actors, and a stop is the budget's
+        # period rather than anybody's record (`0211`).
+        "ops.budget_stop",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",
@@ -466,6 +556,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.webhook_change",
         "ops.webhook_subscriber",
         "proj.record",
+        # A retired projected row keeps what `proj.record` kept, pointers and no principal, and a
+        # source's epoch is its name and a count: `0179` keeps no principal in either.
+        "proj.record_retired",
+        "proj.source_epoch",
         # A channel's record names the administrator who last switched it, an actor and not an
         # owner, and a delivery keeps a channel, an outcome and a reason and never a sender or a
         # message (`0114`), so neither is anybody's.
@@ -777,18 +871,76 @@ def _identifier(table: str) -> sql.Identifier:
     return sql.Identifier(schema, name)
 
 
+#: Why an erasure deletes session memory rather than letting it expire.
+AN_ERASED_PERSONS_SESSION_MEMORY_IS_DELETED_NOT_LEFT_TO_EXPIRE: Final = (
+    "A conversation that is retired leaves its session memory unreachable until it expires, "
+    "because nothing reads it except through a live conversation. An erasure request is a "
+    "promise that the person's data is gone, so the keys of every conversation they had are "
+    "deleted with their memories, named one by one from the conversation ids read before the "
+    "conversations are erased, and never found by a pattern."
+)
+
+
+class SessionKeys(Protocol):
+    """The two Valkey commands an erasure of session memory uses. `redis.Redis` satisfies it.
+
+    A protocol of its own rather than a widening of `brain.cache.ValkeyClient`, which has no
+    delete by design: only the erasure drain holds a client with one, and only named keys reach it.
+    """
+
+    def exists(self, *names: str) -> int: ...
+    def delete(self, *names: str) -> int: ...
+
+
+@dataclass(frozen=True)
+class SessionMemoryEraser:
+    """One person's session memory, one key per conversation id read before the run. See
+    `AN_ERASED_PERSONS_SESSION_MEMORY_IS_DELETED_NOT_LEFT_TO_EXPIRE`."""
+
+    client: SessionKeys
+    #: The person's conversation ids, read in the request's own transaction before any store.
+    threads: tuple[str, ...]
+
+    def _keys(self, subject_id: str) -> tuple[str, ...]:
+        return tuple(session_key(thread, subject_id) for thread in self.threads)
+
+    def count_for(self, subject_id: str) -> int:
+        keys = self._keys(subject_id)
+        return int(self.client.exists(*keys)) if keys else 0
+
+    def erase(self, subject_id: str) -> int:
+        keys = self._keys(subject_id)
+        return int(self.client.delete(*keys)) if keys else 0
+
+
+def conversations_of(conn: psycopg.Connection[Any], subject_id: str) -> tuple[str, ...]:
+    """Every conversation id the person has, retired ones included, as the owner reads them."""
+    rows = conn.execute(
+        "SELECT id FROM chat.conversation WHERE principal_id = %s", (subject_id,)
+    ).fetchall()
+    return tuple(str(row[0]) for row in rows)
+
+
 class EstateEraser:
     """The eraser the queue runs: each store to the executor that can reach it, the rest refused.
 
     `objects` is the seam for the object store. Handed none, which is every install on this
     commit, recordings and attachments are refused with `NO_OBJECT_STORE_ERASER`; an
     implementation over a real `brain.ops.storage.StorageBackend` is passed here and nothing else
-    changes. See the module docstring.
+    changes. See the module docstring. `sessions` is the person's session memory, deleted as part
+    of the memory store; handed none, a process with no cache has none to delete.
     """
 
-    def __init__(self, postgres: PostgresEraser, *, objects: StoreEraser | None = None) -> None:
+    def __init__(
+        self,
+        postgres: PostgresEraser,
+        *,
+        objects: StoreEraser | None = None,
+        sessions: SessionMemoryEraser | None = None,
+    ) -> None:
         self.postgres = postgres
         self.objects = objects
+        self.sessions = sessions
 
     def _executor(self, store: Store) -> StoreEraser:
         facts = facts_for(store)
@@ -803,10 +955,17 @@ class EstateEraser:
         raise ErasureError(NO_INDEX_ERASER)
 
     def count_for(self, store: Store, subject_id: str) -> int:
-        return self._executor(store).count_for(store, subject_id)
+        counted = self._executor(store).count_for(store, subject_id)
+        if store is Store.MEMORY and self.sessions is not None:
+            counted += self.sessions.count_for(subject_id)
+        return counted
 
     def erase(self, store: Store, subject_id: str) -> StoreRemoval:
-        return self._executor(store).erase(store, subject_id)
+        removal = self._executor(store).erase(store, subject_id)
+        if store is Store.MEMORY and self.sessions is not None:
+            gone = self.sessions.erase(subject_id)
+            removal = replace(removal, removed=removal.removed + gone)
+        return removal
 
 
 # ------------------------------------------------------- a person's own refresh tokens (M11.8.6)
@@ -895,6 +1054,7 @@ def drain_erasure_queue(
     objects: StoreEraser | None = None,
     own_tokens: RemovesSlots | None = None,
     consented: Sequence[str] | None = None,
+    sessions: SessionKeys | None = None,
 ) -> str:
     """Carry out the oldest open requests filed by `now`, one transaction each, as report lines.
 
@@ -942,9 +1102,15 @@ def drain_erasure_queue(
             _set(conn, ACTOR_SETTING, ERASURE_QUEUE_ACTOR)
             _set(conn, TRACE_ID_SETTING, f"erasure.{request_id}")
             holds = active_holds(conn, now)
+            # Read before any store is erased: the conversations go before the memories do.
+            remembered = (
+                None
+                if sessions is None
+                else SessionMemoryEraser(sessions, conversations_of(conn, subject_id))
+            )
             try:
                 deletion = carry_out(
-                    EstateEraser(PostgresEraser(conn), objects=objects),
+                    EstateEraser(PostgresEraser(conn), objects=objects, sessions=remembered),
                     subject_id=subject_id,
                     requested_at=requested_at,
                     completed_at=now,
@@ -1109,3 +1275,12 @@ class StoredErasures:
                 .all()
             )
             return tuple(record_from(row) for row in rows)
+
+
+def session_keys_for(url: str) -> SessionKeys:
+    """The erasure drain's client for session memory: `brain.cache.make_client`, bounded as every
+    cache client is. The cast is at a library boundary: `redis.Redis` has `exists` and `delete`
+    and `make_client` returns the narrower protocol, so proving the match buys nothing."""
+    from brain.cache import make_client
+
+    return cast(SessionKeys, make_client(url))

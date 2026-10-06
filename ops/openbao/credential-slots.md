@@ -215,6 +215,7 @@ is the catalogue, and a test holds this table to it):
 | `connector_keys/cloudflare` | cloudflare | Zone Read; DNS Read; Analytics Read | DNS Write; any Edit permission; the Global API Key |
 | `connector_keys/cloudflare_dns_changes` | cloudflare_dns_changes | DNS Edit | Zone Edit; any Account permission; the Global API Key |
 | `connector_keys/freshdesk` | freshdesk | an agent API key with read access | an admin key, which can change SLAs and delete tickets |
+| `connector_keys/freshdesk_ticket_replies` | freshdesk_ticket_replies | an agent API key whose role may reply to tickets | an admin key, which can delete tickets and change SLAs |
 | `connector_keys/google_analytics` | google_analytics | analytics.readonly; Viewer on the one property | analytics.edit; domain-wide delegation |
 | `connector_keys/google_drive` | google_drive | Viewer on the one folder shared with it | domain-wide delegation |
 | `connector_keys/google_workspace` | google_workspace | the client secret of a Web application OAuth client; gmail.readonly, calendar.readonly, drive.readonly, only for the services chosen; a consent given by each person at Google for their own account | any scope that writes or sends; domain-wide delegation of a service account |
@@ -321,6 +322,47 @@ a key that somebody holding a root token deleted. The application never fills it
 key minted after a deletion is a replacement by another route, and every version signed with the
 old key would stop installing. Deciding what to do is an operator's with the recovery key: the
 old key's versions are lost to installs either way.
+
+## The join-key pepper
+
+Entity resolution compares records from different sources on their identifiers, a registration
+number, a tax id, a domain, and stores each one only as an HMAC keyed with this install's own pepper
+(`brain.resolution.canonical.identifier_hash`), so the digests in `er.identifier` cannot be reversed
+by hashing a list of guesses. The worker hashes when it registers source records and the application
+hashes a value an administrator enters to block it, so both read the pepper, each with its own
+token, through one reader (`brain.ops.join_key_pepper.read_pepper`). Nobody supplies it: the
+application makes 32 random bytes on the server and creates the slot the first time it starts and
+finds it empty, and the installer's step `keep this install's join-key pepper` runs the same command
+in the application container, so a fresh install that could not create it fails out loud.
+
+| Slot | Holds | Written by | Deliberately NOT |
+|---|---|---|---|
+| `resolution/pepper` | one field, `value`: 64 lowercase hexadecimal characters | the application, once, when the slot has never held a version | update, delete, destroy or metadata for anybody but an operator holding a root token; any write for the worker |
+
+**It is written once and never written over, for the template signing key's three reasons.** The
+application's policy grants `create` and `read` on `resolution/data/pepper` and nothing else under
+the engine, the one write carries kv's check-and-set at version 0, and `OpenBaoVault.write_static_kv`
+refuses the prefix. The worker's policy grants `read` on the same path and nothing else.
+
+**There is no rotation, and that is the design.** A digest made under one pepper matches nothing made
+under another, so a new pepper does not make the stored digests safer: it unjoins them, silently, and
+every record registered before stops matching every record registered after. Changing it is a
+re-registration of every source record under the new value, planned as a migration, never a setting.
+
+**Why the release's vault script does not create it.** `apply-release.sh` enables the `resolution`
+engine on every release, and creates nothing in it: it runs under the deploy token, which writes no
+secret value and may not load a change to its own policy, so granting it this slot would hold back
+every release on every install already running until somebody made a root token. The application's
+policy is one the deploy token does load, which is how an install made before this engine existed
+gets its pepper on its next start with nobody at the server.
+
+**The pepper never leaves the vault except into the memory of the process that hashes with it.** No
+log line, exception, response or console page carries it, whole or in part, or says how long it is.
+
+**If the application says "Join-key pepper: not used" or "removed"**, the slot holds a value this
+product did not make, or held a pepper that somebody holding a root token deleted. Nothing here
+fills it again, because that would be a rotation by another route. Deciding what to do is an
+operator's with the recovery key, and every choice is a re-registration of every source record.
 
 ## Three things worth deciding before the keys are issued, not after
 

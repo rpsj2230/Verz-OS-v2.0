@@ -43,7 +43,7 @@ credential in memory readable by anything that can read the process.
 
 **The verifier is kept sealed under the state, and the state is never kept.** Between the console
 sending the person and the vendor answering, the install has to hold the verifier somewhere, and
-`ops.oauth_consent` (`0180`) is that place. Its row holds a digest of the state, to find the row
+`ops.oauth_consent` (`0202`) is that place. Its row holds a digest of the state, to find the row
 by, and the verifier sealed with AES-GCM under a key derived from the state. The state itself
 travels only through the person's browser and the vendor, so a copy of the table, or a reader of
 it, holds verifiers nobody can open, and PKCE's protection survives a leaked row. See

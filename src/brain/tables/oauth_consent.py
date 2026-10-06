@@ -1,6 +1,6 @@
 """`ops.oauth_consent`: a consent started at a vendor, held until the vendor answers it, once.
 
-`migrations/versions/0180_oauth_consent.py` holds the argument for the table, its policies and its
+`migrations/versions/0202_oauth_consent.py` holds the argument for the table, its policies and its
 grants; what is here is the model that mirrors it.
 
 **One change is ever made to a row: `used_at` is set, once, by the person who started it.** The
@@ -40,10 +40,10 @@ from brain.tables.identity import PRINCIPAL_ID_CHARS
 #: A state's digest: SHA-256, in hex.
 DIGEST_PATTERN: Final = r"^[0-9a-f]{64}$"
 
-#: The widest consent kind, as `0180` makes the column.
+#: The widest consent kind, as `0202` makes the column.
 KIND_CHARS: Final = 16
 
-#: The check `0180` puts on the kind: one of `ConsentKind`'s values.
+#: The check `0202` puts on the kind: one of `ConsentKind`'s values.
 KIND_CHECK: Final = "kind IN (" + ", ".join(f"'{one.value}'" for one in ConsentKind) + ")"
 
 #: The longest sealed verifier: a 12-byte nonce, a 128-character verifier and a 16-byte tag, in

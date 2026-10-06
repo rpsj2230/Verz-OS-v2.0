@@ -7,9 +7,10 @@ Both were right that a list invented in a rendering layer would disagree with th
 first time one was added. **Since 2026-09-28 the list is not written here at all: each connector
 declares its own console form, or the sentence saying why it has none, as `CONNECTOR` in its own
 module, and `CONNECTABLE` and `NOT_FROM_THE_CONSOLE` are read off
-`brain.connectors.declaration.shipped` when this module is imported, which is at start-up.** So
-the two lists are total over the shipped connectors by construction, and a connector joins the
-Connectors screen by declaring itself, with no edit here.
+`brain.ops.connector_catalogue.declarations`: the shipped connectors, and since M11.7.8 the ones a
+second person reviewed on this install, recomputed whenever that reviewed set changes.** So the two
+lists are total over the declarations by construction, and a connector joins the Connectors screen
+by declaring itself, or by being approved, with no edit here.
 
 **A source is connectable from the console when its manifest is built from settings a person can
 type and a credential in the shape its vendor issues it**, and this install can read it (below).
@@ -54,37 +55,44 @@ Rejected: a `ConnectorRegistry` built from these at start. The registry is a run
 somebody installed; this is the product's list of what could be, and a registry holding every
 connectable source would read on the screen as every source connected.
 
-Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7, M11.8.6
+**A source whose connector is custom code is offered only where the install runs a sandbox for
+it (M11.1.5).** Its form and its reading are not enough: the code runs only through the sandbox
+runner `brain.ops.custom_code_run.installed_runner` names, which no install has until the sandbox
+service runs, and with none the source is listed as not connectable yet and never offered.
+
+Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7, M11.1.5, M11.8.6, M11.7.8
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import (
     DEFAULT_SETTING_CHARS,
+    CodeReading,
     ConnectorDeclaration,
     CredentialShape,
     Setting,
     SettingRefusedError,
     WriteGrant,
-    shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.oauth import ConsentKind, OAuthConsent
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
+from brain.ops.connector_catalogue import Derived
 from brain.ops.credentials import (
     connector_key_slot,
     connector_oauth_slot,
     connector_person_oauth_slot,
 )
+from brain.ops.custom_code_run import installed_runner
 from brain.ops.limits import connector_ceiling
 from brain.ops.secrets import SecretRef, VaultRole
+from brain.tools.run_skill import ScriptRunner
 
 # ------------------------------------------------------------ written-down reasons
 
@@ -180,14 +188,18 @@ class NotConnectableError(Exception):
 
 
 # ------------------------------------------------------------------------ the sources
-def reads(declaration: ConnectorDeclaration) -> bool:
+def reads(declaration: ConnectorDeclaration, *, runner: ScriptRunner | None = None) -> bool:
     """Whether this install can read the source: a reading, a live lookup, or each person's own
     consent read live for their question, and a ceiling.
 
     A source each person consents to has no reading and no lookup by design (M11.7.6): nothing
     reads it with nobody present, and its question reads it as passages with the asker's own
-    token. See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`.
+    token. See `A_SOURCE_THE_CONSOLE_OFFERS_IS_ONE_THIS_INSTALL_READS`. A source whose connector is
+    custom code is read only in the sandbox `runner` is, so with none it is not read here
+    (`brain.connectors.custom_code.A_CUSTOM_SOURCE_WITH_NO_RUNNER_IS_NOT_READ`).
     """
+    if isinstance(declaration.reading, CodeReading) and runner is None:
+        return False
     personal = declaration.oauth is not None and declaration.oauth.kind is ConsentKind.PERSON
     has_a_way = declaration.reading is not None or declaration.live is not None or personal
     return has_a_way and connector_ceiling(declaration.name) is not None
@@ -204,18 +216,20 @@ def answers(declaration: ConnectorDeclaration) -> bool:
 
 def offered(
     declarations: Mapping[str, ConnectorDeclaration],
+    *,
+    runner: ScriptRunner | None = None,
 ) -> tuple[dict[str, Connectable], dict[str, NotConnectable]]:
     """The sources the console offers, and the ones it lists with the reason it does not.
 
     A declaration with a form that this install cannot read is listed with
     `THIS_INSTALL_CANNOT_READ_IT_YET` and no steps, since its steps end in the form it is not
-    offered.
+    offered. `runner` is the install's sandbox runner, which only a custom-code source needs.
     """
     forms = declared_forms(declarations)
     offers = {
         name: form
         for name, form in forms.items()
-        if reads(declarations[name]) and answers(declarations[name])
+        if reads(declarations[name], runner=runner) and answers(declarations[name])
     }
     listed: dict[str, NotConnectable] = {}
     for name, one in declarations.items():
@@ -251,16 +265,19 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
     }
 
 
-_OFFERED, _LISTED = offered(shipped())
+#: Every console form this install declares, offered or not. See `declared_forms`.
+DECLARED_FORMS: Final[Mapping[str, Connectable]] = Derived(declared_forms)
 
-#: Every console form this build declares, offered or not. See `declared_forms`.
-DECLARED_FORMS: Final[Mapping[str, Connectable]] = MappingProxyType(declared_forms(shipped()))
+#: Every source the console can connect, by name, read off `brain.ops.connector_catalogue`'s
+#: declarations: the shipped ones, and the ones reviewed on this install (M11.7.8).
+CONNECTABLE: Final[Mapping[str, Connectable]] = Derived(
+    lambda found: offered(found, runner=installed_runner())[0]
+)
 
-#: Every source the console can connect, by name, read off the shipped declarations at start-up.
-CONNECTABLE: Final[Mapping[str, Connectable]] = MappingProxyType(_OFFERED)
-
-#: Every source this build has a connector for and the console cannot connect, and why.
-NOT_FROM_THE_CONSOLE: Final[Mapping[str, NotConnectable]] = MappingProxyType(_LISTED)
+#: Every source this install has a connector for and the console cannot connect, and why.
+NOT_FROM_THE_CONSOLE: Final[Mapping[str, NotConnectable]] = Derived(
+    lambda found: offered(found, runner=installed_runner())[1]
+)
 
 
 # ------------------------------------------------------------------------ the decisions

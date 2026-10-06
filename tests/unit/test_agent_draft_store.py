@@ -26,7 +26,7 @@ from typing import Any
 import httpx
 import psycopg
 import pytest
-from sqlalchemy.schema import CreateIndex, CreateTable
+from sqlalchemy.schema import CreateIndex
 
 from brain.agent_builder_routes import (
     APPROVE_PATH,
@@ -46,6 +46,7 @@ from brain.identity.principal_store import PRINCIPAL_SETTING
 from brain.session import make_session_factory
 from brain.tables import manifest_draft as tables
 from brain.tables.identity import PRINCIPAL_ID_CHARS, one_of
+from tests.fixtures.amended_tables import created_ddl
 from tests.fixtures.console_http import gate_wiring, headers
 from tests.fixtures.retirable import has_pgvector, retirable
 from tests.fixtures.scratch_postgres import migrate, run, sql
@@ -71,7 +72,9 @@ def test_the_migration_builds_the_three_tables_exactly_as_the_models_declare_the
     emitted = squash(rendered("upgrade", MIGRATION))
     for name in TABLE_NAMES:
         table = metadata.tables[name]
-        assert squash(str(CreateTable(table).compile(dialect=DIALECT))) in emitted
+        # As `0149` built it: a column a later migration added (`0189`'s act channels) is held by
+        # that migration's own test, per `tests/fixtures/amended_tables.py`.
+        assert squash(created_ddl(table, DIALECT)) in emitted
         for index in table.indexes:
             assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in emitted
 
@@ -171,8 +174,9 @@ def test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on
     None
 ):
     """Start, save, check, ask, approve: the agent's three rows exist, disabled, owned by its
-    author; the acts are four rows naming who did each; and the ledger holds one `publish` entry
-    per step about the agent, naming the same people, with the chain verifying.
+    author and switched on for the channel its author ticked, which the request carried to the
+    approval (M13.7.4); the acts are four rows naming who did each; and the ledger holds one
+    `publish` entry per step about the agent, naming the same people, with the chain verifying.
 
     Delete this and any step can stop reaching its table or the ledger while the route tests over
     memory stay green. **Skips without a server.**"""
@@ -194,7 +198,10 @@ def test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on
             )
             assert check.json()["passed"] is True, check.text
             asked = await post(
-                client, "u_admin", PUBLISH_PATH.format(draft_id=draft_id), {"revision": revision}
+                client,
+                "u_admin",
+                PUBLISH_PATH.format(draft_id=draft_id),
+                {"revision": revision, "channels": ["lark"]},
             )
             assert asked.status_code == 202, asked.text
             approved = await post(
@@ -207,10 +214,10 @@ def test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on
 
         assert sql(
             url,
-            "SELECT disabled_at IS NOT NULL, owner_id, created_by, capabilities"
+            "SELECT disabled_at IS NOT NULL, owner_id, created_by, capabilities, channels"
             " FROM agent.agent WHERE id = %s",
             agent_id,
-        ) == [(True, "u_admin", "u_admin", ["read:invoice.reference"])]
+        ) == [(True, "u_admin", "u_admin", ["read:invoice.reference"], ["lark"])]
         assert sql(
             url,
             "SELECT template_id, template_version FROM agent.template_instance WHERE id = %s",
@@ -218,13 +225,14 @@ def test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on
         ) == [(agent_id, 1)]
         assert sql(
             url,
-            "SELECT act, actor_id FROM agent.manifest_act WHERE draft_id = %s ORDER BY at, act",
+            "SELECT act, actor_id, channels FROM agent.manifest_act WHERE draft_id = %s"
+            " ORDER BY at, act",
             uuid.UUID(draft_id),
         ) == [
-            ("checked", "u_admin"),
-            ("requested", "u_admin"),
-            ("approved", "u_prefix"),
-            ("published", "u_prefix"),
+            ("checked", "u_admin", []),
+            ("requested", "u_admin", ["lark"]),
+            ("approved", "u_prefix", []),
+            ("published", "u_prefix", ["lark"]),
         ]
         assert revision == 2
         steps = publishes(url, f"agent:{agent_id}")

@@ -368,7 +368,18 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                     Page(label="Memory", to="/memory", key="memory"),
                 ),
             ),
-            _one("Fields and records", "/classification"),
+            # Part 2.2's D4 module holds `er.*` and "review merges", so the pairs waiting for a
+            # person to say whether two records are one are a tab of it rather than an entry.
+            Entry(
+                label="Fields and records",
+                pages=(
+                    Page(label="Fields", to="/classification"),
+                    Page(label="Possible duplicates", to="/duplicates"),
+                    # The fast-lane rules over a department's tables are written under the grants
+                    # its fields are changed under (`brain.rule_routes`), so they sit beside them.
+                    Page(label="Quick answers", to="/rules"),
+                ),
+            ),
             _one("Artifacts", "/artifacts", "artifacts"),
         ),
     ),
@@ -396,6 +407,7 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                 label="Logs and errors",
                 pages=(Page(label="Logs", to="/logs"), Page(label="Errors", to="/errors")),
             ),
+            _one("Incidents", "/incidents", "incidents"),
         ),
     ),
     Section(

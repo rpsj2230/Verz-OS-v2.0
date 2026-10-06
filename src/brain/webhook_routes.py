@@ -51,6 +51,7 @@ Task ids: M27.8.12
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime
 from typing import Final
 
@@ -74,7 +75,9 @@ from brain.ops.webhook_admin import (
     MINIMUM_SIGNING_SECRET_CHARS,
     REGISTERING_A_SUBSCRIBER,
     REPLACING_A_SIGNING_KEY,
+    REPLAYING_A_DELIVERY,
     SWITCHING_A_SUBSCRIBER_OFF,
+    SWITCHING_A_SUBSCRIBER_ON,
     TOLD,
     Field,
     FieldProblem,
@@ -91,8 +94,11 @@ from brain.ops.webhook_admin import (
 )
 from brain.ops.webhook_delivery import NO_VAULT_ON_THIS_WORKER
 from brain.ops.webhook_store import (
+    REPLAY_HANDLE_CHARS,
     DispatcherLine,
     NoActiveSubscriberError,
+    NoSwitchedOffSubscriberError,
+    NothingToReplayError,
     Registered,
     StoredWebhooks,
     SubscriberTakenError,
@@ -120,6 +126,14 @@ REGISTERED: Final = (
 )
 REPLACED: Final = "The new signing secret is held in the vault and signs every request from now on."
 SWITCHED_OFF: Final = "The subscriber is switched off. It is told nothing more."
+SWITCHED_ON: Final = (
+    "The subscriber is switched back on with the signing secret it already had, and is told "
+    "about what happens from now on. Nothing that happened while it was off is sent to it."
+)
+REPLAYED: Final = (
+    "The delivery will be sent once more within a minute. If the subscriber refuses it again, "
+    "it is given up again, and it cannot be replayed a second time."
+)
 
 #: The component that runs the dispatch. `brain.ops.worker.DEFAULT_WORKER_COMPONENT` is the general
 #: worker, the one container that ticks the schedule, and a test holds the two equal; it is not
@@ -150,6 +164,11 @@ WEBHOOKS_PATH: Final = "/webhooks"
 SUBSCRIBERS_PATH: Final = f"{WEBHOOKS_PATH}/subscribers"
 SECRET_PATH: Final = f"{SUBSCRIBERS_PATH}/{{subscriber_id}}/secret"
 SWITCH_OFF_PATH: Final = f"{SUBSCRIBERS_PATH}/{{subscriber_id}}/switch-off"
+SWITCH_ON_PATH: Final = f"{SUBSCRIBERS_PATH}/{{subscriber_id}}/switch-on"
+REPLAY_PATH: Final = f"{SUBSCRIBERS_PATH}/{{subscriber_id}}/deliveries/{{handle}}/replay"
+
+#: The shape of a replay name, judged before anything is read.
+REPLAY_HANDLE: Final = re.compile(rf"[0-9a-f]{{{REPLAY_HANDLE_CHARS}}}")
 
 #: The status a write that kept nothing answers, by what the vault's state was.
 NOT_KEPT_STATUS: Final = {
@@ -173,6 +192,9 @@ class DeliveryView(BaseModel):
     last_attempt_at: datetime | None
     reason: str | None
     next_attempt_at: datetime | None
+    #: The name a delivery that was given up is replayed by, or None. Not its event id: see
+    #: `brain.ops.webhook_store.A_DELIVERY_IS_REPLAYED_BY_A_NAME_OF_ITS_OWN`.
+    replay: str | None = None
 
 
 class DispatcherView(BaseModel):
@@ -262,6 +284,8 @@ class WebhooksView(BaseModel):
     registering: str
     replacing: str
     switching_off: str
+    switching_on: str
+    replaying: str
     secret_minimum: int
     #: Display names by principal id for everybody `subscribers` names. See the module docstring.
     people: dict[str, str] = {}
@@ -452,6 +476,8 @@ def _page(
         registering=REGISTERING_A_SUBSCRIBER,
         replacing=REPLACING_A_SIGNING_KEY,
         switching_off=SWITCHING_A_SUBSCRIBER_OFF,
+        switching_on=SWITCHING_A_SUBSCRIBER_ON,
+        replaying=REPLAYING_A_DELIVERY,
         secret_minimum=MINIMUM_SIGNING_SECRET_CHARS,
         people=people or {},
     )
@@ -531,6 +557,7 @@ async def webhooks(request: Request, asked: Asked) -> WebhooksView:
                     last_attempt_at=one.last_attempt_at,
                     reason=one.reason,
                     next_attempt_at=one.next_attempt_at,
+                    replay=one.replay,
                 )
                 for one in by_id[line.subscriber_id].deliveries
             ],
@@ -660,7 +687,7 @@ async def replace_secret(
 
 @router.post(SWITCH_OFF_PATH, response_model=WebhookChangedView, responses=COMMON_RESPONSES)
 async def switch_off(request: Request, subscriber_id: str, asked: Asked) -> WebhookChangedView:
-    """Switch a subscriber off for good, and record who did."""
+    """Switch a subscriber off, and record who did. Switching it back on is `switch_on`."""
     if not may_manage(asked.reach, asked.now) or subscriber_id_problems(subscriber_id):
         log.info("webhook switch-off not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
@@ -676,4 +703,61 @@ async def switch_off(request: Request, subscriber_id: str, asked: Asked) -> Webh
         changed_at=asked.now,
         secret_written_at=None,
         told=SWITCHED_OFF,
+    )
+
+
+@router.post(SWITCH_ON_PATH, response_model=WebhookChangedView, responses=COMMON_RESPONSES)
+async def switch_on(request: Request, subscriber_id: str, asked: Asked) -> WebhookChangedView:
+    """Switch a switched-off subscriber back on, and record who did (M27.15.44).
+
+    The same authority and the same one refusal as switching off, for a subscriber that does not
+    exist, one that is on and a reader who may not manage either.
+    """
+    if not may_manage(asked.reach, asked.now) or subscriber_id_problems(subscriber_id):
+        log.info("webhook switch-on not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    try:
+        await records_of(request).switch_on(
+            subscriber_id, actor=asked.reach.principal_id, at=asked.now
+        )
+    except NoSwitchedOffSubscriberError as absent:
+        raise _not_answerable() from absent
+    return WebhookChangedView(
+        subscriber_id=subscriber_id,
+        change=WebhookChange.SWITCHED_ON,
+        changed_at=asked.now,
+        secret_written_at=None,
+        told=SWITCHED_ON,
+    )
+
+
+@router.post(REPLAY_PATH, response_model=WebhookChangedView, responses=COMMON_RESPONSES)
+async def replay(
+    request: Request, subscriber_id: str, handle: str, asked: Asked
+) -> WebhookChangedView:
+    """Send one delivery that was given up once more, and record who did (M27.15.44).
+
+    One refusal for a name that matches nothing, a delivery that was not given up, one replayed
+    already and a reader who may not manage subscribers, so the answer says nothing about which
+    deliveries exist.
+    """
+    if (
+        not may_manage(asked.reach, asked.now)
+        or subscriber_id_problems(subscriber_id)
+        or not REPLAY_HANDLE.fullmatch(handle)
+    ):
+        log.info("webhook replay not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    try:
+        await records_of(request).replay(
+            subscriber_id, handle, actor=asked.reach.principal_id, at=asked.now
+        )
+    except NothingToReplayError as absent:
+        raise _not_answerable() from absent
+    return WebhookChangedView(
+        subscriber_id=subscriber_id,
+        change=WebhookChange.REPLAYED,
+        changed_at=asked.now,
+        secret_written_at=None,
+        told=REPLAYED,
     )
