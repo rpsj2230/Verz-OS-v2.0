@@ -366,6 +366,12 @@ CALLS: dict[str, dict[str, object]] = {
         "to_rung": AutonomyTier.ASSISTED,
     },
     "entity_merge": {"kept_entity_id": "c_0447", "merged_entity_id": "c_0331"},
+    "entity_unmerge": {
+        "kept_entity_id": "c_0447",
+        "restored_entity_id": "c_0331",
+        "merge_id": "0" * 31 + "a",
+        "unmerge_id": "0" * 31 + "b",
+    },
     "publish": {"artifact_id": "rep_2026_08"},
     "break_glass": {
         "session_id": "bg_1",

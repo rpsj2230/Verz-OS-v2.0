@@ -1,8 +1,9 @@
 """The Requirement checks screen over HTTP: every requirement in the register, and what was seen.
 
-Four leaves ask each area's requirements to be "demonstrated on an install by a person, and each
+Seven leaves ask each area's requirements to be "demonstrated on an install by a person, and each
 check is recorded against the requirement it proves": permissions (M1.8.8), departments
-(M2.3.2), models (M5.6.5) and observability (M24.3.6). The register is
+(M2.3.2), models (M5.6.5), observability (M24.3.6), connectors (M11.8.13), tools (M12.4.15)
+and knowledge (M7.7.7). The register is
 `docs/requirements/register.json`, shipped in the image, and a check is a row in
 `ops.requirement_check`. This screen puts the two side by side: pick an area, read each
 requirement in the owner's words, and record passed or failed with a sentence about what was done.
@@ -14,7 +15,7 @@ weak. So the screen is not a read every administrator's screen list carries; it 
 other administration capabilities, and `brain.identity.administration_reconciliation` grants it to
 an administrator appointed before it existed.
 
-**Every area can be checked, and six are named.** `CHECKED_BY` maps an area to the leaf that asks
+**Every area can be checked, and seven are named.** `CHECKED_BY` maps an area to the leaf that asks
 for its checks, so the screen can say which task a row's check proves; an area with no leaf is
 still checkable, because M24.3.4 asks for its audit and tracing checks to be "recorded" in the same
 sense and a mechanism that refused an area would be a narrowing nobody asked for.
@@ -36,7 +37,7 @@ the row's proof leaves. It is product data about this release, as public as that
 records a check: only a person's sentence does that. Rejected: the console fetching the public page
 itself and matching leaves, which would be a second place deciding which check proves which row.
 
-Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M11.8.13, M12.4.15
+Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M11.8.13, M12.4.15, M7.7.7
 """
 
 from __future__ import annotations
@@ -89,6 +90,7 @@ CHECKED_BY: Final[Mapping[str, str]] = {
     "Observability": "M24.3.6",
     "Connectors": "M11.8.13",
     "Tools": "M12.4.15",
+    "Knowledge": "M7.7.7",
 }
 
 #: Where the register lives in the image, and in a checkout: `docs/` beside `src/`.

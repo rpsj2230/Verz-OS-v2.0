@@ -18607,6 +18607,20 @@
     "M1.10.5"
    ],
    "decision": null
+  },
+  {
+   "id": "DEC-64",
+   "source": "owner decision needs-rupash 115, 2026-09-29",
+   "area": "Identity",
+   "requirement": "An install chooses where departments come from: the staff source, kept up to date by the sync, or People, where an administrator assigns several people at once and the sync never moves anybody.",
+   "leaves": [
+    "M1.6.19",
+    "M1.6.20"
+   ],
+   "proof": [
+    "M1.6.21"
+   ],
+   "decision": null
   }
  ]
 }

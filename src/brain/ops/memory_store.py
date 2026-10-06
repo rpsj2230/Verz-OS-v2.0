@@ -21,9 +21,17 @@ the other way is legitimately a second row on the same pair.
 **The instant is the database's.** `correction.superseded_ids` decides a pair by its latest word and
 marks both on a tie, so the order of two corrections is the whole of what an undo means. An instant
 from the application's clock is whichever container served the request, which is the ledger's own
-argument for taking its order from one authoritative reading. The store reads `now()` in the
-transaction and hands it to the domain as `at`, so the correction the caller is handed and the row
-that was written carry the same instant.
+argument for taking its order from one authoritative reading. The store reads the database's
+clock in the transaction, after the lock, and hands it to the domain as `at`, so the correction the
+caller is handed and the row that was written carry the same instant.
+
+**Read as `statement_timestamp()` since 2026-09-29, not `now()`.** `now()` is when the transaction
+began, which is before the lock was granted: a revision that waited on another's lock was stamped
+earlier than the one it waited for, so the pair's latest word was the wrong one, and two revisions
+of one pair written in one transaction were stamped alike and marked each other. The install's
+acceptance check, which writes an edit and then forgets it in one transaction, found the second.
+`statement_timestamp()` is the start of the statement reading it, after the lock, so revisions are
+ordered as they were written. See `A_REVISION_IS_STAMPED_WHEN_IT_IS_DECIDED`.
 
 **The trace and the reach are set before the insert**, as `brain.ops.connector_store` sets them, so
 `0061`'s trigger appends the ledger entry under the request's trace and the caller's entitlement
@@ -41,6 +49,12 @@ person, asks `brain.memory.turn.propose_memories`, and writes each memory beside
 row, which is the revision record the Memory screen reads. No correction is written, because nothing
 was replaced.
 
+**An agent whose learning is paused forms nothing from its runs** (M16.7.13).
+`StoredFormations.form` reads the agent's latest `agent.learning_pause` row in the transaction
+that would write, before the lock on the person, and a paused agent's turn is answered
+`NotFormed.PAUSED`. The pause stops formation and nothing else, so it can narrow what is learned
+and never widen it.
+
 **A turn is formed from by the answer route since 2026-09-29, and read back for a model.** Nothing
 called `StoredFormations.after_turn` until then, so no install ever formed a memory and the Memory
 and Learning screens could only be empty; `brain.api_routes.answered_for` now hands it every turn
@@ -49,7 +63,14 @@ memories, read and decided by `brain.memory.recall.recall` at the run's reach an
 asker is now, whose statements a model is shown as hints. See
 `A_MODEL_IS_SHOWN_ONLY_WHAT_THE_ASKER_MAY_RECALL_ABOUT_THEMSELVES`.
 
-Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3
+**An inference said again is stamped confirmed in the same transaction (M16.7.2).** What
+`propose_memories` names in `confirmed` is updated with `confirmation`, the one column `0163` lets
+the application touch, in the person's own name and under the turn's trace, and `0163`'s trigger
+appends one ledger entry for each. `formation_of` carries the stamp, so every reader decays the
+memory from it. Nothing else stamps it: a mark is written by `brain.ops.learning_signal_store`,
+which names no memory, so a helpful mark cannot confirm one (M16.7.4).
+
+Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3, M16.7.13, M16.7.2
 """
 
 from __future__ import annotations
@@ -60,11 +81,12 @@ from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
 
 import structlog
-from sqlalchemy import Insert, Select, func, insert, or_, select, text
+from sqlalchemy import Insert, Select, func, insert, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Scope
+from brain.knowledge.search import PRINCIPAL_SETTING
 from brain.memory.correction import Correction, Demotion, Supersession
 from brain.memory.digest import Learning, Undo, undo
 from brain.memory.formation import Formation, MemoryKind
@@ -72,6 +94,7 @@ from brain.memory.recall import recall
 from brain.memory.review import Edit, edit
 from brain.memory.signals import Signal
 from brain.memory.turn import Held, NotFormed, Turn, propose_memories, worth_forming
+from brain.ops.learning_signal_store import paused_in
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
@@ -131,9 +154,18 @@ def lock_on(memory_id: str) -> Any:
     )
 
 
+#: Why a revision's instant is read after its lock rather than at its transaction's start.
+A_REVISION_IS_STAMPED_WHEN_IT_IS_DECIDED: Final = (
+    "The order of two corrections of one pair is the whole of what the pair means, and now() is "
+    "when the transaction began, before its lock was granted. A revision that waited would be "
+    "stamped before the one it waited for, and two revisions in one transaction would tie and "
+    "mark each other. So the instant is the statement's, read after the lock."
+)
+
+
 def the_clock() -> Select[Any]:
-    """The database's instant for this transaction."""
-    return select(func.now())
+    """The database's instant for this revision: the reading statement's, after the lock."""
+    return select(func.statement_timestamp())
 
 
 def corrections_naming(memory_ids: Collection[str]) -> Select[tuple[CorrectionRow]]:
@@ -156,6 +188,16 @@ def learnings_of_agents(agent_ids: Collection[str], limit: int) -> Select[tuple[
     return (
         select(LearningRow)
         .where(LearningRow.agent_id.in_(sorted(set(agent_ids))))
+        .order_by(LearningRow.recorded_at.desc(), LearningRow.memory_id)
+        .limit(limit)
+    )
+
+
+def learnings_of_conversations(limit: int) -> Select[tuple[LearningRow]]:
+    """The learnings formed with no agent running, most recently recorded first, bounded."""
+    return (
+        select(LearningRow)
+        .where(LearningRow.agent_id.is_(None))
         .order_by(LearningRow.recorded_at.desc(), LearningRow.memory_id)
         .limit(limit)
     )
@@ -403,6 +445,25 @@ class Formed:
 
     memory_ids: tuple[str, ...]
     skipped: tuple[NotFormed, ...]
+    #: The standing inferences the turn said again, stamped confirmed (M16.7.2).
+    confirmed: tuple[str, ...] = ()
+
+
+def confirmation(principal_id: str, memory_ids: Collection[str]) -> Any:
+    """Stamp these inferences of this person's confirmed, by the database's clock (M16.7.2).
+
+    The one column `0163` lets the application update, in the person's own name, which the policy
+    reads from `app.principal_id`, stamped `statement_timestamp()`, which is the only value the
+    policy admits. The ledger entry is `0163`'s trigger's, one per row the update moves.
+    """
+    return (
+        update(AdaptiveMemoryRow)
+        .where(
+            AdaptiveMemoryRow.id.in_(sorted(set(memory_ids))),
+            AdaptiveMemoryRow.principal_id == principal_id,
+        )
+        .values(last_confirmed_at=func.statement_timestamp())
+    )
 
 
 class StoredFormations:
@@ -426,6 +487,10 @@ class StoredFormations:
         if not worth_forming(turn.said):
             return Formed(memory_ids=(), skipped=(NotFormed.NOTHING_TO_REMEMBER,))
         async with self._sessions() as session, session.begin():
+            # An agent whose learning is paused teaches nothing from its runs (M16.7.13). Read in
+            # the transaction that would write, so a pause set a moment ago is honoured.
+            if turn.agent_id is not None and await paused_in(session, (turn.agent_id,)):
+                return Formed(memory_ids=(), skipped=(NotFormed.PAUSED,))
             await session.execute(lock_on_person(turn.principal_id))
             held = [
                 Held(memory_id=row[0], kind=MemoryKind(row[1]), statement=row[2])
@@ -447,9 +512,17 @@ class StoredFormations:
             for one in proposed.formed:
                 await session.execute(memory_row(one.learning, one.statement))
                 await session.execute(learning_row(one.learning))
+            if proposed.confirmed:
+                # In the person's own name and under the turn's trace, for the policy and the
+                # ledger entry `0163`'s trigger appends for each confirmation.
+                await session.execute(_set_config(PRINCIPAL_SETTING, turn.principal_id))
+                await session.execute(_set_config(TRACE_ID_SETTING, turn.trace_id))
+                await session.execute(_set_config(ENT_HASH_SETTING, turn.reach.ent_hash()))
+                await session.execute(confirmation(turn.principal_id, proposed.confirmed))
         return Formed(
             memory_ids=tuple(one.learning.memory_id for one in proposed.formed),
             skipped=proposed.skipped,
+            confirmed=proposed.confirmed,
         )
 
     async def after_turn(self, turn: Turn) -> Formed | None:
@@ -511,6 +584,7 @@ def formation_of(row: PersistentMemoryRow | AdaptiveMemoryRow) -> Formation:
         ent_hash=row.ent_hash,
         formed_at=row.formed_at,
         kind=MemoryKind(row.kind),
+        confirmed_at=row.last_confirmed_at if isinstance(row, AdaptiveMemoryRow) else None,
     )
 
 

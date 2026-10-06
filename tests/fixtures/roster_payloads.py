@@ -4,7 +4,7 @@
 second file rather than an addition to it. A cassette is a recorded HTTP exchange for a
 business source: a status, headers, a rate limit and the failure modes a connector must
 survive. None of the five sources here is one of those, none of them has an entry in
-`brain.ops.limits.SOURCE_CEILINGS`, and `tests/invariants/test_cassettes.py` parametrises
+`brain.ops.limits.source_ceilings()`, and `tests/invariants/test_cassettes.py` parametrises
 its contract test over `brain.connectors` alone. Adding a directory to `Source` would put a
 roster endpoint into a corpus whose invariants are about rate ceilings and would have said
 nothing about either.

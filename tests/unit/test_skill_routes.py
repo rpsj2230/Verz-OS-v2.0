@@ -1899,3 +1899,45 @@ def test_setting_categories_needs_the_authority_and_a_category_the_grammar_admit
     assert bad.status_code == 404
     assert "is not one this install keeps" in bad.json()["message"]
     assert stored.library.filed == []
+
+
+def scripted_package() -> dict[str, str]:
+    """A zip holding the sample `SKILL.md`, declaring one script, and that script."""
+    import base64
+
+    from tests.unit.test_skill_library import a_zip
+
+    archive = a_zip(
+        {
+            "SKILL.md": text_with(scripts="[scripts/check.py]").encode("utf-8"),
+            "scripts/check.py": b"print('renewal due')\n",
+        }
+    )
+    return {
+        "file_name": "skill.zip",
+        "content": base64.b64encode(archive).decode("ascii"),
+        "encoding": "base64",
+    }
+
+
+def test_a_skill_with_scripts_is_added_only_where_the_install_runs_a_sandbox(
+    client: TestClient, stored: Stored
+) -> None:
+    """`THIS_INSTALL_RUNS_NO_SANDBOX` through the application: with no sandbox address on the
+    state, adding a package with scripts is refused saying so and nothing is stored; with one, the
+    same package is added with the script's hash in what the library holds. Delete this and the
+    route can store code on an install that can never run it, or refuse it on one that can."""
+    from brain.console.skill_library import THIS_INSTALL_RUNS_NO_SANDBOX
+
+    app = client.app
+    app.state.sandbox_address = None  # type: ignore[attr-defined]
+    refused = post(client, "u_admin", SKILLS, scripted_package())
+    assert refused.status_code == 404
+    assert THIS_INSTALL_RUNS_NO_SANDBOX in refused.json()["message"]
+    assert stored.library.skills == {}
+
+    app.state.sandbox_address = "http://script-sandbox:3100"  # type: ignore[attr-defined]
+    accepted = post(client, "u_admin", SKILLS, scripted_package())
+    assert accepted.status_code == 201, accepted.text
+    (held,) = stored.library.skills.values()
+    assert [path for path, _ in held.imported.skill.script_sha256] == ["scripts/check.py"]

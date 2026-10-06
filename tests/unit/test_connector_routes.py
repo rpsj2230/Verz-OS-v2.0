@@ -367,7 +367,7 @@ def hubspot_unmeasured(monkeypatch: pytest.MonkeyPatch) -> None:
     of one is shown on a source that had it taken away."""
     from brain.ops import limits
 
-    kept = {name: one for name, one in limits._BY_NAME.items() if name != "hubspot"}
+    kept = {name: one for name, one in limits.ceilings_by_name().items() if name != "hubspot"}
     monkeypatch.setattr(limits, "_BY_NAME", kept)
 
 

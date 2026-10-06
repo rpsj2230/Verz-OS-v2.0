@@ -59,6 +59,16 @@ const PROGRESS = {
     why: "built (M1/relay-to-sign-in): every release gives the sign-in realm the mail relay saved on Notifications, through the step that already signs in to Keycloak inside its container, writing only when the relay changed and leaving a realm with no relay alone; an install check compares the host the realm reported with the relay's. Not built: hiding Forgot password while no relay is set. Proved on the install when a release has run and a reserved person's Forgot password email arrives",
     updated: "2026-09-30",
   },
+  "M1.6.19": {
+    status: "READY FOR TESTING",
+    why: "built (M1/departments-from): Settings, under Staff, chooses where departments come from; managed on People the staff sync places and moves nobody; proved on the install with M1.6.21",
+    updated: "2026-09-30",
+  },
+  "M1.6.20": {
+    status: "READY FOR TESTING",
+    why: "built (M1/departments-from): People moves several people to a department at once, each move on the ledger under the mover (migration 0170); proved on the install with M1.6.21",
+    updated: "2026-09-30",
+  },
   "M1.6.16": {
     status: "READY FOR TESTING",
     why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
@@ -660,9 +670,9 @@ const PROGRESS = {
     updated: "2026-09-29",
   },
   "M7.7.2": {
-    status: "IN PROGRESS",
-    why: "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
-    updated: "2026-09-28",
+    status: "READY FOR TESTING",
+    why: "a steward for every document, source and agent, and the self-grant notice on Access requests (migration 0167): proved when the install check a_steward_is_named_and_told_of_access_somebody_gave_themselves passes after deploy",
+    updated: "2026-09-30",
   },
   "M7.7.3": {
     status: "IN PROGRESS",

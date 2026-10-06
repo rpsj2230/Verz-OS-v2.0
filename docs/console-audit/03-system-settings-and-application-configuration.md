@@ -2,7 +2,7 @@
 
 - **Screens:** `/install`, `/settings`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
 - **Tables:** `ops.setting`, `ops.budget_version`
-- **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`, `INSTALL_DIGEST_DESTINATION`, `INSTALL_DIGEST_TIME`
+- **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`, `INSTALL_DIGEST_DESTINATION`, `INSTALL_DIGEST_TIME`, `INSTALL_SERVICES`
 - **Measured here:** 15 routes, 1 called by no screen; 8 write routes, 6 with all three proofs; 1 gaps.
 
 | Route | Called by |
@@ -21,7 +21,7 @@
 | `POST /setup/staff-source/trial` | `/first-run` |
 | `PUT /api/v1/digest/destination` | `/settings` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` |
-| `PUT /api/v1/install/tuning/{name}` | `/limits` |
+| `PUT /api/v1/install/tuning/{name}` | `/learning`, `/learning/:view`, `/limits` |
 
 - **Gap.** Spending budgets are read and never changed. Recorded: No route writes ops.budget_version. The request windows and capacity budgets are changed on Rate limits (brain.tuning_routes, since 2026-09-29); a spending ceiling is a release today.
 
@@ -36,4 +36,4 @@
 | `POST /setup/staff-source/trial` | `/first-run` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `PUT /api/v1/digest/destination` | `/settings` | `test_a_group_on_the_list_is_saved_audited_and_outranks_the_environment` in `tests/unit/test_digest_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads before the write, which DESTINATION_CHOSEN asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_a_group_on_the_list_is_saved_audited_and_outranks_the_environment` in `tests/unit/test_digest_routes.py` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
-| `PUT /api/v1/install/tuning/{name}` | `/limits` | `test_saving_a_window_writes_its_row_as_the_person_and_the_next_request_counts_against_it` in `tests/unit/test_tuning.py` | `test_on_a_real_database_the_capacity_checks_pass_or_say_why_not_and_leave_nothing_behind` in `tests/unit/test_acceptance_capacity.py` (database, in CI) | `test_every_reload_of_saved_settings_holds_the_saved_limits_and_names_a_changed_one` in `tests/unit/test_tuning.py` (database, in CI) |
+| `PUT /api/v1/install/tuning/{name}` | `/learning`, `/learning/:view`, `/limits` | `test_saving_a_window_writes_its_row_as_the_person_and_the_next_request_counts_against_it` in `tests/unit/test_tuning.py` | `test_on_a_real_database_the_capacity_checks_pass_or_say_why_not_and_leave_nothing_behind` in `tests/unit/test_acceptance_capacity.py` (database, in CI) | `test_every_reload_of_saved_settings_holds_the_saved_limits_and_names_a_changed_one` in `tests/unit/test_tuning.py` (database, in CI) |

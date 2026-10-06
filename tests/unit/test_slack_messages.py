@@ -35,7 +35,7 @@ from brain.ops.acceptance_checks_connectors import _Keys, _Resolver
 from brain.ops.connectable import manifest_for
 from brain.ops.connector_store import Connection
 from brain.ops.connector_sync_run import SourceAnswer
-from brain.ops.limits import SOURCE_CEILINGS
+from brain.ops.limits import source_ceilings
 from brain.ops.slack_messages_live import READ_MESSAGE, SlackPassages
 from tests.fixtures.cassettes import for_source
 from tests.fixtures.cassettes._types import FETCHED_AT, SEEN_AT, Cassette
@@ -135,7 +135,7 @@ def test_the_connector_is_found_under_its_own_name_with_a_ceiling_of_its_own() -
     this and the connector could be sized against another source's measured limit."""
     assert shipped()["slack_messages"] is slack.CONNECTOR
     assert slack.CONNECTOR.name == slack.CONNECTOR_NAME == slack.__name__.rsplit(".", 1)[-1]
-    [ceiling] = [one for one in SOURCE_CEILINGS if one.name == a_console_manifest().ceiling]
+    [ceiling] = [one for one in source_ceilings() if one.name == a_console_manifest().ceiling]
     assert ceiling.name == "slack_messages"
     assert (ceiling.per_minute, ceiling.raisable) == (20, False)
 

@@ -176,7 +176,7 @@ def test_a_module_that_declares_itself_is_found_and_one_that_does_not_is_left_ou
                 {SAYS_IT}
                 from dataclasses import replace
                 from brain.connectors.xero import CONNECTOR as XERO
-                CONNECTOR = replace(XERO, name="good")
+                CONNECTOR = replace(XERO, name="good", ceiling=None)
             """,
             "framework": '"""Holds nothing a platform lists."""\n',
         },
@@ -245,7 +245,7 @@ def test_the_gaps_name_a_manifest_nobody_declared_and_a_declaration_that_says_no
                 \"\"\"A connector that forgot the owner's rule.\"\"\"
                 from dataclasses import replace
                 from brain.connectors.xero import CONNECTOR as XERO
-                CONNECTOR = replace(XERO, name="quiet")
+                CONNECTOR = replace(XERO, name="quiet", ceiling=None)
             """,
             "clean": f"""
                 {SAYS_IT}
@@ -253,7 +253,7 @@ def test_the_gaps_name_a_manifest_nobody_declared_and_a_declaration_that_says_no
                 from dataclasses import replace
                 from brain.connectors.manifest import ConnectorManifest
                 from brain.connectors.xero import CONNECTOR as XERO
-                CONNECTOR = replace(XERO, name="clean")
+                CONNECTOR = replace(XERO, name="clean", ceiling=None)
                 def manifest() -> ConnectorManifest:
                     raise NotImplementedError
             """,

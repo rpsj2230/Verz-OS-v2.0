@@ -26,11 +26,20 @@ every other process holds them within a minute: see
 `brain.ops.tuning.A_TUNED_VALUE_REACHES_EVERY_PROCESS_WITHIN_A_MINUTE`. The answer is the knobs as
 they now are, so the screen draws the new figure from the response rather than a guess.
 
-Task ids: M22.4.1, M22.1.2
+**The Learning screen's two figures are read and set here too, by the same write.** How long an
+inferred memory lasts and how many conversations must agree before a learned rule is offered for
+review are knobs of `KnobKind.LEARNING`, with the same authority for the same reason: a decay rate
+is the whole install's, as a request window is. Each screen lists and sets its own kinds and
+refuses a name of the other's with the sentence an unknown name gets, so a figure is changed from
+the screen that explains it. The Learning screen's reading is answered to anybody who may open
+that screen, and says in words how long an inference is recalled at the figure in force.
+
+Task ids: M22.4.1, M22.1.2, M16.6.8
 """
 
 from __future__ import annotations
 
+from collections.abc import Set
 from typing import Final
 
 import structlog
@@ -46,10 +55,16 @@ from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
 from brain.ops.tuning import (
     A_TUNED_VALUE_REACHES_EVERY_PROCESS_WITHIN_A_MINUTE,
+    KNOB_BY_NAME,
     KNOBS,
+    LEARNING_KINDS,
+    LIMIT_KINDS,
+    NOT_A_KNOB,
     Knob,
+    KnobKind,
     hold,
     is_saved,
+    lifetime_sentence,
     load,
     problem,
     save,
@@ -66,6 +81,12 @@ TUNING_PATH: Final = "/install/tuning"
 
 #: The screen's name in a refusal. The console's own menu words, identical on every install.
 TUNING_SCREEN: Final = "rate limits"
+
+#: Where the Learning screen's figures are read, and where one is set.
+LEARNING_SETTINGS_PATH: Final = "/govern/learning/settings"
+
+#: The Learning screen's name, as `brain.console.screens` registers it and as a refusal says it.
+LEARNING_SETTINGS_SCREEN: Final = "learning"
 
 
 class KnobView(BaseModel):
@@ -119,11 +140,15 @@ def knob_view(knob: Knob) -> KnobView:
     )
 
 
-def tuning_view(*, may_change: bool) -> TuningView:
+def tuning_view(*, may_change: bool, kinds: Set[KnobKind] = LIMIT_KINDS) -> TuningView:
+    """The knobs of these kinds, in the product's order, and when a change is in force."""
+    in_force = A_TUNED_VALUE_REACHES_EVERY_PROCESS_WITHIN_A_MINUTE
+    if kinds == LEARNING_KINDS:
+        in_force = f"{in_force} {lifetime_sentence()}"
     return TuningView(
-        knobs=[knob_view(one) for one in KNOBS],
+        knobs=[knob_view(one) for one in KNOBS if one.kind in kinds],
         may_change=may_change,
-        in_force=A_TUNED_VALUE_REACHES_EVERY_PROCESS_WITHIN_A_MINUTE,
+        in_force=in_force,
     )
 
 
@@ -131,9 +156,17 @@ def _trace_id() -> str:
     return str(structlog.contextvars.get_contextvars().get("trace_id", ""))
 
 
-def _not_answerable() -> Absent:
+def _not_answerable(named: str = TUNING_SCREEN) -> Absent:
     """The one refusal a caller without the authority gets. Names the screen and nothing else."""
-    return Absent(f"the {TUNING_SCREEN} screen's changes are not answerable for this caller")
+    return Absent(f"the {named} screen's changes are not answerable for this caller")
+
+
+def problem_on(name: str, amount: object, kinds: Set[KnobKind]) -> str:
+    """`problem`'s sentence, and a name of another screen's knob refused as an unknown one is."""
+    knob = KNOB_BY_NAME.get(name)
+    if knob is None or knob.kind not in kinds:
+        return NOT_A_KNOB
+    return problem(name, amount)
 
 
 def _require_sessions(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -167,10 +200,48 @@ async def tune(request: Request, name: str, body: TuneAsked, asked: Asked) -> JS
     save_setting`'s order and for its reason: a caller without the authority is refused before
     the name is looked at, and a value outside the bounds is never written.
     """
+    return await _set(request, name, body, asked, kinds=LIMIT_KINDS, named=TUNING_SCREEN)
+
+
+@router.get(LEARNING_SETTINGS_PATH, response_model=TuningView, responses=COMMON_RESPONSES)
+async def learning_settings(asked: Asked) -> TuningView:
+    """The Learning screen's figures, with what this process holds in force and what it means.
+
+    Answered to a reader of the Learning screen or holder of the Settings authority, and refused
+    identically to anybody else before anything is read.
+    """
+    may_change = may_configure(asked.reach, asked.now)
+    if not may_change and not permitted(
+        screen(LEARNING_SETTINGS_SCREEN).read, asked.reach, asked.now
+    ):
+        raise _not_answerable(LEARNING_SETTINGS_SCREEN)
+    return tuning_view(may_change=may_change, kinds=LEARNING_KINDS)
+
+
+@router.put(
+    f"{LEARNING_SETTINGS_PATH}/{{name}}", response_model=TuningView, responses=COMMON_RESPONSES
+)
+async def set_learning(request: Request, name: str, body: TuneAsked, asked: Asked) -> JSONResponse:
+    """Set one of the Learning screen's figures within its bounds, as `tune` sets a limit."""
+    return await _set(
+        request, name, body, asked, kinds=LEARNING_KINDS, named=LEARNING_SETTINGS_SCREEN
+    )
+
+
+async def _set(
+    request: Request,
+    name: str,
+    body: TuneAsked,
+    asked: Asked,
+    *,
+    kinds: Set[KnobKind],
+    named: str,
+) -> JSONResponse:
+    """One knob of these kinds saved, attributed and held, answered with the screen's knobs."""
     if not may_configure(asked.reach, asked.now):
         log.info("limit change refused", principal=asked.caller.principal.id)
-        raise _not_answerable()
-    said = problem(name, body.value)
+        raise _not_answerable(named)
+    said = problem_on(name, body.value, kinds)
     if said:
         told = ErrorBody(message=said, trace_id=_trace_id())
         return JSONResponse(status_code=422, content=told.model_dump())
@@ -186,5 +257,5 @@ async def tune(request: Request, name: str, body: TuneAsked, asked: Asked) -> JS
         await session.commit()
     hold(saved)
     log.info("limit changed", knob=name, principal=asked.caller.principal.id)
-    page = tuning_view(may_change=True)
+    page = tuning_view(may_change=True, kinds=kinds)
     return JSONResponse(status_code=200, content=page.model_dump(mode="json"))

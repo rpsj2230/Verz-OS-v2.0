@@ -10,7 +10,7 @@
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../../src/pages/connectorsQuery";
 import { probeApiPath } from "../../../src/pages/connectors/connectorProbe";
 import { acceptApiPath } from "../../../src/pages/connectors/DeclarationDrift";
-import { editApiPath, exportApiPath, keyApiPath } from "../../../src/pages/connectors/connectorSources";
+import { editApiPath, exportApiPath, keyApiPath, stewardApiPath } from "../../../src/pages/connectors/connectorSources";
 import {
   LARK_API_PATH,
   LARK_SWITCH_OFF_API_PATH,
@@ -65,6 +65,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/connectors/DeclarationDrift.tsx acceptApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/accept", "acceptApiPath", acceptApiPath("xero")),
+  ],
+  "src/pages/connectors/SourceActs.tsx stewardApiPath(name)": [
+    at("POST /api/v1/connectors/{connector}/steward", "stewardApiPath", stewardApiPath("xero")),
   ],
   "src/pages/connectors/TestConnection.tsx probeApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/probe", "probeApiPath", probeApiPath("xero")),
@@ -135,6 +138,17 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     behaviour: t("test_connector_routes", "test_a_replaced_key_is_a_credential_write_and_changes_no_connection"),
+  },
+  // Naming a steward: the row and its ledger entry through the store as the application role, and
+  // the route over HTTP refusing a person who cannot reach the source (M7.7.2).
+  "POST /api/v1/connectors/{connector}/steward": {
+    row: t("test_stewardship_store", "test_naming_a_steward_writes_the_row_and_its_ledger_entry_and_is_read_back", true),
+    audit: t("test_stewardship_store", "test_naming_a_steward_writes_the_row_and_its_ledger_entry_and_is_read_back", true),
+    behaviour: t(
+      "test_stewardship_routes_db",
+      "test_a_sources_steward_is_named_by_its_administrator_and_must_be_able_to_reach_it",
+      true,
+    ),
   },
   // A press is a request row the worker answers with an attempt row: both are asserted in the one
   // database test, and the ledger entry the press appends in the one built through every migration.

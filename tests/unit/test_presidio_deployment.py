@@ -7,7 +7,7 @@ the budget in `brain.ops.wiring`, the address `brain.ops.pii` dials, the recogni
 A test that read a value out of the file and compared it with itself would be green for every
 value it could hold.
 
-Task ids: M0.4.2
+Task ids: M0.4.2, M32.2.1.1
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from brain.ops.pii import (
     PRESIDIO_ADDRESS_SETTING,
     PRESIDIO_BUILT_INS,
     PRESIDIO_PORT,
+    PRESIDIO_PROBES,
     PRESIDIO_SERVICE,
     analyzer_address,
     deploys_presidio,
@@ -220,3 +221,31 @@ def test_the_address_is_a_setting_an_override_wins_and_lite_has_none() -> None:
     assert analyzer_address("full", "   ") == f"http://{PRESIDIO_SERVICE}:{PRESIDIO_PORT}"
     assert analyzer_address("lite") is None
     assert analyzer_address("lite", "http://analyser.internal:3000") is None
+
+
+def test_an_install_whose_profile_deploys_no_analyser_dials_it_once_it_is_switched_on() -> None:
+    """The owner's install is lite, and item 120 gave the detector room on it without changing the
+    profile, so `INSTALL_SERVICES` switching it on has to be enough for the product to dial it.
+    Both halves: lite with nothing switched on still has no address, and an address is the
+    product's own service by name, not something read from anywhere else.
+
+    Delete this and the detector can run on the server while the product believes it is absent,
+    or start believing it is present on every lite install."""
+    switched = frozenset({PRESIDIO_SERVICE})
+
+    assert analyzer_address("lite") is None
+    assert not deploys_presidio("lite")
+    assert deploys_presidio("lite", switched)
+    assert analyzer_address("lite", "", switched) == f"http://{PRESIDIO_SERVICE}:{PRESIDIO_PORT}"
+    assert analyzer_address("lite", "", frozenset({"seaweedfs"})) is None
+
+
+def test_every_built_in_the_scrub_relies_on_has_a_probe_and_no_probe_is_for_anything_else() -> None:
+    """The install check asks the analyser about each entry of `PRESIDIO_BUILT_INS` with its own
+    probe, so a built-in added without one would be a recogniser the check never asks about, and a
+    probe left over for a removed one would be a question about something the scrub does not use.
+
+    Delete this and the check can pass while the newest recogniser the scrub relies on is
+    missing."""
+    assert set(PRESIDIO_PROBES) == {one.presidio_name for one in PRESIDIO_BUILT_INS}
+    assert all(text.strip() for text in PRESIDIO_PROBES.values())

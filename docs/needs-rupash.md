@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**29 items are open: 153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**39 items are open: 162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,283 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 162. May a new agent be put on your website's chat widget?
+
+**In plain terms:** an agent now answers only on the channels switched on for it, and the switch offers
+a channel only where the agent is allowed to work on it (M13.7.4 and M39.2.4.2). The console and the
+API answer the person asking, in their own signed-in session, so they are offered by name. Your
+website's chat widget is different: it answers visitors who are not signed in, and you decided it gives
+public knowledge only and never asks anybody to log in (item 26). Nothing yet says which agents are
+safe to face the public, so **the switch does not offer the widget at all**. An agent already on it
+keeps it and can be switched off it; no agent can be newly put on it.
+
+**Option A: allow it for an agent that can read only public knowledge.** The widget is offered on an
+agent whose ceiling holds nothing but the knowledge you marked public, checked by the same rule that
+decides what any channel may carry. An agent that can read anything more is never offered it.
+
+**Option B: keep it as built.** The widget keeps whichever agents answer on it today, and a new one is
+put there only by a change to the product.
+
+**My recommendation:** A. It keeps item 26's promise by construction, and lets you replace the website's
+agent without a release. I will not build it until you answer.
+
+**What I need from you:** reply "162: A" or "162: B".
+
+## 161. Before a skill is approved, its examples are rehearsed: what "rehearsed" means for now
+
+**In plain terms:** your plan says a skill's examples are rehearsed before anyone may approve it
+(M12.3.4). A skill will carry its examples inside its own file, each a task and the tools it should
+need, so a new version brings its own. Approving a version will be refused until its examples have
+been rehearsed against that exact version.
+
+Today a rehearsal asks no AI model anything. It checks that an agent holding the skill can reach every
+tool each example needs, for the person approving it, and records that. It does not yet judge whether
+the answer an example would get is a good one.
+
+**That is the narrowing.** Agents can now run with tools through one path (the agent runtime, being
+landed now), so the next step is a rehearsal that actually runs each example and shows the approver
+what it did, with nothing sent or changed. The record is built so that result can be added to it
+later.
+
+**Option A: build the reach check now, and add the real run once the agent runtime is live.**
+Approval is checked for what it can be today, and the screen says what was and was not checked.
+
+**Option B: hold approval-by-rehearsal until examples can be run for real.** Skills are approved as
+today until then.
+
+One more choice inside A: **a skill version with no examples at all is not held**, so the skills
+already in the library can still be reviewed. That also means somebody could leave examples out to
+skip the rehearsal. The alternative is to require at least one example on every new version.
+
+**My recommendation:** A, and versions without examples not held for now. I am building it that way.
+
+**What I need from you:** nothing, or reply "161: B", or "161: A, but require examples".
+
+## 160. May a department's administrator stop one of that department's agents?
+
+**In plain terms:** the Stop control can now stop one agent on its own (M13.7.3), as well as a
+connector, a department, a person or everything. Today only an administrator for the whole company can
+stop a single agent, because a stopped agent is recorded without a department, and a department's
+administrator may only stop things inside their department.
+
+**Option A: allow it.** When a department's administrator presses Stop on an agent, the Brain looks up
+the agent's department at that moment and records it, so the stop is theirs to make and theirs to lift.
+An agent with no department, or one shared across departments, stays a company-wide administrator's to
+stop.
+
+**Option B: keep it as built.** A department's administrator who wants an agent stopped stops their
+whole department, or asks a company-wide administrator.
+
+**My recommendation:** A. A department's administrator is the person nearest to an agent misbehaving
+in their department, and stopping is the safe direction. I will not build it until you answer.
+
+**What I need from you:** reply "160: A" or "160: B".
+
+## 159. When a client's name matches two records you can both see, the Brain says so
+
+**In plain terms:** ask "what does Acme owe us?" when two client records answer to "Acme" (one in
+Xero, one in HubSpot, say) and the Brain has not decided whether they are the same client. Today it
+gives the same sentence it gives when there is no such client at all. Your plan asks for the opposite
+(M14.6.5): say that the name matches more than one client, and never add their figures together.
+
+The rule it changes is one of the Brain's strictest: a person is never told *which kind* of nothing
+happened, because "two records matched" and "nothing exists" must not be told apart when one of the
+records is hidden from them. **That still holds.** The new sentence is given only when every matching
+record is one the person may already read, so it tells them nothing they could not look up. If one of
+the two is hidden from them, they are answered from the one they can see, exactly as if the hidden one
+did not exist, and a test checks the two replies are identical.
+
+Whoever may confirm a merge also gets a link to the "Possible duplicates" review; everybody else gets
+the plain sentence.
+
+**My recommendation:** allow it, as described. I am building it that way.
+
+**What I need from you:** nothing, or reply "159: no" to keep the old single sentence.
+
+## 158. May an automation's canvas have a step where an agent thinks? (optional)
+
+**In plain terms:** every agent now runs through one path, with tools it may call while it answers
+(M13.7.1). The plan says an automation "enters the same agent runtime". The automation canvas you
+have today is deliberately step by step: every step does one fixed thing, and no step asks a model
+anything, so a flow does the same thing every time it runs. That was decided when the canvas was
+built (item 30 and item 124).
+
+So an automation reaches an agent this way instead: **a schedule or a trigger starts an agent**, at
+the reach of the person the automation runs for, and the agent's answer is what the flow produces.
+Nothing changes on the canvas.
+
+**Option A, as built: the canvas stays fixed steps, and an agent is started by a schedule or a
+trigger.** A flow is predictable, and its steps can be read and checked.
+
+**Option B: add an "ask an agent" step inside a canvas.** A flow can then decide things midway, which
+also means it can do something different each time it runs, and its runs are harder to check.
+
+**My recommendation:** A. Nothing waits on this; I am building A.
+
+**Two things I decided for you while building, as you asked me to decide routine items** (tell me if
+either is wrong):
+
+- **Which channels an agent answers on.** An agent now answers only on the channels an administrator
+  switched on for it (M13.7.4). Agents that already exist keep every channel they reach today, so
+  nobody loses anything. A new agent starts with none, and the agent builder asks which channels to
+  switch on, so a new agent is never silent without anybody noticing. Asking for an agent on a channel
+  it is not on gets exactly the same reply as asking for an agent that does not exist.
+- **Where the client-matching weights are kept.** Your decision (f) put them in the exports volume. On
+  an install whose compose file Coolify stores, a release cannot add that volume to the application,
+  so the weights would never be written. They are kept in the Brain's own settings instead, readable
+  only by the worker and by whoever may confirm a merge. The offline matcher still writes its export to
+  the volume where the full install has one.
+
+**What I need from you:** nothing, or reply "158: B" if you want the canvas step.
+
+## 157. One line for your install's database pooler
+
+**In plain terms:** the Brain reaches your database through a pooler that lends out a fixed number of
+connections. The pooler counted its limit per login, and the application uses two logins, so on a busy
+day it could open twice the 20 connections the Brain plans for. The product now caps it at 20 across
+logins (#378). **Your install does not have that cap yet, because a release never edits the copy of
+the compose file Coolify keeps.** Nothing is broken today; this keeps it that way under load.
+
+**Option A: I do it.** Over SSH, through the tunnel to Coolify, I add the one line below to the
+`pgbouncer` service's `environment` in Coolify's copy, beside `DEFAULT_POOL_SIZE`, and redeploy once.
+Requests wait at the pooler for a moment while it restarts.
+
+```yaml
+      MAX_DB_CONNECTIONS: "20"
+```
+
+**Option B: you do it.**
+
+1. Open Coolify and choose the Brain application.
+2. Open the compose file editor.
+3. Find the `pgbouncer` service, then the line `DEFAULT_POOL_SIZE: "20"` under `environment`.
+4. Below it, add the line above with the same indentation.
+5. Press Save, then Redeploy.
+
+**My recommendation:** A.
+
+**What I need from you:** reply "157: A" or "157: B, done".
+
+## 156. What is your "maintenance portal"?
+
+**In plain terms:** the Maintenance Agent you asked for (Wave 3, M38.5.3 and M39.8.7) answers a
+maintenance question from your uploaded maintenance knowledge and the ticket desk, and the plan names
+a third source: "the maintenance portal" (M11.9.9). Nothing the Brain reads today is one, and I will
+not guess what it is. It is closely tied to item 137 (where client projects live).
+
+**Option A: maintenance records in your Laravel application.** If each website's maintenance plan,
+its scheduled work and its history sit in the Laravel database, whoever looks after it adds one more
+read-only view for maintenance beside the clients and staff views (and the project view, if you
+choose B in item 137). I write the view for them; the Brain reads only what it shows.
+
+**Option B: a separate system with its own web address and API.** If the portal is another product
+(a maintenance or hosting dashboard with an API), it connects through the new "Add an API" screen:
+you give its API description, a second person approves it, and it is read like any other source.
+
+**Option C: there is no separate portal.** If maintenance lives in Freshdesk tickets and your uploaded
+maintenance documents, the Maintenance Agent uses those two and nothing more, and I drop the third.
+
+**My recommendation:** tell me which is true today; if it is A, choose it together with item 137's B,
+so one change in Laravel adds both views.
+
+**What I need from you:** reply "156: A", "156: B (the portal's name)" or "156: C".
+
+## 155. Recognising the same client across your systems: two choices before it is switched on
+
+**In plain terms:** the Brain can tell that "Acme Pte Ltd" in Xero, "ACME" in HubSpot and a Freshdesk
+requester at acme are the same client, so a question about one client gathers what every connected
+system knows (Wave 3, M14). The matching code is written and nothing uses it yet. Before it runs, two
+choices are yours.
+
+**1. A little more in the index.** You set the rule that connectors never copy your data: the Brain
+keeps only a small index and reads the rest live when somebody asks. Matching clients needs one more
+thing in that index for each record: a scrambled fingerprint of its email address, phone number or
+company registration number, made with a secret key the Brain keeps in its vault. The fingerprint
+cannot be turned back into the address or number, and nothing else is copied.
+
+- **Option A:** allow the fingerprints in the index, so clients are matched in the background.
+- **Option B:** no fingerprints. Clients are matched only by name, which finds far fewer and needs a
+  person to confirm almost every match.
+
+**My recommendation: A.** It keeps your rule's purpose (none of your data is copied in readable form)
+and makes matching useful.
+
+**2. Matching without a person, for the clearest cases only.** When two records share the same email
+address or registration number and neither carries money (no invoices or deals), the Brain can join
+them by itself, recorded and reversible with one press. Anything less certain, and anything touching
+money, waits for a person.
+
+- **Option A:** join the clearest cases automatically, with a switch to turn it off.
+- **Option B:** a person confirms every match.
+
+**My recommendation: A.** It saves confirming hundreds of obvious matches, and anything involving
+money always waits for a person.
+
+**What I decided myself (tell me if you disagree):**
+
+- Only an Owner or an Admin may confirm or undo a match, as a new permission you can grant to others.
+- The secret key for the fingerprints is created by the installer on every install.
+- Each connector says in its own description which records carry money.
+
+**What I need from you:** reply "155: 1A 2A" (my recommendation), or the options you prefer.
+
+## 151. Connect Slack as a source (ready now)
+
+**In plain terms:** the Brain can now answer from Slack messages, and each person is read only the
+channels Slack says they are in. Nothing is kept: a message is read when asked. This is a separate
+Slack app from the one that answers questions in Slack. In the console open **Knowledge and data**,
+**Connectors**, **Slack**, **Connect**:
+
+1. **Make a Slack app.** On Slack's **Your Apps** page (the console's step links to it) press
+   **Create New App**, **From scratch**, name it after the Brain and pick your workspace.
+2. **Give it read scopes only.** **OAuth & Permissions**, **Bot Token Scopes**: add channels:read,
+   groups:read, channels:history, groups:history, users:read and users:read.email. Nothing that
+   writes.
+3. **Install it and invite it.** **Install to Workspace**, **Allow**. Then in each channel the Brain
+   may read, type /invite and the app's name. A channel it is not in is never read.
+4. **Connect it.** Type the workspace id (it starts with T, on the app's **Basic Information** page),
+   the department whose people may be told what Slack holds, paste the **Bot User OAuth Token** from
+   **OAuth & Permissions** and press **Connect Slack**.
+5. **Give people the read.** **People and access**, **People**, the person, **Grant a capability**:
+   `read:slack_message`, scoped to that department, with a reason. A person is matched to their
+   Slack account by their verified work email, and is read only their own channels.
+
+Tell me "connected Slack" afterwards and I prove it on your install.
+
+## 154. One server change for the sealed sandbox: probably no downtime
+
+**In plain terms:** three things you asked for run code the Brain did not write: scripts inside
+imported skills, the code sandbox, and connectors written as custom code. They must run sealed off,
+with no internet, no access to the Brain's data and hard time and memory limits. The standard way
+to seal them is gVisor, a small program Docker uses to run a container inside its own protective
+layer. Your server does not have it yet (checked read-only on 2026-10-06: Ubuntu 24.04, Docker with
+its standard runtime only).
+
+Installing it is one change no release can make on its own: gVisor is installed on the server and
+added to Docker's settings. Docker can usually take that by **reloading** its settings, which
+restarts nothing, so there is **probably no downtime at all**. Only if the reload does not take it
+does Docker need a full restart, which restarts every container on the server for about a minute,
+the Brain's and your other project's (Activepieces) alike. Nothing is lost either way; they all come
+back by themselves.
+
+**Option A: yes, at a quiet time.** I install gVisor and reload Docker myself (restarting it only if
+the reload is not enough), at a time you name
+(for example a weekday night, Singapore time), then confirm everything is back and run the
+sandbox's own check: a script that tries to reach the internet and is stopped, and one that runs
+past its time and memory limits and is stopped.
+
+**Option B: not now.** The sandbox stays off. Skills with scripts are refused with a sentence saying
+this install runs no sandbox, and custom-code connectors are not offered. Everything else works.
+
+**Memory:** the sandbox is sized at 256 MB a script, so it fits beside the personal-data detector
+and Langfuse (item 120) with about 180 MB to spare. A larger limit per script would need more room.
+
+**My recommendation: A,** at a quiet time you choose.
+
+**What I need from you:** reply "154: A, after 11pm on a weekday" (or whichever time suits), or
+"154: B". Then, on your one visit to **Install, Settings**, **Optional services this server runs**
+becomes `presidio,langfuse,sandbox` instead of `presidio,langfuse`; I tell you when that is ready.
 
 ## 153. Questions written in Chinese: how much is hidden before they go to an outside model?
 
@@ -545,6 +822,9 @@ sent through the relay on Notifications* passes.
 
 **Part 2, mine with your go-ahead: three server steps.**
 
+The first step also lets item 120's optional services start: the personal-data detector and
+Langfuse are started by the updated deploy script after each release, so they wait for this too.
+
 - Install the updated deploy script, so releases set up the accounts client and apply their own
   vault changes (this is also item 129's prerequisite).
 - Run the accounts-client setup once, which creates the sign-in service client the sync uses and
@@ -595,15 +875,19 @@ picture of each step. Paste keys only into the console, never into chat.
 3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
    **Connect Xero**.
 
-**HubSpot** (contacts and deals, read only)
+**HubSpot** (companies, contacts and deals, read only)
 
 1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
    (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
    Name it "Company Brain".
-2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
-   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+2. On the **Scopes** tab tick `crm.objects.companies.read`, `crm.objects.contacts.read` and
+   `crm.objects.deals.read`, and nothing with "write" in it or touching settings. Press **Create
+   app**, confirm, and copy the access token.
 3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
    account's settings) and the token, and press **Connect HubSpot**.
+4. Give people the read: **People and access**, **People**, the person, **Grant a capability**:
+   `read:hubspot_company`, `read:hubspot_contact` and `read:hubspot_deal`, and the fields they may
+   see (a deal's amount is its own grant).
 
 **Freshdesk** (tickets, read live)
 
@@ -838,6 +1122,113 @@ The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same 
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+13. **Every knowledge requirement (M7.7.7), about 25 minutes.** Record against the Knowledge area.
+Use the two test people from "Before you start".
+
+- Step 1. **Add and ask (OWN-31, FEAT-5.1, FEAT-1.4, ARC-A-057).**
+  1. As yourself, open **Knowledge** and press **Add**.
+  2. Upload a short Word or PDF document, at the first person's department.
+  3. As the first person, ask a question on **Ask** that the document answers. The answer cites
+     the document, says when it was read, and carries a trace reference.
+  4. Record this against each of those rows.
+- Step 2. **Uploading never widens (ARC-A-124, FEAT-5.6, FEAT-5.5).**
+  1. As the other person, ask the same question. You are told there is nothing, exactly as if the
+     document did not exist.
+  2. As yourself, open the document on **Knowledge** and widen it to the company.
+  3. As the other person, ask again. Now it answers.
+  4. Put the visibility back.
+- Step 3. **A link as knowledge (FEAT-5.3, ANY-039).** On **Knowledge**, press **Add**, choose
+  **From a link**, and give the address of a public page with text on it. Then ask a question the
+  page answers.
+- Step 4. **Owner, verified date and review date (FEAT-5.9, ARC-A-119, FEAT-5.10, CONA-37, GAP2-31).**
+  1. On the document, set yourself as owner, mark it verified today, and set a review date of
+     tomorrow.
+  2. Ask the question again: the answer shows the verification badge.
+  3. The day after, ask again. The badge says the document is due for re-verification, and you
+     are reminded.
+  4. Then supersede it with a new version, and archive the old one. The old version no longer
+     answers.
+- Step 5. **The price list (ARC-A-126, FEAT-5.7, OWN-163).**
+  1. On **Knowledge > Price list**, add one row with a sell price and a cost.
+  2. As a person with no cost grant, ask the cost of that item. You are told what an absent
+     record is told.
+  3. Ask its sell price: it answers.
+- Step 6. **Unanswered questions (RWD-05).**
+  1. Ask something no document answers.
+  2. As the document's owner, open **Reports > Questions and gaps**. The question is listed.
+- **What still waits, and I tell you when each is live:**
+  - Scanned pages, tables in PDFs, layout and OCR notes in citations, and large documents (GAP-02,
+    GAP3-04, GAP3-05, GAP3-06, FEAT-5.2, ARC-A-116). These need the model server, row 2 of item
+    120.
+  - Embedding by meaning and the rebuild when the embedding model changes (GAP-03, DEC-13,
+    FEAT-5.11). These need the same server.
+  - A person's library of files produced for them (ANY-010) and templates used to produce
+    documents (OWN-29). These need the artifact store.
+- **The rest.** For each Knowledge row still "Not checked yet", read what it needs, try it and
+  record it. Rows that need a part still waiting stay "Not checked yet" until I tell you.
+
+14. **Every connectors requirement (M11.8.13), about 30 minutes.** Record against the Connectors
+area. Use one source you have a key for. Freshdesk or Xero is quickest, and Google Drive if you
+have set up its service account (item 150).
+
+- Step 1. **Connect, scoped, read-only (CON-14, ARC-A-139, FEAT-4.2, FEAT-4.3, ARC-A-140, CONB-10).**
+  1. Open **Connectors** and choose the source. Before connecting, read what it says it reads,
+     its access mode in words, the key it asks for and its ceiling.
+  2. Connect it to one narrow slice: one folder, one helpdesk or one organisation. Leave every
+     write switched off.
+  3. Its details say it reads only, and that writing is a separate grant.
+- Step 2. **The key is never shown back (ARC-A-084, FEAT-4.5, OWN-167, CONB-11).**
+  1. Open the connector's details. They say a key is held, and when and by whom it was written,
+     but never the key itself.
+  2. Download its connection record (**Export**). It holds no key (CONA-36).
+- Step 3. **Test and health (CON-62, CONB-12, CON-61, CON-64).**
+  1. Press **Test**. It says the source answered, and shows no business rows.
+  2. The connector's health shows the last read and its time.
+- Step 4. **Live answers at the asker's reach (FEAT-1.2, OWN2-1, GAP-04, OWN-12, OWN-13).**
+  1. As yourself, grant the first person the source's read on its steward card.
+  2. As them, ask about one record by its number on **Ask**. The answer gives the value and cites
+     the record, the field and when it was read.
+  3. As the other person, ask the same. You are told there is nothing.
+- Step 5. **Replace the key, disconnect and reconnect (CON-63, FEAT-4.4, CONB-13).**
+  1. Press **Replace key** and paste a new key. The next test answers with no restart.
+  2. Disconnect. The confirmation says the key stays held in the vault.
+  3. Reconnect. The history shows both connections.
+- Step 6. **Each source you connect (OWN-9 to OWN-20, OWN2-C1 to OWN2-C12).** For each source you
+  connect, record its own row ("can be connected and read") and its "ready as soon as it is
+  connected" row with what you asked and saw.
+- **What still waits, and I tell you when each is live:**
+  - Writes approved and read back (GAP-35, OWN-24, ARC-B-144, GAP2-14).
+  - MCP and custom-code connectors (ARC-A-138, FEAT-4.1, OWN-21, ARC-A-142, FEAT-4.7). Custom code
+    needs the script sandbox.
+  - The nightly schema-drift check (REQ-33).
+  - Deleted records (GAP-06) and token refresh without you (GAP-07).
+- **The rest.** As in check 13.
+
+15. **Every tools requirement (M12.4.15), about 15 minutes now, more as the browser lands.**
+Record against the Tools area.
+
+- Step 1. **The catalogue (CONA-32, FEAT-3.7, FEAT-3.8, ARC-A-141).**
+  1. On **Skills > Tools**, every tool is listed with its capability and side effect.
+  2. Open an agent's profile. Only the tools assigned to it are offered to its runs.
+  3. Each tool says whose identity it runs as.
+- Step 2. **A website is working (ARC-B-027, OWN-104, the HTTP half).**
+  1. As yourself, grant the first person `read:website_check` scoped to one website host that you
+     own.
+  2. In an automation step, or once the agent runtime offers it, ask whether that site is working.
+     The answer gives the status, any redirects, the days until its certificate expires, and the
+     response time.
+  3. Ask about a host outside the grant. It is refused.
+- **What still waits, and I tell you when each is live:**
+  - The read-only browser, browser writes, the browser scheduler, the independent judge and the
+    signed exceptions (ARC-A-007, ARC-A-008, FEAT-9.x, ARC-B-012 to ARC-B-026, ARC-B-148, GAP-26,
+    GAP3-07 to GAP3-10, OWN-97). These need the browser worker.
+  - Skill scripts and code in a sandbox (FEAT-3.6, OWN-96). These need the script sandbox: the
+    deploy agent's overlay, switched on in the installation settings.
+  - Artifacts an agent produces (GAP-28, OWN-101).
+  - Computer use (CONA-25, ARC-B-028, OWN-98, OWN-106, ANY-022). This is deferred by your own
+    requirement until the browser checks are done.
+- **The rest.** As in check 13.
 
 ## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
 
@@ -4330,6 +4721,16 @@ nothing was ever exposed. The difference is that when they are wired, the leak c
 reintroduced by writing the natural code.
 
 ---
+
+**REOPENED 2026-10-06: the gap came back, and is being fixed again.** A check written on 2026-10-06
+found that the approval screens built since then show the approver the requester's whole request,
+values included: the console's Approvals card since 2026-09-09, and the Lark card since #258
+(2026-09-30). The guard described above was still there and still passing, but the request travelled
+in a free-form part of the card the guard did not look at, and the reach check compared a value the
+caller asserted rather than one it worked out. Nobody was shown anything: agent actions do not reach
+approvers on your install yet, and no sources are connected. The fix renders every approval at the
+approver's own reach on both screens, shows locked any field the approver cannot read, and extends
+the guard to the whole card, with a check on your install that proves it. Nothing for you to do.
 
 ## 13. Can a leash rule say "supervise everywhere except maintenance"? - DECIDED: strictest wins
 
