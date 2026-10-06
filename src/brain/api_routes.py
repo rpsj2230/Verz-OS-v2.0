@@ -154,17 +154,17 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from brain.agents.model import AGENT_ID_CHARS, AgentRecord
+from brain.agents.model import AGENT_ID_CHARS, AgentRecord, tool_ceiling
 from brain.agents.template import config_hash
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, Page, bound_trace_id
 from brain.audit.compliance import intercept
 from brain.audit.record import DenyReason
 from brain.core.department import gaps_for_question
 from brain.core.entitlement import EntitlementSet
-from brain.core.envelope import TypedResult
+from brain.core.envelope import ToolDefinition, TypedResult
 from brain.core.errors import Absent, BrainError, Failed
 from brain.core.field_policy import FieldPolicy
-from brain.core.principal import Principal
+from brain.core.principal import Principal, PrincipalKind
 from brain.core.redaction import (
     ChannelPayload,
     LockedField,
@@ -173,7 +173,7 @@ from brain.core.redaction import (
 )
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.addressing import from_web
-from brain.gate.admission import admit, second_factor_gives_back, verbs_withheld
+from brain.gate.admission import Assurance, admit, second_factor_gives_back, verbs_withheld
 from brain.gate.answer import Answered, answer_lane, frames_of
 from brain.gate.answer_cache import AnswerStore
 from brain.gate.badge_store import item_lookup_of
@@ -183,6 +183,9 @@ from brain.gate.context import Channel, GateStep, Recorder, open_trace
 from brain.gate.fast_lane import AmbiguityReader, FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
+from brain.gate.injection import RiskAssessment
+from brain.gate.invoke import InvocationRefusedError, invoke
+from brain.gate.leash import Leash
 from brain.gate.live_records import LiveRecords
 from brain.gate.model_lane import (
     PASSAGE_POLICY,
@@ -199,12 +202,13 @@ from brain.gate.roster import (
     run_entitlement,
     viewer_for,
 )
+from brain.gate.runtime import AgentRuntime, RunHaltedError, ToolRefusedError
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
 from brain.knowledge.connector_rows import connected_questions
-from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
+from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, SEARCH_DOCUMENTS, KnowledgePassage
 from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.lark_base_rows import BaseLane, lane_for_base
 from brain.knowledge.row_store import SessionRowSource
@@ -1693,6 +1697,13 @@ class Answering:
     reach: EntitlementSet
     channel: Channel
     now: datetime
+    #: How strongly the asker was known when the request was admitted, or None where the channel
+    #: did not say. A run's reach is admitted again at it before each tool call, or at the weakest
+    #: when it is None. See `EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL`.
+    assurance: Assurance | None = None
+    #: The caller the web route authenticated, so a run resolves them again exactly as the route
+    #: did, service accounts included. None on a chat channel, which carries a person.
+    caller: Caller | None = None
 
     @classmethod
     def of(cls, asked: Asking) -> Answering:
@@ -1702,6 +1713,8 @@ class Answering:
             reach=asked.reach,
             channel=asked.channel,
             now=asked.now,
+            assurance=asked.caller.assurance,
+            caller=asked.caller,
         )
 
 
@@ -1710,16 +1723,186 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
 
     The stored agents come from `brain.app.lifespan`'s `agent_roster`, read on each question so an
     agent disabled a moment ago cannot be selected; a process with no database has only the
-    default. `brain.gate.roster.answer_roster` decides which of them this person may use.
+    default. `brain.gate.roster.answer_roster` decides which of them this person may use on the
+    channel they asked on, so an agent not enabled there is absent from this roster (M13.7.4).
     """
     read: AgentRoster | None = getattr(state, "agent_roster", None)
     records = await read() if read is not None else ()
     return answer_roster(
         records,
         viewer_for(asked.principal),
+        channel=asked.channel,
         default=default_agents(registry),
         tool_names=(one.name for one in registry.definitions()),
     )
+
+
+#: Which agent runs get the tool loop rather than the passage step.
+AN_AGENT_WITH_A_TOOL_BEYOND_THE_PASSAGE_SEARCH_RUNS_THE_LOOP: Final = (
+    "A selected agent whose projected catalogue offers a read-only tool other than the passage "
+    "search runs brain.gate.runtime's loop, the one place a model is handed tools. An agent that "
+    "only reads the company's documents keeps the passage step, which reads them before the "
+    "model is asked and hands the model no tools, so nothing about it changes."
+)
+
+#: How the reach a run is judged at again is resolved, for every kind of caller.
+EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL: Final = (
+    "Before each tool call the caller's reach is resolved again exactly as the route resolved it: "
+    "a caller the route authenticated through reach_of, so a service account is its owner's "
+    "grants narrowed by the account and a revoked grant or an owner gone bites at once, then "
+    "admitted for the channel at the same strength; a person answered on a chat channel through "
+    "the resolver and admitted at the strength chat is held to, or the weakest where that is not "
+    "known. Only a caller the run has no way to resolve keeps the reach it was admitted at, and "
+    "no route builds one."
+)
+
+#: The one caller a run cannot resolve again, said where a reader of the rule will look.
+A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH: Final = (
+    "An Answering naming no authenticated caller and a principal that is not a person cannot be "
+    "resolved again by principal id, because that would drop whatever narrowed it. Its run keeps "
+    "the reach it was admitted at. Neither the web route nor any chat channel builds one."
+)
+
+
+class RunToolCaller:
+    """`brain.gate.runtime.ToolCaller` over the application's registry, with one kind of refusal.
+
+    `brain.automation_routes.RegistryToolCaller` validates the arguments into the request model a
+    handler declares and calls it at the reach; its refusal is the automation piece's, and here it
+    becomes the runtime's, so the runtime has one exception to answer with its one sentence.
+    Imported where it is called, because `brain.automation_routes` imports this module.
+    """
+
+    def __init__(self, registry: ToolRegistry) -> None:
+        from brain.automation_routes import RegistryToolCaller
+
+        self.inner = RegistryToolCaller(registry)
+
+    def call(
+        self,
+        *,
+        tool: ToolDefinition,
+        arguments: Mapping[str, Any],
+        entitlement: EntitlementSet,
+        now: datetime | None,
+    ) -> object:
+        from brain.ops.automation_piece import PieceRefusedError
+
+        try:
+            return self.inner.call(tool=tool, arguments=arguments, entitlement=entitlement, now=now)
+        except PieceRefusedError as refused_call:
+            raise ToolRefusedError(str(refused_call)) from refused_call
+
+
+def policy_of(registry: ToolRegistry) -> Callable[[ToolDefinition], FieldPolicy]:
+    """The field policy a tool's results are redacted with: its source's, its entity's, or none.
+
+    None is the empty policy, which withholds every field, and a passage is redacted by the
+    passage policy the model lane uses. Built once per run, before anything is read.
+    """
+    by_source = source_field_policies(registry)
+    by_entity = field_policies(registry)
+
+    def policy(definition: ToolDefinition) -> FieldPolicy:
+        if definition.entity == KNOWLEDGE_ENTITY:
+            return PASSAGE_POLICY
+        found = by_source.get((definition.source, definition.entity))
+        return found or by_entity.get(definition.entity) or FieldPolicy()
+
+    return policy
+
+
+def reach_again(
+    request: Request, asking: Answering
+) -> Callable[[datetime], Awaitable[EntitlementSet]]:
+    """How a run's reach is resolved again before each tool call.
+
+    See `EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL`, and
+    `A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH` for the one that is not. An
+    authenticated caller refused by `reach_of` now (an account whose owner has gone) reaches
+    nothing for the rest of the run.
+    """
+    wiring = wiring_of(request)
+
+    async def again(now: datetime) -> EntitlementSet:
+        if wiring is None:
+            return asking.reach
+        if asking.caller is not None:
+            try:
+                held = await reach_of(asking.caller, wiring, now)
+            except TokenRefusedError:
+                return EntitlementSet(principal_id=asking.reach.principal_id, grants=())
+            return admit(held, asking.channel, asking.caller.assurance)
+        if asking.principal.kind is not PrincipalKind.HUMAN:
+            return asking.reach
+        own = await resolve(
+            asking.principal.id,
+            versions=wiring.versions,
+            store=wiring.store,
+            cache=wiring.cache,
+            now=now,
+        )
+        assurance = asking.assurance or Assurance.UNVERIFIED
+        return admit(own.entitlements, asking.channel, assurance)
+
+    return again
+
+
+def agent_runtime_for(
+    request: Request,
+    *,
+    agent: AgentRecord,
+    asking: Answering,
+    registry: ToolRegistry,
+    assessment: RiskAssessment,
+) -> AgentRuntime | None:
+    """The tool loop for this agent and this asker, or None when the passage step serves it.
+
+    See `AN_AGENT_WITH_A_TOOL_BEYOND_THE_PASSAGE_SEARCH_RUNS_THE_LOOP`. The leash is empty in
+    this release: only tools that read are offered, and a read keeps whatever rung it is given.
+    """
+    from brain.ops.agent_run_store import StoredAgentRuns
+
+    sessions = getattr(request.app.state, "db_sessions", None)
+
+    async def halted() -> str:
+        # The agent axis joins `Work` with the halt store's agent slice; until then a run is
+        # stopped by a halt on everything, its person or their department.
+        return await refusal_for(
+            sessions,
+            Work(
+                person=asking.principal.id,
+                department=asking.principal.primary_department or "",
+            ),
+        )
+
+    runtime = AgentRuntime(
+        record=agent,
+        asker=asking.reach,
+        registry=registry,
+        leash=Leash(),
+        tools=RunToolCaller(registry),
+        policy_for=policy_of(registry),
+        reach_now=reach_again(request, asking),
+        halted=halted,
+        assessment=assessment,
+        runs=None if sessions is None else StoredAgentRuns(sessions),
+    )
+    try:
+        invocation = invoke(
+            principal_id=asking.principal.id,
+            agent_id=agent.agent_id,
+            registry=registry,
+            entitlement=run_entitlement(asking.reach, agent),
+            ceiling=tool_ceiling(agent),
+            leash=Leash(),
+            assessment=assessment,
+            now=asking.now,
+        )
+    except InvocationRefusedError:
+        return None
+    beyond = [one for one in runtime.offered(invocation) if one.name != SEARCH_DOCUMENTS]
+    return runtime if beyond else None
 
 
 async def answered_for(
@@ -1882,6 +2065,18 @@ async def answered_for(
                 now=asking.now,
                 trace_id=recorder.trace_id,
             )
+        # The selected agent's tool loop, when its catalogue offers a tool the passage step does
+        # not already read (M13.7.1). See `agent_runtime_for`.
+        if model is not None and agent is not None:
+            runtime = agent_runtime_for(
+                request,
+                agent=agent,
+                asking=asking,
+                registry=registry,
+                assessment=front.screened,
+            )
+            if runtime is not None:
+                model = replace(model, runtime=runtime)
         answered = await answer_lane(
             address.question,
             origin=origin,
@@ -1952,6 +2147,9 @@ async def answered_for(
                 department=asking.principal.primary_department,
             ),
         )
+    except RunHaltedError as stopped:
+        # A run somebody stopped, in the halt's own words, as a halted question is told.
+        return Halted(stopped.told)
     except BrainError:
         # Already in the taxonomy, already has a public message, already maps to a status.
         raise

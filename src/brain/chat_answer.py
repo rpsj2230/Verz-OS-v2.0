@@ -400,7 +400,14 @@ class ChatAnswerer:
         outcome = await answered_for(
             self._request,
             open_trace(trace, now, channel),
-            Answering(principal=person, reach=reach, channel=channel, now=now),
+            # Bound, the strength every chat reach is admitted at (`ChatAnswers` above).
+            Answering(
+                principal=person,
+                reach=reach,
+                channel=channel,
+                now=now,
+                assurance=Assurance.BOUND,
+            ),
             asked,
         )
         if isinstance(outcome, StoreVerdict):

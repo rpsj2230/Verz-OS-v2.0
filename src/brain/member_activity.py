@@ -90,7 +90,7 @@ file not at all.
 
 Task ids: M40.2.1.1, M40.2.1.2, M40.2.1.3, M40.2.1.4, M40.2.2.1, M40.2.2.2, M40.2.2.3
 Task ids: M40.2.2.4, M40.2.2.5, M40.4.1.1, M40.4.1.2, M40.4.1.3, M40.4.1.4, M40.4.2.1
-Task ids: M40.4.2.2, M40.4.2.3, M40.4.2.4, M40.2.1.5
+Task ids: M40.4.2.2, M40.4.2.3, M40.4.2.4, M40.2.1.5, M13.7.4
 """
 
 from __future__ import annotations
@@ -519,7 +519,13 @@ def my_agents(
         AgentRow(
             agent_id=one.agent_id,
             provision=provision_of(one),
-            channels=offered_channels(run_reach(reach, one), capabilities, policy, now),
+            # And only where it is switched on (M13.7.4): a channel it would be refused on, in the
+            # words a missing agent gets, is not a place this person can run it.
+            channels=tuple(
+                channel
+                for channel in offered_channels(run_reach(reach, one), capabilities, policy, now)
+                if channel.value in one.channels
+            ),
             uses=tally[one.agent_id],
         )
         for one in records

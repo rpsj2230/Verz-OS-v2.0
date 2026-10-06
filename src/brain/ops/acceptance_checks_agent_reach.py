@@ -77,7 +77,7 @@ async def _agent(h: Harness, owner: str, name: str, capabilities: Sequence[str])
     with a template signed by a key made for the check.
     """
     from brain.agents.install_store import agent_values, version_values
-    from brain.agents.model import AgentAudience
+    from brain.agents.model import AgentAudience, answering_on
     from brain.agents.template import (
         ManifestAuthority,
         ManifestIdentity,
@@ -87,6 +87,7 @@ async def _agent(h: Harness, owner: str, name: str, capabilities: Sequence[str])
         publish,
     )
     from brain.core.entitlement import Capability
+    from brain.gate.context import Channel
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -130,7 +131,13 @@ async def _agent(h: Harness, owner: str, name: str, capabilities: Sequence[str])
             effective_hash=effective.config_hash,
             created_by=owner,
         ),
-        insert(AgentRow).values(**agent_values(effective.record)),
+        # Answering on the two channels the check asks on: an agent with none answers nowhere
+        # (M13.7.4), and would be asked about as an agent nobody made.
+        insert(AgentRow).values(
+            **agent_values(
+                answering_on(effective.record, (Channel.CONSOLE.value, Channel.LARK.value))
+            )
+        ),
     )
     return agent_id
 
