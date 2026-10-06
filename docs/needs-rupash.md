@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**47 items are open: 170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **168,** what a brand-new install ships with, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**46 items are open: 170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -68,37 +68,6 @@ the figures and you say when.
 
 **What I need from you:** nothing yet. I will bring the figures after the first week, or reply "169: B"
 or "169: C".
-
-## 168. What a brand-new install ships with: the roles and permission sets, and what it does not
-
-**In plain terms:** your plan says a new install is loaded with "the six roles, standard permission
-sets, the standard agents and sensible defaults" (M41.2.7). Today a fresh install is furnished with the
-roles, the standard permission sets and a company-wide scope, and the built-in agent templates are
-there to install from the gallery. Two things in that sentence are done differently, and that was
-decided inside the code rather than asked of you:
-
-1. **The four "sensible defaults" are not written anywhere.** They are: sessions close after 30 minutes
-   untouched, no session lasts longer than 10 hours, every action with a side effect needs a person's
-   approval until somebody raises that, and new knowledge is visible to the uploader's department and
-   no wider. Nothing reads them as settings: the first two are fixed in the sign-in code (your item
-   19), the third is how the autonomy levels already behave, and the fourth is how knowledge is
-   already filed. So writing them down would create four settings that change nothing.
-2. **No agent is installed at the start.** The built-in templates are there (signed when the product
-   starts), and installing one is a step somebody takes from the gallery, at the Shadow level, so a
-   new install does not start with an agent already answering people.
-
-**Option A: accept both.** A new install ships with the roles, permission sets, scope and templates;
-the four defaults are how the product already behaves, and the Settings page says so in a short note.
-Nobody has an agent answering before they choose one.
-
-**Option B: build them.** The four defaults become settings the product reads (so a company can change
-them without a release), and the install ships with one standard agent per template, installed at the
-Shadow level and answering nobody until promoted.
-
-**My recommendation:** A, with the note on the Settings page. B costs a good deal and adds risk
-(session length is a security setting) for no behaviour you do not already have.
-
-**What I need from you:** reply "168: A" or "168: B".
 
 ## 167. Does a chat room or channel belong to exactly one agent?
 
@@ -1609,6 +1578,40 @@ ordinary files.
 
 **What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
 in MB). Nothing on your server changes for either answer.
+
+## 168. What a brand-new install ships with - DECIDED 2026-10-06: A, accept both
+
+**In plain terms:** your plan says a new install is loaded with "the six roles, standard permission
+sets, the standard agents and sensible defaults" (M41.2.7). Today a fresh install is furnished with the
+roles, the standard permission sets and a company-wide scope, and the built-in agent templates are
+there to install from the gallery. Two things in that sentence are done differently, and that was
+decided inside the code rather than asked of you:
+
+1. **The four "sensible defaults" are not written anywhere.** They are: sessions close after 30 minutes
+   untouched, no session lasts longer than 10 hours, every action with a side effect needs a person's
+   approval until somebody raises that, and new knowledge is visible to the uploader's department and
+   no wider. Nothing reads them as settings: the first two are fixed in the sign-in code (your item
+   19), the third is how the autonomy levels already behave, and the fourth is how knowledge is
+   already filed. So writing them down would create four settings that change nothing.
+2. **No agent is installed at the start.** The built-in templates are there (signed when the product
+   starts), and installing one is a step somebody takes from the gallery, at the Shadow level, so a
+   new install does not start with an agent already answering people.
+
+**Option A: accept both.** A new install ships with the roles, permission sets, scope and templates;
+the four defaults are how the product already behaves, and the Settings page says so in a short note.
+Nobody has an agent answering before they choose one.
+
+**Option B: build them.** The four defaults become settings the product reads (so a company can change
+them without a release), and the install ships with one standard agent per template, installed at the
+Shadow level and answering nobody until promoted.
+
+**My recommendation:** A, with the note on the Settings page. B costs a good deal and adds risk
+(session length is a security setting) for no behaviour you do not already have.
+
+**Decided 2026-10-06: "168: A".** A new install ships with the roles, permission sets, scope and
+templates. The four defaults stay how the product already behaves, and the Settings page says so in a
+short note (built). Nobody has an agent answering before they choose one.
+
 
 ## 135. Google Drive: Viewer or Editor on the folder - DECIDED 2026-09-30: A, Viewer
 
