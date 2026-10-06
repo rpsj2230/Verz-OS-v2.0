@@ -32,7 +32,7 @@ skills fetched from GitHub keep their public names, because renaming them would 
 the import pins; if the install's library already holds either, the check says not run rather than
 asking an import the library would refuse for a reason that is not the product's.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M27.15.57
 """
 
 from __future__ import annotations
@@ -394,7 +394,7 @@ def _transport() -> tuple[Fetcher, Resolver]:
 
 
 @check(
-    leaves=("M12.2.2", "M12.2.3"),
+    leaves=("M12.2.2", "M12.2.3", "M27.15.57"),
     sentence=(
         "A public skill fetched by the install's own transport from a GitHub repository at a full "
         "commit, and another from a raw address, both land undecided, keeping the commit and "
@@ -538,7 +538,7 @@ async def _an_agent(
     """
     from brain.agents.install import settle
     from brain.agents.install_store import agent_values, version_values
-    from brain.agents.model import AgentAudience
+    from brain.agents.model import AgentAudience, answering_on
     from brain.agents.template import (
         ManifestAuthority,
         ManifestIdentity,
@@ -548,6 +548,7 @@ async def _an_agent(
         publish,
     )
     from brain.core.entitlement import Capability
+    from brain.gate.context import Channel
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -609,7 +610,8 @@ async def _an_agent(
             effective_hash=effective.config_hash,
             created_by=owner,
         ),
-        insert(AgentRow).values(**agent_values(record)),
+        # Asked on Ask, so switched on for the console, as a person making it would tick it.
+        insert(AgentRow).values(**agent_values(answering_on(record, (Channel.CONSOLE.value,)))),
     )
     return agent_id
 

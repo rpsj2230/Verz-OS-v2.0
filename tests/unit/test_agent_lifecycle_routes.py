@@ -38,6 +38,7 @@ from brain.agent_lifecycle_routes import (
     LEARNING_PATH,
     LIFECYCLE_PATH,
     MOVED,
+    NO_CHANNEL_ANSWERS_NOWHERE,
     NO_SIGNING_KEY_HERE,
     NOT_THE_VERSION_CONFIRMED,
     REFUSED,
@@ -53,7 +54,7 @@ from brain.agents.creation import AGENT_INSTALL_CAPABILITY, install_draft
 from brain.agents.install import InstallDraft, answer
 from brain.agents.install_store import Finished, prepared
 from brain.agents.lifecycle import AGENT_LIFECYCLE_CAPABILITY, archive, enable
-from brain.agents.model import AgentAudience, AgentRecord, AgentState
+from brain.agents.model import ASKING_CHANNELS, AgentAudience, AgentRecord, AgentState, answering_on
 from brain.agents.template import (
     LeashRung,
     ManifestAuthority,
@@ -295,9 +296,16 @@ class Memory:
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        channels: tuple[str, ...] = (),
     ) -> Finished:
         installation = prepared(
-            draft, key=key, audience=audience, registry=registry, tools=tools, at=at
+            draft,
+            key=key,
+            audience=audience,
+            registry=registry,
+            tools=tools,
+            at=at,
+            channels=channels,
         )
         agent_id = installation.record.agent_id
         if agent_id in self.agents:
@@ -669,6 +677,25 @@ def test_a_duplicate_is_a_new_disabled_agent_from_the_same_version_with_the_same
     assert installation.instance.overlay["persona"] == PERSONA
 
 
+def test_a_duplicate_answers_on_the_channels_its_source_answers_on(console: Console) -> None:
+    """**M13.7.4.** Duplicating asks nothing about channels, so the copy is switched on where the
+    agent it copies is. Delete this and every duplicate is made mute without anybody being told."""
+    source = console.memory.agents[COMPANY]
+    console.memory.agents[COMPANY] = replace(
+        source, record=answering_on(source.record, ("lark", "console"))
+    )
+
+    response = console.post(
+        "u_admin",
+        path(DUPLICATE_PATH, agent_id=COMPANY),
+        {"display_name": "Pricing desk copy", "expected_hash": source.effective_hash},
+    )
+
+    assert response.status_code == 201
+    [made] = console.memory.made
+    assert made.finished.installation.record.channels == ("console", "lark")
+
+
 def test_a_duplicate_never_reaches_a_tool_its_source_was_never_bound_to(
     console: Console,
 ) -> None:
@@ -744,6 +771,39 @@ def test_an_installed_version_starts_disabled_and_at_shadow_on_every_target(
     }
     assert re.fullmatch(r"invoice_desk_[0-9a-f]{6}", record.agent_id)
     assert made.maker_id == "u_admin"
+    assert record.channels == ()
+
+
+def test_an_install_answers_on_the_channels_ticked_and_refuses_one_nothing_is_asked_on(
+    console: Console,
+) -> None:
+    """**M13.7.4.** The version offers every channel an agent may answer on, unticked, with the
+    sentence that none answers nowhere; the ticked ones are stored on the new agent, and a channel
+    outside the list is a 422 that installs nothing. Delete this and the template install either
+    drops the boxes on the way to the row or stores a box that switches nothing on."""
+    version = console.get(
+        "u_admin", path(VERSION_PATH, template_id=TEMPLATE_ID, version=VERSION)
+    ).json()
+    assert [one["name"] for one in version["channels"]] == list(ASKING_CHANNELS)
+    assert version["channels_note"] == NO_CHANNEL_ANSWERS_NOWHERE
+    target = path(INSTALL_PATH, template_id=TEMPLATE_ID, version=VERSION)
+
+    refused = console.post(
+        "u_admin",
+        target,
+        {"expected_digest": version["content_digest"], "channels": ["scheduler"]},
+    )
+    assert refused.status_code == 422
+    assert console.memory.made == []
+
+    made = console.post(
+        "u_admin",
+        target,
+        {"expected_digest": version["content_digest"], "channels": ["whatsapp", "console"]},
+    )
+    assert made.status_code == 201
+    [one] = console.memory.made
+    assert one.finished.installation.record.channels == ("console", "whatsapp")
 
 
 def test_a_version_whose_leash_starts_above_shadow_is_unavailable_and_installs_nothing(

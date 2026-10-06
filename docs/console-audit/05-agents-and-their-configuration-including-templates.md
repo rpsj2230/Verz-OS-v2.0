@@ -1,9 +1,9 @@
 ### Agents and their configuration, including templates
 
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
-- **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`
+- **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 39 routes, 6 called by no screen; 21 write routes, 20 with all three proofs; 3 gaps.
+- **Measured here:** 39 routes, 6 called by no screen; 21 write routes, 20 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -47,6 +47,7 @@
 | `PUT /api/v1/agents/{agent_id}/budget` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 
+- **Gap.** An agent's finished runs are recorded, how each ended and what it spent, and no screen lists them. Recorded: ops.agent_run is written by brain.gate.runtime for operating the runtime and is not the record of what an agent did (brain.ops.agent_run_store.AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD); the agent's Dashboard draws spend from the usage routes, and a list of runs is a screen nobody has drawn yet.
 - **Gap.** A draft is written, checked and rehearsed on every install, and published only where the install holds a template signing key. Recorded: brain.agent_builder_routes signs a published draft with the key brain.agent_lifecycle_routes installs with, and no setting holds one yet (brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN); publishing says so rather than signing with a weaker key.
 - **Gap.** A rung above Shadow cannot be published from a draft, and a rehearsal does not ask its test questions. Recorded: brain.builder.agent_drafts.A_RUNG_IS_RAISED_WITH_EVIDENCE_AND_NEVER_BY_A_DRAFT, and no model answers for an agent yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET).
 - **Gap.** A published template version cannot be installed from the console. Recorded: brain.agent_lifecycle_routes serves the version and its install, and the Agent templates page has no button that presses it yet; switching on and off, archiving, duplicating and handing on are pressed from the Agents pages.

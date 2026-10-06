@@ -45,7 +45,7 @@ draft can be written, saved, checked and rehearsed meanwhile.
 **A new module rather than `brain.agent_lifecycle_routes`**, because that router moves an agent that
 exists and this one makes and changes one; they share its three questions and its 409 body.
 
-Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6
+Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4
 """
 
 from __future__ import annotations
@@ -62,8 +62,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from brain.agent_lifecycle_routes import (
+    NO_CHANNEL_ANSWERS_NOWHERE,
     NO_SIGNING_KEY_HERE,
+    ChannelChoiceView,
     FoundAgent,
+    channel_choices,
     connectors_of,
     holds,
     template_key_of,
@@ -81,7 +84,7 @@ from brain.agents.creation import (
 from brain.agents.install import Installation, MissingKind, rehearse
 from brain.agents.install_store import prepared
 from brain.agents.lifecycle import ARCHIVE_IS_TERMINAL
-from brain.agents.model import AgentAudience, AgentState
+from brain.agents.model import AgentAudience, AgentState, EnabledChannels
 from brain.agents.template import SignedManifest, TemplateManifest, materialise, publish
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
@@ -321,6 +324,10 @@ class AgentDraftView(BaseModel):
     drawable_tools: list[str]
     #: Why publishing is unavailable on this install, when it is.
     publish_unavailable: str | None = None
+    #: For a new agent: the channels it may be switched on for, offered unticked (M13.7.4).
+    channels: list[ChannelChoiceView] = Field(default_factory=channel_choices)
+    #: `brain.agent_lifecycle_routes.NO_CHANNEL_ANSWERS_NOWHERE`.
+    channels_note: str = NO_CHANNEL_ANSWERS_NOWHERE
 
 
 class DraftStartAsked(BaseModel):
@@ -356,6 +363,9 @@ class DraftPublishAsked(BaseModel):
     revision: int = Field(ge=FIRST_REVISION)
     #: False: the author alone. True: the author's own department.
     for_department: bool = False
+    #: For a new agent: the channels it answers on, as the author ticked them (M13.7.4). None
+    #: ticked answers nowhere. An edit keeps the agent's own, as it keeps its audience.
+    channels: EnabledChannels = ()
 
 
 class DraftSavedView(BaseModel):
@@ -726,6 +736,8 @@ async def _publish(
             key=key,
             at=asked.now,
         )
+        # The channels the publishing act carries, which are what the author ticked.
+        channels = next((one.channels for one in acts if one.act is DraftAct.PUBLISHED), ())
         made: Installation = prepared(
             install_draft(
                 signed, agent_id=draft.agent_id, maker_id=draft.owner_id, display_name=None
@@ -735,6 +747,7 @@ async def _publish(
             registry=registry,
             tools=tools,
             at=asked.now,
+            channels=channels,
         )
         if not await store.publish_new(draft.draft_id, acts, signed, made, by=_by(asked)):
             return _not_changed(MOVED, PRESS_AGAIN)
@@ -1220,6 +1233,7 @@ async def publish_agent_draft(
             at=asked.now,
             widened=True,
             for_department=body.for_department,
+            channels=body.channels,
         )
         if not await store.record(draft.draft_id, asked_for, by=_by(asked)):
             return _not_changed(REFUSED, ALREADY_WAITING)
@@ -1237,6 +1251,7 @@ async def publish_agent_draft(
         actor_id=me,
         at=asked.now,
         for_department=body.for_department,
+        channels=body.channels,
     )
     return await _publish(request, store, draft, audience, found, (done,), asked, key)
 
@@ -1289,6 +1304,8 @@ async def approve_agent_draft(
             at=asked.now,
             widened=True,
             for_department=for_department,
+            # What the author ticked when they asked, which is what the approver was shown.
+            channels=requested.channels if requested is not None else (),
         ),
     )
     return await _publish(request, store, draft, audience, found, acts, asked, key)

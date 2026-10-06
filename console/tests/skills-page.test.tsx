@@ -15,7 +15,7 @@
  * sends it, and every path it sends to with the API document.
  *
  * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M42.6.4, M12.2.2, M12.3.2, M12.4.13
- * Task ids: M12.2.10
+ * Task ids: M12.2.10, M27.15.57
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -27,7 +27,7 @@ import { SKILLS_HEADING } from "../src/pages/Skills";
 import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
 import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
-import { IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
+import { FROM_ADDRESS, FROM_REPOSITORY, IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, FINDINGS_HEADING } from "../src/pages/skills/SkillProfile";
 import { PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
 import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
@@ -375,6 +375,35 @@ describe("the library list", () => {
     await waitFor(() => {
       expect(sent.filter((one) => one.path === `${API}${LIBRARY_API_PATH}`).length).toBeGreaterThan(1);
     });
+  });
+});
+
+describe("importing from a repository", () => {
+  test("the import tab offers a GitHub repository first and an address second, with nothing saying only upload and paste", async () => {
+    // What breaks if this is deleted: M27.15.57. The interim sentence saying why only upload and
+    // paste are offered was for a release with no repository import; that import ships, so the tab
+    // must offer it, first, and no sentence may still say it is missing.
+    const { container } = await consoleAt("/skills", { [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) } });
+    pressed("Add a skill", container);
+    const tab = await waitFor(() => {
+      const found = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((one) => one.textContent === "Import");
+      if (found === undefined) {
+        throw new Error("the import tab has not arrived");
+      }
+      return found;
+    });
+    fireEvent.mouseDown(tab, { button: 0 });
+    const form = await waitFor(() => {
+      const found = document.querySelector<HTMLFormElement>('form[aria-label="Import a skill"]');
+      if (found === null) {
+        throw new Error("the import form has not arrived");
+      }
+      return found;
+    });
+    const choices = [...form.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    expect(choices.map((one) => one.closest("label")?.textContent)).toEqual([FROM_REPOSITORY, FROM_ADDRESS]);
+    expect(choices[0]?.checked).toBe(true);
+    expect(document.body.textContent).not.toMatch(/only upload and paste/i);
   });
 });
 
