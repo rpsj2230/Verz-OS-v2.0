@@ -409,6 +409,27 @@ services:
       resources:
         limits:
           memory: 128M
+  keycloak-build:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: 'no'
+    entrypoint:
+    - /bin/bash
+    - -c
+    command:
+    - "set -eu\nmarker=/opt/keycloak/lib/quarkus/brain-build.txt\nbuilt_for=\"$$(ls /opt/keycloak/lib/lib/main | sha256sum | cut -d' ' -f1) KC_DB=$$KC_DB KC_HEALTH_ENABLED=$$KC_HEALTH_ENABLED KC_VAULT=$$KC_VAULT\"\nif [ -f \"$$marker\" ] && [ \"$$(cat \"$$marker\")\" = \"$$built_for\" ]; then\n  echo \"keycloak-build: already built for this distribution and these options\"\n  exit 0\nfi\n/opt/keycloak/bin/kc.sh build\nprintf '%s' \"$$built_for\" > \"$$marker\"\n# The most this container held, from its own cgroup, so the limit below is checked\n# against a measurement on every build rather than once.\necho \"keycloak-build: built, peak $$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown) bytes\"\n"
+    environment:
+      KC_DB: postgres
+      KC_HEALTH_ENABLED: 'true'
+      KC_VAULT: file
+      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40
+    volumes:
+    - keycloak-build:/opt/keycloak/lib/quarkus
+    networks:
+    - identity
+    deploy:
+      resources:
+        limits:
+          memory: 896M
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     restart: unless-stopped
@@ -417,9 +438,12 @@ services:
         condition: service_healthy
       keycloak-realm:
         condition: service_completed_successfully
+      keycloak-build:
+        condition: service_completed_successfully
     command:
     - start
     - --import-realm
+    - --optimized
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
@@ -437,8 +461,9 @@ services:
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:?set KEYCLOAK_HOSTNAME}
       KC_HOSTNAME_STRICT: 'true'
       KC_HEALTH_ENABLED: 'true'
-      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40
+      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40
     volumes:
+    - keycloak-build:/opt/keycloak/lib/quarkus
     - realm-import:/opt/keycloak/data/import:ro
     - keycloak-vault:/opt/keycloak/vault:ro
     networks:
@@ -457,7 +482,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1024M
   langfuse-web:
     image: langfuse/langfuse:3
     restart: unless-stopped
@@ -782,6 +807,7 @@ volumes:
   brain-db: null
   seaweedfs: null
   keycloak-db: null
+  keycloak-build: null
   realm-import: null
   keycloak-vault: null
   langfuse-clickhouse: null
