@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T17:22:42.636406+00:00",
-  "commit": "1c9a550d",
-  "commit_subject": "The browser harness proves two tabs refresh, no page leaks an internal name or another host, and a drawer works under the console's style policy (#451)",
+  "generated_at": "2026-10-06T17:34:24.109136+00:00",
+  "commit": "4b7f54f4",
+  "commit_subject": "The Credentials screen gets an install check that writes every slot it offers into a vault of its own (#453)",
   "total": 1596,
   "done": 684,
   "percent": 42.9,
