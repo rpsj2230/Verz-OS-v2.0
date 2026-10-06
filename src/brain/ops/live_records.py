@@ -32,6 +32,14 @@ record that is absent from one that was not read.
 `refresh` with the range a tool asked for as the read's second filter and the task lane's patience;
 the rows it lays figures over are the ones the tool found at the asker's reach, exactly as here.
 
+**A pair whose source has lost a field is not read, and is answered as a source that could not be
+(M11.8.7).** `lost` reads what each source's newest scheduled read found
+(`brain.ops.connector_sync.fields_lost_of`), and a refresh of an entity that read lost a field
+returns no records and a `FailureReason.SHAPE_CHANGED` failure, so the lane says what it says
+about a source it could not read. Reading it anyway would answer with the lost field missing from
+every record, which reads to the asker as the field being empty. See
+`A_SOURCE_THAT_LOST_A_FIELD_IS_ANSWERED_AS_DEGRADED`.
+
 **It lives outside the gate, which knows it only as `brain.gate.live_records.LiveRecords`.** The
 gate imports no connector (`tests/unit/test_repo_shape.py`): it decides what a caller may see and
 never fetches, so the seam is a protocol the gate owns and this module, which reads through the
@@ -40,19 +48,24 @@ connectors' executor, is the one implementation `brain.api_routes` hands the lan
 Scope: nothing here opens a connection. What is connected, the throttle, the flights and the clock
 are handed in by whoever built the lane.
 
-Task ids: M11.9.2, M11.5.1, M11.5.5, M11.7.1
+Task ids: M11.9.2, M11.5.1, M11.5.5, M11.7.1, M11.8.7
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final
 
 from brain.connectors.contract import FetchRequest
 from brain.connectors.date_range import DateWindow
-from brain.connectors.federation import CONNECTOR_TIMEOUT_MS
+from brain.connectors.federation import (
+    CONNECTOR_TIMEOUT_MS,
+    FailureReason,
+    PartialAnswer,
+    SourceFailure,
+)
 from brain.connectors.live_read import (
     LIVE_READ_BUDGET_MS,
     LIVE_READ_TIMEOUT_MS,
@@ -90,6 +103,17 @@ A_FIGURE_TOOL_WAITS_AS_THE_TASK_LANE_WAITS: Final = (
 #: What a figure tool's reads may take in all, in milliseconds. See the reason above.
 TASK_BUDGET_MS: Final = 2 * CONNECTOR_TIMEOUT_MS
 
+#: Why a source that lost a field is not read for that entity.
+A_SOURCE_THAT_LOST_A_FIELD_IS_ANSWERED_AS_DEGRADED: Final = (
+    "A field the source renamed or removed arrives as nothing on every record read from it, and an "
+    "answer built from those records says the field is empty, which is a wrong answer delivered "
+    "as a right one. So until a scheduled read finds the field again, a question over that entity "
+    "is told the source could not be read, in the words every unreadable source gets."
+)
+
+#: What the trace records for a refresh refused for a lost field. Never the field's name.
+FIELD_LOST_AT_THE_SOURCE: Final = "a field its tools read is no longer in its records"
+
 
 @dataclass(frozen=True)
 class SourceRecords:
@@ -107,6 +131,10 @@ class SourceRecords:
     #: What a figure tool's reads may take in all: two of the task lane's timeouts, the same depth
     #: the live read budget allows a question, at the patience of nobody watching a spinner.
     task_budget_ms: int = TASK_BUDGET_MS
+    #: The fields each source's newest scheduled read found lost, as `entity.field`, asked once per
+    #: refresh. None reads no source as having lost anything. See
+    #: `A_SOURCE_THAT_LOST_A_FIELD_IS_ANSWERED_AS_DEGRADED`.
+    lost: Callable[[], Awaitable[Mapping[str, frozenset[str]]]] | None = None
 
     async def refresh(
         self,
@@ -181,6 +209,10 @@ class SourceRecords:
         mode = sources.reads(source, entity)
         if mode is None:
             return None
+        gone = frozenset() if self.lost is None else (await self.lost()).get(source, frozenset())
+        if any(name.partition(".")[0] == entity for name in gone):
+            failure = SourceFailure(source, FailureReason.SHAPE_CHANGED, FIELD_LOST_AT_THE_SOURCE)
+            return Refreshed(result=None, partial=PartialAnswer(failed=(failure,)), calls=0)
         ranged = () if window is None else ((RANGE_FILTER, window.text()),)
         calls = tuple(
             LiveCall(
