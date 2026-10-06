@@ -14,12 +14,15 @@
  * under a grant since lost is absent from the messages, with no mark where it was: the person's
  * own questions always come back.
  *
- * **A wrong answer is marked with one of four kinds and no words.** The route keeps the kind and the
- * records the answer drew on as a note in the thread, which the learning signal counts; a sentence
- * saying what the right answer was would be a claim nobody checked, so the page offers no field for
- * one (`brain.chat.thread_store.A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`).
+ * **A wrong answer is marked with one of four kinds, and what is right goes somewhere else.** The
+ * route keeps the kind and the records the answer drew on as a note in the thread, which the learning
+ * signal counts, and the note never holds words
+ * (`brain.chat.thread_store.A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`). What the person says is
+ * right, when they say it, is held apart as a proposal about the document the answer cited, and
+ * changes nothing until that document's steward approves it on the Corrections tab
+ * (`brain.knowledge.candidates.A_CORRECTION_S_WORDS_CHANGE_NOTHING_UNTIL_SOMEBODY_APPROVES_THEM`).
  *
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M16.6.5
  */
 
 import type { components } from "../api/schema";

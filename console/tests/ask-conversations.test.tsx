@@ -12,7 +12,7 @@
  * A wrong answer is marked with a kind and no words, at `POST /api/v1/threads/{id}/corrections`,
  * whose kinds are the API schema's own, and a reopened thread says so in words.
  *
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M16.6.5
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -31,6 +31,7 @@ import {
   NOTHING_FOUND_IN_CONVERSATIONS,
   SEARCH_LABEL,
   WAS_IT_WRONG,
+  WHAT_IS_RIGHT,
 } from "../src/pages/Ask";
 import {
   correctionPath,
@@ -228,7 +229,7 @@ describe("a conversation on Ask", () => {
     expect(source).toMatch(new RegExp(`CORRECTION_PREFIX: Final = "${CORRECTION_PREFIX}"`));
   });
 
-  test("an answer kept in a conversation is marked wrong with a kind and no words", async () => {
+  test("an answer kept in a conversation is marked wrong with a kind, and blank words are not sent", async () => {
     // What breaks if this is deleted: a person has no way to say an answer was wrong, so the
     // learning signal never hears it (M9.2.4), or the page sends words the route refuses.
     const { container, idp } = await askScreen();
@@ -245,6 +246,23 @@ describe("a conversation on Ask", () => {
       ["POST", { kind: "missing" }],
     ]);
     expect(button(container, MARK_WRONG).disabled).toBe(true);
+  });
+
+  test("what is right, when given, is sent beside the kind, trimmed", async () => {
+    // What breaks if this is deleted: a person who knows the right answer has nowhere to say it, so
+    // no correction ever reaches the document's steward (M16.6.5); or the words go unlabelled.
+    const { container, idp } = await askScreen();
+    ask(container, QUESTION);
+    await waitFor(() => expect(container.textContent).toContain(WAS_IT_WRONG));
+    const right = container.querySelector<HTMLTextAreaElement>("textarea#ask-right-answer");
+    expect(container.querySelector('label[for="ask-right-answer"]')?.textContent).toBe(WHAT_IS_RIGHT);
+    fireEvent.change(right as HTMLTextAreaElement, { target: { value: "  Five working days.  " } });
+    fireEvent.click(button(container, MARK_WRONG));
+    await waitFor(() => expect(container.textContent).toContain(MARKED_WRONG));
+    const sent = idp.calls.filter((call) => new URL(call.url, ORIGIN).pathname === `${API}${correctionPath(THREAD)}`);
+    expect(sent.map((call) => JSON.parse(String(call.init?.body ?? "null")))).toEqual([
+      { kind: "wrong_fact", right_answer: "Five working days." },
+    ]);
   });
 
   test("a mark the route refuses says nothing was changed", async () => {

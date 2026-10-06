@@ -270,6 +270,12 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "gate.team_membership": "principal_id",
         "know.chunk": "owner_id",
         "know.item": "owner_id",
+        # What a person said the right answer is, and each correction that said it (`0198`). Like a
+        # captured solution, `0198` grants no way for a row to leave, so an erasure keeps these and
+        # reports them kept; an approved one is a passage of a document by then, which is the
+        # document's.
+        "know.candidate_evidence": "principal_id",
+        "know.learning_candidate": "raised_by",
         # A solution a person captured, in their words, and a task addressed to a person (`0120`).
         # `0120` grants no way for a row to leave, so an erasure keeps these and reports them kept.
         "know.solution": "captured_by",

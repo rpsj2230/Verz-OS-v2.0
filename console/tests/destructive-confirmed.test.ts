@@ -92,6 +92,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Deciding a solution is the answer to the question its card asks, as deciding an approval is: the " +
     "problem and the solution are drawn above the two buttons, approving adds a document and refusing " +
     "adds nothing, and both are recorded in the ledger.",
+  "src/pages/knowledge/CorrectionsPage.tsx correctionDecisionPath(review.candidateId)":
+    "Approving a correction adds a new version of its document and keeps the old one in its history; " +
+    "the dialog says so and shows who will read the words before anything is sent. Rejecting adds " +
+    "nothing to the document and keeps the reason. Both are recorded in the ledger under the reviewer, " +
+    "which tests/unit/test_acceptance_corrections.py holds.",
   "src/pages/knowledge/addForms.tsx LINKS_API_PATH":
     "Adding a page by its link writes a new item, and the same page added again to the same place is " +
     "the same item, because its reference is a digest of the bytes, the owner and the place, which " +

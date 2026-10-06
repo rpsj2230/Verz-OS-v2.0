@@ -101,6 +101,7 @@ from brain.tables.identity import (
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
 from brain.tables.learning import CorrectionRow, LearningRow
+from brain.tables.learning_candidate import CandidateEvidenceRow, LearningCandidateRow
 from brain.tables.learning_signal import LearningPauseRow, MarkRow
 from brain.tables.manifest_draft import (
     ManifestActRow,
@@ -449,6 +450,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0197_signal_log. Points at nothing: a conversation, a message and a trace are values, so a
     # signal outlives what it names.
     "mem.signal",
+    # 0198_learning_candidates. A candidate points at nothing: its document is a value, so it
+    # outlives a version being replaced. Its evidence points at the candidate it grew.
+    "know.learning_candidate",
+    "know.candidate_evidence",
 )
 
 __all__ = [
@@ -473,6 +478,7 @@ __all__ = [
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
     "BudgetVersionRow",
+    "CandidateEvidenceRow",
     "CanonicalEntityRow",
     "CapabilityGrantRow",
     "CapabilityPackAssignmentRow",
@@ -512,6 +518,7 @@ __all__ = [
     "GroupRoleRuleRow",
     "HaltRow",
     "KnowledgeItemRow",
+    "LearningCandidateRow",
     "LearningPauseRow",
     "LearningRow",
     "LegalHoldRow",

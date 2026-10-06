@@ -109,6 +109,10 @@ from brain.automations_routes import router as automations_router
 # `brain.binding_routes`.
 from brain.binding_routes import router as binding_router
 
+# Corrections carrying the right answer, decided as a new version of their document is.
+# See `brain.candidate_routes`.
+from brain.candidate_routes import router as candidate_router
+
 # The access certification report, taken from the Access review screen and recorded on the
 # Exports log before it is handed over. See `brain.certification_export_routes`.
 from brain.certification_export_routes import router as certification_export_router

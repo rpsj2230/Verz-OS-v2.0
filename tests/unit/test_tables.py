@@ -154,6 +154,7 @@ MIGRATION_REGISTRY_OBSERVATIONS = VERSIONS / "0182_entity_registry_observations.
 MIGRATION_ENTITY_MERGES = VERSIONS / "0183_entity_merges.py"
 MIGRATION_REVIEW_ITEMS = VERSIONS / "0184_entity_review_items.py"
 MIGRATION_SIGNAL_LOG = VERSIONS / "0197_signal_log.py"
+MIGRATION_LEARNING_CANDIDATES = VERSIONS / "0198_learning_candidates.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -441,6 +442,8 @@ ENTITY_MERGE_TABLES: tuple[str, ...] = ("er.merge", "er.unmerge")
 REVIEW_ITEM_TABLES: tuple[str, ...] = ("er.review_item",)
 #: And the one 0197 adds: what was noticed about each answer, by id and never in words.
 SIGNAL_LOG_TABLES: tuple[str, ...] = ("mem.signal",)
+#: And the two 0198 adds: a proposed fix to a document, and every correction that proposed it.
+LEARNING_CANDIDATE_TABLES: tuple[str, ...] = ("know.learning_candidate", "know.candidate_evidence")
 
 ALL_TABLES = (
     CORE_TABLES
@@ -520,6 +523,7 @@ ALL_TABLES = (
     + ENTITY_MERGE_TABLES
     + REVIEW_ITEM_TABLES
     + SIGNAL_LOG_TABLES
+    + LEARNING_CANDIDATE_TABLES
 )
 
 
@@ -1362,6 +1366,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert review_items.TABLES == REVIEW_ITEM_TABLES
     signal_log = migration_module(MIGRATION_SIGNAL_LOG)
     assert signal_log.TABLES == SIGNAL_LOG_TABLES
+    learning_candidates = migration_module(MIGRATION_LEARNING_CANDIDATES)
+    assert learning_candidates.TABLES == LEARNING_CANDIDATE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1463,6 +1469,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(entity_merges.TABLES)
         + tuple(review_items.TABLES)
         + tuple(signal_log.TABLES)
+        + tuple(learning_candidates.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1545,6 +1552,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(entity_merges.TABLES),
         set(review_items.TABLES),
         set(signal_log.TABLES),
+        set(learning_candidates.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
