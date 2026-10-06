@@ -285,10 +285,14 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     `brain.ops.recovery_run`: the queue's rows read through the driver, and the operation records
     read and settled one committed move at a time.
 
+    **Three on 2026-10-06**, when `resolution_calibration` was given the registry's candidate
+    pairs to fit and a setting to keep each fit in until a reviewer promotes it.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 4
+    assert len(found) == 3
+    assert not any("resolution_calibration" in one for one in found)
     assert not any("queue_redrive" in one for one in found)
     assert not any("side_effect_resume" in one for one in found)
     assert not any("denial_digest" in one for one in found)
@@ -488,11 +492,15 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And twenty-four controls on 2026-10-06, with two orphans still.** `entity_resolution`
     arrived already wired, with `er.observation` and the join-key pepper.
 
+    **And to one later that day.** `start_control` calls the weekly fit's runner, so
+    `resolution_calibration` left the list.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 2
+    assert len(orphans()) == 1
+    assert "resolution_calibration" not in {one.name for one in orphans()}
     assert "queue_redrive" not in {one.name for one in orphans()}
     assert "side_effect_resume" not in {one.name for one in orphans()}
     assert "denial_digest" not in {one.name for one in orphans()}
@@ -548,6 +556,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "escalation_expiry",
         "entity_resolution",
         "evening_digest",
+        "resolution_calibration",
     }
 
 
