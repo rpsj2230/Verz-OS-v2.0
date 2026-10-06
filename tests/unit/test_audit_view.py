@@ -1213,7 +1213,7 @@ def test_may_audit_is_the_views_own_rule_asked_of_an_entry_the_person_made() -> 
         grants=(
             Grant(
                 capability=principal,
-                scope=Scope(clauses=(Clause(field="actor_id", op=Op.IN, value=["u_mine"]),)),
+                scope=Scope(clauses=(Clause(field="actor_id", op=Op.IN, value=("u_mine",)),)),
             ),
         ),
     )
