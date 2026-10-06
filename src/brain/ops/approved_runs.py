@@ -47,7 +47,6 @@ from __future__ import annotations
 
 import asyncio
 import enum
-import json
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -61,7 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import FieldPolicy
-from brain.gate.injection import RiskAssessment, assess
+from brain.gate.injection import RiskAssessment
 from brain.gate.leash import Action, Leash, SuspendedAction
 from brain.ops.idempotency import OperationLedger
 
@@ -177,17 +176,23 @@ class ApprovedRun:
 def assessment_of(action: Action) -> RiskAssessment:
     """The injection screen over what the action carries, as the automation step route takes it.
 
-    The same function where the action is raised and where it is run, so the two see one score.
+    `brain.ops.runtime_effects.action_assessment`, which is where an agent run raises an action,
+    so the same function is read where the action is raised and where it is run.
     """
-    return assess(json.dumps(dict(action.args), sort_keys=True, default=str))
+    from brain.ops.runtime_effects import action_assessment
+
+    return action_assessment(action)
 
 
 def policy_of(action: Action) -> FieldPolicy:
     """The field policy the action's target is decided under: its source's read classification,
-    and the fields that source's write grants declare (`brain.tools.startup.field_policy_for`)."""
-    from brain.tools.startup import field_policy_for
+    and the fields that source's write grants declare (`brain.tools.startup.field_policy_for`).
 
-    return field_policy_for(action.target, source=action.tool.source or None)
+    `brain.ops.runtime_effects.action_policy`, for the reason `assessment_of` gives.
+    """
+    from brain.ops.runtime_effects import action_policy
+
+    return action_policy(action)
 
 
 async def approved_to_run(

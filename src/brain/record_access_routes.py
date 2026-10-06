@@ -45,7 +45,7 @@ from brain.core.field_policy import FieldPolicy
 from brain.core.redaction import require_typed_result, serialise_for_channel
 from brain.core.scope import Scope
 from brain.govern_routes import PEOPLE_SCREEN
-from brain.knowledge.rows import RowRequest, row_scope_for
+from brain.knowledge.rows import RowRequest, is_row_tool, row_scope_for
 from brain.routing_routes import sessions_of
 from brain.tables.identity import PrincipalRow
 from brain.tools.registry import ToolRegistry
@@ -139,7 +139,7 @@ async def record_access(
     wiring = wiring_of(request)
     if not isinstance(registry, ToolRegistry) or wiring is None:
         raise Failed("no tool registry or gate wiring on this process")
-    matching = [d for d in registry.definitions() if d.entity == entity]
+    matching = [d for d in registry.definitions() if d.entity == entity and is_row_tool(d)]
     classification = classification_for(entity)
     reaches = row_scope_for(entity, asked.reach, asked.now) is not None
     if classification is None or len(matching) != 1 or not reaches:

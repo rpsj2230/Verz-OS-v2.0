@@ -157,7 +157,7 @@ from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
 from brain.connectors.write_verification import ReadBack, builds_a_manifest
-from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
+from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, ToolDefinition, TypedResult
 from brain.core.field_policy import FieldRule
 from brain.ops.connect_steps import GuideStep
 from brain.ops.leases import SealedSecret
@@ -1084,6 +1084,68 @@ class PreparesWrite(Protocol):
         ...
 
 
+#: Why a write a model may ask for is declared by the connector, argument by argument.
+A_WRITE_A_MODEL_MAY_ASK_FOR_IS_PREPARED_BY_THE_CONNECTOR_AND_BY_NOBODY_ELSE: Final = (
+    "A tool in an agent's catalogue is only a name and a schema, and what an approver is shown "
+    "and a worker sends is an action. The step between a model's arguments and that action is "
+    "the connector's: which record it is about, what the connection's own settings add (the "
+    "department a grant is matched against comes from the connection and never from the model), "
+    "and what the record read at the run's reach says before anything changes. A write with no "
+    "such declaration is never offered to a model, because the runtime would have nothing to "
+    "build the held action from but the model's own words."
+)
+
+
+class ProposesAction(Protocol):
+    """How a model's arguments for one write tool become the action a person is asked to approve.
+
+    `tool` is the tool as the catalogue describes it, whose `args_schema` the arguments are
+    checked against before anything here is called. `target_of` names the one record the action
+    is about, by the id its source gave it, so the runtime can read that record at the run's reach
+    first. `action_for` builds the action from the arguments, the agent, that record as the
+    reader may see it (redacted) and the connection's settings, and refuses what it cannot build
+    with `ConnectorContractError`. See
+    `A_WRITE_A_MODEL_MAY_ASK_FOR_IS_PREPARED_BY_THE_CONNECTOR_AND_BY_NOBODY_ELSE`.
+    """
+
+    @property
+    def tool(self) -> ToolDefinition:
+        """The write tool this prepares, with the schema its arguments are checked against."""
+        ...
+
+    def target_of(self, arguments: Mapping[str, str]) -> str:
+        """The source id of the record the arguments are about. Raises for a malformed one."""
+        ...
+
+    def action_for(
+        self,
+        arguments: Mapping[str, str],
+        *,
+        agent_id: str,
+        record: Mapping[str, Any],
+        settings: Mapping[str, str],
+    ) -> Action:
+        """The action to hold for a person. Reads nothing and sends nothing."""
+        ...
+
+    def described(self, action: Action) -> str:
+        """What the action is, in a phrase the person who asked for it may be told, such as "a
+        reply to ticket 4242": only what they named or may read, never the approver, a reason or
+        the arguments beyond the reference they already gave."""
+        ...
+
+
+@runtime_checkable
+class SimulatesAction(Protocol):
+    """A preparer that can say what its action would have returned, for a run that only simulates.
+
+    Optional and asked with `isinstance`, so a preparer without one is answered in plain words
+    that nothing was sent, and the runtime never invents a result for a tool that cannot show one.
+    """
+
+    def simulate(self, action: Action) -> TypedResult[Any]: ...
+
+
 @dataclass(frozen=True)
 class WriteGrant:
     """A write a connector can be allowed to make, off until its own key is given (M11.7.3).
@@ -1107,6 +1169,12 @@ class WriteGrant:
     #: The fields its tools write that no read classifies, each behind its own capability. See
     #: `A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT`.
     fields: tuple[FieldRule, ...] = ()
+    #: The tools a model may ask for in an agent run, each with how its arguments become the
+    #: action held for a person. A tool of `tools` with no entry is never offered to a model. See
+    #: `A_WRITE_A_MODEL_MAY_ASK_FOR_IS_PREPARED_BY_THE_CONNECTOR_AND_BY_NOBODY_ELSE`.
+    proposes: Mapping[str, ProposesAction] = field(
+        default_factory=lambda: MappingProxyType({}), compare=False
+    )
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -1115,6 +1183,14 @@ class WriteGrant:
         if not self.tools:
             msg = f"write grant {self.name!r} sends no tool, so the key it asks for sends nothing"
             raise DeclarationError(msg)
+        for prepared, proposer in self.proposes.items():
+            if prepared not in self.tools or proposer.tool.name != prepared:
+                msg = (
+                    f"write grant {self.name!r} prepares {prepared!r} for a model and the grant "
+                    "does not send that tool, or its preparer is for another one; a preparer for "
+                    "a tool nothing sends would be held for a person and never carried out"
+                )
+                raise DeclarationError(msg)
         for one in (self.label, self.credential_label, self.credential_hint, self.not_allowed):
             if not one.strip():
                 msg = (
@@ -1463,6 +1539,25 @@ def written_fields(source: str, entity: str) -> tuple[FieldRule, ...]:
         return ()
     return tuple(
         rule for grant in declared.writes for rule in grant.fields if rule.entity == entity
+    )
+
+
+def proposers(
+    declarations: Mapping[str, ConnectorDeclaration] | None = None,
+) -> Mapping[str, tuple[str, WriteGrant, ProposesAction]]:
+    """Every write tool a model may ask for, by tool name: the connector, its grant, its preparer.
+
+    Over `declarations` when given (the catalogue's, reviewed connectors included) and over the
+    shipped ones otherwise. A tool with no preparer is not here, and so is never offered.
+    """
+    found = shipped() if declarations is None else declarations
+    return MappingProxyType(
+        {
+            tool: (name, grant, proposer)
+            for name, declared in found.items()
+            for grant in declared.writes
+            for tool, proposer in grant.proposes.items()
+        }
     )
 
 
