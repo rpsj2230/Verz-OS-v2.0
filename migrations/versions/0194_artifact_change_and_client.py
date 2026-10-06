@@ -41,7 +41,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0194"
-down_revision = "0184"
+down_revision = "0193"
 branch_labels = None
 depends_on = None
 

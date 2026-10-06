@@ -445,8 +445,6 @@ ENTITY_MERGE_TABLES: tuple[str, ...] = ("er.merge", "er.unmerge")
 REVIEW_ITEM_TABLES: tuple[str, ...] = ("er.review_item",)
 #: And the one 0188 adds: every finished agent run, as counts and names.
 AGENT_RUN_TABLES: tuple[str, ...] = ("ops.agent_run",)
-#: And what 0191 adds: each export of an approved version (M12.3.1).
-SKILL_EXPORT_TABLES: tuple[str, ...] = ("agent.skill_export",)
 #: And the two 0191 adds: each export of an approved version, and each rehearsal of one's
 #: examples (M12.3.1, M12.3.4).
 SKILL_EXPORT_TABLES: tuple[str, ...] = ("agent.skill_export", "agent.skill_rehearsal")
