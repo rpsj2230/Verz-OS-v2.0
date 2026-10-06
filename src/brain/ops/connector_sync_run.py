@@ -112,7 +112,7 @@ cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
 Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.6.1, M11.7.3, M11.7.1
-Task ids: M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15, M11.1.2, M11.1.5, M11.8.6
+Task ids: M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15, M11.1.2, M11.1.5, M11.8.6, M11.7.8
 """
 
 from __future__ import annotations
@@ -249,6 +249,7 @@ from brain.ops.connector_sync_store import (
 )
 from brain.ops.credentials import KEY_FIELD, OAUTH_REFRESH_DIRECTORY, USER_FIELD
 from brain.ops.custom_code_run import CodeRunFailedError, installed_runner, read_once
+from brain.ops.custom_connector_store import refresh
 from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import HttpsTokenIssuer, index_if_due
 from brain.ops.leases import SealedSecret
@@ -1926,7 +1927,12 @@ async def sync_on(
 
     A source a halt stops, on itself or on everything, or every source when the halts cannot be
     read, is not read and records no attempt, so it is due again the moment the halt is lifted.
+
+    The connectors reviewed on this install are read first, so a definition approved since the last
+    cycle is read in this one and one changed since is not (M11.7.8). See
+    `brain.ops.connector_catalogue.A_REVIEWED_CONNECTOR_IS_READ_BEFORE_IT_IS_SERVED`.
     """
+    await refresh(sessions)
     halts = await read_state(sessions)
     async with sessions() as session, session.begin():
         live = await read_live(session)

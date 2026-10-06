@@ -361,7 +361,7 @@ class _Consented:
 def consented_xero() -> tuple[ConnectorDeclaration, _Consented]:
     """Xero's declaration with a consent declared on it, and the reading that renews by it."""
     from brain.connectors import xero
-    from brain.connectors.declaration import Setting, ViewReading
+    from brain.connectors.declaration import CodeReading, Setting, ToolReading, ViewReading
     from brain.connectors.oauth import OAuthConsent
 
     declared = xero.CONNECTOR
@@ -373,7 +373,7 @@ def consented_xero() -> tuple[ConnectorDeclaration, _Consented]:
         client_id_setting=CLIENT_ID_SETTING,
     )
     inner = declared.reading
-    if isinstance(inner, ViewReading):
+    if isinstance(inner, ViewReading | ToolReading | CodeReading):
         raise CheckFailedError("Xero's reading is no longer a REST reading")
     reading = _Consented(inner, consent)
     client_id = Setting(

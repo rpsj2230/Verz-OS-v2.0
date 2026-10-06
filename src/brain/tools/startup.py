@@ -135,18 +135,16 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5, M15.4.2, M12.4.4
+Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from types import MappingProxyType
 from typing import Final
 
 from brain import demo
 from brain.chat.attachments import attachment_definition, attachment_reader
-from brain.connectors.declaration import shipped
 from brain.core.field_policy import FieldPolicy
 from brain.gate.caches import CachedEmbedding
 from brain.knowledge.columns import PRICE_LIST, TableClassification
@@ -161,6 +159,7 @@ from brain.knowledge.document_tools import (
 )
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
+from brain.ops.connector_catalogue import Derived, declarations
 from brain.tools.registry import ResultContract, ToolRegistry
 from brain.tools.website_check import WebsiteCheckTool, register_website_check
 
@@ -211,15 +210,15 @@ BUILT_IN_ROW_ENTITIES: Final = (PRICE_LIST,)
 #: Read-only, because a registration added at run time would be visible to every registry
 #: built afterwards in the same process, which is the singleton the module docstring rejects
 #: arriving through a dictionary.
-SOURCE_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.row_classifications(), **CONNECTOR_ROW_ENTITIES}
+SOURCE_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = Derived(
+    lambda _: {demo.DEMO_SOURCE: demo.row_classifications(), **CONNECTOR_ROW_ENTITIES}
 )
 
 #: The catalogue descriptions for those entities, by source and then entity. Beside the
 #: classifications rather than inside them for the reason `ROW_TOOL_DESCRIPTIONS` gives: a
 #: description is catalogue text whose collisions are a property of the whole registry.
-SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS, **CONNECTOR_ROW_DESCRIPTIONS}
+SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = Derived(
+    lambda _: {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS, **CONNECTOR_ROW_DESCRIPTIONS}
 )
 
 
@@ -229,12 +228,15 @@ def source_row_entities() -> Mapping[str, tuple[TableClassification, ...]]:
 
 
 def connector_row_sources() -> tuple[str, ...]:
-    """Every shipped connector with classifications filed here, which `build_registry` registers.
+    """Every connector with classifications filed here, which `build_registry` registers.
 
-    The shipped connectors and no other source, so the demo's entities stay where the demo is read:
-    see `A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ`.
+    The connectors and no other source, so the demo's entities stay where the demo is read: see
+    `A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ`. The connectors are
+    `brain.ops.connector_catalogue.declarations`, so one reviewed on this install (M11.7.8) has
+    its row tools in the next registry built.
     """
-    return tuple(sorted(name for name in source_row_entities() if name in shipped()))
+    found = declarations()
+    return tuple(sorted(name for name in source_row_entities() if name in found))
 
 
 def row_entities_for(source: str) -> tuple[TableClassification, ...]:

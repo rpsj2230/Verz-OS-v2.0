@@ -100,7 +100,7 @@ token to renew with (`NOT_CONSENTED`); and a token the vendor rotated that the v
 is a consent the next read cannot use (`ROTATED_REFRESH_NOT_KEPT`).
 
 Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8, M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15
-Task ids: M11.1.2, M11.1.5, M11.8.6
+Task ids: M11.1.2, M11.1.5, M11.8.6, M11.7.8
 """
 
 from __future__ import annotations
@@ -120,7 +120,6 @@ from brain.connectors.declaration import (
     CodeReading,
     Reading,
     RoutedReading,
-    shipped,
 )
 from brain.connectors.declaration import PageReply as PageReply
 from brain.connectors.declaration import SourceReading as SourceReading
@@ -132,6 +131,7 @@ from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, Projected
 from brain.connectors.throttle import CallOutcome, UnmeasuredSourceError, limits_for, retry_delay
 from brain.core.scope import Op, Scope
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_catalogue import Derived
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection
 from brain.ops.limits import Limit
@@ -901,8 +901,10 @@ def kept_fields(record: ProjectedRecord, manifest: ConnectorManifest) -> dict[st
 #: Every source this release reads on a schedule, by connector name, read off each connector's
 #: `CONNECTOR` declaration at start-up. `PageReply`, `SourceReading` and `ViewReading` are
 #: `brain.connectors.declaration`'s, named here for the modules that read them from this one.
-READINGS: Final[Mapping[str, Reading]] = MappingProxyType(
-    {name: one.reading for name, one in shipped().items() if one.reading is not None}
+#: Since M11.7.8 they are `brain.ops.connector_catalogue.declarations`', so a connector reviewed on
+#: this install is read from the first cycle after it is approved and not after it changes.
+READINGS: Final[Mapping[str, Reading]] = Derived(
+    lambda found: {name: one.reading for name, one in found.items() if one.reading is not None}
 )
 
 

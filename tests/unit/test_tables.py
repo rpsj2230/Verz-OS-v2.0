@@ -155,6 +155,7 @@ MIGRATION_ENTITY_MERGES = VERSIONS / "0183_entity_merges.py"
 MIGRATION_REVIEW_ITEMS = VERSIONS / "0184_entity_review_items.py"
 MIGRATION_AGENT_RUN = VERSIONS / "0188_agent_run.py"
 MIGRATION_OAUTH_CONSENT = VERSIONS / "0180_oauth_consent.py"
+MIGRATION_CUSTOM_CONNECTOR = VERSIONS / "0181_custom_connector.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -444,6 +445,8 @@ REVIEW_ITEM_TABLES: tuple[str, ...] = ("er.review_item",)
 AGENT_RUN_TABLES: tuple[str, ...] = ("ops.agent_run",)
 #: And the one 0180 adds: a consent started at a vendor, held until it is answered once.
 OAUTH_CONSENT_TABLES: tuple[str, ...] = ("ops.oauth_consent",)
+#: And the one 0181 adds: a connector for a new API, as submitted, and who reviewed it.
+CUSTOM_CONNECTOR_TABLES: tuple[str, ...] = ("ops.custom_connector",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -524,6 +527,7 @@ ALL_TABLES = (
     + REVIEW_ITEM_TABLES
     + AGENT_RUN_TABLES
     + OAUTH_CONSENT_TABLES
+    + CUSTOM_CONNECTOR_TABLES
 )
 
 
@@ -1368,6 +1372,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert agent_run.TABLES == AGENT_RUN_TABLES
     oauth_consent = migration_module(MIGRATION_OAUTH_CONSENT)
     assert oauth_consent.TABLES == OAUTH_CONSENT_TABLES
+    custom_connector = migration_module(MIGRATION_CUSTOM_CONNECTOR)
+    assert custom_connector.TABLES == CUSTOM_CONNECTOR_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1470,6 +1476,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(review_items.TABLES)
         + tuple(agent_run.TABLES)
         + tuple(oauth_consent.TABLES)
+        + tuple(custom_connector.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1553,6 +1560,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(review_items.TABLES),
         set(agent_run.TABLES),
         set(oauth_consent.TABLES),
+        set(custom_connector.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

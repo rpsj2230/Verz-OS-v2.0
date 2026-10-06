@@ -69,7 +69,7 @@ the same `presented`; a refusal is the call's outcome, as a refused key's is, an
 the vendor rotated is written back before the record is read.
 
 Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.1, M11.7.3, M11.7.1, M11.7.2, M11.6.3, M11.6.4
-Task ids: M11.1.2, M11.1.5, M11.8.6
+Task ids: M11.1.2, M11.1.5, M11.8.6, M11.7.8
 """
 
 from __future__ import annotations
@@ -100,7 +100,6 @@ from brain.connectors.declaration import (
     ToolReading,
     ViewReading,
     listed_under,
-    shipped,
 )
 from brain.connectors.google_token import TokenNotIssuedError
 from brain.connectors.live_read import (
@@ -118,6 +117,7 @@ from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import SourceRecord
 from brain.core.envelope import IdentityMode, TypedResult
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_catalogue import DECLARED
 from brain.ops.connector_store import Connection, StoredConnections
 from brain.ops.connector_sync_run import (
     ConnectorKeys,
@@ -197,7 +197,9 @@ class ConnectedSources:
         self._caller = caller
         self._resolver = resolver
         self._clock = clock
-        self._declarations = shipped() if declarations is None else declarations
+        # The catalogue's live view, so a connector reviewed on this install is read live from
+        # the moment it is approved and not after it changes (M11.7.8).
+        self._declarations = DECLARED if declarations is None else declarations
         self._poster = poster
         self._runner = runner
         self._manifests = manifests
