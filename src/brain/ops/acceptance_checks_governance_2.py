@@ -350,40 +350,61 @@ async def _two_people(h: Harness) -> tuple[str, str, str]:
     return asker, approver, other
 
 
+#: What each way of showing an approver the wrong thing fails with.
+SHOWN_THE_TOOL_CALL: Final = (
+    "an approval carried the tool call, its capability or its arguments rather than the request"
+)
+SHOWN_A_LOCKED_FIELD: Final = (
+    "an approver was shown the value of a field they may not read, rather than the lock"
+)
+NOT_THE_ONE_RENDER: Final = (
+    "an approver was not shown the request as the one render draws it at their own reach"
+)
+SHOWN_TO_ANOTHER_DEPARTMENT: Final = "an approver of another department was shown the card"
+
+
 @check(
     leaves=("M33.6.1.2",),
     sentence=(
         "An agent's action naming a value made up for the check waits for a person: the approver "
-        "of acceptance_a reads its card through the Approvals routes as the artefact rendered "
-        "when it was raised, word for word, in the card's own fields and no field holding the "
-        "tool call, its capability or its arguments. Acceptance_b's approver is not shown it."
+        "of acceptance_a reads it through the Approvals routes, on its card and its page, as the "
+        "one render of the request at their own reach, with the lock where they may not read a "
+        "field and never the value, and no field holding the tool call, its capability or its "
+        "arguments. Acceptance_b's approver is not shown it."
     ),
 )
-async def an_approver_reads_the_artefact_and_not_the_tool_call(h: Harness) -> None:
+async def an_approver_reads_the_request_at_their_own_reach(h: Harness) -> None:
     from brain.approval_routes import ApprovalCardView, approval, approvals
+    from brain.console.approvals import request_policy
+    from brain.core.redaction import LOCK_TEXT
+    from brain.gate.approval_request import render_request
     from brain.listing import ListAsked
 
     asker, approver, other = await _two_people(h)
     word = h.word()
     raised = await _raised(h, asker, "artefact", at=h.now, window=WINDOWS[0], args={"status": word})
     request = _request(_approvals_app(h))
+    asked = await _asking(h, approver)
 
-    queue = await approvals(request, await _asking(h, approver), ListAsked(limit=200))
+    queue = await approvals(request, asked, ListAsked(limit=200))
     card = next((one for one in queue.items if one.suspension_id == raised.id), None)
-    page = await approval(request, raised.id, await _asking(h, approver))
-    if card is None or card.artefact != raised.artefact or page.artefact != raised.artefact:
-        raise CheckFailedError("an approver was not shown the artefact as it was rendered")
-    if word not in card.artefact:
-        raise CheckFailedError("the artefact an approver read did not say what will happen")
-    shown = page.model_dump(mode="json")
-    if set(card.model_dump()) != set(ApprovalCardView.model_fields):
-        raise CheckFailedError("an approval card carried a field beyond the card's own")
-    if any(ACTION_CAPABILITY in str(value) for value in shown.values()) or any(
-        isinstance(value, dict) and word in str(value) for value in shown.values()
+    page = await approval(request, raised.id, asked)
+    if card is None:
+        raise CheckFailedError(NOT_THE_ONE_RENDER)
+    shown = (card.model_dump(mode="json"), page.model_dump(mode="json"))
+    if set(card.model_dump()) != set(ApprovalCardView.model_fields) or any(
+        ACTION_CAPABILITY in str(value) or (isinstance(value, dict | list) and word in str(value))
+        for one in shown
+        for value in one.values()
     ):
-        raise CheckFailedError("an approval card carried the tool call rather than its artefact")
+        raise CheckFailedError(SHOWN_THE_TOOL_CALL)
+    if word in card.request or word in page.request or f"status: {LOCK_TEXT}" not in card.request:
+        raise CheckFailedError(SHOWN_A_LOCKED_FIELD)
+    drawn = render_request(raised.action, asked.reach, request_policy(raised.action), asked.now)
+    if card.request != drawn.text or page.request != drawn.text:
+        raise CheckFailedError(NOT_THE_ONE_RENDER)
     if not await _refused(approval(request, raised.id, await _asking(h, other))):
-        raise CheckFailedError("an approver of another department was shown the card")
+        raise CheckFailedError(SHOWN_TO_ANOTHER_DEPARTMENT)
 
 
 @check(

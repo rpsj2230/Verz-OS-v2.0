@@ -29,7 +29,7 @@ MODULE = "brain.ops.acceptance_checks_governance_2"
 
 CONNECTS = "a_connector_admin_installs_and_configures_a_connector"
 ROTATES = "a_connector_admin_binds_and_rotates_a_key_reference"
-ARTEFACT = "an_approver_reads_the_artefact_and_not_the_tool_call"
+ARTEFACT = "an_approver_reads_the_request_at_their_own_reach"
 LAPSES = "an_approver_sees_when_each_approval_lapses_and_a_lapsed_one_goes"
 ELEVATED = "a_partner_is_elevated_for_a_stated_reason_and_a_bounded_time"
 TOLD = "every_elevation_is_told_to_the_standing_super_admins"
@@ -148,26 +148,67 @@ def test_a_key_kept_nowhere_fails_the_rotation_check(
     assert "key was not kept in its source's slot" in _failed(install, ROTATES)
 
 
-@pytest.mark.needs_db
-def test_a_card_rendered_from_the_tool_call_fails_the_artefact_check(
-    install: str, configured: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A card whose words are the tool's name and capability rather than the artefact. Delete
-    this and M33.6.1.2 closes with an approver deciding on how rather than what."""
+def _card_saying(monkeypatch: pytest.MonkeyPatch, words: Any) -> None:
+    """Every approval card's request replaced by `words(suspension)`, minted as the product's own
+    terms are, so the break is a wrong text and never a refused construction."""
     from dataclasses import replace
 
     from brain import approval_routes
+    from brain.gate.approval_request import render_terms
 
     real = approval_routes.shown_card
 
-    def the_call(suspension: Any, *args: Any, **kw: Any) -> Any:
-        shown = real(suspension, *args, **kw)
-        tool = suspension.action.tool
-        called = f"{tool.name} {tool.required_capability} {suspension.action.args}"
-        return None if shown is None else replace(shown, artefact=called)
+    def saying(suspension: Any, reach: Any, *args: Any, **kw: Any) -> Any:
+        shown = real(suspension, reach, *args, **kw)
+        if shown is None:
+            return None
+        return replace(shown, request=render_terms(words(suspension), reach))
 
-    monkeypatch.setattr(approval_routes, "shown_card", the_call)
-    assert "not shown the artefact as it was rendered" in _failed(install, ARTEFACT)
+    monkeypatch.setattr(approval_routes, "shown_card", saying)
+
+
+@pytest.mark.needs_db
+def test_a_card_carrying_the_tool_call_fails_the_request_check(
+    install: str, configured: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A card whose words are the tool, its capability and its arguments. Delete this and
+    M33.6.1.2 closes with an approver deciding on how rather than what."""
+
+    def the_call(suspension: Any) -> str:
+        tool = suspension.action.tool
+        return f"{tool.name} {tool.required_capability} {suspension.action.args}"
+
+    _card_saying(monkeypatch, the_call)
+    from brain.ops import acceptance_checks_governance_2 as module
+
+    assert _failed(install, ARTEFACT) == module.SHOWN_THE_TOOL_CALL
+
+
+@pytest.mark.needs_db
+def test_a_card_showing_the_requesters_artefact_fails_the_request_check(
+    install: str, configured: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**The leak #381 closed.** A card carrying the requester's artefact, which names the value
+    the approver may not read. Delete this and the check can pass with the requester's words on
+    the approver's card again."""
+    _card_saying(monkeypatch, lambda suspension: suspension.artefact)
+    from brain.ops import acceptance_checks_governance_2 as module
+
+    assert _failed(install, ARTEFACT) == module.SHOWN_A_LOCKED_FIELD
+
+
+@pytest.mark.needs_db
+def test_a_card_rendered_at_another_reach_fails_the_request_check(
+    install: str, configured: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A card drawn by the one render but not at the approver's reach: the lock is where it should
+    be and the words still differ. Delete this and the check passes a card rendered for anybody."""
+    _card_saying(
+        monkeypatch, lambda suspension: f"{suspension.action.tool.name}\n  status: Restricted"
+    )
+    from brain.ops import acceptance_checks_governance_2 as module
+
+    assert _failed(install, ARTEFACT) == module.NOT_THE_ONE_RENDER
 
 
 @pytest.mark.needs_db
