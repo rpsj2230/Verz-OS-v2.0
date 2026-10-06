@@ -66,7 +66,8 @@ KNOWN_ORPHANS = frozenset(
         # `denial_digest` left on 2026-09-28 for `WIRED_BUT_NOT_SCHEDULED`: see there.
         # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
-        "resolution_calibration",
+        # `resolution_calibration` left on 2026-10-06: the worker's schedule starts the weekly
+        # fit. See `SCHEDULED_BY_THE_WORKER`.
         # `queue_redrive` and `side_effect_resume` left on 2026-09-30: the worker's schedule
         # starts both through `brain.ops.recovery_run`. See `SCHEDULED_BY_THE_WORKER`.
         # `model_health_probes` left on 2026-09-22: the worker's schedule starts it. See
@@ -173,6 +174,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "escalation_expiry",
         "entity_resolution",
         "evening_digest",
+        "resolution_calibration",
     }
 )
 
