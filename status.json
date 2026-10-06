@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T16:14:30.161267+00:00",
-  "commit": "437060b9",
-  "commit_subject": "Needs page item 173: connecting Google Workspace, the owner's steps (#470)",
+  "generated_at": "2026-10-06T16:28:05.439933+00:00",
+  "commit": "49e9eaa5",
+  "commit_subject": "A stop on one agent refuses that agent's questions and automations and nothing else, and every halt axis is now asked (#402)",
   "total": 1596,
   "done": 680,
   "percent": 42.6,
