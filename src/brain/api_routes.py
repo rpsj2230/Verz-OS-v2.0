@@ -199,6 +199,7 @@ from brain.gate.roster import (
     run_entitlement,
     viewer_for,
 )
+from brain.gate.rule_store import rules_for_asker
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
@@ -1763,6 +1764,10 @@ async def answered_for(
     base = await base_lane_of(request.app.state)
     rules = (
         *getattr(request.app.state, "fast_path_rules", ()),
+        # The rule table as it stands now, for this asker's department and the whole install's
+        # (M6.5.1): a rule written a moment ago answers this question. See
+        # `brain.gate.rule_store.A_RULE_ANSWERS_FROM_THE_NEXT_QUESTION`.
+        *await rules_for_asker(request.app.state, asking.principal.primary_department),
         *tables.rules,
         *sourced,
         *base.rules,

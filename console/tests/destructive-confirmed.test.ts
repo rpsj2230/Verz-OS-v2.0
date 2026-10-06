@@ -39,6 +39,14 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/rules/RulesPage.tsx TRY_API_PATH":
+    "Trying a quick answer writes nothing: brain.rule_routes.tried matches one question against the " +
+    "candidate at the tester's own reach and keeps no row, which tests/unit/test_rule_routes.py holds.",
+  "src/pages/rules/RulesPage.tsx RULES_API_PATH":
+    "Adding a quick answer ends and replaces nothing: a rule whose words are already live where it " +
+    "would answer is refused rather than replaced, because StoredRules.add writes nothing on a " +
+    "conflict, which tests/unit/test_rule_routes.py holds. A rule is taken out only by Retire, which " +
+    "is confirmed.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
     "Adding a work email binds an address to a person who has none. It retires the staff list's " +
     "person for that address only when they have never signed in and hold nothing but what the sync " +

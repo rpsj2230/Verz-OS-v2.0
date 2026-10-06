@@ -103,6 +103,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/channels/:name/:view", index: 0, writes: true },
     { pattern: "/channels/:name/:view", index: 1, writes: true },
   ],
+  // Quick answers: the one form, under the rules in use, adds a rule; its Try it sends nothing saved.
+  "src/pages/rules/RulesPage.tsx": [{ pattern: "/rules", index: 0, writes: true }],
 };
 
 /**

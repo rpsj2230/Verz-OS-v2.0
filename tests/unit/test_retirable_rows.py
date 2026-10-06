@@ -240,6 +240,8 @@ RECIPES: Final[dict[str, Recipe]] = {
         " answer_field, created_by) VALUES ('rule_{n}', 'what is the price of item {n} {{sku}}',"
         " 'sku', 'crm', 'client', 'sku', 'price', 'u_admin')",
         "rule_id = 'rule_{n}'",
+        # 0199: a rule is written in the name the transaction sets, as the console's write is.
+        settings=(("brain.actor_id", "u_admin"),),
     ),
     "know.chunk": Recipe(
         "INSERT INTO know.chunk (chunk_id, document_id, ordinal, kind, span_start, span_end,"
