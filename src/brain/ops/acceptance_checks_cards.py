@@ -41,7 +41,13 @@ and the bystander each write once to the bot, which is when an address is kept, 
 approver does not. Then the approval is raised and `brain.approval_cards.send_raised`, the function
 the promotion route schedules, is run on the check's application. See the fourth check.
 
-Task ids: M10.2.3, M10.2.4, M10.7.1, M10.7.4, M10.2.7, M10.3.5
+**The fifth check is item 14's, on both surfaces at once (M33.8.1).** A price change on the price
+list, which every install classifies, is held for a person; an approver who may decide it and read
+its sell price but not its cost is shown it on the Approvals screen and offered it as a card, and
+both carry the sell price, the cost locked and the cost's value nowhere. A press on that card by
+the bystander decides nothing, and the approver's own decides it as theirs.
+
+Task ids: M10.2.3, M10.2.4, M10.7.1, M10.7.4, M10.2.7, M10.3.5, M33.8.1
 """
 
 from __future__ import annotations
@@ -695,3 +701,133 @@ async def a_raised_approval_is_sent_to_its_approver_s_kept_address(h: Harness) -
         raise CheckFailedError("the card was not sent to the approver's kept address alone")
     if any(address in one.url for one in sent for address in made.ids.values()):
         raise CheckFailedError("a Lark address was put in a request's URL")
+
+
+# ------------------------------------------ 5. rendered at the approver's reach (M33.8.1)
+#: The check's own action: a price change on the price list, which every install classifies, so
+#: its two fields are each behind their own read (`brain.knowledge.columns.PRICE_LIST`).
+PRICE_ENTITY: Final = "price_list"
+PRICE_DECISION: Final = f"approve:{PRICE_ENTITY}"
+SELL_READ: Final = f"read:{PRICE_ENTITY}.sell_price"
+COST_READ: Final = f"read:{PRICE_ENTITY}.cost"
+
+
+@check(
+    leaves=("M33.8.1",),
+    sentence=(
+        "A price change asked by somebody who may read its cost is shown to an approver who may "
+        "not, on the Approvals screen and on their Lark card, with the cost locked, the sell "
+        "price shown and the cost's value nowhere; a press on that card by anybody else decides "
+        "nothing, and the approver's own press decides it as theirs."
+    ),
+)
+async def an_approval_shows_at_its_approver_s_reach_and_their_press_alone(
+    h: Harness,
+) -> None:
+    from brain.approval_cards import PRESS_REFUSED_TOLD
+    from brain.approval_routes import shown_card
+    from brain.console.approvals import request_policy
+    from brain.core.envelope import SideEffect, ToolDefinition
+    from brain.core.redaction import LOCK_TEXT
+    from brain.core.scope import Scope
+    from brain.gate.injection import AutonomyTier, RiskAssessment
+    from brain.gate.leash import Action, Leash, LeashEntry, Route, decide, route_for, suspend
+    from brain.gate.suspension_store import StoredSuspensions, put_suspension
+
+    made = await desk(h)
+    asker, narrow = h.principal(A, "priceasker"), h.principal(A, "pricenarrow")
+    await h.person(asker, department=A, grants=_in(A, PRICE_DECISION, SELL_READ, COST_READ))
+    await h.person(narrow, department=A, grants=_in(A, PRICE_DECISION, SELL_READ))
+    own = {narrow: open_id()}
+    await bound(made.chat, own)
+    made.ids.update(own)
+
+    sell, cost = "41.00", f"{secrets.randbelow(9000) + 1000}.37"
+    agent = f"acceptance.{h.run}.price_agent"
+    action = Action(
+        agent_id=agent,
+        tool=ToolDefinition(
+            name=f"acceptance_{h.run}.change_price",
+            description="The acceptance check's own price change, which changes nothing anywhere",
+            entity=PRICE_ENTITY,
+            required_capability=PRICE_DECISION,
+            side_effect=SideEffect.WRITE,
+        ),
+        target=PRICE_ENTITY,
+        touched_fields=("cost", "sell_price"),
+        row={"department": A},
+        args={"cost": cost, "sell_price": sell},
+    )
+    asking = await h.reach(asker)
+    leash = Leash(
+        entries=(
+            LeashEntry(
+                agent_id=agent,
+                target=PRICE_ENTITY,
+                scope=Scope.department(A),
+                rung=AutonomyTier.ASSISTED,
+            ),
+        )
+    )
+    decision = decide(
+        action,
+        caller=asking,
+        agent_ceiling=asking,
+        policy=request_policy(action),
+        leash=leash,
+        assessment=RiskAssessment(score=0, matched=()),
+        now=h.now,
+    )
+    if route_for(decision) is not Route.SUSPEND:
+        raise CheckFailedError("the check's price change was not held for a person")
+    held = suspend(
+        action,
+        decision,
+        principal_id=asker,
+        trace_id=h.trace_id,
+        now=h.now,
+        suspension_id=f"acceptance_{h.run}_price",
+    )
+    store = StoredSuspensions(h.sessions)
+    async with store.holding(asking, h.now) as rows:
+        await put_suspension(rows.session, held)
+
+    # The Approvals screen, at the narrow approver's own reach.
+    shown = shown_card(held, await h.reach(narrow), h.now)
+    if (
+        shown is None
+        or cost in shown.request.text
+        or f"cost: {LOCK_TEXT}" not in shown.request.text
+    ):
+        raise CheckFailedError("an approver was shown a field of the request they may not read")
+    if f"sell_price: {sell}" not in shown.request.text:
+        raise CheckFailedError(
+            "an approver was not shown a field they may read, or no lock was shown"
+        )
+
+    # Their Lark card, offered when they write about deciding.
+    answered = await made.says(narrow, "approve")
+    cards = [
+        card
+        for _, _, _, card in answered
+        if card is not None and held.id in json.dumps(card) and len(card["elements"]) >= 2
+    ]
+    body = json.dumps(cards)
+    if len(cards) != 1 or cost in body or LOCK_TEXT not in body:
+        raise CheckFailedError("an approver was shown a field of the request they may not read")
+    if sell not in body:
+        raise CheckFailedError(
+            "an approver was not shown a field they may read, or no lock was shown"
+        )
+    approve = _cards(answered)[held.id][0]
+
+    # A press by anybody else decides nothing; the approver's own decides it as theirs.
+    by_somebody = lark_press(made.chat, made.ids[made.bystander], approve)
+    refused = await pressed(made.chat, by_somebody)
+    if refused.get("toast", {}).get("content") != PRESS_REFUSED_TOLD or await _decisions(
+        h, held.id
+    ):
+        raise CheckFailedError("a press by somebody other than the card's reader decided it")
+    await pressed(made.chat, lark_press(made.chat, made.ids[narrow], approve))
+    if await _decisions(h, held.id) != [(narrow, "approved", None)]:
+        raise CheckFailedError("the press of the card's reader did not decide it as theirs")

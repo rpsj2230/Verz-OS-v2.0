@@ -51,7 +51,7 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Previewing a person's run of an agent writes nothing: brain.agent_capability_routes asks the gate " +
     "what that run would be handed and keeps no row, so there is nothing for a press to end or replace.",
   "src/pages/approvals/ApprovalCard.tsx approvalDecisionApiPath(suspensionId)":
-    "Deciding an approval is the answer to a question the card has already asked. The artefact and " +
+    "Deciding an approval is the answer to a question the card has already asked. The request and " +
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +
     "card is the statement of what will happen and to what, and a second step would ask the approver " +
     "to confirm a confirmation. A rejection's button stays disabled until a reason is chosen.",
