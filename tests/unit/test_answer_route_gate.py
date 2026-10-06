@@ -26,6 +26,7 @@ from brain.core.scope import Scope
 from brain.gate.answer_cache import AGE_MARKER
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.finish import Finished
+from brain.gate.roster import StoredAgents
 from brain.gate.select import SelectionStage
 from brain.gate.streaming import STEP_LABELS, Progress
 from brain.knowledge.visibility import Visibility
@@ -89,7 +90,9 @@ def an_agent(
     owner_id: str = "u_steward",
     capabilities: Sequence[str] = PASSAGE_READS,
     disabled: bool = False,
+    channels: Sequence[str] = ("console",),
 ) -> AgentRecord:
+    """An agent this route can select: switched on for the console, where these tests ask."""
     return AgentRecord(
         agent_id=agent_id,
         display_name=agent_id.title(),
@@ -98,12 +101,15 @@ def an_agent(
         authority=AgentAuthority(capabilities=tuple(Capability(value=one) for one in capabilities)),
         created_by=owner_id,
         disabled_at=LONG_AGO if disabled else None,
+        channels=tuple(channels),
     )
 
 
-def roster_of(*records: AgentRecord) -> object:
-    async def read() -> Sequence[AgentRecord]:
-        return records
+def roster_of(*records: AgentRecord, hashes: dict[str, str] | None = None) -> object:
+    """A roster read; `hashes` is read at each question, so a test can change an install."""
+
+    async def read() -> StoredAgents:
+        return StoredAgents(records=records, install_hashes=hashes or {})
 
     return read
 
@@ -379,6 +385,66 @@ def test_an_agent_the_person_may_not_use_answers_as_one_that_does_not_exist(
     assert texts(bodies[0]) == texts(bodies[1]) == texts(bodies[2])
 
 
+#: One trace id for both requests in a byte-for-byte comparison, proposed through the header the
+#: trace middleware accepts (`brain.app`), so the two bodies are compared exactly as served.
+PINNED_TRACE = "trace-for-the-channel-comparison"
+
+
+def _asked_with_a_pinned_trace(client: TestClient, agent: str) -> tuple[int, bytes]:
+    sent = client.post(
+        f"{API_PREFIX}/answer",
+        headers={**headers(READER), "x-trace-id": PINNED_TRACE},
+        json={"question": QUESTION, "agent": agent},
+    )
+    return sent.status_code, sent.content
+
+
+def test_an_agent_not_enabled_on_this_channel_is_answered_byte_for_byte_as_a_missing_one(
+    client: TestClient, transport: Scripted
+) -> None:
+    """**M13.7.4, DENIED == ABSENT.** An agent the reader may use, switched on for Lark alone,
+    named on the console, is answered with the same status and the same bytes as a name nobody
+    created, and both fall to the default before any agent runs. The trace id is pinned through
+    the middleware's own header and nothing in either body is rewritten before comparing.
+
+    Delete this and refusing an agent on the wrong channel can be done in words of its own, which
+    tells the person the agent exists and which channels it is kept from."""
+    rows = Rows()
+    installed(
+        client,
+        request_recorders=(rows,),
+        agent_roster=roster_of(an_agent("lark_only", channels=("lark",))),
+    )
+    kept_from = _asked_with_a_pinned_trace(client, "lark_only")
+    missing = _asked_with_a_pinned_trace(client, "nobody")
+
+    assert kept_from == missing
+    assert kept_from[0] == 200
+    selections = [
+        (one.front.selection_stage, one.front.selected_agent) for one in rows.kept if one.front
+    ]
+    assert selections == [(SelectionStage.DEFAULT, "brain")] * 2
+
+
+def test_an_agent_enabled_on_this_channel_answers_when_named(
+    client: TestClient, transport: Scripted
+) -> None:
+    """The positive sibling: the same agent switched on for the console as well is selected by
+    name there and is the agent that ran. Delete this and the refusal above is satisfied by a
+    roster that drops every stored agent on every channel."""
+    rows = Rows()
+    installed(
+        client,
+        request_recorders=(rows,),
+        agent_roster=roster_of(an_agent("both", channels=("lark", "console"))),
+    )
+    ask(client, agent="both")
+    (finished,) = rows.kept
+    assert finished.front is not None
+    assert (finished.front.selection_stage, finished.agent_id) == (SelectionStage.ADDRESSED, "both")
+    assert len(transport.sent) == 1
+
+
 def test_a_named_agent_answers_at_the_callers_reach_narrowed_by_its_ceiling(
     client: TestClient, transport: Scripted
 ) -> None:
@@ -611,3 +677,28 @@ def test_the_answer_route_hands_its_own_registry_to_the_follow_up(
     assert sent.status_code == 200
     assert len(handed) == 1
     assert isinstance(handed[0], ToolRegistry)
+
+
+def test_an_answer_cached_through_one_install_is_not_served_after_the_install_changes(
+    client: TestClient, transport: Scripted
+) -> None:
+    """The install's stored hash is in the cache key: with it unchanged the second asking is
+    served from the cache, and once a leash, a skill or a connector has moved it the same words
+    are computed again. The record the agent is read from does not change between the two.
+
+    Delete this and `/answer` keys the cache on the stored agent record alone, which holds no
+    leash and no skills, so an answer cached through yesterday's install is served through
+    today's.
+
+    Task ids: M13.2.5
+    """
+    hashes = {"helper": "a" * 64}
+    installed(
+        client, answer_store=Memory(), agent_roster=roster_of(an_agent("helper"), hashes=hashes)
+    )
+    ask(client, agent="helper")
+    ask(client, agent="helper")
+    assert len(transport.sent) == 1
+    hashes["helper"] = "b" * 64
+    ask(client, agent="helper")
+    assert len(transport.sent) == 2

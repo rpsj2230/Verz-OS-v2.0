@@ -54,12 +54,12 @@ Both need this install's template signing key, which the application reads at st
 write-once vault slot (`brain.ops.template_key`); a process holding none says so, and the tests
 drive it with a key of their own.
 
-Task ids: M13.3.6, M13.3.7, M38.2.2.4, M27.11.6, M27.11.7
+Task ids: M13.3.6, M13.3.7, M38.2.2.4, M27.11.6, M27.11.7, M13.7.4
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Final
@@ -70,7 +70,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agents.install import Installation, InstallDraft, complete
 from brain.agents.lifecycle import disable
-from brain.agents.model import AgentAudience, AgentRecord
+from brain.agents.model import AgentAudience, AgentRecord, answering_on
 from brain.agents.template import SignedManifest, TemplateError
 from brain.connectors.registry import ConnectorRegistry
 from brain.gate.injection import AutonomyTier
@@ -183,9 +183,13 @@ def agent_values(record: AgentRecord) -> dict[str, Any]:
         "allowed_tools": sorted(record.authority.allowed_tools),
         "required_tools": sorted(record.authority.required_tools),
         "max_side_effect": record.authority.max_side_effect.value,
+        "connectors": list(record.authority.connectors),
         "created_by": record.created_by,
         "disabled_at": record.disabled_at,
         "archived_at": record.archived_at,
+        "channels": list(record.channels),
+        "max_turns": record.max_turns,
+        "max_tool_calls": record.max_tool_calls,
     }
 
 
@@ -217,8 +221,15 @@ def prepared(
     registry: ConnectorRegistry,
     tools: ToolRegistry,
     at: datetime,
+    channels: Iterable[str] = (),
 ) -> Installation:
     """The installation `StoredAgentInstalls.finish` writes, decided before any connection.
+
+    `channels` are the ones the person installing ticked (M13.7.4), set on the record here and in
+    no other place, so the template install, the builder's publish and a duplicate all enable a
+    new agent the same way. They are the agent's own, like the audience, and never the template's:
+    a manifest naming channels would change every signed template's digest. Empty, the default,
+    answers nowhere, per `brain.agents.model.AN_AGENT_ANSWERS_ONLY_ON_THE_CHANNELS_ENABLED_FOR_IT`.
 
     A version whose leash starts above Shadow is refused first, per
     `AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET`. Then `complete` runs, so a draft whose signature
@@ -240,7 +251,8 @@ def prepared(
         )
         raise InstallStoreError(msg)
     completed = complete(draft, key=key, audience=audience, registry=registry, tools=tools, at=at)
-    return replace(completed, record=disable(completed.record, now=at))
+    enabled = answering_on(completed.record, channels)
+    return replace(completed, record=disable(enabled, now=at))
 
 
 class StoredAgentInstalls:
@@ -260,6 +272,7 @@ class StoredAgentInstalls:
         at: datetime,
         ent_hash: str,
         trace_id: str,
+        channels: Iterable[str] = (),
     ) -> Finished:
         """Write the version, the instance and the agent `prepared` decides, or nothing.
 
@@ -269,7 +282,13 @@ class StoredAgentInstalls:
         """
         signed = draft.offer.signed
         installation = prepared(
-            draft, key=key, audience=audience, registry=registry, tools=tools, at=at
+            draft,
+            key=key,
+            audience=audience,
+            registry=registry,
+            tools=tools,
+            at=at,
+            channels=channels,
         )
         async with self._sessions() as session, session.begin():
             for statement in attributed_to(

@@ -1,6 +1,6 @@
 /**
  * What the console audit holds about the `knowledge` module (`src/pages/knowledge/`, drawn at
- * `/library` and `/solutions`): the writes its screens send, each mapped to the routes it reaches,
+ * `/library`, `/solutions` and `/corrections`): the writes its screens send, each mapped to the routes it reaches,
  * and the tests that follow each route to its row, its ledger entry and what it changes, and the
  * reads it makes only once somebody acts. `support/consoleAudit.ts` collects this file and says why
  * each claim is shaped as it is.
@@ -10,6 +10,7 @@
 
 import { uploadPath } from "../../../src/pages/knowledgeQuery";
 import {
+  correctionDecisionPath,
   newVersionPath,
   passagesPath,
   promotionPath,
@@ -39,6 +40,13 @@ const LIFECYCLE_PROMOTED = lifecycle(
 
 const LIFECYCLE_REVIEWED = lifecycle(
   "test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes",
+);
+
+/** `tests/unit/test_acceptance_corrections.py`, which runs the corrections check against PostgreSQL. */
+const CORRECTION_DECIDED = t(
+  "test_acceptance_corrections",
+  "test_on_a_real_database_the_correction_check_passes_and_leaves_nothing",
+  true,
 );
 
 const LIFECYCLE_SOLVED = lifecycle("test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it");
@@ -119,6 +127,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       solutionDecisionPath("solution.x"),
     ),
   ],
+  "src/pages/knowledge/CorrectionsPage.tsx correctionDecisionPath(review.candidateId)": [
+    at(
+      "POST /api/v1/knowledge/corrections/{candidate_id}/decision",
+      "correctionDecisionPath",
+      correctionDecisionPath("correction.x"),
+    ),
+  ],
   "src/pages/knowledge/addForms.tsx LINKS_API_PATH": [at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH)],
   "src/pages/knowledge/addForms.tsx queuedPath(place.kind, place.level, place.department)": [
     at(
@@ -185,6 +200,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_SOLVED,
     audit: LIFECYCLE_SOLVED,
     behaviour: LIFECYCLE_SOLVED,
+  },
+  "POST /api/v1/knowledge/corrections/{candidate_id}/decision": {
+    row: CORRECTION_DECIDED,
+    audit: CORRECTION_DECIDED,
+    behaviour: CORRECTION_DECIDED,
   },
   "POST /api/v1/knowledge/verifications": {
     row: VERIFIED_SEVERAL,

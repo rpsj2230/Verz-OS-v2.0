@@ -26,11 +26,14 @@ about every source the console connects, so those checks fill each source's form
 made up for the run (`FORMS`) and a source added to the console without a row there fails the
 first check rather than being skipped. See `A_CHECK_FILLS_EACH_FORM_WITH_IDENTIFIERS_OF_ITS_OWN`.
 
-**Two checks write to the database and six do not.** The worker's read and the health it leaves,
-and the connect route's key, need the connection and attempt tables, and the notice needs two
-reserved people and their reach. Everything else is a function of declarations and recorded
-answers, so it runs on any install whatever its database holds, and `tests/unit/
-test_acceptance_connector_framework.py` runs those six with no database at all.
+**Three checks write to the database and six do not.** The worker's read and the health it leaves,
+and the connect route's key, need the connection and attempt tables, the notice needs two reserved
+people and their reach, and the lease check's reads are complete reads of everything, which retire
+what they did not return (`brain.ops.connector_sync.
+WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`), inside the check's transaction.
+Everything else is a function of declarations and recorded answers, so it runs on any install
+whatever its database holds, and `tests/unit/test_acceptance_connector_framework.py` runs those six
+with no database at all.
 
 **The retry is shown at two budgets, because at the live budget Xero's is never taken.** Xero states
 its wait in whole seconds, and a question's reads end by 1.6 seconds, so a stated second plus a
@@ -67,7 +70,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qs, urlsplit
 
 from brain.connectors.contract import FetchRequest, HealthState, identity_mode_default
-from brain.connectors.declaration import ViewReading, shipped
+from brain.connectors.declaration import CodeReading, ToolReading, ViewReading, shipped
 from brain.connectors.federation import CONNECTOR_TIMEOUT_MS, FEDERATION_TIMEOUT_MS, FailureReason
 from brain.connectors.live_read import (
     LIVE_READ_BUDGET_MS,
@@ -674,7 +677,7 @@ async def a_rest_read_is_built_from_a_spec_and_refused_before_a_call(
 
     rig = _rig(h)
     reading = READINGS[SOURCE]
-    if isinstance(reading, ViewReading):
+    if isinstance(reading, ViewReading | ToolReading | CodeReading):
         raise CheckFailedError("the source this check reads is not read over HTTP")
     for entity in reading.entities():
         try:

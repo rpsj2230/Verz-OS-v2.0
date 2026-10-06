@@ -1,6 +1,6 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M11.9.2, M13.8.10
+# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M11.9.2, M13.8.10, M14.7.3, M11.8.6
 #
 # The application answers questions. It borrows connector credentials for the length of one
 # request and gives them back, which is why most rules below are about *creating and
@@ -104,6 +104,32 @@ path "connector_keys/metadata/+" {
   capabilities = ["read"]
 }
 
+# The refresh token a person's consent to a source bought (M11.8.6), kept when the vendor sends the
+# person back to the console with a code and the application exchanges it. create and update, for
+# the reason above for a key; no read, because this process renews no access with its own token; and
+# metadata read only, so the screen can say a consent is held. One segment deeper than every key, so
+# named on lines of its own. A token the vendor rotates during a question's read is written back
+# through the connector-rotate role below, not with this process's own token.
+path "connector_keys/data/oauth_refresh/+" {
+  capabilities = ["create", "update"]
+}
+
+path "connector_keys/metadata/oauth_refresh/+" {
+  capabilities = ["read"]
+}
+
+# The refresh token a person's own consent bought (M11.8.6), one segment deeper again, kept when the
+# vendor sends that person back with a code: the same create and update, no read, and metadata read
+# so My workspace can say their account is connected. The read for their question is made with a
+# connector-person token below, never with this one.
+path "connector_keys/data/oauth_refresh/+/+" {
+  capabilities = ["create", "update"]
+}
+
+path "connector_keys/metadata/oauth_refresh/+/+" {
+  capabilities = ["read"]
+}
+
 # One question's read of a connected source borrows that source's key for the one read, by the
 # owner's decision (needs-rupash 99, 2026-09-28): a run token minted against the connector-run token
 # role, the key read with that token and not with this one, and the token revoked when the read ends.
@@ -114,6 +140,21 @@ path "connector_keys/metadata/+" {
 # application cannot widen the role it mints against. Takes effect on an install once the policies
 # are loaded again, which the installer's policy step does with the unseal pieces.
 path "auth/token/create/connector-run" {
+  capabilities = ["create", "update"]
+}
+
+# A refresh token a vendor rotated during a question's read is written back by a token minted against
+# the connector-rotate role (connector-rotate.hcl), which may patch a refresh token's slot and read
+# nothing (M11.8.6). See brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT.
+path "auth/token/create/connector-rotate" {
+  capabilities = ["create", "update"]
+}
+
+# A person's own refresh token is read for their question with a token minted against the
+# connector-person role (connector-person.hcl), which reads a person's slot and nothing else. Only
+# this policy may mint it: the worker's may not, so nothing running with nobody present reads a
+# person's token. See brain.ops.connector_lease.NOTHING_RUNNING_WITH_NOBODY_PRESENT_READS_A_PERSONS_CONSENT.
+path "auth/token/create/connector-person" {
   capabilities = ["create", "update"]
 }
 
@@ -132,13 +173,29 @@ path "template_signing/data/key" {
   capabilities = ["create", "read"]
 }
 
+# This install's join-key pepper, created once and never written over. See brain.ops.join_key_pepper,
+# whose A_NEW_PEPPER_UNJOINS_EVERY_STORED_DIGEST is why: every join key entity resolution stores is
+# an HMAC under it, and a replaced pepper silently unjoins every one.
+#
+# create, so the application puts it into an empty slot, at the installer's step and at every start;
+# the write carries kv's check-and-set at version 0 as well. No update, so nothing this token does
+# can replace it once the slot holds a version. read, because this process hashes a value an
+# administrator enters to block it. One exact path and no wildcard, no delete, no destroy and no
+# metadata. Created here rather than by apply-release.sh because the deploy token writes no secret
+# value: brain.ops.join_key_pepper.THE_RELEASE_SCRIPT_CANNOT_CREATE_IT_SO_THE_APPLICATION_DOES.
+path "resolution/data/pepper" {
+  capabilities = ["create", "read"]
+}
+
 # Deny by omission is the default here, so the following are listed only to say they were
 # considered and refused rather than forgotten:
 #
 #   sys/policy*          changing its own policy is the escalation this file exists to prevent
 #   sys/unseal           the application is not the operator
-#   auth/*               minting tokens for any role but connector-run, and the roles themselves
+#   auth/*               minting tokens for any role but connector-run, connector-rotate and
+#                        connector-person, and the roles themselves
 #   secret/data/*        static secrets, for the reason at the top
 #   providers/metadata/* update or delete: see above
 #   providers/delete/*   and destroy/*: removing a provider key is done at the server
 #   template_signing/*   update, delete, destroy and metadata: the key is created once, above
+#   resolution/*         update, delete, destroy and metadata: the pepper is created once, above

@@ -89,6 +89,12 @@ the connector's own declaration, because `brain.connectors.declaration` is on th
 path and imports nothing from `brain.knowledge`, which `tests/invariants/test_minimal_index.py`
 holds.
 
+**A connector's write a model may ask for is registered beside the row tool that reads its
+record (M13.7.6).** `brain.tools.proposed_writes` registers each write a connector declares a
+preparer for, with a handler that refuses every call, so an agent's catalogue can offer it and a
+run can hold its call for a person; the only way it is sent is the approved action the worker
+carries out. Without a row source none is registered, for the reason no row tool is.
+
 **The row source is injected and there is no default.** `RowTool.reader` binds to a
 `RowSource`, and a builder that supplied its own would be a second path to data with its
 own idea of what may be seen, which is exactly what `channels.adapter.ChannelAdapter`
@@ -135,24 +141,32 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5, M15.4.2, M12.4.4
+Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8, M13.7.6
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from types import MappingProxyType
 from typing import Final
 
 from brain import demo
 from brain.chat.attachments import attachment_definition, attachment_reader
-from brain.connectors.declaration import shipped
+from brain.core.field_policy import FieldPolicy
+from brain.gate.caches import CachedEmbedding
 from brain.knowledge.columns import PRICE_LIST, TableClassification
 from brain.knowledge.connector_figures import LiveFigures, figure_tools
 from brain.knowledge.connector_rows import CONNECTOR_ROW_DESCRIPTIONS, CONNECTOR_ROW_ENTITIES
-from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, knowledge_tools
+from brain.knowledge.document_tools import (
+    KNOWLEDGE_PIN,
+    KnowledgeCaches,
+    QuestionEmbedder,
+    RecordStore,
+    knowledge_tools,
+)
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
+from brain.ops.connector_catalogue import Derived, declarations
+from brain.tools.proposed_writes import register_proposed_writes
 from brain.tools.registry import ResultContract, ToolRegistry
 from brain.tools.website_check import WebsiteCheckTool, register_website_check
 
@@ -203,15 +217,15 @@ BUILT_IN_ROW_ENTITIES: Final = (PRICE_LIST,)
 #: Read-only, because a registration added at run time would be visible to every registry
 #: built afterwards in the same process, which is the singleton the module docstring rejects
 #: arriving through a dictionary.
-SOURCE_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.row_classifications(), **CONNECTOR_ROW_ENTITIES}
+SOURCE_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = Derived(
+    lambda _: {demo.DEMO_SOURCE: demo.row_classifications(), **CONNECTOR_ROW_ENTITIES}
 )
 
 #: The catalogue descriptions for those entities, by source and then entity. Beside the
 #: classifications rather than inside them for the reason `ROW_TOOL_DESCRIPTIONS` gives: a
 #: description is catalogue text whose collisions are a property of the whole registry.
-SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
-    {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS, **CONNECTOR_ROW_DESCRIPTIONS}
+SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = Derived(
+    lambda _: {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS, **CONNECTOR_ROW_DESCRIPTIONS}
 )
 
 
@@ -221,12 +235,15 @@ def source_row_entities() -> Mapping[str, tuple[TableClassification, ...]]:
 
 
 def connector_row_sources() -> tuple[str, ...]:
-    """Every shipped connector with classifications filed here, which `build_registry` registers.
+    """Every connector with classifications filed here, which `build_registry` registers.
 
-    The shipped connectors and no other source, so the demo's entities stay where the demo is read:
-    see `A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ`.
+    The connectors and no other source, so the demo's entities stay where the demo is read: see
+    `A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ`. The connectors are
+    `brain.ops.connector_catalogue.declarations`, so one reviewed on this install (M11.7.8) has
+    its row tools in the next registry built.
     """
-    return tuple(sorted(name for name in source_row_entities() if name in shipped()))
+    found = declarations()
+    return tuple(sorted(name for name in source_row_entities() if name in found))
 
 
 def row_entities_for(source: str) -> tuple[TableClassification, ...]:
@@ -271,6 +288,22 @@ def classification_for(entity: str, *, source: str | None = None) -> TableClassi
     return next((c for c in known if c.entity == entity), None)
 
 
+def field_policy_for(entity: str, *, source: str | None) -> FieldPolicy:
+    """The field policy an action on `entity` is decided under, for the leash's mask check.
+
+    The read classification `classification_for` finds, and the fields `source`'s write grants
+    declare their tools write (`brain.connectors.declaration.written_fields`). A grant field that
+    contradicts a read rule is a `PolicyConflictError` here rather than either one winning. With
+    nothing classifying the entity, the empty policy, which withholds every field.
+    """
+    from brain.connectors.declaration import written_fields
+
+    found = classification_for(entity, source=source)
+    read = () if found is None else found.policy().rules
+    written = () if source is None else written_fields(source, entity)
+    return FieldPolicy(rules=(*read, *written))
+
+
 def description_for(source: str, entity: str) -> str:
     """The catalogue text for one row tool an install reading `source` registers.
 
@@ -280,7 +313,9 @@ def description_for(source: str, entity: str) -> str:
     return {**ROW_TOOL_DESCRIPTIONS, **SOURCE_ROW_DESCRIPTIONS.get(source, {})}[entity]
 
 
-def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder | None:
+def question_embedder(
+    env: Mapping[str, str] | None = None, *, cache: RecordStore[CachedEmbedding] | None = None
+) -> QuestionEmbedder | None:
     """How this process embeds a question, or None when the install has declared no weights.
 
     None is an install whose knowledge search is text search, which is every install until its
@@ -299,7 +334,7 @@ def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder 
         return None
     from brain.ops.inference_client import make_client
 
-    return QuestionEmbedder(service=make_client(env=env), revision=revision)
+    return QuestionEmbedder(service=make_client(env=env), revision=revision, cache=cache)
 
 
 def build_registry(
@@ -309,6 +344,7 @@ def build_registry(
     sources: Iterable[str] | None = None,
     figures: LiveFigures | None = None,
     website: WebsiteCheckTool | None = None,
+    caches: KnowledgeCaches | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -378,7 +414,9 @@ def build_registry(
                 )
         # The document plane, for every source. See
         # `THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE`.
-        for definition, handler in knowledge_tools(records, question_embedder()):
+        embedder = question_embedder(cache=None if caches is None else caches.embeddings)
+        retrievals = None if caches is None else caches.retrievals
+        for definition, handler in knowledge_tools(records, embedder, retrievals):
             registry.register(
                 definition,
                 handler,
@@ -392,6 +430,9 @@ def build_registry(
             result_contract=ResultContract.TYPED,
             scope=KNOWLEDGE_PIN,
         )
+        # A connector's write a model may ask for, beside the row tool that reads its record. It
+        # can never be called: see `brain.tools.proposed_writes`.
+        register_proposed_writes(registry, declarations())
 
     # The website check, where the caller handed it a transport (M12.4.4). Not tied to a row
     # source: it reads a site, not a table.

@@ -44,6 +44,14 @@ from brain.access_request_routes import router as access_request_router
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
 
+# One agent's Artifacts section: its list, a download re-checked at the requester's reach, a
+# supersession or an archive as a row, and the latest of a kind for a client.
+from brain.agent_artifact_routes import router as agent_artifact_router
+
+# Attaching a tool or a connector to an agent from its page, and detaching one, each checked when
+# it is pressed and written to the ledger with who, when and why.
+from brain.agent_attachment_routes import router as agent_attachment_router
+
 # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
@@ -54,6 +62,17 @@ from brain.agent_capability_routes import router as agent_capability_router
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
+# One agent's Conversations section: the reader's own threads it answered in, with who answered
+# and how each run ended, a failed one included.
+from brain.agent_conversation_routes import router as agent_conversation_router
+
+# An agent installed into a group chat the bot is in, and taken out of one, by whoever switches its
+# channels (M39.2.4.4). See `brain.agent_group_routes`.
+from brain.agent_group_routes import router as agent_group_router
+
+# One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
+# breaker reads, and the supervision pin and its reviews.
+from brain.agent_leash_routes import router as agent_leash_router
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 from brain.agent_memory_routes import router as agent_memory_router
 
@@ -64,6 +83,7 @@ from brain.agent_model_routes import router as agent_model_router
 # again: who may see an agent is its audience rather than a capability, and a hidden agent
 # and a missing one are one answer. The same `asking` dependency, imported.
 from brain.agent_routes import router as agent_router
+from brain.agent_upgrade_routes import router as agent_upgrade_router
 from brain.agent_workspace_routes import router as agent_workspace_router
 
 # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
@@ -84,6 +104,10 @@ from brain.artifact_routes import router as artifact_router
 # `brain.audit.view.AuditView` and a page is filled from what survives. See
 # `brain.audit_routes`.
 from brain.audit_routes import router as audit_router
+
+# The Audit screen's refusal and redaction statistics, behind the same read and refusal, counted
+# over other people's entries in the reader's own view. See `brain.audit_statistics_routes`.
+from brain.audit_statistics_routes import router as audit_statistics_router
 
 # The automation gallery on an agent's Automations tab, and its one confirmed install. Its own
 # router because the write is: an `admin:` authority asked before the agent is read, a
@@ -108,6 +132,10 @@ from brain.automations_routes import router as automations_router
 # Channels screen's bindings and health behind the channel's own authority. See
 # `brain.binding_routes`.
 from brain.binding_routes import router as binding_router
+
+# Corrections carrying the right answer, decided as a new version of their document is.
+# See `brain.candidate_routes`.
+from brain.candidate_routes import router as candidate_router
 
 # The access certification report, taken from the Access review screen and recorded on the
 # Exports log before it is handed over. See `brain.certification_export_routes`.
@@ -158,6 +186,11 @@ from brain.console_stats_routes import router as console_stats_router
 # repeated. See `brain.credential_routes`.
 from brain.credential_routes import router as credential_router
 
+# A connector for a new API, submitted with its specification and mapping and reviewed by a second
+# person who may connect it; approved, it joins the Connectors screen with no release (M11.7.8).
+# See `brain.custom_connector_routes`.
+from brain.custom_connector_routes import router as custom_connector_router
+
 # The data steward: who every read of the company's data begins with, and naming one on an
 # install whose setup named nobody, behind `admin:data_steward` over everything. See
 # `brain.data_steward_routes` and `brain.identity.data_steward`.
@@ -167,6 +200,10 @@ from brain.data_steward_routes import router as data_steward_router
 # audit trail export, recorded in the ledger before the document is handed over. See
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
+
+# A department head's budget against pace and their department's knowledge coverage, for the
+# person who leads it and the one 404 for everybody else. See `brain.department_view_routes`.
+from brain.department_view_routes import router as department_view_router
 
 # Send the evening digest to: the one setting naming a connected channel and a conversation in it,
 # chosen from what each channel offers now and saved as the Settings screen saves. See
@@ -228,6 +265,15 @@ from brain.govern_routes import router as govern_router
 # has written from them. See `brain.group_rule_routes`.
 from brain.group_rule_routes import router as group_rule_router
 
+# Stop: what is stopped, stop at once, and resume with a written reason, behind `admin:halt` in
+# a scope that matches what is stopped. See `brain.halt_routes` and `brain.ops.halt_store`.
+from brain.halt_routes import router as halt_router
+
+# Incidents: which connected sources are degraded now, since when, and which tools stop working
+# because of it, at the Connectors screen's rule for which sources a reader may be told of. See
+# `brain.incident_routes`.
+from brain.incident_routes import router as incident_router
+
 # The five install screens. A ninth router because what it answers about is the deployment
 # rather than the company's data: no name to guess, no row belonging to anybody, and no
 # session on four of the five. The same `asking` dependency, imported. See
@@ -276,6 +322,10 @@ from brain.model_health_routes import router as model_health_router
 # `brain.navigation_routes`.
 from brain.navigation_routes import router as navigation_router
 
+# Nominating a person for a role, and the third person who confirms it into a role grant or
+# declines it. See `brain.nomination_routes`.
+from brain.nomination_routes import router as nomination_router
+
 # Notifications: every notice this product composes, who is told what and whether anything
 # sends it, the switch that stops one, and the email relay with its password in the vault and
 # a test message, behind `admin:notification` over everything. See
@@ -295,6 +345,10 @@ from brain.operation_routes import router as operation_router
 # Disabling a person and enabling them again, from the Departments and teams screen, behind the
 # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
 from brain.principal_state_routes import router as principal_state_router
+
+# A learned fast-lane rule promoted by one person, or two across money, never its proposer, once
+# enough conversations would have used it (M39.4.2.3). See `brain.promotion_routes`.
+from brain.promotion_routes import router as promotion_router
 
 # Prompts: the system instructions every agent is given, shown and never edited, and each
 # agent's own instructions, edited as a local change to its template. See
@@ -325,17 +379,31 @@ from brain.report_routes import router as report_router
 # this install, recorded. See `brain.requirement_check_routes`.
 from brain.requirement_check_routes import router as requirement_check_router
 
+# The Resolution review screen: the pairs entity resolution could not settle, and a reviewer's
+# merge or rejection, behind `admin:entity_merge` over everything and the reach of both records.
+# See `brain.resolution_routes` and `brain.resolution.review_store`.
+from brain.resolution_routes import router as resolution_router
+
 # The retention report and the four writes that decide whether the sweep acts. A router of
 # its own because two of its writes are the only way a deletion is approved or suspended:
 # every write needs its authority over everything, and the report is shown whole to a
 # company-wide reader and to nobody else. See `brain.retention_routes`.
 from brain.retention_routes import router as retention_router
 
+# A followed citation's place, kept for the learning signal, and the signal read by a knowledge
+# administrator. Never a document, a question or a person. See `brain.retrieval_routes`.
+from brain.retrieval_routes import router as retrieval_router
+
 # The routing matrix. A second router rather than more routes on the first, because the
 # rules differ: `api_routes` answers about entities, where the name itself is enumerable,
 # and this one answers about the model chain, where it is not. Both take the same
 # `asking` dependency, which `api_routes` declares once and this imports.
 from brain.routing_routes import router as routing_router
+
+# Fast-lane rules: a department's administrator lists, adds, tests and retires their own, under
+# the classification grants at the rule's place, live from the next question (M6.5.1). See
+# `brain.rule_routes`.
+from brain.rule_routes import router as rule_router
 
 # Service accounts: an integration registered at its owner's reach, a key shown once, and both
 # taken away, behind `admin:credential`. See `brain.service_account_routes`.

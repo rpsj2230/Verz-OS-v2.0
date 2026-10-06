@@ -216,6 +216,7 @@ def ask(
     rows: Rows | None = None,
     hints: tuple[str, ...] = (),
     follow_up: FollowUp | None = None,
+    session: tuple[str, ...] = (),
 ) -> Run:
     """The lane, with a model step whose model is a real executor over a recording transport."""
     transport = Scripted(*script) if script else Scripted(completion() if reply is None else reply)
@@ -255,6 +256,7 @@ def ask(
                         model=calls,
                         hints=FixedHints(hints) if hints else None,
                         follow_up=follow_up,
+                        session=FixedHints(session) if session else None,
                     )
                     if with_model
                     else None,

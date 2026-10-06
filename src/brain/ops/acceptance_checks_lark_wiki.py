@@ -50,6 +50,15 @@ A, B = RESERVED_DEPARTMENTS
 #: The capability the knowledge plane is read with, restated from `brain.knowledge.search`.
 KNOWLEDGE_READ: Final = "read:knowledge"
 
+#: A wiki page's own read, which a reader needs beside the library's. See
+#: `brain.agents.binding.A_WIKI_PAGE_HAS_A_READ_OF_ITS_OWN`.
+WIKI_PAGE_READ: Final = "read:wiki_page"
+
+
+def _both(scope: Scope) -> tuple[tuple[str, Scope], ...]:
+    """The library's read and the wiki's own, in `scope`: what a reader of a wiki page holds."""
+    return ((KNOWLEDGE_READ, scope), (WIKI_PAGE_READ, scope))
+
 
 def _token(prefix: str) -> str:
     alphabet = string.ascii_letters + string.digits
@@ -189,8 +198,8 @@ async def a_lark_wiki_page_is_told_only_to_a_reader_its_space_admits(h: Harness)
         h.principal(B, "support"),
         h.principal(A, "guest"),
     )
-    await h.person(inside, department=A, grants=((KNOWLEDGE_READ, Scope.department(A)),))
-    await h.person(outside, department=B, grants=((KNOWLEDGE_READ, Scope.department(B)),))
+    await h.person(inside, department=A, grants=_both(Scope.department(A)))
+    await h.person(outside, department=B, grants=_both(Scope.department(B)))
     await h.person(nobody, department=A)
 
     async def ask(principal_id: str, question: str) -> TypedResult[KnowledgePassage]:

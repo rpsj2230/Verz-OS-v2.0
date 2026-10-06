@@ -66,7 +66,8 @@ KNOWN_ORPHANS = frozenset(
         # `denial_digest` left on 2026-09-28 for `WIRED_BUT_NOT_SCHEDULED`: see there.
         # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
-        "resolution_calibration",
+        # `resolution_calibration` left on 2026-10-06: the worker's schedule starts the weekly
+        # fit. See `SCHEDULED_BY_THE_WORKER`.
         # `queue_redrive` and `side_effect_resume` left on 2026-09-30: the worker's schedule
         # starts both through `brain.ops.recovery_run`. See `SCHEDULED_BY_THE_WORKER`.
         # `model_health_probes` left on 2026-09-22: the worker's schedule starts it. See
@@ -148,6 +149,12 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #:
 #: `evening_digest` joined on 2026-09-30 the day it was registered, sent once a day at the install's
 #: own hour to the conversation it chose, through `brain.ops.digest_run`.
+#:
+#: `entity_resolution` joined on 2026-10-06 the day it was registered (`0182`, M14.1), giving every
+#: record a connector declares for resolution its entity through
+#: `brain.resolution.registry_store.run_registry_now`.
+#: `approved_actions` joined on 2026-10-06 the day it was registered (`0201`, M13.7.6), running
+#: each approved action once through `brain.ops.approved_runs.run_approved_now`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -167,7 +174,10 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "queue_redrive",
         "side_effect_resume",
         "escalation_expiry",
+        "entity_resolution",
         "evening_digest",
+        "resolution_calibration",
+        "approved_actions",
     }
 )
 

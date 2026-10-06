@@ -69,7 +69,14 @@ they decide whether a memory is reached at all, on every read, with nothing reco
 record is written about it. Putting decay beside supersession would suggest they work the same
 way, and they do not: one is arithmetic on the clock and the other is a row.
 
-Task ids: M16.1.1, M16.1.4, M16.1.5, M16.4.1, M16.4.4, M16.6.8
+**An inference the person says again regains what it was formed with (M16.7.2).** Decay runs from
+`Formation.decays_from`, the later of when it formed and when it was last confirmed, so a
+preference said again today is worth its formed confidence today, and one never said again falls
+below `RECALL_FLOOR` on the half-life in force. Only saying it again confirms it: a helpful mark on
+an answer that used it does not, because a mark by itself boosts nothing (M16.7.4, M16.3.2). See
+`A_MEMORY_SAID_AGAIN_REGAINS_WHAT_IT_WAS_FORMED_WITH`.
+
+Task ids: M16.1.1, M16.1.4, M16.1.5, M16.4.1, M16.4.4, M16.6.8, M16.7.2
 """
 
 from __future__ import annotations
@@ -132,12 +139,26 @@ RECALL_FLOOR = 0.35
 #: one number in one place so that changing it is one edit with one argument.
 HALF_LIFE_DAYS = 30.0
 
+#: Why saying a memory again resets its decay, and why nothing else does.
+A_MEMORY_SAID_AGAIN_REGAINS_WHAT_IT_WAS_FORMED_WITH = (
+    "An inference fades because the evidence for it is old, and the person saying it again is "
+    "new evidence of exactly the same thing, so its decay starts again from then at the "
+    "confidence it formed with. Nothing else confirms it. A helpful mark on an answer the "
+    "memory was a hint to says the answer helped, not that the hint was right, and M16.7.4 "
+    "holds that a mark by itself changes no memory; letting it would make a memory's life a "
+    "function of how often somebody clicks a thumb."
+)
+
 #: How long session memory lives once the thread stops being spoken to.
 #:
 #: The thread's lifetime, which is what M16.1.1 asks for, expressed as an idle bound because
 #: a thread has no end anybody declares. A conversation nobody has added to in this long is
 #: over, whatever the client did with its window.
 SESSION_IDLE_SECONDS = 12 * 60 * 60
+
+#: The most statements one conversation's session memory holds (M16.1.1). A conversation's
+#: working context is a handful of sentences; more than this is a paste, and the oldest go first.
+MAX_SESSION_STATEMENTS = 8
 
 
 class MemoryKind(enum.StrEnum):
@@ -202,6 +223,22 @@ class Formation:
     ent_hash: str
     formed_at: datetime
     kind: MemoryKind = MemoryKind.ADAPTIVE
+    #: When the person last said it again, or None until they have (M16.7.2). Not about the
+    #: writer's reach and never read by the permission question: only by how much the memory is
+    #: worth now, which is `decays_from`.
+    confirmed_at: datetime | None = None
+
+    @property
+    def decays_from(self) -> datetime:
+        """The instant decay is measured from: the latest confirmation, else the formation.
+
+        The later of the two, so a confirmation stamped before the formation by a skewed clock
+        cannot age a memory past the day it formed. See
+        `A_MEMORY_SAID_AGAIN_REGAINS_WHAT_IT_WAS_FORMED_WITH`.
+        """
+        if self.confirmed_at is None:
+            return self.formed_at
+        return max(self.formed_at, self.confirmed_at)
 
     def __post_init__(self) -> None:
         if not self.principal_id:
@@ -215,6 +252,9 @@ class Formation:
             raise ValueError(msg)
         if self.formed_at.tzinfo is None:
             msg = "a naive formation time compares wrongly against an aware one"
+            raise ValueError(msg)
+        if self.confirmed_at is not None and self.confirmed_at.tzinfo is None:
+            msg = "a naive confirmation time compares wrongly against an aware one"
             raise ValueError(msg)
 
 
@@ -342,7 +382,7 @@ def may_recall(
     confidence = (
         confidence_now(
             formed_confidence,
-            formed_at=formation.formed_at,
+            formed_at=formation.decays_from,
             now=now,
             half_life_days=in_force_half_life_days() if half_life_days is None else half_life_days,
         )

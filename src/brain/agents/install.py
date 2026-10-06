@@ -937,6 +937,7 @@ def bound_record(record: AgentRecord, bindings: tuple[ToolBinding, ...]) -> Agen
                 allowed_tools=bound(authority.allowed_tools),
                 required_tools=bound(authority.required_tools),
                 max_side_effect=authority.max_side_effect,
+                connectors=authority.connectors,
             ),
         }
     )

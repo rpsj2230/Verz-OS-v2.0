@@ -1370,25 +1370,28 @@ def test_the_feature_member_exists_and_gates_the_install() -> None:
     assert not group_installable(caps(Channel.SLACK))
 
 
-def test_no_adapter_declares_group_installation_yet() -> None:
-    """The honest state, written down so it is a finding rather than a silence. None of the six
-    adapters has a path for the conversation reference a vendor hands back, so the console
-    offers group installation nowhere, and inventing support a channel does not have is the
-    failure the member was withheld to avoid.
+def test_lark_alone_declares_group_installation_and_reads_the_rooms_it_needs() -> None:
+    """The state since `0205`, written down so it is a finding rather than a silence. Lark's wire
+    reads the bot's own joining and leaving events (`brain.channels.lark.read_room`), which is the
+    path for the conversation reference a group install names, so Lark declares the feature; no
+    other adapter has such a path and none declares it.
 
-    This goes red the day an adapter declares it, which is the right direction: somebody then
-    reads this test, checks the adapter really has the path, and removes the line.
+    This goes red the day another adapter declares it, which is the right direction: somebody then
+    reads this test, checks that adapter really reads its rooms, and adds it here.
 
     Delete this and the claim in the docstring is unchecked."""
+    from brain.channels.lark import BOT_ADDED, BOT_REMOVED, read_room
+
     declared = (
         EMAIL_FEATURES,
-        LARK_FEATURES,
         SLACK_FEATURES,
         TEAMS_FEATURES,
         TELEGRAM_FEATURES,
         WHATSAPP_FEATURES,
     )
 
+    assert Feature.GROUP_INSTALL in LARK_FEATURES
+    assert callable(read_room) and (BOT_ADDED, BOT_REMOVED)
     for features in declared:
         assert Feature.GROUP_INSTALL not in features
 

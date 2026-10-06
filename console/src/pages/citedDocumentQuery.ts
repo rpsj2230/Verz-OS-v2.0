@@ -12,7 +12,12 @@
  * an absent one with the same 404, which this console draws in the API's own words and does not
  * explain.
  *
- * Task ids: M8.1.2
+ * **Beside the passage, the fragment can name the retrieval and the passage's place.** The Ask
+ * screen adds them when the answer came with an `x-retrieval-id`, and the page sends the place back
+ * once for the learning signal (M15.3.4). A place is a number in the reader's own list and names no
+ * document; the chunk never leaves the fragment.
+ *
+ * Task ids: M8.1.2, M15.3.4
  */
 
 /** Written down because the fragment is the only place the passage's position may travel. */
@@ -59,10 +64,47 @@ export function citedDocumentApiPath(documentId: string): string {
   return `/knowledge/documents/${encodeURIComponent(documentId)}`;
 }
 
-/** The console address a document citation links to, with the passage in the fragment. */
-export function citedDocumentAddress(documentId: string, anchor: string): string {
+/**
+ * The console address a document citation links to, with the passage in the fragment, and beside it
+ * the retrieval the answer was drawn from and the passage's place in the reader's list, when both
+ * are known. All of it after the `#`, so none of it is in an access log (M15.3.4).
+ */
+export function citedDocumentAddress(
+  documentId: string,
+  anchor: string,
+  retrievalId = "",
+  position = "",
+): string {
   const base = `${CITED_DOCUMENT_ADDRESS}/${encodeURIComponent(documentId)}`;
-  return anchor === "" ? base : `${base}#${anchor}`;
+  const followed =
+    retrievalId !== "" && position !== ""
+      ? `retrieval=${encodeURIComponent(retrievalId)}&position=${encodeURIComponent(position)}`
+      : "";
+  const fragment = [anchor, followed].filter((one) => one !== "").join("&");
+  return fragment === "" ? base : `${base}#${fragment}`;
+}
+
+/** Where the API keeps a followed citation's place for the learning signal. */
+export function retrievalUsesPath(retrievalId: string): string {
+  return `/retrievals/${encodeURIComponent(retrievalId)}/uses`;
+}
+
+/** The retrieval and the place a fragment names, or null when it names neither whole. */
+export function followedOf(hash: string): { readonly retrievalId: string; readonly position: number } | null {
+  const fragment = hash.startsWith("#") ? hash.slice(1) : hash;
+  const named = new Map<string, string>();
+  for (const part of fragment.split("&")) {
+    const [key, value] = part.split("=", 2);
+    if (key !== undefined && value !== undefined) {
+      named.set(key, decodeURIComponent(value));
+    }
+  }
+  const retrievalId = named.get("retrieval") ?? "";
+  const position = Number(named.get("position") ?? "");
+  if (retrievalId === "" || !Number.isInteger(position) || position < 1) {
+    return null;
+  }
+  return { retrievalId, position };
 }
 
 /** The chunk a fragment names, or the empty string when it names none. */

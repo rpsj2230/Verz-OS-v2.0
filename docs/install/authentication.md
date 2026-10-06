@@ -336,6 +336,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:credential` | running the system |
 | `admin:data_steward` | running the system |
 | `admin:department` | running the system |
+| `admin:entity_merge` | running the system |
 | `admin:erasure` | running the system |
 | `admin:export` | running the system |
 | `admin:feature` | running the system |
@@ -343,6 +344,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:halt` | running the system |
 | `admin:install_setting` | running the system |
 | `admin:knowledge` | running the system |
+| `admin:leash` | running the system |
 | `admin:learning` | running the system |
 | `admin:legal_hold` | running the system |
 | `admin:notification` | running the system |

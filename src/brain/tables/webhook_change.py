@@ -32,7 +32,7 @@ import uuid
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base
@@ -50,8 +50,16 @@ class WebhookChange(enum.StrEnum):
     REGISTERED = "registered"
     #: Its signing secret was replaced with a new one.
     SECRET_REPLACED = "secret_replaced"  # noqa: S105
-    #: It was switched off, for good. Switching back on is registering again under a new id.
+    #: It was switched off. Its deliveries stop until it is switched back on.
     SWITCHED_OFF = "switched_off"
+    #: A switched-off subscriber was switched back on, with the signing secret it already had.
+    SWITCHED_ON = "switched_on"
+    #: One exhausted delivery to it was put back to be sent once more. Names the delivery.
+    REPLAYED = "replayed"
+
+
+#: The changes that write a signing secret, and so may carry the time the vault stamped on it.
+WRITES_A_SECRET: Final = frozenset({WebhookChange.REGISTERED, WebhookChange.SECRET_REPLACED})
 
 
 class WebhookChangeRow(Base):
@@ -77,14 +85,32 @@ class WebhookChangeRow(Base):
     secret_written_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: The delivery a replay put back, by its event id. Present on a replay and on nothing else,
+    #: and one replay per delivery, which `uq_webhook_change_one_replay` holds.
+    event_id: Mapped[str | None] = mapped_column(String(MAX_IDENTIFIER_CHARS), nullable=True)
 
     __table_args__ = (
         CheckConstraint(one_of("change", WebhookChange), name="change"),
         CheckConstraint("length(btrim(changed_by)) > 0", name="changed_by_present"),
         CheckConstraint(
-            f"change <> '{WebhookChange.SWITCHED_OFF.value}' OR secret_written_at IS NULL",
+            f"{one_of('change', WRITES_A_SECRET)} OR secret_written_at IS NULL",
             name="a_switch_off_writes_no_secret",
         ),
+        CheckConstraint(
+            f"change <> '{WebhookChange.REPLAYED.value}' OR event_id IS NOT NULL",
+            name="a_replay_names_its_delivery",
+        ),
+        CheckConstraint(
+            f"event_id IS NULL OR change = '{WebhookChange.REPLAYED.value}'",
+            name="only_a_replay_names_a_delivery",
+        ),
         Index("ix_ops_webhook_change_subscriber", "subscriber_id", "changed_at"),
+        Index(
+            "uq_webhook_change_one_replay",
+            "subscriber_id",
+            "event_id",
+            unique=True,
+            postgresql_where=text(f"change = '{WebhookChange.REPLAYED.value}'"),
+        ),
         {"schema": "ops"},
     )

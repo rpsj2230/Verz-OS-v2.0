@@ -188,6 +188,10 @@ class Settings(BaseSettings):
     #: profile that deploys one, and `brain.config.check` refuses a value on one that does
     #: not; `brain.ops.pii.analyzer_address` is the one reader.
     presidio_url: str = ""
+    #: Where the script sandbox answers, when the installation switched it on. Empty takes the
+    #: product's own service; `brain.ops.sandbox.sandbox_address` is the one reader, and it
+    #: answers None unless the sandbox is switched on.
+    sandbox_url: str = ""
     #: Whether this install looks for a newer release at all. Off unless an install switches it
     #: on, because a look is a request leaving the client's network; see
     #: `brain.deployment.release_feed.A_CHECK_NOBODY_SWITCHED_ON_IS_A_DISCLOSURE_NOBODY_AGREED_TO`.

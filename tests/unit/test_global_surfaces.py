@@ -623,7 +623,7 @@ def test_pressing_stop_carries_both_effects_and_needs_no_approval() -> None:
 
     Delete this and `Halt(effects=frozenset({REFUSE_NEW}))` becomes a plausible thing to
     write here."""
-    admin = holding(KILL_SWITCH.value)
+    admin = holding(KILL_SWITCH.value, department=None)
 
     halt = press_stop(admin, at=NOW, reason="the connector is leaking rows")
 
@@ -646,20 +646,34 @@ def test_somebody_without_the_capability_cannot_stop_the_install() -> None:
     assert not may_stop(holding("read:run"), NOW)
 
 
+def test_the_stop_held_in_one_department_cannot_stop_everything() -> None:
+    """**M27.15.2.** A department administrator holds the stop capability scoped to their own
+    department, and a halt on everything names no department, so their scope does not match it:
+    they may not press the install's stop. Until 2026-10-06 `may_stop` asked for the capability
+    in any scope, and this reader stopped every department's work. Delete this and that returns,
+    with the positive test above still green because it holds the capability unscoped."""
+    scoped = holding(KILL_SWITCH.value, department=MAINTENANCE)
+
+    assert not may_stop(scoped, NOW)
+    with pytest.raises(GlobalSurfaceError, match="may not stop"):
+        press_stop(scoped, at=NOW, reason="a plausible sounding reason")
+
+
 def test_the_axes_a_halt_cannot_reach_are_named_from_the_module_that_knows() -> None:
-    """**M33.1.1.4.** `brain.ops.admission.decide` is handed a connector and nothing else, so
-    a halt on a department, an agent or a person is stored, reported as in force and refuses
-    nothing. The administrator stopping a compromised account is the last person able to go
-    and read which call sites exist.
+    """**M33.1.1.4.** Every path that starts work asks `brain.ops.halt_store.refusal_in` with its
+    person, department or connector, and nothing that starts an agent's work names the agent, so
+    a halt on one agent is stored, reported as in force and refuses nothing. The administrator
+    stopping a misbehaving agent is the last person able to go and read which call sites exist.
 
-    Derived from `ENFORCED_AXES` rather than listed, so the day admission learns an axis this
-    stops naming it with no edit here. Asserted as the complement rather than as three names,
-    which is what makes that true.
+    Derived from `ENFORCED_AXES` rather than listed, so the day an agent's work asks this stops
+    naming it with no edit here. Asserted as the complement rather than as names, which is what
+    makes that true.
 
-    Delete this and the screen offering a person halt says nothing about it being inert."""
+    Delete this and the screen offering an agent halt says nothing about it being inert."""
     assert set(inert_axes()) == set(HaltScope) - ENFORCED_AXES
     assert HaltScope.EVERYTHING not in inert_axes()
-    assert HaltScope.PERSON in inert_axes()
+    assert HaltScope.PERSON not in inert_axes()
+    assert HaltScope.AGENT in inert_axes()
 
 
 # ----------------------------------------------------- department publication requests

@@ -57,10 +57,8 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from brain.audit.record import HaltAct
 from brain.console.entity_stats import Unrecorded
 from brain.console.operate import A_SECOND_FIGURE_FOR_ONE_SCREEN_IS_A_SUBTRACTION
-from brain.ops.halt import Halt, HaltError, HaltScope, HaltState, in_force
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why a queue the reader may not act on is left out rather than shown empty.
@@ -192,30 +190,6 @@ def needs_you(found: Iterable[Waiting | None]) -> tuple[Waiting, ...]:
         seen.add(one.queue)
     order = {queue: index for index, queue in enumerate(Queue)}
     return tuple(sorted(kept, key=lambda one: order[one.queue]))
-
-
-#: One row of `ops.halt` as the state reading needs it: scope, target, act, actor, reason, instant.
-HaltActRow = tuple[str, str, str, str, str, datetime]
-
-
-def halt_state(latest: Iterable[HaltActRow]) -> HaltState:
-    """The halts in force, from the latest act per scope and target, or unknown.
-
-    A latest act of `halt` is in force and a latest act of `resume` lifted it. A row that does not
-    construct makes the whole state unknown rather than dropping that one halt: a halt the reader
-    is not told of is the one that is refusing their work.
-    """
-    halts: list[Halt] = []
-    for scope, target, act, actor, reason, at in latest:
-        if act != HaltAct.HALT.value:
-            continue
-        try:
-            halts.append(
-                Halt(scope=HaltScope(scope), target=target, declared_by=actor, at=at, reason=reason)
-            )
-        except (HaltError, ValueError):
-            return HaltState.unknown()
-    return in_force(halts)
 
 
 def worker_last_seen(runs: Iterable[tuple[datetime, datetime | None]]) -> datetime | None:

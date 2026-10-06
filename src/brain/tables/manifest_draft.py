@@ -20,7 +20,7 @@ row exists only once it is published, and an edit's draft outlives nothing it co
 The vocabularies are the domain's own through `one_of`, and `0149` copies each; `tests/unit/
 test_agent_draft_store.py` holds the copy to these.
 
-Task ids: M27.11.6
+Task ids: M27.11.6, M13.7.4
 """
 
 from __future__ import annotations
@@ -42,13 +42,14 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.agents.model import AGENT_ID_CHARS
 from brain.builder.draft_words import DraftAct, DraftKind
 from brain.core.department import SLUG_PATTERN
 from brain.db import Base
+from brain.tables.agent import CHANNEL_CHARS
 from brain.tables.identity import PRINCIPAL_ID_CHARS, one_of
 
 #: `edit` is the longest kind.
@@ -133,6 +134,10 @@ class ManifestActRow(Base):
     #: For a new agent: seen by the author's department rather than the author alone.
     for_department: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
+    )
+    #: For a new agent: the channels its author ticked, since `0189` (M13.7.4).
+    channels: Mapped[list[str]] = mapped_column(
+        ARRAY(String(CHANNEL_CHARS)), nullable=False, server_default=text("'{}'")
     )
     at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

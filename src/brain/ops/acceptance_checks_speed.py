@@ -8,8 +8,9 @@ the fast lane answers from rows with no model, that what streams to a person is 
 citations, then prose and never reasoning, and that every prompt starts with the same bytes.
 
 **A fast-lane rule is a row the check writes into `gate.fast_path_rule`, and it is read back by
-the install's own loader.** `brain.gate.rule_store.load_rules` is what the lifespan calls at start,
-so the rule the check asks is the rule a restart would load. What it answers from is a price list
+the install's own reader.** `brain.gate.rule_store.rules_for_asker` is what the answer route calls
+on every question (since M6.5.1; it was a load at start before), so the rule the check asks is the
+rule the next question is matched against. What it answers from is a price list
 the check uploads into acceptance_a through the Classification routes' own sequence, reused from
 `brain.ops.acceptance_checks_tables`, so the row the rule reads is a row a department uploaded.
 
@@ -18,15 +19,17 @@ the check uploads into acceptance_a through the Classification routes' own seque
 provider would only add a bill. The fast-lane checks hold the same stand-in and prove it was never
 called, which is the fast lane's whole promise.
 
-**What is not proved here, and why.** M6.1.3 is a property of the `brain_fastlane` role, and the
-answer route reads every row as `brain_app`, since uploaded tables live in `know` and the role may
-reach `proj` alone; the role's grants are held by `brain.ops.migration_policy` and are not what the
-fast lane runs under, so a check would prove a role nothing uses. M6.5.1 needs a console surface
-for rules, which does not exist, and rules load only at start. Both are listed in the package's
-report rather than claimed.
+**M6.1.3 is proved as the role the lane now reads under.** Since `0162` every read the fast lane
+makes is marked as its own (`brain.knowledge.rows.read_as_the_fast_lane`) and read as
+`brain_fastlane`, which holds `SELECT` on `proj.record` and `know.classified_row` and nothing else.
+The check answers an uploaded list's price on the lane, watches the lane's reads carry the mark,
+asks the install's row source who it reads as with the mark and without, and asks the database,
+as the role, for every table it answers from and a table in `know`, another schema and a write of
+each kind it must refuse. M6.5.1, a department's administrator adding, testing and retiring a
+rule from the console, is proved by `brain.ops.acceptance_checks_dept_rules`.
 
 Task ids: M6.1.1, M6.1.2, M6.1.4, M6.1.6, M6.3.1, M6.3.2, M6.3.3, M6.3.4, M6.3.5, M6.4.2
-Task ids: M6.4.3, M6.4.4
+Task ids: M6.4.3, M6.4.4, M6.1.3
 """
 
 from __future__ import annotations
@@ -35,7 +38,7 @@ import pkgutil
 import re
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import insert, text
 
@@ -159,13 +162,10 @@ async def a_rule_on_a_list(h: Harness) -> RuleOnAList:
 
 
 async def rules_app(h: Harness, model: KeptPrompts) -> FastAPI:
-    """`brain.ops.acceptance_checks_memory.memory_app`, recording each request's row, with the
-    rules the install's own loader reads from the rule table in the check's transaction."""
-    from brain.gate.rule_store import load_rules
-
-    app = await memory_app(h, model, recorded=True)
-    app.state.fast_path_rules = await load_rules(h.sessions)
-    return app
+    """`brain.ops.acceptance_checks_memory.memory_app`, recording each request's row. The answer
+    route reads the rule table in the check's transaction on every question, so nothing is
+    handed to it."""
+    return await memory_app(h, model, recorded=True)
 
 
 async def asked_on(
@@ -249,9 +249,11 @@ async def a_rule_row_answers_on_the_fast_lane_with_no_model(h: Harness) -> None:
             created_by=h.actor,
         ),
     )
+    from brain.gate.rule_store import rules_for_asker
+
     stand_in = KeptPrompts()
     app = await rules_app(h, stand_in)
-    ids = {one.rule_id for one in app.state.fast_path_rules}
+    ids = {one.rule_id for one in await rules_for_asker(app.state, A)}
     if f"acceptance_{h.run}_rate" not in ids:
         raise CheckFailedError("a rule written as a row was not read by the install's loader")
 
@@ -408,3 +410,123 @@ async def every_prompt_opens_with_the_same_bytes_and_one_length(h: Harness) -> N
         raise CheckFailedError("two people's calls were not made with the lane's one output cap")
     if pinned.instruction in PREFIX.text:
         raise CheckFailedError("the length instruction sat in the bytes every caller shares")
+
+
+# ------------------------------------------------------ M6.1.3 the fast lane's own role
+#: What the fast lane's role is refused, each a statement the database judges before it reads a
+#: row: a table in `know` it was not given, a table in another schema, and a write of each kind.
+REFUSED_TO_THE_FAST_LANE: Final[tuple[str, ...]] = (
+    "SELECT 1 FROM know.item LIMIT 1",
+    "SELECT 1 FROM know.chunk LIMIT 1",
+    "SELECT 1 FROM know.classified_table LIMIT 1",
+    "SELECT 1 FROM gate.capability_grant LIMIT 1",
+    "SELECT 1 FROM mem.persistent LIMIT 1",
+    "INSERT INTO know.classified_row (entity, version, position, fields) "
+    "VALUES ('acceptance', 1, 0, '{}'::jsonb)",
+    "UPDATE know.classified_row SET position = position WHERE false",
+    "DELETE FROM proj.record WHERE false",
+    "UPDATE proj.record SET entity = entity WHERE false",
+)
+
+#: What it may read, and all of it.
+READ_BY_THE_FAST_LANE: Final[tuple[str, ...]] = (
+    "SELECT 1 FROM proj.record LIMIT 1",
+    "SELECT 1 FROM know.classified_row LIMIT 1",
+)
+
+#: SQLSTATE `insufficient_privilege`: the database refusing the role, and nothing else.
+INSUFFICIENT_PRIVILEGE: Final = "42501"
+
+
+async def as_the_fast_lane(h: Harness, statement: str) -> str | None:
+    """Run one statement as the fast lane's role in a savepoint of its own, and say how it ended:
+    None when it ran, or the SQLSTATE the database refused it with. Rolled back either way."""
+    from sqlalchemy.exc import DBAPIError
+
+    from brain.knowledge.row_store import SET_FAST_LANE_ROLE
+
+    async with h.sessions() as session:
+        try:
+            await session.execute(text(SET_FAST_LANE_ROLE))
+            await session.execute(text(statement))
+        except DBAPIError as refused:
+            await session.rollback()
+            return str(getattr(refused.orig, "sqlstate", "") or "")
+        await session.rollback()
+    return None
+
+
+@check(
+    leaves=("M6.1.3",),
+    sentence=(
+        "A price asked in a rule's exact words of a list acceptance_a uploaded is answered on the "
+        "fast lane, whose every read is marked as the lane's and read as brain_fastlane; that "
+        "role reads the projected records and uploaded rows, and the database refuses it every "
+        "other table in know, every other schema and every write."
+    ),
+)
+async def the_fast_lane_reads_as_a_role_that_reaches_nothing_else(h: Harness) -> None:
+    from sqlalchemy import func, select
+
+    from brain.gate.context import Channel
+    from brain.gate.fast_lane import respond
+    from brain.gate.rule_store import rules_for_asker
+    from brain.knowledge.row_store import FAST_LANE_ROLE, SessionRowSource
+    from brain.knowledge.rows import RowQuery, is_a_fast_lane_read, read_as_the_fast_lane
+    from brain.ops.classification_store import classified_lane_of
+
+    made = await a_rule_on_a_list(h)
+    stand_in = KeptPrompts()
+    app = await rules_app(h, stand_in)
+    answered = await asked_on(h, app, made.reader, made.question(), 1, Channel.CONSOLE)
+    if answered.text is None or made.prices.rows[0][SELL_PRICE] not in answered.text:
+        raise CheckFailedError("the fast lane did not answer a price from an uploaded list")
+    if stand_in.sent or await row_of(h, 1) != ("fast", None, None, "human_interactive"):
+        raise CheckFailedError("an uploaded list's price was not answered on the fast lane alone")
+
+    # The lane the route answered through, its reads watched: every one the lane makes is marked.
+    lane = await classified_lane_of(app.state)
+    marked: list[bool] = []
+
+    def watched(reader: Any) -> Any:
+        async def read(*args: Any, **kwargs: Any) -> Any:
+            marked.append(is_a_fast_lane_read())
+            return await reader(*args, **kwargs)
+
+        return read
+
+    await respond(
+        made.question(),
+        rules=(*await rules_for_asker(app.state, A), *lane.rules),
+        readers={pair: watched(reader) for pair, reader in lane.readers.items()},
+        entitlement=await h.reach(made.reader),
+        now=h.now,
+    )
+    if not marked or not all(marked):
+        raise CheckFailedError("the fast lane's reads were not marked as its own")
+
+    # The source the install reads every row through, asked who it reads as, marked and not.
+    who = RowQuery(
+        entity="acceptance",
+        source="acceptance",
+        columns=("who",),
+        statement=select(func.current_user().label("who")),
+        certainly_empty=False,
+    )
+    source = SessionRowSource(h.sessions)
+    with read_as_the_fast_lane():
+        as_the_lane = [str(one["who"]) for one in await source.rows(who)]
+    otherwise = [str(one["who"]) for one in await source.rows(who)]
+    if as_the_lane != [FAST_LANE_ROLE]:
+        raise CheckFailedError("the fast lane's rows were read as the application")
+    if otherwise == [FAST_LANE_ROLE]:
+        raise CheckFailedError("a read the fast lane did not make was read as its role")
+
+    for statement in READ_BY_THE_FAST_LANE:
+        if await as_the_fast_lane(h, statement) is not None:
+            raise CheckFailedError("the fast lane's role could not read what it answers from")
+    for statement in REFUSED_TO_THE_FAST_LANE:
+        if await as_the_fast_lane(h, statement) != INSUFFICIENT_PRIVILEGE:
+            raise CheckFailedError(
+                "the database let the fast lane's role past what it answers from"
+            )

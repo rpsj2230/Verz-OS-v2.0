@@ -23,7 +23,7 @@
 # still in the ledger with the same digest. Rewriting the anchor history to agree with a
 # truncated ledger needs the deploy key, which lives only in this repository's secrets.
 #
-# Task ids: M24.1.2, M24.3.3
+# Task ids: M24.1.2, M24.3.3, M33.7.1.3
 
 name: Anchor
 
@@ -112,6 +112,22 @@ jobs:
           print(f\"{d['chain']} seq={d['seq']} head={d['head'][:12]}...\")
           "
           echo "taken=true" >> "$GITHUB_OUTPUT"
+          # The elevation chain's head (M33.7.1.3), anchored on its own so a truncation of its
+          # few entries does not wait on the main ledger's. A release without the route is no
+          # elevation anchor this run and not a failure; a reply that is not an anchor is one.
+          if curl --fail --silent --show-error --max-time 20 \
+                 "$BRAIN_URL/api/audit/elevation-anchor" -o elevation.json; then
+            python -c "
+          import json, sys
+          d = json.load(open('elevation.json'))
+          if d.get('chain') != 'break_glass' or len(d.get('head', '')) != 64 or 'seq' not in d:
+              sys.exit('the elevation anchor is not an anchor of the break_glass chain')
+          print(f\"{d['chain']} seq={d['seq']} head={d['head'][:12]}...\")
+          "
+          else
+            rm -f elevation.json
+            echo "the application published no elevation chain head; none anchored this run"
+          fi
 
       - name: Check the last published head is still in the ledger
         # M24.3.3. The head published last time says entry N existed with that digest. A ledger
@@ -129,42 +145,48 @@ jobs:
           import datetime, glob, json, os, urllib.error, urllib.request
 
           out = open(os.environ["GITHUB_OUTPUT"], "a")
-          published = sorted(glob.glob("anchors/*.json"))
-          if not published:
-              print("no earlier anchor; nothing to check against")
-              out.write("missing=false\n")
-              raise SystemExit(0)
-          last = published[-1]
-          before = json.load(open(last))
-          if set(before["head"]) == {"0"}:
-              print("the last anchor recorded an empty ledger; nothing to check against")
-              out.write("missing=false\n")
-              raise SystemExit(0)
-          now = json.load(open("anchor.json"))
-          url = f"{os.environ['BRAIN_URL']}/api/audit/anchor/{before['seq']}"
-          try:
-              with urllib.request.urlopen(url, timeout=20) as answer:
-                  held = json.load(answer).get("head")
-          except (urllib.error.URLError, ValueError) as exc:
-              # A release without the route, or no answer: not a finding, and said so.
-              print(f"entry {before['seq']} could not be asked about ({exc}); not checked")
-              out.write("missing=false\n")
-              raise SystemExit(0)
-          if held is None or now["seq"] < before["seq"]:
-              verdict = "removed"
-          elif held != before["head"]:
-              verdict = "rewritten"
-          else:
-              verdict = "held"
-          print(f"entry {before['seq']} from {last}: {verdict}")
-          if verdict == "held":
-              out.write("missing=false\n")
-              raise SystemExit(0)
-          os.makedirs("anchors/findings", exist_ok=True)
-          stamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H%M%SZ")
-          finding = {"anchor": last, "head": before["head"], "seq": before["seq"], "verdict": verdict}
-          json.dump(finding, open(f"anchors/findings/{stamp}.json", "w"), sort_keys=True)
-          out.write("missing=true\n")
+          # Each chain against its own last published head: the main ledger's in anchors/, the
+          # elevation chain's in anchors/break_glass/ (M33.7.1.3).
+          CHAINS = (
+              ("anchors", "anchor.json", "/api/audit/anchor"),
+              ("anchors/break_glass", "elevation.json", "/api/audit/elevation-anchor"),
+          )
+          missing = False
+          for folder, current, route in CHAINS:
+              published = sorted(glob.glob(f"{folder}/*.json"))
+              if not published or not os.path.exists(current):
+                  print(f"{folder}: no earlier anchor or none taken now; nothing to check against")
+                  continue
+              last = published[-1]
+              before = json.load(open(last))
+              if set(before["head"]) == {"0"}:
+                  print(f"{folder}: the last anchor recorded an empty chain; nothing to check")
+                  continue
+              now = json.load(open(current))
+              url = f"{os.environ['BRAIN_URL']}{route}/{before['seq']}"
+              try:
+                  with urllib.request.urlopen(url, timeout=20) as answer:
+                      held = json.load(answer).get("head")
+              except (urllib.error.URLError, ValueError) as exc:
+                  # A release without the route, or no answer: not a finding, and said so.
+                  print(f"{folder}: entry {before['seq']} could not be asked about ({exc})")
+                  continue
+              if held is None or now["seq"] < before["seq"]:
+                  verdict = "removed"
+              elif held != before["head"]:
+                  verdict = "rewritten"
+              else:
+                  verdict = "held"
+              print(f"{folder}: entry {before['seq']} from {last}: {verdict}")
+              if verdict == "held":
+                  continue
+              missing = True
+              os.makedirs("anchors/findings", exist_ok=True)
+              stamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H%M%SZ")
+              finding = {"anchor": last, "head": before["head"], "seq": before["seq"], "verdict": verdict}
+              name = folder.replace("/", "_")
+              json.dump(finding, open(f"anchors/findings/{stamp}-{name}.json", "w"), sort_keys=True)
+          out.write(f"missing={'true' if missing else 'false'}\n")
           CHECK
 
       - name: Commit it
@@ -176,6 +198,11 @@ jobs:
           # keeps the directory readable for years; the git history keeps every version.
           stamp="$(date -u +%Y-%m-%d)"
           mv anchor.json "anchors/$stamp.json"
+          # The elevation chain's head, beside the main ledger's, when this run took one.
+          if [ -f elevation.json ]; then
+            mkdir -p anchors/break_glass
+            mv elevation.json "anchors/break_glass/$stamp.json"
+          fi
 
           # `git status` and not `git diff`: a new day's file is untracked, and `git diff` never
           # sees an untracked file, so every new anchor was reported as "nothing to commit".

@@ -129,7 +129,9 @@ import {
   channelWords,
   CORRECTION_WORDS,
   correctionPath,
+  exportPath,
   messageWords,
+  readConversationTaken,
   readCorrection,
   readThread,
   readThreads,
@@ -143,6 +145,7 @@ import {
 } from "./threadsQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
+import { CANNOT_SAVE, saveDocument } from "./dataTransferQuery";
 
 /** The console address of this screen. */
 export const ASK_ADDRESS = "/ask";
@@ -221,16 +224,33 @@ export const NOTHING_FOUND_IN_CONVERSATIONS = "None of your questions holds thos
 const SEARCH_FIELD_ID = "ask-search";
 
 /**
- * The control under an answer kept in a conversation, marking it wrong (M9.2.4). A kind and no
- * words: see `threadsQuery.ts` for why there is no field saying what the right answer was.
+ * The control under an answer kept in a conversation, marking it wrong (M9.2.4), and saying what
+ * is right if the person knows (M16.6.5). The kind is the note; the words, when given, are a
+ * proposal its document's steward decides: see `threadsQuery.ts`.
  */
 export const WAS_IT_WRONG = "Was this answer wrong?";
+export const WHAT_IS_RIGHT = "What is right? (optional)";
+export const WHAT_IS_RIGHT_HINT =
+  "Sent to whoever looks after the document this answer used. It changes nothing until they approve it.";
+/** The most a person may say is right, which is what the route takes. */
+export const RIGHT_ANSWER_CHARS = 2000;
 export const MARK_WRONG = "Mark it wrong";
 export const MARKED_WRONG = "Marked. Your conversation now notes that this answer was wrong.";
 export const NOT_MARKED = "That could not be marked. Nothing was changed.";
 
+/**
+ * The control exporting the conversation the answer was kept in as a file (M33.3.1.3). The file is
+ * the conversation as the page shows it now, and the export is recorded in the person's own name
+ * before it is handed over, which the page says rather than leaving it to be discovered.
+ */
+export const EXPORT_CONVERSATION = "Export this conversation";
+export const NOT_EXPORTED = "That conversation could not be exported. Nothing was saved.";
+
 /** The id tying the correction's kind to its label. */
 const CORRECTION_FIELD_ID = "ask-correction";
+
+/** The id tying what is right to its label. */
+const RIGHT_FIELD_ID = "ask-right-answer";
 
 /** The first kind offered. */
 const FIRST_CORRECTION: CorrectionKind = "wrong_fact";
@@ -256,8 +276,8 @@ const ANSWER_REGION_ID = "ask-answer";
  * rather than fields draws. The badge is neutral whatever it says: its words carry the state, and
  * a colour chosen from them would be this console holding an opinion about the item.
  */
-function Cited({ citation }: { readonly citation: CitationView }) {
-  const address = citationAddress(citation);
+function Cited({ citation, retrievalId }: { readonly citation: CitationView; readonly retrievalId: string }) {
+  const address = citationAddress(citation, retrievalId);
   const fresh = freshnessWords(citation);
   return (
     <>
@@ -352,6 +372,8 @@ export function Ask() {
   const [thread, setThread] = useState("");
   // The titles of the files attached to this conversation, until a new one (M12.3.6).
   const [attached, setAttached] = useState<readonly string[]>([]);
+  // The retrieval the answer on the screen was drawn from, which a followed citation names (M15.3.4).
+  const [retrievalId, setRetrievalId] = useState("");
   const [threads, setThreads] = useState<readonly ThreadSummary[] | null>(null);
   const [searching, setSearching] = useState("");
   const [found, setFound] = useState<readonly ThreadSummary[] | null>(null);
@@ -359,6 +381,8 @@ export function Ask() {
   // Marking the answer on the page wrong: the kind chosen, and what the route said (M9.2.4).
   const [wrong, setWrong] = useState<CorrectionKind>(FIRST_CORRECTION);
   const [marked, setMarked] = useState<"" | "marked" | "failed">("");
+  const [right, setRight] = useState("");
+  const [exported, setExported] = useState("");
 
   // This person's conversations. A list that did not come back is no panel rather than an error:
   // the question can still be asked, and it starts a conversation of its own.
@@ -420,6 +444,8 @@ export function Ask() {
       inFlight.current = controller;
       focusWasInTheForm.current = form.current?.contains(document.activeElement) ?? false;
       setMarked("");
+      setRight("");
+      setExported("");
       setAsking({ view: NOTHING_ASKED, busy: true, failure: null, traceId: "" });
 
       void (async () => {
@@ -438,6 +464,7 @@ export function Ask() {
         if (opened.threadId !== "") {
           setThread(opened.threadId);
         }
+        setRetrievalId(opened.retrievalId);
         for await (const event of opened.events) {
           if (controller.signal.aborted) {
             return;
@@ -586,7 +613,7 @@ export function Ask() {
           <ul className="ask__sources">
             {view.citations.map((citation, at) => (
               <li key={`${at}-${citation.label}`}>
-                <Cited citation={citation} />
+                <Cited citation={citation} retrievalId={retrievalId} />
               </li>
             ))}
           </ul>
@@ -611,7 +638,7 @@ export function Ask() {
                 void (async () => {
                   const sent = await request<unknown>(correctionPath(thread), {
                     method: "POST",
-                    body: { kind: wrong },
+                    body: right.trim() === "" ? { kind: wrong } : { kind: wrong, right_answer: right.trim() },
                   });
                   setMarked(sent.ok && readCorrection(sent.data) !== null ? "marked" : "failed");
                 })();
@@ -632,6 +659,20 @@ export function Ask() {
                   </option>
                 ))}
               </select>
+              <label className="ask__label" htmlFor={RIGHT_FIELD_ID}>
+                {WHAT_IS_RIGHT}
+              </label>
+              <textarea
+                id={RIGHT_FIELD_ID}
+                className="form-control"
+                maxLength={RIGHT_ANSWER_CHARS}
+                value={right}
+                aria-describedby={`${RIGHT_FIELD_ID}-hint`}
+                onChange={(changed) => setRight(changed.target.value)}
+              />
+              <p className="note" id={`${RIGHT_FIELD_ID}-hint`}>
+                {WHAT_IS_RIGHT_HINT}
+              </p>
               <button type="submit" className="button" disabled={marked === "marked"}>
                 {MARK_WRONG}
               </button>
@@ -641,6 +682,34 @@ export function Ask() {
                 </p>
               ) : null}
             </form>
+          ) : null}
+
+          {thread !== "" && !busy && view.answer !== "" ? (
+            <div className="ask__export">
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  void (async () => {
+                    const sent = await request<unknown>(exportPath(thread), { method: "POST" });
+                    const taken = sent.ok ? readConversationTaken(sent.data) : null;
+                    if (taken === null) {
+                      setExported(NOT_EXPORTED);
+                      return;
+                    }
+                    const saved = saveDocument(taken.filename, taken.document, document, "application/json");
+                    setExported(saved ? taken.told : CANNOT_SAVE);
+                  })();
+                }}
+              >
+                {EXPORT_CONVERSATION}
+              </button>
+              {exported !== "" ? (
+                <p className="note" role="status">
+                  {exported}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           {view.failed !== null ? (
