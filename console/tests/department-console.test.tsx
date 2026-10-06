@@ -17,7 +17,7 @@
  * says it is not this reader's. It is mounted through the application's own route table, so its
  * view addresses are held too.
  *
- * Task ids: M27.7.29, M27.10.1, M27.16.1, M33.2.1.3, M33.2.1.4
+ * Task ids: M27.7.29, M27.10.1, M27.16.1, M27.5.6, M27.5.10, M33.2.1.3, M33.2.1.4
  */
 
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router-dom";

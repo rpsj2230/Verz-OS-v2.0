@@ -645,6 +645,9 @@ WRITTEN_BY_CHECKS = (
     "agent.supervision_pin",
     "agent.tool_attachment",
     "ops.data_export",
+    "gate.elevation_request",
+    "gate.review_decision",
+    "gate.break_glass_notice",
 )
 
 
