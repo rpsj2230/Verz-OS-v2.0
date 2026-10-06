@@ -278,6 +278,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # own row with a conflict clause; ending and unlinking are guarded writes to its own
         # tables, where a second call finds the row already ended or already gone.
         "brain.audit_routes:LedgerWindows.window": Repeat.READS,
+        "brain.audit_routes:PagedView.page": Repeat.READS,
         "brain.audit_routes:PersonGrants.person": Repeat.READS,
         "brain.audit_routes:PersonGrants.grant_ids": Repeat.READS,
         # The window's runs of refusals for the Audit screen's statistics: the digest's grouped
@@ -399,6 +400,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.model_lane:PassageSearch.passages": Repeat.READS,
         "brain.gate.model_lane:AskerHints.hints": Repeat.READS,
         "brain.gate.model_lane:AnswerModel.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # The co-author's one model call, asked of the executor the answer lane's is: the model
+        # answers and forgets, and a second ask is a second proposal that nobody has applied.
+        "brain.agent_coauthor_routes:CoauthorCalls.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.gate.model_lane:ToolLoop.drafted": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.gate.runtime:ToolCaller.call": Repeat.ISSUES,
         "brain.gate.runtime:RunLog.record": Repeat.DERIVED_STATE,

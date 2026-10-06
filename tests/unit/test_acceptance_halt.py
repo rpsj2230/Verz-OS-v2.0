@@ -7,7 +7,7 @@ refusing. It passes, and every table holds afterwards what it held before, `ops.
 ledger included, so the check stops nobody on the install. Then it is run against the product
 broken where it proves.
 
-Task ids: M27.15.10, M27.15.15, M27.15.16, M27.15.2
+Task ids: M27.15.10, M27.15.15, M27.15.16, M27.15.2, M13.7.3
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from tests.unit.test_acceptance_sources import run_checks
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_halt"
 NAME = "a_stop_reaches_only_what_its_holder_may_stop"
-LEAVES = ("M27.15.2", "M27.15.10", "M27.15.15", "M27.15.16")
+LEAVES = ("M27.15.2", "M27.15.10", "M27.15.15", "M27.15.16", "M13.7.3")
 
 
 def mine() -> dict[str, Check]:
@@ -75,6 +75,7 @@ def test_on_a_real_database_a_stop_reaches_only_what_it_may_and_leaves_nothing()
         ("nothing_refused", "a department stop did not stop exactly that department"),
         ("resume_without_words", "a resume with no reason lifted a stop"),
         ("answers_anyway", "a question was answered while everything was stopped"),
+        ("agent_not_asked", "an agent stop did not stop exactly that agent's work"),
     ],
 )
 def test_the_check_fails_where_the_stop_button_is_broken(
@@ -103,13 +104,12 @@ def test_the_check_fails_where_the_stop_button_is_broken(
             return await real(*args, reason=reason or "lifted with nothing written", **kwargs)
 
         monkeypatch.setattr(halt_routes, "resume", wordless)
+    elif broken == "agent_not_asked":
+        from brain.ops.halt import ENFORCED_AXES, HaltScope
+
+        monkeypatch.setattr(halt_store, "ENFORCED_AXES", ENFORCED_AXES - {HaltScope.AGENT})
     else:
-
-        async def nothing(*args: Any) -> str:
-            del args
-            return ""
-
-        monkeypatch.setattr(api_routes, "refusal_for", nothing)
+        monkeypatch.setattr(api_routes, "refusal_in", lambda state, work: "")
     with at_head(f"brain_acceptance_halt_{broken}") as url:
         outcome = run_checks(url, (mine()[NAME],))
     assert outcome[NAME] == (FAILED, reason)

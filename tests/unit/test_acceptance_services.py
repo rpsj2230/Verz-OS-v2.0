@@ -464,3 +464,135 @@ def test_with_the_ledger_off_a_configured_destination_is_still_sent_nothing(
     finally:
         hold_saved(before)
     assert analyser == []
+
+
+# ------------------------------------------------------------------------ the script sandbox
+SANDBOXED = "the_sandbox_finds_no_network_and_stops_scripts_at_their_limits"
+
+
+def sandbox_like(
+    *, isolated: bool = True, network: str = "network:none", holds: bool = True
+) -> Handler:
+    """A sandbox that answers each probe as a real one would, or as one whose isolation failed."""
+    from brain.ops.sandbox import AnswerStatus
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            runtime = "runsc" if isolated else "runc"
+            return httpx.Response(200, json={"runtime": runtime, "network": "none"})
+        sent = json.loads(request.content)
+        kind = sent["run_id"].rsplit("-", 1)[-1]
+        status, output = {
+            "network": (AnswerStatus.COMPLETED, network),
+            "time": (AnswerStatus.TIMED_OUT if holds else AnswerStatus.COMPLETED, ""),
+            "memory": (AnswerStatus.MEMORY_EXCEEDED, ""),
+        }[kind]
+        return httpx.Response(
+            200,
+            json={
+                "run_id": sent["run_id"],
+                "status": status.value,
+                "exit_code": 0,
+                "output": output,
+                "elapsed_seconds": 0.1,
+                "truncated": False,
+            },
+        )
+
+    return answer
+
+
+def sandbox_report(runtime: str = "runsc") -> dict[str, object]:
+    return {
+        "commit": settings_from({}).resolved_commit(),
+        "runtimes": ["runc", "runsc"],
+        "services": {
+            name: {
+                "limit_mib": component(name).memory_mib,
+                "state": "running",
+                "health": "healthy",
+                "runtime": runtime,
+            }
+            for name in BY_NAME["sandbox"].components
+        },
+    }
+
+
+@pytest.fixture
+def sandbox_on() -> Iterator[None]:
+    before = hold_saved({"INSTALL_SERVICES": "sandbox"})
+    yield
+    hold_saved(before)
+
+
+def test_the_sandbox_check_claims_the_code_sandbox_leaf() -> None:
+    """Delete this and the check can drift onto a leaf it does not prove."""
+    assert mine()[SANDBOXED].leaves == ("M12.4.5",)
+
+
+def test_an_install_without_the_sandbox_is_not_run(
+    monkeypatch: pytest.MonkeyPatch, analyser: list[str]
+) -> None:
+    """Delete this and every install that chose no sandbox shows a red row."""
+    before = hold_saved({"INSTALL_SERVICES": "none"})
+    try:
+        assert judged(monkeypatch, SANDBOXED, sandbox_report()) == (
+            NOT_RUN,
+            services.NO_SANDBOX_HERE,
+        )
+    finally:
+        hold_saved(before)
+    assert analyser == []
+
+
+@pytest.mark.usefixtures("sandbox_on")
+def test_a_sandbox_isolated_by_every_witness_and_held_to_its_limits_passes(
+    monkeypatch: pytest.MonkeyPatch, analyser: list[str]
+) -> None:
+    """The positive case: docker says gVisor, the kernel says gVisor and no network, and each probe
+    is answered as a sandbox that holds. Delete this and a check that refuses everything passes
+    every test that follows."""
+    use(sandbox_like())
+    assert judged(monkeypatch, SANDBOXED, sandbox_report()) == (PASSED, "")
+    assert analyser[0].endswith("/health")
+    assert len(analyser) == 4
+
+
+@pytest.mark.usefixtures("sandbox_on")
+@pytest.mark.parametrize(
+    ("report", "sandbox", "reason"),
+    [
+        (sandbox_report(runtime="runc"), sandbox_like(), "THE_SANDBOX_IS_NOT_UNDER_GVISOR"),
+        (sandbox_report(), sandbox_like(isolated=False), "THE_SANDBOX_IS_NOT_ISOLATED"),
+        (sandbox_report(), sandbox_like(network="network:reached"), "A_SANDBOX_LIMIT_DID_NOT_HOLD"),
+        (sandbox_report(), sandbox_like(holds=False), "A_SANDBOX_LIMIT_DID_NOT_HOLD"),
+    ],
+    ids=[
+        "docker says not gVisor",
+        "the kernel says not gVisor",
+        "a network found",
+        "time not held",
+    ],
+)
+def test_each_witness_that_disagrees_fails_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+    analyser: list[str],
+    report: dict[str, object],
+    sandbox: Handler,
+    reason: str,
+) -> None:
+    """Three witnesses and each is decisive alone. Delete this and a sandbox started on docker's
+    own runtime, or one whose scripts reach the application, passes on the other two."""
+    use(sandbox)
+    assert judged(monkeypatch, SANDBOXED, report) == (FAILED, getattr(services, reason))
+    del analyser
+
+
+@pytest.mark.usefixtures("sandbox_on")
+def test_a_release_the_step_has_not_reported_is_not_judged(
+    monkeypatch: pytest.MonkeyPatch, analyser: list[str]
+) -> None:
+    """Delete this and a sandbox gone since the last deploy passes on what an older one ran."""
+    use(sandbox_like())
+    assert judged(monkeypatch, SANDBOXED, None) == (NOT_RUN, services.NOT_REPORTED_FOR_THIS_RELEASE)
+    assert analyser == []

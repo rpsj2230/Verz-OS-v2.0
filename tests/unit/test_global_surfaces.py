@@ -661,19 +661,13 @@ def test_the_stop_held_in_one_department_cannot_stop_everything() -> None:
 
 def test_the_axes_a_halt_cannot_reach_are_named_from_the_module_that_knows() -> None:
     """**M33.1.1.4.** Every path that starts work asks `brain.ops.halt_store.refusal_in` with its
-    person, department or connector, and nothing that starts an agent's work names the agent, so
-    a halt on one agent is stored, reported as in force and refuses nothing. The administrator
-    stopping a misbehaving agent is the last person able to go and read which call sites exist.
+    person, department, connector and agent, so since M13.7.3 no axis is inert and the list is
+    empty. Derived from `ENFORCED_AXES` rather than listed, so the day an axis is added that
+    nothing asks it is named here with no edit.
 
-    Derived from `ENFORCED_AXES` rather than listed, so the day an agent's work asks this stops
-    naming it with no edit here. Asserted as the complement rather than as names, which is what
-    makes that true.
-
-    Delete this and the screen offering an agent halt says nothing about it being inert."""
+    Delete this and the screen offering a halt on an axis nothing asks says nothing about it."""
     assert set(inert_axes()) == set(HaltScope) - ENFORCED_AXES
-    assert HaltScope.EVERYTHING not in inert_axes()
-    assert HaltScope.PERSON not in inert_axes()
-    assert HaltScope.AGENT in inert_axes()
+    assert inert_axes() == ()
 
 
 # ----------------------------------------------------- department publication requests

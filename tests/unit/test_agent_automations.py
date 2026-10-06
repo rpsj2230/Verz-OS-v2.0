@@ -69,6 +69,7 @@ from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.knowledge.visibility import Visibility
 from brain.memory.tiers import CHANGES_WHAT_ANYBODY_MAY_SEE, Change, Tier
+from brain.ops import halt as halt_module
 from brain.ops.halt import ENFORCED_AXES, Effect, HaltScope
 from brain.ops.jobs import MAX_ATTEMPTS, TERMINAL, JobState, hidden_count_fields
 
@@ -970,21 +971,24 @@ def test_the_owner_notice_has_no_field_that_could_switch_it_off_and_names_no_fai
         )
 
 
-def test_the_halt_a_pause_builds_is_the_systems_own_and_stops_nothing_today() -> None:
+def test_the_halt_a_pause_builds_is_the_systems_own_and_the_agent_axis_is_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The reuse and the honesty in one test. Stopping what is already running is
     `brain.ops.halt`, not a second switch invented here, and the halt carries both effects
     because refusing new work while a forty-minute run keeps writing is that module's first
     lie.
 
-    And it stops nothing today, which is reported rather than implied.
-    `brain.ops.halt.ENFORCED_AXES` holds `EVERYTHING` and `CONNECTOR` only, because
-    `brain.ops.admission.decide` is handed a connector and nothing else, so a halt scoped to
-    an agent is in force in the store and refuses no request anywhere. `automation_gaps` says
-    so by running `halt_gaps`, rather than this module keeping its own copy of which axes are
-    consulted.
+    **The agent axis is enforced since M13.7.3**, so `brain.ops.halt.ENFORCED_AXES` holds it
+    and a halt scoped to an agent refuses that agent's questions and automations. The test
+    used to say the opposite, and it was the code that had moved: the agent is now named by an
+    answer's route and by the automation runner. What it still pins is the reporting. The
+    axis is taken back out of the set here and `automation_gaps` must say the halt would be
+    inert, because that sentence is how a future axis nothing asks is noticed, and it was
+    written by running `halt_gaps` rather than by this module keeping its own copy.
 
-    Delete this and the console reports an automation as stopped while its current run
-    finishes writing, with nothing anywhere saying the halt was inert."""
+    Delete this and the console could report an automation as stopped while its current run
+    finishes writing, with nothing anywhere saying a halt on an unasked axis was inert."""
     stopped = failure_pause(
         an_automation(),
         consecutive_failures=FAILURES_BEFORE_PAUSE,
@@ -999,10 +1003,13 @@ def test_the_halt_a_pause_builds_is_the_systems_own_and_stops_nothing_today() ->
     assert stopped.halt.target == AGENT
     assert stopped.halt.effects == frozenset({Effect.REFUSE_NEW, Effect.SIGNAL_RUNNING})
 
-    assert HaltScope.AGENT not in ENFORCED_AXES
+    assert HaltScope.AGENT in ENFORCED_AXES
+    assert automation_gaps(halts=[stopped.halt]) == ()
+    assert automation_gaps() == ()
+
+    monkeypatch.setattr(halt_module, "ENFORCED_AXES", ENFORCED_AXES - {HaltScope.AGENT})
     found = automation_gaps(halts=[stopped.halt])
     assert any("axis nothing consults" in one for one in found)
-    assert automation_gaps() == ()
 
 
 def test_no_figure_on_this_surface_could_be_a_count_of_what_was_withheld() -> None:

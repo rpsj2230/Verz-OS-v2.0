@@ -33,12 +33,12 @@ already the rule and a `paused` boolean beside a timestamp is two facts that can
 Stopping what is already running is a `Halt`, which is the system's stop button, and building
 a second one here is exactly the fifth lie that module names.
 
-**And the halt this builds does not currently stop anything, which is reported rather than
-implied.** `brain.ops.halt.ENFORCED_AXES` holds `EVERYTHING` and `CONNECTOR` only, because
-`brain.ops.admission.decide` is handed a connector and nothing else, so a halt scoped to an
-agent is in force in the store and refuses no request anywhere. `automation_gaps` runs
-`halt_gaps` over the halt a failure pause produces and reports that, because the person
-reading a paused automation is not in a position to go and read which call sites exist.
+**And the halt this builds is only as real as the axis it is declared on, which is reported
+rather than implied.** Since M13.7.3 `brain.ops.halt.ENFORCED_AXES` holds the agent axis, because
+an answer names the agent it was routed to and the automation runner the agent it runs, so a halt
+scoped to an agent refuses that agent's work. `automation_gaps` runs `halt_gaps` over the halt a
+failure pause produces and reports any axis nothing asks, because the person reading a paused
+automation is not in a position to go and read which call sites exist.
 
 **A schedule change is a gated learning event, and the classification is read rather than
 restated.** `brain.memory.tiers` puts `Change.LEASH_INCREASE` at `Tier.GATED` and lists it

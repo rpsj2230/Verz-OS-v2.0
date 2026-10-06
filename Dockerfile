@@ -136,6 +136,7 @@ COPY --chown=brain:brain ops/deploy/overlays/ /app/ops/deploy/overlays/
 COPY --chown=brain:brain docker-compose.presidio.yml /app/ops/deploy/overlays/docker-compose.presidio.yml
 COPY --chown=brain:brain docker-compose.objectstore.yml /app/ops/deploy/overlays/docker-compose.objectstore.yml
 COPY --chown=brain:brain docker-compose.langfuse.yml /app/ops/deploy/overlays/docker-compose.langfuse.yml
+COPY --chown=brain:brain docker-compose.sandbox.yml /app/ops/deploy/overlays/docker-compose.sandbox.yml
 # The settings files those compose files mount, which the trace ledger's preparation puts on the
 # server where they are missing (ops/deploy/overlays/langfuse.prepare.sh).
 COPY --chown=brain:brain ops/langfuse/clickhouse-memory.xml /app/ops/deploy/overlays/settings/langfuse/clickhouse-memory.xml

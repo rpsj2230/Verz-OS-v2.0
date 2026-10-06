@@ -1,0 +1,102 @@
+# The script sandbox: code nobody here wrote, run under gVisor with no network, a read-only root
+# and limits on time, memory and output (brain.ops.sandbox is the contract, and
+# brain.ops.sandbox_runner the two processes below).
+#
+# **Two containers, because a script must have no network and the sandbox must answer on one.**
+# `script-sandbox` answers the application on `sandbox`, an internal network the release joins
+# the application and the worker to. It checks each request against the contract and writes it
+# into a job volume. `script-sandbox-executor` has `network_mode: none`: no interface but loopback,
+# so a script cannot reach the application, the database or anything else, by construction rather
+# than by a rule inside the process. The two share only the job volume, which is memory.
+# Rejected: one container that removes the network around each script with a new namespace,
+# which needs a capability inside the sandbox and makes "no network" a property of code that runs
+# beside the script rather than of the container it runs in.
+#
+# **gVisor or nothing.** Both name `runtime: runsc`, and `brain.ops.overlays` refuses the whole
+# overlay, at save and in the plan, on a server whose docker has no such runtime
+# (`AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED`), so it is never started on docker's own runtime
+# instead.
+#
+# **The product's own image, with a different command.** The runner is this product's code, and a
+# second image would be a second build, a second scan and a second thing to pin for a few hundred
+# lines of the standard library. `APP_IMAGE` is the image the application runs, which the deploy
+# step names when it composes this file.
+#
+# Each limit is also a line in `brain.ops.wiring`, which costs the overlay before it starts.
+#
+# Task ids: M12.4.5, M12.2.9, M11.1.5
+
+services:
+  script-sandbox:
+    image: ${APP_IMAGE:?the deploy step names the image the application runs}
+    runtime: runsc
+    restart: unless-stopped
+    command: ["python", "-m", "brain.ops.sandbox_runner", "front", "/jobs"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    volumes:
+      - sandbox-jobs:/jobs
+    tmpfs:
+      - /tmp:size=16m
+    networks:
+      # One network, internal: the application and the worker reach the sandbox by name, and the
+      # sandbox reaches nothing.
+      - sandbox
+    expose:
+      - "3100"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3100/health', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  script-sandbox-executor:
+    image: ${APP_IMAGE:?the deploy step names the image the application runs}
+    runtime: runsc
+    restart: unless-stopped
+    command: ["python", "-m", "brain.ops.sandbox_runner", "executor", "/jobs", "/work"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    # No network at all, which is the whole reason this is a container of its own.
+    network_mode: none
+    volumes:
+      - sandbox-jobs:/jobs
+    tmpfs:
+      # Where a script runs and writes. Memory, gone when the container goes, and bounded.
+      - /work:size=64m
+      - /tmp:size=16m
+    healthcheck:
+      test: ["CMD", "python", "-m", "brain.ops.sandbox_runner", "alive", "/jobs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+volumes:
+  # The only thing the two share. Memory too, so a job never reaches a disk.
+  sandbox-jobs:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=32m,mode=1777"
+
+networks:
+  sandbox:
+    internal: true
