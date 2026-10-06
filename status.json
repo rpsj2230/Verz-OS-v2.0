@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T05:31:12.368187+00:00",
-  "commit": "a82636c0",
-  "commit_subject": "Item 165: whether an administrator may choose how a source's own permissions are followed (#432)",
+  "generated_at": "2026-10-06T06:06:43.635758+00:00",
+  "commit": "7dd3308b",
+  "commit_subject": "Six skill and builder leaves are proved: four by install checks through the routes their pages call, two by page tests (#356)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
