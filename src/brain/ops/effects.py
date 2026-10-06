@@ -230,6 +230,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.agent_lifecycle_routes:AgentLifecycles.version": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.live_principal": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.change": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.agent_lifecycle_routes:AgentLifecycles.widen": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.agent_lifecycle_routes:AgentLifecycles.change_channels": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),

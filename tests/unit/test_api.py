@@ -307,6 +307,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         DUPLICATE_PATH,
         ENABLE_PATH,
         INSTALL_PATH,
+        PUBLICATION_PATH,
         TRANSFER_PATH,
     )
     from brain.agent_upgrade_routes import ACCEPT_PATH as UPGRADE_ACCEPT_PATH
@@ -345,6 +346,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
                 ENABLE_PATH,
                 DISABLE_PATH,
                 ARCHIVE_PATH,
+                PUBLICATION_PATH,
                 TRANSFER_PATH,
                 CHANNELS_PATH,
                 DUPLICATE_PATH,

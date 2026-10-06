@@ -49,6 +49,13 @@ const LIFECYCLE_PRESSED = t(
   true,
 );
 
+/** A department agent published over HTTP against PostgreSQL: the row company-wide, one `published` entry. */
+const PUBLICATION_PRESSED = t(
+  "test_agent_lifecycle_store",
+  "test_a_publication_pressed_reaches_its_row_and_one_published_entry_naming_the_person",
+  true,
+);
+
 /** A co-author's change taken over HTTP against PostgreSQL: one more revision, and the save on the ledger. */
 const COAUTHOR_TAKEN_PRESSED = t(
   "test_agent_draft_store",
@@ -193,6 +200,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/enable", "agentMoveApiPath", agentMoveApiPath("quote-helper", "enable")),
     at("POST /api/v1/agents/{agent_id}/disable", "agentMoveApiPath", agentMoveApiPath("quote-helper", "disable")),
     at("POST /api/v1/agents/{agent_id}/archive", "agentMoveApiPath", agentMoveApiPath("quote-helper", "archive")),
+    at("POST /api/v1/agents/{agent_id}/publish", "agentMoveApiPath", agentMoveApiPath("quote-helper", "publish")),
     at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
     at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
   ],
@@ -395,6 +403,14 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PRESSED,
     audit: LIFECYCLE_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_disable_then_archive_each_move_the_agent_once_and_name_the_person"),
+  },
+  "POST /api/v1/agents/{agent_id}/publish": {
+    row: PUBLICATION_PRESSED,
+    audit: PUBLICATION_PRESSED,
+    behaviour: t(
+      "test_agent_lifecycle_routes",
+      "test_somebody_other_than_the_steward_publishes_a_department_agent_to_the_whole_company",
+    ),
   },
   "POST /api/v1/agents/{agent_id}/transfer": {
     row: LIFECYCLE_PRESSED,
