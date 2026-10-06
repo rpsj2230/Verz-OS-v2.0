@@ -40,6 +40,7 @@ import importlib.util
 import os
 from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -53,6 +54,7 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import TypedResult
 from brain.core.scope import Scope
 from brain.db import libpq_url, normalise_database_url
+from brain.gate.caches import CachedRetrieval
 from brain.knowledge.document_tools import (
     DocumentRead,
     DocumentSearch,
@@ -64,6 +66,7 @@ from brain.knowledge.row_store import SessionRowSource
 from brain.knowledge.rows import RowQuery
 from brain.knowledge.search import CHUNK, KNOWLEDGE_READ, Reach, session_settings
 from brain.tables.gate import DepartmentRow
+from tests.unit.test_knowledge_caches import Kept
 
 pytestmark = pytest.mark.needs_db
 
@@ -81,6 +84,9 @@ FINANCE = "finance"
 WEB = "web"
 
 OWNER = "u_owner"
+
+#: Far from any wall clock: the retrieval key asks whether the caller is past a time bound.
+NOW = datetime(2019, 1, 1, 9, 0, tzinfo=UTC)
 OTHER = "u_other"
 
 
@@ -160,6 +166,8 @@ def _build(admin: str, url: str) -> None:
     )
     # Read through the metadata rather than `__table__`, which is typed as a `FromClause`.
     DepartmentRow.metadata.tables["gate.department"].to_metadata(metadata)
+    # The global policy epoch, which the retrieval cache's key reads (M6.2.3).
+    DepartmentRow.metadata.tables["gate.policy_epoch"].to_metadata(metadata)
     engine = sa.create_engine(
         _pointed_at(normalise_database_url(url), DATABASE), poolclass=NullPool
     )
@@ -173,6 +181,8 @@ def _build(admin: str, url: str) -> None:
         for statement in (*migration.RLS, *migration.GRANTS):
             conn.execute(statement)
         conn.execute("GRANT SELECT ON gate.department TO brain_app")
+        conn.execute("GRANT SELECT ON gate.policy_epoch TO brain_app")
+        conn.execute("INSERT INTO gate.policy_epoch (id, epoch) VALUES (1, 7)")
         for slug in (FINANCE, WEB):
             conn.execute(
                 "INSERT INTO gate.department (company_id, slug, name, scope_slug) "
@@ -251,9 +261,15 @@ def read(url: str, document_id: str, who: EntitlementSet) -> TypedResult[Knowled
     return _run(url, work)
 
 
-def search(url: str, question: str, who: EntitlementSet) -> TypedResult[KnowledgePassage]:
+def search(
+    url: str,
+    question: str,
+    who: EntitlementSet,
+    kept: Kept[CachedRetrieval] | None = None,
+) -> TypedResult[KnowledgePassage]:
     async def work(source: SessionRowSource) -> TypedResult[KnowledgePassage]:
-        return await searcher(source)(DocumentSearch(question=question), entitlement=who)
+        handler = searcher(source, None, kept)
+        return await handler(DocumentSearch(question=question), entitlement=who, now=NOW)
 
     return _run(url, work)
 
@@ -310,6 +326,38 @@ def test_a_search_finds_a_department_passage_for_its_department_and_not_for_anot
     assert documents(search(server, "payroll", IN_FINANCE)) == ["doc_payroll"]
     assert documents(search(server, "payroll", IN_WEB)) == []
     assert documents(search(server, "handbook", IN_WEB)) == ["doc_handbook"]
+
+
+def test_a_cached_search_on_the_real_database_hands_back_what_it_found_the_first_time(
+    server: str,
+) -> None:
+    """The retrieval cache's positive half on a real server: the second asking is served from
+    the kept list and still hands back the passage, because the bodies are read again. Delete
+    this and the cache can keep a list the re-read cannot use, with every stand-in test green."""
+    kept: Kept[CachedRetrieval] = Kept()
+
+    first = documents(search(server, "styleguide", IN_WEB, kept))
+    second = documents(search(server, "styleguide", IN_WEB, kept))
+
+    assert first == second == ["doc_styleguide"]
+    assert [one.chunk_ids for one in kept.held.values()] == [("c_styleguide_1",)]
+
+
+def test_a_kept_list_naming_a_passage_outside_the_reach_hands_back_nothing_of_it(
+    server: str,
+) -> None:
+    """**The re-read is the wall, proved against the real policy.** A kept list is made to name
+    finance's payroll passage under a web caller's own key, which is what a poisoned or stale
+    entry would be. The hit skips the ranking and reads the bodies under the web caller's reach
+    and settings, and payroll does not come back while the web passage still does. See
+    `A_CACHED_RETRIEVAL_IS_RE_READ_UNDER_THE_CALLERS_REACH`. Delete this and a cached list of
+    references can become a way to read a passage the reader was never admitted to."""
+    kept: Kept[CachedRetrieval] = Kept()
+    search(server, "styleguide", IN_WEB, kept)
+    [key] = kept.held
+    kept.held[key] = CachedRetrieval(key=key, chunk_ids=("c_payroll_1", "c_styleguide_1"))
+
+    assert documents(search(server, "styleguide", IN_WEB, kept)) == ["doc_styleguide"]
 
 
 def test_the_policy_by_itself_admits_what_the_settings_say_and_company_chunks_without_them(

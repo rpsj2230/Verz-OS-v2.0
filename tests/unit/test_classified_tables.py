@@ -439,6 +439,45 @@ def test_dropping_a_derivation_moves_the_epoch_the_answer_cache_is_keyed_on() ->
     assert epoch_before == policy_epoch_of(lane_for([table()], TableRows(ROWS)).policies)
 
 
+def test_an_upload_again_moves_every_answers_cache_key_and_nothing_else_does() -> None:
+    """**A price list uploaded again was answered with the old price from the cache** until the
+    answer aged out, because only the policy was in the key (M6.5.2). Each live table's upload is
+    now a source epoch: a second upload of the same table moves the key an answer is stored under
+    and looked up by, and reading the lane twice over one upload does not.
+
+    Delete this and an upload's new rows can go unseen by anybody asking the question they were
+    uploaded to answer, for as long as an answer may be served from the cache."""
+    from types import SimpleNamespace
+
+    from brain.api_routes import caching_of
+    from brain.gate.cache_key import key_for
+    from brain.knowledge.classified_rows import epoch_name
+
+    first = lane_for([table(version=1)], TableRows(ROWS))
+    again = lane_for([table(version=1)], TableRows(ROWS))
+    second = lane_for([table(version=2)], TableRows(ROWS))
+
+    assert first.epochs == {epoch_name(ENTITY): 1} == again.epochs
+    assert second.epochs == {epoch_name(ENTITY): 2}
+
+    def key(lane: Any) -> str:
+        caching = caching_of(
+            SimpleNamespace(answer_store=object()), lane.policies, (), {}, lane.epochs
+        )
+        assert caching is not None
+        return key_for(
+            "what is the sell price of WEB-1001",
+            "e" * 32,
+            "c" * 16,
+            caching.policy_epoch,
+            caching.source_epochs,
+            caching.sources,
+        )
+
+    assert key(first) == key(again)
+    assert key(first) != key(second)
+
+
 # ------------------------------------------------------------------- the statement
 
 

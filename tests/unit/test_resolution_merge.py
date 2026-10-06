@@ -957,8 +957,8 @@ def test_the_audit_names_who_merged_when_and_on_what_evidence() -> None:
     name and a weight and nowhere to put what the field said, so a merge audit is readable by
     an auditor without being a copy of the two records.
 
-    Delete this and the audit becomes a pointer and a timestamp, which is exactly what
-    `canonical.NOTHING_HERE_RECORDS_WHO_MERGED_OR_ON_WHAT_EVIDENCE` says was missing."""
+    Delete this and the audit becomes a pointer and a timestamp, which is all `er.canonical`
+    records on its own."""
     graph = {"e1": entity("e1"), "e2": entity("e2")}
     authority = automatic()
     outcome = merge(
@@ -1240,15 +1240,13 @@ def test_the_evidence_on_a_merge_audit_carries_no_value_from_either_record() -> 
         Evidence(field="Kandang Kerbau Holdings Pte Ltd", weight=1.0)
 
 
-def test_merging_is_not_called_by_anything_in_the_running_system() -> None:
+def test_merging_is_not_called_by_any_route_or_resolver_in_the_running_system() -> None:
     """Said in a constant so that claiming otherwise means deleting it.
 
-    No route, worker or job calls `merge` or `unmerge`. There is no merge audit table, no
-    pre-image is persisted anywhere, and no cache has ever been cleared by an `Invalidation`
-    this module produced. The call site that would have to exist is a resolver service holding
-    the entity graph, calling the cascade over a candidate pair, handing the result to
-    `AutomaticMerge` and writing the outcome's one pointer inside a transaction with the audit
-    row.
+    `brain.resolution.merge_store` writes a merge, its pre-image and its audit row in one
+    transaction, and only the install acceptance check calls it. No route, no review screen and
+    no resolver service holding the entity graph and handing the cascade's result to
+    `AutomaticMerge` does.
 
     Delete this and the gap stops being written down, and the next reader assumes the money
     rule is protecting something."""

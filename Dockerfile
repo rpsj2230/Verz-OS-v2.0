@@ -66,6 +66,15 @@ FROM python:3.13-slim-bookworm AS runtime
 RUN groupadd --system --gid 1001 brain \
  && useradd --system --uid 1001 --gid brain --shell /usr/sbin/nologin --no-create-home brain
 
+# Where the identity stack's realm one-shot writes the realm Keycloak imports
+# (`keycloak-realm` in docker-compose.keycloak.yml mounts the `realm-import` volume here). A new
+# named volume takes its owner from the directory it is mounted over, and with no directory in
+# the image that owner is root, so the one-shot, which runs as `brain`, was refused writing the
+# file on every fresh install and Keycloak, which waits for it, never started. Found by the
+# browser harness's first run on an empty runner (M27.10.6): an install whose volume was made
+# before this image ran as `brain` never shows it.
+RUN mkdir /out && chown brain:brain /out
+
 # The image carries its own identity rather than being told at runtime. Coolify resolves
 # ${VAR:-default} at save time and bakes the literal into its stored compose, so a runtime
 # variable could not be overridden by the deploy at all: /health/ready reported "unknown"
@@ -123,8 +132,14 @@ COPY --chown=brain:brain ops/openbao/policies /app/ops/openbao/policies
 # copied out of the image by the server's deploy hook and run there, so a release reaches a
 # Coolify install, whose own copy of the compose file no release can change, without anybody
 # editing that server. The compose file is copied, not bind-mounted, for the reason above.
-COPY --chown=brain:brain ops/deploy/overlays/apply.sh /app/ops/deploy/overlays/apply.sh
+COPY --chown=brain:brain ops/deploy/overlays/ /app/ops/deploy/overlays/
 COPY --chown=brain:brain docker-compose.presidio.yml /app/ops/deploy/overlays/docker-compose.presidio.yml
+COPY --chown=brain:brain docker-compose.objectstore.yml /app/ops/deploy/overlays/docker-compose.objectstore.yml
+COPY --chown=brain:brain docker-compose.langfuse.yml /app/ops/deploy/overlays/docker-compose.langfuse.yml
+# The settings files those compose files mount, which the trace ledger's preparation puts on the
+# server where they are missing (ops/deploy/overlays/langfuse.prepare.sh).
+COPY --chown=brain:brain ops/langfuse/clickhouse-memory.xml /app/ops/deploy/overlays/settings/langfuse/clickhouse-memory.xml
+COPY --chown=brain:brain ops/seaweedfs/provision.sh /app/ops/deploy/overlays/settings/seaweedfs/provision.sh
 # The built console, which this application serves at the root of the install's web address.
 # `brain.console_static` looks for it here and serves nothing at all when it is absent, so a
 # local `docker build` that dropped this line would produce an image whose only symptom is a

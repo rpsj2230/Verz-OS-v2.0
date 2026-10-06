@@ -18,7 +18,7 @@ Task ids: M27.11.6, M27.11.7
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -35,6 +35,7 @@ from brain.agent_lifecycle_routes import (
     ENABLE_PATH,
     INSTALL_PATH,
     IT_MOVED,
+    LEARNING_PATH,
     LIFECYCLE_PATH,
     MOVED,
     NO_SIGNING_KEY_HERE,
@@ -73,6 +74,7 @@ from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
 from brain.gate.injection import AutonomyTier
 from brain.knowledge.visibility import Visibility
+from brain.ops.learning_signal_store import StoredLearningPauses
 from brain.tools.registry import ToolRegistry
 from tests.fixtures.console_http import gate_wiring, headers
 from tests.unit.test_agent_routes import KEY, agent_row, an_invoice, person
@@ -860,3 +862,58 @@ def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> Non
         "may_duplicate": True,
         "duplicate_unavailable": None,
     }
+
+
+# ------------------------------------------------------------ the learning switch (M16.7.13)
+class KeptPauses(StoredLearningPauses):
+    """`StoredLearningPauses` in memory: every pause and resume it was asked to write, in order."""
+
+    def __init__(self) -> None:
+        self.written: list[tuple[str, bool, str, str]] = []
+
+    async def set(self, *, agent_id: str, paused: bool, reason: str, by: str) -> None:
+        self.written.append((agent_id, paused, reason, by))
+
+    async def paused(self, agent_ids: Collection[str]) -> frozenset[str]:
+        latest: dict[str, bool] = {}
+        for agent_id, paused, _, _ in self.written:
+            latest[agent_id] = paused
+        return frozenset(one for one in agent_ids if latest.get(one, False))
+
+
+def test_an_agents_learning_is_paused_and_resumed_by_who_may_switch_it_off(
+    console: Console,
+) -> None:
+    """**Each agent has a learning switch** (M16.7.13, CONA-23). Whoever holds the lifecycle
+    authority over an agent pauses it with a reason, in their own name, reads it paused, and
+    resumes it; somebody holding that authority in another department, and somebody with none,
+    are the one 404 a missing agent gets and write nothing.
+
+    Delete this and the switch can be pressed by anybody who can name an agent, or pressed and
+    answered with nothing written."""
+    pauses = KeptPauses()
+    console.app.state.learning_pauses = pauses
+    route = path(LEARNING_PATH, agent_id=COMPANY)
+
+    before = console.get("u_admin", route)
+    paused = console.post("u_admin", route, {"paused": True, "reason": "a wrong lesson"})
+    read = console.get("u_admin", route)
+    resumed = console.post("u_admin", route, {"paused": False, "reason": "fixed at source"})
+    outside = console.post(
+        "u_narrow", path(LEARNING_PATH, agent_id=SALES), {"paused": True, "reason": "x"}
+    )
+    nobody = console.post("u_none", route, {"paused": True, "reason": "x"})
+    missing = console.post(
+        "u_admin", path(LEARNING_PATH, agent_id=MISSING), {"paused": True, "reason": "x"}
+    )
+
+    assert (before.status_code, before.json()["paused"]) == (200, False)
+    assert (paused.status_code, paused.json()["paused"]) == (200, True)
+    assert read.json() == {"agent_id": COMPANY, "paused": True}
+    assert resumed.json()["paused"] is False
+    assert pauses.written == [
+        (COMPANY, True, "a wrong lesson", "u_admin"),
+        (COMPANY, False, "fixed at source", "u_admin"),
+    ]
+    assert refusal(outside) == refusal(nobody) == refusal(missing)
+    assert refusal(missing)[0] == 404
