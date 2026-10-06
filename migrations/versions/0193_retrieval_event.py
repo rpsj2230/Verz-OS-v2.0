@@ -4,7 +4,8 @@
 table held a record, so the signal was arithmetic over nothing. `ops.retrieval_event` is that
 table, column for field of `RetrievalEvent`: which retrievers ran, how many passages the person was
 shown, how many of those two retrievers agreed on, where in that list they followed a citation,
-and how long it took. `brain.tables.retrieval` argues the absences.
+how long it took, and whether the ranking was served from the retrieval cache rather than made for
+that request. `brain.tables.retrieval` argues the absences.
 
 **Read by the application with `USING (true)`**, for `0041`'s reason: a row names no document, no
 question and nobody, so there is nothing in one that a reader could be refused, and the route that
@@ -94,6 +95,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("latency_ms", sa.Integer(), nullable=False),
+        sa.Column("from_cache", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.PrimaryKeyConstraint("event_id"),
         sa.CheckConstraint(f"retrievers ~ '{RETRIEVERS_PATTERN}'", name="retrievers_are_names"),
         sa.CheckConstraint("returned >= 0", name="returned_is_a_count"),

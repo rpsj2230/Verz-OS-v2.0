@@ -382,7 +382,7 @@ def test_a_retrieval_event_has_nowhere_to_record_what_was_withheld() -> None:
     `withheld`, and it is then in the log store for the retention period.
     """
     names = {f.name for f in dataclasses.fields(RetrievalEvent)}
-    assert names == {"retrievers", "returned", "corroborated", "used", "latency_ms"}
+    assert names == {"retrievers", "returned", "corroborated", "used", "latency_ms", "from_cache"}
     forbidden = {
         "withheld",
         "filtered",
@@ -539,6 +539,34 @@ def test_the_share_of_first_places_is_over_the_retrievals_that_found_something()
     measured = signal(events)
     assert measured is not None
     assert measured.top_position_share == pytest.approx(4 / 6)
+
+
+def test_the_signal_counts_a_cached_retrievals_use_and_keeps_its_latency_out() -> None:
+    """`A_CACHED_RETRIEVAL_COUNTS_AS_A_USE_AND_NEVER_AS_A_LATENCY`. Five retrievals ranked for
+    their request, slow, and five served from the cache, fast: the shares count all ten, the
+    cache's share is a half, and the tail is the ranked ones' alone. With none served from the
+    cache the share is nought and every latency counts. Delete this and repeating a question
+    makes the ranking look faster, or a use of a cached ranking stops counting."""
+    ranked = [event(used=(1,), latency_ms=400) for _ in range(5)]
+    cached = [event(used=(), latency_ms=2, from_cache=True) for _ in range(5)]
+
+    mixed = signal(ranked + cached)
+    assert mixed is not None
+    assert mixed.events == 10
+    assert mixed.used_share == pytest.approx(0.5)
+    assert mixed.cached_share == pytest.approx(0.5)
+    assert mixed.latency_p95_ms == 400.0
+
+    only_ranked = signal([event(latency_ms=n) for n in range(1, 11)])
+    assert only_ranked is not None
+    assert only_ranked.cached_share == 0.0
+    assert only_ranked.latency_p95_ms == 10.0
+
+    only_cached = signal(cached + cached)
+    assert only_cached is not None
+    assert (only_cached.cached_share, only_cached.latency_p95_ms) == (1.0, 0.0)
+    assert event(from_cache=True).attributes()["served"] == "cache"
+    assert event().attributes()["served"] == "ranking"
 
 
 def test_a_batch_where_nobody_acted_reports_a_signal_rather_than_dividing_by_nothing() -> None:

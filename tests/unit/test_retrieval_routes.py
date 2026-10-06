@@ -111,7 +111,13 @@ def test_an_answer_names_the_retrieval_it_was_drawn_from_and_keeps_nothing_else(
 
     assert answered.status_code == 200
     assert kept.events == [
-        RetrievalEvent(retrievers=(LEXICAL_RETRIEVER,), returned=1, corroborated=1, latency_ms=4)
+        RetrievalEvent(
+            retrievers=(LEXICAL_RETRIEVER,),
+            returned=1,
+            corroborated=1,
+            latency_ms=4,
+            from_cache=False,
+        )
     ]
     assert answered.headers[RETRIEVAL_HEADER] == "00000000-0000-4000-8000-000000000001"
 
@@ -137,6 +143,53 @@ def test_a_retrieval_that_cannot_be_kept_costs_the_answer_nothing(
     assert answered.status_code == 200
     assert answered.headers[RETRIEVAL_HEADER] == ""
     assert "event: answer" in answered.text or "event: citation" in answered.text
+
+
+class NotingACacheHit(Passages):
+    """The passage stand-in, noting a ranking served from the retrieval cache, as the searcher
+    does on a hit."""
+
+    async def passages(
+        self, question: str, *, entitlement: EntitlementSet, now: datetime
+    ) -> TypedResult[KnowledgePassage]:
+        note(
+            Searched(
+                retrievers=(LEXICAL_RETRIEVER,),
+                corroborated=frozenset({VISIBLE.id}),
+                latency_ms=1,
+                from_cache=True,
+            )
+        )
+        return await super().passages(question, entitlement=entitlement, now=now)
+
+
+def test_an_answer_from_a_cached_ranking_names_its_retrieval_marked_from_the_cache(
+    client: TestClient, kept: Kept
+) -> None:
+    """A hit is kept as its own retrieval, with the ranking's retrievers and corroboration and
+    the mark, and the answer names it, so a citation followed from it is counted. Delete this and
+    an answer served from the cache has no id to send a followed place back against, or the
+    signal route drops the share the cache served."""
+    state: Any = client.app.state  # type: ignore[attr-defined]
+    state.passage_search = NotingACacheHit(VISIBLE)
+
+    answered = _asked(client)
+
+    assert answered.status_code == 200
+    assert kept.events == [
+        RetrievalEvent(
+            retrievers=(LEXICAL_RETRIEVER,),
+            returned=1,
+            corroborated=1,
+            latency_ms=1,
+            from_cache=True,
+        )
+    ]
+    assert answered.headers[RETRIEVAL_HEADER] == "00000000-0000-4000-8000-000000000001"
+    for _ in range(MINIMUM_EVENTS_FOR_A_SIGNAL - 1):
+        _asked(client)
+    read = client.get(f"{API_PREFIX}/retrievals/signal", headers=headers(LIBRARIAN)).json()
+    assert (read["enough"], read["cached_share"], read["latency_p95_ms"]) == (True, 1.0, 0.0)
 
 
 def test_a_question_no_search_ran_for_names_no_retrieval(client: TestClient, kept: Kept) -> None:
@@ -196,6 +249,7 @@ def test_the_signal_is_read_by_a_knowledge_administrator_alone(
         "top_position_share": 0.0,
         "mean_first_used_position": 0.0,
         "latency_p95_ms": 0.0,
+        "cached_share": 0.0,
     }
     for _ in range(MINIMUM_EVENTS_FOR_A_SIGNAL):
         _asked(client)
