@@ -13,19 +13,35 @@
 #
 # | service        | cgroup | process-side          | why the gap |
 # |----------------|--------|-----------------------|-------------|
-# | keycloak       | 1024M  | MaxRAMPercentage 50   | metaspace, code cache, GC structures, threads |
+# | keycloak       | 1024M  | -Xmx420m, code 96m    | metaspace, code cache, GC structures, threads |
 # | keycloak-db    | 256M   | shared_buffers 64MB   | work_mem per sort, WAL buffers, the backends |
 #
 # A cgroup limit is enforced by the kernel killing the process, so it protects the
 # neighbours and does nothing for this container. The JVM must additionally be told its own
-# ceiling or it sizes the heap from the *host's* memory: a JVM on an 11.7 GiB machine
-# defaults to a heap around a quarter of that, is happy, and is killed by a 768M cgroup
-# while collecting. `MaxRAMPercentage` reads the cgroup limit rather than the host, which is
-# why it is a percentage here and a fixed number in the Node services.
+# ceiling or it sizes the heap from the *host's* memory, is happy, and is killed by the cgroup
+# while collecting.
 #
-# 50 rather than 100 because the heap is not the process. Metaspace, the code cache, thread
-# stacks and the GC's own structures live outside it. A heap sized at the whole cgroup is a
-# container that dies under load with a perfectly healthy heap.
+# **So the heap is a fixed figure, `-Xmx420m`, and never a percentage.** This file said until
+# 2026-10-06 that `MaxRAMPercentage` reads the cgroup limit rather than the host, and whether it
+# does depends on the kernel the install runs on. The JDK in the Keycloak 26.0 image (21.0.6)
+# decides whether the memory controller exists by reading `/proc/cgroups`, which newer kernels
+# have stopped filling with the cgroup v2 controllers: on the browser harness's runner (kernel
+# 6.17) it names thirteen v1 controllers and neither `memory` nor `cpu`. HotSpot then logs
+# "controller memory is not enabled" and sizes everything from the host. Measured with `jcmd` on
+# that runner: `MaxRAM=16766414848`, the host's memory, so 50 per cent was an
+# 8 GiB heap reserved and 3.3 GiB committed inside a 1024M cgroup, and the kernel killed it at
+# 1026900 kB resident on its first sign-ins. Another install on the same image and JDK reads its
+# limit correctly, so a percentage is right or wrong by the kernel a server happens to run, which
+# is not something the product can hold, and an upgrade of that kernel would change it silently.
+# The JDK's fix (JDK-8349988, in 21.0.10) stops reading that file. A fixed `-Xmx` does not depend
+# on what the JVM believes about the machine on any kernel, and its figure can be held against the
+# limit. See `KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE`.
+#
+# 420 MiB of heap beside what lives outside it. Measured with native memory tracking on the same
+# run: metaspace 117 MiB committed (capped at 256m by Keycloak itself), the code cache 56 to
+# 62 MiB (capped here at 96m), symbols 47 MiB, and the collector's structures, which shrink with
+# the heap they describe, so about 400 MiB outside an outsized heap and less beside this one.
+# `MALLOC_ARENA_MAX=2` keeps glibc from giving each of its sixty threads an arena of its own.
 #
 # **It was 768M at 70 per cent until 2026-10-06, and that killed every fresh install's first
 # start.** The figure assumed about 150 MiB outside the heap, which is true of a Keycloak that is
@@ -35,7 +51,13 @@
 # changesets that create Keycloak's schema on a new database still took it to 749668 kB and it
 # was killed on one run of two. The restart policy hid every one, because the second start found
 # the work done. So the server has 1024M for the start that creates its schema and imports the
-# realm, and settles far below it: 418 to 596 MiB once requests have arrived.
+# realm.
+#
+# **And the correction to the figure #417 gave.** It said the server settles at 418 to 596 MiB.
+# That was measured after the specs, once the collector had run; across the start the cgroup
+# was at its limit on every run, and the kill above was the first that crossed it. The figure
+# that matters is the largest anonymous memory over the whole run, which the browser harness
+# now samples every second and prints.
 #
 # ---------------------------------------------------------------------------------------
 # Its own database, and that is deliberate rather than lazy.
@@ -204,7 +226,9 @@ services:
       KC_DB: postgres
       KC_HEALTH_ENABLED: "true"
       KC_VAULT: file
-      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40"
+      # A fixed heap, for the reason the header gives the server's.
+      JAVA_OPTS_APPEND: "-Xms64m -Xmx384m"
+      MALLOC_ARENA_MAX: "2"
     volumes:
       - keycloak-build:/opt/keycloak/lib/quarkus
     networks:
@@ -295,9 +319,10 @@ services:
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:?set KEYCLOAK_HOSTNAME}
       KC_HOSTNAME_STRICT: "true"
       KC_HEALTH_ENABLED: "true"
-      # The process-side cap. Reads the cgroup limit rather than the host; see the header
-      # for why it is 50, and why the limit is no longer 768M.
-      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=40"
+      # The process-side caps, as fixed figures: see the header for why not a percentage, and
+      # `tests/unit/test_wiring.py` for the sum they are held to.
+      JAVA_OPTS_APPEND: "-Xms128m -Xmx420m -XX:ReservedCodeCacheSize=96m"
+      MALLOC_ARENA_MAX: "2"
     volumes:
       # The build `keycloak-build` made for these options. See `--optimized` above.
       - keycloak-build:/opt/keycloak/lib/quarkus
