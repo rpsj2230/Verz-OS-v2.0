@@ -488,6 +488,7 @@ CONFIGURATION_COLUMNS: Final[tuple[str, ...]] = (
     "allowed_tools",
     "required_tools",
     "max_side_effect",
+    "connectors",
 )
 
 
