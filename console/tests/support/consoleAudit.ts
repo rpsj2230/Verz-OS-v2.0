@@ -239,7 +239,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/digest/destination",
       "/setup/*",
     ],
-    tables: ["ops.setting", "ops.budget_version"],
+    tables: ["ops.setting", "ops.budget_version", "ops.budget_stop"],
     installation: [
       "INSTALL_LOCALES",
       "INSTALL_CURRENCY",
@@ -793,6 +793,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: ["/api/v1/audit*", "/api/v1/requirements/checks", "/api/v1/traces*"],
     tables: [
       "obs.audit_entry",
+      "obs.elevation_entry",
       "ops.sensitive_read",
       "ops.requirement_check",
       "agent.browser_session",

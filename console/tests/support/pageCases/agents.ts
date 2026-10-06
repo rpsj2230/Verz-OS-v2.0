@@ -178,6 +178,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
       "/api/v1/agents/quote-helper/automations": AGENT_AUTOMATIONS,
+      // The header badge asks whether a newer template version is on offer; this agent is current.
+      "/api/v1/agents/quote-helper/upgrade": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        badge: "current",
+        from_version: 1,
+        conflicts: [],
+        updates: [],
+        nothing: UNBROKEN,
+      },
     },
   },
   // The Profile, the view with the most on it: the capabilities, the permissions, the leash and the

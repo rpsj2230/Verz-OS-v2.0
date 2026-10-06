@@ -26,7 +26,7 @@
 | `GET /api/v1/agents/{agent_id}/lifecycle` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/memory` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/publications` | **no screen** |
-| `GET /api/v1/agents/{agent_id}/upgrade` | `/agents/:agentId/:tab` |
+| `GET /api/v1/agents/{agent_id}/upgrade` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/approvals` | `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |
