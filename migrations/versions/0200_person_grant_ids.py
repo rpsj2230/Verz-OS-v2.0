@@ -40,7 +40,7 @@ from alembic import op
 revision = "0200"
 # The head of main on the day. Re-pointed at whichever migration is the head when it lands:
 # nothing here depends on anything after 0045.
-down_revision = "0196"
+down_revision = "0206"
 branch_labels = None
 depends_on = None
 
