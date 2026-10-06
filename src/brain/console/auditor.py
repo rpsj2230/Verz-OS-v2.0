@@ -45,19 +45,41 @@ field for the same reason. A field name appearing in a redaction count says that
 and that somebody was refused it, which is `brain.core.redaction`'s whole subject arriving
 through a report.
 
+**Neither statistic ever counts the reader's own entries.** An entry the reader made, and one
+about the reader, is in their view by being theirs rather than by an audit grant, and a count of
+the refusals or redactions on it tells them how much was kept from them. That is the hidden-count
+rule arriving about the one person it must never be about, so both statistics count other
+people's entries inside the auditor's own audit reach and nothing else. See
+`A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM`.
+
+**A shape is told only to a reader `denial_alerts` would tell.** The shape of a run of denials is
+assessed over every denial in the window, including ones this reader may not see: "enumeration"
+says somebody reached for at least five different things. `shapes_told` keeps an assessment only
+where `brain.ops.denial_alerts.reach` admits the reader, which is the rule that decides who is
+alerted, called rather than restated, so the statistics page can never say more about a pattern
+than the alert would have.
+
+**The assessment is keyed by the person and the capability, and until 2026-10-06 it was keyed by
+the entry's subject.** A `deny` entry's actor is the person refused and its subject the thing they
+reached for (`gate.record_denial`), and a `DenialPattern` is per person and capability. Keyed by
+subject, no real entry ever matched an assessment, so the statistic was empty on every install
+while its tests, which used entries whose subject was their own actor, passed.
+
 Task ids: M33.4.1.2, M33.4.1.3
 """
 
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from brain.audit.ledger import AuditAction
+from brain.audit.ledger import REDACTED, AuditAction
 from brain.audit.view import MAX_PAGE_SIZE, AuditFilter, AuditRow, AuditView
-from brain.ops.denial_alerts import ALERT_TEXT
+from brain.core.entitlement import EntitlementSet
+from brain.ops.denial_alerts import ALERT_TEXT, DenialPattern, reach
 from brain.ops.limits import DenialShape
 
 #: The actions that change what somebody may do, as opposed to recording what they did.
@@ -92,6 +114,49 @@ NOTHING_COUNTS_WHAT_THE_READER_MAY_NOT_SEE: Final = (
     "residual bucket, an 'and others' line or a total to subtract from would each be the "
     "hidden count that brain.audit.view.AuditPage refuses to carry, one aggregation up."
 )
+
+#: Why the reader's own entries are never counted, by either statistic.
+A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM: Final = (
+    "The statistics count other people's entries inside the auditor's own audit reach, and "
+    "never an entry the reader made or one about the reader. Those are in the reader's view "
+    "because they are the reader's, and a count of the refusals or redactions on them tells the "
+    "reader how much was withheld from them, which is the hidden count arriving about the one "
+    "person it must never be about."
+)
+
+#: The subject kind whose id is a person, so an entry of it may be about the reader.
+PERSON_KIND: Final = "principal"
+
+#: An assessed shape, by the person refused and the capability they were refused.
+ShapeKey = tuple[str, str]
+
+
+def someone_elses(row: AuditRow, reader_id: str) -> bool:
+    """Whether this row is about somebody other than the reader, and was made by somebody else.
+
+    See `A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM`. Both halves: an entry the reader made
+    is their own request, and an entry about them is admitted to their view by
+    `AuditView._may_see`'s self rule rather than by any audit grant.
+    """
+    if row.actor_id == reader_id:
+        return False
+    return not (row.subject_kind == PERSON_KIND and row.subject_id == reader_id)
+
+
+def shapes_told(
+    patterns: Iterable[DenialPattern], reader: EntitlementSet, *, now: datetime
+) -> dict[ShapeKey, DenialShape]:
+    """The assessed shapes this reader may be told, by person and capability.
+
+    `brain.ops.denial_alerts.reach` decides, as it decides who is alerted. See the module
+    docstring for why a shape assessed over denials the reader cannot see is not theirs to read
+    unless that rule admits them.
+    """
+    return {
+        (pattern.subject_id, pattern.capability.value): pattern.shape
+        for pattern in patterns
+        if reach(pattern, reader, now=now) is not None
+    }
 
 
 @dataclass(frozen=True)
@@ -172,18 +237,28 @@ def permission_history(
 def refusal_statistics(
     view: AuditView,
     *,
-    shapes: dict[str, DenialShape],
+    shapes: Mapping[ShapeKey, DenialShape],
+    reader_id: str,
     limit: int = MAX_PAGE_SIZE,
 ) -> tuple[RefusalStatistic, ...]:
     """How often each shape of refusal happened, in this reader's own view (M33.4.1.3).
 
-    `shapes` maps an entry's subject reference to the shape `brain.ops.denial_alerts` assessed
-    it as. It is handed in rather than computed here because assessing a pattern is that
+    `shapes` maps the person refused and the capability they were refused to the shape
+    `brain.ops.denial_alerts` assessed, which `shapes_told` builds from the patterns and the
+    reader. It is handed in rather than computed here because assessing a pattern is that
     module's question and this one must not have a second opinion about it; what is decided
     here is only what a screen may show once it has the answer.
 
-    See `A_COUNT_OF_REFUSALS_BY_NAME_IS_A_MAP_OF_WHAT_EXISTS` and
-    `NOTHING_COUNTS_WHAT_THE_READER_MAY_NOT_SEE`.
+    See `A_COUNT_OF_REFUSALS_BY_NAME_IS_A_MAP_OF_WHAT_EXISTS`,
+    `NOTHING_COUNTS_WHAT_THE_READER_MAY_NOT_SEE` and
+    `A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM`: the reader's own entries are left out
+    by the view's own `shows` narrowing, so a page is filled from other people's. `reader_id` is
+    the principal whose reach the view was built with. It is passed beside the view rather than
+    read off it, because `AuditView` deliberately offers nothing but `page`
+    (`tests/invariants/test_audit_view_invariants.py`).
+
+    Every page of the view is read, `limit` rows at a time, so the count is over the window the
+    caller loaded rather than over its first page.
 
     A shape with no occurrences in this reader's view is absent rather than reported at zero.
     A row reading "impersonation: 0" is a reader being told that shape exists and that nobody
@@ -194,16 +269,25 @@ def refusal_statistics(
     first and that ordering is itself a figure: a reader comparing two runs learns which shape
     moved without either count being shown to them.
     """
-    page = view.page(AuditFilter(actions=frozenset({AuditAction.DENY})), limit=limit)
-
     seen: Counter[DenialShape] = Counter()
-    for row in page.rows:
-        shape = shapes.get(row.subject_id)
-        if shape is None:
-            # A denial nobody assessed is not a shape, and guessing one here would be this
-            # module forming the opinion the paragraph above says it must not.
-            continue
-        seen[shape] += 1
+    cursor: str | None = None
+    while True:
+        page = view.page(
+            AuditFilter(actions=frozenset({AuditAction.DENY})),
+            limit=limit,
+            cursor=cursor,
+            shows=lambda row: someone_elses(row, reader_id),
+        )
+        for row in page.rows:
+            shape = shapes.get((row.actor_id, row.details.get("capability", "")))
+            if shape is None:
+                # A denial nobody assessed is not a shape, and guessing one here would be this
+                # module forming the opinion the paragraph above says it must not.
+                continue
+            seen[shape] += 1
+        if page.next_cursor is None:
+            break
+        cursor = page.next_cursor
 
     return tuple(
         RefusalStatistic(shape=shape, occurrences=count, reads_as=ALERT_TEXT[shape])
@@ -213,7 +297,9 @@ def refusal_statistics(
 
 
 def redaction_statistics(
-    rows: tuple[AuditRow, ...],
+    rows: Iterable[AuditRow],
+    *,
+    reader_id: str,
 ) -> int:
     """How many of these entries carried a redaction, and nothing about which field (M33.4.1.3).
 
@@ -222,6 +308,13 @@ def redaction_statistics(
     `brain.core.redaction`'s subject arriving through a report.
 
     Counted over rows the caller already holds, so this cannot widen anything: it is given
-    what a reader may see and returns a property of it.
+    what a reader may see and returns a property of it. **Only other people's rows are
+    counted**: see `A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM`. `reader_id` is the
+    principal whose view the rows came from.
     """
-    return sum(1 for row in rows if any(value == "<redacted>" for value in row.details.values()))
+    return sum(
+        1
+        for row in rows
+        if someone_elses(row, reader_id)
+        and any(value == REDACTED for value in row.details.values())
+    )
