@@ -89,11 +89,12 @@ import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabili
 import { AgentDashboard, usePeriod } from "./AgentDashboard";
 import { daysSince, readHeaderFacts, readProfile, spendIsRecorded, type HeaderFacts } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
-import { AgentUpgrade } from "./AgentUpgrade";
+import { AgentUpgrade, useUpgradeReview } from "./AgentUpgrade";
+import { hasAnOffer } from "./agentUpgradeQuery";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { useDraftStart } from "./DraftStart";
 import { useLifecycleActs } from "./LifecycleActs";
-import { LeashPill, StatePill } from "./pills";
+import { LeashPill, StatePill, UpgradePill } from "./pills";
 import "../../styles/agent-workspace.css";
 
 /** The three views, in the owner's order. The first is where the bare address lands. */
@@ -270,6 +271,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
   }, []);
   const lifecycle = useLifecycleActs(onMoved, agentAddress);
   const drafting = useDraftStart();
+  const upgrade = useUpgradeReview(agentId);
   const [period, setPeriod] = usePeriod();
   const answer = useResource<unknown>(agentWorkspaceApiPath(agentId), agentVersion);
   const workspace = useMemo(() => readAgentWorkspace(answer.data), [answer.data]);
@@ -337,6 +339,9 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
         <>
           {facts.state === undefined ? null : <StatePill state={facts.state} />}
           {facts.leashUpTo === undefined ? null : <LeashPill rung={facts.leashUpTo} upTo />}
+          {hasAnOffer(upgrade.review) && upgrade.review.badge === "available" ? (
+            <UpgradePill version={upgrade.review.toVersion} />
+          ) : null}
         </>
       }
       subline={subline}
@@ -408,7 +413,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           onAutomationsChanged={onChanged}
         />
       ) : null}
-      {view === "profile" ? <AgentUpgrade agentId={agentId} onChanged={onMoved} /> : null}
+      {view === "profile" ? <AgentUpgrade agentId={agentId} upgrade={upgrade} onChanged={onMoved} /> : null}
       {view === "profile" ? (
         <AgentProfile
           agent={agent}
