@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**46 items are open: 169,** when to switch on spending limits that really stop requests, **168,** what a brand-new install ships with, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**47 items are open: 170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **168,** what a brand-new install ships with, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,33 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 170. Which parts of an agent does the builder list as sections of its own?
+
+**In plain terms:** your plan lists eleven sections in the agent builder. Seven were built from the
+start, and "Connected sources" has now been added as the eighth. Three are not built, for a reason the
+builder's own rule gives: a section has to be a part of the agent's saved definition (its "manifest"),
+and these are not.
+
+- **Workflows (automations).** Automations are installed on each agent from the gallery, one at a
+  time, and that already works. A "workflows" part of the definition would be a second description of
+  the same thing.
+- **Memory.** What an agent remembers and learns comes from its own runs, which a template cannot
+  know in advance. It is already set on the agent's own Memory tab (including pausing learning).
+- **Channels (where it answers).** Decided per install when the agent is published, and changed later
+  from the agent's page (item 162). It is not a property of the template.
+
+**Option A: leave them out of the builder's sections** and let the builder link to where each is
+already set (the Automations gallery, the Memory tab, the publish step's channel choice). No change to
+what the product stores.
+
+**Option B: add them as parts of the definition.** A template could then carry default workflows,
+memory settings and channels. It needs a change to the stored definition (a database change), and a
+decision on which defaults, and it makes two places hold the same setting.
+
+**My recommendation:** A. Each of the three is already set in exactly one place; B would add a second.
+
+**What I need from you:** nothing, or reply "170: B".
 
 ## 169. When should spending limits start to really stop requests?
 
