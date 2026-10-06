@@ -43,6 +43,8 @@ interface FormCase {
 
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
+  // An API's specification and mapping, the one form on Add an API, above its review list.
+  "src/pages/connectors/CustomConnectorsPage.tsx": [{ pattern: "/connectors/new-api", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
   // A memory's edit opens in place on My workspace, the first form on the page once opened.
   "src/pages/MyWorkspace.tsx": [{ pattern: "/me", opener: "Edit", index: 0, writes: true }],
@@ -82,9 +84,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
-  // The preview as a person is in the Permissions card, above the model card, so the pin's is second.
-  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 1, writes: true }],
-  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // The Permissions card draws the tools block's three choices (judged elsewhere) and then the
+  // preview as a person in its footer, above the model card, so the preview is fourth and the pin
+  // fifth.
+  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 3, writes: true }],
+  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 2, writes: true }],
   // A person's Access view: the preview through an agent, under the grants, roles and placements.
   "src/pages/people/PersonPreview.tsx": [{ pattern: "/people/:personId/:view", index: 0, writes: true }],
   // The Dashboard opens first, and its one form is the monthly budget, drawn for a reader of
@@ -103,6 +107,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/channels/:name/:view", index: 0, writes: true },
     { pattern: "/channels/:name/:view", index: 1, writes: true },
   ],
+  // Quick answers: the one form, under the rules in use, adds a rule; its Try it sends nothing saved.
+  "src/pages/rules/RulesPage.tsx": [{ pattern: "/rules", index: 0, writes: true }],
 };
 
 /**
@@ -111,6 +117,16 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/agents/AgentLeash.tsx":
+    "Both forms are choices from lists the API sent, a setting and a rung, and a verdict from the " +
+    "ledger's four; nothing is typed, so nothing can be sent blank, and Change is disabled until a " +
+    "different rung is chosen. tests/agent-leash.test.tsx holds that every write is sent only from " +
+    "its confirmation, and the leash block is inside the Profile, whose page case mounts no leash.",
+  "src/pages/agents/AgentTools.tsx":
+    "Its forms are choices from lists the API sent, a tool or a connector the reader may attach or " +
+    "detach; nothing is typed, so nothing can be sent blank. tests/agent-tools.test.tsx holds that " +
+    "every press is sent only from its confirmation, and the block is inside the Profile, whose page " +
+    "case mounts it with nothing typed.",
   "src/pages/agents/AgentMemory.tsx":
     "The one form corrects a memory, opened from its row in the Memory section at its own address, " +
     "which no page case mounts. tests/agent-memory.test.tsx submits it blank and holds that nothing " +
@@ -211,6 +227,9 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
   "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/people/MoveDrawer.tsx": "Its one form opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. It is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says which department to choose.",
   "src/pages/people/PersonPlacements.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
@@ -242,6 +261,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The capture form is drawn in a drawer outside the page's main landmark, and a decision's form is " +
     "one per waiting solution. tests/knowledge-page.test.tsx submits the capture blank and a decision " +
     "with no review date, and holds that nothing is sent and each says what to fill in.",
+  "src/pages/knowledge/CorrectionsPage.tsx":
+    "A decision's form is one per opened correction, drawn only once the review has loaded. " +
+    "tests/knowledge-page.test.tsx rejects with no reason and approves with no review date, and holds " +
+    "that nothing is sent and each says what to fill in.",
   "src/pages/FirstRun.tsx":
     "The wizard's step forms move between steps and send nothing. Its one write is the review " +
     "screen's button after every step, and the API's problems are drawn beside the fields they " +

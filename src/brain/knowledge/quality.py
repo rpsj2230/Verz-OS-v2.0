@@ -532,6 +532,16 @@ RERANKING: Final = AdoptionRecord(
 #: checking the column's grammar.
 RETRIEVER_RE: Final = re.compile(r"^[a-z][a-z0-9_]*$")
 
+#: Why a retrieval served from the cache is counted as a use and never as a latency (M15.3.4).
+A_CACHED_RETRIEVAL_COUNTS_AS_A_USE_AND_NEVER_AS_A_LATENCY: Final = (
+    "A retrieval served from the retrieval cache is a ranking made once and handed to another "
+    "person asking the same thing, so where they acted in it is evidence about that ranking and "
+    "counts in the shares like any other. How long it took is a cache read, and folding it into "
+    "the ranking's tail would make the ranking look faster the more often people repeat "
+    "themselves, so the latency is read over the retrievals that ranked, and the share served "
+    "from the cache is reported beside it."
+)
+
 #: How the retriever names are joined for the one attribute that carries them. A dot, because
 #: `RETRIEVER_RE` admits none, and because the joined value still passes the value grammar
 #: `brain.ops.tracing` applies to anything it keeps.
@@ -551,9 +561,11 @@ class RetrievalEvent:
 
     What is here: which of our own retrievers contributed, how many results the caller
     received, how many of those more than one retriever found, where in that list the caller
-    acted, and how long it took. Every one of those is a fact about our ranking or about what
-    the caller is already holding. See `A_COUNT_OF_WHAT_WAS_SHOWN_IS_NOT_A_COUNT_OF_WHAT_WAS_HIDDEN`
-    and `THE_LOG_MEASURES_OUR_RANKING_AND_NEVER_THE_CORPUS`.
+    acted, how long it took, and whether the ranking was served from the retrieval cache rather
+    than made for this request (`A_CACHED_RETRIEVAL_COUNTS_AS_A_USE_AND_NEVER_AS_A_LATENCY`).
+    Every one of those is a fact about our ranking or about what the caller is already holding.
+    See `A_COUNT_OF_WHAT_WAS_SHOWN_IS_NOT_A_COUNT_OF_WHAT_WAS_HIDDEN` and
+    `THE_LOG_MEASURES_OUR_RANKING_AND_NEVER_THE_CORPUS`.
 
     `used` is one-based positions into the caller's own result list. A position past
     `returned` is refused: it is either a bug or a record of something the caller was not
@@ -565,6 +577,7 @@ class RetrievalEvent:
     corroborated: int = 0
     used: tuple[int, ...] = ()
     latency_ms: int = 0
+    from_cache: bool = False
 
     def __post_init__(self) -> None:
         if not self.retrievers:
@@ -642,6 +655,7 @@ class RetrievalEvent:
             "first_used_position": self.first_used_position,
             "latency_ms": self.latency_ms,
             "outcome": "used" if self.used else "unused",
+            "served": "cache" if self.from_cache else "ranking",
         }
 
 
@@ -652,7 +666,9 @@ class RetrievalSignal:
     Rates rather than counts wherever a count would be about people: `used_share` says how
     often retrieval produced something somebody acted on, which is a property of the ranking.
     `events` is the denominator and is carried because a rate with no denominator is a number
-    nobody can weigh.
+    nobody can weigh. `cached_share` is how many of them were served from the retrieval cache,
+    and `latency_p95_ms` is over the others; see
+    `A_CACHED_RETRIEVAL_COUNTS_AS_A_USE_AND_NEVER_AS_A_LATENCY`.
     """
 
     events: int
@@ -660,6 +676,7 @@ class RetrievalSignal:
     top_position_share: float
     mean_first_used_position: float
     latency_p95_ms: float
+    cached_share: float = 0.0
 
 
 def signal(events: Sequence[RetrievalEvent]) -> RetrievalSignal | None:
@@ -683,6 +700,7 @@ def signal(events: Sequence[RetrievalEvent]) -> RetrievalSignal | None:
     if len(events) < MINIMUM_EVENTS_FOR_A_SIGNAL:
         return None
     acted = [event for event in events if event.used]
+    ranked = [float(event.latency_ms) for event in events if not event.from_cache]
     return RetrievalSignal(
         events=len(events),
         used_share=len(acted) / len(events),
@@ -694,5 +712,6 @@ def signal(events: Sequence[RetrievalEvent]) -> RetrievalSignal | None:
         mean_first_used_position=(
             sum(event.first_used_position for event in acted) / len(acted) if acted else 0.0
         ),
-        latency_p95_ms=percentile_ms([float(event.latency_ms) for event in events], 0.95),
+        latency_p95_ms=percentile_ms(ranked, 0.95) if ranked else 0.0,
+        cached_share=(len(events) - len(ranked)) / len(events),
     )

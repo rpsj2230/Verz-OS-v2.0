@@ -725,7 +725,18 @@ ROLE_WRITING_MAPPERS = frozenset(
 )
 
 
-def _mappers_minting_for(client: dict[str, Any], realm: dict[str, Any]) -> list[dict[str, Any]]:
+def _default_roles(realm: dict[str, Any]) -> frozenset[str]:
+    """The realm roles a person holds by default: the default role and the realm roles in it."""
+    name = (realm.get("defaultRole") or {}).get("name", "")
+    composite: dict[str, Any] = next(
+        (one for one in realm.get("roles", {}).get("realm") or [] if one["name"] == name), {}
+    )
+    return frozenset({name, *(composite.get("composites", {}).get("realm") or [])})
+
+
+def _mappers_minting_for(
+    client: dict[str, Any], realm: dict[str, Any], holding: frozenset[str] | None = None
+) -> list[dict[str, Any]]:
     """Every mapper that runs when Keycloak mints an access token for `client`, as imported.
 
     `TokenManager.getRequestedClientScopes` is the client's default scopes plus the client itself,
@@ -736,8 +747,24 @@ def _mappers_minting_for(client: dict[str, Any], realm: dict[str, Any]) -> list[
     means `defaultDefaultClientScopes`. Optional scopes are left out: a token carries one only when
     the sign-in asks for it by name. A mapper whose protocol is not the client's never runs
     (`DefaultClientSessionContext.loadProtocolMappers`).
+
+    **And a scope with role scope mappings runs only for a person holding one of those roles**
+    (`DefaultClientSessionContext.isClientScopePermittedForUser`). `holding` is that person's
+    realm roles, the default ones when not given, which is everybody on a fresh install. Until
+    2026-10-06 this walk left the rule out, the realm mapped the payload role to
+    `brain-identity`, and every test here passed over a realm whose console tokens carried no
+    audience, subject or second factor for anybody who could not read traces.
     """
-    scopes = {one["name"]: one for one in realm.get("clientScopes") or []}
+    held = _default_roles(realm) if holding is None else holding
+    gated: dict[str, set[str]] = {}
+    for mapping in realm.get("scopeMappings") or []:
+        if mapping.get("clientScope"):
+            gated.setdefault(mapping["clientScope"], set()).update(mapping.get("roles") or [])
+    scopes = {
+        one["name"]: one
+        for one in realm.get("clientScopes") or []
+        if one["name"] not in gated or gated[one["name"]] & held
+    }
     if (
         client.get("defaultClientScopes") is not None
         or client.get("optionalClientScopes") is not None
@@ -1084,3 +1111,79 @@ def test_nothing_but_the_second_factor_stands_in_front_of_everybody_who_signs_in
             "verifyEmail asks every unverified person for an emailed link, and the realm names no "
             "sender, so the email fails and nobody finishes signing in"
         )
+
+
+def test_a_person_holding_only_the_default_role_is_minted_a_console_token_the_api_accepts() -> None:
+    """The claims the realm mints for a console sign-in, built from the realm, pass the API.
+
+    A fresh install's first administrator holds the default role and nothing else. The claims are
+    read off the realm the way Keycloak mints them (`_mappers_minting_for`, with the rule that a
+    scope gated on a role is dropped for a person without it), put in a token, and handed to
+    `validate_token` and `assurance_from` as the API would. Delete this and the payload role can go
+    back onto `brain-identity`, which is what shipped on 2026-09-30: the scope was dropped for
+    everybody without that role, the console's tokens carried no `aud`, and the finishing step of
+    the first run refused the first administrator with `wrong_audience`. The browser harness found
+    it on a fresh install; the owner's install never imported the new realm and never showed it.
+    """
+    from brain.identity.keycloak_tokens import API_AUDIENCE
+    from brain.identity.oidc import KeySet, RawToken, SigningKey, validate_token
+
+    realm = _realm()
+    console = next(c for c in realm["clients"] if c["clientId"] == "brain-console")
+    mappers = _mappers_minting_for(console, realm, _default_roles(realm))
+    kinds = {str(one.get("protocolMapper")) for one in mappers}
+    audiences = sorted(
+        one["config"]["included.client.audience"]
+        for one in mappers
+        if one.get("protocolMapper") == "oidc-audience-mapper"
+        and one.get("config", {}).get("access.token.claim") == "true"
+    )
+    assert {"oidc-sub-mapper", "oidc-amr-mapper", "oidc-audience-mapper"} <= kinds
+    now = datetime(2999, 1, 1, tzinfo=UTC)
+    issuer = "https://id.example.test/realms/brain"
+    claims: dict[str, object] = {
+        "iss": issuer,
+        # Keycloak writes a single audience as a string and several as a list.
+        "aud": audiences[0] if len(audiences) == 1 else audiences,
+        "azp": console["clientId"],
+        "sub": "4f1c8e2a-6d0b-4a7e-9b51-0e2d7c3a9f10",
+        "typ": "Bearer",
+        "amr": ["pwd", "otp"],
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=5)).timestamp()),
+    }
+    key = SigningKey(kid="k", algorithm="RS256", material="-----PUBLIC k-----", use="sig")
+    verified = validate_token(
+        RawToken(
+            header={"alg": "RS256", "kid": "k", "typ": "JWT"},
+            payload=claims,
+            signing_input=b"header.payload",
+            signature=b"signed",
+        ),
+        keys=KeySet(issuer=issuer, keys=(key,), fetched_at=now),
+        verify=lambda **_: True,
+        expected_issuer=issuer,
+        expected_audience=API_AUDIENCE,
+        now=now,
+    )
+    assert assurance_from(verified) is Assurance.STRONG
+
+
+def test_a_scope_gated_on_a_role_is_not_minted_for_a_person_without_it() -> None:
+    """The walk drops a role-gated scope for a non-holder and keeps it for a holder.
+
+    The sibling of the test above: without it, `_mappers_minting_for` could ignore `holding`
+    altogether and the test above would pass on any realm, including the broken one.
+    """
+    realm = _realm()
+    console = next(c for c in realm["clients"] if c["clientId"] == "brain-console")
+    gated = {
+        **realm,
+        "scopeMappings": [{"clientScope": "brain-identity", "roles": ["brain-langfuse-payload"]}],
+    }
+    nobody = _mappers_minting_for(console, gated, _default_roles(realm))
+    holder = _mappers_minting_for(
+        console, gated, _default_roles(realm) | {"brain-langfuse-payload"}
+    )
+    assert "oidc-audience-mapper" not in {one.get("protocolMapper") for one in nobody}
+    assert "oidc-audience-mapper" in {one.get("protocolMapper") for one in holder}

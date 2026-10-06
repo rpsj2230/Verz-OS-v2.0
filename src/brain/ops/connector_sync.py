@@ -88,20 +88,45 @@ database's views are the one shape not carried on: see `A_VIEW_READ_IS_ONE_BOUND
 that changed them, and the answer cache's key carries it. See
 `A_CHANGED_READ_ADVANCES_ITS_SOURCE_S_EPOCH` and `brain.tables.projection.SourceEpochRow`.
 
+**A field the source has renamed or removed is found by the scheduled read, shown on its health
+and answered as degraded (M11.8.7).** Every scheduled read already fetches each entity's pages, so
+it is also the schema check, and every source is read at least once a day
+(`A_SCHEDULED_READ_IS_THE_SCHEMA_CHECK_AND_RUNS_AT_LEAST_DAILY`). A field the index keeps is lost
+when a record that carried it is read again without it and no record of the read carries it, or
+when the newest read before this one had found it lost and this one still finds it on nothing
+(`lost_fields`, and `A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_CARRIED_IT_NO_LONGER_DO`). A field read
+only live, never kept, is not judged here: nothing holds what it used to be. The attempt is still a
+read, its health is degraded, and its sentence names each lost field as `entity.field` in the
+connector's own names and never a value. `brain.ops.live_records.SourceRecords` then reads that
+sentence back with `fields_lost_of` and answers a question over that entity as a source that could
+not be read, rather than with records missing the field.
+
+Rejected: a nightly control of its own that reads every source's schema separately. It would spend
+a second call per entity on what the scheduled read already fetched, against the same vendor
+ceiling, and judge a different page from the one the index was written from.
+
 Rejected: registering a `ConnectorRegistry` from the stored connections and driving `reconnect` on
 every run. It would quarantine a connection in memory that the next run rebuilds from the same row,
 so the quarantine would last one run, and it would add a second in-memory opinion about whether a
 source is connected beside the table that already says so.
 
+**A source consented to by OAuth fails in three more sentences of its own (M11.8.6).** A vendor that
+refused the renewal has withdrawn the consent (`CONSENT_WITHDRAWN`, from `brain.connectors.oauth`),
+which is down at once like any refused key; a source nobody has consented to yet has no refresh
+token to renew with (`NOT_CONSENTED`); and a token the vendor rotated that the vault would not keep
+is a consent the next read cannot use (`ROTATED_REFRESH_NOT_KEPT`).
+
 Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8, M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15
-Task ids: M11.1.2, M11.1.5
+Task ids: M11.8.7
+Task ids: M11.1.2, M11.1.5, M11.8.6, M11.7.8
 """
 
 from __future__ import annotations
 
 import enum
 import json
-from collections.abc import Callable, Mapping, Sequence
+import re
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
@@ -114,17 +139,18 @@ from brain.connectors.declaration import (
     CodeReading,
     Reading,
     RoutedReading,
-    shipped,
 )
 from brain.connectors.declaration import PageReply as PageReply
 from brain.connectors.declaration import SourceReading as SourceReading
 from brain.connectors.declaration import ViewReading as ViewReading
 from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.connectors.minimal_index import MinimalIndexError, StoredRow, assert_minimal_index
+from brain.connectors.oauth import CONSENT_WITHDRAWN as CONSENT_WITHDRAWN
 from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, ProjectedRecord
 from brain.connectors.throttle import CallOutcome, UnmeasuredSourceError, limits_for, retry_delay
 from brain.core.scope import Op, Scope
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_catalogue import Derived
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection
 from brain.ops.limits import Limit
@@ -341,9 +367,24 @@ NO_SANDBOX: Final = (
 #: What an attempt came to, one per kind of thing that happened. Constants, for
 #: `A_RUN_RECORD_CARRIES_NO_VALUE_FROM_THE_SOURCE`.
 READ_TO_THE_END: Final = "Read to the end."
+#: What a read that found fields lost says, before the fields' names. See `fields_lost_detail`.
+FIELDS_LOST: Final = (
+    "Read, and these fields the source's tools read were in none of the records it answered, so "
+    "it has renamed or removed them:"
+)
 READ_BUT_CUT_SHORT: Final = (
     "Read as far as one run reads, which was not the end; the next run carries on from where this "
     "one stopped."
+)
+
+#: A pass read to its end that met a bound its reading will not cross. Google Drive's is a folder
+#: nested deeper than `brain.connectors.google_drive.MAX_FOLDER_DEPTH`, Google's own limit.
+READ_BUT_PART_LEFT_OUT: Final = (
+    "Read to the end of what its reading goes into, which is not all of the source: part of it "
+    "lies past a bound the reading does not cross, so that part was not read and nothing was "
+    "retired. "
+    "In Google Drive that is a folder nested more than 100 levels below the one connected; move it "
+    "nearer the connected folder and the next run reads it."
 )
 SOURCE_ALLOWANCE_REFUSED: Final = (
     "The source's call allowance refused the read. It is tried again once the source said it would "
@@ -415,6 +456,19 @@ TOOL_SAID_IT_FAILED: Final = (
 #: Custom code that did not complete in its sandbox (M11.1.5).
 CODE_DID_NOT_COMPLETE: Final = (
     "The connector's code did not complete in its sandbox, so nothing from that read was kept."
+)
+#: A source consented to by OAuth that nobody has consented to yet, or whose consent's refresh token
+#: is not in the vault (M11.8.6).
+NOT_CONSENTED: Final = (
+    "Nobody has consented to this connection at the vendor yet, so there is nothing to renew its "
+    "access with. Connect it with the vendor from this source's page."
+)
+#: A refresh token the vendor rotated during a read, which the vault would not keep. The vendor
+#: voided the old one when it issued the new, so the next read cannot renew with it (M11.8.6).
+ROTATED_REFRESH_NOT_KEPT: Final = (
+    "The vendor issued a new refresh token with this read and the vault would not keep it, so the "
+    "next read has nothing to renew with. Check the connector-rotate role and policy are loaded "
+    "(ops/openbao/apply-release.sh), then connect it with the vendor again."
 )
 NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
 
@@ -764,6 +818,9 @@ class SyncState:
     detail: str
     #: When the source was last read to the end, which may be long before this attempt.
     last_synced_at: datetime | None
+    #: The sentence of the newest attempt that was a read, which is where a lost field is said and
+    #: kept until a later read finds it again. See `fields_lost_of`.
+    synced_detail: str = ""
     #: Where reading the source stood, from the newest attempt that recorded it. None before the
     #: first read and on every row before `0179`.
     read_state: ReadState | None = None
@@ -871,8 +928,10 @@ def kept_fields(record: ProjectedRecord, manifest: ConnectorManifest) -> dict[st
 #: Every source this release reads on a schedule, by connector name, read off each connector's
 #: `CONNECTOR` declaration at start-up. `PageReply`, `SourceReading` and `ViewReading` are
 #: `brain.connectors.declaration`'s, named here for the modules that read them from this one.
-READINGS: Final[Mapping[str, Reading]] = MappingProxyType(
-    {name: one.reading for name, one in shipped().items() if one.reading is not None}
+#: Since M11.7.8 they are `brain.ops.connector_catalogue.declarations`', so a connector reviewed on
+#: this install is read from the first cycle after it is approved and not after it changes.
+READINGS: Final[Mapping[str, Reading]] = Derived(
+    lambda found: {name: one.reading for name, one in found.items() if one.reading is not None}
 )
 
 
@@ -956,6 +1015,85 @@ def plan_for(
 # ----------------------------------------------------------------- what an attempt costs
 
 
+#: Why a field is judged lost record by record.
+A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_CARRIED_IT_NO_LONGER_DO: Final = (
+    "A vendor may leave an empty field out of a record rather than send it empty, and the index "
+    "keeps records the source has since deleted, so neither a field absent from every record of "
+    "one read nor one the index once held is yet a renamed one. What says it was renamed or "
+    "removed is a record that carried it, read again without it, while no record of the read "
+    "carries it. A "
+    "field already found lost stays lost until a read finds it again, because the read that found "
+    "it wrote its records without it."
+)
+
+#: Why the scheduled read is the nightly schema check.
+A_SCHEDULED_READ_IS_THE_SCHEMA_CHECK_AND_RUNS_AT_LEAST_DAILY: Final = (
+    "Every shipped reading is read at least once a day, and a failing one is asked at least daily "
+    "as well (LONGEST_WAIT_AFTER_FAILURES), so judging each read's records against what it maps "
+    "checks every connected source's schema every night without a second call to any vendor."
+)
+
+#: The longest interval any reading may declare and still be checked every night.
+SCHEMA_CHECKED_AT_LEAST_EVERY: Final = timedelta(days=1)
+
+#: What each half of a lost field's name is: one of the connector's own lower-case identifiers.
+_IDENTIFIER: Final = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+
+
+def lost_fields(
+    entity: str,
+    *,
+    dropped: Iterable[str],
+    carried: Iterable[str],
+    seen: Iterable[str],
+) -> tuple[str, ...]:
+    """The fields of `entity` a read lost, as `entity.field`, in name order.
+
+    `dropped` is every kept field some record of this read carried in the index and does not carry
+    now, `carried` the fields of this entity the newest read before this one had found lost, and
+    `seen` every field any record of this read carries. See
+    `A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_CARRIED_IT_NO_LONGER_DO`.
+    """
+    names = (set(dropped) | set(carried)) - set(seen)
+    return tuple(f"{entity}.{one}" for one in sorted(names))
+
+
+def carried_for(entity: str, lost: Iterable[str]) -> frozenset[str]:
+    """The field names of `entity` among `entity.field` names, as `fields_lost_of` reads them."""
+    return frozenset(
+        field for name in lost for owner, _, field in (name.partition("."),) if owner == entity
+    )
+
+
+def fields_lost_detail(lost: Iterable[str]) -> str:
+    """The sentence a read that lost fields leaves, naming each."""
+    return f"{FIELDS_LOST} {', '.join(sorted(lost))}."
+
+
+def _is_lost_name(name: str) -> bool:
+    """Whether `name` is `entity.field`: two identifiers about one dot, and nothing else.
+
+    No check that the dot is there: without one the field is empty, which no identifier is.
+    """
+    owner, _, field = name.partition(".")
+    return bool(_IDENTIFIER.match(owner)) and bool(_IDENTIFIER.match(field))
+
+
+def fields_lost_of(detail: str) -> frozenset[str]:
+    """The fields a read's sentence says it lost, or none for any other sentence.
+
+    The one reader of `fields_lost_detail`'s sentence, as `verdict_of` is for a test's. A name
+    that is not `entity.field` makes the whole sentence one this build did not write, which is
+    read as saying nothing rather than as a partial list.
+    """
+    if not detail.startswith(FIELDS_LOST + " ") or not detail.endswith("."):
+        return frozenset()
+    named = [one.strip() for one in detail[len(FIELDS_LOST) + 1 : -1].split(",")]
+    if not named or not all(_is_lost_name(one) for one in named):
+        return frozenset()
+    return frozenset(named)
+
+
 def after_attempt(
     *,
     connector: str,
@@ -969,9 +1107,13 @@ def after_attempt(
     retry_after_seconds: float | None = None,
     records: int = 0,
     cut_short: bool = False,
+    drifted: bool = False,
     read_state: ReadState | None = None,
 ) -> Attempt:
     """The row one attempt leaves: its health, the failures in a row, and when to try again.
+
+    A read that found a field lost (`drifted`) is degraded, as a read cut short is: it was read,
+    and what it answers is not all there.
 
     The whole backoff rule is here and nowhere else. See
     `A_FAILING_SOURCE_IS_ASKED_LESS_OFTEN_AND_AT_LEAST_DAILY`,
@@ -981,7 +1123,7 @@ def after_attempt(
     carried = 0 if previous is None else previous.consecutive_failures
     if outcome is SyncOutcome.SYNCED:
         failures = 0
-        health = HealthState.DEGRADED if cut_short else HealthState.OK
+        health = HealthState.DEGRADED if cut_short or drifted else HealthState.OK
         wait = interval
     elif outcome is SyncOutcome.QUOTA:
         failures = carried

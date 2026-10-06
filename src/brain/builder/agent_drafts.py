@@ -58,9 +58,18 @@ and dropped with it (`carrier`): nothing so signed is stored, verified or return
 a publish stores is signed with this install's own key or not at all. See
 `A_QUESTION_ASKED_BEFORE_PUBLISHING_IS_SIGNED_WITH_A_KEY_NOBODY_KEEPS`.
 
+**The gate is `brain.builder.publish.decide` and the route asks it once** (M20.4.1, M20.4.4). What a
+check finds is a `Check` of system origin, so a failure blocks and nothing an author wrote can; the
+rung a publish lands on is `decide`'s, demoted to Shadow on a widening, and the signed manifest has
+no leash entry above it (`at_rung`). Before 2026-10-06 the route worked out the widenings and the
+approvers beside `decide` and never called it, so the rung, the refusals and the approver count were
+three answers where the domain code has one. Not here, and said plainly: M20.4.5, the router
+collision, because nothing on this install stores a binding of an agent to a route for `decide` to
+compare with, and M20.4.2's author-written checks, which wait for a model to run the golden set.
+
 Scope: domain logic. Nothing here opens a connection or reads a clock.
 
-Task ids: M27.11.6, M27.15.31
+Task ids: M27.11.6, M27.15.31, M13.7.4, M20.4.1, M20.4.4
 """
 
 from __future__ import annotations
@@ -76,6 +85,7 @@ from brain.agents.install import Installation, settle
 from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord, entitlement_ceiling
 from brain.agents.template import (
     BLANK_MANIFEST,
+    LeashRung,
     SignedManifest,
     TemplateError,
     TemplateInstance,
@@ -95,7 +105,12 @@ from brain.builder.drafts import (
 from brain.builder.form import FIELD_WORDS, SECTION_TITLES
 from brain.builder.publish import (
     APPROVERS_FOR_AN_ORDINARY_PUBLISH,
+    Check,
+    CheckOrigin,
+    PublishDecision,
     approvers_needed,
+    decide,
+    released_rung,
 )
 from brain.connectors.registry import ConnectorRegistry
 from brain.console.scoped_authority import may_approve_publication
@@ -181,6 +196,9 @@ class Act:
     widened: bool = False
     #: For a new agent: seen by the author's department rather than the author alone.
     for_department: bool = False
+    #: For a new agent: the channels its author ticked, which a second person's approval publishes
+    #: with, as it publishes with `for_department` (M13.7.4). Empty answers nowhere.
+    channels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -413,6 +431,74 @@ def widenings(before: AgentRecord | None, after: AgentRecord, *, now: datetime) 
     new agent narrowing rows reads as widening its capabilities and never its rows.
     """
     return widened(reaching_nothing(after) if before is None else before, after, now=now)
+
+
+def system_check(passed_as: str, failed_as: str, *, failed: bool) -> Check:
+    """One check the system ran on a draft, named by what it found.
+
+    Always `CheckOrigin.SYSTEM`: the only checks run on a draft are the ones this install makes of
+    it, and an author-written one cannot block (`A_TEST_THE_AUTHOR_WROTE_IS_A_TEST_THE_AUTHOR_CAN_
+    REWRITE`). The author's golden questions are not run until a model answers for an agent
+    (M20.3.1), so there is no author-origin check here to be advisory; saying so is better than
+    inventing one. The name is the sentence a person reads when it fails.
+    """
+    return Check(
+        name=failed_as if failed else passed_as, origin=CheckOrigin.SYSTEM, passed=not failed
+    )
+
+
+def rung_of(found_version: SignedManifest | None) -> AutonomyTier:
+    """The rung an agent goes on at: the version it is installed from, or Shadow for a new one."""
+    if found_version is None:
+        return STARTING_RUNG
+    return released_rung(dict(found_version.manifest.document()))
+
+
+def publish_decision(
+    *,
+    agent_id: str,
+    before: AgentRecord | None,
+    after: AgentRecord,
+    current_rung: AutonomyTier,
+    checks: Iterable[Check],
+    now: datetime,
+) -> PublishDecision:
+    """What `brain.builder.publish.decide` says this draft may become, over this agent's records.
+
+    The ceilings are the two records' (a new agent is compared with one that reaches nothing, as
+    `widenings` does), and the widenings the ceilings cannot show, a tool or a side effect, are
+    handed in as `further_widenings`, so the rung, the approvers and the refusals are one decision
+    and the route no longer works any of them out beside it. There is no route binding to hand
+    `decide`: nothing on this install stores one (`needs-rupash` on what a route is).
+    """
+    return decide(
+        agent_id=agent_id,
+        current_rung=current_rung,
+        before_ceiling=ceiling_of(reaching_nothing(after) if before is None else before),
+        after_ceiling=ceiling_of(after),
+        checks=checks,
+        further_widenings=widenings(before, after, now=now),
+        now=now,
+    )
+
+
+def at_rung(manifest: TemplateManifest, rung: AutonomyTier) -> TemplateManifest:
+    """The manifest with no leash entry above `rung`: lowering is immediate and raising is not here.
+
+    A draft cannot name a rung above Shadow (`raised_rungs` is a refusal), so for every draft this
+    function receives the result is the manifest itself; it is kept so the rung a publish lands on
+    is the decided one by construction, and a future path that lets a draft carry a higher rung
+    cannot publish it past a widening's demotion.
+    """
+    lowered = tuple(
+        LeashRung(target=one.target, scope=one.scope, rung=min(one.rung, rung))
+        for one in manifest.guardrails.leash
+    )
+    if lowered == manifest.guardrails.leash:
+        return manifest
+    return manifest.model_copy(
+        update={"guardrails": manifest.guardrails.model_copy(update={"leash": lowered})}
+    )
 
 
 def second_people_needed(widened_parts: Sequence[str]) -> int:

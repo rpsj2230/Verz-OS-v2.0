@@ -10,7 +10,7 @@ names come from `brain.ops.sweeps.SWEEPS`, not from a list typed out twice. Addi
 and forgetting to wire it up now fails a test rather than passing silently, which is what
 happened to `one_tool_grammar` on the day it was written.
 
-Task ids: M12.1.6, M38.1.2.1, M30.2.1, M0.4.1, M31.2.2.3
+Task ids: M12.1.6, M38.1.2.1, M30.2.1, M0.4.1, M31.2.2.3, M28.1.4
 """
 
 from __future__ import annotations
@@ -464,6 +464,7 @@ def test_every_shard_keeps_its_coverage_data_under_a_name_of_its_own() -> None:
         (position, one)
         for position, one in enumerate(job["steps"])
         if str(one.get("uses", "")).startswith("actions/upload-artifact")
+        and "coverage" in str(one.get("with", {}).get("name", ""))
     ]
 
     assert "${{ matrix.shard }}" in str(job["env"]["COVERAGE_FILE"])
@@ -925,3 +926,44 @@ def test_main_runs_the_deploy_gates_and_leaves_the_suite_to_the_pull_request() -
         "docs",
     ):
         assert "event_name" not in str(jobs[name].get("if", "")), name
+
+
+#: The status check main's branch protection requires for the invariants, by the name GitHub
+#: shows. Read from the repository's protection settings on 2026-10-06; the settings live on
+#: GitHub rather than here, so this is the one name the workflow must keep for them to apply.
+INVARIANTS_CHECK_MAIN_REQUIRES = "Lint, types, invariants"
+
+#: The golden corpus's two blocking tests: a permission failure, and quality below the baseline.
+GOLDEN_BLOCKS_ON = (
+    "test_a_permission_failure_blocks_the_merge_whatever_the_quality_figures_say",
+    "test_quality_has_not_fallen_below_what_was_committed",
+)
+
+
+def test_a_regression_in_the_golden_corpus_fails_the_check_main_requires() -> None:
+    """The golden corpus runs in the job main requires, so a regression blocks the merge (M28.1.4).
+
+    The corpus is asked through the gate by `tests/invariants/test_golden_through_the_gate.py`,
+    and its two blocking tests fail on a permission failure and on quality below the committed
+    baseline. They block a merge only while three things stay together: the file under
+    `tests/invariants`, a job running that directory, and that job's name being the check main's
+    protection requires. Delete this and any one of the three can move with every test green,
+    which is a regression gate that has quietly stopped gating.
+    """
+    import ast
+
+    running = [
+        job
+        for job in _workflow()["jobs"].values()
+        if any(
+            "pytest tests/invariants" in str(step.get("run", "")) for step in job.get("steps", [])
+        )
+    ]
+    assert [job.get("name") for job in running] == [INVARIANTS_CHECK_MAIN_REQUIRES]
+    golden = REPO / "tests" / "invariants" / "test_golden_through_the_gate.py"
+    defined = {
+        node.name
+        for node in ast.parse(golden.read_text(encoding="utf-8")).body
+        if isinstance(node, ast.FunctionDef)
+    }
+    assert set(GOLDEN_BLOCKS_ON) <= defined

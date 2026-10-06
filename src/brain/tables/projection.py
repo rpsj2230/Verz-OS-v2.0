@@ -284,9 +284,9 @@ class SourceEpochRow(Base):
     lost to an eviction or a restart while the answers stored under it may survive, and one that
     starts again at zero can match an answer stored before the first change; the worker also
     holds no cache client. An epoch read off `last_seen_at`, which is what
-    `brain.gate.caches.CachedFreshness.epoch` does, moves on every read that merely confirmed a
-    record, so every answer about a source would be dropped every quarter hour whether anything
-    changed or not.
+    `brain.gate.caches.CachedFreshness.epoch` did until M6.2.5 was built on this counter, moves on
+    every read that merely confirmed a record, so every answer about a source would be dropped
+    every quarter hour whether anything changed or not.
 
     **The shape `gate.policy_epoch` has, for its reasons.** Created on first use rather than
     seeded, a reader treating a missing row as zero; no DELETE grant, because a counter that

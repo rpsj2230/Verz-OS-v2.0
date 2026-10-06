@@ -326,7 +326,8 @@ def test_a_control_is_in_process_only_when_every_part_of_it_is_called() -> None:
 
     A control is usually a predicate plus the work, and counting it as wired because one of
     them has a caller is the failure being avoided. `verdict_for` genuinely has a caller and the
-    calibration's `drift` does not, so the pair measures as unreached.
+    calibration's `tooling_gaps` does not, so the pair measures as unreached. It named `drift`
+    until 2026-10-06, when the Possible duplicates screen became its caller.
 
     It named the re-verification pair until 2026-09-15, when `brain.knowledge.item_store`
     became the outer function's caller and the pair stopped being an example of anything, and
@@ -335,9 +336,11 @@ def test_a_control_is_in_process_only_when_every_part_of_it_is_called() -> None:
     because every real control with a half-called pair has since been wired or has no caller
     at all.
     """
-    partly = _control(symbols=("brain.resolution.calibration:drift", "brain.ops.queue:verdict_for"))
+    partly = _control(
+        symbols=("brain.resolution.calibration:tooling_gaps", "brain.ops.queue:verdict_for")
+    )
     assert call_sites("brain.ops.queue:verdict_for") != ()
-    assert call_sites("brain.resolution.calibration:drift") == ()
+    assert call_sites("brain.resolution.calibration:tooling_gaps") == ()
     assert measured_invocation(partly) is Invocation.NOTHING
 
 
@@ -838,11 +841,16 @@ def test_a_cadence_restated_from_a_cron_expression_is_said_out_loud() -> None:
     closing it means a cron parser in a module that ships.
     """
     lines = advisories()
-    assert any(
-        "audit_anchor's schedule is a cron expression" in line and "nothing compares" in line
-        for line in lines
-    )
-    assert [one.name for one in CONTROLS if one.schedule_file] == ["audit_anchor"]
+    for name in ("audit_anchor", "elevation_anchor"):
+        assert any(
+            f"{name}'s schedule is a cron expression" in line and "nothing compares" in line
+            for line in lines
+        )
+    # The elevation chain's anchor (M33.7.1.3) is read by the same workflow, on the same cron.
+    assert [one.name for one in CONTROLS if one.schedule_file] == [
+        "audit_anchor",
+        "elevation_anchor",
+    ]
 
 
 # ------------------------------------------------------------ a control that has not run

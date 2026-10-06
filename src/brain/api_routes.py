@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4, M11.7.8
 """
 
 from __future__ import annotations
@@ -153,19 +153,22 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from starlette.background import BackgroundTask
 
-from brain.agents.model import AGENT_ID_CHARS, AgentRecord
+from brain.agents.model import AGENT_ID_CHARS, AgentRecord, tool_ceiling
 from brain.agents.template import config_hash
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, Page, bound_trace_id
 from brain.audit.compliance import intercept
 from brain.audit.record import DenyReason
+from brain.cache import AsyncValkeyClient
 from brain.core.department import gaps_for_question
 from brain.core.entitlement import EntitlementSet
-from brain.core.envelope import TypedResult
-from brain.core.errors import Absent, BrainError, Failed
+from brain.core.envelope import ToolDefinition, TypedResult
+from brain.core.errors import Absent, BrainError, Degraded, Failed
 from brain.core.field_policy import FieldPolicy
-from brain.core.principal import Principal
+from brain.core.principal import Principal, PrincipalKind
 from brain.core.redaction import (
+    ID_KEYS,
     ChannelPayload,
     LockedField,
     require_typed_result,
@@ -173,16 +176,19 @@ from brain.core.redaction import (
 )
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.addressing import from_web
-from brain.gate.admission import admit, second_factor_gives_back, verbs_withheld
+from brain.gate.admission import Assurance, admit, second_factor_gives_back, verbs_withheld
 from brain.gate.answer import Answered, answer_lane, frames_of
 from brain.gate.answer_cache import AnswerStore
 from brain.gate.badge_store import item_lookup_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
-from brain.gate.fast_lane import FastPathRule, RowReader
+from brain.gate.fast_lane import AmbiguityReader, FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
+from brain.gate.injection import RiskAssessment
+from brain.gate.invoke import InvocationRefusedError, invoke
+from brain.gate.leash import Leash
 from brain.gate.live_records import LiveRecords
 from brain.gate.model_lane import (
     PASSAGE_POLICY,
@@ -195,18 +201,22 @@ from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource
 from brain.gate.roster import (
     AgentRoster,
     AnswerRoster,
+    StoredAgents,
     answer_roster,
     run_entitlement,
     viewer_for,
 )
+from brain.gate.rule_store import rules_for_asker
+from brain.gate.runtime import AgentRuntime, RunHaltedError, SideEffects, ToolRefusedError
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
 from brain.knowledge.connector_rows import connected_questions
-from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
+from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, SEARCH_DOCUMENTS, KnowledgePassage
 from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.lark_base_rows import BaseLane, lane_for_base
+from brain.knowledge.retrieval_log import Searched, collected, event_for
 from brain.knowledge.row_store import SessionRowSource
 from brain.knowledge.rows import (
     DEFAULT_ROW_LIMIT,
@@ -217,13 +227,16 @@ from brain.knowledge.rows import (
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
-from brain.memory.turn import Turn, recall_place, turn_of
+from brain.memory.promotion_store import counted_after_answering
+from brain.memory.turn import Turn, recall_place, session_statements, turn_of
+from brain.ops.budget_stop_store import Asker, budget_refusal_for
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.halt_store import Work, refusal_for
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
@@ -244,9 +257,12 @@ from brain.ops.live_read_run import (
 )
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
+from brain.ops.retrieval_store import StoredRetrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
+from brain.ops.session_memory_store import SessionRecollection, StoredSessions
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
+from brain.reviewed_connectors import current as reviewed_now
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
 
@@ -736,6 +752,9 @@ async def records(
             ]
         )
     narrowing = filter_scope(filters)
+    # Before the registry is looked at, for every caller alike, so a connector changed since its
+    # approval has no row tool here (M11.7.8). See `brain.reviewed_connectors`.
+    await reviewed_now(request.app.state)
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):
         # A process-level fault, identical for every caller and every entity, so it discloses
@@ -858,6 +877,10 @@ THREAD_HEADER: Final = "x-thread-id"
 
 #: The longest thread id a question may name: a UUID's text.
 THREAD_ID_CHARS: Final = 36
+
+#: The response header naming the retrieval an answer was drawn from, which the page sends a
+#: followed citation's position back against (M15.3.4). See `brain.knowledge.retrieval_log`.
+RETRIEVAL_HEADER: Final = "x-retrieval-id"
 
 
 class Question(BaseModel):
@@ -1079,6 +1102,16 @@ async def base_lane_of(state: Any) -> BaseLane:
     )
 
 
+def ambiguity_of(state: Any) -> AmbiguityReader | None:
+    """The registry's reader for an ambiguous name, or None on a process with no database."""
+    from brain.resolution.ambiguity_store import StoredAmbiguity
+
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return None
+    return StoredAmbiguity(sessions)
+
+
 def live_records_of(state: Any) -> LiveRecords | None:
     """What reads a connected source's records live for this process, or None where nothing can.
 
@@ -1165,19 +1198,53 @@ def model_lane_of(state: Any) -> ModelLane | None:
 DEFAULT_AGENT: Final = "brain"
 
 
+async def agent_run_of(
+    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+) -> AgentRun | None:
+    """The selected agent as its run carries it: its record, its skill pins and their library.
+
+    The pins are the Skills screen's own reading of the agent's install (`brain.skill_routes.
+    pins_of`, from `materialise`), and the library is read only when there is a pin to resolve.
+    A process with no database runs a stored agent with no pins, which is the only thing it could
+    read. See `AN_AGENT_RUNS_THE_SKILLS_IT_IS_ASSIGNED`.
+    """
+    if agent is None:
+        return None
+    sessions = getattr(state, "db_sessions", None)
+    if sessions is None:
+        return AgentRun(record=agent, pins=(), library=(), registry=registry)
+    # Imported here: `brain.skill_routes` serves routes that import this module.
+    from brain.ops.skill_store import StoredSkills
+    from brain.skill_routes import installs_of, pins_of
+
+    async with sessions() as session:
+        pairs = (await session.execute(installs_of([agent.agent_id]))).all()
+    pins = tuple(pin for one, version in pairs for pin in pins_of(one, version, agent))
+    library = await StoredSkills(sessions).library() if pins else ()
+    return AgentRun(record=agent, pins=pins, library=library, registry=registry)
+
+
+#: Why `/answer` reads the selected agent's skill pins on every question.
+AN_AGENT_RUNS_THE_SKILLS_IT_IS_ASSIGNED: Final = (
+    "Assigning a skill to an agent pins the agent to one version of it, and the pin is only worth "
+    "something if the agent's runs read it. Until 2026-10-06 this route handed every run no pins, "
+    "so a skill assigned on the Skills screen changed nothing any answer did. The pins are read "
+    "on each question, as the roster is, so a skill detached a moment ago is not offered."
+)
+
+
 def model_lane_for(
     state: Any,
-    agent: AgentRecord | None,
-    registry: ToolRegistry,
+    run: AgentRun | None,
     kinds: tuple[KnowledgeKind, ...] = (),
     follow_up: FollowUp | None = None,
 ) -> ModelLane | None:
-    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8),
-    searching only the kinds of knowledge the person narrowed the question to (M7.6.1), and
-    bringing what a continued thread brings (M9.2.3).
+    """The model step, carrying the selected agent's run when a stored one was chosen (M3.9.8,
+    M27.12.1), searching only the kinds of knowledge the person narrowed the question to (M7.6.1),
+    and bringing what a continued thread brings (M9.2.3).
 
-    The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
-    read on this route yet, so it runs with none. See `brain.gate.roster`.
+    The agent's tier, pinned model and skill pins reach the call through `AgentRun`, built by
+    `agent_run_of`. See `brain.gate.roster`.
     """
     lane = model_lane_of(state)
     if lane is None:
@@ -1188,9 +1255,9 @@ def model_lane_for(
         lane = replace(lane, search=narrowed_to(lane.search, kinds))
     if follow_up is not None:
         lane = replace(lane, follow_up=follow_up)
-    if agent is None:
+    if run is None:
         return lane
-    return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
+    return replace(lane, agent=run)
 
 
 async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
@@ -1213,7 +1280,9 @@ async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowU
     if not ask.thread or store is None:
         return None
     thread = await store.thread(asking.principal.id, ask.thread)
-    if thread is None:
+    # A retired conversation is hidden from the application's role already; asked again here
+    # because session memory is read only through a follow-up, and must go with the conversation.
+    if thread is None or thread.retired:
         return None
     earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
     if not earlier:
@@ -1347,6 +1416,48 @@ def with_hints(
         trace_id=trace_id,
     )
     return replace(lane, hints=bound)
+
+
+def sessions_of(state: Any) -> StoredSessions | None:
+    """Where session memory is kept: `app.state.session_memory`, or the process's Valkey client,
+    or None on a process with no cache, which keeps no session memory (M16.1.1)."""
+    found = getattr(state, "session_memory", None)
+    if isinstance(found, StoredSessions):
+        return found
+    client = getattr(state, "valkey", None)
+    # The client `brain.app.lifespan` built from `make_async_client`, held as its owned protocol;
+    # the narrower protocol is all the store is handed. A cast at that boundary proves nothing.
+    return None if client is None else StoredSessions(cast(AsyncValkeyClient, client))
+
+
+def with_session(
+    state: Any, lane: ModelLane | None, *, principal_id: str, thread_id: str | None
+) -> ModelLane | None:
+    """The model step carrying what the asker said for this conversation only (M16.1.1).
+
+    `thread_id` is given only for a conversation the route has found as the asker's own and live,
+    which is a follow-up; see
+    `brain.ops.session_memory_store.A_SESSION_MEMORY_IS_ONE_PERSONS_ONE_CONVERSATION_AND_GOES_WITH_IT`.
+    """
+    sessions = sessions_of(state)
+    if lane is None or sessions is None or not thread_id:
+        return lane
+    bound = SessionRecollection(store=sessions, thread_id=thread_id, principal_id=principal_id)
+    return replace(lane, session=bound)
+
+
+async def session_formed(
+    state: Any, *, principal_id: str, thread_id: str | None, said: str, now: datetime
+) -> None:
+    """Keep what the person said for this conversation, once the exchange has its thread.
+
+    Silent and never failing the answer: tier zero (M16.3.1). Nothing is kept for an exchange
+    kept in no thread, which is a referred question or a process with no database.
+    """
+    sessions = sessions_of(state)
+    if sessions is None or not thread_id:
+        return
+    await sessions.remember(thread_id, principal_id, session_statements(said), now=now)
 
 
 def default_agents(registry: ToolRegistry) -> dict[str, AgentSetup]:
@@ -1605,6 +1716,45 @@ def asked_too_often(request: Request, verdict: StoreVerdict) -> JSONResponse:
     )
 
 
+#: Why a halted question is turned away before anything else is asked.
+A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING: Final = (
+    "A question from a person, or a department, somebody has stopped is refused first, before the "
+    "windows, the cache, the lanes and any model, in the one sentence brain.ops.halt writes, "
+    "which names the scope and never the reason or who stopped it. A store that cannot be read "
+    "refuses too, in its own sentence. It is a 503 with no Retry-After, because nobody can say "
+    "when a person will resume it."
+)
+
+
+@dataclass(frozen=True)
+class Halted:
+    """A question a halt refused, and the one sentence the person is told."""
+
+    told: str
+
+
+@dataclass(frozen=True)
+class BudgetStopped(Halted):
+    """A question a used-up budget refused, told `budget_stop_store.SPENDING_LIMIT_REACHED`.
+
+    A halt's subclass because both are a question turned away before it costs anything, with one
+    sentence and nothing else, and every place that answers a halt answers this the same way. The
+    two stay told apart for whoever reads the type: a halt ends with a person and a budget stop
+    with its period, which `brain.ops.budget_stop` argues in a constant of its own.
+    """
+
+
+def halted_reply(request: Request, halted: Halted) -> JSONResponse:
+    """The 503 a halted question is, with no `Retry-After`.
+
+    See `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    """
+    body = ErrorBody(message=halted.told, trace_id=bound_trace_id(request))
+    return JSONResponse(
+        status_code=503, content=body.model_dump(), headers={"Cache-Control": "no-store"}
+    )
+
+
 @dataclass(frozen=True)
 class Answering:
     """Who a question is answered for: the person, the one reach, the channel and the instant.
@@ -1620,6 +1770,13 @@ class Answering:
     reach: EntitlementSet
     channel: Channel
     now: datetime
+    #: How strongly the asker was known when the request was admitted, or None where the channel
+    #: did not say. A run's reach is admitted again at it before each tool call, or at the weakest
+    #: when it is None. See `EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL`.
+    assurance: Assurance | None = None
+    #: The caller the web route authenticated, so a run resolves them again exactly as the route
+    #: did, service accounts included. None on a chat channel, which carries a person.
+    caller: Caller | None = None
 
     @classmethod
     def of(cls, asked: Asking) -> Answering:
@@ -1629,6 +1786,8 @@ class Answering:
             reach=asked.reach,
             channel=asked.channel,
             now=asked.now,
+            assurance=asked.caller.assurance,
+            caller=asked.caller,
         )
 
 
@@ -1637,21 +1796,248 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
 
     The stored agents come from `brain.app.lifespan`'s `agent_roster`, read on each question so an
     agent disabled a moment ago cannot be selected; a process with no database has only the
-    default. `brain.gate.roster.answer_roster` decides which of them this person may use.
+    default. `brain.gate.roster.answer_roster` decides which of them this person may use on the
+    channel they asked on, so an agent not enabled there is absent from this roster (M13.7.4).
     """
     read: AgentRoster | None = getattr(state, "agent_roster", None)
-    records = await read() if read is not None else ()
+    stored = await read() if read is not None else StoredAgents(records=())
     return answer_roster(
-        records,
+        stored.records,
         viewer_for(asked.principal),
+        channel=asked.channel,
         default=default_agents(registry),
         tool_names=(one.name for one in registry.definitions()),
+        install_hashes=stored.install_hashes,
     )
 
 
+#: Which agent runs get the tool loop rather than the passage step.
+AN_AGENT_WITH_A_TOOL_BEYOND_THE_PASSAGE_SEARCH_RUNS_THE_LOOP: Final = (
+    "A selected agent whose projected catalogue offers a read-only tool other than the passage "
+    "search runs brain.gate.runtime's loop, the one place a model is handed tools. An agent that "
+    "only reads the company's documents keeps the passage step, which reads them before the "
+    "model is asked and hands the model no tools, so nothing about it changes."
+)
+
+#: How the reach a run is judged at again is resolved, for every kind of caller.
+EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL: Final = (
+    "Before each tool call the caller's reach is resolved again exactly as the route resolved it: "
+    "a caller the route authenticated through reach_of, so a service account is its owner's "
+    "grants narrowed by the account and a revoked grant or an owner gone bites at once, then "
+    "admitted for the channel at the same strength; a person answered on a chat channel through "
+    "the resolver and admitted at the strength chat is held to, or the weakest where that is not "
+    "known. Only a caller the run has no way to resolve keeps the reach it was admitted at, and "
+    "no route builds one."
+)
+
+#: The one caller a run cannot resolve again, said where a reader of the rule will look.
+A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH: Final = (
+    "An Answering naming no authenticated caller and a principal that is not a person cannot be "
+    "resolved again by principal id, because that would drop whatever narrowed it. Its run keeps "
+    "the reach it was admitted at. Neither the web route nor any chat channel builds one."
+)
+
+
+class RunToolCaller:
+    """`brain.gate.runtime.ToolCaller` over the application's registry, with one kind of refusal.
+
+    `brain.automation_routes.RegistryToolCaller` validates the arguments into the request model a
+    handler declares and calls it at the reach; its refusal is the automation piece's, and here it
+    becomes the runtime's, so the runtime has one exception to answer with its one sentence.
+    Imported where it is called, because `brain.automation_routes` imports this module.
+    """
+
+    def __init__(self, registry: ToolRegistry) -> None:
+        from brain.automation_routes import RegistryToolCaller
+
+        self.inner = RegistryToolCaller(registry)
+
+    def call(
+        self,
+        *,
+        tool: ToolDefinition,
+        arguments: Mapping[str, Any],
+        entitlement: EntitlementSet,
+        now: datetime | None,
+    ) -> object:
+        from brain.ops.automation_piece import PieceRefusedError
+
+        try:
+            return self.inner.call(tool=tool, arguments=arguments, entitlement=entitlement, now=now)
+        except PieceRefusedError as refused_call:
+            raise ToolRefusedError(str(refused_call)) from refused_call
+
+
+def policy_of(registry: ToolRegistry) -> Callable[[ToolDefinition], FieldPolicy]:
+    """The field policy a tool's results are redacted with: its source's, its entity's, or none.
+
+    None is the empty policy, which withholds every field, and a passage is redacted by the
+    passage policy the model lane uses. Built once per run, before anything is read.
+    """
+    by_source = source_field_policies(registry)
+    by_entity = field_policies(registry)
+
+    def policy(definition: ToolDefinition) -> FieldPolicy:
+        if definition.entity == KNOWLEDGE_ENTITY:
+            return PASSAGE_POLICY
+        found = by_source.get((definition.source, definition.entity))
+        return found or by_entity.get(definition.entity) or FieldPolicy()
+
+    return policy
+
+
+def reach_again(
+    request: Request, asking: Answering
+) -> Callable[[datetime], Awaitable[EntitlementSet]]:
+    """How a run's reach is resolved again before each tool call.
+
+    See `EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL`, and
+    `A_CALLER_NOTHING_CAN_RESOLVE_KEEPS_ITS_ADMITTED_REACH` for the one that is not. An
+    authenticated caller refused by `reach_of` now (an account whose owner has gone) reaches
+    nothing for the rest of the run.
+    """
+    wiring = wiring_of(request)
+
+    async def again(now: datetime) -> EntitlementSet:
+        if wiring is None:
+            return asking.reach
+        if asking.caller is not None:
+            try:
+                held = await reach_of(asking.caller, wiring, now)
+            except TokenRefusedError:
+                return EntitlementSet(principal_id=asking.reach.principal_id, grants=())
+            return admit(held, asking.channel, asking.caller.assurance)
+        if asking.principal.kind is not PrincipalKind.HUMAN:
+            return asking.reach
+        own = await resolve(
+            asking.principal.id,
+            versions=wiring.versions,
+            store=wiring.store,
+            cache=wiring.cache,
+            now=now,
+        )
+        assurance = asking.assurance or Assurance.UNVERIFIED
+        return admit(own.entitlements, asking.channel, assurance)
+
+    return again
+
+
+#: Why an agent's leash and a place to hold writes are read only for an agent that may ask for one.
+AN_AGENT_THAT_MAY_ASK_FOR_A_WRITE_IS_GIVEN_ITS_LEASH_AND_A_PLACE_TO_HOLD_IT: Final = (
+    "An agent whose ceiling names a write a connector prepares for a model is run with its own "
+    "stored leash and with the means to hold the writes it asks for, which `brain.gate.runtime` "
+    "decides by that leash and stores for a person. Every other agent is run as it was: with no "
+    "leash, because the only tools it is offered read, and with nothing that could hold a write."
+)
+
+
+async def side_effects_for(
+    request: Request, *, agent: AgentRecord, registry: ToolRegistry
+) -> tuple[Leash, SideEffects | None]:
+    """The leash a run is held to and what holds its writes, or an empty leash and nothing.
+
+    See `AN_AGENT_THAT_MAY_ASK_FOR_A_WRITE_IS_GIVEN_ITS_LEASH_AND_A_PLACE_TO_HOLD_IT`. Nothing is
+    read for an agent that names no such write, and a process with no database or no suspension
+    store has nowhere to hold one, so it offers none.
+    """
+    from brain.connectors.declaration import proposers
+    from brain.gate.suspension_store import StoredSuspensions
+    from brain.ops.connector_catalogue import declarations
+    from brain.ops.connector_store import StoredConnections
+    from brain.ops.runtime_effects import ConnectorSideEffects
+
+    sessions = getattr(request.app.state, "db_sessions", None)
+    store = getattr(request.app.state, "suspensions", None)
+    named = agent.authority.allowed_tools & set(proposers(declarations()))
+    if not named or sessions is None or not isinstance(store, StoredSuspensions):
+        return Leash(), None
+    # Imported here: `brain.agent_routes` serves routes that import this module.
+    from brain.agent_routes import install_for, install_of, leash_of
+
+    async with sessions() as session:
+        pair = (await session.execute(install_for(agent.agent_id))).one_or_none()
+    install = None if pair is None else install_of(pair[0], pair[1], agent)
+    return leash_of(install, registry), ConnectorSideEffects(
+        suspensions=store, connections=StoredConnections(sessions).connected
+    )
+
+
+def agent_runtime_for(
+    request: Request,
+    *,
+    agent: AgentRecord,
+    asking: Answering,
+    registry: ToolRegistry,
+    assessment: RiskAssessment,
+    leash: Leash | None = None,
+    side_effects: SideEffects | None = None,
+) -> AgentRuntime | None:
+    """The tool loop for this agent and this asker, or None when the passage step serves it.
+
+    See `AN_AGENT_WITH_A_TOOL_BEYOND_THE_PASSAGE_SEARCH_RUNS_THE_LOOP`. The leash is empty unless
+    the agent may ask for a write and was handed its own with `side_effects`: a tool that reads
+    keeps whatever rung it is given, and a write is decided by the leash and held for a person
+    (`side_effects_for`).
+    """
+    from brain.ops.agent_run_store import StoredAgentRuns
+
+    sessions = getattr(request.app.state, "db_sessions", None)
+
+    async def halted() -> str:
+        # The agent axis joins `Work` with the halt store's agent slice; until then a run is
+        # stopped by a halt on everything, its person or their department.
+        return await refusal_for(
+            sessions,
+            Work(
+                person=asking.principal.id,
+                department=asking.principal.primary_department or "",
+            ),
+        )
+
+    held = leash if leash is not None else Leash()
+    runtime = AgentRuntime(
+        record=agent,
+        asker=asking.reach,
+        registry=registry,
+        leash=held,
+        tools=RunToolCaller(registry),
+        policy_for=policy_of(registry),
+        reach_now=reach_again(request, asking),
+        halted=halted,
+        assessment=assessment,
+        runs=None if sessions is None else StoredAgentRuns(sessions),
+        side_effects=side_effects,
+    )
+    try:
+        invocation = invoke(
+            principal_id=asking.principal.id,
+            agent_id=agent.agent_id,
+            registry=registry,
+            entitlement=run_entitlement(asking.reach, agent),
+            ceiling=tool_ceiling(agent),
+            leash=held,
+            assessment=assessment,
+            now=asking.now,
+        )
+    except InvocationRefusedError:
+        return None
+    beyond = [one for one in runtime.offered(invocation) if one.name != SEARCH_DOCUMENTS]
+    return runtime if beyond else None
+
+
+#: Called when a run fails, so the asker's thread can say so. The caller knows the thread; this
+#: function knows whether the question may be written down at all.
+FailureKeeper = Callable[[], Awaitable[None]]
+
+
 async def answered_for(
-    request: Request, recorder: Recorder, asking: Answering, ask: Question
-) -> Answered | StoreVerdict:
+    request: Request,
+    recorder: Recorder,
+    asking: Answering,
+    ask: Question,
+    *,
+    failed: FailureKeeper | None = None,
+) -> Answered | StoreVerdict | Halted:
     """One question answered for one person at one reach, or the window that refused it.
 
     The body of `answer`, taken out so a chat channel answers a bound person by the same code
@@ -1659,13 +2045,52 @@ async def answered_for(
     `request` is the one being served, for the process's state and its trace; the web route
     passes its own, and a chat channel passes the vendor's event request. A refusal by a
     window is returned rather than rendered, because a stream and a chat say it differently.
+
+    `recorder.agent_id` names the stored agent the front half routed to, for whoever keeps the
+    thread. A run that fails after the question was admitted calls `failed` before the error goes
+    on, unless the question was referred, which is written down nowhere (M24.2.2); see
+    `brain.chat.remember.remember_failure`.
     """
+    # Before the registry, its row tools and the live reads are looked at, for every question
+    # alike (M11.7.8). See `brain.reviewed_connectors`.
+    await reviewed_now(request.app.state)
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):
         # A process-level fault, identical for every caller and every question, so it
         # discloses nothing about what exists. `brain.app.lifespan` builds one before it
         # yields.
         raise Failed("no tool registry on this process")
+
+    # Stopped, by a halt on everything, this person or their department, or a halt store that
+    # cannot be read. First of all, before any table is read for the lanes, so a database that
+    # cannot be read refuses in the halt's own words rather than failing in a lane. See
+    # `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
+    told = await refusal_for(
+        getattr(request.app.state, "db_sessions", None),
+        Work(
+            person=asking.principal.id,
+            department=asking.principal.primary_department or "",
+        ),
+    )
+    if told:
+        return Halted(told)
+
+    # Stopped by a budget that is used up, while `budget_enforcement` is on; recorded as one the
+    # install would have stopped while it is off. After the halt and before any lane, so a stopped
+    # question costs nothing, and a budget store that cannot be read answers the question. See
+    # `brain.ops.budget_stop_store.BUDGET_ENFORCEMENT_FAILS_SAFE_FOR_THE_ASKER`.
+    spent = await budget_refusal_for(
+        getattr(request.app.state, "db_sessions", None),
+        Asker(
+            principal_id=asking.principal.id,
+            department=asking.principal.primary_department or "",
+            agent_id=ask.agent,
+        ),
+        at=asking.now,
+        trace_id=bound_trace_id(request),
+    )
+    if spent:
+        return BudgetStopped(spent)
 
     # Uploaded classified tables (Classification screen) join the fast lane beside the
     # built-in rules, each column answered only to who may read it.
@@ -1676,6 +2101,10 @@ async def answered_for(
     base = await base_lane_of(request.app.state)
     rules = (
         *getattr(request.app.state, "fast_path_rules", ()),
+        # The rule table as it stands now, for this asker's department and the whole install's
+        # (M6.5.1): a rule written a moment ago answers this question. See
+        # `brain.gate.rule_store.A_RULE_ANSWERS_FROM_THE_NEXT_QUESTION`.
+        *await rules_for_asker(request.app.state, asking.principal.primary_department),
         *tables.rules,
         *sourced,
         *base.rules,
@@ -1769,6 +2198,7 @@ async def answered_for(
         # A stored agent answers at the caller's reach narrowed by its ceiling, and the default
         # at the caller's own. Everything read below is read at that reach and no other.
         agent = roster.records.get(front.selection.agent_id)
+        recorder.agent_id = None if agent is None else agent.agent_id
         reach = run_entitlement(asking.reach, agent)
         sources = covered_at(
             registry, reach, asking.now, tables=[entity for _, entity in tables.readers]
@@ -1777,7 +2207,12 @@ async def answered_for(
         # called before ROUTE and PROJECT: a fast-lane question answers or abstains. The model
         # is shown what the asker said about themselves and may still recall (M16.6.3).
         model = (
-            model_lane_for(request.app.state, agent, registry, ask.kinds, follow_up)
+            model_lane_for(
+                request.app.state,
+                await agent_run_of(request.app.state, agent, registry),
+                ask.kinds,
+                follow_up,
+            )
             if front.calls_a_model
             else None
         )
@@ -1790,6 +2225,29 @@ async def answered_for(
                 now=asking.now,
                 trace_id=recorder.trace_id,
             )
+            # And what they said for this conversation only, from a conversation found as theirs
+            # and live, which is the one a follow-up continues (M16.1.1).
+            model = with_session(
+                request.app.state,
+                model,
+                principal_id=asking.principal.id,
+                thread_id=ask.thread if follow_up is not None else None,
+            )
+        # The selected agent's tool loop, when its catalogue offers a tool the passage step does
+        # not already read (M13.7.1). See `agent_runtime_for`.
+        if model is not None and agent is not None:
+            held_leash, effects = await side_effects_for(request, agent=agent, registry=registry)
+            runtime = agent_runtime_for(
+                request,
+                agent=agent,
+                asking=asking,
+                registry=registry,
+                assessment=front.screened,
+                leash=held_leash,
+                side_effects=effects,
+            )
+            if runtime is not None:
+                model = replace(model, runtime=runtime)
         answered = await answer_lane(
             address.question,
             origin=origin,
@@ -1816,6 +2274,9 @@ async def answered_for(
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
             source_policies={**source_field_policies(registry), **base.source_policies},
+            # Which client each record a name matched is, so records the asker reads that are
+            # more than one client are named as ambiguous rather than guessed at (M14.6.5).
+            ambiguity=ambiguity_of(request.app.state),
         )
         # An abstention under a skill that declares a queue is handed to the person named for it,
         # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
@@ -1857,13 +2318,21 @@ async def answered_for(
                 department=asking.principal.primary_department,
             ),
         )
-    except BrainError:
-        # Already in the taxonomy, already has a public message, already maps to a status.
+    except RunHaltedError as stopped:
+        # A run somebody stopped, in the halt's own words, as a halted question is told.
+        return Halted(stopped.told)
+    except BrainError as exc:
+        # Already in the taxonomy, already has a public message, already maps to a status. A run
+        # that could not answer is kept in the asker's thread as failed first.
+        if failed is not None and referral is None and isinstance(exc, Degraded | Failed):
+            await failed()
         raise
     except Exception as exc:
         # Broad for the reason the records route gives about its own: whatever a driver raises
         # would otherwise reach the response as FastAPI's default body, which is not
         # `ErrorBody`, or as a message with a connection string in it.
+        if failed is not None and referral is None:
+            await failed()
         raise Failed(f"answering: {type(exc).__name__}") from exc
 
     # The reason, never the question and never the answer. An abstention reason is the audit
@@ -1948,15 +2417,51 @@ async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> Marked
     return MarkedView(counted=True, told=MARK_COUNTED)
 
 
+# ------------------------------------------------------- the retrieval log (M15.3.4)
+def retrievals_of(state: Any) -> StoredRetrievals | None:
+    """The retrieval log over this process's database, or None on a process with none."""
+    found = getattr(state, "retrievals", None)
+    if isinstance(found, StoredRetrievals):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredRetrievals(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+async def logged_retrieval(
+    state: Any, searched: Sequence[Searched], answered: Answered
+) -> str | None:
+    """Keep the retrieval an answer on Ask was drawn from, and say which (M15.3.4).
+
+    The record is `brain.knowledge.retrieval_log.event_for` over the passages the person was
+    shown, which is the composed answer's payload and nothing for an abstention; None when no
+    passage search ran or there is nowhere to keep it. A retrieval that cannot be kept costs the
+    answer nothing: the learning signal is evidence, and an answer is never failed for it.
+    """
+    shown = () if answered.composed is None else answered.composed.payload.records
+    event = event_for(searched, (str(_first_id(record)) for record in shown))
+    store = retrievals_of(state)
+    if event is None or store is None:
+        return None
+    try:
+        return await store.record(event)
+    except Exception:
+        log.warning("retrieval.not_logged", exc_info=True)
+        return None
+
+
+def _first_id(record: Mapping[str, Any]) -> object:
+    return next((record[key] for key in ID_KEYS if key in record), "")
+
+
 async def remembered(
-    request: Request, asking: Answering, ask: Question, answered: Answered
+    request: Request, asking: Answering, ask: Question, answered: Answered, recorder: Recorder
 ) -> str | None:
     """Keep this exchange in the asker's thread, and say which thread (M9.1.1).
 
     `brain.chat.remember.remember` over this process's store, with the policies the answer was
-    redacted under, which are what a stored answer's references are re-checked against. A
-    failure to keep it is logged and the answer still goes out: the person asked a question, and
-    losing its transcript is not a reason to withhold the answer.
+    redacted under, which are what a stored answer's references are re-checked against, and the
+    run the recorder names. A failure to keep it is logged and the answer still goes out: the
+    person asked a question, and losing its transcript is not a reason to withhold the answer.
     """
     from brain.chat.remember import remember, threads_of
 
@@ -1975,11 +2480,42 @@ async def remembered(
             question=ask.question,
             answered=answered,
             policies=policies,
+            agent_id=recorder.agent_id or "",
+            trace_id=recorder.trace_id,
             now=asking.now,
         )
     except Exception as exc:
         log.warning("thread.not_kept", error=type(exc).__name__)
         return None
+
+
+def failure_kept(
+    request: Request, asking: Answering, ask: Question, recorder: Recorder
+) -> FailureKeeper:
+    """What `answered_for` calls when the web route's run fails: the question, marked failed.
+
+    Into the thread the question named, as an answer would have been. A failure to keep it is
+    logged and the error still goes out, for `remembered`'s reason.
+    """
+
+    async def keep() -> None:
+        from brain.chat.remember import remember_failure, threads_of
+
+        try:
+            await remember_failure(
+                threads_of(request.app.state),
+                principal_id=asking.principal.id,
+                thread_id=ask.thread,
+                channel=asking.channel,
+                question=ask.question,
+                agent_id=recorder.agent_id or "",
+                trace_id=recorder.trace_id,
+                now=asking.now,
+            )
+        except Exception as exc:
+            log.warning("thread.failure_not_kept", error=type(exc).__name__)
+
+    return keep
 
 
 @router.post("/answer", responses=LIMITED_RESPONSES)
@@ -2007,17 +2543,48 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     Asking past a window is a 429 before the lane runs, and a refused question is never counted:
     `A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED`.
     """
-    outcome = await answered_for(request, recorder, Answering.of(asked), ask)
+    asking = Answering.of(asked)
+    with collected() as searched:
+        outcome = await answered_for(
+            request, recorder, asking, ask, failed=failure_kept(request, asking, ask, recorder)
+        )
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
-    thread = await remembered(request, Answering.of(asked), ask, outcome)
+    if isinstance(outcome, Halted):
+        return halted_reply(request, outcome)
+    thread = await remembered(request, asking, ask, outcome, recorder)
+    retrieval = await logged_retrieval(request.app.state, searched, outcome)
+    # What the person said for this conversation only, kept once the exchange has its thread.
+    await session_formed(
+        request.app.state,
+        principal_id=asking.principal.id,
+        thread_id=thread,
+        said=ask.question,
+        now=asking.now,
+    )
+    # Whether a learned rule held for review would have answered this, counted once the response
+    # has gone and never at its cost (M39.4.2.3). See `brain.memory.promotion.
+    # A_SHADOW_OCCURRENCE_NEVER_SLOWS_OR_FAILS_AN_ANSWER`.
+    counting = BackgroundTask(
+        counted_after_answering,
+        request.app.state,
+        ask.question,
+        principal_id=asked.caller.principal.id,
+        department=asked.caller.principal.primary_department,
+        thread_id=thread,
+        now=asked.now,
+    )
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
+        background=counting,
         headers={
             # The thread the exchange was kept in, which the page continues by (M9.1.1). Empty
             # when nothing was kept: a referred question, or a process with no database.
             THREAD_HEADER: thread or "",
+            # The retrieval this answer was drawn from, for the learning signal (M15.3.4). Empty
+            # when no passage search ran, or on a process with no database.
+            RETRIEVAL_HEADER: retrieval or "",
             # A permission requirement rather than a performance note. See the constant above.
             "Cache-Control": "no-store",
             # nginx buffers a proxied response by default, which turns a stream into one

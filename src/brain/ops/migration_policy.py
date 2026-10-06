@@ -27,6 +27,13 @@ brain_fastlane` because a fast answer needed a document. The check lives here be
 is the one function every migration is already put through, so the rule applies to files
 nobody has written yet. See `THE_FAST_LANE_REACHES_PROJECTED_TABLES_AND_NOTHING_ELSE`.
 
+**Since `0162` the list names one table outside `proj`, by name.** An uploaded price list's rows
+are in `know.classified_row`, and the fast lane answers from them, so the role reads that table
+and the usage on `know` its name needs. Each is one exact statement rather than a pattern over
+`know`, so `GRANT SELECT ON know.chunk TO brain_fastlane` is still the finding it always was, and
+the next table the fast lane answers from is a line added here with its reason, which is the
+review this rule is for. See `ONE_TABLE_OUTSIDE_PROJ_IS_NAMED_AND_NO_SCHEMA_IS`.
+
 **And one rule about the install from empty rather than about the upgrade.** M41.2.1 asks
 that migrations build every schema, table, index, constraint, trigger and row-level security
 policy from an empty database. Most of that can only be checked against a database that has
@@ -87,6 +94,15 @@ THE_FAST_LANE_REACHES_PROJECTED_TABLES_AND_NOTHING_ELSE = (
     "list of shapes, and anything not on it is a finding rather than a judgement call."
 )
 
+#: Why the fast lane's one table outside `proj` is named rather than matched.
+ONE_TABLE_OUTSIDE_PROJ_IS_NAMED_AND_NO_SCHEMA_IS = (
+    "An uploaded table's rows are what most fast answers are read from, and they live in "
+    "know.classified_row, beside every document chunk the company holds. A shape admitting any "
+    "table in know would admit the chunks the day somebody wrote the grant, so the allowed list "
+    "names the table, the usage on its schema and the policy on it, one statement each, and "
+    "nothing else in know."
+)
+
 #: Why a table's row-level security has to be enabled in the migration that creates it.
 A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION = (
     "`brain.ops.sweeps rls` asks a live database whether row-level security is on, which is "
@@ -145,6 +161,15 @@ _FAST_LANE_ALLOWED: tuple[re.Pattern[str], ...] = (
         r"CREATE\s+POLICY\s+\w+\s+ON\s+proj\.\w+\s+FOR\s+SELECT\s+TO\s+brain_fastlane\b.*",
         re.IGNORECASE,
     ),
+    # An uploaded table's rows (`0162`), named one by one. See
+    # `ONE_TABLE_OUTSIDE_PROJ_IS_NAMED_AND_NO_SCHEMA_IS`.
+    re.compile(r"GRANT\s+USAGE\s+ON\s+SCHEMA\s+know\s+TO\s+brain_fastlane$", re.IGNORECASE),
+    re.compile(r"GRANT\s+SELECT\s+ON\s+know\.classified_row\s+TO\s+brain_fastlane$", re.IGNORECASE),
+    re.compile(
+        r"CREATE\s+POLICY\s+\w+\s+ON\s+know\.classified_row\s+FOR\s+SELECT\s+TO\s+"
+        r"brain_fastlane\b.*",
+        re.IGNORECASE,
+    ),
 )
 
 
@@ -156,6 +181,25 @@ class Finding:
 
     def __str__(self) -> str:
         return f"{self.file}: {self.rule}, {self.detail}"
+
+
+#: A function a migration defines, from its CREATE to the end of its dollar-quoted body.
+_FUNCTION_DEFINITION = re.compile(
+    r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b.*?(\$\w*\$).*?\1", re.IGNORECASE | re.DOTALL
+)
+
+
+def _without_function_bodies(text: str) -> str:
+    """`text` with the body of every function it defines removed, so a trigger is not a data change.
+
+    Measured on 2026-10-06: `0209` defines a trigger function that appends a row to a second
+    ledger whenever an elevation is approved, and the data rule read that `INSERT INTO` as a
+    change to data the migration makes. It makes none: defining a function writes no row, and the
+    downgrade reverses it with `DROP FUNCTION`, which is exactly the property the rule protects.
+    **Only a definition is removed.** A `DO` block runs when the migration does, so an `INSERT`
+    inside one is still a data change and is still read.
+    """
+    return _FUNCTION_DEFINITION.sub("", text)
 
 
 def _without_prose(text: str) -> str:
@@ -578,7 +622,7 @@ def check_file(path: Path) -> list[Finding]:
     has_schema = bool(
         ADD_COLUMN.search(text) or DROP_COLUMN.search(text) or "op.create_table" in text
     )
-    if has_schema and DML.search(_without_prose(text)):
+    if has_schema and DML.search(_without_function_bodies(_without_prose(text))):
         findings.append(
             Finding(
                 name,

@@ -5,7 +5,7 @@ The routes' tests drive these through HTTP; these hold the rules themselves, eac
 passes beside the case that is refused, so a rule that refuses everything cannot stand in for one
 that decides.
 
-Task ids: M27.11.6
+Task ids: M27.11.6, M20.4.1, M20.4.4
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from brain.builder.agent_drafts import (
     Act,
     AgentDraft,
     approval_refusal,
+    at_rung,
     blank_seed,
     carrier,
     ceiling_of,
@@ -30,9 +31,12 @@ from brain.builder.agent_drafts import (
     manifest_of,
     next_version,
     plain,
+    publish_decision,
     raised_rungs,
+    rung_of,
     second_people_needed,
     state_of,
+    system_check,
     where,
     widenings,
 )
@@ -40,7 +44,11 @@ from brain.builder.compose import BuilderError
 from brain.builder.draft_words import DraftAct, DraftChange, DraftKind, DraftState
 from brain.builder.drafts import FIRST_VERSION, ManifestDraft, Problem, Revision, body_text
 from brain.builder.form import FIELD_WORDS, form_document
-from brain.builder.publish import APPROVERS_FOR_A_WIDENING, APPROVERS_FOR_AN_ORDINARY_PUBLISH
+from brain.builder.publish import (
+    APPROVERS_FOR_A_WIDENING,
+    APPROVERS_FOR_AN_ORDINARY_PUBLISH,
+    CheckOrigin,
+)
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect
 from brain.core.scope import Scope
@@ -289,3 +297,118 @@ def test_versions_of_an_agents_own_template_count_on_from_the_newest() -> None:
     """Delete this and an edit could publish over a version that exists."""
     assert next_version(()) == FIRST_VERSION
     assert next_version((1, 3, 2)) == 4
+
+
+# ----------------------------------------------------------------------- the publish gate
+def test_a_system_check_that_failed_stops_the_publish_and_one_that_passed_does_not() -> None:
+    """**M20.4.1.** The decision's refusals are the failed checks' names and a passing check is
+    named by what it verified and refuses nothing.
+
+    Delete this and a failing check could be dropped between the route and the gate, or every
+    check could refuse."""
+    mine = a_record("read:invoice.reference")
+    failing = system_check("fine", "the agent moved", failed=True)
+    passing = system_check("fine", "the agent moved", failed=False)
+    assert (
+        failing.origin is CheckOrigin.SYSTEM
+        and failing.blocks
+        and failing.name == "the agent moved"
+    )
+    assert not passing.blocks and passing.name == "fine"
+    stopped = publish_decision(
+        agent_id="invoice_desk",
+        before=None,
+        after=mine,
+        current_rung=AutonomyTier.SHADOW,
+        checks=(passing, failing),
+        now=AT,
+    )
+    assert stopped.refusals == ("the agent moved",) and not stopped.may_publish
+    clear = publish_decision(
+        agent_id="invoice_desk",
+        before=None,
+        after=mine,
+        current_rung=AutonomyTier.SHADOW,
+        checks=(passing,),
+        now=AT,
+    )
+    assert clear.refusals == () and clear.may_publish
+
+
+def test_the_decided_rung_is_shadow_for_any_widening_and_the_current_one_otherwise() -> None:
+    """**M20.4.4.** A new agent, a capability added and a tool added alone each demote and ask for
+    a second person; an edit that reaches no further keeps the rung the agent was on. The tool case
+    is the one the ceilings cannot show.
+
+    Delete this and the rung a publish lands on is whatever the route happened to compute."""
+    before = a_record("read:invoice.reference", tools=frozenset({"ledger.read_invoice"}))
+    cases = {
+        "new": (None, before),
+        "capability": (
+            before,
+            a_record(
+                "read:invoice.reference", "read:invoice.total", tools=before.authority.allowed_tools
+            ),
+        ),
+        "tool": (
+            before,
+            a_record(
+                "read:invoice.reference",
+                tools=frozenset({"ledger.read_invoice", "ledger.read_all"}),
+            ),
+        ),
+    }
+    for label, (was, now_) in cases.items():
+        widened = publish_decision(
+            agent_id="invoice_desk",
+            before=was,
+            after=now_,
+            current_rung=AutonomyTier.ASSISTED,
+            checks=(),
+            now=AT,
+        )
+        assert widened.rung is AutonomyTier.SHADOW, label
+        assert widened.approvers == APPROVERS_FOR_A_WIDENING, label
+    same = publish_decision(
+        agent_id="invoice_desk",
+        before=before,
+        after=before,
+        current_rung=AutonomyTier.ASSISTED,
+        checks=(),
+        now=AT,
+    )
+    assert same.rung is AutonomyTier.ASSISTED
+    assert same.approvers == APPROVERS_FOR_AN_ORDINARY_PUBLISH
+
+
+def test_an_agent_goes_on_at_the_rung_of_the_version_it_is_installed_from() -> None:
+    """**M20.4.4.** A new agent has no version and goes on at Shadow; an installed one goes on at
+    what its version's leash says.
+
+    Delete this and an edit that widens nothing is compared with the wrong rung, so keeping it is
+    meaningless."""
+    assert rung_of(None) is AutonomyTier.SHADOW
+    assert (
+        rung_of(carrier(manifest(AutonomyTier.ASSISTED), signed_by="u_author", at=AT))
+        is AutonomyTier.ASSISTED
+    )
+    assert (
+        rung_of(carrier(manifest(AutonomyTier.SHADOW), signed_by="u_author", at=AT))
+        is AutonomyTier.SHADOW
+    )
+
+
+def test_a_manifest_is_lowered_to_the_decided_rung_and_never_raised() -> None:
+    """**M20.4.4.** No leash entry survives above the rung the gate decided, one at or below it is
+    untouched, and a manifest already within the rung comes back as the same object.
+
+    Delete this and a publish that the gate demoted could still be signed with the higher rung."""
+    raised = manifest(AutonomyTier.ASSISTED)
+    lowered = at_rung(raised, AutonomyTier.SHADOW)
+    assert {one.rung for one in lowered.guardrails.leash} == {AutonomyTier.SHADOW}
+    assert {one.target for one in lowered.guardrails.leash} == {
+        one.target for one in raised.guardrails.leash
+    }
+    assert at_rung(raised, AutonomyTier.ASSISTED) is raised
+    low = manifest(AutonomyTier.SHADOW)
+    assert at_rung(low, AutonomyTier.ASSISTED) is low

@@ -135,7 +135,7 @@ who decided it, who retired it and who assigned it are sent as display names bes
 page used to print, read from the directory for exactly those people.
 
 Task ids: M42.6.4, M27.8.6, M12.2.2, M12.2.3, M12.2.5, M12.2.6, M12.3.2, M12.4.6, M12.4.13
-Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1, M12.2.10
+Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1, M12.2.10, M12.3.1, M12.3.4
 """
 
 from __future__ import annotations
@@ -204,9 +204,11 @@ from brain.console.skill_library import (
     decided,
     detachment,
     edited,
+    exported,
     github_source,
     may_add,
     may_assign,
+    may_export,
     may_read_library,
     may_review,
     procedure_findings,
@@ -219,6 +221,7 @@ from brain.console.skill_library import (
     read_url,
     retired_digests,
     retiring,
+    runnable_here,
     trusted_reach,
     url_source_problem,
 )
@@ -239,6 +242,17 @@ from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.fetch import Fetcher, Resolver, fetch_skill_source, fetch_skill_url
 from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, SkillDiff, content_diff
+from brain.tools.skill_examples import (
+    A_REACH_REHEARSAL_JUDGES_WHAT_IS_REACHABLE_AND_NOT_THE_ANSWER,
+    A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_ONCE_A_REHEARSAL_OF_ITS_DIGEST_CLEARS_THEM,
+    EXAMPLES_HEADING,
+    Rehearsal,
+    RehearsalKind,
+    SkillExample,
+    examples_of,
+    rehearsal_clears,
+    rehearse_reach,
+)
 from brain.tools.skills import DIGEST_RE, SkillError, SkillPin, markdown_of
 from brain.tools.sop_files import MAX_PROCEDURE_BYTES
 from brain.tools.sop_import import Finding
@@ -435,6 +449,45 @@ def finding_view(found: Finding) -> ProcedureFindingView:
     )
 
 
+class ExampleView(BaseModel):
+    """One example task a version carries, and the tools a run of it is expected to use."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    task: str
+    expects: tuple[str, ...]
+
+
+class RehearsalOutcomeView(BaseModel):
+    """One example's outcome in a rehearsal: passed, or the expected tools it could not reach."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    task: str
+    passed: bool
+    missing: tuple[str, ...]
+
+
+class SkillRehearsalView(BaseModel):
+    """One rehearsal of a version: what ran, through which agent, by whom, and every outcome.
+
+    `limit` is what the kind of rehearsal could and could not judge, in words, so a result is never
+    read as more than it is. See
+    `brain.tools.skill_examples.A_REACH_REHEARSAL_JUDGES_WHAT_IS_REACHABLE_AND_NOT_THE_ANSWER`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    digest: str
+    kind: str
+    agent_id: str
+    rehearsed_by: str
+    at: datetime | None
+    passed: bool
+    outcomes: tuple[RehearsalOutcomeView, ...]
+    limit: str
+
+
 class LibrarySkillView(BaseModel):
     """One skill in the library: SCREEN 6's library row and its review pane in one shape.
 
@@ -487,6 +540,16 @@ class LibrarySkillView(BaseModel):
     retired_by: str | None = None
     #: This reader may retire or reinstate it. Decides whether a button is drawn and nothing more.
     retirable: bool = False
+    #: This reader may export it: an approved version, unchanged since, for a reader who may add
+    #: skills (M12.3.1). Decides whether a button is drawn and nothing more.
+    exportable: bool = False
+    #: The example tasks this version carries (M12.3.4). Words of the skill, so only where the body
+    #: goes; empty otherwise and for a version carrying none.
+    examples: tuple[ExampleView, ...] = ()
+    #: The newest rehearsal of this exact version, for a reader the body is disclosed to.
+    rehearsal: SkillRehearsalView | None = None
+    #: This reader may rehearse it: a reviewer, on a waiting version that carries examples.
+    rehearsable: bool = False
     #: The display names of whoever added it and whoever decided it, when the directory holds one.
     submitted_by_name: str | None = None
     reviewer_name: str | None = None
@@ -519,6 +582,9 @@ class SkillsPage(Page[SkillRow]):
     library_truncated: bool = False
     #: The agents this reader may assign an approved skill to.
     agents: tuple[AgentChoiceView, ...] = ()
+    #: The agents a reviewer may rehearse a waiting version through: every agent they can see
+    #: (M12.3.4). Empty for a reader who may not review.
+    rehearsal_agents: tuple[AgentChoiceView, ...] = ()
     may_add: bool = False
     #: No tool registry was built on this process, so no tool a skill names can be resolved and
     #: every tool is listed as unregistered.
@@ -713,6 +779,14 @@ class SkillLibrary(Protocol):
         self, digest: str, *, retired: bool, by: str, ent_hash: str, trace_id: str
     ) -> None: ...
 
+    async def script_bytes(self, digest: str) -> dict[str, bytes]: ...
+
+    async def export(self, digest: str, *, by: str, ent_hash: str, trace_id: str) -> None: ...
+
+    async def rehearse(self, made: Rehearsal, *, ent_hash: str, trace_id: str) -> None: ...
+
+    async def rehearsals(self, digests: Sequence[str]) -> Mapping[str, tuple[Rehearsal, ...]]: ...
+
     async def detach(
         self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str
     ) -> bool: ...
@@ -781,6 +855,16 @@ def library_of(request: Request) -> SkillLibrary:
     if isinstance(found, SkillLibrary):
         return found
     return StoredSkills(_require_sessions(request))
+
+
+def sandbox_of(request: Request) -> bool:
+    """Whether this install runs a script sandbox: the address the lifespan resolved, or none.
+
+    `app.state.sandbox_address` is `brain.ops.sandbox.sandbox_address` over the installation's
+    settings, set once at start; absent, the install runs none, and a skill with scripts is
+    refused with `brain.console.skill_library.THIS_INSTALL_RUNS_NO_SANDBOX`.
+    """
+    return bool(getattr(request.app.state, "sandbox_address", None))
 
 
 def fetcher_of(request: Request) -> Fetcher:
@@ -1001,6 +1085,35 @@ def _markdown(one: LibrarySkill) -> str | None:
         return None
 
 
+def _examples(one: LibrarySkill) -> tuple[SkillExample, ...]:
+    """The examples a stored version carries, or none for one whose examples no longer read.
+
+    Every way in refuses malformed examples, so a stored version's always read; a row that does
+    not is shown carrying none rather than failing the whole page.
+    """
+    try:
+        return examples_of(one.imported.skill)
+    except SkillError:
+        return ()
+
+
+def rehearsal_view(made: Rehearsal, *, people: Mapping[str, str]) -> SkillRehearsalView:
+    """One rehearsal for the page, naming who rehearsed it when the directory holds a name."""
+    return SkillRehearsalView(
+        digest=made.digest,
+        kind=made.kind.value,
+        agent_id=made.agent_id,
+        rehearsed_by=people.get(made.rehearsed_by, made.rehearsed_by),
+        at=made.at,
+        passed=made.passed,
+        outcomes=tuple(
+            RehearsalOutcomeView(task=one.task, passed=one.passed, missing=one.missing)
+            for one in made.outcomes
+        ),
+        limit=A_REACH_REHEARSAL_JUDGES_WHAT_IS_REACHABLE_AND_NOT_THE_ANSWER,
+    )
+
+
 def library_view(
     one: LibrarySkill,
     reach: SkillReach,
@@ -1013,6 +1126,7 @@ def library_view(
     against: LibrarySkill | None = None,
     retirement: Retirement | None = None,
     people: Mapping[str, str] | None = None,
+    rehearsals: Sequence[Rehearsal] = (),
 ) -> LibrarySkillView:
     """One library row, with the reach the registry gives it and what this reader is offered.
 
@@ -1023,6 +1137,7 @@ def library_view(
     imported = one.imported
     state = review_state(imported)
     retired = retirement is not None and retirement.retired
+    examples = _examples(one)
     named = people or {}
     return LibrarySkillView(
         digest=one.digest,
@@ -1060,6 +1175,16 @@ def library_view(
         retired_at=retirement.at if retired and retirement is not None else None,
         retired_by=named.get(retirement.set_by) if retired and retirement is not None else None,
         retirable=edits,
+        exportable=edits and state is Review.APPROVED,
+        examples=(
+            tuple(ExampleView(task=one.task, expects=one.expects) for one in examples)
+            if discloses_body
+            else ()
+        ),
+        rehearsal=(
+            rehearsal_view(rehearsals[-1], people=named) if discloses_body and rehearsals else None
+        ),
+        rehearsable=reviews and bool(examples) and state is Review.PENDING and not one.moved,
         submitted_by_name=named.get(one.submitted_by),
         reviewer_name=named.get(imported.reviewer) if imported.reviewer else None,
         findings=(
@@ -1214,6 +1339,7 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
     readable = may_read_library(asked.reach, asked.now)
     library = await store.library(MAX_LIBRARY) if readable else ()
     retirements = await store.retirements([one.digest for one in library])
+    rehearsed = await store.rehearsals([one.digest for one in library])
     held_names = sorted({one.name for one in library})
     history = await store.assignment_history(held_names)
     estate = await _estate(request, asked, _people_in(library, retirements, history))
@@ -1255,11 +1381,20 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
                 against=compared_with(one, library),
                 retirement=retirements.get(one.digest),
                 people=estate.people,
+                rehearsals=rehearsed.get(one.digest, ()),
             )
             for one in library
         ),
         library_truncated=len(library) >= MAX_LIBRARY,
         agents=choices,
+        rehearsal_agents=(
+            tuple(
+                AgentChoiceView(agent_id=one.agent_id, display_name=one.display_name)
+                for one in estate.mine
+            )
+            if readable and reviews
+            else ()
+        ),
         may_add=adds,
         registry_is_absent=registry is None,
         categories=chips(filed, shown),
@@ -1374,6 +1509,7 @@ async def _view_for(
     store = library_of(request)
     filed = await store.categories([one.name])
     retirement = (await store.retirements([one.digest])).get(one.digest)
+    rehearsed = (await store.rehearsals([one.digest])).get(one.digest, ())
     return library_view(
         one,
         _reach_of(one, _tool_registry(request)),
@@ -1384,6 +1520,7 @@ async def _view_for(
         categories=filed.get(one.name, ()),
         against=compared_with(one, [*library, one]),
         retirement=retirement,
+        rehearsals=rehearsed,
     )
 
 
@@ -1457,7 +1594,9 @@ async def add_skill(request: Request, body: SkillPackageAsked, asked: Asked) -> 
         raise _not_answerable()
     categories = _categories_or_refused(body.categories)
     try:
-        package = read_package(body.file_name, _package_bytes(body))
+        package = runnable_here(
+            read_package(body.file_name, _package_bytes(body)), sandbox=sandbox_of(request)
+        )
     except SkillLibraryError as refused:
         raise _refused_because(str(refused)) from None
     return await _added(request, asked, _adding(package, asked), categories)
@@ -1514,6 +1653,10 @@ async def import_skill(request: Request, body: SkillImportAsked, asked: Asked) -
         raise _not_answerable()
     categories = _categories_or_refused(body.categories)
     package = await _fetched_package(request, body)
+    try:
+        runnable_here(package, sandbox=sandbox_of(request))
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
     return await _added(request, asked, _adding(package, asked), categories)
 
 
@@ -1645,6 +1788,15 @@ async def review_skill(
     one = await library.skill(digest)
     if one is None:
         raise _refused_because("nothing was decided: no skill in the library has that digest")
+    examples = _examples(one)
+    if body.decision == "approve" and not rehearsal_clears(
+        digest, examples, (await library.rehearsals([digest])).get(digest, ())
+    ):
+        raise _refused_because(
+            f"nothing was decided: rehearse this version's {len(examples)} example tasks and see "
+            "every one pass before approving it. "
+            f"{A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_ONCE_A_REHEARSAL_OF_ITS_DIGEST_CLEARS_THEM}"
+        )
     try:
         after = decided(
             one,
@@ -1811,6 +1963,133 @@ async def _retirement(
         version=one.imported.skill.version,
         retired=retire,
         holding=holders,
+    )
+
+
+#: Where one version's examples are rehearsed, under the API base (M12.3.4).
+REHEARSALS_PATH: Final = "/skills/{digest}/rehearsals"
+
+
+class RehearseAsked(BaseModel):
+    """The agent the version is rehearsed through, as if it held it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str = Field(min_length=1, max_length=128)
+
+
+@router.post(
+    REHEARSALS_PATH, status_code=201, response_model=SkillRehearsalView, responses=COMMON_RESPONSES
+)
+async def rehearse_skill(
+    request: Request, digest: Digest, body: RehearseAsked, asked: Asked
+) -> JSONResponse:
+    """Rehearse one waiting version's examples through one agent, as the reviewer, and record it.
+
+    The review authority first, then the agent as the assignment route reads it, so an agent
+    outside the reviewer's audience is the same refusal as one that does not exist. The reach is
+    `reach_through`: what this version reaches for this person through that agent, the run an
+    assignment would give them. Each example passes when every tool it expects is within it. See
+    `brain.tools.skill_examples.A_REACH_REHEARSAL_JUDGES_WHAT_IS_REACHABLE_AND_NOT_THE_ANSWER`.
+    """
+    if not may_review(asked.reach, asked.now):
+        log.info("skill not rehearsable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    found = await agent_installs_of(request).agent(body.agent_id)
+    if found is None or body.agent_id not in visible_agent_ids((found.record,), viewer_of(asked)):
+        log.info("skill not rehearsable through this agent", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    library = library_of(request)
+    one = await library.skill(digest)
+    if one is None:
+        raise _refused_because("nothing was rehearsed: no skill in the library has that digest")
+    examples = _examples(one)
+    if not examples:
+        raise _refused_because(
+            f"nothing was rehearsed: {one.name} {one.imported.skill.version} carries no example "
+            f"tasks; add them under '{EXAMPLES_HEADING}' in a new version"
+        )
+    registry = _tool_registry(request)
+    if registry is None:
+        raise _refused_because(
+            "nothing was rehearsed: no tool list is loaded on the server, so what this version "
+            "reaches cannot be said"
+        )
+    reachable = reach_through(one.imported.skill, registry, asked.reach, found.record, asked.now)
+    made = Rehearsal(
+        digest=digest,
+        kind=RehearsalKind.REACH,
+        outcomes=rehearse_reach(examples, reachable),
+        rehearsed_by=asked.caller.principal.id,
+        agent_id=body.agent_id,
+        at=asked.now,
+    )
+    await library.rehearse(made, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id())
+    log.info(
+        "skill rehearsed", skill=one.name, passed=made.passed, principal=asked.caller.principal.id
+    )
+    view = rehearsal_view(made, people={})
+    return JSONResponse(status_code=201, content=view.model_dump(mode="json"))
+
+
+#: Where one approved version is exported, under the API base (M12.3.1).
+EXPORT_PATH: Final = "/skills/{digest}/export"
+
+
+class ExportedSkillView(BaseModel):
+    """One exported package: what `POST /skills` on another install takes, and what it is.
+
+    `file_name`, `content` and `encoding` are `SkillPackageAsked`'s own fields, so the package can
+    be handed to another install's library as it is; `name`, `version` and `digest` say which
+    version it is, as its manifest does.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file_name: str
+    content: str
+    encoding: Literal["base64"]
+    name: str
+    version: str
+    digest: str
+
+
+@router.post(EXPORT_PATH, response_model=ExportedSkillView, responses=COMMON_RESPONSES)
+async def export_skill(request: Request, digest: Digest, asked: Asked) -> ExportedSkillView:
+    """One approved version as a package another install imports, recorded in the ledger.
+
+    A POST because it writes: each export is a row and a ledger entry, so "who took which version
+    off the install" is answerable. The authority that adds skills, asked with the library's own
+    read, before the digest is looked up, so a version the reader cannot see is the same 404 as one
+    that does not exist. See
+    `brain.console.skill_library.AN_EXPORT_IS_OF_AN_APPROVED_VERSION_AND_LANDS_UNREVIEWED`.
+    """
+    if not may_export(asked.reach, asked.now):
+        log.info("skill export not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    store = library_of(request)
+    one = await store.skill(digest)
+    if one is None:
+        raise _not_answerable()
+    scripts = await store.script_bytes(digest) if one.imported.skill.scripts else {}
+    try:
+        package = exported(one, scripts)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+    await store.export(
+        digest,
+        by=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    log.info("skill exported", skill=one.name, principal=asked.caller.principal.id)
+    return ExportedSkillView(
+        file_name=package.file_name,
+        content=base64.b64encode(package.content).decode("ascii"),
+        encoding="base64",
+        name=package.name,
+        version=package.version,
+        digest=package.digest,
     )
 
 

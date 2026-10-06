@@ -85,17 +85,21 @@ from brain.ops.canary_run import run_canaries_now
 from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.denial_digest_run import run_denial_digest_now
-from brain.ops.erasure_store import drain_erasure_queue
+from brain.ops.erasure_store import drain_erasure_queue, session_keys_for
 from brain.ops.escalation_store import run_expiry_now
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
+from brain.ops.openbao import OpenBaoVault
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, AtTime, Owed, owed, schedulable, time_of_day
+from brain.ops.secrets import VaultRole
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
 from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
+from brain.resolution.calibration_store import run_calibration_now
+from brain.resolution.registry_store import run_registry_now
 from brain.settings import process_environment, settings_from
 
 #: Why the two questions are two columns.
@@ -362,6 +366,66 @@ def escalation_expiry(now: datetime, report_only: bool, database_url: str) -> st
     return f"{expired} escalation(s) past their deadline marked expired; each asker is told so"
 
 
+#: Why the registry declines in report-only mode, though it removes nothing.
+A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING: Final = (
+    "The registry only adds: an entity, its names, its keys. Report-only mode exists for controls "
+    "that remove data, so brain.ops.schedule never asks for it here, and asked anyway the run "
+    "writes nothing and says so rather than ignoring the mode it was given."
+)
+
+
+def entity_resolution(now: datetime, report_only: bool, database_url: str) -> str:
+    """Give every record a connector declares for resolution its entity, and say how many (M14.1).
+
+    `brain.resolution.registry_store.run_registry_now` does it as the worker's login, with the
+    install's join-key pepper read from the vault with the worker's own token
+    (`brain.ops.join_key_pepper`); this is the literal call the registry reads. A pepper that
+    cannot be read stops the run with the vault's reason and never a value, because hashing with
+    anything else would write digests that join nothing the next run writes. Declines in
+    report-only mode, see `A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING`.
+    """
+    if report_only:
+        return (
+            "report only: no record was registered. "
+            f"{A_REGISTRY_RUN_IN_REPORT_ONLY_MODE_WRITES_NOTHING}"
+        )
+    from brain.ops.join_key_pepper import pepper_vault, read_pepper
+    from brain.ops.secrets import VaultRole
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    pepper = read_pepper(
+        pepper_vault(settings.vault_address, settings.vault_token, VaultRole.WORKER)
+    )
+    ran = run_registry_now(
+        database_url, now=now, pepper=pepper.reveal(), loop_factory=_loop_factory()
+    )
+    return ran.summary()
+
+
+#: Why the calibration declines in report-only mode, though it removes nothing.
+A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING: Final = (
+    "A fit only adds a setting row a reviewer may promote. Report-only mode exists for controls "
+    "that remove data, so brain.ops.schedule never asks for it here, and asked anyway the run "
+    "fits nothing and says so rather than ignoring the mode it was given."
+)
+
+
+def resolution_calibration(now: datetime, report_only: bool, database_url: str) -> str:
+    """Fit the week's candidate pairs into a weight table and keep it for a reviewer (M14.4.4).
+
+    `brain.resolution.calibration_store.run_calibration_now` does it as the worker's login; this is
+    the literal call the registry reads. Nothing it keeps is in force until a reviewer promotes
+    it, so a run can never change how records are scored. Declines in report-only mode, see
+    `A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING`.
+    """
+    if report_only:
+        return f"report only: nothing was fitted. {A_FIT_IN_REPORT_ONLY_MODE_KEEPS_NOTHING}"
+    from brain.ops.worker import _loop_factory
+
+    return run_calibration_now(database_url, now=now, loop_factory=_loop_factory()).summary()
+
+
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
     """Record the re-verification nags owed at `now`, and say what the run did.
 
@@ -387,9 +451,27 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
     On the worker's own connection, which is the database owner's: `brain.ops.erasure_store` refuses
     a connection row-level security narrows, because a row a policy hides is a row the erasure
     would neither count nor retire. `prepare_threshold=None` for the reason `retention_sweep` gives.
+    The vault is the worker's own, read from this process's settings, and removes the refresh tokens
+    a person's own consents bought (`brain.ops.erasure_store.
+    ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`); a worker with none says so in the report.
     """
+    settings = settings_from(process_environment())
+    vault: OpenBaoVault | None = None
+    if settings.vault_address and settings.vault_token:
+        try:
+            vault = OpenBaoVault(
+                settings.vault_address, settings.vault_token, role=VaultRole.WORKER
+            )
+        except ValueError:
+            vault = None
+    # The cache this process's settings name, for the person's session memory (M16.1.1); none
+    # configured is none kept. See the erasure store's reason constant about session memory.
+    valkey_url = settings.valkey_url
+    sessions = session_keys_for(valkey_url) if valkey_url else None
     with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
-        return drain_erasure_queue(conn, now=now, report_only=report_only)
+        return drain_erasure_queue(
+            conn, now=now, report_only=report_only, own_tokens=vault, sessions=sessions
+        )
 
 
 def canary_run(now: datetime, report_only: bool, database_url: str) -> str:
@@ -695,6 +777,39 @@ def evening_digest(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why approved actions run nothing in report-only mode.
+AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING: Final = (
+    "Running an approved action changes a system somebody else owns, so a run asked to only "
+    "report runs none and says so; the approvals stay approved, inside their windows."
+)
+
+
+def approved_actions(now: datetime, report_only: bool, database_url: str) -> str:
+    """Run every approved action that is waiting, each once, and say what the runs came to.
+
+    `brain.ops.approved_runs.run_approved_now` is the literal call the registry reads, with the
+    worker's vault for a write's own key. Declines in report-only mode, see
+    `AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING`, and takes the worker's event loop for
+    the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no approved action was run. "
+            f"{AN_APPROVED_ACTION_IN_REPORT_ONLY_MODE_RUNS_NOTHING}"
+        )
+    from brain.ops.approved_runs import run_approved_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_approved_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    ).summary()
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -779,14 +894,14 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     ),
     # Wired on 2026-09-30 with `gate.escalation` (`0168`). See `brain.ops.escalation_store`.
     Runner(name="escalation_expiry", run=escalation_expiry, workload=WorkloadClass.BACKGROUND),
-    # For whoever builds it: the feature observations `drift` measures over, which are
-    # resolution decisions nobody records for this purpose yet. The fit is weekly.
+    # Wired on 2026-10-06 with `er.observation` (`0182`). See `brain.resolution.registry_store`.
+    Runner(name="entity_resolution", run=entity_resolution, workload=WorkloadClass.BATCH),
+    # Wired on 2026-10-06: the weekly fit over the registry's candidate pairs, kept as a setting
+    # until a reviewer promotes it. See `brain.resolution.calibration_store`.
     Runner(
         name="resolution_calibration",
-        needs=(
-            "a record of the decisions made when two records were matched as the same person or "
-            "company, which this install does not keep yet"
-        ),
+        run=resolution_calibration,
+        workload=WorkloadClass.BATCH,
     ),
     # Wired on 2026-09-30: `brain.ops.recovery_run.sweep_queue` re-drives an orphaned or failed
     # job its task declares safe and sets aside the rest, over the worker's own queue connection.
@@ -828,6 +943,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # Wired on 2026-09-30 with its destination (`brain.ops.digest_destination`), the worker's
     # borrowed channel key (`brain.ops.channel_lease`) and the send (`brain.ops.digest_run`).
     Runner(name="evening_digest", run=evening_digest, workload=WorkloadClass.BATCH),
+    # Wired on 2026-10-06 with `gate.approved_to_run` (`0201`). See `brain.ops.approved_runs`.
+    Runner(name="approved_actions", run=approved_actions, workload=WorkloadClass.BACKGROUND),
 )
 
 
@@ -860,6 +977,10 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return knowledge_reverification(now, report_only, database_url)
         case "escalation_expiry":
             return escalation_expiry(now, report_only, database_url)
+        case "entity_resolution":
+            return entity_resolution(now, report_only, database_url)
+        case "resolution_calibration":
+            return resolution_calibration(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case "outbox_dispatch":
@@ -890,6 +1011,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return side_effect_resume(now, report_only, database_url)
         case "evening_digest":
             return evening_digest(now, report_only, database_url)
+        case "approved_actions":
+            return approved_actions(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

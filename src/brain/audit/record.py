@@ -183,6 +183,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "channel_binding": AuditAction.CHANNEL_BINDING,
         "pack": AuditAction.PACK,
         "browser_session": AuditAction.BROWSER_SESSION,
+        "entity_unmerge": AuditAction.ENTITY_UNMERGE,
     }
 )
 
@@ -287,8 +288,8 @@ class LegalHoldChange(enum.StrEnum):
 
 
 class SkillChange(enum.StrEnum):
-    """What happened to a skill in the library. The values `0056`'s, `0121`'s and `0139`'s
-    triggers write.
+    """What happened to a skill in the library. The values `0056`'s, `0121`'s, `0139`'s and
+    `0191`'s triggers write.
 
     `0121` adds an edit, a decision by the person who added the skill, and a change of categories.
     A self-decision is its own word rather than a flag beside `approved`, because the audit screen
@@ -305,6 +306,10 @@ class SkillChange(enum.StrEnum):
     #: `0139`: a version retired, so no agent may newly be assigned it, or reinstated.
     RETIRED = "retired"
     REINSTATED = "reinstated"
+    #: `0191`: an approved version taken off the install as a package (M12.3.1).
+    EXPORTED = "exported"
+    #: `0191`: a version's examples rehearsed, with whether every one passed (M12.3.4).
+    REHEARSED = "rehearsed"
 
 
 class CredentialChange(enum.StrEnum):
@@ -391,15 +396,19 @@ class ErasureChange(enum.StrEnum):
 
 
 class MemoryChange(enum.StrEnum):
-    """What a correction did to a memory. The two values `0061`'s trigger writes.
+    """What happened to a memory: a correction marked it, or the person confirmed it.
 
-    The words of `brain.memory.correction.Correction`, restated rather than imported for the reason
-    the `TYPE_CHECKING` block above gives about keeping this package underneath the layers that
-    record into it, and held equal to that enum by a test.
+    The first two are the words of `brain.memory.correction.Correction`, which `0061`'s trigger
+    writes, restated rather than imported for the reason the `TYPE_CHECKING` block above gives
+    about keeping this package underneath the layers that record into it, and held equal to that
+    enum by a test. The third is `0163`'s trigger's, when a person says an inference again
+    (M16.7.2); it corrects nothing, so it is not a `Correction`.
     """
 
     SUPERSEDED = "superseded"
     DEMOTED = "demoted"
+    #: The person said a standing inference again, and its decay starts again from then.
+    CONFIRMED = "confirmed"
 
 
 class OrganisationChange(enum.StrEnum):
@@ -410,7 +419,9 @@ class OrganisationChange(enum.StrEnum):
     column moving, which is the one change the console makes to a live row; `CHANGED` is any other
     column moving, which only a statement typed by hand does, and names the columns; `RETIRED` is
     `deleted_at` being set. A scope's name is its `label`, and since `0141` the console renames one,
-    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1).
+    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1). `MOVED` is a
+    person put in another department, which `0170`'s trigger writes under the person, naming the
+    department they were moved to (M1.6.20).
     """
 
     JOINED = "joined"
@@ -421,6 +432,7 @@ class OrganisationChange(enum.StrEnum):
     RENAMED = "renamed"
     CHANGED = "changed"
     RETIRED = "retired"
+    MOVED = "moved"
 
 
 #: Which of the placement changes are about a team, and which about leading a department. Two sets
@@ -513,7 +525,8 @@ class ElevationChange(enum.StrEnum):
 
 
 class AgentChange(enum.StrEnum):
-    """What happened to an agent. The seven words `0137`'s trigger writes, in the order it checks.
+    """What happened to an agent. The words `0137`'s trigger writes, in the order it checks, and the
+    one `0190` adds after them.
 
     No `transferred`: a hand-over is `agent_owner`, which `0105`'s trigger writes with both
     owners, so the same change is not recorded twice.
@@ -530,6 +543,21 @@ class AgentChange(enum.StrEnum):
     UNARCHIVED = "unarchived"
     PUBLISHED = "published"
     AUDIENCE_CHANGED = "audience_changed"
+    #: The channels it answers on were switched (M13.7.4), by `0190`'s branch of the same trigger.
+    CHANNELS_CHANGED = "channels_changed"
+
+
+class AgentUpgradeChange(enum.StrEnum):
+    """What happened to an agent's place on its template. The two words `0204`'s triggers write.
+
+    Under the `agent` action beside `AgentChange`, and a separate enum on purpose: `0137`'s trigger
+    writes the seven words of `AgentChange` and a test holds the two equal, and these two are a
+    different trigger's on a different table. `UPGRADED` is the pinned version moving, and
+    `UPGRADE_DECLINED` is a version somebody read and turned away.
+    """
+
+    UPGRADED = "upgraded"
+    UPGRADE_DECLINED = "upgrade_declined"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -846,6 +874,7 @@ class AuditRecorder:
         kept_entity_id: str,
         merged_entity_id: str,
         changed: Sequence[str] = (),
+        merge_id: str = "",
     ) -> tuple[AuditEntry, AuditEntry]:
         """Record that two entities were merged, as two entries: one per side.
 
@@ -859,12 +888,43 @@ class AuditRecorder:
 
         Both entries share the recorder's trace id, so the pair is one event again to anybody
         querying by trace.
+
+        `merge_id` names the `er.merge` row holding who decided, on what evidence, and the
+        pre-image, as `0183`'s trigger writes it. A 32-hex id, which the redaction keeps as a
+        digest; empty for a merge no store recorded, which writes no key rather than an empty one.
         """
         details: dict[str, object] = {}
         _with_names(details, "changed", changed)
+        if merge_id:
+            details["merge_id"] = merge_id
         kept = self._write(AuditAction.ENTITY_MERGE, subject("entity", kept_entity_id), details)
         merged = self._write(AuditAction.ENTITY_MERGE, subject("entity", merged_entity_id), details)
         return kept, merged
+
+    def entity_unmerge(
+        self,
+        *,
+        kept_entity_id: str,
+        restored_entity_id: str,
+        merge_id: str = "",
+        unmerge_id: str = "",
+    ) -> tuple[AuditEntry, AuditEntry]:
+        """Record that a merge was reversed, as two entries: one per side, the survivor first.
+
+        Two entries for `entity_merge`'s reason: the id that came back has to be findable by its
+        own subject. Written in a deployed database by `0183`'s trigger function on
+        `er.canonical`, which this is held to by `tests/unit/test_merge_store.py`. The two ids are
+        the `er.merge` and `er.unmerge` rows, both 32-hex, and both are written or neither.
+        """
+        details: dict[str, object] = {}
+        if merge_id and unmerge_id:
+            details["merge_id"] = merge_id
+            details["unmerge_id"] = unmerge_id
+        kept = self._write(AuditAction.ENTITY_UNMERGE, subject("entity", kept_entity_id), details)
+        restored = self._write(
+            AuditAction.ENTITY_UNMERGE, subject("entity", restored_entity_id), details
+        )
+        return kept, restored
 
     def publish(self, *, artifact_id: str, fields: Sequence[str] = ()) -> AuditEntry:
         """Record that an artefact was published.
@@ -1237,8 +1297,8 @@ class AuditRecorder:
         return self._write(AuditAction.INSTRUCTIONS, subject("agent", agent_id), details)
 
     def webhook(self, *, subscriber_id: str, change: WebhookChange) -> AuditEntry:
-        """Record that a webhook subscriber was registered, had its secret replaced, or was switched
-        off (M27.8.12).
+        """Record that a webhook subscriber was registered, had its secret replaced, was switched
+        off or back on, or had a delivery given up replayed (M27.8.12, M27.15.44).
 
         Written in a deployed database by `0059`'s trigger on `ops.webhook_change`, one entry per
         change row, and held to this method's details by a test. The subject is the subscriber and
@@ -1266,10 +1326,12 @@ class AuditRecorder:
         )
 
     def memory(self, *, memory_id: str, change: MemoryChange) -> AuditEntry:
-        """Record that a correction marked a memory: superseded it, or demoted it.
+        """Record that a correction marked a memory, superseded or demoted, or that the person
+        confirmed it by saying it again.
 
         Written in a deployed database by `0061`'s trigger on `mem.correction`, on the insert, and
-        held to this method's details by a test. **Never what the memory says, and never the memory
+        by `0163`'s on `mem.adaptive`, when `last_confirmed_at` moves, each held to this method's
+        details by a test. **Never what the memory says, and never the memory
         that replaced it**: the statement is `brain.memory.correction`'s refusal to keep a
         transcript in a correction log, and the replacement is on the correction's own row. There is
         no parameter through which either could arrive.
@@ -1480,16 +1542,23 @@ class AuditRecorder:
         )
 
     def agent(
-        self, *, agent_id: str, change: AgentChange, actor_inferred: bool = False
+        self,
+        *,
+        agent_id: str,
+        change: AgentChange | AgentUpgradeChange,
+        actor_inferred: bool = False,
     ) -> AuditEntry:
-        """Record that an agent was created, enabled, disabled, archived or published.
+        """Record that an agent was created, enabled, disabled, archived or published, or moved to
+        a newer version of its template or turned one away.
 
         Written in a deployed database by `0137`'s trigger on `agent.agent`, on the insert and on
         an update that moves a lifecycle timestamp or the audience level, and held to
         this method's details by a test. The subject is the agent. **Never the steward**: there is
         no parameter through which a principal id could arrive, because one is not a field name
         and the ledger would keep the marker in its place. `actor_inferred` is the detail the
-        trigger adds when nobody named the actor, as `instructions` adds it.
+        trigger adds when nobody named the actor, as `instructions` adds it. `0204`'s two triggers
+        write the two `AgentUpgradeChange` words under this same action, so there is still one
+        method for the one action.
         """
         details: dict[str, object] = {"change": change.value}
         if actor_inferred:

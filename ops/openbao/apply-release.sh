@@ -44,14 +44,14 @@ bao_ token lookup >/dev/null 2>&1 || fail "the vault refused the token this ran 
 
 # The engines, enabled where missing and never removed.
 ENGINES_NOW="$(bao_ secrets list)" || fail "the vault would not list its engines"
-for engine in providers webhooks connector_keys template_signing; do
+for engine in providers webhooks connector_keys template_signing resolution; do
   case "$ENGINES_NOW" in
     *"$engine/ "*) ;;
     *) if test "$CHECK_ONLY" = yes; then missing "the $engine engine"; else bao_ secrets enable -path="$engine" kv-v2 >/dev/null || fail "the vault would not enable the $engine engine"; fi ;;
   esac
 done
 ENGINES_NOW="$(bao_ secrets list)" || fail "the vault would not list its engines"
-for engine in providers webhooks connector_keys template_signing; do
+for engine in providers webhooks connector_keys template_signing resolution; do
   case "$ENGINES_NOW" in *"$engine/ "*) ;; *) test "$CHECK_ONLY" = yes || missing "the $engine engine" ;; esac
 done
 
@@ -88,6 +88,20 @@ if ! role_ok_channel_send; then
   fi
   role_ok_channel_send || missing "the channel-send token role"
 fi
+role_ok_connector_rotate() { test "$(bao_ read -field=allowed_policies auth/token/roles/connector-rotate 2>/dev/null)" = "[connector-rotate]" && test "$(bao_ read -field=orphan auth/token/roles/connector-rotate 2>/dev/null)" = "false" && test "$(bao_ read -field=renewable auth/token/roles/connector-rotate 2>/dev/null)" = "false" && test "$(bao_ read -field=token_no_default_policy auth/token/roles/connector-rotate 2>/dev/null)" = "true" && test "$(bao_ read -field=token_explicit_max_ttl auth/token/roles/connector-rotate 2>/dev/null)" = "3600"; }
+if ! role_ok_connector_rotate; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ write auth/token/roles/connector-rotate allowed_policies=connector-rotate orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600 >/dev/null || fail "the vault would not define the connector-rotate token role"
+  fi
+  role_ok_connector_rotate || missing "the connector-rotate token role"
+fi
+role_ok_connector_person() { test "$(bao_ read -field=allowed_policies auth/token/roles/connector-person 2>/dev/null)" = "[connector-person]" && test "$(bao_ read -field=orphan auth/token/roles/connector-person 2>/dev/null)" = "false" && test "$(bao_ read -field=renewable auth/token/roles/connector-person 2>/dev/null)" = "false" && test "$(bao_ read -field=token_no_default_policy auth/token/roles/connector-person 2>/dev/null)" = "true" && test "$(bao_ read -field=token_explicit_max_ttl auth/token/roles/connector-person 2>/dev/null)" = "3600"; }
+if ! role_ok_connector_person; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ write auth/token/roles/connector-person allowed_policies=connector-person orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600 >/dev/null || fail "the vault would not define the connector-person token role"
+  fi
+  role_ok_connector_person || missing "the connector-person token role"
+fi
 
 # Every connected source's slot: its scopes, and no key.
 slot_ok() { test "$(bao_ read -field=custom_metadata "connector_keys/metadata/$1" 2>/dev/null)" = "$2"; }
@@ -108,6 +122,12 @@ if ! slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs an
     bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=an agent API key with read access' -custom-metadata='not_requested=an admin key, which can change SLAs and delete tickets' freshdesk >/dev/null || fail "the vault would not define the credential slot for freshdesk"
   fi
   slot_ok freshdesk 'map[not_requested:an admin key, which can change SLAs and delete tickets scopes:an agent API key with read access]' || missing "the credential slot for freshdesk"
+fi
+if ! slot_ok freshdesk_ticket_replies 'map[not_requested:an admin key, which can delete tickets and change SLAs scopes:an agent API key whose role may reply to tickets]'; then
+  if test "$CHECK_ONLY" = no; then
+    bao_ kv metadata put -mount=connector_keys -custom-metadata='scopes=an agent API key whose role may reply to tickets' -custom-metadata='not_requested=an admin key, which can delete tickets and change SLAs' freshdesk_ticket_replies >/dev/null || fail "the vault would not define the credential slot for freshdesk_ticket_replies"
+  fi
+  slot_ok freshdesk_ticket_replies 'map[not_requested:an admin key, which can delete tickets and change SLAs scopes:an agent API key whose role may reply to tickets]' || missing "the credential slot for freshdesk_ticket_replies"
 fi
 if ! slot_ok google_analytics 'map[not_requested:analytics.edit; domain-wide delegation scopes:analytics.readonly; Viewer on the one property]'; then
   if test "$CHECK_ONLY" = no; then
@@ -177,4 +197,4 @@ fi
 if test "$CHECK_ONLY" = no; then
   bao_ token renew >/dev/null 2>&1 || true
 fi
-say "in force: 4 engines, $POLICIES policies, 2 token roles (connector-run, channel-send) and 13 credential slots"
+say "in force: 5 engines, $POLICIES policies, 4 token roles (connector-run, channel-send, connector-rotate, connector-person) and 14 credential slots"

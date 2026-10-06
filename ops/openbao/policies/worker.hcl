@@ -1,6 +1,6 @@
 # What the background worker may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5, M5.4.7
+# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5, M5.4.7, M14.7.3, M11.8.6
 #
 # The worker runs scheduled and queued work, so its runs are longer than a request and
 # nobody is watching them. Two differences from the application follow from that, and both
@@ -61,6 +61,22 @@ path "providers/data/deepseek" {
   capabilities = ["read"]
 }
 
+# The trace ledger's project keys, read by the install check that sends one run to the ledger and
+# finds it there (brain.ops.acceptance_checks_services, M32.1.2.6), and by a worker that sends the
+# runs it answers. Read and nothing more: the application keeps them, with its own token, when the
+# release hands them over (brain.ops.ledger_export). One path, named, for the reason above.
+path "providers/data/trace_ledger" {
+  capabilities = ["read"]
+}
+
+# The join-key pepper, read to hash the identifiers of the source records the worker registers for
+# entity resolution (brain.ops.join_key_pepper). Read and nothing more: the application creates it
+# once, and a process nobody watches must not be able to create or replace the value every stored
+# digest depends on. One exact path, and no metadata: the worker has no screen to tell.
+path "resolution/data/pepper" {
+  capabilities = ["read"]
+}
+
 # The key a connected source's vendor issued is NOT read under this policy. Until 2026-09-17 it was,
 # on connector_keys/data/+, which made this token, renewed for as long as the worker runs, a standing
 # read of every source's key. The worker now mints a run token per attempt against the connector-run
@@ -80,6 +96,22 @@ path "auth/token/create/connector-run" {
 # never under this policy. See brain.ops.channel_lease.A_CHANNEL_IS_READ_BY_THE_WORKER_ONLY_THROUGH_A_SEND_LEASE.
 path "auth/token/create/channel-send" {
   capabilities = ["create", "update"]
+}
+
+# And for a refresh token a vendor rotated during a read (M11.8.6): written back only through a token
+# minted against the connector-rotate role (connector-rotate.hcl), which may patch a refresh token's
+# slot and read nothing. See brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT.
+path "auth/token/create/connector-rotate" {
+  capabilities = ["create", "update"]
+}
+
+# Erasing a person removes the refresh tokens their own consents bought (M11.8.6): the erasure queue
+# runs here, and deleting a slot's metadata removes every version of it. Delete alone: no read, no
+# write, and nothing a source's key or a source's own refresh token is kept at, each a segment
+# shorter. This process may not mint the connector-person role, so it never reads one. See
+# brain.ops.erasure_store.ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS.
+path "connector_keys/metadata/oauth_refresh/+/+" {
+  capabilities = ["delete"]
 }
 
 path "sys/leases/revoke" {

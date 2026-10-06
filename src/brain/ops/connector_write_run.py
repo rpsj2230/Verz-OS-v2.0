@@ -42,7 +42,7 @@ Scope: every part that touches the world is handed in (the keys, the caller, the
 clock, the ledger), so the tests drive it over recorded replies. Nothing here decides who may
 approve; nothing here reads a table.
 
-Task ids: M11.7.3
+Task ids: M11.7.3, M11.8.12
 """
 
 from __future__ import annotations
@@ -106,6 +106,15 @@ A_WRITE_IS_DONE_ONLY_WHEN_READ_BACK_AS_APPROVED: Final = (
     "done only when the source found the record and every field the change set holds what was "
     "approved. A record that could not be read back, or holds something else, is reported failed, "
     "naming the fields, and never done."
+)
+
+#: Why a change is judged against every record read back under its id.
+A_CHANGE_HOLDS_WHEN_ONE_RECORD_READ_BACK_HOLDS_IT: Final = (
+    "Most changes are read back as the one record they changed. Some can only be read back among "
+    "others named the same way, as a reply is among its ticket's conversations, because the "
+    "source gives the new record's own id only in its answer to the send, which a read-back "
+    "exists not to trust. So every record read back under the change's id is judged, the change "
+    "holds when one of them holds exactly what was approved, and only that record is reported."
 )
 
 # What a report says, one sentence per outcome. Constant: a source's reply and a record's value
@@ -274,7 +283,7 @@ def send_approved(
         }
 
         def execute(action: Action) -> TypedResult[SourceRecord]:
-            call = grant.prepares.call_for(action)
+            call = grant.prepares.call_for(action, settings=connection.settings)
             checked = call.operation.prepare(call.arguments, resolver=resolver)
             answer = caller.send(
                 call.operation.operation.method.upper(),
@@ -346,7 +355,7 @@ def read_back(
 
     See `A_WRITE_IS_DONE_ONLY_WHEN_READ_BACK_AS_APPROVED`.
     """
-    call = grant.prepares.call_for(action)
+    call = grant.prepares.call_for(action, settings=connection.settings)
     sources = ConnectedSources(
         {connection.connector: connection},
         keys=keys,
@@ -363,11 +372,17 @@ def read_back(
     judged = verdict(classified_reading(PageReply(call=reply.outcome, rows=reply.rows)))
     if judged is not Verification.FOUND or reply.rows is None:
         return WriteReport(outcome=WriteOutcome.FAILED, told=READ_BACK_UNKNOWN, verification=judged)
-    record = next((one for one in reply.rows.records if one.id == call.source_id), None)
-    if record is None:
+    # Every record read back under the change's id is a candidate, and the change holds when one
+    # of them holds it: a reply is one conversation among its ticket's. See
+    # `A_CHANGE_HOLDS_WHEN_ONE_RECORD_READ_BACK_HOLDS_IT`.
+    candidates = [one for one in reply.rows.records if one.id == call.source_id]
+    if not candidates:
         return WriteReport(outcome=WriteOutcome.FAILED, told=READ_BACK_UNKNOWN, verification=judged)
-    differs = grant.prepares.differs(action, record.model_dump())
-    found = scoped(reply.rows, connection, call.entity)
+    judged_each = [(one, grant.prepares.differs(action, one.model_dump())) for one in candidates]
+    record, differs = next(
+        ((one, named) for one, named in judged_each if not named), judged_each[0]
+    )
+    found = scoped(reply.rows.model_copy(update={"records": (record,)}), connection, call.entity)
     if differs:
         return WriteReport(
             outcome=WriteOutcome.FAILED,

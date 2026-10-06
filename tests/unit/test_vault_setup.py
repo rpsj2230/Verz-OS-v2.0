@@ -63,7 +63,17 @@ from brain.deployment.vault_setup import (
     vault_choice_lines,
 )
 from brain.ops.channel_lease import SEND_POLICY, SEND_ROLE_MAX_TTL_SECONDS, SEND_TOKEN_ROLE
-from brain.ops.connector_lease import RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS, RUN_TOKEN_ROLE
+from brain.ops.connector_lease import (
+    PERSON_POLICY,
+    PERSON_ROLE_MAX_TTL_SECONDS,
+    PERSON_TOKEN_ROLE,
+    ROTATE_POLICY,
+    ROTATE_ROLE_MAX_TTL_SECONDS,
+    ROTATE_TOKEN_ROLE,
+    RUN_POLICY,
+    RUN_ROLE_MAX_TTL_SECONDS,
+    RUN_TOKEN_ROLE,
+)
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.openbao import STATIC_PREFIXES
 from brain.ops.vault_quorum import RECOVERY_SPLIT
@@ -364,6 +374,12 @@ def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the
         f"write auth/token/roles/{SEND_TOKEN_ROLE} allowed_policies={SEND_POLICY} orphan=false "
         "renewable=false token_no_default_policy=true "
         f"token_explicit_max_ttl={SEND_ROLE_MAX_TTL_SECONDS}",
+        f"write auth/token/roles/{ROTATE_TOKEN_ROLE} allowed_policies={ROTATE_POLICY} "
+        "orphan=false renewable=false token_no_default_policy=true "
+        f"token_explicit_max_ttl={ROTATE_ROLE_MAX_TTL_SECONDS}",
+        f"write auth/token/roles/{PERSON_TOKEN_ROLE} allowed_policies={PERSON_POLICY} "
+        "orphan=false renewable=false token_no_default_policy=true "
+        f"token_explicit_max_ttl={PERSON_ROLE_MAX_TTL_SECONDS}",
     ]
     defined = [one for one in as_root if one.startswith("kv metadata put")]
     assert [one.rsplit(" ", 1)[-1] for one in defined] == sorted(SLOT_SCOPES)
@@ -552,18 +568,21 @@ def test_only_lite_may_decline_the_vault_as_only_its_files_run_no_worker_or_obje
     assert DECLINABLE_PROFILES == ("lite",)
 
 
-def test_the_engines_enabled_are_the_four_the_product_writes_and_the_policy_names() -> None:
+def test_the_engines_enabled_are_the_five_the_product_writes_and_the_policy_names() -> None:
     """Delete this and an engine the console writes to is one no release ever enabled, which
     reads as the vault refusing: a 404 on a write is an engine that is not mounted. The template
-    signing key's engine is granted on its one slot rather than on every name, which is
-    `brain.ops.template_key`'s write-once rule, so it is held to that exact path."""
-    assert ENGINES == ("providers", "webhooks", "connector_keys", "template_signing")
+    signing key's and the join-key pepper's engines are granted on their one slot rather than on
+    every name, which is the write-once rule of `brain.ops.template_key` and
+    `brain.ops.join_key_pepper`, so each is held to that exact path."""
+    assert ENGINES == ("providers", "webhooks", "connector_keys", "template_signing", "resolution")
     assert tuple(one.rstrip("/") for one in STATIC_PREFIXES) == ENGINES
     policy = (REPO / "ops/openbao/policies/application.hcl").read_text(encoding="utf-8")
-    for engine in ENGINES[:-1]:
+    for engine in ENGINES[:-2]:
         assert f'path "{engine}/data/+"' in policy
     assert 'path "template_signing/data/key"' in policy
     assert 'path "template_signing/data/+"' not in policy
+    assert 'path "resolution/data/pepper"' in policy
+    assert 'path "resolution/data/+"' not in policy
     applied = (REPO / APPLY_SCRIPT).read_text(encoding="utf-8").splitlines()
     assert applied.count(f"for engine in {' '.join(ENGINES)}; do") == 2
 
@@ -894,8 +913,9 @@ def test_a_release_applies_its_own_changes_reads_them_back_and_a_second_run_writ
     assert first.returncode == 0, first.stderr
     assert first.stdout.strip() == (
         f"vault: in force: {len(ENGINES)} engines, "
-        f"{len(list((REPO / 'ops/openbao/policies').glob('*.hcl')))} policies, 2 token roles "
-        f"({RUN_TOKEN_ROLE}, {SEND_TOKEN_ROLE}) and {len(SLOT_SCOPES)} credential slots"
+        f"{len(list((REPO / 'ops/openbao/policies').glob('*.hcl')))} policies, 4 token roles "
+        f"({RUN_TOKEN_ROLE}, {SEND_TOKEN_ROLE}, {ROTATE_TOKEN_ROLE}, {PERSON_TOKEN_ROLE}) and "
+        f"{len(SLOT_SCOPES)} credential slots"
     )
     calls = lines(state / "calls")
     assert all(one.startswith((f"{DEPLOY_TOKEN}|", "|status")) for one in calls)
@@ -915,6 +935,46 @@ def test_a_release_applies_its_own_changes_reads_them_back_and_a_second_run_writ
     assert writes == []
     for secret in (DEPLOY_TOKEN, ROOT):
         assert secret not in first.stdout + first.stderr + again.stdout + again.stderr
+
+
+def test_a_release_enables_the_pepper_engine_and_never_writes_or_reads_inside_it(
+    tmp_path: Path,
+) -> None:
+    """**The join-key pepper survives every release, rollback and re-run, because none of them
+    touches it.** The apply script enables the `resolution` engine where it is missing and does
+    nothing else there: no read, no write, no metadata, under the root token at install or the
+    deploy token after. The deploy policy names no path in the engine at all, so even an edited
+    script could not reach the pepper with the token a release runs as. See
+    `brain.ops.join_key_pepper.THE_RELEASE_SCRIPT_CANNOT_CREATE_IT_SO_THE_APPLICATION_DOES`.
+
+    Delete this and a later edit can teach the release to create the pepper, which needs the
+    deploy token's own policy changed and holds back every release on every install already
+    running (`test_a_release_that_changes_the_deploy_policy_is_refused_in_words`), or to write it,
+    which unjoins every stored digest."""
+    from brain.ops.join_key_pepper import PEPPER_SLOT
+
+    mount = PEPPER_SLOT.split("/", 1)[0]
+    deploy = _granted(REPO / "ops/openbao/policies/deploy.hcl")
+    assert not [path for path in deploy if path.startswith(f"{mount}/")]
+
+    state = tmp_path / "vault"
+    state.mkdir()
+    (state / "policy.deploy").write_text(
+        (REPO / "ops/openbao/policies/deploy.hcl").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    for run in ("first", "again"):
+        done, _ = applying(tmp_path / run, state=state)
+        assert done.returncode == 0, done.stderr
+    touching = [one.split("|", 1)[1] for one in lines(state / "calls") if mount in one]
+    assert touching == [f"secrets enable -path={mount} kv-v2"]
+
+
+def _granted(path: Path) -> set[str]:
+    """Every path a policy file names in a `path "..."` rule, comments cut off."""
+    text = "\n".join(
+        line.split("#", 1)[0] for line in path.read_text(encoding="utf-8").splitlines()
+    )
+    return set(re.findall(r'path\s+"([^"]+)"', text))
 
 
 def test_a_release_that_changes_the_deploy_policy_is_refused_in_words(tmp_path: Path) -> None:

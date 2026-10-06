@@ -16,13 +16,21 @@ of one agent share revision 2.
 the draft tables admit the application role to read, and the route that serves this has already
 decided the reader may see the agent.
 
-Task ids: M20.4.6
+**The permission canaries' last word is read here too** (M20.4.1). `canary_run` is a scheduled
+control and every attempt of it is a row of `ops.control_run`, so whether the install's permission
+canaries are red is that control's newest finished run, and no second record of it is kept. An
+install that has never finished a run is not red: a publish gate that refuses everything until a
+scheduled control has fired once would stop the builder on the first day, and an absence of
+evidence is not a failure. See `A_RED_CANARY_RUN_STOPS_A_PUBLISH_AND_NO_RUN_DOES_NOT`.
+
+Task ids: M20.4.6, M20.4.1
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+from typing import Final
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -30,7 +38,34 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.builder.draft_words import DraftAct
 from brain.builder.publish import PublishedVersion, PublishRecord, publication_history
 from brain.tables.manifest_draft import ManifestActRow, ManifestDraftRow
+from brain.tables.schedule import ControlRunRow
 from brain.tables.template import TemplateVersionRow
+
+#: The control whose runs say whether the permission canaries pass.
+CANARY_CONTROL: Final = "canary_run"
+
+#: Why a red run stops a publish and a missing one does not.
+A_RED_CANARY_RUN_STOPS_A_PUBLISH_AND_NO_RUN_DOES_NOT: Final = (
+    "A publish puts a ceiling into the world, and the permission canaries are the only check that "
+    "the gate still refuses what it refused yesterday, so while the newest finished run of them is "
+    "red nothing is published. An install that has not yet finished a run has no evidence either "
+    "way and is not stopped, because a gate that refuses everything until a schedule has fired "
+    "would stop every builder on the first day."
+)
+
+
+async def canaries_are_red(sessions: async_sessionmaker[AsyncSession]) -> bool:
+    """Whether the newest finished run of the permission canaries failed."""
+    async with sessions() as session:
+        newest = (
+            await session.execute(
+                select(ControlRunRow.outcome)
+                .where(ControlRunRow.name == CANARY_CONTROL, ControlRunRow.outcome.is_not(None))
+                .order_by(ControlRunRow.started_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    return newest == "failed"
 
 
 class StoredPublications:

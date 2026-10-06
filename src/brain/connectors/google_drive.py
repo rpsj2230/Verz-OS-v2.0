@@ -201,18 +201,38 @@ Drive was not. See `A_FILE_LOCKED_NARROWER_THAN_ITS_FOLDER_IS_NEVER_READ`.
 
 **Everything under the pin is read, at every level, under the same rules.** Drive's query
 language reaches a folder's children and not its descendants, so the reading walks the tree one
-listing per folder (`DriveReading.next_page`), carrying the folders still to list in the run's own
-page arguments, which never reach Drive. A subfolder locked narrower than its parent is not walked,
-so it and everything in it are left out; a shortcut is never followed, so nothing outside the tree
-is reached through one; and a folder is listed once however it is reached, so no loop of folders is
-walked twice. See `THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT`. A pass is bounded
-by the worker's pages and the documented ceiling, and one cut short says so and is carried on from
-where it stopped by the next: the page it would have asked, these arguments with the folders still
-to list in them, is what the worker keeps as the walk's place (M11.9.15,
-`brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`), so a tree larger
-than one pass is read whole over several. A pass that reaches `MAX_FOLDERS_WALKED` leaves the
-folders past it out, says so through `DriveReading.left_out`, and is reported cut short and retires
-nothing, because a file in a folder it did not reach was not asked for.
+listing per folder (`DriveReading.next_page`), carrying where it is in the run's own page
+arguments, which never reach Drive. A subfolder locked narrower than its parent is not walked, so
+it and everything in it are left out; a shortcut is never followed, so nothing outside the tree is
+reached through one; and a folder already on the walk's path, or already waiting on it, is not
+entered again, so no loop of folders is walked twice. See
+`THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT`.
+
+**The walk goes depth first, and its place is a path rather than a queue.** A pass is bounded by
+the worker's pages and the documented ceiling, and one cut short says so and is carried on from
+where it stopped by the next: the page it would have asked is what the worker keeps as the walk's
+place (M11.9.15, `brain.ops.connector_sync.A_WALK_CUT_SHORT_IS_CARRIED_ON_IN_EVERY_SHAPE`). That
+place is the path from the pin down to the folder being listed, one `WalkFrame` a level: the
+folder, the token of its next page, and the subfolders of the page already read that are not yet
+entered. **What a place holds is bounded by the tree's depth and one page, and never by the
+tree's size**, so any tree, however wide, is read whole over as many passes as it takes, and the
+place is gone once the walk ends, so the next pass starts again at the pin. See
+`A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`.
+
+The breadth-first walk it replaced carried the folders still to list, and every folder queued so
+far, in the same arguments, and stopped queueing at two hundred folders. A carried-on place then
+grew with the tree, and a tree of more than two hundred folders was never read whole by any number
+of passes: the same folders past the bound were left out of every one. *Rejected:* re-asking a
+page to recover the subfolders still to enter, which keeps a level to its folder and its token at
+the price of one more listing for every subfolder; and keeping a set of folders already listed
+across passes, which is the growing queue again under another name. A place an earlier release
+saved in the breadth-first shape is still carried on (`walk_path`).
+
+**Depth is bounded, by Google's own figure, and a tree deeper than it is refused in words.** See
+`MAX_FOLDER_DEPTH`. A pass that meets a folder deeper than that does not enter it, says so through
+`DriveReading.left_out`, and is reported on connector health as part of the source left out
+(`brain.ops.connector_sync.READ_BUT_PART_LEFT_OUT`) and retires nothing, because a file in a
+folder it did not reach was not asked for.
 
 **Its ceiling is Google's documented quota at the dearest call a read makes.** See
 `THE_CEILING_IS_GOOGLE_S_QUOTA_AT_ITS_DEAREST_CALL` and `brain.ops.limits`.
@@ -234,6 +254,7 @@ Task ids: M11.6.7, M11.7.7, M11.9.15
 from __future__ import annotations
 
 import enum
+import json
 import re
 import secrets
 from collections.abc import Callable, Collection, Mapping, Sequence
@@ -433,7 +454,20 @@ THE_WHOLE_TREE_UNDER_THE_PIN_IS_WALKED_AND_NOTHING_OUTSIDE_IT = (
     "lists the pin and then each subfolder it finds, under the same rules: a subfolder whose "
     "inherited permissions are off, or shown as shared by link, is not walked, so it and "
     "everything in it are left out; a shortcut is never followed, so nothing outside the tree is "
-    "reached through one; and each folder is listed once, so a loop of folders ends."
+    "reached through one; and a folder already on the walk's path, or waiting on it, is not "
+    "entered again, in this pass or in one that carries it on, so a loop of folders ends."
+)
+
+#: Why the walk's carried place is a path bounded by depth rather than a queue bounded by count.
+A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE = (
+    "A walk cut short is carried on from the place it saved, so what a place holds is what one "
+    "pass costs the next. A breadth-first queue holds every folder found and not yet listed, which "
+    "grows with the tree, and capping it leaves the same folders out of every pass for ever. A "
+    "depth-first path holds one level for each folder between the pin and the one being listed: "
+    "its id, its next page's token, and the subfolders of the page read that are not yet entered. "
+    "That is bounded by the depth and one page whatever the tree's size, so a tree of any width is "
+    "read whole over enough passes, and a walk that ends saves no place, so the next starts at the "
+    "pin."
 )
 
 #: Why a file whose inherited permissions are off is never read.
@@ -2418,17 +2452,33 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
 
 
 # ---------------------------------------------------------- the worker's reading (M11.6.7)
-#: The run's own page arguments that carry the walk: the folder this page lists, the folders still
-#: to list, every folder already queued, and whether a folder was left out at the bound. Read by
-#: `FolderListing.url_for` and never sent.
+#: The run's own page arguments that carry the walk: the folder this page lists (empty for the
+#: pin), the path from the pin down to it, and whether a folder was left out at the depth bound.
+#: Read by `FolderListing.url_for` and `DriveReading.next_page`, and never sent.
 WALK_FOLDER: Final = "walk.folder"
-WALK_PENDING: Final = "walk.pending"
-WALK_SEEN: Final = "walk.seen"
+WALK_PATH: Final = "walk.path"
 WALK_LEFT_OUT: Final = "walk.left_out"
 
-#: The most folders one pass walks, the pin's subfolders and theirs together. The worker's page
-#: bound and the ceiling bound a pass as well; this one bounds what a pass carries.
-MAX_FOLDERS_WALKED: Final = 200
+#: The breadth-first walk's arguments: the folders still to list, and every folder queued. Read
+#: only to carry on a place an earlier release saved in that shape (`walk_path`), never written.
+BREADTH_FIRST_PENDING: Final = "walk.pending"
+BREADTH_FIRST_SEEN: Final = "walk.seen"
+
+#: The deepest a folder is walked below the pin, in levels: the pin's subfolders are level one.
+#: **Google's own limit, so the bound refuses nothing Google lets anybody build.** Both of Drive's
+#: guides give the same figure, read on 2026-10-06: a user's My Drive "can't contain more than 100
+#: levels of nested folders" (Create and populate folders), and neither can a folder in a shared
+#: drive (Manage shared drives), where Drive refuses a deeper create with
+#: `teamDriveHierarchyTooDeep`. The pin sits at a level of its own, so a tree under it is at most
+#: this deep and usually shallower. A smaller figure would refuse trees that exist; a larger one
+#: buys nothing Drive can hold, and is the length of the path a saved place may carry, so this is
+#: also the bound on what one pass hands the next. A tree deeper than it is one an older Drive
+#: allowed, or one Google's figure has moved for, and either way its deeper part is refused in
+#: words on connector health and never read in silence.
+MAX_FOLDER_DEPTH: Final = 100
+
+#: What one level of a stored path holds: its folder, its next page's token, the folders waiting.
+_LEVEL_PARTS: Final = 3
 
 
 def subfolders_to_walk(body: Any) -> tuple[str, ...]:
@@ -2490,7 +2540,7 @@ class FolderListing(RestOperation):
         return pinned if folder == pinned.folder_id else replace(pinned, folder_id=folder)
 
     def url_for(self, arguments: Mapping[str, str]) -> str:
-        walk = {WALK_FOLDER, WALK_PENDING, WALK_SEEN, WALK_LEFT_OUT}
+        walk = {WALK_FOLDER, WALK_PATH, WALK_LEFT_OUT, BREADTH_FIRST_PENDING, BREADTH_FIRST_SEEN}
         unasked = sorted(set(arguments) - {PAGE_CURSOR_PARAMETER, *walk})
         if unasked:
             msg = (
@@ -2544,24 +2594,140 @@ def _assert_file(entity: str) -> None:
         raise DriveError(msg)
 
 
-def _queued(asked: Mapping[str, str], body: Any) -> tuple[list[str], set[str], bool]:
-    """The folders still to list after this page, every folder queued, and whether one was left out.
+@dataclass(frozen=True)
+class WalkFrame:
+    """One level of the walk's path: a folder the walk is inside, and how to carry it on.
 
-    Each subfolder the page names is queued once; one already queued is not queued again, which is
-    what ends a loop, and none past `MAX_FOLDERS_WALKED`, which is left out and said to be.
+    `folder` is the folder (empty for the pin, whose id the arguments never carry), `page_after`
+    the token of its page after the one read, empty when that page was its last, and `waiting` the
+    subfolders that page named which the walk has not yet entered. The walk goes into the first of
+    them and keeps the rest here, so a level holds at most one page's subfolders. See
+    `A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`.
     """
-    pending = asked.get(WALK_PENDING, "").split()
-    seen = set(asked.get(WALK_SEEN, "").split())
+
+    folder: str
+    page_after: str = ""
+    waiting: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.folder and not _FILE_ID_RE.match(self.folder):
+            raise DriveError("a level of the walk names a Drive folder or the pin")
+        if not all(_FILE_ID_RE.match(one) for one in self.waiting):
+            raise DriveError("a folder waiting on the walk is a Drive identifier")
+
+
+def walk_path(asked: Mapping[str, str]) -> tuple[WalkFrame, ...]:
+    """The path a page's arguments carry, from the pin down to the listed folder's parent.
+
+    A place an earlier release saved in the breadth-first shape names no path, and names the folders
+    it still had to list: they are carried on as the subfolders waiting at the pin's level, so the
+    pass that was under way is finished rather than lost. Raises `DriveError` for a path this module
+    did not write, because a path read wrongly is a tree read in part with nothing said.
+    """
+    held = asked.get(WALK_PATH, "")
+    if not held:
+        pending = tuple(asked.get(BREADTH_FIRST_PENDING, "").split())
+        return (WalkFrame(folder="", waiting=pending),) if pending else ()
+    try:
+        levels = json.loads(held)
+    except ValueError as unread:
+        raise DriveError("the walk's path is not one this reading wrote") from unread
+    if not isinstance(levels, list):
+        raise DriveError("the walk's path is a list of levels")
+    path: list[WalkFrame] = []
+    for level in levels:
+        if not (
+            isinstance(level, list)
+            and len(level) == _LEVEL_PARTS
+            and isinstance(level[0], str)
+            and isinstance(level[1], str)
+            and isinstance(level[2], list)
+            and all(isinstance(one, str) for one in level[2])
+        ):
+            raise DriveError("a level of the walk is a folder, a token and the folders waiting")
+        path.append(WalkFrame(folder=level[0], page_after=level[1], waiting=tuple(level[2])))
+    return tuple(path)
+
+
+def _page_of_the_walk(
+    folder: str, token: str, path: Sequence[WalkFrame], *, left_out: bool
+) -> Mapping[str, str]:
+    """The arguments of one page of the walk: its folder, its token, the path and the mark."""
+    arguments = {WALK_FOLDER: folder}
+    if token:
+        arguments[PAGE_CURSOR_PARAMETER] = token
+    if path:
+        arguments[WALK_PATH] = json.dumps(
+            [[one.folder, one.page_after, list(one.waiting)] for one in path],
+            separators=(",", ":"),
+        )
+    if left_out:
+        arguments[WALK_LEFT_OUT] = "1"
+    return MappingProxyType(arguments)
+
+
+def _folder_listed(folder: str, body: Any) -> str:
+    """The folder a page listed, learning the pin's id from the page where the arguments name none.
+
+    The pin's first page is asked with no arguments, so its id is not in them; every row of a page
+    names the folder it was listed from among its parents (`FolderListing.project` refuses a page
+    where one does not), so the one parent every row shares is the pin. Kept on the path, it is
+    what stops a folder that names the pin as a child from walking the pin again. Empty where the
+    page has no rows or the rows share no single parent, which leaves that one loop unguarded and
+    nothing else.
+    """
+    if folder:
+        return folder
+    listed = body.get("files") if isinstance(body, Mapping) else None
+    shared: set[str] | None = None
+    for raw in listed if isinstance(listed, list) else []:
+        parents = raw.get("parents") if isinstance(raw, Mapping) else None
+        if not isinstance(parents, list):
+            return ""
+        named = {one for one in parents if isinstance(one, str)}
+        shared = named if shared is None else shared & named
+    if shared is None or len(shared) != 1:
+        return ""
+    (pin,) = shared
+    return pin if _FILE_ID_RE.match(pin) else ""
+
+
+def walk_step(asked: Mapping[str, str], body: Any) -> tuple[Mapping[str, str] | None, bool]:
+    """The page the walk asks after this one, or None at its end, and whether the walk has left a
+    folder out at `MAX_FOLDER_DEPTH`, on this page or before it.
+
+    Depth first: into the first subfolder this page names that is not already on the path or
+    waiting on it, keeping this folder's next page and its other subfolders as a level of the path;
+    else this folder's next page; else back up the path to the nearest level with a subfolder
+    waiting or a page left. A subfolder deeper than `MAX_FOLDER_DEPTH` is not entered, and the mark
+    says so on every page after. See `A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`.
+    """
+    folder = _folder_listed(asked.get(WALK_FOLDER, ""), body)
+    path = list(walk_path(asked))
     left_out = asked.get(WALK_LEFT_OUT, "") == "1"
-    for one in subfolders_to_walk(body):
-        if one in seen:
-            continue
-        if len(seen) >= MAX_FOLDERS_WALKED:
+    token = next_cursor(Reply(status=200, body=body))
+    # The cycle guard: a folder on the path, or waiting at any level of it, is not entered again.
+    # The path travels in the arguments, so the guard holds across passes as well as within one.
+    on_path = {folder, *(one.folder for one in path), *(w for one in path for w in one.waiting)}
+    found = [one for one in dict.fromkeys(subfolders_to_walk(body)) if one not in on_path]
+    if found:
+        if len(path) + 1 > MAX_FOLDER_DEPTH:
             left_out = True
-            continue
-        seen.add(one)
-        pending.append(one)
-    return pending, seen, left_out
+        else:
+            path.append(WalkFrame(folder=folder, page_after=token, waiting=tuple(found[1:])))
+            return _page_of_the_walk(found[0], "", path, left_out=left_out), left_out
+    if token:
+        return _page_of_the_walk(folder, token, path, left_out=left_out), left_out
+    while path:
+        level = path.pop()
+        if level.waiting:
+            path.append(replace(level, waiting=level.waiting[1:]))
+            following = _page_of_the_walk(level.waiting[0], "", path, left_out=left_out)
+            return following, left_out
+        if level.page_after:
+            following = _page_of_the_walk(level.folder, level.page_after, path, left_out=left_out)
+            return following, left_out
+    return None, left_out
 
 
 class DriveReading:
@@ -2603,34 +2769,22 @@ class DriveReading:
     ) -> Mapping[str, str] | None:
         """The rest of this folder, or the next folder of the walk, or None when the tree is done.
 
-        The walk is carried in the page arguments (`WALK_FOLDER`, `WALK_PENDING`, `WALK_SEEN`),
-        so the reading holds nothing between pages, and a pass the worker stopped is carried on from
-        them. Each subfolder a page names is queued once (`subfolders_to_walk`); a folder already
-        queued is not queued again, which is what ends a loop, and no more than
-        `MAX_FOLDERS_WALKED` are queued in one pass, the rest left out and marked `WALK_LEFT_OUT`.
+        The walk is carried in the page arguments (`WALK_FOLDER`, `WALK_PATH`), so the reading
+        holds nothing between pages, and a pass the worker stopped is carried on from them. It goes
+        depth first, so what the arguments carry is bounded by `MAX_FOLDER_DEPTH` and one page
+        rather than by the tree (`walk_step`, `A_WALK_S_PLACE_IS_ITS_PATH_AND_NOT_ITS_QUEUE`).
         """
         del entity, returned
-        folder = asked.get(WALK_FOLDER, "")
-        pending, seen, left_out = _queued(asked, body)
-        walk = {WALK_PENDING: " ".join(pending), WALK_SEEN: " ".join(sorted(seen))}
-        if left_out:
-            walk[WALK_LEFT_OUT] = "1"
-        cursor = next_cursor(Reply(status=200, body=body))
-        if cursor:
-            return MappingProxyType({PAGE_CURSOR_PARAMETER: cursor, WALK_FOLDER: folder, **walk})
-        if not pending:
-            return None
-        following = pending.pop(0)
-        walk[WALK_PENDING] = " ".join(pending)
-        return MappingProxyType({WALK_FOLDER: following, **walk})
+        return walk_step(asked, body)[0]
 
     def left_out(self, entity: str, asked: Mapping[str, str], body: Any) -> bool:
-        """Whether this pass has left a folder out at `MAX_FOLDERS_WALKED`, on this page or before.
+        """Whether this pass has left a folder out at `MAX_FOLDER_DEPTH`, on this page or before.
 
-        A `declaration.BoundedWalk`: the worker reports such a pass cut short and retires nothing.
+        A `declaration.BoundedWalk`: the worker reports such a pass as part of the source left out,
+        and it retires nothing.
         """
         _assert_file(entity)
-        return _queued(asked, body)[2]
+        return walk_step(asked, body)[1]
 
     def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
         # Built for its refusal of settings that are not a folder; Google needs no header here.

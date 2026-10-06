@@ -12,7 +12,7 @@ import { DRAFT_SUMMARY } from "./agents";
 function card(id: string): Record<string, unknown> {
   return {
     suspension_id: id,
-    artefact: `ticket.update_status on ticket\n  note: ${UNBROKEN}`,
+    request: `ticket.update_status on ticket\n  note: ${UNBROKEN}`,
     runs_as: UNBROKEN,
     raised_at: "2019-03-04T09:00:00Z",
     expires_at: "2019-03-04T13:00:00Z",

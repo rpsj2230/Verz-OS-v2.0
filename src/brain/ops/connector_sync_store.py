@@ -24,7 +24,12 @@ slower reading cannot overwrite a faster one's. See
 `retire_unseen` stamps `statement_timestamp()`, the one instant `0045`'s policy lets the application
 write, and copies each row it retires into `proj.record_retired` in the same statement, and
 `advance_epoch` counts a change in `proj.source_epoch`; the worker runs each in the
-transaction of the write it describes. `StoredSourceEpochs` is the answer path's read of them.
+transaction of the write it describes. `StoredSourceEpochs` is the answer path's read of them,
+and `ReadThroughSourceEpochs` keeps that read for `SOURCE_EPOCHS_TTL_SECONDS` in the cache when an
+install has one (M6.2.5), so a question costs no database read for its epochs. **A read-through and
+not a cache the worker writes**, because the worker holds no cache client and a counter kept only in
+the cache could start again at zero under an answer it once invalidated; a reading lost here is
+read again from the counter, which is the record.
 
 **The worker writes as the login its URL names**, which on an install is the database's owner, as
 `brain.ops.erasure_store` and `brain.ops.webhook_delivery` already do. Under the application role
@@ -70,6 +75,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import HealthState
 from brain.connectors.projection import ProjectedRecord
+from brain.gate.caches import (
+    SOURCE_EPOCHS_KEY,
+    SOURCE_EPOCHS_TTL_SECONDS,
+    CachedSourceEpochs,
+)
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_probe import (
     REQUEST_NAMESPACE,
@@ -148,6 +158,18 @@ def latest_attempts() -> Select[Any]:
         .group_by(ConnectorSyncRow.connection_id)
         .subquery("synced")
     )
+    # The newest read's own sentence, which is where a lost field is said and kept. See
+    # `brain.ops.connector_sync.fields_lost_of`.
+    read = (
+        select(
+            ConnectorSyncRow.connection_id,
+            ConnectorSyncRow.detail.label("synced_detail"),
+        )
+        .where(ConnectorSyncRow.outcome == SyncOutcome.SYNCED.value)
+        .distinct(ConnectorSyncRow.connection_id)
+        .order_by(ConnectorSyncRow.connection_id, ConnectorSyncRow.finished_at.desc())
+        .subquery("read")
+    )
     # Where reading stood, from the newest attempt that recorded it: a test of the connection
     # records none and must not make the next read start again.
     placed = (
@@ -168,6 +190,7 @@ def latest_attempts() -> Select[Any]:
             newest.c.next_attempt_at,
             newest.c.detail,
             synced.c.last_synced_at,
+            read.c.synced_detail,
             placed.c.read_state,
         )
         .join(
@@ -178,6 +201,7 @@ def latest_attempts() -> Select[Any]:
             ),
         )
         .outerjoin(synced, synced.c.connection_id == newest.c.connection_id)
+        .outerjoin(read, read.c.connection_id == newest.c.connection_id)
         .outerjoin(placed, placed.c.connection_id == newest.c.connection_id)
         .order_by(newest.c.connector)
     )
@@ -338,6 +362,44 @@ class StoredSourceEpochs:
         return MappingProxyType({str(name): int(epoch) for name, epoch in rows})
 
 
+class EpochsCache(Protocol):
+    """Where a reading of every source's epoch is kept: `brain.cache.source_epochs_cache`.
+
+    Never raises: a store that is down is a miss on `get` and a dropped write on `set`, which is
+    `brain.cache.ValkeyRecordCache`'s promise, so an unreachable cache slows a question down and
+    never fails it.
+    """
+
+    def get(self, key: str) -> CachedSourceEpochs | None: ...
+
+    def set(self, key: str, value: CachedSourceEpochs, ttl_seconds: int) -> None: ...
+
+
+class ReadThroughSourceEpochs:
+    """`SourceEpochs` from the cache when it holds a reading, else from `inner`, which it keeps.
+
+    See `brain.gate.caches.ONE_EPOCH_SOURCE_KEYS_AN_ANSWER`: this is the counter, read less often,
+    and never a second epoch source. The reading is the whole mapping under one key, because the
+    database read it saves is the whole table in one statement.
+    """
+
+    def __init__(self, inner: SourceEpochs, cache: EpochsCache) -> None:
+        self._inner = inner
+        self._cache = cache
+
+    async def epochs(self) -> Mapping[str, int]:
+        kept = self._cache.get(SOURCE_EPOCHS_KEY)
+        if kept is not None:
+            return MappingProxyType(dict(kept.epochs))
+        read = await self._inner.epochs()
+        self._cache.set(
+            SOURCE_EPOCHS_KEY,
+            CachedSourceEpochs(key=SOURCE_EPOCHS_KEY, epochs=dict(read)),
+            SOURCE_EPOCHS_TTL_SECONDS,
+        )
+        return read
+
+
 def attempt_row(connection_id: uuid.UUID, attempt: Attempt) -> Insert:
     """The row one finished attempt leaves."""
     return insert(ConnectorSyncRow).values(
@@ -372,8 +434,31 @@ def _state(row: RowMapping) -> SyncState:
         next_attempt_at=row["next_attempt_at"],
         detail=str(row["detail"]),
         last_synced_at=row["last_synced_at"],
+        synced_detail=str(row["synced_detail"] or ""),
         read_state=ReadState.from_stored(str(row["connector"]), row["read_state"]),
     )
+
+
+async def held_by_record(
+    session: AsyncSession, source: str, entity: str, source_ids: Sequence[str]
+) -> Mapping[str, frozenset[str]]:
+    """The fields the index holds on each of these live records, by the record's id.
+
+    Read for a page before the page is written, because a run that has lost a field writes its
+    records without it. See `brain.ops.connector_sync.A_FIELD_IS_LOST_WHEN_THE_RECORDS_THAT_
+    CARRIED_IT_NO_LONGER_DO`.
+    """
+    if not source_ids:
+        return MappingProxyType({})
+    rows = await session.execute(
+        select(ProjectedRecordRow.source_id, ProjectedRecordRow.fields).where(
+            ProjectedRecordRow.source == source,
+            ProjectedRecordRow.entity == entity,
+            ProjectedRecordRow.source_id.in_(list(source_ids)),
+            ProjectedRecordRow.deleted_at.is_(None),
+        )
+    )
+    return MappingProxyType({str(one): frozenset(dict(fields)) for one, fields in rows.all()})
 
 
 async def read_live(session: AsyncSession) -> tuple[LiveConnection, ...]:

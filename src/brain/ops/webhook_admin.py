@@ -163,7 +163,19 @@ REPLACING_A_SIGNING_KEY: Final = (
 )
 SWITCHING_A_SUBSCRIBER_OFF: Final = (
     "The subscriber is told nothing more, and deliveries already waiting for it are not sent. "
-    "This cannot be undone: to start again, register it under a new id."
+    "It can be switched back on here, and each delivery it missed can then be sent once more."
+)
+
+#: What switching a subscriber back on does, in the confirmation's words.
+SWITCHING_A_SUBSCRIBER_ON: Final = (
+    "The subscriber is told about what happens from now on, signed with the secret it already "
+    "has. Deliveries it missed while it was off are not sent unless each is replayed."
+)
+
+#: What replaying a delivery that was given up does, in the confirmation's words.
+REPLAYING_A_DELIVERY: Final = (
+    "This delivery is sent once more within a minute. If the subscriber refuses it again it is "
+    "given up again, and it cannot be replayed a second time."
 )
 
 # ---------------------------------------------------------------------- the figures

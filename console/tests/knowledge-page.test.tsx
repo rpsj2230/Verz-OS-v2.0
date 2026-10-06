@@ -44,8 +44,12 @@ import {
 } from "../src/pages/knowledge/knowledgeDocuments";
 import { ADD_LABEL, KNOWLEDGE_HEADING, NO_DOCUMENTS } from "../src/pages/knowledge/KnowledgePage";
 import { CAPTURE, CAPTURE_PROBLEMS } from "../src/pages/knowledge/SolutionsPage";
+import { APPROVE, CONFIRM_CONSEQUENCE, OPEN, REASON_MISSING, REJECT } from "../src/pages/knowledge/CorrectionsPage";
 import { QUEUED_FIELDS, QUEUED_STATES, queuedPath, readQueued } from "../src/pages/knowledgeIntakeQuery";
 import {
+  CORRECTIONS_API_PATH,
+  correctionDecisionPath,
+  correctionReviewPath,
   instantOf,
   isAfterToday,
   itemPath,
@@ -657,6 +661,92 @@ describe("Solutions", () => {
     await act(async () => {
       fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------- corrections
+describe("Corrections", () => {
+  const CANDIDATE = "correction.tealfix";
+  const LISTED = { candidate_id: CANDIDATE, item_id: ITEM, title: "Site handover", instances: 2, raised_at: "2019-03-02T09:00:00+00:00" };
+  const REVIEW = { ...LISTED, words: "The handover takes five working days.", audience: "Everyone in web will see these words." };
+
+  test("the list names the document and not the words, which are read only when it is opened", async () => {
+    // What breaks if this is deleted: the corrected words drawn in a list nobody's right to decide
+    // was asked for, or a review drawn without who will read the words (M16.6.6, condition five).
+    const idp = api({ [CORRECTIONS_API_PATH]: { items: [LISTED] }, [correctionReviewPath(CANDIDATE)]: REVIEW });
+    const container = await page("/corrections", idp);
+
+    expect(container.textContent).toContain("Site handover");
+    expect(container.textContent).toContain("2 corrections said the same");
+    expect(container.textContent).not.toContain("five working days");
+    expect(idp.calls.some((call) => new URL(call.url, ORIGIN).pathname === `${API}${correctionReviewPath(CANDIDATE)}`)).toBe(false);
+
+    fireEvent.click(within(container).getByText(OPEN));
+    await waitFor(() => expect(container.textContent).toContain("five working days"));
+    expect(container.textContent).toContain("Everyone in web will see these words.");
+  });
+
+  test("approving asks first and sends the review date; rejecting needs a reason", async () => {
+    // What breaks if this is deleted: a new version written with no confirmation and no review date,
+    // or a rejection sent with no reason the route would refuse anyway.
+    const idp = api({ [CORRECTIONS_API_PATH]: { items: [LISTED] }, [correctionReviewPath(CANDIDATE)]: REVIEW });
+    const container = await page("/corrections", idp);
+    fireEvent.click(within(container).getByText(OPEN));
+    const form = (await waitFor(() => {
+      const found = container.querySelector('form[aria-label^="Decide"]');
+      if (found === null) {
+        throw new Error("the review has not arrived");
+      }
+      return found;
+    })) as HTMLFormElement;
+
+    fireEvent.click(within(form).getByText(REJECT));
+    expect(form.textContent).toContain(REASON_MISSING);
+    setField(form, "review_by", "");
+    fireEvent.submit(form);
+    expect(form.textContent).toContain(PROBLEMS.review);
+    expect(writes(idp)).toEqual([]);
+
+    setField(form, "review_by", "2999-02-03");
+    fireEvent.click(within(form).getByText(APPROVE));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(CONFIRM_CONSEQUENCE);
+    expect(dialog.textContent).toContain("Everyone in web will see these words.");
+    expect(writes(idp)).toEqual([]);
+    fireEvent.click(within(dialog).getByText(APPROVE));
+    await waitFor(() => expect(writes(idp)).toHaveLength(1));
+    expect(writes(idp)[0]?.url.pathname).toBe(`${API}${correctionDecisionPath(CANDIDATE)}`);
+    expect(bodyOf(writes(idp)[0]?.init as RequestInit)).toEqual({ approve: true, review_by: "2999-02-03T12:00:00+00:00" });
+  });
+
+  test("a rejection with a reason is sent with it and nothing else", async () => {
+    // What breaks if this is deleted: the positive sibling of the refusal above, so a form that
+    // refuses every rejection would pass.
+    const idp = api({ [CORRECTIONS_API_PATH]: { items: [LISTED] }, [correctionReviewPath(CANDIDATE)]: REVIEW });
+    const container = await page("/corrections", idp);
+    fireEvent.click(within(container).getByText(OPEN));
+    const form = (await waitFor(() => {
+      const found = container.querySelector('form[aria-label^="Decide"]');
+      if (found === null) {
+        throw new Error("the review has not arrived");
+      }
+      return found;
+    })) as HTMLFormElement;
+    setField(form, "reason", "  The document is already right.  ");
+    fireEvent.click(within(form).getByText(REJECT));
+    await waitFor(() => expect(writes(idp)).toHaveLength(1));
+    expect(bodyOf(writes(idp)[0]?.init as RequestInit)).toEqual({ approve: false, reason: "The document is already right." });
+  });
+
+  test("a correction the reader may not decide is the API's one refusal, drawn as any other", async () => {
+    // What breaks if this is deleted: a refused review drawn as a loading state for ever, or as
+    // something that tells the reader the correction exists.
+    const idp = api({ [CORRECTIONS_API_PATH]: { items: [LISTED] }, [correctionReviewPath(CANDIDATE)]: 404 });
+    const container = await page("/corrections", idp);
+    fireEvent.click(within(container).getByText(OPEN));
+    await waitFor(() => expect(container.querySelector('[data-slot="loading-state"]')).toBeNull());
+    expect(container.textContent).not.toContain("five working days");
+    expect(container.querySelector('form[aria-label^="Decide"]')).toBeNull();
   });
 });
 

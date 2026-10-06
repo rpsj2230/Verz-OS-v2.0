@@ -17,10 +17,14 @@
  * first; appointing, deputising and mapping are drawers. The controls are drawn when the API says
  * `editable`, and every route asks its own question.
  *
+ * **Nominations, for the person who cannot appoint** (M33.1.2.3). Anybody this page opens for may
+ * propose somebody; the section lists what the reader may decide and what they proposed, and never
+ * how many others are waiting. Deciding is a drawer that confirms or declines.
+ *
  * Removed from the old screen: principal ids typed into and printed on the forms and lists, the role
  * key as a heading, and three forms drawn open under the lists (now one press away).
  *
- * Task ids: M27.11.3, M1.3.2, M1.3.3, M1.3.4, M1.1.5, M1.8.4, M27.16.1
+ * Task ids: M27.11.3, M1.3.2, M1.3.3, M1.3.4, M1.1.5, M1.8.4, M27.16.1, M33.1.2.3
  */
 
 import { Plus, UserCog } from "lucide-react";
@@ -41,17 +45,20 @@ import {
   GROUP_RULES_API_PATH,
   HOLDERS_API_PATH,
   MISCONFIGURATIONS_API_PATH,
+  NOMINATIONS_API_PATH,
   ROLES_API_PATH,
   readGroupRules,
   readMisconfigurations,
+  readNominations,
   readRoles,
   type GroupRuleRow,
+  type NominationRow,
   type RoleRow,
 } from "../governQuery";
 import { dayWords } from "../access/formParts";
 import { PersonName, roleWords, useNames } from "../access/PersonName";
 import { scopeLines } from "../scopeText";
-import { AppointDrawer, DeputyDrawer, EndDialog, GroupRuleDrawer, type Ending } from "./RoleDrawers";
+import { AppointDrawer, DeputyDrawer, EndDialog, GroupRuleDrawer, NominationDecisionDrawer, type Ending } from "./RoleDrawers";
 
 export const ROLES_HEADING = "Roles and permissions";
 export const ROLES_LEDE = "The six platform roles, who holds each, and which directory groups confer one. A role grants nothing.";
@@ -59,6 +66,20 @@ export const ROLES_CRUMB = "Roles";
 export const HOLDERS_HEADING = "Who holds a role";
 export const NO_HOLDERS = "Nobody you may see holds a role";
 export const GROUP_RULES_HEADING = "Directory groups";
+export const NOMINATIONS_HEADING = "Nominations";
+export const NOTHING_TO_DECIDE = "Nothing is waiting for your decision";
+export const NOMINATED_NOBODY = "You have not nominated anybody";
+
+/** A nomination's state, in words. */
+export function nominationState(row: NominationRow): string {
+  if (row.outcome === "confirmed") {
+    return "Confirmed";
+  }
+  if (row.outcome === "declined") {
+    return "Declined";
+  }
+  return "Waiting for a decision";
+}
 export const MISCONFIGURED_HEADING = "Approver role and approve permission";
 export const SYNCED_HEADING = "Roles the sync wrote from a group";
 export const A_ROLE_IS_NOT_EDITED =
@@ -368,6 +389,98 @@ function Misconfigured() {
   );
 }
 
+function Nominations({ version, onWritten }: { readonly version: number; readonly onWritten: () => void }) {
+  const answer = useResource<unknown>(NOMINATIONS_API_PATH, version);
+  const page = useMemo(() => readNominations(answer.data), [answer.data]);
+  const [nominating, setNominating] = useState(false);
+  const [deciding, setDeciding] = useState<{ readonly id: string; readonly label: string } | null>(null);
+
+  const nameOf = (row: NominationRow) => row.display_name ?? "another account";
+  const labelOf = (row: NominationRow) => `${nameOf(row)}, ${roleWords(row.role)}`;
+  const columns: readonly EntityColumn<NominationRow>[] = [
+    {
+      id: "person",
+      header: "Person",
+      hideable: false,
+      cell: (row) => <PersonName principalId={row.principal_id} names={new Map()} known={row.display_name ?? undefined} />,
+      text: (row) => nameOf(row),
+    },
+    { id: "role", header: "Role", cell: (row) => roleWords(row.role), text: (row) => roleWords(row.role) },
+    { id: "reason", header: "Why", cell: (row) => row.reason, text: (row) => row.reason },
+    { id: "state", header: "State", cell: (row) => nominationState(row), text: (row) => nominationState(row) },
+  ];
+
+  let body;
+  if (answer.failure !== null) {
+    body = <FailureState failure={answer.failure} />;
+  } else if (answer.data === null) {
+    body = <LoadingState label="Loading nominations." rows={2} />;
+  } else {
+    body = (
+      <div className="flex flex-col gap-4">
+        {page.deciding.length === 0 ? (
+          <p className="m-0 text-[13px] text-dim">{NOTHING_TO_DECIDE}</p>
+        ) : (
+          <EntityTable
+            caption="Nominations waiting for your decision"
+            columns={columns}
+            rows={page.deciding}
+            rowId={(row) => row.id}
+            rowLabel={labelOf}
+            rowActions={(row) => (
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={`Decide the nomination of ${labelOf(row)}`}
+                onClick={() => {
+                  setDeciding({ id: row.id, label: labelOf(row) });
+                }}
+              >
+                Decide
+              </Button>
+            )}
+          />
+        )}
+        {page.mine.length === 0 ? (
+          <p className="m-0 text-[13px] text-dim">{NOMINATED_NOBODY}</p>
+        ) : (
+          <EntityTable caption="Your nominations" columns={columns} rows={page.mine} rowId={(row) => row.id} rowLabel={labelOf} />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <SectionCard
+      title={NOMINATIONS_HEADING}
+      lede="Somebody proposed for a role, confirmed or declined by a person with the grant decision over them."
+      action={
+        answer.failure === null ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setNominating(true);
+            }}
+          >
+            <Plus aria-hidden /> Nominate
+          </Button>
+        ) : undefined
+      }
+    >
+      {body}
+      <AppointDrawer open={nominating} onOpenChange={setNominating} onWritten={onWritten} nominating />
+      <NominationDecisionDrawer
+        nomination={deciding}
+        onClose={() => {
+          setDeciding(null);
+        }}
+        onWritten={onWritten}
+      />
+    </SectionCard>
+  );
+}
+
 export function RolesPage() {
   const [version, setVersion] = useState(0);
   const written = useCallback(() => {
@@ -380,6 +493,7 @@ export function RolesPage() {
         <Catalogue />
       </SectionCard>
       <Holders version={version} onWritten={written} />
+      <Nominations version={version} onWritten={written} />
       <GroupRules version={version} onWritten={written} />
       <Misconfigured />
     </div>

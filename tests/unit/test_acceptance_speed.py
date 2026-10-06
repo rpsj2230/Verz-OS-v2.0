@@ -1,6 +1,6 @@
 """The speed install acceptance checks: registered, passing on PostgreSQL, and able to fail.
 
-The pure half holds the four checks to the leaves they prove and to the work breakdown, and the
+The pure half holds the five checks to the leaves they prove and to the work breakdown, and the
 tables they write to the suite's own list. The database half builds PostgreSQL to head once for the
 module and runs the checks as the worker would: each passes, and every table they write to holds,
 row for row, what it held before. Then the property each check proves is broken, one at a time, by
@@ -10,7 +10,7 @@ fails with its own sentence.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M6.1.1, M6.1.2, M6.1.4, M6.1.6, M6.3.1, M6.3.2, M6.3.3, M6.3.4, M6.3.5, M6.4.2
-Task ids: M6.4.3, M6.4.4
+Task ids: M6.4.3, M6.4.4, M6.1.3
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ LEAVES = {
         "M6.3.5",
     ),
     "every_prompt_opens_with_the_same_bytes_and_one_length": ("M6.4.2", "M6.4.3", "M6.4.4"),
+    "the_fast_lane_reads_as_a_role_that_reaches_nothing_else": ("M6.1.3",),
 }
 
 #: Every table the speed checks write to, which must hold afterwards exactly what it held before.
@@ -122,6 +123,7 @@ def test_the_speed_checks_are_listed_in_their_page_order() -> None:
         "the_fast_lane_share_counts_people_and_not_machines",
         "an_answer_streams_steps_then_citations_then_prose",
         "every_prompt_opens_with_the_same_bytes_and_one_length",
+        "the_fast_lane_reads_as_a_role_that_reaches_nothing_else",
     ]
 
 
@@ -305,4 +307,38 @@ def test_the_prompt_check_fails_when_a_person_reaches_the_shared_bytes(
     assert refused(database, "every_prompt_opens_with_the_same_bytes_and_one_length") == (
         FAILED,
         "two people's prompts did not open with the same bytes",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_role_check_fails_when_the_lane_does_not_mark_its_reads(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lane whose reads carry no mark is read as the application by every source. Delete this
+    and the check can pass on an install whose fast lane reads everything the application can."""
+    import contextlib
+
+    from brain.gate import fast_lane
+
+    monkeypatch.setattr(fast_lane, "read_as_the_fast_lane", contextlib.nullcontext)
+
+    assert refused(database, "the_fast_lane_reads_as_a_role_that_reaches_nothing_else") == (
+        FAILED,
+        "the fast lane's reads were not marked as its own",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_role_check_fails_when_the_source_ignores_the_mark(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source that runs a marked read as the application. Delete this and the check can pass on
+    an install whose row source never takes the role, the lane's mark read by nothing."""
+    from brain.knowledge import row_store
+
+    monkeypatch.setattr(row_store, "is_a_fast_lane_read", lambda: False)
+
+    assert refused(database, "the_fast_lane_reads_as_a_role_that_reaches_nothing_else") == (
+        FAILED,
+        "the fast lane's rows were read as the application",
     )
