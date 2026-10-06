@@ -13,7 +13,7 @@
  * **What a filter offers is asserted over the rendered options**, and every parameter the page sends
  * and every action it can label are read out of the API's own document.
  *
- * Task ids: M27.7.13, M27.16.1
+ * Task ids: M27.7.13, M27.16.1, M33.4.1.3
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -37,6 +37,7 @@ import {
   READING_THE_LEDGER,
 } from "../src/pages/audit/AuditPage";
 import { HISTORY_FILLED_A_PAGE, PERMISSIONS_VIEW } from "../src/pages/audit/AuditSubjectPage";
+import { NO_PATTERN, REDACTED_LABEL, STATISTICS_HEADING } from "../src/pages/audit/auditStatistics";
 import { ACTION_LABELS, NO_NAME, whatWords } from "../src/pages/audit/auditWords";
 import { THAT_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED } from "../src/ui/FailureNotice";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -287,6 +288,81 @@ describe("what the Audit log shows", () => {
     });
     expect(unreachable.container.textContent).toContain(THE_BRAIN_COULD_NOT_BE_REACHED);
     expect(new Set([NO_ENTRIES, THAT_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED, READING_THE_LEDGER]).size).toBe(4);
+  });
+});
+
+describe("the refusal and redaction statistics", () => {
+  const STATISTICS_OPERATION = "/api/v1/audit/statistics";
+  const ENUMERATING = "A colleague is being told there is nothing there across a spread of different places.";
+  const MISSING_A_GRANT = "A colleague keeps being told there is nothing there, always in the same place.";
+
+  function statistics(over: Record<string, unknown> = {}): unknown {
+    return {
+      since: "2019-02-25T09:00:00Z",
+      until: "2019-03-04T09:00:00Z",
+      refusals: [
+        { shape: "access_needed", reads_as: MISSING_A_GRANT, occurrences: 1 },
+        { shape: "enumeration", reads_as: ENUMERATING, occurrences: 37 },
+      ],
+      redacted_entries: 29,
+      read_at_most: 5000,
+      ...over,
+    };
+  }
+
+  function card(container: HTMLElement): Element | undefined {
+    return [...container.querySelectorAll('[data-slot="section-card"]')].find((one) => one.querySelector("h2")?.textContent === STATISTICS_HEADING);
+  }
+
+  test("each shape is drawn in the API's own sentence with how often, and the redactions as one number", async () => {
+    // What breaks if this is deleted: the card can sum the shapes into a total, draw a figure it
+    // computed, or name what was refused, and nothing reading the page would notice.
+    const { container, idp } = await mount("/audit", (url) => {
+      if (url.pathname === STATISTICS_OPERATION) {
+        return json(statistics());
+      }
+      return url.pathname === AUDIT_OPERATION ? json(ledgerPage(ROWS)) : null;
+    });
+    await waitFor(() => {
+      expect(card(container)?.textContent ?? "").toContain(ENUMERATING);
+    });
+    const text = card(container)?.textContent ?? "";
+
+    expect(text).toContain(MISSING_A_GRANT);
+    expect(text).toContain("37 times");
+    expect(text).toContain("once");
+    expect(text).toContain(REDACTED_LABEL);
+    expect(text).toContain("29");
+    expect(text).not.toContain("38");
+    expect(text).not.toMatch(/\bof \d+\b|\btotal\b|\bshowing\b/i);
+    const sent = asked(idp, STATISTICS_OPERATION);
+    expect(sent).toHaveLength(1);
+    expect([...(sent[0]?.searchParams.keys() ?? [])]).toEqual([]);
+  });
+
+  test("a card the API answers 404 is left out and the ledger still draws, and no pattern is said in words", async () => {
+    // What breaks if this is deleted: a reader the statistics are not for is shown an empty card, or
+    // a window with no pattern draws an empty list that reads as a broken page.
+    const refused = await mount("/audit", (url) => {
+      if (url.pathname === STATISTICS_OPERATION) {
+        return json({ message: "I could not find that.", trace_id: "t-9" }, 404);
+      }
+      return url.pathname === AUDIT_OPERATION ? json(ledgerPage(ROWS)) : null;
+    });
+    await waitFor(() => {
+      expect(refused.container.textContent).toContain("Capability granted");
+    });
+    expect(card(refused.container)).toBeUndefined();
+
+    const quiet = await mount("/audit", (url) => {
+      if (url.pathname === STATISTICS_OPERATION) {
+        return json(statistics({ refusals: [], redacted_entries: 0 }));
+      }
+      return url.pathname === AUDIT_OPERATION ? json(ledgerPage(ROWS)) : null;
+    });
+    await waitFor(() => {
+      expect(card(quiet.container)?.textContent ?? "").toContain(NO_PATTERN);
+    });
   });
 });
 

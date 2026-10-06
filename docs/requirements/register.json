@@ -209,7 +209,7 @@
     "M27.14.1",
     "M27.15.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "ARC-A-013",
@@ -2902,7 +2902,7 @@
     "M27.7.29",
     "M2.3.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 160: only an unscoped stop stops one agent"
   },
   {
    "id": "ARC-A-171",
@@ -2920,7 +2920,7 @@
     "M39.7.2",
     "M10.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "FEAT-1.1",
@@ -3148,7 +3148,7 @@
     "M13.8.9",
     "M13.8.5"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "FEAT-2.3",
@@ -6041,7 +6041,7 @@
    "proof": [
     "M10.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "ARC-B-069",
@@ -7843,7 +7843,7 @@
    "proof": [
     "M28.5.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "OWN-9",
@@ -8432,7 +8432,7 @@
    "proof": [
     "M12.4.9"
    ],
-   "decision": null
+   "decision": "needs-rupash 161: reach-only rehearsal until the agent runtime runs examples"
   },
   {
    "id": "OWN-45",
@@ -12273,7 +12273,7 @@
    "proof": [
     "M12.4.9"
    ],
-   "decision": null
+   "decision": "needs-rupash 161: reach-only rehearsal until the agent runtime runs examples"
   },
   {
    "id": "CON-60",
@@ -14355,7 +14355,7 @@
    "proof": [
     "M27.15.12"
    ],
-   "decision": null
+   "decision": "needs-rupash 168: A, the four defaults are how the product already behaves and no agent is installed at the start"
   },
   {
    "id": "DEF-08",
@@ -15670,7 +15670,7 @@
    "proof": [
     "M27.14.4"
    ],
-   "decision": null
+   "decision": "needs-rupash 162: the widget is offered to no new agent"
   },
   {
    "id": "CONA-22",

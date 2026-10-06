@@ -39,7 +39,7 @@ request, and a stored report is a second copy of a verdict that the next edit to
 stale; the owner's proof is the run shown on the Audit screen, and the anchor history lives in the
 outside store.
 
-Task ids: M24.1.2, M24.3.3
+Task ids: M24.1.2, M24.3.3, M33.7.1.3
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Final, Protocol, runtime_checkable
+from typing import Final, Protocol, cast, runtime_checkable
 
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -70,7 +70,7 @@ from brain.audit.verify import (
     Completeness,
     verify_window,
 )
-from brain.tables.audit import AuditEntryRow
+from brain.tables.audit import AuditEntryRow, ElevationEntryRow
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why a row that fails to construct stops the walk.
@@ -101,48 +101,69 @@ PUBLISHED_BY: Final = "anchor_store"
 
 
 # ------------------------------------------------------------------------ the reader
+#: A stored entry of either chain: the main ledger's, or the elevation chain's (`0209`), which has
+#: the same columns and the same digest, so one reader and one walk serve both.
+LedgerRow = AuditEntryRow | ElevationEntryRow
+
+#: Which table a stored chain is read from.
+LedgerTable = type[AuditEntryRow] | type[ElevationEntryRow]
+
+
 @runtime_checkable
 class LedgerSequence(Protocol):
     """The ledger read in sequence order. `StoredLedgerSequence` over a database."""
 
-    async def after(self, seq: int | None, *, limit: int) -> Sequence[AuditEntryRow]:
+    async def after(self, seq: int | None, *, limit: int) -> Sequence[LedgerRow]:
         """Up to `limit` rows with a sequence number greater than `seq`, oldest first."""
         ...
 
-    async def newest(self) -> AuditEntryRow | None:
+    async def newest(self) -> LedgerRow | None:
         """The row with the highest sequence number, or None for an empty ledger."""
         ...
 
-    async def at_seq(self, seq: int) -> AuditEntryRow | None:
+    async def at_seq(self, seq: int) -> LedgerRow | None:
         """The row at exactly this sequence number, or None."""
         ...
 
 
 class StoredLedgerSequence:
-    """`obs.audit_entry` read as the application role, whose policy admits every row to read."""
+    """A stored chain read as the application role, whose policy admits every row to read.
 
-    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+    `obs.audit_entry` by default, and `obs.elevation_entry` when handed `ElevationEntryRow`
+    (M33.7.1.3): the second chain is walked and anchored by exactly this code, which is what makes
+    it a chain rather than a table that happens to hold digests.
+    """
+
+    def __init__(
+        self, sessions: async_sessionmaker[AsyncSession], table: LedgerTable = AuditEntryRow
+    ) -> None:
         self._sessions = sessions
+        self._table = table
 
-    async def after(self, seq: int | None, *, limit: int) -> Sequence[AuditEntryRow]:
-        statement = select(AuditEntryRow).order_by(AuditEntryRow.seq).limit(limit)
+    async def after(self, seq: int | None, *, limit: int) -> Sequence[LedgerRow]:
+        table = self._table
+        statement = select(table).order_by(table.seq).limit(limit)
         if seq is not None:
-            statement = statement.where(AuditEntryRow.seq > seq)
+            statement = statement.where(table.seq > seq)
         async with self._sessions() as session, session.begin():
-            return (await session.execute(statement)).scalars().all()
+            # `cast` at the library boundary: a select over a union of mapped classes is typed as
+            # their common base, and the class handed in is one of the two by construction.
+            return cast("Sequence[LedgerRow]", (await session.execute(statement)).scalars().all())
 
-    async def newest(self) -> AuditEntryRow | None:
-        statement = select(AuditEntryRow).order_by(AuditEntryRow.seq.desc()).limit(1)
+    async def newest(self) -> LedgerRow | None:
+        table = self._table
+        statement = select(table).order_by(table.seq.desc()).limit(1)
         async with self._sessions() as session, session.begin():
-            return (await session.execute(statement)).scalars().first()
+            return cast("LedgerRow | None", (await session.execute(statement)).scalars().first())
 
-    async def at_seq(self, seq: int) -> AuditEntryRow | None:
-        statement = select(AuditEntryRow).where(AuditEntryRow.seq == seq)
+    async def at_seq(self, seq: int) -> LedgerRow | None:
+        table = self._table
+        statement = select(table).where(table.seq == seq)
         async with self._sessions() as session, session.begin():
-            return (await session.execute(statement)).scalars().first()
+            return cast("LedgerRow | None", (await session.execute(statement)).scalars().first())
 
 
-def entry_of(row: AuditEntryRow) -> AuditEntry | None:
+def entry_of(row: LedgerRow) -> AuditEntry | None:
     """One stored row as a chain entry, or None when the ledger's own type refuses it."""
     try:
         return AuditEntry(
@@ -239,7 +260,7 @@ def published_anchor(*, seq: int, head: str, recorded_at: datetime) -> Anchor:
     )
 
 
-def _refused_row(index: int, row: AuditEntryRow) -> ChainBreak:
+def _refused_row(index: int, row: LedgerRow) -> ChainBreak:
     return ChainBreak(
         index=index,
         seq=row.seq,

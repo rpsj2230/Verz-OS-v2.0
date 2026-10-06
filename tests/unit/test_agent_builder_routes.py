@@ -10,7 +10,7 @@ the ledger entries reach PostgreSQL is `tests/unit/test_agent_draft_store.py`.
 Every published agent is made by the product's own install flow from a signed manifest, and every
 edited agent was installed the same way, so what a publish answers here is what the store writes.
 
-Task ids: M27.11.6, M27.15.31
+Task ids: M27.11.6, M27.15.31, M20.4.1, M20.4.4
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from brain.agent_builder_routes import (
     AGENT_MOVED,
     ALREADY_PUBLISHED,
     APPROVE_PATH,
+    CANARIES_RED,
     CHECK_FIRST,
     CHECK_PATH,
     DECLINE_PATH,
@@ -54,6 +55,7 @@ from brain.agent_builder_routes import (
 )
 from brain.agent_lifecycle_routes import NO_CHANNEL_ANSWERS_NOWHERE, NO_SIGNING_KEY_HERE, FoundAgent
 from brain.agent_routes import TEMPLATE_SCREEN, record_of
+from brain.agents.attachments import with_connectors
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.creation import AGENT_INSTALL_CAPABILITY
 from brain.agents.install import Installation
@@ -721,6 +723,55 @@ def test_an_edit_starts_from_the_agent_as_it_is_and_an_instruction_change_publis
     assert after.install[0].manifest.identity.version == 1
 
 
+def bind_on_the_page(console: Console, *connectors: str) -> None:
+    """The company agent with these connectors on its own list, as a press on its page leaves it."""
+    held = console.memory.agents[COMPANY]
+    console.memory.agents[COMPANY] = replace(
+        held, record=with_connectors(held.record, tuple(connectors))
+    )
+
+
+def published(console: Console, draft_id: str, revision: int) -> tuple[str, ...]:
+    response = console.post("u_admin", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+    assert response.status_code == 201, response.text
+    return console.memory.agents[COMPANY].record.authority.connectors
+
+
+def test_an_untouched_draft_keeps_a_connector_bound_on_the_agents_page(console: Console) -> None:
+    """**`A_PUBLISH_CHANGES_ONLY_THE_CONNECTORS_ITS_DRAFT_CHANGED`.** An edit draft starts from the
+    connectors the agent names now, not the manifest's, so a publish of a draft whose author only
+    changed the persona keeps a connector bound on the page.
+
+    Delete this and every publish silently unbinds every source a steward bound on the agent's
+    page, and the author never saw the list it overwrote."""
+    bind_on_the_page(console, "freshdesk")
+    response = console.post("u_admin", at(EDIT_PATH, agent_id=COMPANY))
+    assert response.json()["document"]["connectors"] == ["freshdesk"]
+    draft = response.json()
+    revision = saved(console, draft, {**draft["document"], "persona": PERSONA})
+    assert checked(console, draft["draft_id"], revision).json()["passed"]
+
+    assert published(console, draft["draft_id"], revision) == ("freshdesk",)
+
+
+def test_a_publish_unbinds_only_what_its_draft_removed_and_keeps_one_bound_while_it_was_open(
+    console: Console,
+) -> None:
+    """A connector bound on the page while a draft was open is kept by its publish, because the
+    draft never named it either way; a connector the author took out of the draft is unbound. The
+    first half is the reason the rule is a change applied rather than a list written, and the
+    second is its positive sibling: without it a publish that never unbinds anything passes.
+
+    Delete this and a publish undoes a bind made a minute before it, or cannot unbind at all."""
+    bind_on_the_page(console, "freshdesk")
+    draft_id, revision = edited(console, {"persona": PERSONA})
+    bind_on_the_page(console, "freshdesk", "hubspot")
+    assert published(console, draft_id, revision) == ("freshdesk", "hubspot")
+
+    removed_id, removed_revision = edited(console, {"connectors": ["hubspot"]})
+    assert published(console, removed_id, removed_revision) == ("hubspot",)
+
+
 def test_an_edit_that_widens_the_ceiling_waits_and_one_that_changed_underneath_is_refused(
     console: Console,
 ) -> None:
@@ -918,3 +969,100 @@ def test_a_procedure_over_the_drafts_own_tools_becomes_a_skill_and_another_tool_
     assert "call `ledger.read_invoice`" in good.json()["skill"]
     assert bad.status_code == 409
     assert bad.json()["outcome"] == REFUSED
+
+
+# ------------------------------------------------------------------------ the publish gate
+def test_a_check_and_a_publish_say_the_rung_the_gate_decided(console: Console) -> None:
+    """**M20.4.4.** The check carries the rung a publish would land on and so does the publish, and
+    both are Shadow: a new agent starts there, and so does a widening of an agent already on it.
+
+    Delete this and the rung is not on the view, so nobody is told what a publish decided and the
+    gate's decision has no observable consequence on the route."""
+    draft_id, revision = ready(console, reaching_nothing())
+    check = checked(console, draft_id, revision).json()
+    response = console.post("u_admin", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+
+    assert check["rung_after"] == "shadow"
+    assert response.status_code == 201
+    assert response.json()["rung"] == "shadow"
+
+
+def test_an_edit_that_only_allows_a_bigger_side_effect_is_a_widening_the_gate_demotes(
+    console: Console,
+) -> None:
+    """**M20.4.4.** The capabilities are unchanged and the agent may now draft: the check names the
+    side effect, asks for a second person and decides Shadow, while a persona edit beside it asks
+    for nobody. A side effect is a widening two entitlement ceilings cannot show.
+
+    Delete this and the gate only sees capabilities, so an agent can be allowed to act on one
+    person's word."""
+    draft_id, revision = edited(console, {"persona": PERSONA})
+    quiet = checked(console, draft_id, revision).json()
+    assert quiet["widened"] == [] and quiet["second_person_needed"] is False
+
+    acting = {"guardrails": {**a_document()["guardrails"], "max_side_effect": "draft"}}
+    other_id, other_revision = edited(console, acting)
+    loud = checked(console, other_id, other_revision).json()
+    assert loud["widened"] == ["draft"]
+    assert loud["second_person_needed"] is True
+    assert loud["rung_after"] == "shadow"
+
+
+def test_an_approval_asks_the_gate_again_so_a_second_person_cannot_publish_past_a_red_canary(
+    console: Console,
+) -> None:
+    """**M20.4.1.** The second person did not run the author's check, so approving runs it: the
+    permission canaries went red after the request, the approval is refused in words, and nothing
+    is published or recorded as approved; once they pass, the same approval publishes.
+
+    Delete this and an approval writes whatever the author's earlier check once passed."""
+    draft_id, revision = ready(console, a_document())
+    waits = console.post("u_admin", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+    assert waits.status_code == 202
+
+    async def red() -> bool:
+        return True
+
+    async def green() -> bool:
+        return False
+
+    console.app.state.canaries_red = red
+    body = {"revision": revision}
+    refused = console.post("u_prefix", at(APPROVE_PATH, draft_id=draft_id), body)
+    assert refused.status_code == 409
+    assert CANARIES_RED in refused.json()["sentence"]
+    assert console.memory.agents.keys() == everybody().keys()
+    assert DraftAct.APPROVED not in [one.act for one in console.memory.drafts[draft_id].acts]
+
+    console.app.state.canaries_red = green
+    assert console.post("u_prefix", at(APPROVE_PATH, draft_id=draft_id), body).status_code == 201
+
+
+def test_nothing_is_published_while_the_permission_canaries_are_red(console: Console) -> None:
+    """**M20.4.1.** A red newest canary run fails the check in words and the publish is refused with
+    nothing written; the same draft checked again once they pass publishes. A permission canary
+    that could not block would be a report.
+
+    Delete this and the system's own permission check is shown to the author and never consulted,
+    so a gate known to be leaking publishes more agents on top of it."""
+    draft_id, revision = ready(console, reaching_nothing())
+
+    async def red() -> bool:
+        return True
+
+    async def green() -> bool:
+        return False
+
+    console.app.state.canaries_red = red
+    stopped = checked(console, draft_id, revision).json()
+    refused = console.post("u_admin", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+
+    assert stopped["passed"] is False
+    assert CANARIES_RED in stopped["problems"]
+    assert refused.status_code == 409
+    assert console.memory.agents.keys() == everybody().keys()
+
+    console.app.state.canaries_red = green
+    assert checked(console, draft_id, revision).json()["passed"] is True
+    published = console.post("u_admin", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+    assert published.status_code == 201

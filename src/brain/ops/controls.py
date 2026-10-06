@@ -748,6 +748,27 @@ CONTROLS: Final[tuple[Control, ...]] = (
         schedule_file=".github/workflows/anchor.yml",
     ),
     Control(
+        name="elevation_anchor",
+        # The elevation chain's head (`0209`, M33.7.1.3), published beside the main ledger's and
+        # read by the same workflow, so its few entries are anchored on their own cadence.
+        symbols=("brain.audit.chain_check:published_head",),
+        guards=(
+            "that an approved elevation cannot be removed from the end of the elevation chain "
+            "without it being detectable, whatever the main ledger's anchor says"
+        ),
+        lost_silently=(
+            "The elevation chain still verifies after its newest entries are removed, and the "
+            "main ledger's anchor says nothing about it: the main chain still holds each "
+            "request's decision, but the separate head that moves only when somebody is elevated "
+            "would no longer be recorded anywhere the database administrator cannot reach."
+        ),
+        every=_SIX_HOURLY,
+        severity=Severity.RAISED,
+        invoked_by=Invocation.ON_A_ROUTE,
+        route="/api/audit/elevation-anchor",
+        schedule_file=".github/workflows/anchor.yml",
+    ),
+    Control(
         name="model_health_probes",
         # The run joined on 2026-09-22: the worker's schedule starts it every minute, it reads the
         # ladder and the stored rings, asks `next_probes` which deployments are due, and appends
@@ -1034,6 +1055,32 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.NOTICED,
         invoked_by=Invocation.IN_PROCESS,
         daily_at="INSTALL_DIGEST_TIME",
+    ),
+    Control(
+        name="approved_actions",
+        # Since 2026-10-06 (`0201`, M13.7.6). The worker's schedule starts `run_approved_now`,
+        # which reads each approved action through `gate.approved_to_run` and runs it once
+        # through `brain.gate.leash.resume` at its requester's reach as it is now.
+        symbols=(
+            "brain.ops.approved_runs:run_approved_now",
+            "brain.ops.approved_runs:run_approved",
+        ),
+        guards=(
+            "that an action a person approved is carried out once, without its requester coming "
+            "back, at their reach as it is when it runs, and that a rejected, changed or lapsed "
+            "one never is"
+        ),
+        lost_silently=(
+            "The approver pressed approve and the card closed, and nothing was sent: the reply "
+            "never reaches the customer and the DNS record never changes, while the screen says "
+            "the action was approved. Nobody is told, because the approval itself succeeded."
+        ),
+        # Five minutes, restated rather than imported: `brain.ops.approved_runs` reaches the
+        # tables, which import this registry for the control-run name constraint.
+        every=_FIVE_MINUTELY,
+        cadence_from="brain.ops.approved_runs:RUNS_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
     ),
 )
 

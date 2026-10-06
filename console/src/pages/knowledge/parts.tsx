@@ -21,7 +21,7 @@ import { Button } from "../../components/ui/button";
 import { cn } from "../../lib/utils";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { taskDonePath } from "../knowledgeLifecycleQuery";
-import { documentAddress, SOLUTIONS_ADDRESS, stateWords, type TaskRow } from "./knowledgeDocuments";
+import { CORRECTIONS_ADDRESS, documentAddress, SOLUTIONS_ADDRESS, stateWords, type TaskRow } from "./knowledgeDocuments";
 
 const STATE_TONE: Readonly<Record<string, string>> = {
   published: "bg-ok-wash text-ok",
@@ -48,6 +48,19 @@ export function DuePill() {
 export const MARK_READ = "Mark as read";
 export const OPEN_TASK = "Open";
 
+/** Where a task's Open goes: a decided solution to Solutions, a proposed correction to Corrections
+ * where it is reviewed, and every other task to the document it is about. */
+export function taskAddress(one: TaskRow): string {
+  switch (one.kind) {
+    case "solution_decided":
+      return SOLUTIONS_ADDRESS;
+    case "correction_proposed":
+      return CORRECTIONS_ADDRESS;
+    default:
+      return documentAddress(one.itemId);
+  }
+}
+
 /** The reader's own tasks, each with a way to what it is about and, where it reports, Mark as read. */
 export function TaskList({ tasks, onChanged }: { readonly tasks: readonly TaskRow[]; readonly onChanged: () => void }) {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -67,7 +80,7 @@ export function TaskList({ tasks, onChanged }: { readonly tasks: readonly TaskRo
             <span className="min-w-0 text-[13px] text-ink [overflow-wrap:anywhere]">{one.says}</span>
             <span className="flex shrink-0 items-center gap-2">
               <Button asChild variant="ghost" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
-                <Link to={one.kind === "solution_decided" ? SOLUTIONS_ADDRESS : documentAddress(one.itemId)}>{OPEN_TASK}</Link>
+                <Link to={taskAddress(one)}>{OPEN_TASK}</Link>
               </Button>
               {one.closable ? (
                 <Button

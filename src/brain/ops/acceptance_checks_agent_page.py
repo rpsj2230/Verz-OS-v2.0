@@ -55,7 +55,7 @@ A, B = RESERVED_DEPARTMENTS
 TEMPLATE_NAME: Final = "Acceptance check template"
 
 #: The strip each reader should be offered, in the strip's order, written out rather than derived.
-STEWARDS_STRIP: Final = ("automations", "memory", "settings")
+STEWARDS_STRIP: Final = ("automations", "memory", "artifacts", "settings")
 MEMORY_READERS_STRIP: Final = ("memory",)
 
 

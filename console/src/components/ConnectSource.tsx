@@ -33,7 +33,14 @@
  * screen's connect flow keeps a source's settings while its dialog is closed (`kit/flowMemory.ts`),
  * so it hands them back here and hears each change; first run passes neither and starts blank.
  *
- * Task ids: M42.6.5, M42.5.9, M27.8.5, M27.11.9, M11.7.7
+ * **A source consented to by OAuth has one more step after it is connected (M11.8.6).** Its form
+ * takes the application's client id as a setting and its client secret as the key, and once the
+ * connection is made the form gives way to "Connect with" the vendor: the API holds a consent and
+ * answers the vendor's own page, and this tab goes there. The person signs in at the vendor, never
+ * here, and the vendor sends them back to `pages/ConnectorConsent.tsx`. See
+ * `pages/connectors/consentAtVendor.ts`.
+ *
+ * Task ids: M42.6.5, M42.5.9, M27.8.5, M27.11.9, M11.7.7, M11.8.6
  */
 
 import { useState, type FormEvent } from "react";
@@ -50,12 +57,20 @@ import {
 } from "../pages/connectorsQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
+import { consentPath, connectWithLabel, returnAddress, type ConsentStarted } from "../pages/connectors/consentAtVendor";
 import { ConfirmAction } from "./ConfirmAction";
+import { Button } from "./ui/button";
 import { CredentialField, credentialFor, credentialGiven } from "./CredentialField";
 import { useSecret } from "./ui/secret-field";
 
 /** The heading over a refusal that is not a problem with a field. */
 export const NOT_CONNECTED = "The source was not connected";
+
+/** The heading over a consent the API would not start. */
+export const NOT_SENT_TO_THE_VENDOR = "The vendor was not asked";
+
+/** The button that leaves the consent for later, which the source's page offers again. */
+export const CONSENT_LATER = "Later";
 
 /** The button that changes nothing on the confirmation. */
 export const KEEP_UNCONNECTED = "Connect nothing";
@@ -110,6 +125,9 @@ export function ConnectSource({
   const [busy, setBusy] = useState(false);
   const [blank, setBlank] = useState<Problem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // Set once a source consented to by OAuth is connected: the API's sentence, kept for "Later".
+  const [consenting, setConsenting] = useState<string | null>(null);
+  const [consentFailure, setConsentFailure] = useState<ApiFailure | null>(null);
   const problems: readonly Problem[] = [...blank, ...(failure?.problems ?? [])];
 
   const prefix = `connect-${source.name}`;
@@ -147,8 +165,55 @@ export function ConnectSource({
       setBlank([]);
       setFailure(null);
       setSettings(blankSettings(source));
+      if (source.consent_with) {
+        setConsenting(readTold(result.data));
+        return;
+      }
       onConnected(readTold(result.data));
     })();
+  }
+
+  function consent(): void {
+    setBusy(true);
+    setConsentFailure(null);
+    void (async () => {
+      const body = { return_address: returnAddress(window.location.origin) };
+      const result = await request<ConsentStarted>(consentPath(source.name), { method: "POST", body });
+      if (!result.ok) {
+        setBusy(false);
+        setConsentFailure(result.failure);
+        return;
+      }
+      // To the vendor's own page, in this tab. See `pages/connectors/consentAtVendor.ts`.
+      window.location.assign(result.data.address);
+    })();
+  }
+
+  if (consenting !== null && source.consent_with) {
+    return (
+      <div className="form" aria-label={connectWithLabel(source.consent_with)} role="group">
+        {consentFailure === null ? null : (
+          <FailureNotice failure={consentFailure} title={NOT_SENT_TO_THE_VENDOR} />
+        )}
+        <p>{consenting}</p>
+        <p className="field-description">{source.consent_told}</p>
+        <div className="form-actions">
+          <Button type="button" disabled={busy} onClick={consent}>
+            {connectWithLabel(source.consent_with)}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              onConnected(consenting);
+            }}
+          >
+            {CONSENT_LATER}
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

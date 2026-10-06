@@ -170,6 +170,7 @@ from brain.gate.finish import Finished, ModelCallOutcome, Origin, RequestRecorde
 from brain.install import hold_saved
 from brain.listing import Column, ListAsked, Listing
 from brain.locale import currency as install_currency
+from brain.locale import currency_or_unset
 from brain.models.assembly import (
     HOSTED_PROFILE,
     LOCAL_PROFILE,
@@ -624,6 +625,9 @@ class ProviderStatsView(BaseModel):
     answered: int | None
     failures: int | None
     cost_minor: int | None
+    #: The ISO 4217 code the minor units are in, `XXX` when the install chose none. See
+    #: `brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`.
+    currency: str
     unrecorded: list[UnrecordedView]
 
 
@@ -928,6 +932,7 @@ def stats_view(provider: str, *, answered: int, cost_recorded: bool) -> Provider
         answered=answered,
         failures=None,
         cost_minor=None,
+        currency=currency_or_unset(),
         unrecorded=[
             UnrecordedView(figure="failures", why=FAILURES_ARE_NOT_ATTRIBUTED),
             UnrecordedView(

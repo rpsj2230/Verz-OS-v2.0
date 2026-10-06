@@ -288,8 +288,8 @@ class LegalHoldChange(enum.StrEnum):
 
 
 class SkillChange(enum.StrEnum):
-    """What happened to a skill in the library. The values `0056`'s, `0121`'s and `0139`'s
-    triggers write.
+    """What happened to a skill in the library. The values `0056`'s, `0121`'s, `0139`'s and
+    `0191`'s triggers write.
 
     `0121` adds an edit, a decision by the person who added the skill, and a change of categories.
     A self-decision is its own word rather than a flag beside `approved`, because the audit screen
@@ -306,6 +306,10 @@ class SkillChange(enum.StrEnum):
     #: `0139`: a version retired, so no agent may newly be assigned it, or reinstated.
     RETIRED = "retired"
     REINSTATED = "reinstated"
+    #: `0191`: an approved version taken off the install as a package (M12.3.1).
+    EXPORTED = "exported"
+    #: `0191`: a version's examples rehearsed, with whether every one passed (M12.3.4).
+    REHEARSED = "rehearsed"
 
 
 class CredentialChange(enum.StrEnum):
@@ -521,7 +525,8 @@ class ElevationChange(enum.StrEnum):
 
 
 class AgentChange(enum.StrEnum):
-    """What happened to an agent. The seven words `0137`'s trigger writes, in the order it checks.
+    """What happened to an agent. The words `0137`'s trigger writes, in the order it checks, and the
+    one `0190` adds after them.
 
     No `transferred`: a hand-over is `agent_owner`, which `0105`'s trigger writes with both
     owners, so the same change is not recorded twice.
@@ -538,6 +543,21 @@ class AgentChange(enum.StrEnum):
     UNARCHIVED = "unarchived"
     PUBLISHED = "published"
     AUDIENCE_CHANGED = "audience_changed"
+    #: The channels it answers on were switched (M13.7.4), by `0190`'s branch of the same trigger.
+    CHANNELS_CHANGED = "channels_changed"
+
+
+class AgentUpgradeChange(enum.StrEnum):
+    """What happened to an agent's place on its template. The two words `0204`'s triggers write.
+
+    Under the `agent` action beside `AgentChange`, and a separate enum on purpose: `0137`'s trigger
+    writes the seven words of `AgentChange` and a test holds the two equal, and these two are a
+    different trigger's on a different table. `UPGRADED` is the pinned version moving, and
+    `UPGRADE_DECLINED` is a version somebody read and turned away.
+    """
+
+    UPGRADED = "upgraded"
+    UPGRADE_DECLINED = "upgrade_declined"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -1277,8 +1297,8 @@ class AuditRecorder:
         return self._write(AuditAction.INSTRUCTIONS, subject("agent", agent_id), details)
 
     def webhook(self, *, subscriber_id: str, change: WebhookChange) -> AuditEntry:
-        """Record that a webhook subscriber was registered, had its secret replaced, or was switched
-        off (M27.8.12).
+        """Record that a webhook subscriber was registered, had its secret replaced, was switched
+        off or back on, or had a delivery given up replayed (M27.8.12, M27.15.44).
 
         Written in a deployed database by `0059`'s trigger on `ops.webhook_change`, one entry per
         change row, and held to this method's details by a test. The subject is the subscriber and
@@ -1522,16 +1542,23 @@ class AuditRecorder:
         )
 
     def agent(
-        self, *, agent_id: str, change: AgentChange, actor_inferred: bool = False
+        self,
+        *,
+        agent_id: str,
+        change: AgentChange | AgentUpgradeChange,
+        actor_inferred: bool = False,
     ) -> AuditEntry:
-        """Record that an agent was created, enabled, disabled, archived or published.
+        """Record that an agent was created, enabled, disabled, archived or published, or moved to
+        a newer version of its template or turned one away.
 
         Written in a deployed database by `0137`'s trigger on `agent.agent`, on the insert and on
         an update that moves a lifecycle timestamp or the audience level, and held to
         this method's details by a test. The subject is the agent. **Never the steward**: there is
         no parameter through which a principal id could arrive, because one is not a field name
         and the ledger would keep the marker in its place. `actor_inferred` is the detail the
-        trigger adds when nobody named the actor, as `instructions` adds it.
+        trigger adds when nobody named the actor, as `instructions` adds it. `0204`'s two triggers
+        write the two `AgentUpgradeChange` words under this same action, so there is still one
+        method for the one action.
         """
         details: dict[str, object] = {"change": change.value}
         if actor_inferred:
