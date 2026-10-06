@@ -40,6 +40,7 @@ from brain.agent_builder_routes import (
     MOVED,
     NO_INSTALL_TO_START_FROM,
     PROCEDURE_PATH,
+    PUBLICATIONS_PATH,
     PUBLISH_PATH,
     PUBLISHED_EDIT,
     PUBLISHED_NEW,
@@ -773,6 +774,65 @@ def test_a_hidden_agent_and_a_missing_agent_are_one_answer_to_edit_as_a_draft(
     outside = console.post("u_narrow", at(EDIT_PATH, agent_id=COMPANY))
     missing = console.post("u_admin", at(EDIT_PATH, agent_id="no_such_agent"))
 
+    assert outside.status_code == missing.status_code == 404
+    assert outside.json()["message"] == missing.json()["message"]
+
+
+def test_an_agents_publish_history_is_served_to_its_builder_and_is_one_404_to_anybody_else(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The builder who may install over the agent is served its history as the store computed it,
+    each publish's who, when, paths, rung and approvers; a builder in web alone and a made-up id
+    get one 404 body.
+
+    Delete this and the history either tells a reader which agents exist outside their authority,
+    or serves something other than what `publication_history` computed."""
+    from datetime import UTC
+
+    import brain.agent_builder_routes as routes
+    import brain.builder.publication_store as store
+    from brain.builder.publish import PublishDecision, record_publish
+
+    at_instant = datetime(2019, 3, 4, 12, tzinfo=UTC)
+    record = record_publish(
+        agent_id=COMPANY,
+        actor_id="u_admin",
+        at=at_instant,
+        before={"persona": "Before."},
+        after={"persona": PERSONA},
+        decision=PublishDecision(
+            agent_id=COMPANY, rung=AutonomyTier.SHADOW, approvers=1, widenings=(), refusals=()
+        ),
+        approvers=("u_second",),
+    )
+
+    class Kept:
+        def __init__(self, sessions: object) -> None:
+            pass
+
+        async def history(self, agent_id: str) -> tuple[Any, ...]:
+            return (record,) if agent_id == COMPANY else ()
+
+    monkeypatch.setattr(routes, "sessions_of", lambda request: object())
+    monkeypatch.setattr(store, "StoredPublications", Kept)
+
+    served = console.get("u_admin", at(PUBLICATIONS_PATH, agent_id=COMPANY))
+    outside = console.get("u_narrow", at(PUBLICATIONS_PATH, agent_id=COMPANY))
+    missing = console.get("u_admin", at(PUBLICATIONS_PATH, agent_id="no_such_agent"))
+
+    assert served.status_code == 200, served.text
+    assert served.json() == {
+        "agent_id": COMPANY,
+        "publications": [
+            {
+                "published_by": "u_admin",
+                "published_at": "2019-03-04T12:00:00Z",
+                "paths": ["persona"],
+                "rung": "shadow",
+                "approvers": ["u_second"],
+            }
+        ],
+    }
     assert outside.status_code == missing.status_code == 404
     assert outside.json()["message"] == missing.json()["message"]
 

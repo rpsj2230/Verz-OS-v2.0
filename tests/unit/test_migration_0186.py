@@ -1,6 +1,6 @@
 """`0186` against PostgreSQL: an agent's connectors are backfilled, and shared names are copied.
 
-One scratch database taken to head, stepped back to `0154`, given rows naming the old entities and
+One scratch database taken to head, stepped back to `0170`, given rows naming the old entities and
 stepped forward again. On it, Xero is connected and Freshdesk was connected and then disconnected,
 so one source of `contact` is live and one is not, which is both halves of the grant rule at once.
 
@@ -31,7 +31,7 @@ DEPARTMENT_SCOPE = json.dumps(
 
 @contextmanager
 def before_0186(name: str) -> Iterator[tuple[str, str]]:
-    """A scratch database at `0154`, yielded as its name and its URL, and dropped afterwards."""
+    """A scratch database at `0170`, yielded as its name and its URL, and dropped afterwards."""
     from tests.fixtures.retirable import has_pgvector, retirable
     from tests.fixtures.scratch_postgres import admin_url, database_url, migrate
 
@@ -41,7 +41,7 @@ def before_0186(name: str) -> Iterator[tuple[str, str]]:
     with retirable(database) as url:
         if not has_pgvector(url):
             pytest.skip("the chain to 0133 needs pgvector, which CI has")
-        migrate(database, "downgrade", "0154")
+        migrate(database, "downgrade", "0170")
         yield database, url
 
 
@@ -165,7 +165,51 @@ def _rows(url: str) -> None:
             " VALUES (%s, 'invoice', 'INV-1', gen_random_uuid(), '{}'::jsonb, now())",
             source,
         )
+    _resolution_rows(url)
     _agent_rows(url)
+
+
+def _resolution_rows(url: str) -> None:
+    """The rows main added after 0186 was written that carry or point at a source's record: a
+    retirement, an observation, a canonical's origin, and two pairs waiting for a person, one of
+    which sorts the other way under the new names."""
+    from tests.fixtures.scratch_postgres import sql
+
+    sql(
+        url,
+        "INSERT INTO proj.record_retired (source, entity, source_id, fields, last_seen_at,"
+        " noticed_at) VALUES ('xero', 'contact', 'C-1', '{}'::jsonb, now(), now())",
+    )
+    for source, source_id in (("xero", "C-1"), ("demo", "C-9")):
+        sql(
+            url,
+            "INSERT INTO er.observation (source, entity, source_id, entity_type, name_verdict,"
+            " name_fold, observed_at) VALUES (%s, 'contact', %s, 'company', 'usable', 'acme',"
+            " now())",
+            source,
+            source_id,
+        )
+    sql(
+        url,
+        "INSERT INTO er.canonical (entity_id, entity_type, created_by, created_from_source,"
+        " created_from_entity, created_from_source_id) VALUES"
+        " ('ent_xero', 'company', 'u_one', 'xero', 'contact', 'C-1')",
+    )
+    for item_id, left, right in (
+        ("i_cross", ("freshdesk", "contact", "F-1"), ("xero", "contact", "C-1")),
+        ("i_flips", ("freshdesk", "contact", "F-1"), ("freshdesk", "conversation", "F-2")),
+    ):
+        sql(
+            url,
+            "INSERT INTO er.review_item (item_id, entity_type, left_source, left_entity,"
+            " left_source_id, right_source, right_entity, right_source_id, left_entity_id,"
+            " right_entity_id, origin, stage, reason, evidence, state) VALUES"
+            " (%s, 'company', %s, %s, %s, %s, %s, %s, 'ent_left', 'ent_right', 'held', 3,"
+            " 'close names', '[]'::jsonb, 'open')",
+            item_id,
+            *left,
+            *right,
+        )
 
 
 def _grants(url: str) -> list[tuple[Any, ...]]:
@@ -253,6 +297,85 @@ def test_a_source_s_own_records_are_renamed_and_another_source_s_are_not(
     ]
 
 
+def test_the_records_main_added_since_are_renamed_and_a_pair_keeps_its_order(
+    migrated: tuple[str, str],
+) -> None:
+    """0179's retirements, 0182's observations, a canonical's origin and 0184's waiting pairs carry
+    or point at a source's record, so they take the source's new name, and another source's keep
+    theirs. A pair that would sort the other way is stored the other way round, with the same two
+    records and the same two entities. Delete this and a renamed record never comes back from a
+    retirement, is observed twice for matching, or is named by a pair that points at nothing."""
+    from tests.fixtures.scratch_postgres import sql
+
+    _, url = migrated
+
+    assert sql(url, "SELECT source, entity, source_id FROM proj.record_retired") == [
+        ("xero", "xero_contact", "C-1")
+    ]
+    assert sql(url, "SELECT source, entity, source_id FROM er.observation ORDER BY source") == [
+        ("demo", "contact", "C-9"),
+        ("xero", "xero_contact", "C-1"),
+    ]
+    assert sql(
+        url,
+        "SELECT created_from_source, created_from_entity FROM er.canonical"
+        " WHERE entity_id = 'ent_xero'",
+    ) == [("xero", "xero_contact")]
+    assert sql(
+        url,
+        "SELECT item_id, left_source, left_entity, left_source_id, left_entity_id, right_source,"
+        " right_entity, right_source_id, right_entity_id FROM er.review_item ORDER BY item_id",
+    ) == [
+        (
+            "i_cross",
+            "freshdesk",
+            "freshdesk_contact",
+            "F-1",
+            "ent_left",
+            "xero",
+            "xero_contact",
+            "C-1",
+            "ent_right",
+        ),
+        (
+            "i_flips",
+            "freshdesk",
+            "conversation",
+            "F-2",
+            "ent_right",
+            "freshdesk",
+            "freshdesk_contact",
+            "F-1",
+            "ent_left",
+        ),
+    ]
+
+
+def test_every_table_with_a_source_and_an_entity_is_renamed_or_argued_for() -> None:
+    """Every table the models declare with a source column and an entity column is renamed in
+    place, has its pointer renamed, or is named as not rewritten, and nothing else is listed.
+    Delete this and the next table to carry a source's entity is missed by this rename, as 0179,
+    0182 and 0184's were until the day this landed."""
+    import brain.tables  # noqa: F401 - registers every table on the metadata
+    from brain.db import metadata
+    from tests.unit.test_tables import VERSIONS, migration_module
+
+    module = migration_module(VERSIONS / "0186_agent_connectors_and_source_named_entities.py")
+    carrying = {
+        table.fullname
+        for table in metadata.tables.values()
+        if any(column.name == "entity" or column.name.endswith("_entity") for column in table.c)
+        and any(column.name == "source" or column.name.endswith("_source") for column in table.c)
+    }
+
+    assert carrying == {
+        *module.SOURCED,
+        *module.NOT_REWRITTEN,
+        "er.canonical",
+        "er.review_item",
+    }
+
+
 def test_running_it_again_writes_no_second_copy(migrated: tuple[str, str]) -> None:
     """Down and up again: the column goes and comes back, and no grant, pack entry or agent
     capability is written twice. Delete this and an install that retried a failed upgrade holds
@@ -261,7 +384,7 @@ def test_running_it_again_writes_no_second_copy(migrated: tuple[str, str]) -> No
 
     database, url = migrated
     before = _grants(url)
-    migrate(database, "downgrade", "0154")
+    migrate(database, "downgrade", "0170")
     gone = sql(
         url,
         "SELECT 1 FROM information_schema.columns WHERE table_schema = 'agent'"

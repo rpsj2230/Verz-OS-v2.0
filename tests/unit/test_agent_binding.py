@@ -257,3 +257,29 @@ def test_connector_access_is_compiled_in_the_ceiling_and_decided_nowhere_else() 
         "brain.agents.install",
         "brain.agents.install_store",
     }
+
+
+def test_the_binding_builds_a_forms_key_reference_as_connectable_does() -> None:
+    """`entities_of` builds the key reference itself rather than importing
+    `brain.ops.connectable`, which the request path may not reach. Delete this and the two can
+    drift, and the form the binding reads its entities from is built with a reference the
+    connection itself would never be."""
+    import ast
+    import inspect
+
+    from brain.agents import binding
+    from brain.ops.connectable import key_reference
+    from brain.ops.credentials import connector_key_slot
+    from brain.ops.secrets import SecretRef, VaultRole
+
+    imported = {
+        node.module
+        for node in ast.walk(ast.parse(inspect.getsource(binding)))
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert "brain.ops.connectable" not in imported
+    assert "brain.ops.credentials" in imported
+    for name in ("xero", "freshdesk", "hubspot"):
+        assert key_reference(name) == SecretRef(
+            path=connector_key_slot(name).path, role=VaultRole.WORKER
+        )

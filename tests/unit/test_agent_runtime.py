@@ -443,6 +443,15 @@ CALLS_A_MODEL_WITHOUT_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+#: Modules whose `.complete(` is `brain.ops.connector_sync.ReadState.complete`, which asks whether
+#: a read covered every entity and calls no model. Held to importing nothing that could reach one.
+COMPLETE_THAT_IS_NOT_A_MODEL: frozenset[str] = frozenset(
+    {"brain.ops.connector_sync", "brain.ops.connector_sync_run"}
+)
+
+#: Where a model is reached from: a module importing from one of these could call it.
+MODEL_MODULES: tuple[str, ...] = ("brain.models", "brain.gate.model_lane", "brain.gate.runtime")
+
 #: Names that mean a module holds a tool catalogue or the runtime's protocol.
 TOOL_BEARING: frozenset[str] = frozenset(
     {"ProjectedCatalogue", "invoke", "project", "ToolProposal", "tools_block", "PROTOCOL"}
@@ -482,8 +491,19 @@ def test_only_the_runtime_calls_a_model_while_holding_tools() -> None:
     written beside the runtime with its own idea of the reach."""
     modules = _modules()
     callers = {name for name, tree in modules.items() if _calls_a_model(tree)}
+    for name in COMPLETE_THAT_IS_NOT_A_MODEL:
+        assert name in callers, f"{name} no longer calls .complete(, so it needs no exception"
+        reached = {
+            node.module or ""
+            for node in ast.walk(modules[name])
+            if isinstance(node, ast.ImportFrom)
+        }
+        assert not any(one.startswith(MODEL_MODULES) for one in reached), name
+        assert not (_imported(modules[name]) & TOOL_BEARING), name
 
-    assert callers - CALLS_A_MODEL_WITHOUT_TOOLS == {"brain.gate.runtime"}
+    assert callers - CALLS_A_MODEL_WITHOUT_TOOLS - COMPLETE_THAT_IS_NOT_A_MODEL == {
+        "brain.gate.runtime"
+    }
     for name in callers - {"brain.gate.runtime"}:
         assert not (_imported(modules[name]) & TOOL_BEARING), name
 

@@ -27,6 +27,7 @@ export const ACTION_LABELS: Readonly<Record<string, string>> = Object.freeze({
   deny: "Access refused",
   leash_change: "Agent leash changed",
   entity_merge: "Records merged",
+  entity_unmerge: "Merged records separated",
   publish: "Published",
   break_glass: "Emergency access opened",
   compose_change: "Agent's tools or sources changed",
@@ -97,6 +98,7 @@ const CHANGE_LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> 
     renamed: "Department or team renamed",
     changed: "Department or team changed by hand",
     retired: "Department or team retired",
+    moved: "Moved to another department",
   }),
   principal_state: Object.freeze({
     disabled: "Sign-in disabled",

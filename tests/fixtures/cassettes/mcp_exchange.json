@@ -1,0 +1,420 @@
+{
+  "about": "One MCP server over Streamable HTTP, written from the MCP specification revision 2025-06-18 (basic/transports, server/tools) and not captured from a live server. Each conversation is every request the client sends, in order, with its headers, and the server's answer to it. {key} stands for the leased key, which no recording holds.",
+  "session": "4f1c2a9e7d3b40c8",
+  "conversations": {
+    "scheduled": [
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {},
+              "clientInfo": {
+                "name": "company-brain-connectors",
+                "version": "1"
+              }
+            }
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "mcp-session-id": "4f1c2a9e7d3b40c8"
+          },
+          "body": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {\"tools\": {\"listChanged\": true}}, \"serverInfo\": {\"name\": \"recorded-crm\", \"version\": \"1.4.0\"}}}"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+          }
+        },
+        "response": {
+          "status": 202,
+          "headers": {},
+          "body": ""
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: message\nid: 1\ndata: {\"jsonrpc\": \"2.0\", \"method\": \"notifications/message\", \"params\": {\"level\": \"info\", \"data\": \"listing\"}}\n\nevent: message\nid: 2\ndata: {\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"tools\": [{\"name\": \"list_clients\", \"title\": \"List clients\", \"description\": \"List the clients this server holds, each with its name and status.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Only clients in this status.\"}}, \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_client\", \"title\": \"Read a client\", \"description\": \"Read one client by its id, with its balance.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}, \"required\": [\"id\"], \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"delete_client\", \"description\": \"Delete one client.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}}, \"annotations\": {\"readOnlyHint\": false, \"destructiveHint\": true}}]}}\n\n"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "list_clients",
+              "arguments": {}
+            }
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: message\nid: 1\ndata: {\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\\"clients\\\": [{\\\"id\\\": \\\"c-1001\\\", \\\"name\\\": \\\"Harbour Lane Bakery\\\", \\\"status\\\": \\\"active\\\", \\\"balance\\\": \\\"1840.00\\\", \\\"owner_note\\\": \\\"renewal due\\\"}, {\\\"id\\\": \\\"c-1002\\\", \\\"name\\\": \\\"Westfield Joinery\\\", \\\"status\\\": \\\"paused\\\", \\\"balance\\\": \\\"0.00\\\", \\\"owner_note\\\": \\\"\\\"}, {\\\"name\\\": \\\"A row with no id\\\", \\\"status\\\": \\\"active\\\"}]}\"}], \"structuredContent\": {\"clients\": [{\"id\": \"c-1001\", \"name\": \"Harbour Lane Bakery\", \"status\": \"active\", \"balance\": \"1840.00\", \"owner_note\": \"renewal due\"}, {\"id\": \"c-1002\", \"name\": \"Westfield Joinery\", \"status\": \"paused\", \"balance\": \"0.00\", \"owner_note\": \"\"}, {\"name\": \"A row with no id\", \"status\": \"active\"}]}, \"isError\": false}}\n\n"
+        }
+      }
+    ],
+    "live": [
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {},
+              "clientInfo": {
+                "name": "company-brain-connectors",
+                "version": "1"
+              }
+            }
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "mcp-session-id": "4f1c2a9e7d3b40c8"
+          },
+          "body": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {\"tools\": {\"listChanged\": true}}, \"serverInfo\": {\"name\": \"recorded-crm\", \"version\": \"1.4.0\"}}}"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+          }
+        },
+        "response": {
+          "status": 202,
+          "headers": {},
+          "body": ""
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"tools\": [{\"name\": \"list_clients\", \"title\": \"List clients\", \"description\": \"List the clients this server holds, each with its name and status.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Only clients in this status.\"}}, \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_client\", \"title\": \"Read a client\", \"description\": \"Read one client by its id, with its balance.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}, \"required\": [\"id\"], \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"delete_client\", \"description\": \"Delete one client.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}}, \"annotations\": {\"readOnlyHint\": false, \"destructiveHint\": true}}]}}"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "get_client",
+              "arguments": {
+                "id": "c-1001"
+              }
+            }
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\\"clients\\\": {\\\"id\\\": \\\"c-1001\\\", \\\"name\\\": \\\"Harbour Lane Bakery\\\", \\\"status\\\": \\\"active\\\", \\\"balance\\\": \\\"1840.00\\\", \\\"owner_note\\\": \\\"renewal due\\\"}}\"}], \"isError\": false}}"
+        }
+      }
+    ],
+    "tool_error": [
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {},
+              "clientInfo": {
+                "name": "company-brain-connectors",
+                "version": "1"
+              }
+            }
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "mcp-session-id": "4f1c2a9e7d3b40c8"
+          },
+          "body": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {\"tools\": {\"listChanged\": true}}, \"serverInfo\": {\"name\": \"recorded-crm\", \"version\": \"1.4.0\"}}}"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+          }
+        },
+        "response": {
+          "status": 202,
+          "headers": {},
+          "body": ""
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: message\nid: 1\ndata: {\"jsonrpc\": \"2.0\", \"method\": \"notifications/message\", \"params\": {\"level\": \"info\", \"data\": \"listing\"}}\n\nevent: message\nid: 2\ndata: {\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"tools\": [{\"name\": \"list_clients\", \"title\": \"List clients\", \"description\": \"List the clients this server holds, each with its name and status.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Only clients in this status.\"}}, \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_client\", \"title\": \"Read a client\", \"description\": \"Read one client by its id, with its balance.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}, \"required\": [\"id\"], \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"delete_client\", \"description\": \"Delete one client.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}}, \"annotations\": {\"readOnlyHint\": false, \"destructiveHint\": true}}]}}\n\n"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "list_clients",
+              "arguments": {}
+            }
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: message\nid: 1\ndata: {\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"The CRM is in maintenance.\"}], \"isError\": true}}\n\n"
+        }
+      }
+    ],
+    "allowance_spent": [
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {},
+              "clientInfo": {
+                "name": "company-brain-connectors",
+                "version": "1"
+              }
+            }
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "mcp-session-id": "4f1c2a9e7d3b40c8"
+          },
+          "body": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {\"tools\": {\"listChanged\": true}}, \"serverInfo\": {\"name\": \"recorded-crm\", \"version\": \"1.4.0\"}}}"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+          }
+        },
+        "response": {
+          "status": 202,
+          "headers": {},
+          "body": ""
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: message\nid: 1\ndata: {\"jsonrpc\": \"2.0\", \"method\": \"notifications/message\", \"params\": {\"level\": \"info\", \"data\": \"listing\"}}\n\nevent: message\nid: 2\ndata: {\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"tools\": [{\"name\": \"list_clients\", \"title\": \"List clients\", \"description\": \"List the clients this server holds, each with its name and status.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Only clients in this status.\"}}, \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_client\", \"title\": \"Read a client\", \"description\": \"Read one client by its id, with its balance.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}, \"required\": [\"id\"], \"additionalProperties\": false}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"delete_client\", \"description\": \"Delete one client.\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}}}, \"annotations\": {\"readOnlyHint\": false, \"destructiveHint\": true}}]}}\n\n"
+        }
+      },
+      {
+        "request": {
+          "headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer {key}",
+            "Mcp-Session-Id": "4f1c2a9e7d3b40c8",
+            "MCP-Protocol-Version": "2025-06-18"
+          },
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "list_clients",
+              "arguments": {}
+            }
+          }
+        },
+        "response": {
+          "status": 429,
+          "headers": {
+            "retry-after": "30"
+          },
+          "body": ""
+        }
+      }
+    ]
+  }
+}
