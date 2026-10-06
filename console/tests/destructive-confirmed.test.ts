@@ -44,6 +44,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "read through it until it is approved, and it replaces no definition, which is the change route's, " +
     "and that one is not sent from this page. tests/unit/test_custom_connector_store.py holds the " +
     "definition waiting and tests/custom-connectors-page.test.tsx the form.",
+  "src/pages/skills/SkillForms.tsx rehearsalsPath(one.digest)":
+    "Rehearsing a waiting version's examples records a rehearsal and changes nothing any agent runs; nothing ends, changes or is removed.",
+  "src/pages/skills/SkillProfile.tsx exportPath(one.digest)":
+    "Exporting an approved skill version hands its package to the person as a file and records that it was taken; nothing on this install ends, changes or is removed.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
     "Adding a work email binds an address to a person who has none. It retires the staff list's " +
     "person for that address only when they have never signed in and hold nothing but what the sync " +
@@ -108,6 +112,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
+  "src/pages/CitedDocument.tsx retrievalUsesPath(followed.retrievalId)":
+    "Opening a cited document sends the place of the passage followed for the learning signal; it " +
+    "adds one position to a retrieval that names no document or person, so nothing is ended.",
   "src/pages/Ask.tsx correctionPath(thread)":
     "Marking an answer wrong adds a note to the person's own conversation naming the kind; the " +
     "answer, its records and everything else in the thread stay as they were, so nothing is ended.",

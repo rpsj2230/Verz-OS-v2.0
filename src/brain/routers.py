@@ -44,6 +44,10 @@ from brain.access_request_routes import router as access_request_router
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
 
+# One agent's Artifacts section: its list, a download re-checked at the requester's reach, a
+# supersession or an archive as a row, and the latest of a kind for a client.
+from brain.agent_artifact_routes import router as agent_artifact_router
+
 # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
@@ -54,6 +58,13 @@ from brain.agent_capability_routes import router as agent_capability_router
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
+# One agent's Conversations section: the reader's own threads it answered in, with who answered
+# and how each run ended, a failed one included.
+from brain.agent_conversation_routes import router as agent_conversation_router
+
+# One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
+# breaker reads, and the supervision pin and its reviews.
+from brain.agent_leash_routes import router as agent_leash_router
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 from brain.agent_memory_routes import router as agent_memory_router
 
@@ -344,6 +355,10 @@ from brain.resolution_routes import router as resolution_router
 # every write needs its authority over everything, and the report is shown whole to a
 # company-wide reader and to nobody else. See `brain.retention_routes`.
 from brain.retention_routes import router as retention_router
+
+# A followed citation's place, kept for the learning signal, and the signal read by a knowledge
+# administrator. Never a document, a question or a person. See `brain.retrieval_routes`.
+from brain.retrieval_routes import router as retrieval_router
 
 # The routing matrix. A second router rather than more routes on the first, because the
 # rules differ: `api_routes` answers about entities, where the name itself is enumerable,

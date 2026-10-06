@@ -53,7 +53,7 @@ from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
-from brain.tables.artifact import ArtifactRow
+from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -104,6 +104,12 @@ from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.learning_signal import LearningPauseRow, MarkRow
+from brain.tables.leash import (
+    ActionVerdictRow,
+    LeashChangeRow,
+    SupervisedActionRow,
+    SupervisionPinRow,
+)
 from brain.tables.manifest_draft import (
     ManifestActRow,
     ManifestDraftRow,
@@ -133,6 +139,7 @@ from brain.tables.resolution import (
 from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
 from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
+from brain.tables.retrieval import RetrievalEventRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
@@ -142,6 +149,8 @@ from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
 from brain.tables.skill import (
     SkillAssignmentRow,
     SkillDetachmentRow,
+    SkillExportRow,
+    SkillRehearsalRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
@@ -455,6 +464,20 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.oauth_consent",
     # 0203_custom_connector. Points at nothing: the submitter and the reviewer are values.
     "ops.custom_connector",
+    # 0191_skill_export_and_rehearsal. An export points at the version it carried.
+    "agent.skill_export",
+    "agent.skill_rehearsal",
+    # 0193_retrieval_event. Points at nothing: it names no document, question or person.
+    "ops.retrieval_event",
+    # 0194_artifact_change_and_client. A change points at the artifact it changed and at the one
+    # that superseded it, which are never deleted; the person is a value.
+    "agent.artifact_change",
+    # 0195_leash_changes_and_supervision. A move, an action, a verdict and a pin point at
+    # nothing: the agent, the action and the people are values, so the record outlives them.
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
 )
 
 __all__ = [
@@ -462,12 +485,14 @@ __all__ = [
     "AcceptanceResultRow",
     "AccessRequestHandledRow",
     "AccessRequestRow",
+    "ActionVerdictRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentRow",
     "AgentRunRow",
     "ApiKeyRow",
     "ApplicationLogRow",
+    "ArtifactChangeRow",
     "ArtifactRow",
     "AuditEntryRow",
     "AutomationChangeRow",
@@ -522,6 +547,7 @@ __all__ = [
     "KnowledgeItemRow",
     "LearningPauseRow",
     "LearningRow",
+    "LeashChangeRow",
     "LegalHoldRow",
     "ManifestActRow",
     "ManifestDraftRow",
@@ -553,6 +579,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "RetiredRecordRow",
+    "RetrievalEventRow",
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",
@@ -569,7 +596,9 @@ __all__ = [
     "SettingType",
     "SkillAssignmentRow",
     "SkillDetachmentRow",
+    "SkillExportRow",
     "SkillInvocationRow",
+    "SkillRehearsalRow",
     "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
@@ -580,6 +609,8 @@ __all__ = [
     "StaffMemberRow",
     "StaffSyncRunRow",
     "StewardTaskRow",
+    "SupervisedActionRow",
+    "SupervisionPinRow",
     "SuspensionRow",
     "TeamMembershipRow",
     "TeamRow",

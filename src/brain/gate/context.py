@@ -183,6 +183,10 @@ class Recorder:
     principal_id: str | None = None
     ent_hash: str | None = None
     notes: list[str] = field(default_factory=list)
+    #: Filled in once the front half has routed the request: the stored agent it answers
+    #: through, or None for the asker's own reach and for a request that never got that far.
+    #: Read by whoever keeps the asker's thread, on an answer and on a failure alike.
+    agent_id: str | None = None
 
     def enter(self, step: GateStep) -> None:
         """Record a step, refusing to run one out of order.

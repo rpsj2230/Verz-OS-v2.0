@@ -305,6 +305,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
       "/api/v1/agents/{agent_id}/about",
+      "/api/v1/agents/{agent_id}/conversations",
       "/api/v1/agents/{agent_id}/model-pin",
       "/api/v1/agents/{agent_id}/lifecycle",
       "/api/v1/agents/{agent_id}/enable",
@@ -321,6 +322,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/memory",
       "/api/v1/agents/{agent_id}/memory/{memory_id}/deletion",
       "/api/v1/agents/{agent_id}/memory/{memory_id}/edit",
+      "/api/v1/agents/{agent_id}/artifacts",
+      "/api/v1/agents/{agent_id}/artifacts/latest",
+      "/api/v1/agents/{agent_id}/artifacts/{artifact_id}/download",
+      "/api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive",
+      "/api/v1/agents/{agent_id}/artifacts/{artifact_id}/supersede",
+      "/api/v1/agents/{agent_id}/leash",
+      "/api/v1/agents/{agent_id}/leash/moves",
+      "/api/v1/agents/{agent_id}/supervision/pin",
+      "/api/v1/agents/{agent_id}/supervision/review",
+      "/api/v1/agents/{agent_id}/supervision/verdicts",
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
@@ -335,6 +346,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.template_instance",
       "agent.template_version",
       "agent.upgrade_decline",
+      "agent.leash_change",
+      "agent.supervised_action",
+      "agent.action_verdict",
+      "agent.supervision_pin",
       "agent.browser_envelope",
       "gate.suspension",
       "agent.manifest_draft",
@@ -378,6 +393,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/{digest}/retirement",
       "/api/v1/skills/{digest}/reinstatement",
       "/api/v1/skills/{digest}/detachments",
+      "/api/v1/skills/{digest}/export",
+      "/api/v1/skills/{digest}/rehearsals",
       "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
@@ -393,12 +410,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_retirement",
       "agent.skill_script",
       "agent.skill_detachment",
+      "agent.skill_export",
+      "agent.skill_rehearsal",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
       {
-        what: "A skill cannot be tried out through an agent in practice mode before it is assigned.",
-        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW, and no route runs a rehearsal; the Profile draws it inert with pages/skills/skillActions.ts' sentence.",
+        what: "A skill cannot be tried out through an agent in practice mode, with a model answering, before it is assigned.",
+        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW. POST /api/v1/skills/{digest}/rehearsals rehearses a version's examples for reach only and runs no model (needs-rupash 161); the Profile draws the practice run inert with pages/skills/skillActions.ts' sentence.",
       },
       {
         what: "A skill that declares scripts cannot be added.",
@@ -593,6 +612,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.fast_path_rule",
       "gate.field_policy",
       "agent.artifact",
+      "agent.artifact_change",
       "know.classified_table",
       "know.classified_row",
       "er.review_item",
@@ -851,6 +871,12 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
   "POST /api/v1/threads/attachments":
     "A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage.",
+  "ops.retrieval_event":
+    "What a person was answered from, as the learning signal reads it: which retrievers ran, how many passages were shown and where a citation was followed, with no document, question or person; written by the answer route and the cited page, and nothing in it for an administrator to manage.",
+  "GET /api/v1/retrievals/signal":
+    "The ranking's learning signal, rates over recent retrievals for a knowledge administrator tuning search; it manages nothing, and no screen draws it yet.",
+  "POST /api/v1/retrievals/{event_id}/uses":
+    "The place of a passage a person followed from an answer, sent by the cited document page for the learning signal; a person's own act, not something an administrator manages.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":

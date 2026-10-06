@@ -156,6 +156,10 @@ MIGRATION_REVIEW_ITEMS = VERSIONS / "0184_entity_review_items.py"
 MIGRATION_AGENT_RUN = VERSIONS / "0188_agent_run.py"
 MIGRATION_OAUTH_CONSENT = VERSIONS / "0202_oauth_consent.py"
 MIGRATION_CUSTOM_CONNECTOR = VERSIONS / "0203_custom_connector.py"
+MIGRATION_SKILL_EXPORT = VERSIONS / "0191_skill_export_and_rehearsal.py"
+MIGRATION_RETRIEVAL_EVENT = VERSIONS / "0193_retrieval_event.py"
+MIGRATION_ARTIFACT_CHANGE = VERSIONS / "0194_artifact_change_and_client.py"
+MIGRATION_LEASH = VERSIONS / "0195_leash_changes_and_supervision.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -447,6 +451,21 @@ AGENT_RUN_TABLES: tuple[str, ...] = ("ops.agent_run",)
 OAUTH_CONSENT_TABLES: tuple[str, ...] = ("ops.oauth_consent",)
 #: And the one 0203 adds: a connector for a new API, as submitted, and who reviewed it.
 CUSTOM_CONNECTOR_TABLES: tuple[str, ...] = ("ops.custom_connector",)
+#: And the two 0191 adds: each export of an approved version, and each rehearsal of one's
+#: examples (M12.3.1, M12.3.4).
+SKILL_EXPORT_TABLES: tuple[str, ...] = ("agent.skill_export", "agent.skill_rehearsal")
+#: And the one 0193 adds: a retrieval a person was answered from, for the learning signal.
+RETRIEVAL_EVENT_TABLES: tuple[str, ...] = ("ops.retrieval_event",)
+#: And the one 0194 adds: an artifact superseded or archived.
+ARTIFACT_CHANGE_TABLES: tuple[str, ...] = ("agent.artifact_change",)
+#: And the four 0195 adds: a rung's moves, the actions an agent took under supervision, a person's
+#: verdict on each, and the supervision pin with its reviews.
+LEASH_TABLES: tuple[str, ...] = (
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
+)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -528,6 +547,10 @@ ALL_TABLES = (
     + AGENT_RUN_TABLES
     + OAUTH_CONSENT_TABLES
     + CUSTOM_CONNECTOR_TABLES
+    + SKILL_EXPORT_TABLES
+    + RETRIEVAL_EVENT_TABLES
+    + ARTIFACT_CHANGE_TABLES
+    + LEASH_TABLES
 )
 
 
@@ -1374,6 +1397,14 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert oauth_consent.TABLES == OAUTH_CONSENT_TABLES
     custom_connector = migration_module(MIGRATION_CUSTOM_CONNECTOR)
     assert custom_connector.TABLES == CUSTOM_CONNECTOR_TABLES
+    skill_export = migration_module(MIGRATION_SKILL_EXPORT)
+    assert skill_export.TABLES == SKILL_EXPORT_TABLES
+    retrieval_event = migration_module(MIGRATION_RETRIEVAL_EVENT)
+    assert retrieval_event.TABLES == RETRIEVAL_EVENT_TABLES
+    artifact_change = migration_module(MIGRATION_ARTIFACT_CHANGE)
+    assert artifact_change.TABLES == ARTIFACT_CHANGE_TABLES
+    leash = migration_module(MIGRATION_LEASH)
+    assert leash.TABLES == LEASH_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1477,6 +1508,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(agent_run.TABLES)
         + tuple(oauth_consent.TABLES)
         + tuple(custom_connector.TABLES)
+        + tuple(skill_export.TABLES)
+        + tuple(retrieval_event.TABLES)
+        + tuple(artifact_change.TABLES)
+        + tuple(leash.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1561,6 +1596,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(agent_run.TABLES),
         set(oauth_consent.TABLES),
         set(custom_connector.TABLES),
+        set(skill_export.TABLES),
+        set(retrieval_event.TABLES),
+        set(artifact_change.TABLES),
+        set(leash.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

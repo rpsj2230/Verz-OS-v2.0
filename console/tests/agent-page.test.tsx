@@ -528,10 +528,10 @@ describe("the Profile", () => {
     const inert = [...mounted.container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)];
     // Four since 2026-09-29: adding a source and changing permissions start a draft of the agent
     // now, and a preview as a person is asked of its own route, so none of the three is among these.
-    // Three since 2026-10-06: choosing where the agent answers is the live card `where the agent
-    // answers` below holds, and adding it to a group chat, changing who can find it and changing a
-    // rung are what is left.
-    expect(inert.length).toBeGreaterThanOrEqual(3);
+    // Since 2026-10-06 choosing where the agent answers is the live card `where the agent answers`
+    // below holds, and a rung is changed in the leash block, so adding it to a group chat and
+    // changing who can find it are what is left.
+    expect(inert.length).toBeGreaterThanOrEqual(2);
     const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
       (one) => one.textContent === "Change permissions",
     );

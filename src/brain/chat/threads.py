@@ -70,7 +70,7 @@ from brain.channels.adapter import ChannelCapabilities
 from brain.chat.turns import RecordRef, Turn, TurnKind, context_for
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.gate.context import Channel
-from brain.tables.chat import MessageRole
+from brain.tables.chat import MessageRole, RunState
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why nothing here takes a channel to decide which thread a message belongs to.
@@ -140,6 +140,12 @@ class ThreadMessage:
     #: and an unreadable one is an answer whose dependencies are unknown. See
     #: `A_REFERENCE_THAT_CANNOT_BE_READ_IS_A_REFERENCE_THAT_REACHES_NOTHING`.
     refs: tuple[RecordRef, ...] | None = ()
+    #: For an answer, the stored agent that gave it, or empty when it was answered at the asker's
+    #: own reach or was written before `0192`.
+    agent_id: str = ""
+    #: For an answer, how its run ended, or None when that was not recorded. See
+    #: `brain.tables.chat.RunState`.
+    run_state: RunState | None = None
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:
@@ -288,6 +294,7 @@ def as_turns(thread: Thread) -> tuple[Turn, ...]:
                     at=one.at,
                     principal_id=thread.owner_id,
                     refs=one.refs or (),
+                    agent_id=one.agent_id,
                 )
             )
     return tuple(turns)
