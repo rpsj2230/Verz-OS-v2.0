@@ -709,7 +709,8 @@ def test_a_record_a_read_retired_serves_again_when_returned_and_its_retirement_i
         sql(
             url,
             "INSERT INTO proj.record (source, entity, source_id, fields, last_seen_at, deleted_at) "
-            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            "VALUES ('xero', %s, %s, '{}'::jsonb, %s, %s)",
+            xero.ENTITY_INVOICE,
             INVOICE_ID,
             NOW - timedelta(days=30),
             noticed,
@@ -718,7 +719,8 @@ def test_a_record_a_read_retired_serves_again_when_returned_and_its_retirement_i
             url,
             "INSERT INTO proj.record_retired "
             "(source, entity, source_id, fields, last_seen_at, noticed_at) "
-            "VALUES ('xero', 'invoice', %s, '{}'::jsonb, %s, %s)",
+            "VALUES ('xero', %s, %s, '{}'::jsonb, %s, %s)",
+            xero.ENTITY_INVOICE,
             INVOICE_ID,
             NOW - timedelta(days=30),
             noticed,

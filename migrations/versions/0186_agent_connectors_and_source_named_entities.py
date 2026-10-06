@@ -26,9 +26,20 @@ this migration does about the rows that already name them:
 - **A capability pack** gains the same copies in its list, on the same rule.
 - **An agent's own capabilities** gain the copies for the connectors that agent names, rather than
   for the ones the install has connected, because its list is the binding.
-- **Rows that carry their source are renamed in place**: `proj.record`, `er.alias`,
-  `er.identifier`, `er.link` and `gate.fast_path_rule`, where the source is the connector that
-  provided the old name. They are the source's own records, and the source is in the row.
+- **Rows that carry their source are renamed in place**: `proj.record`, `proj.record_retired`,
+  `er.alias`, `er.identifier`, `er.link`, `er.observation` and `gate.fast_path_rule`, where the
+  source is the connector that provided the old name. They are the source's own records, and the
+  source is in the row. `proj.record_retired` is renamed with `proj.record` because a returning
+  record finds its retirement by source, entity and id, so a retirement left under the old name
+  would keep a renamed record retired for ever.
+- **Rows that point at such a record are renamed with it**: `er.canonical`'s `created_from` and
+  both sides of every `er.review_item`, so a canonical says which record it came from and a
+  pair waiting for a person still names two records that exist. A pair whose two sides would sort
+  the other way under the new names is stored the other way round, which its ordering constraint
+  requires and which changes nothing about the pair.
+- These last four arrived on main (0179, 0182, 0184) after this was written and before it landed;
+  `tests/unit/test_migration_0186.py` reads every table the models declare and fails on one with a
+  source and an entity that is neither renamed here nor named below.
 
 What is deliberately not rewritten, and why:
 
@@ -43,6 +54,8 @@ What is deliberately not rewritten, and why:
   `gate.suspension`, `ops.outbox_event` and the memory tables record what was asked or held at the
   time, under the name it had then.
 - **`know.classified_table`** is a company's own upload, named by the company.
+- **`agent.tool_definition`** is written from the tool registry at every start, so it carries the
+  new names from the first start of this release.
 
 The downgrade drops the column. The copied grants and renamed rows stay: on the release before
 this one they name entities nothing provides, so they reach nothing there.
@@ -50,7 +63,7 @@ this one they name entities nothing provides, so they reach nothing there.
 Task ids: M13.7.8, M13.8.1
 
 Revision ID: 0186
-Revises: 0154
+Revises: 0170
 """
 
 from __future__ import annotations
@@ -58,9 +71,9 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0186"
-# Main's head when this was written. Re-pointed at whichever migration is the head when it lands:
-# nothing here depends on anything after 0154.
-down_revision = "0154"
+# Main's head when this landed (0154 when it was written): nothing here depends on anything
+# after 0154, and it was re-pointed at the head of the day so the chain stays one line.
+down_revision = "0170"
 branch_labels = None
 depends_on = None
 
@@ -186,11 +199,58 @@ UPDATE agent.agent AS a
 #: The tables whose rows carry their source and entity, renamed in place.
 SOURCED: tuple[str, ...] = (
     "proj.record",
+    "proj.record_retired",
     "er.alias",
     "er.identifier",
     "er.link",
+    "er.observation",
     "gate.fast_path_rule",
 )
+
+#: Tables with a source and an entity column that this does not rewrite, each argued in the
+#: docstring. Read by `tests/unit/test_migration_0186.py` with `SOURCED` and the two below.
+NOT_REWRITTEN: tuple[str, ...] = ("agent.tool_definition",)
+
+#: A canonical entity's origin: which record it was first made from.
+RENAME_CANONICAL_ORIGIN = f"""
+WITH renamed(old, provider, new) AS (VALUES {_renamed_values()})
+UPDATE er.canonical AS t
+   SET created_from_entity = r.new
+  FROM renamed AS r
+ WHERE t.created_from_source = r.provider
+   AND t.created_from_entity = r.old
+"""
+
+#: Both sides of a pair waiting for a person, kept in the order `pair_is_ordered` requires.
+RENAME_REVIEW_ITEMS = f"""
+WITH renamed(old, provider, new) AS (VALUES {_renamed_values()}),
+named AS (
+    SELECT i.item_id,
+           i.left_source AS ls, COALESCE(rl.new, i.left_entity) AS le,
+           i.left_source_id AS lid, i.left_entity_id AS leid,
+           i.right_source AS rs, COALESCE(rr.new, i.right_entity) AS re,
+           i.right_source_id AS rid, i.right_entity_id AS reid
+      FROM er.review_item AS i
+      LEFT JOIN renamed AS rl ON rl.provider = i.left_source AND rl.old = i.left_entity
+      LEFT JOIN renamed AS rr ON rr.provider = i.right_source AND rr.old = i.right_entity
+     WHERE rl.new IS NOT NULL OR rr.new IS NOT NULL
+),
+ordered AS (
+    SELECT item_id, (ls, le, lid) < (rs, re, rid) AS kept, ls, le, lid, leid, rs, re, rid, reid
+      FROM named
+)
+UPDATE er.review_item AS t
+   SET left_source = CASE WHEN o.kept THEN o.ls ELSE o.rs END,
+       left_entity = CASE WHEN o.kept THEN o.le ELSE o.re END,
+       left_source_id = CASE WHEN o.kept THEN o.lid ELSE o.rid END,
+       left_entity_id = CASE WHEN o.kept THEN o.leid ELSE o.reid END,
+       right_source = CASE WHEN o.kept THEN o.rs ELSE o.ls END,
+       right_entity = CASE WHEN o.kept THEN o.re ELSE o.le END,
+       right_source_id = CASE WHEN o.kept THEN o.rid ELSE o.lid END,
+       right_entity_id = CASE WHEN o.kept THEN o.reid ELSE o.leid END
+  FROM ordered AS o
+ WHERE t.item_id = o.item_id
+"""
 
 
 def _rename_in(table: str) -> str:
@@ -212,6 +272,8 @@ def upgrade() -> None:
     op.execute(COPY_INTO_AGENTS)
     for table in SOURCED:
         op.execute(_rename_in(table))
+    op.execute(RENAME_CANONICAL_ORIGIN)
+    op.execute(RENAME_REVIEW_ITEMS)
 
 
 def downgrade() -> None:
