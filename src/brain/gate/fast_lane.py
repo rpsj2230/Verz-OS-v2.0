@@ -41,6 +41,19 @@ reads the answer. Here nothing does. Both cases therefore return nothing and let
 lane read the actual words, which costs one model call and is the cheap side of the asymmetry
 `brain.gate.classify` is built on.
 
+**Two records that are two clients are not a fall-through, since 2026-10-06 (M14.6.5).** Falling
+through hands the name to a lane that may pick one, or add their figures together, and neither
+is recoverable. When the registry says the records the asker read are more than one client, the
+lane returns `FastLaneUnresolved` and the asker is told in one sentence that it could not tell
+which, with a review reference for a reviewer only. **Every record in that comparison was read
+at the asker's reach**, so a withheld record cannot make a name ambiguous, and an asker reaching
+one of two gets exactly the answer they would get if the other did not exist. See
+`NAMING_AMBIGUITY_ONLY_AMONG_RECORDS_THE_ASKER_READS`. Records that resolve to one entity still
+fall through, as do records the registry has not linked, about which it has said nothing, and
+everything without a registry to ask. Rejected: telling the asker how many
+clients matched, which is a count, and showing the review link to anybody a review item exists
+for, which tells a non-reviewer what reviewers have open.
+
 **Except that one question asked of several places is not two questions, and until 2026-09-29
 it was refused as though it were.** Every uploaded price list with a sell price column is asked
 about in exactly the same words (`brain.knowledge.classified_rows.QUESTION_SHAPES`), so the owner's
@@ -89,7 +102,15 @@ application's pool. The first thing that composition found here was the keying d
 `entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached with the seeded
 demo.
 
-Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2
+**Every read `respond` makes is marked as the fast lane's (M6.1.3)**, inside
+`brain.knowledge.rows.read_as_the_fast_lane`, and `SessionRowSource` reads a marked read as
+`brain_fastlane`, which holds `SELECT` on the projected records and an uploaded table's rows and
+nothing else. So a statement this lane ran that reached past them would be refused by the
+database, whatever this module's code had come to do. The marker is on the read and not a
+reader of the lane's own, because the readers are the registry's, behind the switch that stops a
+tool.
+
+Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2, M6.1.3
 """
 
 from __future__ import annotations
@@ -115,7 +136,7 @@ from brain.core.fast_path import (
 )
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.classify import is_a_name_not_a_phrase
-from brain.knowledge.rows import RowRecord, RowRequest
+from brain.knowledge.rows import RowRecord, RowRequest, read_as_the_fast_lane
 
 log = structlog.get_logger()
 
@@ -151,6 +172,20 @@ TWO_RULES_MATCHING_ONE_QUESTION_IS_A_FALL_THROUGH = (
 )
 
 #: Why the same words for several places are read in each rather than refused as two rules.
+#: Why two records the asker reads under one name are named as ambiguous rather than abstained on.
+NAMING_AMBIGUITY_ONLY_AMONG_RECORDS_THE_ASKER_READS: Final = (
+    "Every record this lane holds was read at the asker's own reach, the run reach the one "
+    "intersect produced, so two records answering to one name are two records the asker may "
+    "already see. Saying the name matches more than one client tells them nothing they could not "
+    "read, and abstaining would let the answer lane guess. A record the asker may not read never "
+    "reaches this branch: its read compiles to nothing, so an asker reaching one of two records "
+    "gets exactly the answer they would get if the other did not exist. Records that resolve to "
+    "one entity are one client and are not ambiguous, and a record the registry has not linked "
+    "is one it has said nothing about, so both still fall through. The sentence is the same "
+    "whether or not a review item joins them, because a non-reviewer must not learn what "
+    "reviewers have open."
+)
+
 ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH: Final = (
     "Two rules in the same literal words, each for a different place, read the same name out of "
     "the question, so they are one question that several places might answer, and refusing the "
@@ -554,6 +589,37 @@ class FastLaneAnswer:
         return bool(self.result.records)
 
 
+class AmbiguityReader(Protocol):
+    """What the registry says about records the lane read: which client each is, and whether a
+    person has a pair of them open for review. `brain.resolution.ambiguity_store` on an install.
+
+    A protocol, because this module opens no connection; the gate holds the question and the
+    registry holds the answer, in the split `brain.ops.limits` and `brain.ops.limit_store` keep.
+    """
+
+    async def current_entities(
+        self, records: Sequence[tuple[str, str, str]]
+    ) -> Mapping[tuple[str, str, str], str]:
+        """The current entity of each (source, entity, source id) the registry links."""
+        ...
+
+    async def open_review(self, entity_ids: Sequence[str]) -> str | None:
+        """An open review item between any two of these entities, or None."""
+        ...
+
+
+@dataclass(frozen=True)
+class FastLaneUnresolved:
+    """The name the question asked about belongs to more than one client the asker reads.
+
+    No records, no figures and no count: the answer is a sentence, and what it may carry beyond
+    the sentence is a review reference, which the answer route shows only to a reviewer. See
+    `NAMING_AMBIGUITY_ONLY_AMONG_RECORDS_THE_ASKER_READS`.
+    """
+
+    review_ref: str | None
+
+
 def reader_for(match: RuleMatch, readers: Mapping[tuple[str, str], RowReader]) -> RowReader:
     """The reader a matched rule is answered through, or a wiring error naming the rule's pair.
 
@@ -579,7 +645,8 @@ async def respond(
     readers: Mapping[tuple[str, str], RowReader],
     entitlement: EntitlementSet,
     now: datetime | None = None,
-) -> FastLaneAnswer | None:
+    ambiguity: AmbiguityReader | None = None,
+) -> FastLaneAnswer | FastLaneUnresolved | None:
     """Match, fetch, and hand back rows. No model, no tools, no second permission decision.
 
     One entry point rather than a match step and an answer step a caller pairs up, so that
@@ -598,6 +665,13 @@ async def respond(
     first place's empty answer, which is the object one place gives for a name it does not hold,
     so the lane cannot say how many places were asked. See
     `ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH`.
+
+    **More than one record answering to the name is named as ambiguous when the registry says
+    they are more than one client (M14.6.5)**, and only then: records that resolve to one entity,
+    or that the registry has not linked, still fall through, and without an `ambiguity` reader
+    nothing changes. The records were read
+    at this reach, so the asker reads every one of them. See
+    `NAMING_AMBIGUITY_ONLY_AMONG_RECORDS_THE_ASKER_READS`.
     """
     found = _matches(question, rules, entities_served(readers))
     if not found:
@@ -605,11 +679,27 @@ async def respond(
     if len(found) > 1 and not asked_of_several_places(found):
         _two_rules_matched(found)
         return None
-    answers = [await _read(match, readers, entitlement=entitlement, now=now) for match in found]
+    # Every read is marked as the fast lane's, so a source that runs SQL reads it as the lane's
+    # own role (M6.1.3). See `brain.knowledge.rows.read_as_the_fast_lane`.
+    with read_as_the_fast_lane():
+        answers = [await _read(match, readers, entitlement=entitlement, now=now) for match in found]
     held = [one for one in answers if one.result.records]
     if sum(len(one.result.records) for one in held) > 1:
         log.warning("fast_lane.two_records_matched", rules=sorted(one.rule_id for one in held))
-        return None
+        if ambiguity is None:
+            return None
+        keys = [
+            (one.source, record.entity, record.id) for one in held for record in one.result.records
+        ]
+        current = await ambiguity.current_entities(keys)
+        # A record the registry has not linked is one it has said nothing about, so the name is
+        # not known to be ambiguous and the lane falls through as it always has.
+        if any(key not in current for key in keys):
+            return None
+        clients = sorted({current[key] for key in keys})
+        if len(clients) < 2:
+            return None
+        return FastLaneUnresolved(review_ref=await ambiguity.open_review(clients))
     return held[0] if held else answers[0]
 
 

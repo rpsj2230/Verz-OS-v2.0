@@ -461,7 +461,9 @@ def test_an_upload_again_moves_every_answers_cache_key_and_nothing_else_does() -
     assert second.epochs == {epoch_name(ENTITY): 2}
 
     def key(lane: Any) -> str:
-        caching = caching_of(SimpleNamespace(answer_store=object()), lane.policies, (), lane.epochs)
+        caching = caching_of(
+            SimpleNamespace(answer_store=object()), lane.policies, (), {}, lane.epochs
+        )
         assert caching is not None
         return key_for(
             "what is the sell price of WEB-1001",

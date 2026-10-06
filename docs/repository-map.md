@@ -14,6 +14,7 @@ So every directory below is one of three things, and the third column is the one
 | `migrations/` | Alembic revisions. The database is built from these and from nothing else. | Never |
 | `console/` | The web console: Vite, React, vitest. | Never |
 | `tests/` | The suite, the invariants, the fixtures and the golden corpus. | Never |
+| `e2e/` | The browser harness: Playwright specs and a page object per console module, run against a furnished install in CI. Its people hold no credential; each run mints them. | Never |
 | `docs/` | The work breakdown, the build pages the application serves, and this file. | Never |
 | `ops/` | The Keycloak realm, OpenBao policies, runbooks and git hooks. | Never |
 | `matcher/` | The record matcher's own offline image: its dependencies, lock file and Dockerfile, kept apart from the application. | Never |

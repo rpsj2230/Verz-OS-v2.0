@@ -46,17 +46,53 @@ a driver handing back extra keys cannot widen an answer, and this returns what t
 rather than filtering it: filtering here would be a second place that decides what a record
 holds, and the first place is the one with the projection in front of it.
 
-Task ids: none
+**A read the fast lane made is read as its own role, for the one transaction it reads in
+(M6.1.3).** `brain.gate.fast_lane.respond` makes its reads inside
+`brain.knowledge.rows.read_as_the_fast_lane`, and a read made there takes `brain_fastlane` as the
+transaction's first statement after the application's own, so the rows an answer is taken from
+with no model in the loop are read by a role that holds `SELECT` on `proj.record` and
+`know.classified_row` and nothing else (`0008`, `0162`). The database is then what refuses the lane
+a document, a grant or a write, rather than the lane's own code. LOCAL, for `brain.session`'s
+reason: the application talks to PgBouncer in transaction mode, and a role set for the session
+would outlive the request on a connection somebody else takes next. See
+`THE_FAST_LANE_READS_AS_A_ROLE_THAT_CAN_READ_NOTHING_ELSE`.
+
+Rejected: a second source the fast lane is handed instead. The lane is handed the registry's own
+handlers, each behind the switch that stops a tool, and readers rebuilt over another source would
+take the switch off, which is `brain.knowledge.rows`'
+`A_FAST_LANE_READ_IS_MARKED_ON_THE_READ_AND_NOT_ON_THE_READER`. And rejected: the role on every
+read. A model's tool call reads documents and more than one table, and answers through a model
+that reads what it is shown; the role belongs to the lane whose promise is that nothing downstream
+checks what it returned.
+
+Task ids: M6.1.3
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Final
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.knowledge.rows import RowQuery
+from brain.knowledge.rows import RowQuery, is_a_fast_lane_read
+
+#: The role the fast lane's rows are read as. `0001` creates it NOLOGIN NOBYPASSRLS.
+FAST_LANE_ROLE: Final = "brain_fastlane"
+
+#: Written out, so there is no interpolation near a statement. A test holds it to the role.
+SET_FAST_LANE_ROLE: Final = "SET LOCAL ROLE brain_fastlane"
+
+#: Why the fast lane's reads take a role of their own.
+THE_FAST_LANE_READS_AS_A_ROLE_THAT_CAN_READ_NOTHING_ELSE: Final = (
+    "A fast answer is read and sent with no model in the loop, so nothing downstream reads it "
+    "and nothing can notice it came from the wrong place. Read as the application, the lane "
+    "could reach every table the application can, and what kept it to the projection was the "
+    "lane's own code. Read as brain_fastlane, it holds SELECT on the projected records and the "
+    "rows of uploaded tables and nothing else, so a statement that reached a document, a grant "
+    "or a write would be refused by the database, which is a refusal the lane cannot argue with."
+)
 
 #: Why this adds nothing to the statement it was handed.
 SOURCE_RUNS_THE_STATEMENT_AND_DECIDES_NOTHING = (
@@ -103,9 +139,12 @@ class SessionRowSource:
 
         The query's settings run first, on this session, so they share the transaction the
         session begins on its first statement. See
-        `SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION`.
+        `SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION`. Before them, for a read the fast lane
+        made, the fast lane's role. See the module docstring.
         """
         async with self._sessions() as session:
+            if is_a_fast_lane_read():
+                await session.execute(text(SET_FAST_LANE_ROLE))
             for setting in query.settings:
                 await session.execute(setting)
             result = await session.execute(query.statement)

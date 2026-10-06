@@ -74,6 +74,7 @@ from brain.tools.skills import (
     SkillSource,
     SourceKind,
     execution_tool,
+    script_sha256_of,
     skill_from_markdown,
 )
 
@@ -85,12 +86,18 @@ REVIEWED_AT = datetime(2026, 9, 6, 9, 30, tzinfo=UTC)
 # ------------------------------------------------------------------ fixtures and doubles
 
 
+#: The one script the fixture skill carries, and its bytes.
+SCRIPT = "scripts/check.py"
+SCRIPT_BYTES = b"print('expiring: 0')\n"
+
+
 def _skill(*, body: str = "check the expiry, then open a ticket") -> Skill:
     return Skill(
         name="hosting_expiry",
         description="Check which hosting accounts expire this month",
         version="1.0.0",
-        scripts=("scripts/check.py",),
+        scripts=(SCRIPT,),
+        script_sha256=((SCRIPT, script_sha256_of(SCRIPT_BYTES)),),
         body=body,
     )
 
@@ -890,3 +897,97 @@ def test_the_tool_cannot_be_built_without_a_runner() -> None:
     assert fields["runner"].default is dataclasses.MISSING
     assert fields["runner"].default_factory is dataclasses.MISSING
     assert fields["library"].default is dataclasses.MISSING
+
+
+# --------------------------------------------------- the bytes the approval covers (M12.4.11)
+def test_a_skill_whose_scripts_are_named_and_not_hashed_never_runs() -> None:
+    """`SCRIPT_BYTES_NOT_COVERED`: a skill read from its `SKILL.md` alone names its scripts and no
+    approval covers their bytes, so it is refused before a spec is built. Delete this and an
+    approval of a name runs whatever bytes sit under it."""
+    from brain.tools.run_skill import SCRIPT_BYTES_NOT_COVERED
+
+    bare = Skill(name="hosting_expiry", description="Check expiry", scripts=(SCRIPT,))
+    request = ScriptRequest(skill=bare.name, script=SCRIPT)
+    with pytest.raises(SkillScriptError) as refused:
+        plan_run(bare, request, leash=ScriptLeash(), environment={}, reach_hash="")
+    assert str(refused.value) == SCRIPT_BYTES_NOT_COVERED
+
+
+def test_the_spec_carries_the_hash_of_every_script_the_approval_covers() -> None:
+    """The positive half: a covered skill plans a run whose spec names each script's approved
+    sha256, which is what the runner checks the bytes against. Delete this and a runner has
+    nothing to check the bytes it materialises against."""
+    skill = _skill()
+    spec = plan_run(
+        skill,
+        ScriptRequest(skill=skill.name, script=SCRIPT),
+        leash=ScriptLeash(),
+        environment={},
+        reach_hash="",
+    )
+    assert spec.script_sha256 == ((SCRIPT, script_sha256_of(SCRIPT_BYTES)),)
+
+
+def test_the_digest_covers_a_scripts_bytes_so_an_edit_is_a_different_skill() -> None:
+    """`THE_DIGEST_COVERS_EVERY_SCRIPTS_BYTES`: one changed byte in a script changes the skill's
+    digest, so the approval of the old one does not cover the new. And a skill with no hashes
+    digests as it always did, so no approval granted before this is voided. Delete this and an
+    edit to a script survives its approval."""
+    edited = _skill().model_dump()
+    edited["script_sha256"] = ((SCRIPT, script_sha256_of(SCRIPT_BYTES + b" ")),)
+    assert Skill.model_validate(edited).digest() != _skill().digest()
+    bare = Skill(name="hosting_expiry", description="Check", scripts=(SCRIPT,))
+    assert (
+        bare.digest()
+        == Skill(name="hosting_expiry", description="Check", scripts=(SCRIPT,)).digest()
+    )
+    assert (
+        bare.digest()
+        != Skill.model_validate(
+            {**bare.model_dump(), "script_sha256": ((SCRIPT, "0" * 64),)}
+        ).digest()
+    )
+
+
+@pytest.mark.parametrize(
+    "hashes",
+    [
+        (("scripts/other.py", "0" * 64),),
+        ((SCRIPT, "0" * 63),),
+        ((SCRIPT, "A" * 64),),
+        ((SCRIPT, "0" * 64), (SCRIPT, "0" * 64)),
+    ],
+)
+def test_a_partial_or_malformed_set_of_hashes_does_not_construct(
+    hashes: tuple[tuple[str, str], ...],
+) -> None:
+    """Every declared script hashed once in lowercase hex, or none: a hash for another path, a
+    short or upper-case one, or one script twice is refused. Delete this and an approval can
+    cover some of a skill's code and not the rest."""
+    with pytest.raises(ValueError, match=r"sha256|hashed once"):
+        Skill(name="hosting_expiry", description="Check", scripts=(SCRIPT,), script_sha256=hashes)
+
+
+def test_a_runner_refuses_bytes_that_are_not_the_ones_approved() -> None:
+    """`verify_script_bytes`: the runner recomputes each file's sha256 and refuses a changed byte,
+    a missing script and an extra file before anything runs, and passes the exact bytes. Delete
+    this and a script edited in the store after approval runs as if approved."""
+    from brain.tools.run_skill import SCRIPT_CHANGED_SINCE_APPROVAL, verify_script_bytes
+
+    skill = _skill()
+    spec = plan_run(
+        skill,
+        ScriptRequest(skill=skill.name, script=SCRIPT),
+        leash=ScriptLeash(),
+        environment={},
+        reach_hash="",
+    )
+    verify_script_bytes(spec, {SCRIPT: SCRIPT_BYTES})
+    for files in (
+        {SCRIPT: SCRIPT_BYTES + b"#"},
+        {},
+        {SCRIPT: SCRIPT_BYTES, "scripts/extra.py": b"x"},
+    ):
+        with pytest.raises(SkillScriptError) as refused:
+            verify_script_bytes(spec, files)
+        assert str(refused.value) == SCRIPT_CHANGED_SINCE_APPROVAL

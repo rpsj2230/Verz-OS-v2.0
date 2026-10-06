@@ -272,12 +272,12 @@ def test_a_zip_holding_only_its_skill_md_is_read_in_memory() -> None:
 
 
 def test_a_package_that_declares_scripts_or_carries_another_file_is_refused() -> None:
-    """A skill whose code the approval digest would not cover is refused at the door, whether the
-    `SKILL.md` names a script or the archive carries a file beside it.
+    """A skill whose code the approval digest would not cover is refused at the door, whether a
+    `SKILL.md` on its own names a script, so its bytes never arrived, or the archive carries a
+    file its `SKILL.md` does not declare.
 
-    Delete this and a reviewer approves the prose of a skill whose scripts can then be edited
-    without the approval noticing, because `Skill.digest` covers a script's name and not its
-    bytes."""
+    Delete this and a reviewer approves the prose of a skill whose code arrived beside it
+    unreviewed, or whose declared script was never read at all."""
     with pytest.raises(SkillLibraryError, match="declares scripts"):
         read_package("SKILL.md", text_with(scripts="[run.py]").encode("utf-8"))
     with pytest.raises(SkillLibraryError) as beside:
@@ -622,6 +622,8 @@ def test_through_an_agent_a_skill_reaches_no_tool_its_caller_or_the_agent_does_n
                 Capability(value="read:ticket.status"),
             ),
             allowed_tools=frozenset({"crm.read_client", "desk.read_ticket"}),
+            # Bound to the helpdesk, as an agent reading tickets has to be.
+            connectors=("freshdesk",),
         ),
         created_by="u_builder",
     )
@@ -887,3 +889,79 @@ def test_a_skill_carries_nothing_through_which_an_assignment_could_widen_an_agen
     }
 
     assert set(Skill.model_fields) & forbidden == set()
+
+
+# ------------------------------------------------------- scripts and their bytes (M12.4.11)
+SCRIPT = b"print('renewal due')\n"
+
+
+def scripted_zip(**extra: bytes) -> bytes:
+    text = text_with(scripts="[scripts/check.py]").encode("utf-8")
+    return a_zip({"pkg/SKILL.md": text, "pkg/scripts/check.py": SCRIPT, **extra})
+
+
+def test_a_package_carrying_its_declared_scripts_is_read_with_their_bytes_in_the_digest() -> None:
+    """The positive half of `A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`: a zip
+    holding the `SKILL.md` and exactly its declared script, in any folder, is read, the script's
+    bytes travel with the package, and their sha256 is in the skill's digest. Delete this and a
+    skill with scripts can never be added, or is added with its bytes outside its digest."""
+    from brain.tools.skills import script_sha256_of
+
+    package = read_package("skill.zip", scripted_zip())
+    assert package.skill.scripts == ("scripts/check.py",)
+    assert package.skill.script_sha256 == (("scripts/check.py", script_sha256_of(SCRIPT)),)
+    assert dict(package.scripts) == {"scripts/check.py": SCRIPT}
+    one = added(package, by=IMPORTER, at=NOW)
+    assert dict(one.scripts) == {"scripts/check.py": SCRIPT}
+    changed = read_package(
+        "skill.zip",
+        a_zip(
+            {
+                "pkg/SKILL.md": text_with(scripts="[scripts/check.py]").encode("utf-8"),
+                "pkg/scripts/check.py": SCRIPT + b"#",
+            }
+        ),
+    )
+    assert changed.skill.digest() != package.skill.digest()
+
+
+@pytest.mark.parametrize(
+    ("members", "says"),
+    [
+        ({"pkg/scripts/extra.py": b"x"}, r"extra\.py"),
+        ({"elsewhere/run.py": b"x"}, "outside the folder"),
+        ({"pkg/scripts/big.py": b"x" * (64 * 1024 + 1)}, "over the"),
+    ],
+)
+def test_a_package_with_a_file_its_skill_md_does_not_declare_is_refused(
+    members: dict[str, bytes], says: str
+) -> None:
+    """An undeclared file beside the scripts, a file outside the `SKILL.md`'s folder, and a file
+    past the script size bound are each refused, saying which. Delete this and code no digest
+    covers rides in with a skill that does declare scripts."""
+    with pytest.raises(SkillLibraryError, match=says):
+        read_package("skill.zip", scripted_zip(**members))
+
+
+def test_a_package_lacking_a_declared_script_is_refused() -> None:
+    """A `SKILL.md` declaring a script the zip does not hold is refused naming it. Delete this and
+    a declared script nobody could review is approved as a name."""
+    text = text_with(scripts="[scripts/check.py, scripts/other.py]").encode("utf-8")
+    with pytest.raises(SkillLibraryError, match=r"other\.py"):
+        read_package("skill.zip", a_zip({"pkg/SKILL.md": text, "pkg/scripts/check.py": SCRIPT}))
+
+
+def test_a_skill_with_scripts_is_refused_where_the_install_runs_no_sandbox() -> None:
+    """`THIS_INSTALL_RUNS_NO_SANDBOX`: with no sandbox switched on, a package with scripts is
+    refused at the door, and a package without scripts, or any package where a sandbox runs, is
+    let through. Delete this and code is stored for approval on an install that can never run
+    it."""
+    from brain.console.skill_library import THIS_INSTALL_RUNS_NO_SANDBOX, runnable_here
+
+    scripted = read_package("skill.zip", scripted_zip())
+    plain = read_package("SKILL.md", SKILL_MD.encode("utf-8"))
+    with pytest.raises(SkillLibraryError) as refused:
+        runnable_here(scripted, sandbox=False)
+    assert THIS_INSTALL_RUNS_NO_SANDBOX in str(refused.value)
+    assert runnable_here(plain, sandbox=False) is plain
+    assert runnable_here(scripted, sandbox=True) is scripted

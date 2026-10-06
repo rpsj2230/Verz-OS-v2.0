@@ -4,16 +4,19 @@
 `brain.gate.leash.SuspendedAction` holds the state machine. Neither says what the person sees
 or what happens when they decide, and those are the two halves here.
 
-**The artefact is shown verbatim and the tool call is not shown at all.** `SuspendedAction`
-already keeps what the person was shown, with the argument beside it: an approval of a
-re-rendered artefact is an approval of something nobody read. This module carries that through
-to the card and adds the other half of M33.6.1.2, which is that the machinery does not appear.
-A tool call is a capability name and a row of arguments. The capability is a fact about the
-permission model, which `brain.console.auditor` argues at length must not leak through a
-report, and the arguments are the client's own data, arriving on a screen whose reader was
-chosen for their authority over an action rather than their reach over that data. `Card` has
-no field either could arrive in and `card_gaps` reports one if a later edit adds it. See
-`AN_APPROVER_READS_WHAT_WILL_HAPPEN_AND_NOT_HOW`.
+**What will happen is rendered at the approver's own reach, and the tool call is not shown at
+all (M33.8.1, needs-rupash 14).** A tool call is a capability name and a row of arguments. The
+capability is a fact about the permission model, which `brain.console.auditor` argues at length
+must not leak through a report, and the arguments are the client's own data, arriving on a screen
+whose reader was chosen for their authority over an action rather than their reach over that data.
+So the card carries `brain.gate.approval_request.render_request` of the action at the approver's
+entitlements, under the field policy of the action's entity (`request_policy`): an argument they
+may read shows its value and every other one is locked. Until 2026-10-06 the card carried
+`SuspendedAction.artefact`, the requester's rendering with every value in it, on the argument that
+an approval of a re-rendered artefact is an approval of something nobody read; the action digest
+is what binds an approval to one action, and the requester's rendering is what item 14 forbids.
+`Card` has no field a tool call could arrive in, and `card_gaps` reports one if a later edit adds
+it. See `AN_APPROVER_READS_WHAT_WILL_HAPPEN_AND_NOT_HOW`.
 
 **Four verdicts, three states, and the asymmetry is the point.** `brain.audit.record`'s
 `ApprovalVerdict` argues it: a state says whether the stored action may run and a verdict says
@@ -43,7 +46,7 @@ Rejected: offering the approver a count of what they were not shown. `pending_fo
 value for the reason `A_QUEUE_THAT_COUNTS_WHAT_IT_WITHHELD_IS_A_CENSUS_OF_OTHER_DEPARTMENTS`
 gives, and a card view that said "and four others" would put the count back one screen along.
 
-Task ids: M33.6.1.2, M33.6.1.3, M40.6.1.2
+Task ids: M33.6.1.2, M33.6.1.3, M40.6.1.2, M33.8.1
 """
 
 from __future__ import annotations
@@ -56,7 +59,15 @@ from brain.audit.ledger import AuditEntry
 from brain.audit.record import ApprovalVerdict, AuditRecorder
 from brain.console.role_surfaces import pending_for
 from brain.core.entitlement import EntitlementSet
-from brain.gate.leash import SuspendedAction
+from brain.core.envelope import ToolDefinition
+from brain.core.field_policy import FieldPolicy
+from brain.gate.approval_request import (
+    RenderedRequest,
+    RequestRefusedError,
+    render_request,
+    render_terms,
+)
+from brain.gate.leash import Action, SuspendedAction
 from brain.knowledge.promotion import is_promotion
 
 
@@ -71,9 +82,9 @@ AN_APPROVER_READS_WHAT_WILL_HAPPEN_AND_NOT_HOW: Final = (
     "the permission model, which a report must not leak, and the arguments are the client's "
     "own data arriving on a screen whose reader was chosen for their authority over an "
     "action rather than their reach over that data. What an approver needs is what will "
-    "happen, which is the artefact, and it is shown exactly as it was rendered: an approval "
-    "of a re-rendered artefact is an approval of something nobody read."
+    "happen, rendered at their own reach, with every argument they could not look up locked."
 )
+
 
 #: Why an amended action is not built here.
 AN_AMENDMENT_A_SCREEN_BUILDS_IS_AN_ACTION_NOBODY_ENTITLED: Final = (
@@ -123,15 +134,16 @@ CALL_SHAPED: Final[frozenset[str]] = frozenset(
 class Card:
     """One approval as its approver sees it (M33.6.1.2).
 
-    The artefact is `SuspendedAction.artefact`, unchanged. Everything else is what a person
-    needs to decide: which suspension this is, when it lapses, and whose reach it would run
-    under, which is the fact that makes "approve" mean something different from "do it".
+    `request` is the action rendered at the approver's own reach by
+    `brain.gate.approval_request.render_request`, never the requester's artefact. Everything else
+    is what a person needs to decide: which suspension this is, when it lapses, and whose reach it
+    would run under, which is the fact that makes "approve" mean something different from "do it".
 
     There is no field a tool call could arrive in, and `card_gaps` says so mechanically.
     """
 
     suspension_id: str
-    artefact: str
+    request: RenderedRequest
     runs_as: str
     raised_at: datetime
     expires_at: datetime
@@ -142,14 +154,6 @@ class Card:
     #: Why approving this sends nothing, in the grant's own words, or empty when it would run
     #: (M11.7.3): a connector write this install has not allowed. Never a tool call's detail.
     unsent_because: str = ""
-
-    def __post_init__(self) -> None:
-        if not self.artefact.strip():
-            msg = (
-                f"suspension {self.suspension_id!r} would be shown with nothing on it, and an "
-                "approver pressing approve on an empty card has approved whatever it was"
-            )
-            raise ApprovalError(msg)
 
 
 def card_gaps(shape: type = Card) -> tuple[str, ...]:
@@ -174,6 +178,47 @@ def card_gaps(shape: type = Card) -> tuple[str, ...]:
     )
 
 
+def terms_not_data() -> tuple[ToolDefinition, ...]:
+    """The product's own tools whose arguments are the terms of the decision, shown whole.
+
+    A closed set a test holds, matched on the whole definition rather than the name, so a tool of
+    anybody else's that borrowed one of these names is rendered under its entity's classification
+    like every other. See `brain.gate.approval_request.AN_ACTION_S_OWN_TERMS_ARE_NOT_DATA`.
+    """
+    from brain.browsing.sessions import ACT_ON_SURFACE
+    from brain.knowledge.promotion import PROMOTION_TOOL
+
+    return (PROMOTION_TOOL, ACT_ON_SURFACE)
+
+
+def request_policy(action: Action) -> FieldPolicy:
+    """The field policy an approver's view of `action` is rendered under.
+
+    Its entity's classification, its own source's first. An entity nothing classifies is the
+    empty policy, under which every argument is locked.
+    """
+    from brain.tools.startup import classification_for
+
+    found = classification_for(action.tool.entity, source=action.tool.source or None)
+    return found.policy() if found is not None else FieldPolicy(rules=())
+
+
+def request_for(
+    suspension: SuspendedAction, reader: EntitlementSet, now: datetime
+) -> RenderedRequest:
+    """What `reader` is shown of one held action, on every surface an approval is drawn on.
+
+    The product's own terms for one of `terms_not_data`, and otherwise the action rendered at the
+    reader's reach under `request_policy`. **The one function on any approver's surface that reads
+    `SuspendedAction.artefact`, and only for the product's own tools**, which a test holds by
+    reading the source. See `brain.gate.approval_request.AN_ACTION_S_OWN_TERMS_ARE_NOT_DATA`.
+    """
+    action = suspension.action
+    if action.tool in terms_not_data():
+        return render_terms(suspension.artefact, reader)
+    return render_request(action, reader, request_policy(action), now)
+
+
 def card(
     suspension: SuspendedAction,
     entitlement: EntitlementSet,
@@ -196,9 +241,13 @@ def card(
     """
     if not pending_for(entitlement, [suspension], now):
         return None
+    try:
+        request = request_for(suspension, entitlement, now)
+    except RequestRefusedError as refused:
+        raise ApprovalError(str(refused)) from refused
     return Card(
         suspension_id=suspension.id,
-        artefact=suspension.artefact,
+        request=request,
         runs_as=suspension.principal_id,
         raised_at=suspension.raised_at,
         expires_at=suspension.expires_at,

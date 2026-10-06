@@ -187,11 +187,15 @@ async def person_for(
     actor: str,
     now: datetime,
     trace_id: str,
+    place: bool = True,
 ) -> str:
     """The Brain person behind this account, made and bound if there is none. Returns their id.
 
     Found by the account's sign-in link first, then by the address's email binding; made only when
     neither exists. The sign-in link is written by `SignInBindings.bind`, the screen's own write.
+    A person made is placed in the department the list names when `place`, and in none when
+    departments are managed on People
+    (`brain.identity.departments_from.UNDER_THE_CONSOLE_THE_SYNC_MOVES_NOBODY`).
     """
     email_digest = digest_of(person.work_address)
     async with sessions() as session, session.begin():
@@ -215,7 +219,9 @@ async def person_for(
                     display_name=person.display_name,
                     primary_department=registered_by_name(departments).get(
                         department_key(person.department)
-                    ),
+                    )
+                    if place
+                    else None,
                 )
             )
         if mailbox is None:
@@ -266,6 +272,7 @@ async def provide_accounts(
     absent_is_gone: bool,
     trial: bool = False,
     keep_open: frozenset[str] = frozenset(),
+    place: bool = True,
 ) -> AccountRun:
     """Plan the accounts this roster supports and carry the plan out, unless this is a trial.
 
@@ -331,6 +338,7 @@ async def provide_accounts(
                 actor=actor,
                 now=now,
                 trace_id=trace_id,
+                place=place,
             )
         for linked in plan.to_link:
             if linked.needs_marking:
@@ -350,6 +358,7 @@ async def provide_accounts(
                 actor=actor,
                 now=now,
                 trace_id=trace_id,
+                place=place,
             )
         for account in plan.to_enable:
             await reopen(fetch, realm, bearer, account)

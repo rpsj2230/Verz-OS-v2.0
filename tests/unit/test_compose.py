@@ -49,7 +49,9 @@ from brain.ops.compose import (
     host_mib_for,
     mounted_paths,
     relative_bind_mounts,
+    sequenced_one_shots,
     services_declared_differently,
+    summed_mib,
     unbudgeted_mib,
     unbudgeted_services,
     undeployed_mib,
@@ -93,7 +95,7 @@ def test_every_file_the_full_profile_names_exists_and_parses() -> None:
 
     files = profile_files()
     assert BASELINE_FILE in files
-    assert len(declared_services(files)) == 22
+    assert len(declared_services(files)) == 23
 
 
 def test_every_component_of_the_full_profile_has_a_service() -> None:
@@ -414,30 +416,36 @@ def test_the_deployment_and_the_budget_describe_the_same_host_once_both_gaps_are
 
     `brain.ops.wiring` sums components; the compose files reserve containers. They disagreed in
     both directions until 2026-09-21, when the one component with no service got one; what is
-    left is 576 MiB deployed by four containers no component budgets. Add each gap to the side
+    left is 1472 MiB deployed by five containers no component budgets. Add each gap to the side
     that is missing it and the totals are equal, which is the only way to see that the budget
     and the deployment are describing one machine rather than two.
+
+    The identity is between sums, so it uses `summed_mib`. The host's need is a peak, which is
+    `deployment_mib`: since 2026-10-06 Keycloak's server and the one-shots it waits for are never
+    in memory together, so the peak is the sum less the smaller side of that pair.
 
     Written as an identity rather than as two numbers, so that resizing any container fails
     here unless the other side moves with it.
 
     Delete this and the profile's memory figure can be quoted from either side, and the two
-    answers differ by 576 MiB with nothing saying which is right."""
+    answers differ by 1472 MiB with nothing saying which is right."""
     files = profile_files()
 
-    assert deployment_mib(files) == 14720
+    assert summed_mib(files) == 15872
+    assert deployment_mib(files) == 14848
     assert undeployed_mib("full", files) == 0
-    assert unbudgeted_mib("full", files) == 576
+    assert unbudgeted_mib("full", files) == 1472
 
-    assert deployment_mib(files) + undeployed_mib("full", files) == (
+    assert summed_mib(files) + undeployed_mib("full", files) == (
         PRODUCTION_BASELINE_MIB + wave_two_mib("full") + unbudgeted_mib("full", files)
     )
 
 
 def test_the_containers_no_budget_accounts_for_are_named_rather_than_only_counted() -> None:
-    """Four containers are real memory on the host and are in no figure `brain.ops.wiring`
-    produces: a realm importer, an object-store provisioner, the automation sandbox's own
-    database and its egress proxy. Every one arrived beside a component and none is one.
+    """Five containers are real memory on the host and are in no figure `brain.ops.wiring`
+    produces: a realm importer, Keycloak's server build, an object-store provisioner, the
+    automation sandbox's own database and its egress proxy. Every one arrived beside a component
+    and none is one.
 
     The baseline four are excluded because `PRODUCTION_BASELINE_MIB` already counts them, and
     that exclusion is asserted below rather than assumed: a check that reported `db` would be
@@ -450,6 +458,7 @@ def test_the_containers_no_budget_accounts_for_are_named_rather_than_only_counte
     assert {line.split("'")[1] for line in found} == {
         "automation-db",
         "automation-egress",
+        "keycloak-build",
         "keycloak-realm",
         "seaweedfs-init",
     }, found
@@ -463,7 +472,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     """**The honest answer to "why is there no full profile deployed", and it is not the same
     answer as the budget's.** `budget_breaches("full")` compares wave 2 against a cap measured
     on one machine, which is a fact about that machine and not about the product. This is the
-    fact about the product: the profile needs 14976 MiB of reservations, and the machine the
+    fact about the product: the profile needs 15104 MiB of reservations, and the machine the
     measurements were taken on has 11960 MiB in total, so it does not fit there with every
     neighbour removed and nothing left for the kernel.
 
@@ -475,7 +484,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     head, which is how "it does not fit our server" became "it cannot be built"."""
     files = profile_files()
 
-    assert host_mib_for("full", files) == 14976
+    assert host_mib_for("full", files) == 15104
     assert host_mib_for("full", files) == (
         deployment_mib(files) + undeployed_mib("full", files) + HOST_RESERVE_MIB
     )
@@ -672,3 +681,102 @@ def test_two_different_bodies_or_an_unknown_section_are_refused_rather_than_sett
     assert full_profile_document(
         {"a.yml": {"networks": {"n": same}}, "b.yml": {"networks": {"n": dict(same)}}}
     ) == {"networks": {"n": same}}
+
+
+def _one_shot_files(**services: dict[str, object]) -> dict[str, dict[str, object]]:
+    """One compose document holding `services`, for the sequencing tests below."""
+    return {BASELINE_FILE: {"services": services}}
+
+
+def _limited(mib: int, **body: object) -> dict[str, object]:
+    return {"deploy": {"resources": {"limits": {"memory": f"{mib}M"}}}, **body}
+
+
+def test_a_one_shot_a_service_waits_for_is_costed_against_that_service_not_beside_it() -> None:
+    """A server waiting for two one-shots costs the larger of the server and the two together.
+
+    The peak is the other containers plus max(build + realm, server). Delete this and the host
+    requirement goes back to adding Keycloak's 896 MiB build to its own server, which the files
+    never run at the same time, and the published standard figure passes the machine it was
+    measured on.
+    """
+    files = _one_shot_files(
+        app=_limited(1024),
+        build=_limited(896, restart="no"),
+        realm=_limited(128, restart="no"),
+        server=_limited(
+            1536,
+            depends_on={
+                "build": {"condition": "service_completed_successfully"},
+                "realm": {"condition": "service_completed_successfully"},
+            },
+        ),
+    )
+    assert sequenced_one_shots(files) == {"server": ("build", "realm")}
+    assert summed_mib(files) == 1024 + 896 + 128 + 1536
+    assert deployment_mib(files) == 1024 + max(896 + 128, 1536)
+
+
+@pytest.mark.parametrize(
+    ("why", "services"),
+    [
+        (
+            "the server only waits for the one-shot to start",
+            {
+                "build": _limited(896, restart="no"),
+                "server": _limited(1024, depends_on=["build"]),
+            },
+        ),
+        (
+            "two services wait for it, and either may start while it runs beside the other",
+            {
+                "build": _limited(896, restart="no"),
+                "server": _limited(
+                    1024, depends_on={"build": {"condition": "service_completed_successfully"}}
+                ),
+                "other": _limited(
+                    256, depends_on={"build": {"condition": "service_completed_successfully"}}
+                ),
+            },
+        ),
+        (
+            "it waits only for the one-shot to start, written as a condition",
+            {
+                "build": _limited(896, restart="no"),
+                "server": _limited(1024, depends_on={"build": {"condition": "service_started"}}),
+            },
+        ),
+        (
+            "the waiter is itself a one-shot, which may run beside anything else",
+            {
+                "build": _limited(896, restart="no"),
+                "after": _limited(
+                    256,
+                    restart="no",
+                    depends_on={"build": {"condition": "service_completed_successfully"}},
+                ),
+            },
+        ),
+        (
+            "what it waits for is not a one-shot, so it is still running",
+            {
+                "build": _limited(896),
+                "server": _limited(
+                    1024, depends_on={"build": {"condition": "service_completed_successfully"}}
+                ),
+            },
+        ),
+    ],
+)
+def test_a_container_that_can_run_beside_another_is_costed_beside_it(
+    why: str, services: dict[str, dict[str, object]]
+) -> None:
+    """Only the one ordering compose guarantees is netted; every other case is the full sum.
+
+    The sibling of the test above. Delete this and the sequencing can net a pair compose does
+    not keep apart, which is a host requirement below a moment the host does live through, the
+    failure in the unaffordable direction.
+    """
+    files = _one_shot_files(**services)
+    assert sequenced_one_shots(files) == {}, why
+    assert deployment_mib(files) == summed_mib(files), why

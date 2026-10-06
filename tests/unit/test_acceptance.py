@@ -31,6 +31,7 @@ from brain.ops import (
     acceptance_audit,
     acceptance_checks_accounts,
     acceptance_checks_channels,
+    acceptance_checks_class_pools,
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_run,
@@ -556,7 +557,18 @@ WRITTEN_BY_CHECKS = (
     "ops.spend_actual",
     "ops.sensitive_read",
     "er.canonical",
+    "er.alias",
+    "er.identifier",
+    "er.link",
+    "er.observation",
+    "er.blocked_value",
+    # The merge checks plant their own entities and merge and unmerge them (`0183`).
+    "er.merge",
+    "er.unmerge",
+    "er.review_item",
     "proj.record",
+    "proj.record_retired",
+    "proj.source_epoch",
     "ops.connector_connection",
     "ops.connector_sync",
     "ops.setting",
@@ -682,6 +694,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # The model pin's check plans its stand-ins only on a hosted install, and this one keeps text
+    # at home; `tests/unit/test_acceptance_skill_pins.py` runs it with the hosted profile.
+    assert (
+        outcomes.pop("an_agent_s_pinned_model_is_tried_first_with_its_level_behind")[0] == NOT_RUN
+    )
     # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
     assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
     assert (
@@ -691,6 +708,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # runs them with the hosted profile and a vault the test answers for.
     for escalation_check in registered(("brain.ops.acceptance_escalation",)):
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
+    # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
+    assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     # No optional service is switched on here; `tests/unit/test_acceptance_services.py` switches
@@ -702,8 +721,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for ledger_check in (
         "the_trace_ledger_runs_as_its_five_services",
         "every_trace_ledger_service_runs_under_its_budgeted_limit",
+        "a_run_sent_to_the_ledger_is_found_there_with_its_model_call",
     ):
         assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
+    # No class pooler runs here; `tests/unit/test_class_pools.py` stands a limited login in for
+    # the batch pool, reports it running and passes.
+    assert outcomes.pop("a_batch_job_holding_its_share_cannot_take_a_persons_connection") == (
+        NOT_RUN,
+        acceptance_checks_class_pools.NOT_RUNNING_HERE,
+    )
     # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
     email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
     assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)

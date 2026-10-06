@@ -30,9 +30,9 @@ import { APPROVALS_HEADING, Confirmed, useConfirmationInView } from "./Approvals
 export const READING_APPROVAL = "Reading the approval.";
 export const ONE_APPROVAL = "Approval";
 
-/** The first line of the artefact names the action, which is what the page is called. */
-function titleOf(artefact: string): string {
-  return artefact.split("\n")[0]?.trim() || "An approval";
+/** The first line of the request names the action, which is what the page is called. */
+function titleOf(request: string): string {
+  return request.split("\n")[0]?.trim() || "An approval";
 }
 
 export function ApprovalPage({ suspensionId }: { readonly suspensionId: string }) {
@@ -58,7 +58,7 @@ export function ApprovalPage({ suspensionId }: { readonly suspensionId: string }
   if (card === null) {
     return null;
   }
-  const title = titleOf(card.artefact);
+  const title = titleOf(card.request);
   return (
     <DetailPage
       crumbs={[{ label: APPROVALS_HEADING, to: APPROVALS_ADDRESS }, { label: title }]}

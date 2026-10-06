@@ -192,6 +192,7 @@ from brain.knowledge.search import Reach, reach_for
 from brain.ops.budgets import Allowance, BudgetLevel, BudgetRow
 from brain.ops.canaries import CanaryFinding
 from brain.ops.halt import Halt, HaltScope, HaltState
+from brain.ops.halt_store import halt_row
 from brain.ops.jobs import JobRecord, JobState, hidden_count_fields
 from brain.ops.schedule import Owed
 from brain.ops.spend import LADDER, Refusal, Rung
@@ -1366,12 +1367,14 @@ def incidents(
 def _halt_row(one: Halt) -> dict[str, str]:
     """The fields a halt grant's scope may be written against.
 
-    The scope and its target, which are the two things a halt names. `declared_by` is
-    deliberately absent: a grant scoped to halts you declared yourself would hide from an
-    administrator the halt somebody else put on their department, which is the one they most
-    need to see.
+    The scope and its target, which are the two things a halt names, and for a department halt
+    the department, so a grant scoped to a department sees the halt on it: the row the stop was
+    authorised against, from `brain.ops.halt_store.halt_row`, so the screen shows a scoped
+    administrator exactly what they may stop. `declared_by` is deliberately absent: a grant
+    scoped to halts you declared yourself would hide from an administrator the halt somebody
+    else put on their department, which is the one they most need to see.
     """
-    return {"scope": one.scope.value, "target": one.target}
+    return halt_row(one.scope, one.target)
 
 
 def stopped_for(

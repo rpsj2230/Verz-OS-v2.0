@@ -365,8 +365,8 @@ def test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_a
     assert said["reader_queue"].json()["items"] == []
     cards = said["queue"].json()["items"]
     assert [one["suspension_id"] for one in cards] == [said["asked"].json()["suspension_id"]]
-    assert "Document: Site handover" in cards[0]["artefact"]
-    assert "TEALNEW" not in cards[0]["artefact"]
+    assert "Document: Site handover" in cards[0]["request"]
+    assert "TEALNEW" not in cards[0]["request"]
     assert said["decided"].status_code == 200, said["decided"].text
     assert placed == [("company", "web")]
     assert chunks == {("company",)}

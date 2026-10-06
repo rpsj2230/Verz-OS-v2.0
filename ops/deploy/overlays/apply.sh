@@ -24,7 +24,9 @@
 # WHAT AN OVERLAY MAY NEED FIRST. A START line opens an overlay and its PREPARE lines name scripts
 # beside this one that put on the server what its compose files expect: settings files, secrets
 # minted on this server, a database (langfuse.prepare.sh says what the trace ledger needs). An
-# overlay whose preparation fails is left out and the others start. The secrets are kept in an
+# overlay whose preparation fails is left out and the others start. A preparation is told the
+# application's container as well, for one that asks the application for what only it can read
+# (class-pools.prepare.sh, the configuration and the owner login). The secrets are kept in an
 # environment file only root can read, under the settings directory the product's compose files
 # already name, and handed to compose with --env-file; nothing here prints one.
 #
@@ -36,7 +38,7 @@
 # A_PLAN_THAT_CANNOT_BE_MADE_STOPS_NOTHING), remove a volume, or fail the deploy: the
 # application is already serving, and a service that would not start is said in the journal.
 #
-# Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2
+# Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M22.2.2
 set -eu
 
 APP="${1:?usage: apply.sh <application container>}"
@@ -82,6 +84,7 @@ sed -n 's/^SAY /overlays: /p' "$planned"
 # Each overlay's lines, kept only when its preparation succeeded.
 files=""
 waits=""
+afters=""
 joins="$(mktemp)"
 trap 'rm -f "$facts" "$planned" "$joins"' EXIT
 current=""
@@ -92,7 +95,8 @@ while IFS= read -r line; do
     "START "*) current="${line#START }"; skipped="" ;;
     "PREPARE "*)
       if [ -z "$skipped" ] && ! BRAIN_OVERLAYS_SETTINGS="$SETTINGS" BRAIN_OVERLAYS_ENV="$ENV_FILE" \
-          BRAIN_APP_PROJECT="$project" sh "$HERE/${line#PREPARE }" < /dev/null; then
+          BRAIN_APP_PROJECT="$project" BRAIN_APP_CONTAINER="$APP" \
+          sh "$HERE/${line#PREPARE }" < /dev/null; then
         say "$current is not started: its preparation did not finish"
         skipped=1
         anyskipped=1
@@ -100,6 +104,7 @@ while IFS= read -r line; do
     "FILE "*) [ -n "$skipped" ] || files="$files -f $HERE/${line#FILE }" ;;
     "JOIN "*) [ -n "$skipped" ] || echo "$line" >> "$joins" ;;
     "WAIT "*) [ -n "$skipped" ] || waits="$waits ${line#WAIT }" ;;
+    "AFTER "*) [ -n "$skipped" ] || afters="$afters ${line#AFTER }" ;;
   esac
 done < "$planned"
 
@@ -159,6 +164,14 @@ docker compose -p "$overlays" $envfile $files up -d --wait --wait-timeout 300 $w
 if [ "$code" -ne 0 ]; then
   say "a service did not report healthy within five minutes; docker compose -p $overlays ps says which"
 fi
+
+# What the application must be handed from the server once the services run, such as keys
+# minted here. A failure is said and changes nothing that runs.
+for after in $afters; do
+  if ! BRAIN_OVERLAYS_ENV="$ENV_FILE" BRAIN_APP_CONTAINER="$APP" sh "$HERE/$after" < /dev/null; then
+    say "$after did not finish; it is tried again on the next deploy"
+  fi
+done
 
 docker ps -aq --filter "label=com.docker.compose.project=$overlays" | xargs -r docker inspect \
   --format '{{index .Config.Labels "com.docker.compose.service"}}|{{.HostConfig.Memory}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' |
