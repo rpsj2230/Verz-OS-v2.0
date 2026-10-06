@@ -139,6 +139,22 @@ def with_store(console: Console, store: ObjectStore) -> Console:
     return console
 
 
+def log_grants(scope: Scope) -> tuple[tuple[str, Scope], ...]:
+    """What a reader of the Logs screen holds over `scope`: the log's authority and the plane its
+    read asks, which `brain.log_routes.may_read_application_log` asks of both.
+
+    Built from `brain.log_routes.LOG_READ` rather than through `screen_grants`, because the log's
+    read is declared in its route module and not among the console's registered screens.
+    """
+    from brain.console.reads import Plane, admits, plane_capability_for
+    from brain.log_routes import LOG_READ
+
+    planes = [
+        plane_capability_for(LOG_READ, one).value for one in Plane if admits(one, LOG_READ.plane)
+    ]
+    return ((READS_THE_LOG, scope), (planes[0], scope))
+
+
 class KeptNowhere(SigningSecrets):
     """A signing-secret keeper that records whose secret it was handed and keeps none.
 
@@ -283,13 +299,11 @@ async def the_log_exports_what_its_reader_could_page_to(h: Harness) -> None:
         h.principal(A, "log-a"),
         h.principal(A, "other"),
     )
-    await h.person(
-        admin, department=A, grants=((READS_THE_LOG, Scope.unrestricted()), *screen_grants("logs"))
-    )
+    await h.person(admin, department=A, grants=log_grants(Scope.unrestricted()))
     await h.person(
         narrow,
         department=A,
-        grants=((READS_THE_LOG, Scope.department(A)), *screen_grants("logs", Scope.department(A))),
+        grants=log_grants(Scope.department(A)),
     )
     await h.person(other, department=A)
     at = datetime.now(UTC) - timedelta(seconds=30)

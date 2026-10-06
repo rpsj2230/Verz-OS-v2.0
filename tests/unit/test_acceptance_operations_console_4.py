@@ -75,6 +75,30 @@ def test_the_authorities_the_checks_hold_are_the_routes_own() -> None:
     assert MANAGE_SUBSCRIBERS.value == ops.MANAGES_SUBSCRIBERS
 
 
+def test_the_log_readers_grants_open_the_log_over_everything_and_not_over_one_department() -> None:
+    """The grants the log check gives its two readers are the ones the log's own decision asks:
+    the reader over everything may read the log and the department's reader may not. Delete this
+    and the check's readers can stop matching the route, which on 2026-10-06 they did: the first
+    version asked for a registered screen the log does not have and stopped on a KeyError."""
+    from brain.core.entitlement import Capability, EntitlementSet, Grant
+    from brain.core.scope import Scope
+    from brain.log_routes import may_read_application_log
+    from brain.ops.acceptance_operations_console_4 import log_grants
+
+    def holding(scope: Scope) -> EntitlementSet:
+        return EntitlementSet(
+            principal_id="u_reader",
+            grants=tuple(
+                Grant(capability=Capability(value=one), scope=where)
+                for one, where in log_grants(scope)
+            ),
+        )
+
+    now = datetime(2999, 1, 1, tzinfo=UTC)
+    assert may_read_application_log(holding(Scope.unrestricted()), now)
+    assert not may_read_application_log(holding(Scope.department("acceptance_a")), now)
+
+
 def test_the_exported_kinds_are_kinds_the_audit_trail_governs() -> None:
     """The audit kinds the exporter is granted are kinds the ledger records and the view asks a
     capability for. Delete this and a renamed kind leaves the exporter able to read nothing, and
@@ -304,10 +328,16 @@ def test_subscribers_listed_to_anybody_fail_the_subscribers_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Who is told what shown whatever the reader holds. Delete this and M27.7.12 closes on a
-    screen that tells anybody which outside addresses hear about the company."""
+    screen that tells anybody which outside addresses hear about the company.
+
+    Both decisions are removed: the route's early answer and the console module's, which asks the
+    same question again for every line. Removing only the first leaves the second hiding every
+    line, which is that module doing its job, and the check rightly passes."""
     from brain import govern_people_routes
+    from brain.console import subscribers
 
     monkeypatch.setattr(govern_people_routes, "may_manage", lambda reach, now=None: True)
+    monkeypatch.setattr(subscribers, "may_manage", lambda reach, now=None: True)
     assert "may not manage them" in _failed(install, SUBSCRIBERS)
 
 
