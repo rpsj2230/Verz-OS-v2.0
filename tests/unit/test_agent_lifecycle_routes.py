@@ -12,7 +12,7 @@ reach PostgreSQL is `tests/unit/test_agent_lifecycle_store.py`.
 Every agent is made by the product's own install flow from a signed manifest, rather than built as
 a record, so its ceiling is what binding against a tool registry made of it.
 
-Task ids: M27.11.6, M27.11.7
+Task ids: M27.11.6, M27.11.7, M13.7.4, M39.2.4.2
 """
 
 from __future__ import annotations
@@ -27,8 +27,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import brain.agent_lifecycle_routes as lifecycle_routes
 from brain.agent_lifecycle_routes import (
     ARCHIVE_PATH,
+    CANNOT_CARRY_IT,
     CANNOT_TAKE_IT,
     CHANNELS_PATH,
     DISABLE_PATH,
@@ -51,7 +53,7 @@ from brain.agent_lifecycle_routes import (
     FoundAgent,
     channel_choices,
 )
-from brain.agent_routes import TEMPLATE_SCREEN, record_of
+from brain.agent_routes import TEMPLATE_SCREEN, declared_channels, record_of
 from brain.agents.creation import AGENT_INSTALL_CAPABILITY, install_draft
 from brain.agents.install import InstallDraft, answer
 from brain.agents.install_store import Finished, prepared
@@ -75,6 +77,7 @@ from brain.core.entitlement import Capability, Grant
 from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.context import Channel
 from brain.gate.injection import AutonomyTier
 from brain.knowledge.visibility import Visibility
 from brain.ops.learning_signal_store import StoredLearningPauses
@@ -958,7 +961,10 @@ def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> Non
         "may_duplicate": True,
         "duplicate_unavailable": None,
         "channels": list(console.memory.agents[COMPANY].record.channels),
-        "channel_choices": [one.model_dump() for one in channel_choices()],
+        # Every channel but the website widget, which declares nothing it can carry yet.
+        "channel_choices": [
+            one.model_dump() for one in channel_choices() if one.name != Channel.WIDGET.value
+        ],
         "channels_note": NO_CHANNEL_ANSWERS_NOWHERE,
         "may_change_channels": True,
     }
@@ -1091,3 +1097,65 @@ def test_a_channel_nothing_can_ask_on_is_refused_and_a_stale_page_writes_nothing
     assert unknown.status_code == 422
     assert stale.status_code == 409
     assert console.memory.changes == []
+
+
+def only_lark_is_declared(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A deployment whose one adapter is Lark, so the real `channel_rows` offers Lark alone."""
+    declared = declared_channels()
+    monkeypatch.setattr(
+        lifecycle_routes,
+        "declared_channels",
+        lambda: tuple(one for one in declared if one.channel is Channel.LARK),
+    )
+
+
+def test_a_channel_its_run_could_not_be_carried_on_is_not_switched_on_and_nothing_is_written(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED, the refusal (M39.2.4.2).**
+    WhatsApp is not among the channels `channel_rows` offers this reader for this agent, so a
+    switch onto it is the domain's refusal in its own sentence, and the boxes never offered it.
+    Delete this and the switch can turn an agent on for a surface that cannot carry what it may
+    answer, which is the offer the workspace refuses made anyway by a POST."""
+    only_lark_is_declared(monkeypatch)
+
+    view = console.get("u_admin", path(LIFECYCLE_PATH, agent_id=COMPANY)).json()
+    refused = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["lark", "whatsapp"], "expected": []},
+    )
+
+    assert [one["name"] for one in view["channel_choices"]] == ["console", "lark", "api"]
+    assert refused.status_code == 409
+    assert (refused.json()["outcome"], refused.json()["sentence"]) == (REFUSED, CANNOT_CARRY_IT)
+    assert console.memory.changes == []
+
+
+def test_a_channel_it_could_be_carried_on_is_switched_on_and_one_already_on_may_stay(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The positive sibling: Lark, which `channel_rows` offers, and the console, which answers the
+    asker in their own session, are switched on; and a channel already on that would not be
+    offered now (the widget) may stay on and be switched off, because only switching on is judged.
+    Delete this and the rule can refuse every switch, or strand an agent on a channel nobody may
+    now switch off."""
+    only_lark_is_declared(monkeypatch)
+    found = console.memory.agents[COMPANY]
+    console.memory.agents[COMPANY] = replace(found, record=answering_on(found.record, ["widget"]))
+
+    kept = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["widget", "lark", "console"], "expected": ["widget"]},
+    )
+    off = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["lark"], "expected": ["console", "lark", "widget"]},
+    )
+
+    assert kept.status_code == 200, kept.text
+    assert "widget" in [one["name"] for one in kept.json()["channel_choices"]]
+    assert off.status_code == 200, off.text
+    assert console.memory.agents[COMPANY].record.channels == ("lark",)

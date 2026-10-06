@@ -65,7 +65,7 @@ list of what is missing. `app.state.connector_registry` still wins when a test p
 is changing under another package; these are writes, and a write and the read it changes are
 already separate modules for the Prompts screen and the Skills screen.
 
-Task ids: M27.11.6, M27.11.7, M11.9.4, M13.7.4
+Task ids: M27.11.6, M27.11.7, M11.9.4, M13.7.4, M39.2.4.2
 """
 
 from __future__ import annotations
@@ -84,7 +84,14 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.agent_routes import TEMPLATE_SCREEN, _tool_registry, record_of, viewer_of
+from brain.agent_routes import (
+    TEMPLATE_SCREEN,
+    _tool_registry,
+    declared_channels,
+    product_field_policy,
+    record_of,
+    viewer_of,
+)
 from brain.agents.creation import (
     AGENT_INSTALL_CAPABILITY,
     duplicate_draft,
@@ -131,6 +138,7 @@ from brain.automation_schedule_routes import NotChangedView
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.manifest import ManifestError, manifest_digest
 from brain.connectors.registry import ConnectorRegistry, ConnectorState, RegisteredConnector
+from brain.console.agent_tabs import channel_rows
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -747,6 +755,44 @@ A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS: Final = (
 )
 
 
+#: The surfaces an agent answers on that no channel adapter declares, and why each is offered.
+ANSWERED_IN_THE_ASKERS_OWN_SESSION: Final[frozenset[str]] = frozenset(
+    {Channel.CONSOLE.value, Channel.API.value}
+)
+
+#: Where a channel may be switched on (M39.2.4.2), and the one place that decides it.
+A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED: Final = (
+    "A channel with an adapter is switched on only where brain.console.agent_tabs.channel_rows "
+    "offers it: the channel's own may_carry asked of the most sensitive thing a run of this "
+    "agent by this reader could return, which is the workspace's one decision and not a copy. "
+    "The web console and a service key's API answer the person who asked, in their own "
+    "session, through the gate's redaction at their reach, and declare no adapter; they are "
+    "offered by name. Every other surface with no adapter (the website widget today) is not "
+    "offered until it declares what it can carry. Only switching a channel on is judged: one "
+    "already on may stay on or be switched off."
+)
+
+
+def switchable_channels(record: AgentRecord, asked: Asking) -> frozenset[str]:
+    """The channels this reader may switch this agent on for. See the reason constant above."""
+    rows = channel_rows(
+        asked.reach,
+        record,
+        declared_channels(),
+        product_field_policy(),
+        enabled=(),
+        now=asked.now,
+    )
+    return frozenset(row.channel.value for row in rows) | ANSWERED_IN_THE_ASKERS_OWN_SESSION
+
+
+#: What a switch onto a channel that cannot carry this agent's answers is told.
+CANNOT_CARRY_IT: Final = (
+    "That channel cannot carry what this agent may answer, so it was not switched on and "
+    "nothing was changed."
+)
+
+
 def may_change_channels(record: AgentRecord, asked: Asking) -> bool:
     """Whether this caller may switch this agent's channels. See the reason constant."""
     return record.audience.owner_id == asked.caller.principal.id or holds(
@@ -783,8 +829,16 @@ def lifecycle_view(found: FoundAgent, asked: Asking, key: str | None) -> Lifecyc
         may_duplicate=installs and unavailable is None,
         duplicate_unavailable=unavailable,
         channels=list(record.channels),
+        channel_choices=channel_choices_for(record, asked),
         may_change_channels=may_change_channels(record, asked),
     )
+
+
+def channel_choices_for(record: AgentRecord, asked: Asking) -> list[ChannelChoiceView]:
+    """The boxes: every channel this reader may switch on, and every one already on, so a channel
+    on today can be switched off whatever it would be offered now."""
+    shown = switchable_channels(record, asked) | frozenset(record.channels)
+    return [one for one in channel_choices() if one.name in shown]
 
 
 def leash_view(leash: Leash) -> list[LeashRungView]:
@@ -944,6 +998,9 @@ async def change_agent_channels(
     before = found.record
     if tuple(body.expected) != before.channels:
         return _not_changed(MOVED, IT_MOVED)
+    switched_on = frozenset(body.channels) - frozenset(before.channels)
+    if not switched_on <= switchable_channels(before, asked):
+        return _not_changed(REFUSED, CANNOT_CARRY_IT)
     after = answering_on(before, body.channels)
     if after.channels != before.channels and not await store.change_channels(
         before,
