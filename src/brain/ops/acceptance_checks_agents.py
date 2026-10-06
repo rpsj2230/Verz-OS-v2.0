@@ -251,7 +251,7 @@ def _every_section(h: Harness, administrator: str) -> Any:
         ),
         authority=ManifestAuthority(
             scope=Scope.department(A),
-            capabilities=(Capability(value="read:price_list"),),
+            capabilities=(Capability(value="read:knowledge.document"),),
             allowed_tools=("acceptance.search",),
         ),
         connectors=("acceptance_source",),
