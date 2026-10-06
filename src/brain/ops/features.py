@@ -224,8 +224,31 @@ RELEASE_CHECK: Final = Feature(
     read_by=("brain.install_routes:updates",),
 )
 
+#: Merging two entities with nobody looking. Off until the owner decides needs-rupash 155: a
+#: merge joins two permission surfaces, and an unattended one does that on a score. A merge a
+#: named reviewer decided is never behind this switch.
+UNATTENDED_ENTITY_MERGE: Final = Feature(
+    name="unattended_entity_merge",
+    title="Merge matching records without a reviewer",
+    what=(
+        "When two records in your connected sources match on a hard identifier, and neither "
+        "carries financial records, the product merges them into one entity on its own. Every "
+        "such merge is recorded with its evidence and can be undone."
+    ),
+    while_off=(
+        "No two records are merged unless a named reviewer decides it. A merge made while this "
+        "was on stays in force and can still be undone."
+    ),
+    read_by=("brain.resolution.merge_store:merge_entities",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
-FEATURES: Final[tuple[Feature, ...]] = (PROMPT_EDITING, SCHEDULE_CONTROL, RELEASE_CHECK)
+FEATURES: Final[tuple[Feature, ...]] = (
+    PROMPT_EDITING,
+    SCHEDULE_CONTROL,
+    RELEASE_CHECK,
+    UNATTENDED_ENTITY_MERGE,
+)
 
 
 def feature(name: str, features: Sequence[Feature] = FEATURES) -> Feature:

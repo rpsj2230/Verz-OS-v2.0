@@ -148,6 +148,10 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #:
 #: `evening_digest` joined on 2026-09-30 the day it was registered, sent once a day at the install's
 #: own hour to the conversation it chose, through `brain.ops.digest_run`.
+#:
+#: `entity_resolution` joined on 2026-10-06 the day it was registered (`0182`, M14.1), giving every
+#: record a connector declares for resolution its entity through
+#: `brain.resolution.registry_store.run_registry_now`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -167,6 +171,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "queue_redrive",
         "side_effect_resume",
         "escalation_expiry",
+        "entity_resolution",
         "evening_digest",
     }
 )

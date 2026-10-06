@@ -89,7 +89,8 @@ def entities_of(declaration: ConnectorDeclaration) -> frozenset[str]:
     entity left out of this set is an entity no agent's list narrows.
     """
     from brain.knowledge.connector_rows import CONNECTOR_ROW_ENTITIES
-    from brain.ops.connectable import key_reference
+    from brain.ops.credentials import connector_key_slot
+    from brain.ops.secrets import SecretRef, VaultRole
 
     found = {one.entity for one in CONNECTOR_ROW_ENTITIES.get(declaration.name, ())}
     found.update(declaration.provides)
@@ -98,7 +99,13 @@ def entities_of(declaration: ConnectorDeclaration) -> frozenset[str]:
             found.update(part.entities())
     form = declaration.console
     if form is not None and form.example is not None:
-        built = form.build(form.example.settings, key_reference(declaration.name))
+        # The reference `brain.ops.connectable.key_reference` builds, made here rather than
+        # imported: that module reaches the worker's custom-code runner and, through the
+        # schedule, the offline calibration, and nothing on the request path may import either
+        # (`tests/invariants/test_no_ml_on_the_request_path.py`). Held equal to it by
+        # `test_the_binding_builds_a_forms_key_reference_as_connectable_does`.
+        key = SecretRef(path=connector_key_slot(declaration.name).path, role=VaultRole.WORKER)
+        built = form.build(form.example.settings, key)
         found.update(tool.entity for tool in built.tools if tool.entity)
     return frozenset(found)
 

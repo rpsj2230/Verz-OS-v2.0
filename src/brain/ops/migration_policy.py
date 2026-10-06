@@ -27,6 +27,13 @@ brain_fastlane` because a fast answer needed a document. The check lives here be
 is the one function every migration is already put through, so the rule applies to files
 nobody has written yet. See `THE_FAST_LANE_REACHES_PROJECTED_TABLES_AND_NOTHING_ELSE`.
 
+**Since `0162` the list names one table outside `proj`, by name.** An uploaded price list's rows
+are in `know.classified_row`, and the fast lane answers from them, so the role reads that table
+and the usage on `know` its name needs. Each is one exact statement rather than a pattern over
+`know`, so `GRANT SELECT ON know.chunk TO brain_fastlane` is still the finding it always was, and
+the next table the fast lane answers from is a line added here with its reason, which is the
+review this rule is for. See `ONE_TABLE_OUTSIDE_PROJ_IS_NAMED_AND_NO_SCHEMA_IS`.
+
 **And one rule about the install from empty rather than about the upgrade.** M41.2.1 asks
 that migrations build every schema, table, index, constraint, trigger and row-level security
 policy from an empty database. Most of that can only be checked against a database that has
@@ -87,6 +94,15 @@ THE_FAST_LANE_REACHES_PROJECTED_TABLES_AND_NOTHING_ELSE = (
     "list of shapes, and anything not on it is a finding rather than a judgement call."
 )
 
+#: Why the fast lane's one table outside `proj` is named rather than matched.
+ONE_TABLE_OUTSIDE_PROJ_IS_NAMED_AND_NO_SCHEMA_IS = (
+    "An uploaded table's rows are what most fast answers are read from, and they live in "
+    "know.classified_row, beside every document chunk the company holds. A shape admitting any "
+    "table in know would admit the chunks the day somebody wrote the grant, so the allowed list "
+    "names the table, the usage on its schema and the policy on it, one statement each, and "
+    "nothing else in know."
+)
+
 #: Why a table's row-level security has to be enabled in the migration that creates it.
 A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION = (
     "`brain.ops.sweeps rls` asks a live database whether row-level security is on, which is "
@@ -143,6 +159,15 @@ _FAST_LANE_ALLOWED: tuple[re.Pattern[str], ...] = (
     # security, which is indistinguishable from an empty database.
     re.compile(
         r"CREATE\s+POLICY\s+\w+\s+ON\s+proj\.\w+\s+FOR\s+SELECT\s+TO\s+brain_fastlane\b.*",
+        re.IGNORECASE,
+    ),
+    # An uploaded table's rows (`0162`), named one by one. See
+    # `ONE_TABLE_OUTSIDE_PROJ_IS_NAMED_AND_NO_SCHEMA_IS`.
+    re.compile(r"GRANT\s+USAGE\s+ON\s+SCHEMA\s+know\s+TO\s+brain_fastlane$", re.IGNORECASE),
+    re.compile(r"GRANT\s+SELECT\s+ON\s+know\.classified_row\s+TO\s+brain_fastlane$", re.IGNORECASE),
+    re.compile(
+        r"CREATE\s+POLICY\s+\w+\s+ON\s+know\.classified_row\s+FOR\s+SELECT\s+TO\s+"
+        r"brain_fastlane\b.*",
         re.IGNORECASE,
     ),
 )

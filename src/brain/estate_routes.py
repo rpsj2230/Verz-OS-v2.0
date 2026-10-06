@@ -134,9 +134,8 @@ from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import Basis
-from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
-from brain.core.scope import Scope
 from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.listing import Column, ListAsked, Listing
@@ -153,6 +152,7 @@ from brain.ops.memory_store import (
     StoredMemoryRecords,
     corrections_naming,
     corrections_of,
+    formation_of,
     inferred_named,
     learnings_named,
     learnings_of_agents,
@@ -661,14 +661,7 @@ def stored_memory(
     try:
         kind = MemoryKind(row.kind)
         provenance_of(kind)
-        formation = Formation(
-            principal_id=row.principal_id,
-            capabilities=tuple(Capability(value=one) for one in row.capability_tags),
-            scope=Scope.model_validate(row.scope),
-            ent_hash=row.ent_hash,
-            formed_at=row.formed_at,
-            kind=kind,
-        )
+        formation = formation_of(row)
     except (ValueError, MemoryViewError) as exc:
         log.warning("memory row does not construct", memory=row.id, error=type(exc).__name__)
         return None
