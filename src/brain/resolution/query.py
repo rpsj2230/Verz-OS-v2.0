@@ -66,7 +66,7 @@ compared at all. Adding one here would put a bound on a scan whose shape nothing
 Scope: domain logic. Nothing here opens a connection, reads a clock or binds a parameter to a
 driver. It emits a statement and its arguments as data, exactly as `scope_sql` does.
 
-Task ids: M14.3.6
+Task ids: M14.3.6, M14.4.2
 """
 
 from __future__ import annotations
@@ -82,6 +82,7 @@ from brain.resolution.canonical import ResolutionError, SourceRef
 from brain.resolution.cascade import (
     DECLARED_THRESHOLDS,
     DECLARED_WEIGHTS,
+    SQL_PREDICATES,
     WEIGHT_PARAM_PREFIX,
     Feature,
     Thresholds,
@@ -342,3 +343,66 @@ def score_query(
         calibrated=weights.calibrated,
         certainly_empty=reach.certainly_empty,
     )
+
+
+# ------------------------------------------------------------- the calibration extract (M14.4.2)
+#: The column each feature's agreement is reported under in the pattern extract.
+PATTERN_PREFIX: Final = "f_"
+
+
+@dataclass(frozen=True)
+class PatternQuery:
+    """The statement that counts candidate pairs by which features agreed, and its arguments."""
+
+    sql: str
+    params: Mapping[str, Any]
+    #: The features in the order the statement reports them.
+    features: tuple[Feature, ...]
+
+
+def pattern_query(
+    *,
+    table: str,
+    thresholds: Thresholds = DECLARED_THRESHOLDS,
+    touching: Sequence[SourceRef] = (),
+) -> PatternQuery:
+    """How many blocked candidate pairs showed each set of agreements, in one statement (M14.4.2).
+
+    The extract `calibration.train` fits, and it is the scoring statement's own comparisons:
+    each feature's column is `cascade.SQL_PREDICATES` for that feature, so the agreements the fit
+    counts are the agreements the score sums, and a pair leaves the database as a pattern and a
+    count with no record, name or digest in it, which is `calibration.PatternCount`'s rule. Over
+    the same candidates the online scan compares (`CANDIDATE_BLOCKING`), because a weight fitted
+    on pairs the online path never sees is fitted on a different population. `touching`
+    restricts it to pairs with one of these records on a side, as `score_query` does.
+    """
+    if not _TABLE_RE.match(table):
+        msg = f"{table!r} is not a table this statement may be built over"
+        raise ResolutionError(msg)
+    features = tuple(Feature)
+    columns = ",\n".join(
+        f"  (CASE WHEN {SQL_PREDICATES[one]} THEN true ELSE false END)"
+        f" AS {PATTERN_PREFIX}{one.value}"
+        for one in features
+    )
+    left_key = ", ".join(f"{LEFT_ALIAS}.{one}" for one in RECORD_KEY_COLUMNS)
+    right_key = ", ".join(f"{RIGHT_ALIAS}.{one}" for one in RECORD_KEY_COLUMNS)
+    where = CANDIDATE_BLOCKING
+    params: dict[str, Any] = {THRESHOLD_PARAM: thresholds.upper, LOWER_PARAM: thresholds.lower}
+    if touching:
+        rows = []
+        for n, one in enumerate(touching):
+            names = tuple(f"t{n}_{column}" for column in RECORD_KEY_COLUMNS)
+            params.update(zip(names, (one.source, one.entity, one.source_id), strict=True))
+            rows.append("(" + ", ".join(f":{name}" for name in names) + ")")
+        listed = ", ".join(rows)
+        where = f"{where} AND (({left_key}) IN ({listed}) OR ({right_key}) IN ({listed}))"
+    grouped = ", ".join(str(n) for n in range(1, len(features) + 1))
+    sql = (
+        f"SELECT\n{columns},\n  count(*) AS pairs\n"
+        f"FROM {table} {LEFT_ALIAS} JOIN {table} {RIGHT_ALIAS}\n"
+        f"  ON ({left_key}) < ({right_key})\n"
+        f"WHERE {where}\n"
+        f"GROUP BY {grouped}"
+    )
+    return PatternQuery(sql=sql, params=params, features=features)

@@ -3,7 +3,7 @@
 - **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/duplicates`, `/artifacts`
 - **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
-- **Measured here:** 41 routes, 6 called by no screen; 21 write routes, 21 with all three proofs; 7 gaps.
+- **Measured here:** 43 routes, 6 called by no screen; 22 write routes, 22 with all three proofs; 7 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -27,6 +27,7 @@
 | `GET /api/v1/records/{entity}/access` | **no screen** |
 | `GET /api/v1/resolution/review` | `/duplicates` |
 | `GET /api/v1/resolution/review/{item_id}` | **no screen** |
+| `GET /api/v1/resolution/weights` | `/duplicates` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/govern/learning/undo` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/learning`, `/learning/:view` |
@@ -44,6 +45,7 @@
 | `POST /api/v1/me/memory/edit` | `/me` |
 | `POST /api/v1/me/memory/forget` | `/me` |
 | `POST /api/v1/resolution/review/{item_id}/decision` | `/duplicates` |
+| `POST /api/v1/resolution/weights/promote` | `/duplicates` |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `PUT /api/v1/govern/learning/settings/{name}` | `/learning`, `/learning/:view`, `/limits` |
@@ -78,6 +80,7 @@
 | `POST /api/v1/me/memory/edit` | `/me` | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_edits_a_memory_and_the_replacement_changes_the_words_and_nothing_else` in `tests/unit/test_mine_routes.py` |
 | `POST /api/v1/me/memory/forget` | `/me` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_forgets_a_memory_formed_from_their_own_words` in `tests/unit/test_mine_routes.py` |
 | `POST /api/v1/resolution/review/{item_id}/decision` | `/duplicates` | `test_a_reviewed_merge_moves_one_pointer_and_records_who_when_and_on_what` in `tests/unit/test_merge_store.py` (database, in CI) | `test_a_reviewed_merge_moves_one_pointer_and_records_who_when_and_on_what` in `tests/unit/test_merge_store.py` (database, in CI) | `test_on_a_real_database_the_review_check_passes_and_nothing_is_left_behind` in `tests/unit/test_acceptance_review.py` (database, in CI) |
+| `POST /api/v1/resolution/weights/promote` | `/duplicates` | `test_a_run_keeps_a_fit_nobody_scores_with_until_a_reviewer_promotes_it` in `tests/unit/test_calibration_store.py` (database, in CI) | `test_a_run_keeps_a_fit_nobody_scores_with_until_a_reviewer_promotes_it` in `tests/unit/test_calibration_store.py` (database, in CI) | `test_on_a_real_database_the_calibration_check_passes_and_nothing_is_left_behind` in `tests/unit/test_acceptance_calibration.py` (database, in CI) |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_applying_a_mark_stores_it_and_moves_the_epoch_when_a_derivation_changes` in `tests/unit/test_classified_tables.py` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_an_administrator_uploads_a_price_list_and_is_answered_its_classification` in `tests/unit/test_classified_tables.py` |
 | `PUT /api/v1/govern/learning/settings/{name}` | `/learning`, `/learning/:view`, `/limits` | `test_saving_a_half_life_writes_its_row_as_the_person_and_the_next_recall_decays_at_it` in `tests/unit/test_learning_settings.py` | `test_on_a_real_database_every_learning_check_passes_and_leaves_nothing_behind` in `tests/unit/test_acceptance_learning.py` (database, in CI) | `test_a_held_half_life_is_the_rate_every_recall_decays_an_inference_at` in `tests/unit/test_learning_settings.py` |
