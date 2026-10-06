@@ -55,8 +55,9 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
     """**What makes "sent" and the switch true.** The sender is read for a call to `notice_is_on`
     naming this notice's kind. Two are started by the worker's schedule, the handoff of a
     question to a person is sent by the answer path itself as the question is handed on (M8.3.2),
-    and its asker is told it expired by a loop the application starts (M8.3.4), both because the
-    channel's secret is the application's and not the worker's.
+    its asker is told it expired by a loop the application starts (M8.3.4), and each person's week
+    of learning is told by another (M16.5.1), all three because the channel's secret is the
+    application's and not the worker's.
 
     Delete this and a sender added for a notice can skip the switch, so the screen offers to stop
     something the switch never reaches."""
@@ -69,6 +70,7 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
         NoticeKind.DENIAL_PATTERN,
         NoticeKind.HANDED_TO_A_PERSON,
         NoticeKind.QUESTION_NOT_PICKED_UP,
+        NoticeKind.LEARNING_DIGEST,
     ]
     for one in sent:
         tree = ast.parse(inspect.getsource(_function(one.sent_by)))  # type: ignore[arg-type]
@@ -105,6 +107,26 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
         and node.func.id == "keep_telling_expired_askers"
     ]
     assert started, "nothing starts the loop that tells an expired question's asker"
+    # Each person's week of learning is told by another loop, started with the application.
+    weekly = [
+        node
+        for node in ast.walk(ast.parse(inspect.getsource(application)))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "keep_sending_learning_digests"
+    ]
+    assert weekly, "nothing starts the loop that tells each person their week of learning"
+    from brain import learning_told
+
+    def calls(function: object, name: str) -> bool:
+        tree = ast.parse(inspect.getsource(function))  # type: ignore[arg-type]
+        return any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name
+            for node in ast.walk(tree)
+        )
+
+    assert calls(learning_told.keep_sending_learning_digests, "learning_pass")
+    assert calls(learning_told.learning_pass, "send_learning_digests")
 
 
 def test_a_notice_said_to_be_unsent_has_a_composer_nothing_the_schedule_starts_calls() -> None:
