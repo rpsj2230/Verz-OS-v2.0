@@ -90,6 +90,7 @@ from brain.gate.injection import AutonomyTier
 from brain.gate.takeover_store import standing_from
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
+from brain.locale import currency_or_unset
 from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, hidden_count_fields
 from brain.tables.agent import AgentRow
@@ -1506,6 +1507,7 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
         "basis": "everyone",
         "range": "30d",
         "spend_minor": 1000,
+        "currency": currency_or_unset(),
         "runs": 2,
         "recorded": True,
     }
@@ -1513,6 +1515,7 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
         "basis": "own",
         "range": "30d",
         "spend_minor": 0,
+        "currency": currency_or_unset(),
         "runs": 0,
         "recorded": True,
     }
@@ -1520,6 +1523,7 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
         "basis",
         "range",
         "spend_minor",
+        "currency",
         "runs",
         "recorded",
     }
@@ -1549,6 +1553,7 @@ def test_a_cost_outside_the_window_or_without_a_trace_is_absent_from_the_figure(
         "basis": "everyone",
         "range": "30d",
         "spend_minor": 400,
+        "currency": currency_or_unset(),
         "runs": 1,
         "recorded": True,
     }

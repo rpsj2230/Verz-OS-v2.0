@@ -271,6 +271,7 @@ from brain.gate.roster import viewer_for
 from brain.gate.takeover_store import TakeoverStandings
 from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
+from brain.locale import currency_or_unset
 from brain.models.registry import ModelPin
 from brain.models.routing import Tier
 from brain.ops.builtin_templates import is_built_in
@@ -656,6 +657,9 @@ class HeadlineView(BaseModel):
     basis: str
     range: str
     spend_minor: int
+    #: The ISO 4217 code the minor units are in, `XXX` when the install chose none. See
+    #: `brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`.
+    currency: str
     runs: int
     #: Whether anything records what a run cost. While it is false the two figures above are
     #: over rows nothing writes, and the page says they are not recorded yet rather than drawing
@@ -1393,6 +1397,7 @@ def headline_view(agent_id: str, rows: Sequence[Actual], asked: Asking) -> Headl
         basis=figures.basis.value,
         range=HEADLINE_RANGE.value,
         spend_minor=figures.spend_minor,
+        currency=currency_or_unset(),
         runs=figures.runs,
         recorded=RUN_SPEND_IS_RECORDED,
     )
