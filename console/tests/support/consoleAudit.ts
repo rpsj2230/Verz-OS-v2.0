@@ -831,6 +831,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
+  "POST /api/v1/threads/{thread_id}/export":
+    "A person exporting their own conversation from Ask, as the page shows it to them; the export is recorded in their own name and nothing in it is for an administrator to manage.",
   "gate.channel_event":
     "The dedupe key of each inbound channel message, claimed once by brain.gate.event_store.first_delivery and read by nothing else; there is nothing in it for anybody to manage.",
   "/ask/documents/:documentId":

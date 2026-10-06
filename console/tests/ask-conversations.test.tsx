@@ -10,23 +10,27 @@
  * there fails here.
  *
  * A wrong answer is marked with a kind and no words, at `POST /api/v1/threads/{id}/corrections`,
- * whose kinds are the API schema's own, and a reopened thread says so in words.
+ * whose kinds are the API schema's own, and a reopened thread says so in words. The conversation is
+ * exported at `POST /api/v1/threads/{id}/export`, and the file saved is the document string the API
+ * sent, byte for byte, because its digest is what the export's record holds.
  *
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M33.3.1.3
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { EVENT_STREAM } from "../src/api/events";
 import {
   ASK_ADDRESS,
   ASK_LABEL,
   CONTINUING,
   CONVERSATIONS_HEADING,
+  EXPORT_CONVERSATION,
   MARK_WRONG,
   MARKED_WRONG,
   NEW_CONVERSATION,
+  NOT_EXPORTED,
   NOT_MARKED,
   NOTHING_FOUND_IN_CONVERSATIONS,
   SEARCH_LABEL,
@@ -36,12 +40,14 @@ import {
   correctionPath,
   CORRECTION_PREFIX,
   CORRECTION_WORDS,
+  exportPath,
   THREAD_HEADER,
   THREAD_SEARCH_API_PATH,
   THREADS_API_PATH,
   threadPath,
 } from "../src/pages/threadsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
+import { backendModelFields } from "./support/python";
 import { readRepoFile } from "./support/repo";
 
 const ORIGIN = "https://console.test";
@@ -77,15 +83,30 @@ const REOPENED = {
   ],
 };
 
+/** What `POST /threads/{id}/export` sends: a document string with characters a re-encoding moves. */
+const TAKEN = {
+  filename: `conversation-${THREAD}.json`,
+  document: '{"turns":[{"kind":"answer","text":"Sign it \\u00e9"}]}',
+  told: "Your conversation is saved as a file.",
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 interface Mounted {
   readonly container: HTMLElement;
   readonly idp: FakeIdp;
 }
 
-async function askScreen(threads: unknown = LISTED, correcting = 201): Promise<Mounted> {
+async function askScreen(threads: unknown = LISTED, correcting = 201, exporting = 200, kept = true): Promise<Mounted> {
   const idp = fakeIdentityProvider({
     api(url, init) {
       const address = new URL(url, ORIGIN);
+      if (address.pathname === `${API}${exportPath(THREAD)}` && init?.method === "POST") {
+        return exporting === 200 ? json(TAKEN) : json({ message: "I could not find that.", trace_id: "t" }, exporting);
+      }
       if (address.pathname === `${API}${correctionPath(THREAD)}` && init?.method === "POST") {
         const sent = JSON.parse(String(init.body ?? "null")) as { kind?: string } | null;
         return correcting === 201
@@ -95,7 +116,7 @@ async function askScreen(threads: unknown = LISTED, correcting = 201): Promise<M
       if (address.pathname === `${API}/answer`) {
         return new Response(FRAMES, {
           status: 200,
-          headers: { "content-type": EVENT_STREAM, [THREAD_HEADER]: THREAD },
+          headers: kept ? { "content-type": EVENT_STREAM, [THREAD_HEADER]: THREAD } : { "content-type": EVENT_STREAM },
         });
       }
       if (address.pathname === `${API}${THREADS_API_PATH}`) {
@@ -264,6 +285,7 @@ describe("a conversation on Ask", () => {
     const { container } = await askScreen();
     await waitFor(() => expect(container.querySelector("h1")).not.toBeNull());
     expect(container.textContent).not.toContain(WAS_IT_WRONG);
+    expect(container.textContent).not.toContain(EXPORT_CONVERSATION);
   });
 
   test("a reopened thread says in words which kind an answer was marked", async () => {
@@ -280,5 +302,56 @@ describe("a conversation on Ask", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "who signs the checklist" }));
     await waitFor(() => expect(container.textContent).toContain(CORRECTION_WORDS.stale));
     expect(container.textContent).not.toContain("correction:stale");
+  });
+  test("a conversation is exported as the file the API sent, byte for byte, and the page says so", async () => {
+    // What breaks if this is deleted: a person has no way to take a copy of their own conversation
+    // (M33.3.1.3), or the page parses and rewrites the document so the saved file is not the one
+    // whose digest the export's record holds.
+    expect(Object.keys(TAKEN).sort()).toEqual(backendModelFields("src/brain/thread_routes.py", "ConversationTakenView").sort());
+    const saved: Blob[] = [];
+    const created = vi.fn((made: Blob) => {
+      saved.push(made);
+      return "blob:conversation";
+    });
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: created, revokeObjectURL: vi.fn() }));
+    const named: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      named.push(this.download);
+    });
+    const { container, idp } = await askScreen();
+    ask(container, QUESTION);
+    await waitFor(() => expect(container.textContent).toContain(EXPORT_CONVERSATION));
+    fireEvent.click(button(container, EXPORT_CONVERSATION));
+    await waitFor(() => expect(container.textContent).toContain(TAKEN.told));
+    const sent = idp.calls.filter((call) => new URL(call.url, ORIGIN).pathname === `${API}${exportPath(THREAD)}`);
+    expect(sent.map((call) => call.init?.method)).toEqual(["POST"]);
+    expect(named).toEqual([TAKEN.filename]);
+    expect(saved).toHaveLength(1);
+    expect(await (saved[0] as Blob).text()).toBe(TAKEN.document);
+    expect((saved[0] as Blob).type).toBe("application/json");
+  });
+
+  test("an export the route refuses saves nothing and says so", async () => {
+    // The refusal's sibling: a thread that is not the person's is the route's 404, and the page
+    // says nothing was saved rather than offering a file.
+    const created = vi.fn(() => "blob:nothing");
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: created, revokeObjectURL: vi.fn() }));
+    const { container } = await askScreen(LISTED, 201, 404);
+    ask(container, QUESTION);
+    await waitFor(() => expect(container.textContent).toContain(EXPORT_CONVERSATION));
+    fireEvent.click(button(container, EXPORT_CONVERSATION));
+    await waitFor(() => expect(container.textContent).toContain(NOT_EXPORTED));
+    expect(created).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain(TAKEN.told);
+  });
+  test("an answer kept in no conversation offers nothing to export or mark", async () => {
+    // What breaks if this is deleted: an answer whose thread the API did not name draws the export
+    // control, which posts to an address with no thread in it.
+    const { container, idp } = await askScreen(LISTED, 201, 200, false);
+    ask(container, QUESTION);
+    await waitFor(() => expect(container.textContent).toContain("It says to sign it."));
+    expect(container.textContent).not.toContain(EXPORT_CONVERSATION);
+    expect(container.textContent).not.toContain(WAS_IT_WRONG);
+    expect(idp.calls.some((call) => new URL(call.url, ORIGIN).pathname.endsWith("/export"))).toBe(false);
   });
 });

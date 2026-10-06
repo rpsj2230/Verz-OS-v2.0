@@ -8,7 +8,7 @@
  */
 
 import { ANSWER_API_PATH, MARK_API_PATH } from "../../../src/pages/askQuery";
-import { correctionPath } from "../../../src/pages/threadsQuery";
+import { correctionPath, exportPath } from "../../../src/pages/threadsQuery";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 /**
@@ -21,6 +21,17 @@ const A_CORRECTION_IS_KEPT_AND_COUNTED = t(
   true,
 );
 
+/**
+ * The route test exporting a person's own conversation: the file is what the page shows, the
+ * `ops.data_export` row is in their name with the digest of the bytes they received, the ledger has
+ * its publish entry, and another person asking is the one 404 with nothing recorded (M33.3.1.3).
+ */
+const A_CONVERSATION_EXPORT_IS_RECORDED = t(
+  "test_thread_export_routes",
+  "test_a_person_exports_their_thread_as_the_page_shows_it_and_the_export_is_recorded",
+  true,
+);
+
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
   "src/pages/Ask.tsx MARK_API_PATH": [at("POST /api/v1/answer/mark", "MARK_API_PATH", MARK_API_PATH)],
@@ -30,6 +41,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       "correctionPath",
       correctionPath("3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b"),
     ),
+  ],
+  "src/pages/Ask.tsx exportPath(thread)": [
+    at("POST /api/v1/threads/{thread_id}/export", "exportPath", exportPath("3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b")),
   ],
 };
 
@@ -56,5 +70,10 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
         "Marking an answer in one's own conversation wrong changes no setting and nobody's access; the note is kept in the asker's own thread.",
     },
     behaviour: A_CORRECTION_IS_KEPT_AND_COUNTED,
+  },
+  "POST /api/v1/threads/{thread_id}/export": {
+    row: A_CONVERSATION_EXPORT_IS_RECORDED,
+    audit: A_CONVERSATION_EXPORT_IS_RECORDED,
+    behaviour: A_CONVERSATION_EXPORT_IS_RECORDED,
   },
 };

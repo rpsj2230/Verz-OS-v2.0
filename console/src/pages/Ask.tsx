@@ -128,7 +128,9 @@ import {
   channelWords,
   CORRECTION_WORDS,
   correctionPath,
+  exportPath,
   messageWords,
+  readConversationTaken,
   readCorrection,
   readThread,
   readThreads,
@@ -142,6 +144,7 @@ import {
 } from "./threadsQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
+import { CANNOT_SAVE, saveDocument } from "./dataTransferQuery";
 
 /** The console address of this screen. */
 export const ASK_ADDRESS = "/ask";
@@ -227,6 +230,14 @@ export const WAS_IT_WRONG = "Was this answer wrong?";
 export const MARK_WRONG = "Mark it wrong";
 export const MARKED_WRONG = "Marked. Your conversation now notes that this answer was wrong.";
 export const NOT_MARKED = "That could not be marked. Nothing was changed.";
+
+/**
+ * The control exporting the conversation the answer was kept in as a file (M33.3.1.3). The file is
+ * the conversation as the page shows it now, and the export is recorded in the person's own name
+ * before it is handed over, which the page says rather than leaving it to be discovered.
+ */
+export const EXPORT_CONVERSATION = "Export this conversation";
+export const NOT_EXPORTED = "That conversation could not be exported. Nothing was saved.";
 
 /** The id tying the correction's kind to its label. */
 const CORRECTION_FIELD_ID = "ask-correction";
@@ -356,6 +367,7 @@ export function Ask() {
   // Marking the answer on the page wrong: the kind chosen, and what the route said (M9.2.4).
   const [wrong, setWrong] = useState<CorrectionKind>(FIRST_CORRECTION);
   const [marked, setMarked] = useState<"" | "marked" | "failed">("");
+  const [exported, setExported] = useState("");
 
   // This person's conversations. A list that did not come back is no panel rather than an error:
   // the question can still be asked, and it starts a conversation of its own.
@@ -417,6 +429,7 @@ export function Ask() {
       inFlight.current = controller;
       focusWasInTheForm.current = form.current?.contains(document.activeElement) ?? false;
       setMarked("");
+      setExported("");
       setAsking({ view: NOTHING_ASKED, busy: true, failure: null, traceId: "" });
 
       void (async () => {
@@ -627,6 +640,34 @@ export function Ask() {
                 </p>
               ) : null}
             </form>
+          ) : null}
+
+          {thread !== "" && !busy && view.answer !== "" ? (
+            <div className="ask__export">
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  void (async () => {
+                    const sent = await request<unknown>(exportPath(thread), { method: "POST" });
+                    const taken = sent.ok ? readConversationTaken(sent.data) : null;
+                    if (taken === null) {
+                      setExported(NOT_EXPORTED);
+                      return;
+                    }
+                    const saved = saveDocument(taken.filename, taken.document, document, "application/json");
+                    setExported(saved ? taken.told : CANNOT_SAVE);
+                  })();
+                }}
+              >
+                {EXPORT_CONVERSATION}
+              </button>
+              {exported !== "" ? (
+                <p className="note" role="status">
+                  {exported}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           {view.failed !== null ? (
