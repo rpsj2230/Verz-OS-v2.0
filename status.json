@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T06:57:48.395696+00:00",
-  "commit": "a363086b",
-  "commit_subject": "A turn's context is assembled in one place for both answer paths, named in the trace, and what a person says for one conversation is kept for it alone (#441)",
+  "generated_at": "2026-10-06T07:09:34.729869+00:00",
+  "commit": "c8f802c9",
+  "commit_subject": "The Audit log counts refusals by shape and redacted entries over other people's entries, and never the reader's own (#444)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
