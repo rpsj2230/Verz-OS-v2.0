@@ -111,7 +111,7 @@ from brain.ops.channel_store import ChannelRecord, ChannelSecrets, ChannelSecret
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.group_install_store import StoredGroupInstalls
 from brain.ops.idempotency import Intent
-from brain.ops.lark_connect import ask_address
+from brain.ops.lark_connect import ASK_PATH, ask_address
 from brain.ops.limit_store import StoreVerdict
 from brain.ops.limits import refusal_sentence
 from brain.routing_routes import sessions_of
@@ -290,6 +290,16 @@ def ask_link() -> str:
         return ask_address(value_of("INSTALL_OIDC_REDIRECT_URIS"))
     except InstallError:
         return ""
+
+
+def console_link(path: str) -> str:
+    """A page of this install's console by its path, or empty on an install with no address.
+
+    From the address the chat's link to Ask is made from, so every link a message carries and the
+    Ask link agree about where this install is.
+    """
+    ask = ask_link()
+    return f"{ask.removesuffix(ASK_PATH)}{path}" if ask.endswith(ASK_PATH) else ""
 
 
 # ------------------------------------------------------------------------ the answerer

@@ -236,7 +236,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
-from brain.ops.halt_store import Work, refusal_for
+from brain.ops.halt_store import Work, read_state, refusal_for, refusal_in
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
 from brain.ops.lark_wiki_live import WithheldPages, WithWiki
@@ -1260,16 +1260,21 @@ def model_lane_for(
     return replace(lane, agent=run)
 
 
-async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
+async def follow_up_for(
+    state: Any, asking: Answering, ask: Question, registry: ToolRegistry | None = None
+) -> FollowUp | None:
     """What a question continuing one of this person's threads brings, or None (M9.2.3).
 
-    None for a question naming no thread, one naming a thread that is not theirs or holds no
-    earlier question, and on a process with no database. The passages cited are the ones
-    `brain.chat.threads.continuation_context` still admits at this reach now, and the earlier
-    questions are the person's own words. A follow-up is never looked up in or kept by the answer
-    cache, whose key knows nothing of the thread; see
+    None for a question naming no thread, one naming a thread that is not theirs or holds neither
+    an earlier question nor an attachment, and on a process with no database. The files attached
+    to the thread are read by the registry's own `chat.read_attachment` handler (M12.3.6), and a
+    document reference they hold is not also recalled as a cited passage. The passages cited are
+    the ones `brain.chat.threads.continuation_context` still admits at this reach now, and the
+    earlier questions are the person's own words. A follow-up is never looked up in or kept by
+    the answer cache, whose key knows nothing of the thread; see
     `A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH`.
     """
+    from brain.chat.attachments import ATTACHED
     from brain.chat.remember import threads_of
     from brain.chat.threads import continuation_context
     from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, recaller
@@ -1285,16 +1290,58 @@ async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowU
     if thread is None or thread.retired:
         return None
     earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
-    if not earlier:
+    attached = tuple(
+        dict.fromkeys(
+            ref.record_id
+            for one in thread.messages
+            if one.role is MessageRole.SYSTEM and one.body == ATTACHED
+            for ref in one.refs or ()
+        )
+    )
+    if not earlier and not attached:
         return None
     cited = tuple(
         one.record_id
         for one in continuation_context(thread, asking.reach, now=asking.now)
-        if one.entity == KNOWLEDGE_ENTITY
+        if one.entity == KNOWLEDGE_ENTITY and one.record_id not in attached
     )
     sessions = getattr(state, "db_sessions", None)
     recall = None if sessions is None else recaller(SessionRowSource(sessions))
-    return FollowUp(earlier=earlier, cited=cited, recall=recall)
+    return FollowUp(
+        earlier=earlier,
+        cited=cited,
+        recall=recall,
+        attached=attached,
+        read_attached=attachment_handler(registry),
+    )
+
+
+def attachment_handler(
+    registry: ToolRegistry | None,
+) -> Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None:
+    """The registry's `chat.read_attachment` handler, taking a document's reference, or None.
+
+    None where the registry holds no such tool, which is a process with no database, so a thread's
+    attachments are then read by nothing rather than by a reader of the route's own.
+    """
+    from brain.chat.attachments import READ_ATTACHMENT, AttachmentRead
+
+    if registry is None or not registry.has(READ_ATTACHMENT):
+        return None
+    # The registry keeps a handler as an untyped callable; this is the one it registered.
+    handler = cast(
+        "Callable[..., Awaitable[TypedResult[KnowledgePassage]]]",
+        registry.get(READ_ATTACHMENT).handler,
+    )
+
+    async def read(
+        attachment_id: str, *, entitlement: EntitlementSet, now: datetime | None = None
+    ) -> TypedResult[KnowledgePassage]:
+        return await handler(
+            AttachmentRead(attachment_id=attachment_id), entitlement=entitlement, now=now
+        )
+
+    return read
 
 
 #: Why a follow-up skips the answer cache both ways.
@@ -1984,13 +2031,15 @@ def agent_runtime_for(
     sessions = getattr(request.app.state, "db_sessions", None)
 
     async def halted() -> str:
-        # The agent axis joins `Work` with the halt store's agent slice; until then a run is
-        # stopped by a halt on everything, its person or their department.
+        # Asked at every step of the loop, with the agent this run is, so a stop declared on the
+        # agent, its person, their department or everything halts a run already under way
+        # (M13.7.3).
         return await refusal_for(
             sessions,
             Work(
                 person=asking.principal.id,
                 department=asking.principal.primary_department or "",
+                agent=agent.agent_id,
             ),
         )
 
@@ -2065,13 +2114,12 @@ async def answered_for(
     # cannot be read. First of all, before any table is read for the lanes, so a database that
     # cannot be read refuses in the halt's own words rather than failing in a lane. See
     # `A_HALTED_QUESTION_IS_TURNED_AWAY_BEFORE_IT_COSTS_ANYTHING`.
-    told = await refusal_for(
-        getattr(request.app.state, "db_sessions", None),
-        Work(
-            person=asking.principal.id,
-            department=asking.principal.primary_department or "",
-        ),
+    halts = await read_state(getattr(request.app.state, "db_sessions", None))
+    work = Work(
+        person=asking.principal.id,
+        department=asking.principal.primary_department or "",
     )
+    told = refusal_in(halts, work)
     if told:
         return Halted(told)
 
@@ -2149,7 +2197,9 @@ async def answered_for(
     # What a question continuing one of this person's threads brings (M9.2.3), read at their
     # own reach before an agent narrows it, because what they may still read is theirs to judge.
     follow_up = (
-        None if referral is not None else await follow_up_for(request.app.state, asking, ask)
+        None
+        if referral is not None
+        else await follow_up_for(request.app.state, asking, ask, registry)
     )
     caching = (
         None
@@ -2180,6 +2230,11 @@ async def answered_for(
             now=asking.now,
             caching=caching,
         )
+        # The agent it was routed to, once it is known and before anything is counted or read at
+        # its reach: a stopped agent answers nobody (M13.7.3), from the state read above.
+        told = refusal_in(halts, replace(work, agent=front.selection.agent_id))
+        if told:
+            return Halted(told)
         # Every window, the agent's included, and the one call that records. See
         # A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED.
         counted = await windows_say(

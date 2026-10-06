@@ -31,10 +31,13 @@ one.
 for: the route is exercised through the real application with the token machinery the other
 route tests use.
 
-Task ids: M27.7.29, M27.10.1
+Task ids: M27.7.29, M27.10.1, M27.15.14
 """
 
 from __future__ import annotations
+
+from datetime import datetime
+from typing import Final
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
@@ -42,6 +45,12 @@ from pydantic import BaseModel, ConfigDict
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
 from brain.console.department_console import ConsoleNavigation, Entry, Section, console_for
+from brain.console.reads import permitted
+from brain.console.screens import screen
+from brain.core.entitlement import EntitlementSet
+from brain.halt_routes import HALT_SCREEN
+from brain.ops.halt import HaltScope
+from brain.ops.halt_store import may_act
 
 
 class TabView(BaseModel):
@@ -95,6 +104,10 @@ class NavigationView(BaseModel):
     console: str
     departments: list[str]
     sections: list[SectionView]
+    #: What the header's Stop control stops in one press for this reader: `everything`, their
+    #: `departments`, or empty for a reader who holds no stop, who is drawn no control. Decided by
+    #: `stop_offered`, so the browser holds no copy of who may stop what (M27.15.14).
+    stop: str = ""
 
 
 def entry_view(entry: Entry) -> EntryView:
@@ -128,7 +141,32 @@ def navigation_view(decided: ConsoleNavigation) -> NavigationView:
 router = APIRouter(prefix=API_PREFIX, tags=["console"])
 
 
+#: What the Stop control is given to stop, in the words `NavigationView.stop` carries.
+STOP_EVERYTHING: Final = "everything"
+STOP_DEPARTMENTS: Final = "departments"
+
+#: Why the Stop control is decided here and not by a read of its own.
+THE_STOP_CONTROL_RIDES_ON_THE_MENU: Final = (
+    "The control is in the header of every page, and the menu is the one answer every page "
+    "already reads. Deciding it here keeps a second request off every page load and keeps the "
+    "decision on the server: the Stop screen's own read, and whether the reader's stop reaches "
+    "everything, both asked of brain.ops.halt_store and brain.console.reads, never of the browser."
+)
+
+
+def stop_offered(decided: ConsoleNavigation, reach: EntitlementSet, now: datetime) -> str:
+    """What one press of the header's Stop control stops for this reader, or empty for none."""
+    if not permitted(screen(HALT_SCREEN).read, reach, now):
+        return ""
+    if may_act(reach, HaltScope.EVERYTHING, "", now):
+        return STOP_EVERYTHING
+    return STOP_DEPARTMENTS if decided.departments else ""
+
+
 @router.get("/console/navigation", response_model=NavigationView, responses=COMMON_RESPONSES)
 async def console_navigation(asked: Asked) -> NavigationView:
     """The console this reader is given, at the reach this request was admitted at."""
-    return navigation_view(console_for(asked.reach, asked.now))
+    decided = console_for(asked.reach, asked.now)
+    return navigation_view(decided).model_copy(
+        update={"stop": stop_offered(decided, asked.reach, asked.now)}
+    )

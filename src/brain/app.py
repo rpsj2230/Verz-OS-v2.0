@@ -116,6 +116,7 @@ from brain.install import InstallError, installed_name, value_of
 from brain.knowledge.app_parse_budget import app_parse_gaps
 from brain.knowledge.document_tools import KnowledgeCaches
 from brain.knowledge.row_store import SessionRowSource
+from brain.learning_told import keep_sending_learning_digests
 from brain.mailbox_read import keep_reading_the_mailbox
 from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
@@ -143,6 +144,7 @@ from brain.ops.model_service import (
 )
 from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.openbao import OpenBaoVault
+from brain.ops.overlays import OverlayError, components_switched_on, switched_on_here
 from brain.ops.pii import analyzer_address
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
@@ -178,8 +180,8 @@ from brain.reviewed_connectors import install_tools
 from brain.routers import ROUTERS
 from brain.session import (
     check_login_row_security,
-    check_reachable,
     check_row_security,
+    database_probe,
     dispose,
     make_app_engine,
     make_application_sessions,
@@ -395,6 +397,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # while the channel's record reads no mailbox. See `brain.mailbox_read`.
     reading: asyncio.Task[None] | None = None
     telling: asyncio.Task[None] | None = None
+    # Each person's week of learning, told in their own chat. See `brain.learning_told`.
+    learning: asyncio.Task[None] | None = None
     pausing: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
@@ -437,12 +441,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # for the Logs screen; standard output is unchanged. See `brain.ops.log_capture`.
         app.state.log_store = start_log_store(app.state.db_sessions, settings)
         engine = app.state.db_engine
-
-        async def database_probe() -> bool:
-            return await check_reachable(engine)
-
-        readings.probes[DATABASE_PART] = database_probe
-        app.state.ready[DATABASE_PART] = await database_probe()
+        # The engine requests use at the moment the probe runs, which is the class pooler's while
+        # the sessions have moved there. See `brain.session.READINESS_ASKS_THE_ENGINE_REQUESTS_USE`.
+        probe_database = database_probe(app.state.db_sessions, engine)
+        readings.probes[DATABASE_PART] = probe_database
+        app.state.ready[DATABASE_PART] = await probe_database()
         # Named and not counted: every install deployed before the migration login existed logs
         # in as the owner, and failing readiness for that would take each of them down on update.
         app.state.reported[DATABASE_LOGIN_PART] = await check_login_row_security(engine)
@@ -468,6 +471,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # An asker whose handed-on question expired is told in their own chat, by this process
         # because the worker holds no channel's token. See `brain.escalation_told`.
         telling = asyncio.create_task(keep_telling_expired_askers(app))
+        # Each person is told what the system learnt from them last week, once, by this process for
+        # the same reason. See `brain.learning_told`.
+        learning = asyncio.create_task(keep_sending_learning_digests(app))
         # A steward whose automation was paused for failing is told in their own chat, by this
         # process for the same reason. See `brain.automation_paused_told`.
         pausing = asyncio.create_task(keep_telling_paused_stewards(app))
@@ -640,10 +646,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # per call from the ladder, the provider switches and the keys this process holds, so a
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
-    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9). No
-    # installation switches it on until the sandbox overlay lands with its switch; until then
-    # the set of switched services is empty and every skill with scripts is refused at the door.
-    app.state.sandbox_address = sandbox_address(settings.sandbox_url, frozenset())
+    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9): switched on
+    # by `INSTALL_SERVICES` naming `sandbox`, read after the saved settings are held above, and
+    # started by the release only under gVisor (brain.ops.overlays). A value nobody declared runs
+    # no sandbox rather than stopping the start.
+    try:
+        switched = components_switched_on(switched_on_here())
+    except OverlayError:
+        switched = frozenset()
+    app.state.sandbox_address = sandbox_address(settings.sandbox_url, switched)
     # Every request to a third-party model is scrubbed of personal data on its way out, by the
     # rules and by the install's analyser where its profile deploys one (`brain.ops.egress`).
     app.state.models = model_service_at_start(
@@ -828,6 +839,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             telling.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await telling
+        if learning is not None:
+            learning.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await learning
         if pausing is not None:
             pausing.cancel()
             with contextlib.suppress(asyncio.CancelledError):
