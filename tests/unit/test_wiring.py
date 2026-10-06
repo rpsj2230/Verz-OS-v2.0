@@ -243,17 +243,21 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
     6,200. Standard still names the inference server, and 648 is less than that one container,
     which is the arithmetic behind item 120 leaving the model server waiting.
 
+    **And a fifth time on 2026-10-06, by a component, from 648 to 904.** The identity provider
+    went from 768 to 1024 MiB, measured: the browser harness found the kernel killing its first
+    start at 768 on every fresh install (`docker-compose.keycloak.yml` says how).
+
     Delete this and the overrun stops being visible anywhere, which means it is discovered by
     deploying it."""
     breaches = budget_breaches("standard")
 
     assert len(breaches) == 1, breaches
     assert "inference-server" in breaches[0]
-    assert "over by 648 MiB" in breaches[0], (
+    assert "over by 904 MiB" in breaches[0], (
         "the standard overrun has moved; something has grown or shrunk and this test is the "
         "only place that would have said so"
     )
-    assert wave_two_mib("standard") - spendable_mib() == 648
+    assert wave_two_mib("standard") - spendable_mib() == 904
 
 
 def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -> None:
@@ -704,7 +708,8 @@ def test_rows_one_and_three_of_item_120_fit_beside_what_the_install_already_runs
     and whose limit is read from its own compose file. Beside them, row 1 (the personal data
     detector) and row 3 (the trace ledger's five services) fit inside the 6,200 MiB wave 2 may
     spend, and row 2 (the model server and the document worker) does not fit beside row 1,
-    which is why it waits.
+    which is why it waits. The spare was 632 MiB until 2026-10-06 and is 376 since the identity
+    provider's limit went from 768 to 1024 MiB, measured; rows 1 and 3 still fit.
 
     Exact on purpose, for the reason the standard overrun is: a figure that moves is the
     finding. Delete this and the room item 120 hands out is a paragraph in a document that
@@ -719,8 +724,8 @@ def test_rows_one_and_three_of_item_120_fit_beside_what_the_install_already_runs
     row_two = set_cost_mib(("inference-server", "brain-parse-worker"))
 
     assert spendable_mib() == 6200
-    assert running + vault_mib == 1728
-    assert spendable_mib() - running - vault_mib - row_one - row_three == 632
+    assert running + vault_mib == 1984
+    assert spendable_mib() - running - vault_mib - row_one - row_three == 376
     assert row_two > spendable_mib() - running - vault_mib - row_one
 
 
@@ -941,3 +946,35 @@ def test_the_trace_stack_and_the_trace_ledger_differ_by_exactly_the_object_store
     assert set(TRACE_STACK_ROLES.values()) - TRACE_LEDGER == {"seaweedfs"}
     assert TRACE_LEDGER - set(TRACE_STACK_ROLES.values()) == set()
     assert "seaweedfs" in AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT
+
+
+#: Measured on 2026-10-06 by the browser harness on an empty runner, with Keycloak 26.0.8 in a
+#: 768 MiB cgroup and its heap capped at 50 per cent: the changesets that create its schema on a new
+#: database took it to this resident size and the kernel killed it.
+KEYCLOAK_KILLED_AT_KIB = 749_668
+KEYCLOAK_KILLED_LIMIT_MIB = 768
+KEYCLOAK_KILLED_AT_PERCENT = 50
+
+
+def test_keycloak_s_limit_and_heap_leave_room_for_the_start_that_was_killed() -> None:
+    """The server's heap cap plus what lived beside the heap when it was killed fits its limit.
+
+    What lived outside the heap at that kill is at least the resident size less the heap's cap
+    then, about 348 MiB, far past the 150 MiB the compose header once assumed. The limit
+    `brain.ops.wiring` budgets, with the heap share the compose file gives the JVM, has to hold
+    that beside a full heap with a tenth to spare. Delete this and the limit can go back to 768M,
+    or the heap share up to 70, with every unit test green, and every fresh install's identity
+    provider is killed on its first start and comes back by its restart policy, which nobody sees.
+    """
+    compose = yaml.safe_load((REPO / "docker-compose.keycloak.yml").read_text(encoding="utf-8"))
+    service = compose["services"]["keycloak"]
+    limit_mib = component("keycloak").memory_mib
+    assert service["deploy"]["resources"]["limits"]["memory"] == f"{limit_mib}M"
+    found = re.search(r"-XX:MaxRAMPercentage=(\d+)\b", service["environment"]["JAVA_OPTS_APPEND"])
+    assert found is not None
+    percent = int(found.group(1))
+    outside_heap_mib = (
+        KEYCLOAK_KILLED_AT_KIB / 1024 - KEYCLOAK_KILLED_LIMIT_MIB * KEYCLOAK_KILLED_AT_PERCENT / 100
+    )
+    assert outside_heap_mib > 300
+    assert limit_mib * percent / 100 + outside_heap_mib <= limit_mib * 0.9

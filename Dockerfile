@@ -66,6 +66,15 @@ FROM python:3.13-slim-bookworm AS runtime
 RUN groupadd --system --gid 1001 brain \
  && useradd --system --uid 1001 --gid brain --shell /usr/sbin/nologin --no-create-home brain
 
+# Where the identity stack's realm one-shot writes the realm Keycloak imports
+# (`keycloak-realm` in docker-compose.keycloak.yml mounts the `realm-import` volume here). A new
+# named volume takes its owner from the directory it is mounted over, and with no directory in
+# the image that owner is root, so the one-shot, which runs as `brain`, was refused writing the
+# file on every fresh install and Keycloak, which waits for it, never started. Found by the
+# browser harness's first run on an empty runner (M27.10.6): an install whose volume was made
+# before this image ran as `brain` never shows it.
+RUN mkdir /out && chown brain:brain /out
+
 # The image carries its own identity rather than being told at runtime. Coolify resolves
 # ${VAR:-default} at save time and bakes the literal into its stored compose, so a runtime
 # variable could not be overridden by the deploy at all: /health/ready reported "unknown"

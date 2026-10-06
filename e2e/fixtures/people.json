@@ -1,0 +1,22 @@
+[
+  {
+    "id": "4f1c8e2a-6d0b-4a7e-9b51-0e2d7c3a9f10",
+    "username": "e2e-admin",
+    "email": "admin@example.test",
+    "emailVerified": true,
+    "firstName": "Harness",
+    "lastName": "Administrator",
+    "enabled": true,
+    "x-credentials": "password and one-time code"
+  },
+  {
+    "id": "9a3e5d71-2c84-4b0f-8e6a-5d1f0b7c2e44",
+    "username": "e2e-reader",
+    "email": "reader@example.test",
+    "emailVerified": true,
+    "firstName": "Harness",
+    "lastName": "Reader",
+    "enabled": true,
+    "x-credentials": "password only"
+  }
+]

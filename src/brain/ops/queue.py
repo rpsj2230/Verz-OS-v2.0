@@ -215,8 +215,12 @@ DRIVER_MODULE: Final = "brain.ops.queue"
 DRIVER_IMPLEMENTATIONS: Final[tuple[str, ...]] = ("procrastinate", "hatchet")
 
 #: Hostnames that are a transaction pooler on this stack. From the compose service name,
-#: which is what the container network resolves.
-POOLER_HOSTNAMES: Final[frozenset[str]] = frozenset({"pgbouncer", "pgbouncer-transaction"})
+#: which is what the container network resolves. `pgbouncer-classes` is the pools per workload
+#: class (`brain.ops.class_pools`), transaction mode like the first, so a queue URL derived from
+#: a process that has moved there goes to the session pooler exactly as one through the first does.
+POOLER_HOSTNAMES: Final[frozenset[str]] = frozenset(
+    {"pgbouncer", "pgbouncer-transaction", "pgbouncer-classes"}
+)
 
 #: What a PostgreSQL table name may be before `driver_rls_statements` interpolates it into
 #: DDL. Unquoted lower-case identifiers only, which is what the driver creates and what the

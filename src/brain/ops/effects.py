@@ -291,6 +291,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.SAME_RESULT_WHEN_REPEATED
         ),
         "brain.ops.template_key:TemplateKeyVault.read_static_kv": Repeat.READS,
+        # The join-key pepper's slot, created once for the template key's reason: a repeat of the
+        # create is refused and leaves the first pepper in place, and the read reads.
+        "brain.ops.join_key_pepper:PepperKeeper.create_static_kv_once": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.join_key_pepper:PepperReader.read_static_kv": Repeat.READS,
         # The record of a kept key (0054): a row in this system's own table, whose trigger appends
         # the ledger entry. A repeat is a second row and a second entry, which is right, because a
         # repeated call follows a second write to the vault.
@@ -353,6 +359,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The gate.
         "brain.gate.answer_cache:AnswerStore.get": Repeat.READS,
         "brain.gate.answer_cache:AnswerStore.set": Repeat.DERIVED_STATE,
+        "brain.knowledge.document_tools:RecordStore.get": Repeat.READS,
+        "brain.knowledge.document_tools:RecordStore.set": Repeat.DERIVED_STATE,
         "brain.gate.compose:TraceSink.emit": Repeat.DERIVED_STATE,
         "brain.gate.finish:RequestRecorder.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The answer lane's model step: passages found at a reach, and a model that answers and
@@ -650,6 +658,23 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:ViewReading.refresh_interval": Repeat.READS,
         "brain.connectors.declaration:ViewReading.read": Repeat.READS,
         "brain.connectors.declaration:ViewReading.projected": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.entities": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.refresh_interval": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.key_scheme": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.endpoint": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.pinned": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.tool_call": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.interpret_tool": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.projected": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.entities": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.refresh_interval": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.key_scheme": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.plan_spec": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.planned": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.interpret_spec": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.from_answers": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.from_output": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.projected": Repeat.READS,
         "brain.ops.laravel_reader:Cursor.execute": Repeat.READS,
         "brain.ops.laravel_reader:Cursor.fetchall": Repeat.READS,
         "brain.ops.laravel_reader:Session.cursor": Repeat.READS,
@@ -723,6 +748,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # Each source's epoch, read into the answer cache's key (M11.8.4). The advance is a
         # statement the worker runs in its own transaction, not a door.
         "brain.ops.connector_sync_store:SourceEpochs.epochs": Repeat.READS,
+        # The source epochs reading's store (M6.2.5): a read, and a write of a value the counter
+        # can always produce again, kept for its own lifetime.
+        "brain.ops.connector_sync_store:EpochsCache.get": Repeat.READS,
+        "brain.ops.connector_sync_store:EpochsCache.set": Repeat.DERIVED_STATE,
         # Asking for a test of a connection is one row in `ops.setting` a second press moves to a
         # later instant; the worker makes one test for however many presses it finds.
         "brain.ops.connector_sync_store:ConnectorProbes.ask": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

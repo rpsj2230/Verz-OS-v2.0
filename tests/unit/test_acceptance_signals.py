@@ -7,7 +7,7 @@ is broken, one at a time, and the check fails with its own sentence.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M16.7.4, M16.7.13, M16.7.5
+Task ids: M16.7.4, M16.7.13, M16.7.5, M16.7.2
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ MODULE = "brain.ops.acceptance_checks_signals"
 LEAVES = {
     "a_mark_is_counted_and_changes_nothing": ("M16.7.4",),
     "pausing_an_agent_stops_what_its_runs_teach": ("M16.7.13", "M16.7.5"),
+    "an_inference_said_again_is_kept_and_one_not_fades": ("M16.7.2",),
 }
 
 #: Every table the checks write to, which must hold afterwards exactly what it held before.
@@ -93,6 +94,7 @@ def test_the_signals_checks_are_listed_in_their_page_order() -> None:
     assert checks_in(MODULE) == [
         "a_mark_is_counted_and_changes_nothing",
         "pausing_an_agent_stops_what_its_runs_teach",
+        "an_inference_said_again_is_kept_and_one_not_fades",
     ]
 
 
@@ -234,4 +236,85 @@ def test_the_pause_check_fails_when_a_memory_keeps_what_the_answer_said(
     assert refused(database, "pausing_an_agent_stops_what_its_runs_teach") == (
         FAILED,
         "a value read from a source was kept in a memory or a rule",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_confirmation_check_fails_when_saying_it_again_stamps_nothing(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A formation that skips a restatement as it did before M16.7.2. Delete this and the check can
+    pass on an install where saying a preference again keeps nothing alive."""
+    from sqlalchemy import select
+
+    from brain.ops import memory_store
+
+    monkeypatch.setattr(memory_store, "confirmation", lambda principal_id, memory_ids: select(1))
+
+    assert refused(database, "an_inference_said_again_is_kept_and_one_not_fades") == (
+        FAILED,
+        "an inference said again was not confirmed",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_confirmation_check_fails_when_decay_ignores_the_confirmation(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A confirmation stored and read by nothing: decay runs from the formation whatever the row
+    says. Delete this and the check can pass on an install where the stamp changes no recall."""
+    from brain.memory.formation import Formation
+
+    monkeypatch.setattr(Formation, "decays_from", property(lambda self: self.formed_at))
+
+    assert refused(database, "an_inference_said_again_is_kept_and_one_not_fades") == (
+        FAILED,
+        "an inference said again faded as if it had not been said",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_confirmation_check_fails_when_a_helpful_mark_confirms_what_the_answer_recalled(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The design M16.7.4 and M16.3.2 refuse: a helpful mark confirming the memories the answer was
+    given. Delete this and the next person to have that idea can build it with the check green."""
+    from brain.ops import learning_signal_store
+    from brain.ops.memory_store import confirmation
+
+    real = learning_signal_store.StoredMarks.mark
+
+    async def confirming(
+        self: Any, *, principal_id: str, trace_id: str, helpful: bool, now: Any
+    ) -> bool:
+        from sqlalchemy import select, text
+
+        from brain.tables.memory import AdaptiveMemoryRow
+
+        marked = await real(
+            self, principal_id=principal_id, trace_id=trace_id, helpful=helpful, now=now
+        )
+        async with self._sessions() as session, session.begin():
+            ids = (
+                (
+                    await session.execute(
+                        select(AdaptiveMemoryRow.id).where(
+                            AdaptiveMemoryRow.principal_id == principal_id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            await session.execute(
+                text("SELECT set_config('app.principal_id', :p, true)").bindparams(p=principal_id)
+            )
+            await session.execute(confirmation(principal_id, ids))
+        return marked
+
+    monkeypatch.setattr(learning_signal_store.StoredMarks, "mark", confirming)
+
+    assert refused(database, "an_inference_said_again_is_kept_and_one_not_fades") == (
+        FAILED,
+        "a helpful mark confirmed a memory",
     )

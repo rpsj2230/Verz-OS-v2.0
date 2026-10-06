@@ -27,7 +27,7 @@ from brain import console_overview_routes
 from brain.api import API_PREFIX
 from brain.approval_routes import APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS
 from brain.console.elevation import ELEVATION_CONTROL
-from brain.console.needs_you import UNRECORDED_HEALTH, Queue, halt_state
+from brain.console.needs_you import UNRECORDED_HEALTH, Queue
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
 from brain.console.skill_library import REVIEW_AUTHORITY
@@ -42,6 +42,7 @@ from brain.core.scope import Scope
 from brain.gate.elevation_store import StoredRequest
 from brain.gate.review_store import StoredReview
 from brain.ops.controls import CONTROLS
+from brain.ops.halt_store import halt_state, latest_halt_acts
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.tables.elevation import ElevationDecision
 from tests.fixtures.console_http import Stub, console_client, get
@@ -401,7 +402,7 @@ def test_the_latest_act_per_target_decides_what_is_in_force_on_postgresql() -> N
             built = engine(url)
             try:
                 async with built.connect() as conn:
-                    result = await conn.execute(console_overview_routes.latest_halt_acts())
+                    result = await conn.execute(latest_halt_acts())
                     return [tuple(one) for one in result.all()]
             finally:
                 await built.dispose()

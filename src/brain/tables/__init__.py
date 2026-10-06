@@ -73,6 +73,7 @@ from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
+from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.escalation import EscalationRow
 from brain.tables.fast_lane import FastPathRuleRow
@@ -126,6 +127,8 @@ from brain.tables.resolution import (
     EntityIdentifierRow,
     EntityLinkRow,
 )
+from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
+from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
@@ -431,6 +434,17 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "proj.source_epoch",
     # 0178_skill_scripts. A script points at the skill version whose digest covers its bytes.
     "agent.skill_script",
+    # 0182_entity_registry_observations. None points at anything: each names a source record or a
+    # digest by value, so each outlives what it names.
+    "er.observation",
+    "er.blocked_value",
+    # 0183_entity_merges. A merge points at the two canonical entities it joined, and an unmerge at
+    # the merge it reverses, by the merge's own three columns so the pair cannot differ.
+    "er.merge",
+    "er.unmerge",
+    # 0184_entity_review_items. Points at nothing: the records and entities are values, so an item
+    # outlives a merge or an unmerge of what it names.
+    "er.review_item",
 )
 
 __all__ = [
@@ -450,6 +464,7 @@ __all__ = [
     "AutomationRunRow",
     "AutomationScheduleRow",
     "BindingCodeRow",
+    "BlockedValueRow",
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
@@ -481,6 +496,8 @@ __all__ = [
     "EntityAliasRow",
     "EntityIdentifierRow",
     "EntityLinkRow",
+    "EntityMergeRow",
+    "EntityUnmergeRow",
     "ErasureOutcome",
     "ErasureRequestRow",
     "EscalationRow",
@@ -502,6 +519,7 @@ __all__ = [
     "MessageRow",
     "ModelAttemptRow",
     "ModelProviderRow",
+    "ObservationRow",
     "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",
@@ -523,6 +541,7 @@ __all__ = [
     "RetentionReportRow",
     "RetiredRecordRow",
     "ReviewDecisionRow",
+    "ReviewItemRow",
     "RoleGrantRow",
     "RoutingChangeRow",
     "RoutingRungRow",

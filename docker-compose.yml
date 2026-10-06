@@ -92,6 +92,7 @@ services:
       INSTALL_STAFF_SOURCE: ${INSTALL_STAFF_SOURCE:-}
       INSTALL_STAFF_SOURCE_LOCATION: ${INSTALL_STAFF_SOURCE_LOCATION:-}
       INSTALL_ACCOUNT_EMPLOYMENT_TYPES: ${INSTALL_ACCOUNT_EMPLOYMENT_TYPES:-}
+      INSTALL_DEPARTMENTS_FROM: ${INSTALL_DEPARTMENTS_FROM:-}
       INSTALL_MODEL_PROFILE: ${INSTALL_MODEL_PROFILE:-}
       INSTALL_MODEL_ENDPOINT: ${INSTALL_MODEL_ENDPOINT:-}
       INSTALL_EMBEDDING_DIMENSIONS: ${INSTALL_EMBEDDING_DIMENSIONS:-}
@@ -171,6 +172,10 @@ services:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
       DEFAULT_POOL_SIZE: "20"
+      # PgBouncer's pool size is per login and database, and the application reaches it as
+      # brain_app and the owner, so without this it could hold twice the pool. This caps the
+      # database across logins at the figure brain.ops.connections counts.
+      MAX_DB_CONNECTIONS: "20"
       AUTH_TYPE: scram-sha-256
       # A login not in the userlist (the owner is) is looked up as the owner, which is how
       # brain_app gets in; a role that is a superuser or bypasses row security never does.

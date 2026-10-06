@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
+from typing import TypedDict
 
 import pytest
 from pydantic import TypeAdapter
@@ -29,9 +30,9 @@ from brain.cache import (
     CacheHealth,
     ValkeyRecordCache,
     embedding_cache,
-    freshness_cache,
     plan_cache,
     retrieval_cache,
+    source_epochs_cache,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect, ToolDefinition
@@ -50,17 +51,18 @@ from brain.gate.cache_key import (
 )
 from brain.gate.caches import (
     EMBEDDING_TTL_SECONDS,
-    FRESHNESS_TTL_SECONDS,
     MAX_PLAN_TOOLS,
     MAX_QUESTION_CHARS,
     MAX_RETRIEVAL_REFERENCES,
     PLAN_TTL_SECONDS,
     RETRIEVAL_TTL_SECONDS,
+    SOURCE_EPOCHS_KEY,
+    SOURCE_EPOCHS_TTL_SECONDS,
     TTL_SECONDS,
     CachedEmbedding,
-    CachedFreshness,
     CachedPlan,
     CachedRetrieval,
+    CachedSourceEpochs,
     CacheLayerError,
     CallerKey,
     ReplayedPlan,
@@ -71,11 +73,9 @@ from brain.gate.caches import (
     content_hash,
     digest_of,
     embedding_key,
-    freshness_key,
     plan_key,
     replay,
     retrieval_key,
-    source_epochs,
     ttl_invariants,
 )
 from brain.gate.catalogue import AgentCeiling, ProjectedCatalogue, project
@@ -86,6 +86,17 @@ from brain.knowledge.search import MAX_CANDIDATE_DEPTH
 NOW = datetime(2026, 9, 7, 9, 0, tzinfo=UTC)
 
 QUESTION = "How many hours are left on Acme"
+
+
+class _Shape(TypedDict):
+    """The narrowing a retrieval key requires beside the reach: every kind, the default count."""
+
+    kinds: tuple[str, ...]
+    limit: int
+
+
+#: A question narrowed to nothing and asking for the search tool's default number of passages.
+SHAPE: _Shape = {"kinds": (), "limit": 10}
 AGENT_CONFIG = "cfg-e3a1"
 
 #: A length at which the text somebody pasted is a document rather than a question. Held as
@@ -421,7 +432,7 @@ def test_a_key_needs_a_question_to_be_built_from():
     with pytest.raises(CacheLayerError):
         plan_key("   ", who, agent_config_hash=AGENT_CONFIG)
     with pytest.raises(CacheLayerError):
-        retrieval_key("", who, departments=("web",), corpus_epoch=1)
+        retrieval_key("", who, departments=("web",), corpus_epoch=1, **SHAPE)
 
 
 def test_a_revoked_grant_moves_the_answer_key():
@@ -456,15 +467,15 @@ def test_a_moved_policy_epoch_moves_every_key_this_module_builds():
     assert plan_key(QUESTION, before, agent_config_hash=AGENT_CONFIG) != plan_key(
         QUESTION, after, agent_config_hash=AGENT_CONFIG
     )
-    assert retrieval_key(QUESTION, before, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, after, departments=("web",), corpus_epoch=2
-    )
+    assert retrieval_key(
+        QUESTION, before, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, after, departments=("web",), corpus_epoch=2, **SHAPE)
 
 
 def test_a_moved_source_epoch_moves_the_answer_key():
     """A source refreshing has to orphan the answers built on it.
 
-    Delete this and the freshness cache below computes an epoch nothing carries anywhere,
+    Delete this and the source epochs cache below keeps an epoch nothing carries anywhere,
     which is the state `brain.cache` describes as a version nobody reads: not invalidation,
     a comment.
     """
@@ -696,9 +707,9 @@ def test_two_callers_with_the_same_grants_do_not_share_a_retrieval_key():
     bob = caller(ents("u_bob", "read:knowledge"))
 
     assert alice.ent_hash == bob.ent_hash
-    assert retrieval_key(QUESTION, alice, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, bob, departments=("web",), corpus_epoch=2
-    )
+    assert retrieval_key(
+        QUESTION, alice, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, bob, departments=("web",), corpus_epoch=2, **SHAPE)
 
 
 def test_a_retrieval_key_is_the_same_whatever_order_the_departments_arrive_in():
@@ -712,8 +723,8 @@ def test_a_retrieval_key_is_the_same_whatever_order_the_departments_arrive_in():
     who = caller(ents("u_alice", "read:knowledge"))
 
     assert retrieval_key(
-        QUESTION, who, departments=("web", "finance"), corpus_epoch=2
-    ) == retrieval_key(QUESTION, who, departments=("finance", "web"), corpus_epoch=2)
+        QUESTION, who, departments=("web", "finance"), corpus_epoch=2, **SHAPE
+    ) == retrieval_key(QUESTION, who, departments=("finance", "web"), corpus_epoch=2, **SHAPE)
 
 
 def test_a_department_added_to_a_callers_reach_moves_their_retrieval_key():
@@ -725,9 +736,9 @@ def test_a_department_added_to_a_callers_reach_moves_their_retrieval_key():
     """
     who = caller(ents("u_alice", "read:knowledge"))
 
-    assert retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, who, departments=("web", "finance"), corpus_epoch=2
-    )
+    assert retrieval_key(
+        QUESTION, who, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, who, departments=("web", "finance"), corpus_epoch=2, **SHAPE)
 
 
 def test_a_moved_corpus_epoch_moves_the_retrieval_key():
@@ -739,9 +750,55 @@ def test_a_moved_corpus_epoch_moves_the_retrieval_key():
     """
     who = caller(ents("u_alice", "read:knowledge"))
 
-    assert retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=2) != retrieval_key(
-        QUESTION, who, departments=("web",), corpus_epoch=3
-    )
+    assert retrieval_key(
+        QUESTION, who, departments=("web",), corpus_epoch=2, **SHAPE
+    ) != retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=3, **SHAPE)
+
+
+def test_a_question_narrowed_or_asking_for_more_passages_is_a_different_retrieval():
+    """**The narrowing is in the key, and a key without it serves the wrong list.**
+
+    The same words narrowed to SOPs rank a different list from the words searched over every
+    kind, and a list cut at five is not one cut at ten. Delete this and a key could drop either,
+    and a question narrowed to one kind would be handed the list ranked for all of them: not a
+    disclosure, since every passage is re-read under the reach, and still a wrong answer served
+    fast. The equal pair proves the narrowing is sorted rather than compared as given.
+    """
+    who = caller(ents("u_alice", "read:knowledge"))
+
+    def key(kinds: tuple[str, ...], limit: int) -> str:
+        return retrieval_key(
+            QUESTION, who, departments=("web",), corpus_epoch=2, kinds=kinds, limit=limit
+        )
+
+    assert key((), 10) != key(("sop",), 10)
+    assert key(("sop",), 10) != key(("sop", "faq"), 10)
+    assert key((), 10) != key((), 5)
+    assert key(("sop", "faq"), 10) == key(("faq", "sop"), 10)
+
+
+def test_a_retrieval_key_refuses_a_narrowing_that_is_not_one():
+    """A kind repeated, a kind that is not a slug, and a request for no passages are refused.
+
+    Delete this and a repeated kind changes the key without changing the retrieval, which is a
+    miss nobody can explain, and a count of zero keys an entry for a search that asked for
+    nothing. The last line proves an ordinary narrowing is still accepted.
+    """
+    who = caller(ents("u_alice", "read:knowledge"))
+
+    def key(kinds: tuple[str, ...], limit: int) -> str:
+        return retrieval_key(
+            QUESTION, who, departments=("web",), corpus_epoch=2, kinds=kinds, limit=limit
+        )
+
+    with pytest.raises(CacheLayerError):
+        key(("sop", "sop"), 10)
+    with pytest.raises(CacheLayerError):
+        key(("sop,faq",), 10)
+    with pytest.raises(CacheLayerError):
+        key((), 0)
+
+    assert key(("sop", "faq"), 1)
 
 
 def test_a_retrieval_key_refuses_something_that_is_not_a_department():
@@ -754,13 +811,13 @@ def test_a_retrieval_key_refuses_something_that_is_not_a_department():
     who = caller(ents("u_alice", "read:knowledge"))
 
     with pytest.raises(CacheLayerError):
-        retrieval_key(QUESTION, who, departments=("web,finance",), corpus_epoch=2)
+        retrieval_key(QUESTION, who, departments=("web,finance",), corpus_epoch=2, **SHAPE)
     with pytest.raises(CacheLayerError):
-        retrieval_key(QUESTION, who, departments=("web", "web"), corpus_epoch=2)
+        retrieval_key(QUESTION, who, departments=("web", "web"), corpus_epoch=2, **SHAPE)
     with pytest.raises(CacheLayerError):
-        retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=-1)
+        retrieval_key(QUESTION, who, departments=("web",), corpus_epoch=-1, **SHAPE)
 
-    assert retrieval_key(QUESTION, who, departments=("web", "finance"), corpus_epoch=0)
+    assert retrieval_key(QUESTION, who, departments=("web", "finance"), corpus_epoch=0, **SHAPE)
 
 
 def test_a_cached_retrieval_holds_references_and_no_passages():
@@ -904,107 +961,53 @@ def test_the_embedding_cache_has_nowhere_to_put_the_text_it_embedded():
     assert not names & {"content", "question", "text", "payload", "answer"}
 
 
-# ------------------------------------------------- the projection freshness cache (M6.2.5)
+# ------------------------------------------------------ the source epochs cache (M6.2.5)
 
 
-def reading(source: str, entity: str, seen: datetime) -> CachedFreshness:
-    return CachedFreshness(
-        key=freshness_key(source, entity), source=source, entity=entity, last_seen_at=seen
-    )
+def epochs_reading(**epochs: int) -> CachedSourceEpochs:
+    return CachedSourceEpochs(key=SOURCE_EPOCHS_KEY, epochs=dict(epochs))
 
 
-def test_a_freshness_epoch_moves_when_the_projection_does():
-    """The epoch is what invalidates every answer built on a source.
+def test_a_source_epochs_reading_holds_the_counter_and_nothing_derived_from_a_timestamp():
+    """`ONE_EPOCH_SOURCE_KEYS_AN_ANSWER`, as the type's shape.
 
-    Delete this and an epoch that is stuck, or that is a constant, passes construction: the
-    reading looks fine, the answer key it feeds never changes, and every answer built on
-    data that has since moved stays servable until its own TTL.
+    Delete this and `last_seen_at` can come back as a field beside the counter, which is two
+    epoch sources in one reading and an epoch that moves on every confirming read.
     """
-    before = reading("xero", "invoice", NOW)
-    after = reading("xero", "invoice", NOW + timedelta(microseconds=1))
+    names = {f.name for f in CachedSourceEpochs.__dataclass_fields__.values()}
 
-    assert after.epoch > before.epoch
+    assert names == {"key", "epochs"}
+    assert epochs_reading(xero=3, freshdesk=1).epochs == {"xero": 3, "freshdesk": 1}
 
 
-def test_a_freshness_reading_has_no_epoch_field_to_disagree_with_its_timestamp():
-    """Two records of one fact, and the way they disagree cannot be noticed.
+def test_a_stored_epochs_reading_checks_its_own_names_and_numbers():
+    """The value's guard: a reading from the store never went through the code that built it.
 
-    A refresh moves `last_seen_at` and a caller forgets to bump a supplied integer, so every
-    key built from it is unchanged. Delete this and `epoch` is added as a field with a
-    default, which is the same failure with a nicer signature.
+    Delete this and a reading naming anything at all reaches an answer key verbatim, or one
+    carrying nought, which no advance writes, keys an answer as if the source had never
+    changed while the counter says it has.
     """
-    names = {f.name for f in CachedFreshness.__dataclass_fields__.values()}
+    for bad in (
+        {"Xero Ltd": 1},
+        {"xero": 0},
+        {"xero": -2},
+        {"xero": True},
+    ):
+        with pytest.raises(CacheLayerError):
+            CachedSourceEpochs(key=SOURCE_EPOCHS_KEY, epochs=bad)  # type: ignore[arg-type]
+    with pytest.raises(CacheLayerError):
+        CachedSourceEpochs(key="", epochs={"xero": 1})
+    # The positive sibling: no source has changed yet is a reading, not a refusal.
+    assert CachedSourceEpochs(key=SOURCE_EPOCHS_KEY, epochs={}).epochs == {}
 
-    assert names == {"key", "source", "entity", "last_seen_at"}
-    assert "epoch" not in names
 
+def test_the_source_epochs_key_names_no_caller():
+    """One reading serves everybody, which is the point of caching it.
 
-def test_two_freshness_readings_for_one_source_and_entity_are_refused():
-    """Silently keeping the last is how a stale reading wins by arriving second.
-
-    Delete this and `source_epochs` takes whichever came last, which is an ordering nobody
-    chose, and the loser might be the newer one.
+    Delete this and a caller component creeps into the key, at which point the mapping every
+    question shares is read from the database once per person again.
     """
-    with pytest.raises(CacheLayerError):
-        source_epochs(
-            [reading("xero", "invoice", NOW), reading("xero", "invoice", NOW - timedelta(days=1))]
-        )
-
-
-def test_source_epochs_names_the_entity_as_well_as_the_source():
-    """`proj.record` is keyed by both, so one epoch per connector is the wrong grain.
-
-    A Freshdesk company and a Xero contact are different companies. Delete this and the two
-    entities of one connector fold into one epoch, which needs a rule for combining them,
-    and the only safe rule is the newest, which invalidates answers that drew on neither.
-    """
-    epochs = source_epochs(
-        [reading("xero", "invoice", NOW), reading("xero", "contact", NOW - timedelta(hours=1))]
-    )
-
-    assert set(epochs) == {"xero.invoice", "xero.contact"}
-    assert epochs["xero.invoice"] > epochs["xero.contact"]
-
-
-def test_a_naive_last_seen_at_is_refused():
-    """A naive timestamp yields an epoch off by the deployment's offset from UTC.
-
-    Delete this and a reading read back from somewhere that dropped the timezone produces a
-    perfectly ordinary looking integer that is eight hours wrong, so an answer is invalidated
-    or held on a boundary nobody can find.
-    """
-    with pytest.raises(CacheLayerError):
-        reading("xero", "invoice", datetime(2026, 9, 7, 9, 0))
-
-
-def test_a_stored_freshness_reading_checks_its_own_source_and_entity():
-    """The value's guard, which is not the key builder's.
-
-    A reading arriving from the store never went through `freshness_key`, so the type has to
-    check what it carries. Delete this and a reading naming anything at all is accepted, and
-    `source_epochs` puts that name straight into an answer key.
-    """
-    with pytest.raises(CacheLayerError):
-        CachedFreshness(key="fresh:x", source="Xero Ltd", entity="invoice", last_seen_at=NOW)
-    with pytest.raises(CacheLayerError):
-        CachedFreshness(key="fresh:x", source="xero", entity="Invoice Line", last_seen_at=NOW)
-    with pytest.raises(CacheLayerError):
-        CachedFreshness(key="", source="xero", entity="invoice", last_seen_at=NOW)
-
-
-def test_a_freshness_key_names_no_caller_and_refuses_a_name_that_is_not_an_object():
-    """One reading serves everybody, which is the point, and its parts are checked.
-
-    Delete this and a caller component creeps into the key, at which point the number the
-    whole estate shares is read once per person, and a source name from outside reaches a
-    key verbatim.
-    """
-    assert freshness_key("xero", "invoice") == "fresh:xero.invoice"
-
-    with pytest.raises(CacheLayerError):
-        freshness_key("Xero Ltd", "invoice")
-    with pytest.raises(CacheLayerError):
-        freshness_key("xero", "Invoice Line")
+    assert SOURCE_EPOCHS_KEY == "epochs:sources"
 
 
 # ------------------------------------------------------------ the prohibition (M6.2.6)
@@ -1121,7 +1124,7 @@ def test_every_cache_lifetime_holds_its_relation_to_the_others():
         "plans": PLAN_TTL_SECONDS,
         "retrievals": RETRIEVAL_TTL_SECONDS,
         "embeddings": EMBEDDING_TTL_SECONDS,
-        "freshness": FRESHNESS_TTL_SECONDS,
+        "source_epochs": SOURCE_EPOCHS_TTL_SECONDS,
     }
 
 
@@ -1217,16 +1220,16 @@ def test_a_store_that_is_down_is_a_miss_and_never_an_error():
     exercised too, because a cache write failing after a successful load means the answer is
     already in hand and raising there turns a slow request into a broken one.
     """
-    freshness = freshness_cache(DeadValkey())
-    stored = reading("xero", "invoice", NOW)
+    epochs = source_epochs_cache(DeadValkey())
+    stored = epochs_reading(xero=3)
 
-    assert freshness.get(stored.key) is None
-    assert freshness.health.degraded is True
+    assert epochs.get(stored.key) is None
+    assert epochs.health.degraded is True
 
-    freshness.set(stored.key, stored, FRESHNESS_TTL_SECONDS)
+    epochs.set(stored.key, stored, SOURCE_EPOCHS_TTL_SECONDS)
 
-    assert freshness.health.outages == 2
-    assert freshness.health.writes == 0
+    assert epochs.health.outages == 2
+    assert epochs.health.writes == 0
 
 
 def test_a_value_survives_a_round_trip_through_the_store():
@@ -1236,17 +1239,17 @@ def test_a_value_survives_a_round_trip_through_the_store():
     this file, because all of them assert that something is refused.
     """
     client = FakeValkey()
-    freshness = freshness_cache(client)
-    stored = reading("xero", "invoice", NOW)
-    freshness.set(stored.key, stored, FRESHNESS_TTL_SECONDS)
+    epochs = source_epochs_cache(client)
+    stored = epochs_reading(xero=3, freshdesk=1)
+    epochs.set(stored.key, stored, SOURCE_EPOCHS_TTL_SECONDS)
 
-    found = freshness.get(stored.key)
+    found = epochs.get(stored.key)
 
     assert found is not None
     assert found == stored
-    assert found.epoch == stored.epoch
-    assert client.ttls[stored.key] == FRESHNESS_TTL_SECONDS
-    assert freshness.health.hits == 1
+    assert found.epochs == {"xero": 3, "freshdesk": 1}
+    assert client.ttls[stored.key] == SOURCE_EPOCHS_TTL_SECONDS
+    assert epochs.health.hits == 1
 
 
 def test_a_shared_health_counter_can_be_passed_to_several_caches():
@@ -1277,10 +1280,10 @@ def test_the_stores_are_named_apart_so_a_log_line_says_which_one_degraded():
         plan_cache(client).name,
         retrieval_cache(client).name,
         embedding_cache(client).name,
-        freshness_cache(client).name,
+        source_epochs_cache(client).name,
     }
 
-    assert names == {"plans", "retrievals", "embeddings", "freshness"}
+    assert names == {"plans", "retrievals", "embeddings", "source_epochs"}
     assert names == set(TTL_SECONDS)
 
 

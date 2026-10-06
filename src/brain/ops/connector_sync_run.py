@@ -87,13 +87,19 @@ the attempt does; `authorization` refuses to build such a source's header from a
 token, so the key file itself is never sent. See `brain.connectors.google_token`, which argues the
 exchange once for both Google sources.
 
+**An MCP server's tools and custom code take one typed branch too (M11.1.2, M11.1.5).** Both
+read one entity at a time by calls this module makes with the leased key, each admitted by the
+ceiling (`_read_by_calls`): an MCP session's posts (`brain.ops.mcp_session`), or the calls a
+custom connector's sandboxed code planned (`brain.ops.custom_code_run`), whose code never holds
+the key (`brain.connectors.custom_code.THE_KEY_NEVER_ENTERS_THE_SANDBOX`).
+
 Rejected: reading through `brain.tools.fetch.Fetcher`, which the connectors' own `connector_fetch`
 closures take. It carries no headers and no status, so a key cannot be sent through it and a 429
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
 Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.6.1, M11.7.3, M11.7.1
-Task ids: M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15
+Task ids: M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15, M11.1.2, M11.1.5
 """
 
 from __future__ import annotations
@@ -114,13 +120,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.backfill import BackfillCursor
 from brain.connectors.contract import ConnectorContractError, FetchRequest
+from brain.connectors.custom_code import CustomCodeError, KeyInSandboxError
 from brain.connectors.declaration import (
     BoundedWalk,
+    CodeReading,
     DatabaseLogin,
     KeyScheme,
     ListedUnder,
+    PageReply,
+    Reading,
     RoutedReading,
     ScopedReading,
+    ToolReading,
     ViewReading,
     listed_under,
 )
@@ -132,6 +143,7 @@ from brain.connectors.google_token import (
     exchange,
     token_from,
 )
+from brain.connectors.mcp import McpToolNotAsReviewedError
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import MAX_RESPONSE_BYTES, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
@@ -144,17 +156,24 @@ from brain.ops.connector_lease import (
 )
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
+    CODE_DID_NOT_COMPLETE,
+    KEY_KEPT_OUT,
     MAX_PAGES_PER_ENTITY,
     MAX_SECONDS_WAITING_IN_A_RUN,
     NO_KEY,
     NO_KEY_FILE_EXCHANGE,
+    NO_SANDBOX,
     NO_VAULT,
+    NO_WAY_TO_POST,
     OWN_SHARE_SPENT,
     READ_BUT_CUT_SHORT,
+    READ_BUT_PART_LEFT_OUT,
     READ_TO_THE_END,
     READINGS,
     SHAPE_DISAGREED,
     SOURCE_ALLOWANCE_REFUSED,
+    TOOL_NOT_AS_REVIEWED,
+    TOOL_SAID_IT_FAILED,
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
     Attempt,
@@ -188,9 +207,17 @@ from brain.ops.connector_sync_store import (
     seen_since,
 )
 from brain.ops.credentials import KEY_FIELD, USER_FIELD
+from brain.ops.custom_code_run import CodeRunFailedError, installed_runner, read_once
+from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.lark_base_index import HttpsTokenIssuer, index_if_due
 from brain.ops.leases import SealedSecret
-from brain.ops.limits import LimiterState, check
+from brain.ops.limits import Limit, LimiterState, check
+from brain.ops.mcp_session import (
+    CallNotAdmittedError,
+    CallNotAnsweredError,
+    open_session,
+    read_entity,
+)
 from brain.ops.openbao import (
     CONNECTOR_KEY_PREFIX,
     OpenBaoVault,
@@ -201,6 +228,7 @@ from brain.ops.openbao import (
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.ops.webhook_delivery import HTTPS_PORT, SystemResolver, _PinnedHTTPSConnection
 from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
+from brain.tools.run_skill import ScriptRunner
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -336,9 +364,7 @@ class Unleased:
         return LeaseOutcome.NONE
 
 
-def borrowed(
-    keys: ConnectorKeys, reading: SourceReading | ViewReading, ref: SecretRef, *, now: datetime
-) -> KeyLease:
+def borrowed(keys: ConnectorKeys, reading: Reading, ref: SecretRef, *, now: datetime) -> KeyLease:
     """The lease one read holds: none for a source that takes no key, and the vault's otherwise.
 
     A source whose record is published to anybody who asks has no slot to read, so asking the
@@ -816,15 +842,25 @@ class SyncRun:
     #: What the switched-on Lark Base's index run did, or empty with no Base switched on. See
     #: `brain.ops.lark_base_index.IndexRun.summary`, which names no Base and no table.
     base: str = ""
+    #: Sources a halt stopped, which are not read and keep their place. See `brain.ops.halt_store`.
+    held: int = 0
 
     def summary(self) -> str:
         after = f"; {self.base}" if self.base else ""
-        if not (self.read or self.waiting or self.failed or self.not_due or self.cannot_be_read):
+        if not (
+            self.read
+            or self.waiting
+            or self.failed
+            or self.not_due
+            or self.cannot_be_read
+            or self.held
+        ):
             return f"no source is connected{after}"
+        stopped = f", {self.held} stopped by a halt" if self.held else ""
         return (
             f"{self.read} read, {self.waiting} waiting for a source's allowance, "
             f"{self.failed} failed, {self.not_due} not yet due, "
-            f"{self.cannot_be_read} that cannot be read{after}"
+            f"{self.cannot_be_read} that cannot be read{stopped}{after}"
         )
 
 
@@ -840,6 +876,9 @@ class _Reading:
     before: ReadState | None = None
     records: int = 0
     cut_short: bool = False
+    #: Whether the walk left part of the source out at a bound of its own. See
+    #: `brain.connectors.declaration.BoundedWalk`.
+    left_out: bool = False
     waited: float = 0.0
 
 
@@ -964,13 +1003,15 @@ async def attempt(
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
     poster: SourcePoster | None = None,
+    runner: ScriptRunner | None = None,
 ) -> Attempt:
     """Read one connection under a lease taken for this attempt, and give it back at the end.
 
     The lease is closed in a `finally`, so an attempt that raised, or was cancelled, still gives its
     run token back, and the row records how that went. See `brain.ops.connector_lease`. `poster` is
     how a Google source's key file is exchanged for a token (`presented`); a source whose key is
-    sent as it is never uses it.
+    sent as it is never uses it. `runner` is the sandbox a custom-code source's code runs in
+    (`brain.ops.custom_code_run.installed_runner`); every other source never uses it.
     """
     manifest, reading = plan.manifest, plan.reading
     assert manifest is not None and reading is not None  # SyncPlan holds this for a runnable plan
@@ -987,6 +1028,7 @@ async def attempt(
             clock=clock,
             sleep=sleep,
             poster=poster,
+            runner=runner,
         )
     finally:
         ended = lease.close(clock())
@@ -1005,6 +1047,7 @@ async def _read_under(
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
     poster: SourcePoster | None,
+    runner: ScriptRunner | None = None,
 ) -> Attempt:
     """Read one connection to the end, or as far as it can be read, and say what that came to."""
     manifest, reading = plan.manifest, plan.reading
@@ -1012,10 +1055,11 @@ async def _read_under(
     started_at = clock()
     before = None if previous is None else previous.read_state
     try:
-        # A database's views keep no place: see `A_VIEW_READ_IS_ONE_BOUNDED_READ`.
+        # A database's views keep no place: see `A_VIEW_READ_IS_ONE_BOUNDED_READ`. Neither do an
+        # MCP server's tools or custom code, which are read whole on every attempt.
         read = (
             ReadPass(started_at=started_at)
-            if isinstance(reading, ViewReading)
+            if isinstance(reading, ViewReading | ToolReading | CodeReading)
             else next_read(reading, before, now=started_at)
         )
     except Exception:
@@ -1062,6 +1106,22 @@ async def _read_under(
             resolver=resolver,
             clock=clock,
             sleep=sleep,
+        )
+    if isinstance(reading, ToolReading | CodeReading):
+        # An MCP server's tools, or custom code in a sandbox: one read per entity, each call
+        # admitted by the ceiling. See `_read_by_calls`.
+        return await _read_by_calls(
+            live,
+            one,
+            reading,
+            key,
+            finish=finish,
+            sessions=sessions,
+            caller=caller,
+            poster=poster,
+            runner=runner,
+            resolver=resolver,
+            clock=clock,
         )
     try:
         shown = presented(reading, key, poster=poster, resolver=resolver, now=clock())
@@ -1252,6 +1312,7 @@ async def _read_under(
                     # The walk reached a bound of its own and left part of the source out. See
                     # `brain.connectors.declaration.BoundedWalk`.
                     one.cut_short = True
+                    one.left_out = True
                     one.read = replace(one.read, partial=True)
                 pages += 1
                 arguments = following
@@ -1263,6 +1324,10 @@ async def _read_under(
     if one.read.retires(entities):
         await _retire(sessions, plan.connector, entities, one.read.started_at)
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
+    if one.left_out and one.read.complete(entities):
+        # A walk that ended having left part of the source out is not carried on by the next
+        # run, so it says what was left out rather than that the next run carries on.
+        detail = READ_BUT_PART_LEFT_OUT
     return finish(SyncOutcome.SYNCED, detail)
 
 
@@ -1336,6 +1401,139 @@ async def _read_views(
     return finish(SyncOutcome.SYNCED, detail)
 
 
+def bare_headers(scheme: KeyScheme, key: str) -> dict[str, str]:
+    """The headers an MCP or custom-code source's call carries: JSON, and the key in its scheme.
+
+    Their readings name a scheme sent as it is (`declaration.SCHEMES_SENT_AS_THEY_ARE`), so the
+    key is never exchanged first; a source taking no key is sent no `Authorization` at all.
+    """
+    if scheme is KeyScheme.NONE:
+        return {"Accept": "application/json"}
+    return {"Accept": "application/json", "Authorization": authorization(scheme, key)}
+
+
+class _Admission:
+    """The source's ceiling, asked before each call of a run that cannot wait inside itself.
+
+    An MCP session and a custom connector's planned calls are made in one synchronous step each,
+    so a call the ceiling does not admit is not waited for: the attempt ends as this install's
+    share spent, with the wait the ceiling named, and the next run reads the source again.
+    """
+
+    def __init__(self, limits: tuple[Limit, ...], clock: Callable[[], datetime]) -> None:
+        self._limits = limits
+        self._clock = clock
+        self._state = LimiterState()
+        self.retry_after: float | None = None
+
+    def __call__(self) -> bool:
+        decision = check(now=self._clock(), limits=self._limits, state=self._state)
+        if not decision.allowed:
+            self.retry_after = decision.retry_after_seconds
+            return False
+        self._state = self._state.record(self._clock(), self._limits)
+        return True
+
+
+async def _read_by_calls(
+    live: LiveConnection,
+    one: _Reading,
+    reading: ToolReading | CodeReading,
+    key: str,
+    *,
+    finish: Callable[..., Attempt],
+    sessions: async_sessionmaker[AsyncSession],
+    caller: SourceCaller,
+    poster: SourcePoster | None,
+    runner: ScriptRunner | None,
+    resolver: Resolver,
+    clock: Callable[[], datetime],
+) -> Attempt:
+    """Each entity of an MCP server's tools or of custom code, read once and written (M11.1.2).
+
+    The views loop's write and outcome, with the calls each read makes admitted one by one by the
+    source's ceiling (`_Admission`). An MCP source opens one session for the attempt and calls one
+    declared tool per entity (`brain.ops.mcp_session`); a custom-code source plans, is called and
+    is read per entity (`brain.ops.custom_code_run.read_once`, M11.1.5). Every failure leaves one
+    of `brain.ops.connector_sync`'s constant sentences and never the source's or the code's words.
+    """
+    manifest = one.plan.manifest
+    assert manifest is not None  # SyncPlan holds this for a runnable plan
+    if poster is None and isinstance(reading, ToolReading):
+        return finish(SyncOutcome.FAILED, NO_WAY_TO_POST)
+    if runner is None and isinstance(reading, CodeReading):
+        return finish(SyncOutcome.FAILED, NO_SANDBOX)
+    settings = live.connection.settings
+    headers = bare_headers(reading.key_scheme(), key)
+    admit = _Admission(one.plan.limits, clock)
+    try:
+        session = None
+        if isinstance(reading, ToolReading):
+            assert poster is not None  # refused above
+            session = open_session(
+                reading,
+                settings=settings,
+                headers=headers,
+                poster=poster,
+                resolver=resolver,
+                admit=admit,
+            )
+        for entity in reading.entities():
+            read_at = clock()
+            page: PageReply
+            if session is not None and isinstance(reading, ToolReading):
+                page = read_entity(session, reading, entity, None, fetched_at=read_at.isoformat())
+            else:
+                assert isinstance(reading, CodeReading) and runner is not None  # refused above
+                page = read_once(
+                    reading,
+                    entity,
+                    None,
+                    settings=settings,
+                    headers=headers,
+                    secret=key,
+                    runner=runner,
+                    caller=caller,
+                    poster=poster,
+                    resolver=resolver,
+                    admit=admit,
+                    fetched_at=read_at.isoformat(),
+                )
+            if page.call is not CallOutcome.OK or page.rows is None:
+                # Answered, and said it failed: never a page with no rows, and not a refused key.
+                return finish(SyncOutcome.FAILED, TOOL_SAID_IT_FAILED, call=page.call)
+            kept: list[tuple[ProjectedRecord, Mapping[str, StoredValue]]] = []
+            for row in (r.model_dump() for r in page.rows.records):
+                projected = reading.projected(entity, row, seen_at=read_at)
+                if projected is not None:
+                    kept.append((projected, kept_fields(projected, manifest)))
+            await _write_page(sessions, one.plan.connector, entity, kept)
+            one.records += len(kept)
+    except CallNotAdmittedError:
+        return finish(SyncOutcome.QUOTA, OWN_SHARE_SPENT, retry_after_seconds=admit.retry_after)
+    except CallNotAnsweredError as failed:
+        if failed.call is CallOutcome.QUOTA:
+            return finish(
+                SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED, retry_after_seconds=failed.retry_after
+            )
+        detail = failure_detail(failed.call, timed_out=failed.timed_out)
+        return finish(SyncOutcome.FAILED, detail, call=failed.call)
+    except UnsafeAddressError:
+        return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
+    except McpToolNotAsReviewedError:
+        return finish(SyncOutcome.FAILED, TOOL_NOT_AS_REVIEWED)
+    except KeyInSandboxError:
+        return finish(SyncOutcome.FAILED, KEY_KEPT_OUT)
+    except CodeRunFailedError:
+        return finish(SyncOutcome.FAILED, CODE_DID_NOT_COMPLETE)
+    except CustomCodeError:
+        return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+    except Exception:
+        # Broad and typeless, for the REST loop's reason: a refusal can quote what was answered.
+        return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
+    return finish(SyncOutcome.SYNCED, READ_TO_THE_END)
+
+
 #: What a connector's own `interpret` may read an answered call as instead of a page: the body said
 #: the key was refused, or the source was not able to answer. `TRUNCATED` is a page and is not here.
 REFUSED_INSIDE_AN_ANSWER: Final = frozenset(
@@ -1352,17 +1550,26 @@ async def sync_on(
     resolver: Resolver,
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
-    readings: Mapping[str, SourceReading | ViewReading] = READINGS,
+    readings: Mapping[str, Reading] = READINGS,
     poster: SourcePoster | None = None,
+    runner: ScriptRunner | None = None,
 ) -> SyncRun:
-    """Every live connection that may be read and is due, read once, and each attempt recorded."""
+    """Every live connection that may be read and is due, read once, and each attempt recorded.
+
+    A source a halt stops, on itself or on everything, or every source when the halts cannot be
+    read, is not read and records no attempt, so it is due again the moment the halt is lifted.
+    """
+    halts = await read_state(sessions)
     async with sessions() as session, session.begin():
         live = await read_live(session)
         states = await read_states(session)
-    read = waiting = failed = not_due = cannot = 0
+    read = waiting = failed = not_due = cannot = held = 0
     for one in live:
+        if refusal_in(halts, Work(connector=one.connection.connector)):
+            held += 1
+            continue
         previous = states.get(one.id)
-        plan = plan_for(one.connection, last=previous, now=now, readings=readings)
+        plan = plan_for(one.connection, last=previous, now=now, readings=readings, runner=runner)
         if plan.refused:
             cannot += 1
             continue
@@ -1380,6 +1587,7 @@ async def sync_on(
             clock=clock,
             sleep=sleep,
             poster=poster,
+            runner=runner,
         )
         async with sessions() as session, session.begin():
             await session.execute(attempt_row(one.id, done))
@@ -1390,7 +1598,12 @@ async def sync_on(
         else:
             failed += 1
     return SyncRun(
-        read=read, waiting=waiting, failed=failed, not_due=not_due, cannot_be_read=cannot
+        read=read,
+        waiting=waiting,
+        failed=failed,
+        not_due=not_due,
+        cannot_be_read=cannot,
+        held=held,
     )
 
 
@@ -1428,6 +1641,7 @@ def run_connector_sync_now(
                 resolver=resolver,
                 clock=_utc_now,
                 poster=caller,
+                runner=installed_runner(),
             )
             # The switched-on Lark Base's minimal index, on the same schedule and under the same
             # keys; it has no connection row, for `brain.ops.lark_base_index`'s reason.

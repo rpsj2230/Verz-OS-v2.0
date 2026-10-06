@@ -112,7 +112,7 @@ has no check and no client, and resolves through `NoEntitlementCache`.
 
 **The four caches of M6.2 share one class and the reason is the self-key check.** See
 `ValkeyRecordCache`. What made two stores worth writing separately above is that they do
-different things on a hit; the plan, retrieval, embedding and freshness stores do the same
+different things on a hit; the plan, retrieval, embedding and source epochs stores do the same
 thing as each other, so writing four of them would be writing one `get` four times and
 leaving three of the copies to rot. The one thing this file adds to all four is the check
 that a value found under a key is the value stored under it, which `ValkeyAnswerStore`
@@ -142,9 +142,9 @@ from brain.core.entitlement import EntitlementSet
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.caches import (
     CachedEmbedding,
-    CachedFreshness,
     CachedPlan,
     CachedRetrieval,
+    CachedSourceEpochs,
     CacheLayerError,
 )
 from brain.gate.entitlement_store import PRINCIPAL_SETTING
@@ -671,7 +671,7 @@ class ValkeyRecordCache[T: Keyed](_ValkeyCache):
 _PLAN: Final = TypeAdapter(CachedPlan)
 _RETRIEVAL: Final = TypeAdapter(CachedRetrieval)
 _EMBEDDING: Final = TypeAdapter(CachedEmbedding)
-_FRESHNESS: Final = TypeAdapter(CachedFreshness)
+_SOURCE_EPOCHS: Final = TypeAdapter(CachedSourceEpochs)
 
 
 def plan_cache(
@@ -695,11 +695,11 @@ def embedding_cache(
     return ValkeyRecordCache(client, _EMBEDDING, name="embeddings", health=health)
 
 
-def freshness_cache(
+def source_epochs_cache(
     client: ValkeyClient, *, health: CacheHealth | None = None
-) -> ValkeyRecordCache[CachedFreshness]:
-    """The projection freshness cache (M6.2.5). One reading per source and entity."""
-    return ValkeyRecordCache(client, _FRESHNESS, name="freshness", health=health)
+) -> ValkeyRecordCache[CachedSourceEpochs]:
+    """The source epochs cache (M6.2.5). One reading of every source's counter, for everybody."""
+    return ValkeyRecordCache(client, _SOURCE_EPOCHS, name="source_epochs", health=health)
 
 
 def version_from(found: object) -> int:

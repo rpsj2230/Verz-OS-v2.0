@@ -263,8 +263,9 @@ def test_every_step_that_writes_something_says_when_it_is_already_done() -> None
     nothing to say which one."""
     # 23 since 2026-09-29: the vault's seal key and the release's vault changes are steps of
     # their own (needs-rupash 114), and both write, so both carry a done test. 24 the same day:
-    # the staff sync's sign-in accounts client (needs-rupash 115), which writes the vault.
-    assert len(PLAN) == 24
+    # the staff sync's sign-in accounts client (needs-rupash 115), which writes the vault. 25 on
+    # 2026-10-06: the join-key pepper (M14.7.3), which creates one vault slot once.
+    assert len(PLAN) == 25
     for step in PLAN:
         if step.changes:
             assert step.already_done.strip(), f"{step.name} writes and cannot say it is done"
