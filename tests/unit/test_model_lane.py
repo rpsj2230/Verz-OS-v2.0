@@ -214,6 +214,7 @@ def ask(
     rules: Sequence[FastPathRule] = (HOURS,),
     rows: Rows | None = None,
     hints: tuple[str, ...] = (),
+    session: tuple[str, ...] = (),
 ) -> Run:
     """The lane, with a model step whose model is a real executor over a recording transport."""
     transport = Scripted(*script) if script else Scripted(completion() if reply is None else reply)
@@ -249,7 +250,10 @@ def ask(
                     now=NOW,
                     clock=lambda: NOW,
                     model=ModelLane(
-                        search=found, model=calls, hints=FixedHints(hints) if hints else None
+                        search=found,
+                        model=calls,
+                        hints=FixedHints(hints) if hints else None,
+                        session=FixedHints(session) if session else None,
                     )
                     if with_model
                     else None,
