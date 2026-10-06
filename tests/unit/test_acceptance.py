@@ -636,6 +636,7 @@ WRITTEN_BY_CHECKS = (
     "ops.question_asked",
     "ops.question_gap",
     "ops.erasure_request",
+    "ops.routing_change",
     "agent.artifact",
     "agent.artifact_change",
     "agent.leash_change",
