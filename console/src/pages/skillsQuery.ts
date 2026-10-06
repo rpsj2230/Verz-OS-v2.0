@@ -88,6 +88,40 @@ export function retirementPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/retirement`;
 }
 
+/** Where one version's examples are rehearsed (M12.3.4). */
+export function rehearsalsPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/rehearsals`;
+}
+
+/** `brain.skill_routes.SkillRehearsalView`: one rehearsal of a version, and what it could not judge. */
+export type RehearsalResult = components["schemas"]["SkillRehearsalView"];
+
+export const EXAMPLES_HEADING = "Example tasks";
+export const NO_EXAMPLES = "This version carries no example tasks, so there is nothing to rehearse before deciding.";
+export const REHEARSE = "Rehearse the examples";
+export const REHEARSE_THROUGH = "Rehearse through";
+export const REHEARSING = "Rehearsing.";
+export const REHEARSAL_PASSED = "Every example passed";
+export const REHEARSAL_FAILED = "An example did not pass";
+export const NOT_YET_REHEARSED = "Not rehearsed yet. Approving waits until a rehearsal of this version passes every example.";
+
+/** What one example's outcome says: passed, or the tools it could not reach. */
+export function outcomeWords(outcome: { readonly passed: boolean; readonly missing: readonly string[] }): string {
+  return outcome.passed ? "Passed" : `Could not reach ${outcome.missing.join(", ")}`;
+}
+
+/** `RehearsalView`, or null when the body is not one. */
+export function readRehearsal(payload: unknown): RehearsalResult | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Record<string, unknown>;
+  if (typeof body.passed !== "boolean" || !Array.isArray(body.outcomes) || typeof body.limit !== "string") {
+    return null;
+  }
+  return body as unknown as RehearsalResult;
+}
+
 /** Where one approved version is exported (M12.3.1). */
 export function exportPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/export`;
@@ -225,6 +259,8 @@ export interface SkillsPage {
   readonly libraryTruncated: boolean;
   /** The agents this reader may assign an approved skill to. */
   readonly agents: readonly AgentChoice[];
+  /** The agents a reviewer may rehearse a waiting version through (M12.3.4). */
+  readonly rehearsalAgents: readonly AgentChoice[];
   /** This reader may add a skill. Presentation only. */
   readonly mayAdd: boolean;
   /** No tool registry on the API's process, so no tool a skill names could be resolved. */
@@ -243,6 +279,7 @@ const NOTHING: SkillsPage = Object.freeze({
   library: [],
   libraryTruncated: false,
   agents: [],
+  rehearsalAgents: [],
   // False on an unreadable body: a control drawn for an answer this console could not read is a
   // control whose every press is refused.
   mayAdd: false,
@@ -268,6 +305,7 @@ export function readSkillsPage(payload: unknown): SkillsPage {
     library?: unknown;
     library_truncated?: unknown;
     agents?: unknown;
+    rehearsal_agents?: unknown;
     may_add?: unknown;
     registry_is_absent?: unknown;
     categories?: unknown;
@@ -288,6 +326,7 @@ export function readSkillsPage(payload: unknown): SkillsPage {
     library: Array.isArray(body.library) ? (body.library as LibrarySkill[]) : [],
     libraryTruncated: body.library_truncated === true,
     agents: Array.isArray(body.agents) ? (body.agents as AgentChoice[]) : [],
+    rehearsalAgents: Array.isArray(body.rehearsal_agents) ? (body.rehearsal_agents as AgentChoice[]) : [],
     mayAdd: body.may_add === true,
     registryIsAbsent: body.registry_is_absent === true,
     categories: Array.isArray(body.categories)

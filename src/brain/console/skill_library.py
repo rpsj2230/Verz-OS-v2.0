@@ -136,6 +136,7 @@ from brain.gate.catalogue import EmptyCatalogueError
 from brain.tools.extract import MAX_MEMBERS, _is_regular
 from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, pending
+from brain.tools.skill_examples import examples_of
 from brain.tools.skills import (
     MAX_SCRIPT_BYTES,
     SKILL_FILE,
@@ -609,6 +610,10 @@ def _skill_of(
         raise refuse(str(refused)) from None
     if not skill.version.isascii():
         raise refuse(f"its version {skill.version!r} is not written in the digits 0 to 9")
+    try:
+        examples_of(skill)
+    except SkillError as refused:
+        raise refuse(str(refused)) from None
     held = dict(files or {})
     if set(held) != set(skill.scripts):
         if skill.scripts and files is None:

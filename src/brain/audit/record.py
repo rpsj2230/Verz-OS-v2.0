@@ -308,6 +308,8 @@ class SkillChange(enum.StrEnum):
     REINSTATED = "reinstated"
     #: `0191`: an approved version taken off the install as a package (M12.3.1).
     EXPORTED = "exported"
+    #: `0191`: a version's examples rehearsed, with whether every one passed (M12.3.4).
+    REHEARSED = "rehearsed"
 
 
 class CredentialChange(enum.StrEnum):

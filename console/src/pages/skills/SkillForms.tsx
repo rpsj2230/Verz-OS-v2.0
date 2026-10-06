@@ -39,6 +39,13 @@ import {
   assignConsequence,
   assignedSentence,
   assignPath,
+  readRehearsal,
+  REHEARSAL_FAILED,
+  REHEARSAL_PASSED,
+  rehearsalsPath,
+  REHEARSE,
+  REHEARSE_THROUGH,
+  REHEARSING,
   assignQuestion,
   categoriesPath,
   categoriesTyped,
@@ -595,5 +602,85 @@ export function AssignForm({
         }}
       />
     </>
+  );
+}
+
+/** What a rehearse form says when no agent is chosen. */
+export const CHOOSE_AN_AGENT = "Choose an agent to rehearse this version through.";
+
+/**
+ * Rehearse one waiting version's examples through one agent, as yourself (M12.3.4). Not confirmed:
+ * it changes nothing anybody runs, and the rehearsal is recorded as it is made. The answer says
+ * whether every example passed, and the page then shows each outcome with what it could not judge.
+ */
+export function RehearseForm({
+  one,
+  agents,
+  onTold,
+}: {
+  readonly one: LibrarySkill;
+  readonly agents: readonly AgentChoice[];
+  readonly onTold: Tell;
+}) {
+  const [agentId, setAgentId] = useState(agents[0]?.agent_id ?? "");
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const fieldId = `rehearse-${one.digest}`;
+
+  async function rehearse(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const agent = agents.find((candidate) => candidate.agent_id === agentId);
+    if (agent === undefined) {
+      setProblem(CHOOSE_AN_AGENT);
+      return;
+    }
+    setProblem(null);
+    setBusy(true);
+    setFailure(null);
+    const result = await request<unknown>(rehearsalsPath(one.digest), { method: "POST", body: { agent_id: agent.agent_id } });
+    setBusy(false);
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
+    }
+    const rehearsed = readRehearsal(result.data);
+    const word = rehearsed?.passed === true ? REHEARSAL_PASSED : REHEARSAL_FAILED;
+    onTold({ ok: rehearsed?.passed === true, sentence: `${word}, rehearsing ${one.name} ${one.version} through ${agent.display_name}.` });
+  }
+
+  return (
+    <form className="flex min-w-0 flex-col gap-2" aria-label={`${REHEARSE}: ${one.name} ${one.version}`} onSubmit={(event) => void rehearse(event)} noValidate>
+      {failure === null ? null : <FailureNotice failure={failure} fields={["agent_id"]} />}
+      <div className="flex flex-wrap items-end gap-2">
+        <Field id={fieldId} label={REHEARSE_THROUGH} hint="Any agent you can see, as if it held this version, at your own reach.">
+          <select
+            id={fieldId}
+            name="agent_id"
+            className="h-11 min-w-0 rounded-md border border-input bg-panel px-2.5 text-sm text-ink shadow-xs outline-hidden focus-visible:ring-2 focus-visible:ring-ring sm:h-8"
+            value={agentId}
+            onChange={(event) => {
+              setAgentId(event.target.value);
+              setProblem(null);
+            }}
+          >
+            {agents.map((candidate) => (
+              <option key={candidate.agent_id} value={candidate.agent_id}>
+                {candidate.display_name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Button type="submit" size="sm" variant="outline" className="min-h-11 sm:min-h-8" disabled={busy}>
+          {REHEARSE}
+        </Button>
+      </div>
+      <Problem text={problem} />
+      {busy ? (
+        <p role="status" className="m-0 text-[12.5px] text-dim">
+          {REHEARSING}
+        </p>
+      ) : null}
+    </form>
   );
 }

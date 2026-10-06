@@ -362,6 +362,12 @@ class Library:
     async def export(self, *args: Any, **kwargs: Any) -> None:
         raise AssertionError("a stats read wrote")
 
+    async def rehearse(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("a stats read wrote")
+
+    async def rehearsals(self, digests: Sequence[str]) -> Mapping[str, tuple[Any, ...]]:
+        return {}
+
 
 @pytest.fixture
 def held() -> Held:

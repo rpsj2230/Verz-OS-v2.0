@@ -141,6 +141,7 @@ from brain.tables.skill import (
     SkillAssignmentRow,
     SkillDetachmentRow,
     SkillExportRow,
+    SkillRehearsalRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
@@ -452,6 +453,7 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.agent_run",
     # 0191_skill_export_and_rehearsal. An export points at the version it carried.
     "agent.skill_export",
+    "agent.skill_rehearsal",
 )
 
 __all__ = [
@@ -566,6 +568,7 @@ __all__ = [
     "SkillDetachmentRow",
     "SkillExportRow",
     "SkillInvocationRow",
+    "SkillRehearsalRow",
     "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",

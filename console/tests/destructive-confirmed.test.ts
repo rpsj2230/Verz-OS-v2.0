@@ -39,6 +39,8 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/skills/SkillForms.tsx rehearsalsPath(one.digest)":
+    "Rehearsing a waiting version's examples records a rehearsal and changes nothing any agent runs; nothing ends, changes or is removed.",
   "src/pages/skills/SkillProfile.tsx exportPath(one.digest)":
     "Exporting an approved skill version hands its package to the person as a file and records that it was taken; nothing on this install ends, changes or is removed.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
