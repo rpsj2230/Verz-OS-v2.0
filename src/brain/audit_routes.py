@@ -404,9 +404,31 @@ def ledger_of(request: Request) -> LedgerWindows:
 # ---------------------------------------------------------------- the reading
 
 
+class PagedView(Protocol):
+    """What `read_page` asks of a view: `AuditView.page`'s signature and nothing else.
+
+    A protocol rather than `AuditView` itself so a narrowing of the view's page, which
+    `brain.console.global_surfaces.company_activity` is, can be read in chunks by the same loop
+    rather than by a second copy of it. Anything satisfying this is asked the view's own
+    question, so a narrowing can only ever return fewer of the view's rows.
+    """
+
+    def page(
+        self,
+        criteria: AuditFilter | None = None,
+        *,
+        limit: int = DEFAULT_PAGE_SIZE,
+        cursor: str | None = None,
+        newest_first: bool = False,
+        shows: Callable[[AuditRow], bool] | None = None,
+    ) -> AuditPage:
+        """One page of what the view's reader may see."""
+        ...
+
+
 async def read_page(
     ledger: LedgerWindows,
-    view_of: Callable[[Sequence[AuditEntry]], AuditView],
+    view_of: Callable[[Sequence[AuditEntry]], PagedView],
     criteria: AuditFilter,
     *,
     limit: int,

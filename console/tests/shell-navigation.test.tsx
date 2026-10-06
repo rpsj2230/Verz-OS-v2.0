@@ -127,7 +127,8 @@ describe("the navigation", () => {
       const list = holder.querySelector(`ul[aria-labelledby="${title?.id ?? "missing"}"]`);
       return [...(list?.querySelectorAll("a") ?? [])].map((link) => link.textContent ?? "");
     };
-    expect(under("Home")).toEqual(["Dashboard"]);
+    // The Super Admin's view across the install sits beside the Dashboard (M33.1.1.1 to M33.1.1.3).
+    expect(under("Home")).toEqual(["Dashboard", "Whole company"]);
     expect(under("Knowledge and data")).toContain("Connectors");
     expect(under("People and access")).toContain("Roles and permissions");
     expect(under("People and access")).not.toContain("Capabilities");
