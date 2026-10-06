@@ -130,6 +130,30 @@ export function correctionPath(threadId: string): string {
   return `${threadPath(threadId)}/corrections`;
 }
 
+/** The address one of the person's threads is exported from as a file (M33.3.1.3). */
+export function exportPath(threadId: string): string {
+  return `${threadPath(threadId)}/export`;
+}
+
+/** `brain.thread_routes.ConversationTakenView`: the file once, its name, and what to say. */
+export type ConversationTaken = components["schemas"]["ConversationTakenView"];
+
+/**
+ * The export just taken, or null when the body is not one. The document stays the string the API
+ * sent, because its digest is what the export's record holds: parsed and written again, the saved
+ * file would be one the record does not describe.
+ */
+export function readConversationTaken(payload: unknown): ConversationTaken | null {
+  const body = payload as Record<string, unknown> | null;
+  const filename = text(body?.["filename"]);
+  const document = text(body?.["document"]);
+  const told = text(body?.["told"]);
+  if (filename === null || document === null || told === null) {
+    return null;
+  }
+  return { filename, document, told };
+}
+
 /** `brain.chat.turns.CorrectionKind`, as the API's schema names it. */
 export type CorrectionKind = components["schemas"]["CorrectionKind"];
 

@@ -29,15 +29,27 @@ upload at their own level makes, and keeps it on their thread as a reference
 A document the caller cannot read is one 404, the same as one that does not exist.
 `chat.read_attachment` is how an agent reads it: see `brain.chat.attachments`.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6
+**A person exports their own conversation, as they are shown it now, and the export is recorded
+(M33.3.1.3).** `POST /threads/{id}/export` reopens the thread exactly as `GET /threads/{id}` does,
+at the reach held now, and hands what it shows to `brain.member_activity.export_my_history`, which
+builds the export from the person's own turns and the `ExportAudit` row filing it as a subject
+access request in their own name. The row lands in `ops.data_export` (`0207`) before the document
+is handed back, so there is no export without its record, and the ledger's `publish` entry follows
+from `0053`'s trigger. What is exported is never more than the page shows: a reference the person
+can no longer read is not re-read for the file. See `AN_EXPORT_IS_THE_THREAD_AS_IT_IS_SHOWN_NOW`.
+
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6, M33.3.1.3
 """
 
 from __future__ import annotations
 
+import hashlib
+import uuid
 from datetime import datetime
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Path, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
@@ -46,14 +58,23 @@ from brain.attribution import trace_of_request
 from brain.chat.remember import threads_of
 from brain.chat.thread_store import CONSOLE_SURFACE, StoredThreads, surfaces
 from brain.chat.threads import Thread
-from brain.chat.turns import CorrectionKind
+from brain.chat.turns import CorrectionKind, Turn, TurnKind
 from brain.core.errors import Absent, Failed
 from brain.knowledge.candidate_store import propose
 from brain.knowledge.candidates import WORDS_CHARS
 from brain.knowledge.document_tools import DocumentRead, reader
 from brain.knowledge.item import ITEM_ID_PATTERN
 from brain.knowledge.row_store import SessionRowSource
-from brain.member_activity import continue_thread, recent_threads
+from brain.member_activity import (
+    ContinuedThread,
+    continue_thread,
+    export_my_history,
+    recent_threads,
+)
+from brain.ops.data_export_store import StoredExports
+from brain.routing_routes import sessions_of
+from brain.tables.chat import MessageRole
+from brain.tables.data_export import ExportDataSet
 
 #: Why no route here takes a person.
 A_HISTORY_IS_ONLY_EVER_THE_CALLERS: Final = (
@@ -63,10 +84,28 @@ A_HISTORY_IS_ONLY_EVER_THE_CALLERS: Final = (
     "somebody else's history has no address."
 )
 
+#: Why a person's export is the thread as the page shows it now, and never a wider read.
+AN_EXPORT_IS_THE_THREAD_AS_IT_IS_SHOWN_NOW: Final = (
+    "A person's export is built from the same reopening the thread page uses, at the reach they "
+    "hold now, so it carries exactly the words the page would show and never a reference they "
+    "can no longer read. Its record is written before the file is handed over, filed as a "
+    "subject access request in their own name, so a copy of a conversation never leaves "
+    "without the row saying who took it."
+)
+
 THREADS_PATH: Final = "/threads"
 THREAD_SEARCH_PATH: Final = "/threads/search"
 THREAD_PATH: Final = "/threads/{thread_id}"
 CORRECTIONS_PATH: Final = "/threads/{thread_id}/corrections"
+EXPORT_PATH: Final = "/threads/{thread_id}/export"
+
+#: The file a person's export downloads as, named by the thread.
+EXPORT_NAME: Final = "conversation-{}.json"
+
+#: What the person is told when their export is handed over.
+EXPORT_TAKEN: Final = (
+    "Your conversation is saved as a file. A record that you exported it is kept in your name."
+)
 ATTACHMENTS_PATH: Final = "/threads/attachments"
 
 #: The longest search a person may type, which is a few words and not a paragraph.
@@ -207,13 +246,8 @@ async def search_my_threads(
     return _listed(threads, asked)
 
 
-@router.get(THREAD_PATH, response_model=ThreadView, responses=COMMON_RESPONSES)
-async def my_thread(
-    request: Request,
-    asked: Asked,
-    thread_id: Annotated[str, Path(pattern=THREAD_ID_PATTERN)],
-) -> ThreadView:
-    """One of the caller's threads, reopened at the reach held now, or one 404 for any other."""
+async def _reopened(request: Request, asked: Asked, thread_id: str) -> ContinuedThread:
+    """One of the caller's threads, reopened at the reach held now, or the one 404."""
     principal_id = asked.caller.principal.id
     found = await _store(request).thread(principal_id, thread_id)
     continued = continue_thread(
@@ -228,6 +262,17 @@ async def my_thread(
     )
     if continued is None:
         raise Absent(f"thread {thread_id!r} is not answerable for this caller")
+    return continued
+
+
+@router.get(THREAD_PATH, response_model=ThreadView, responses=COMMON_RESPONSES)
+async def my_thread(
+    request: Request,
+    asked: Asked,
+    thread_id: Annotated[str, Path(pattern=THREAD_ID_PATTERN)],
+) -> ThreadView:
+    """One of the caller's threads, reopened at the reach held now, or one 404 for any other."""
+    continued = await _reopened(request, asked, thread_id)
     return ThreadView(
         thread_id=continued.thread_id,
         title=continued.title,
@@ -308,3 +353,106 @@ async def attach_to_my_thread(
         now=asked.now,
     )
     return AttachedView(thread_id=thread_id, attachment_id=attaching.attachment_id)
+
+
+class ExportedTurnView(BaseModel):
+    """One turn as it leaves: what kind, when, and the words the page showed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: str
+    at: datetime
+    text: str
+
+
+class ConversationExportView(BaseModel):
+    """A person's own conversation as the file holds it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    export_id: str
+    conversation_id: str
+    exported_at: datetime
+    turns: list[ExportedTurnView]
+
+
+class ConversationTakenView(BaseModel):
+    """The file once, its name, and what the person is told: `data_transfer_routes`' shape.
+
+    The document is a string rather than the object so that the bytes the browser saves are the
+    bytes whose digest the record holds; a console that parsed and re-serialised it would save a
+    file the record does not describe.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    filename: str
+    document: str
+    told: str
+
+
+#: Which turn each shown message is. A system note is nobody's turn and is not exported.
+TURN_OF_ROLE: Final = {MessageRole.USER: TurnKind.QUESTION, MessageRole.ASSISTANT: TurnKind.ANSWER}
+
+
+def turns_shown(continued: ContinuedThread, principal_id: str) -> tuple[Turn, ...]:
+    """The reopened thread's messages as turns, in order, with the words the page shows."""
+    return tuple(
+        Turn(kind=kind, at=one.at, principal_id=principal_id, text=one.body)
+        for one in continued.shown
+        if (kind := TURN_OF_ROLE.get(one.role)) is not None
+    )
+
+
+@router.post(EXPORT_PATH, response_model=ConversationTakenView, responses=COMMON_RESPONSES)
+async def export_my_thread(
+    request: Request,
+    asked: Asked,
+    thread_id: Annotated[str, Path(pattern=THREAD_ID_PATTERN)],
+) -> JSONResponse:
+    """The caller's own conversation as a file, recorded before it is handed over (M33.3.1.3).
+
+    See `AN_EXPORT_IS_THE_THREAD_AS_IT_IS_SHOWN_NOW`.
+    """
+    principal_id = asked.caller.principal.id
+    continued = await _reopened(request, asked, thread_id)
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    export_id = uuid.uuid4().hex
+    taken, audit = export_my_history(
+        turns_shown(continued, principal_id),
+        principal_id=principal_id,
+        conversation_id=continued.thread_id,
+        at=asked.now,
+        export_id=export_id,
+        reason_reference=f"thread/{continued.thread_id}",
+    )
+    body = ConversationExportView(
+        export_id=export_id,
+        conversation_id=taken.conversation_id,
+        exported_at=taken.at,
+        turns=[
+            ExportedTurnView(kind=one.kind.value, at=one.at, text=one.text) for one in taken.turns
+        ],
+    )
+    document = body.model_dump_json()
+    await StoredExports(sessions).record_report(
+        data_set=ExportDataSet.CONVERSATION,
+        actor=audit.requested_by,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=trace_of_request(),
+        reason=audit.reason,
+        reason_reference=audit.reason_reference,
+        at=audit.at,
+        entries=audit.items,
+        document_digest=hashlib.sha256(document.encode("utf-8")).hexdigest(),
+    )
+    taken_view = ConversationTakenView(
+        filename=EXPORT_NAME.format(continued.thread_id), document=document, told=EXPORT_TAKEN
+    )
+    return JSONResponse(
+        status_code=200,
+        content=taken_view.model_dump(mode="json"),
+        headers={"Cache-Control": "no-store"},
+    )

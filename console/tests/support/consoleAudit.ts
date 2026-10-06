@@ -892,6 +892,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "The place of a passage a person followed from an answer, sent by the cited document page for the learning signal; a person's own act, not something an administrator manages.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
+  "POST /api/v1/threads/{thread_id}/export":
+    "A person exporting their own conversation from Ask, as the page shows it to them; the export is recorded in their own name and nothing in it is for an administrator to manage.",
   "gate.channel_event":
     "The dedupe key of each inbound channel message, claimed once by brain.gate.event_store.first_delivery and read by nothing else; there is nothing in it for anybody to manage.",
   "/ask/documents/:documentId":

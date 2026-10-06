@@ -30,7 +30,7 @@ The downgrade drops the function, after which a person's History shows role gran
 Task ids: M33.4.1.2
 
 Revision ID: 0200
-Revises: 0187
+Revises: 0206
 """
 
 from __future__ import annotations
