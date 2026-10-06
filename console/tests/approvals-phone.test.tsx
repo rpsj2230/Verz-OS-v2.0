@@ -145,7 +145,7 @@ async function consoleAt(
 function wireCard(id: string, artefact = "ticket.update_status on ticket"): Record<string, unknown> {
   return {
     suspension_id: id,
-    artefact,
+    request: artefact,
     runs_as: "u_asker",
     raised_at: "2019-03-04T09:00:00Z",
     expires_at: "2019-03-04T13:00:00Z",

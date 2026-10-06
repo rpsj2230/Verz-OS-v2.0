@@ -201,7 +201,7 @@ def test_the_accountant_may_read_the_ledger_and_may_not_move_anything() -> None:
     manifest = accountant_agent()
     held = {c.value for c in manifest.authority.capabilities}
 
-    assert "read:invoice.amount" in held
+    assert "read:xero_invoice.amount_due" in held
     assert manifest.guardrails.max_side_effect is SideEffect.NONE
     assert all(value.startswith("read:") for value in held), (
         "the accountant holds a capability that is not a read"
@@ -548,7 +548,7 @@ def test_the_chaser_reads_what_is_late_and_never_what_it_is_worth() -> None:
     """A reminder needs the invoice, its status and its due date. The amount is the field
     that would make the chaser a second accountant and put a figure owed into a draft
     somebody might forward, so it is asserted by prefix rather than by name: holding
-    `read:invoice.amount_due` fails as surely as `read:invoice.amount`.
+    `read:xero_invoice.amount_due` fails as surely as any other amount would.
 
     Delete this and the chaser's ceiling can grow to the ledger's without another test here
     noticing, because it would still differ from the accountant by its due date."""
@@ -557,9 +557,29 @@ def test_the_chaser_reads_what_is_late_and_never_what_it_is_worth() -> None:
     chaser = catalogue_by_id()["ar_and_renewal_chaser"]
     held = {one.value for one in chaser.authority.capabilities}
 
-    assert "read:invoice.due_date" in held
-    assert not any(value.startswith("read:invoice.amount") for value in held), held
+    assert "read:xero_invoice.due_date" in held
+    assert not any(value.startswith("read:xero_invoice.amount") for value in held), held
     assert chaser.guardrails.max_side_effect.name == "DRAFT"
+
+
+@pytest.mark.parametrize("template_id", ["accountant_agent", "ar_and_renewal_chaser"])
+def test_the_ledger_templates_read_only_fields_xero_maps(template_id: str) -> None:
+    """**Version 1 of both read nothing from the ledger they name.** They held
+    `read:invoice.number`, `read:invoice.amount` and `read:client.name`, and Xero maps
+    `invoice_number` and `amount_due` and calls a client a contact, so every read missed. Held
+    here against Xero's own field rules rather than a list in this file, so a template naming a
+    field the connector does not map fails whichever of the two moves.
+
+    Delete this and a ledger template can again be installed READY and read nothing."""
+    from brain.agents.catalogue import catalogue_by_id
+    from brain.connectors import xero
+
+    manifest = catalogue_by_id()[template_id]
+    mapped = {rule.required_capability.value for rule in xero.XERO_FIELD_RULES}
+
+    assert manifest.connectors == (xero.CONNECTOR_NAME,)
+    assert manifest.identity.version == 2
+    assert {one.value for one in manifest.authority.capabilities} <= mapped
 
 
 def test_the_ux_designer_reads_a_finding_and_never_who_produced_it() -> None:

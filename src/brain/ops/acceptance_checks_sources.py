@@ -369,12 +369,14 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
     def asking(field_name: str, slot: str) -> str:
         return QUESTION_SHAPES[0].format(label=label_of(field_name), slot=slot)
 
-    reads = ("read:invoice", "read:invoice.invoice_number", "read:invoice.status")
+    reads = ("read:xero_invoice", "read:xero_invoice.invoice_number", "read:xero_invoice.status")
     finance, sales = h.principal(A, "finance"), h.principal(A, "sales")
     await h.person(
         finance,
         department=A,
-        grants=tuple((one, Scope.unrestricted()) for one in (*reads, "read:invoice.amount_due")),
+        grants=tuple(
+            (one, Scope.unrestricted()) for one in (*reads, "read:xero_invoice.amount_due")
+        ),
     )
     await h.person(sales, department=A, grants=tuple((one, Scope.unrestricted()) for one in reads))
 
