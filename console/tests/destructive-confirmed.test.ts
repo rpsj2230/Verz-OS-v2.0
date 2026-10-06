@@ -39,6 +39,23 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/rules/RulesPage.tsx TRY_API_PATH":
+    "Trying a quick answer writes nothing: brain.rule_routes.tried matches one question against the " +
+    "candidate at the tester's own reach and keeps no row, which tests/unit/test_rule_routes.py holds.",
+  "src/pages/rules/RulesPage.tsx RULES_API_PATH":
+    "Adding a quick answer ends and replaces nothing: a rule whose words are already live where it " +
+    "would answer is refused rather than replaced, because StoredRules.add writes nothing on a " +
+    "conflict, which tests/unit/test_rule_routes.py holds. A rule is taken out only by Retire, which " +
+    "is confirmed.",
+  "src/pages/connectors/CustomConnectorsPage.tsx DEFINITIONS_API_PATH":
+    "Submitting an API's definition keeps a new one waiting for a second person's review; nothing is " +
+    "read through it until it is approved, and it replaces no definition, which is the change route's, " +
+    "and that one is not sent from this page. tests/unit/test_custom_connector_store.py holds the " +
+    "definition waiting and tests/custom-connectors-page.test.tsx the form.",
+  "src/pages/skills/SkillForms.tsx rehearsalsPath(one.digest)":
+    "Rehearsing a waiting version's examples records a rehearsal and changes nothing any agent runs; nothing ends, changes or is removed.",
+  "src/pages/skills/SkillProfile.tsx exportPath(one.digest)":
+    "Exporting an approved skill version hands its package to the person as a file and records that it was taken; nothing on this install ends, changes or is removed.",
   "src/pages/people/WorkEmail.tsx workEmailApiPath(principalId)":
     "Adding a work email binds an address to a person who has none. It retires the staff list's " +
     "person for that address only when they have never signed in and hold nothing but what the sync " +
@@ -92,6 +109,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Deciding a solution is the answer to the question its card asks, as deciding an approval is: the " +
     "problem and the solution are drawn above the two buttons, approving adds a document and refusing " +
     "adds nothing, and both are recorded in the ledger.",
+  "src/pages/knowledge/CorrectionsPage.tsx correctionDecisionPath(review.candidateId)":
+    "Approving a correction adds a new version of its document and keeps the old one in its history; " +
+    "the dialog says so and shows who will read the words before anything is sent. Rejecting adds " +
+    "nothing to the document and keeps the reason. Both are recorded in the ledger under the reviewer, " +
+    "which tests/unit/test_acceptance_corrections.py holds.",
   "src/pages/knowledge/addForms.tsx LINKS_API_PATH":
     "Adding a page by its link writes a new item, and the same page added again to the same place is " +
     "the same item, because its reference is a digest of the bytes, the owner and the place, which " +
@@ -103,6 +125,12 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
+  "src/pages/CitedDocument.tsx retrievalUsesPath(followed.retrievalId)":
+    "Opening a cited document sends the place of the passage followed for the learning signal; it " +
+    "adds one position to a retrieval that names no document or person, so nothing is ended.",
+  "src/pages/Ask.tsx exportPath(thread)":
+    "Exporting a conversation hands the person their own thread as a file and records that it was " +
+    "taken; the thread and everything in it stay as they were, so nothing is ended.",
   "src/pages/Ask.tsx correctionPath(thread)":
     "Marking an answer wrong adds a note to the person's own conversation naming the kind; the " +
     "answer, its records and everything else in the thread stay as they were, so nothing is ended.",
@@ -205,6 +233,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
+  "src/components/MyAccounts.tsx myConsentPath(row.connector)":
+    "Connecting your own account ends and replaces nothing: it holds one consent for the person who " +
+    "pressed and sends them to the vendor's own page, where they agree or decline. Nothing is kept " +
+    "until the vendor answers, which tests/unit/test_connector_consent_routes.py holds.",
+  "src/components/ConnectSource.tsx consentPath(source.name)":
+    "Connecting with the vendor ends and replaces nothing: it holds one consent for the person who " +
+    "pressed and sends them to the vendor's own page, where they agree or decline. Nothing is kept " +
+    "until the vendor answers, which tests/unit/test_connector_consent_routes.py holds.",
   "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing in Lark and keeps nothing it read, which tests/unit/test_lark_connect.py " +

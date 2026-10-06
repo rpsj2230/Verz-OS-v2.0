@@ -288,8 +288,8 @@ class LegalHoldChange(enum.StrEnum):
 
 
 class SkillChange(enum.StrEnum):
-    """What happened to a skill in the library. The values `0056`'s, `0121`'s and `0139`'s
-    triggers write.
+    """What happened to a skill in the library. The values `0056`'s, `0121`'s, `0139`'s and
+    `0191`'s triggers write.
 
     `0121` adds an edit, a decision by the person who added the skill, and a change of categories.
     A self-decision is its own word rather than a flag beside `approved`, because the audit screen
@@ -306,6 +306,10 @@ class SkillChange(enum.StrEnum):
     #: `0139`: a version retired, so no agent may newly be assigned it, or reinstated.
     RETIRED = "retired"
     REINSTATED = "reinstated"
+    #: `0191`: an approved version taken off the install as a package (M12.3.1).
+    EXPORTED = "exported"
+    #: `0191`: a version's examples rehearsed, with whether every one passed (M12.3.4).
+    REHEARSED = "rehearsed"
 
 
 class CredentialChange(enum.StrEnum):
@@ -521,7 +525,8 @@ class ElevationChange(enum.StrEnum):
 
 
 class AgentChange(enum.StrEnum):
-    """What happened to an agent. The seven words `0137`'s trigger writes, in the order it checks.
+    """What happened to an agent. The words `0137`'s trigger writes, in the order it checks, and the
+    one `0190` adds after them.
 
     No `transferred`: a hand-over is `agent_owner`, which `0105`'s trigger writes with both
     owners, so the same change is not recorded twice.
@@ -538,6 +543,8 @@ class AgentChange(enum.StrEnum):
     UNARCHIVED = "unarchived"
     PUBLISHED = "published"
     AUDIENCE_CHANGED = "audience_changed"
+    #: The channels it answers on were switched (M13.7.4), by `0190`'s branch of the same trigger.
+    CHANNELS_CHANGED = "channels_changed"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:

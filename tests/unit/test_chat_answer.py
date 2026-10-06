@@ -615,3 +615,68 @@ def test_an_answer_above_the_chats_ceiling_is_replaced_by_the_link(
     ((kind, where, text),) = world.lark.messages()
     assert (kind, where) == ("chat_id", DM)
     assert text == f"{chat_answer.CEILING_TOLD}{ORIGIN}/ask"
+
+
+def test_a_chat_run_that_fails_is_kept_in_the_askers_chat_thread_as_failed(
+    client: TestClient, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**M39.8.9 in a chat.** A direct message whose run fails is handed to the thread keeper
+    once, as the asker's question in the thread named for this chat, marked failed by
+    `remember_failure`; the web's keeper is not the one called. Delete this and a chat's failed run
+    leaves no trace in the asker's thread, which the agent page would then never show."""
+    from brain.chat import remember as remember_module
+    from brain.chat.thread_store import chat_thread_id
+
+    kept: list[dict[str, Any]] = []
+
+    async def failure_kept(threads: Any, **fields: Any) -> str:
+        kept.append(fields)
+        return "kept"
+
+    def lane_fails(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("the model step failed")
+
+    monkeypatch.setattr(remember_module, "remember_failure", failure_kept)
+    monkeypatch.setattr("brain.api_routes.answer_lane", lane_fails)
+
+    post(client, dm(WIDE, "what is the price of WEB-1001", "om_dm_failed"))
+
+    assert [
+        (one["principal_id"], one["channel"], one["question"], one["agent_id"]) for one in kept
+    ] == [("u_wide", Channel.LARK, "what is the price of WEB-1001", "")]
+    assert kept[0]["thread_id"] == chat_thread_id(Channel.LARK, "u_wide", DM)
+
+
+def test_a_room_s_floor_run_that_fails_is_not_kept_in_the_askers_thread(
+    client: TestClient, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Only the asker's own run is theirs to keep.** In a group the asker's question is answered
+    twice: once at their own reach, which is kept, and once at the room's floor, which is a reach
+    that is not theirs and never written to their thread. When the second run fails, nothing is
+    kept as failed. The direct-message test above is the sibling whose failure is kept. Delete this
+    and a run computed at a room's floor lands in one member's thread as their failed turn."""
+    from brain.chat import remember as remember_module
+    from brain.gate.answer import answer_lane
+
+    kept: list[dict[str, Any]] = []
+
+    async def failure_kept(threads: Any, **fields: Any) -> str:
+        kept.append(fields)
+        return "kept"
+
+    calls: list[int] = []
+
+    def second_fails(*args: Any, **kwargs: Any) -> Any:
+        calls.append(1)
+        if len(calls) > 1:
+            raise RuntimeError("the model step failed")
+        return answer_lane(*args, **kwargs)
+
+    monkeypatch.setattr(remember_module, "remember_failure", failure_kept)
+    monkeypatch.setattr("brain.api_routes.answer_lane", second_fails)
+    rooms(world, [WIDE, OPEN_IDS["u_prefix"]])
+
+    post(client, in_group(WIDE, "what is the price of WEB-1001", "om_g_floor_fails"))
+
+    assert len(calls) == 2
+    assert kept == []

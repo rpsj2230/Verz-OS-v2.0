@@ -736,7 +736,10 @@ Part 4.3.
 - **Belongs:** what each field requires to be read, fast-lane rules, entity merges.
   **Separate:** reading records (Use: Records).
 - **Actions:** review a proposed classification (exists, dry run); apply a classification (to
-  build, gated by a second person); list fast-path rules (to build, read); review merges (to build).
+  build, gated by a second person); list, try, add and retire fast-lane rules on Quick answers
+  (`/rules`, built: a department's administrator for their own department under the
+  classification grants, the install's for the whole company; read by the answer route on every
+  question, so a change answers from the next one); review merges (to build).
 
 #### D5 Artifacts
 

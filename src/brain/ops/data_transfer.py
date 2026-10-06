@@ -194,8 +194,17 @@ A_CERTIFICATION_REPORT_IS_TAKEN_FROM_THE_REVIEW: Final = (
     "the reviewer was deciding from. It is recorded here with the other exports."
 )
 
+#: Where a person's conversation is taken, and why never from an administrator's form.
+A_CONVERSATION_IS_EXPORTED_BY_THE_PERSON_WHO_HAD_IT: Final = (
+    "Taken by the person from their own conversation on Ask, as it is shown to them now, and "
+    "never by an administrator in bulk. It is recorded here with the other exports, in the "
+    "name of the person who took it."
+)
+
 #: Data sets that run, and are taken from their own screen rather than this screen's form.
-TAKEN_ELSEWHERE: Final = frozenset({ExportDataSet.ACCESS_CERTIFICATION.value})
+TAKEN_ELSEWHERE: Final = frozenset(
+    {ExportDataSet.ACCESS_CERTIFICATION.value, ExportDataSet.CONVERSATION.value}
+)
 
 #: Everything the code knows how to bring in or take out, in the order the screen lists them.
 CATALOGUE: Final[tuple[DataSet, ...]] = (
@@ -257,16 +266,12 @@ CATALOGUE: Final[tuple[DataSet, ...]] = (
         ),
     ),
     DataSet(
-        key="conversation_history",
+        key=ExportDataSet.CONVERSATION.value,
         label="A person's own conversations",
         direction=Direction.EXPORT,
-        carries="One person's conversations, as they were shown to them.",
-        runs=False,
-        told=(
-            "Not taken from here. A person's conversation history is theirs to export from their "
-            "own workspace rather than an administrator's to take in bulk, and that export is not "
-            "served yet."
-        ),
+        carries="One person's conversation, as it is shown to them.",
+        runs=True,
+        told=A_CONVERSATION_IS_EXPORTED_BY_THE_PERSON_WHO_HAD_IT,
     ),
     DataSet(
         key="documents",

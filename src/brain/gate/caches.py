@@ -153,6 +153,7 @@ from brain.gate.cache_key import DEFAULT_MAX_AGE, NotCacheableError, key_for, no
 from brain.gate.catalogue import ProjectedCatalogue
 from brain.gate.resolve import CACHE_TTL_SECONDS, Resolved
 from brain.knowledge.item import ITEM_ID_PATTERN
+from brain.knowledge.quality import RETRIEVER_RE
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -614,10 +615,20 @@ class CachedRetrieval:
     policy in `0009` protects `know.chunk`, and nothing protects a Valkey value. Ids are
     re-read through the query that carries `reach_predicate`, so the second wall still stands
     behind every reuse of this.
+
+    `retrievers` and `corroborated_at` are what the ranking knew for the learning signal
+    (M15.3.4): the names of the retrievers that ran, and the zero-based places in `chunk_ids` of
+    the references two of them agreed on, so a hit is noted as the ranking it serves again.
+    Places rather than the references again, because a place cannot name a reference the entry
+    does not hold and costs a few bytes where a reference costs fifty. Neither is a passage and
+    neither is about the caller. Both are empty on an entry kept before they were, which notes
+    nothing.
     """
 
     key: str
     chunk_ids: tuple[str, ...]
+    retrievers: tuple[str, ...] = ()
+    corroborated_at: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.key:
@@ -636,6 +647,24 @@ class CachedRetrieval:
             if not _ITEM_ID_RE.match(chunk_id):
                 msg = "a cached retrieval names something that is not a reference"
                 raise CacheLayerError(msg)
+        if list(self.retrievers) != sorted(set(self.retrievers)) or not all(
+            RETRIEVER_RE.match(name) for name in self.retrievers
+        ):
+            msg = "a cached retrieval's retrievers are a sorted set of retriever names"
+            raise CacheLayerError(msg)
+        if list(self.corroborated_at) != sorted(set(self.corroborated_at)) or not all(
+            0 <= place < len(self.chunk_ids) for place in self.corroborated_at
+        ):
+            msg = (
+                "a cached retrieval's corroborated places are a sorted set inside its own list; "
+                "one past it is a record of something this caller was not shown"
+            )
+            raise CacheLayerError(msg)
+
+    @property
+    def corroborated(self) -> frozenset[str]:
+        """The references two retrievers agreed on, read back from their places."""
+        return frozenset(self.chunk_ids[place] for place in self.corroborated_at)
 
 
 def retrieval_key(

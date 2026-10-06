@@ -17,18 +17,26 @@
  * `citedDocumentQuery.A_PASSAGE_IS_NAMED_IN_THE_FRAGMENT`. A passage that is not among those shown
  * is said in one sentence rather than left for the reader to hunt for.
  *
+ * **A followed citation's place is sent back once, and nothing else is.** When the fragment names
+ * the retrieval the answer was drawn from and the passage's place in the reader's list, the page
+ * posts that place for the learning signal (M15.3.4). The chunk stays in the fragment; the request
+ * carries a retrieval that names no document and a number, and its answer is not drawn.
+ *
  * **No figure anywhere.** The passages are sections, not a numbered list, because a marker is a
  * number and a number here is a count of passages the reader was or was not shown.
  *
- * Task ids: M8.1.2
+ * Task ids: M8.1.2, M15.3.4
  */
 
 import { useEffect, useRef } from "react";
 import { useLocation, useParams } from "react-router-dom";
+import { request } from "../api/client";
 import { useResource } from "../api/useResource";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
   anchorOf,
+  followedOf,
+  retrievalUsesPath,
   CITED_DOCUMENT_LEDE,
   CITED_HERE,
   CITED_PASSAGE_GONE,
@@ -50,6 +58,21 @@ export function CitedDocument() {
   const document = answer.busy || answer.failure ? null : readCitedDocument(answer.data);
   const marked = useRef<HTMLElement | null>(null);
   const found = document !== null && document.passages.some((one) => one.chunkId === cited);
+
+  // Once per address: the place of the passage followed, for the learning signal. What comes back
+  // is not drawn, because a person reading a document has nothing to do with it.
+  const followed = followedOf(hash);
+  const sent = useRef("");
+  useEffect(() => {
+    if (followed === null || sent.current === hash) {
+      return;
+    }
+    sent.current = hash;
+    void request<unknown>(retrievalUsesPath(followed.retrievalId), {
+      method: "POST",
+      body: { position: followed.position },
+    });
+  }, [followed, hash]);
 
   // Once, when the passage the link named is on the screen: scroll to it and put focus on it, so
   // a keyboard or screen reader lands where a sighted reader's eye does.
