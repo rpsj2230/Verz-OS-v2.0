@@ -3,7 +3,7 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 39 routes, 6 called by no screen; 21 write routes, 20 with all three proofs; 4 gaps.
+- **Measured here:** 42 routes, 6 called by no screen; 23 write routes, 22 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -19,6 +19,7 @@
 | `GET /api/v1/agents/{agent_id}/lifecycle` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/memory` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/publications` | **no screen** |
+| `GET /api/v1/agents/{agent_id}/upgrade` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/approvals` | `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |
@@ -43,6 +44,8 @@
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/preview` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/people`, `/people/:personId`, `/people/:personId/:view` |
 | `POST /api/v1/agents/{agent_id}/transfer` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` |
+| `POST /api/v1/agents/{agent_id}/upgrade/accept` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/upgrade/decline` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` |
 | `PUT /api/v1/agents/{agent_id}/budget` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` |
@@ -74,6 +77,8 @@
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_a_colleague_shown_a_memory_they_may_not_change_is_told_who_may` in `tests/unit/test_agent_memory_routes.py` (database, in CI) |
 | `POST /api/v1/agents/{agent_id}/preview` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/people`, `/people/:personId`, `/people/:personId/:view` | Not applicable: A preview writes no row: it asks the gate what one person's run would be handed and keeps nothing. | Not applicable: A preview changes nothing, so there is nothing for the ledger to record. | `test_a_previewer_who_may_not_read_grants_is_answered_as_a_missing_agent` in `tests/unit/test_agent_capability_routes.py` |
 | `POST /api/v1/agents/{agent_id}/transfer` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` | `test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_a_transfer_hands_the_agent_to_somebody_here_and_names_who_handed_it` in `tests/unit/test_agent_lifecycle_routes.py` |
+| `POST /api/v1/agents/{agent_id}/upgrade/accept` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_acceptance_and_a_decline_pressed_reach_their_rows_and_one_ledger_entry_each` in `tests/unit/test_agent_upgrade_store.py` (database, in CI) | `test_an_acceptance_and_a_decline_pressed_reach_their_rows_and_one_ledger_entry_each` in `tests/unit/test_agent_upgrade_store.py` (database, in CI) | `test_accepting_takes_the_versions_value_and_hands_the_store_what_it_must_compare` in `tests/unit/test_agent_upgrade_routes.py` |
+| `POST /api/v1/agents/{agent_id}/upgrade/decline` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_acceptance_and_a_decline_pressed_reach_their_rows_and_one_ledger_entry_each` in `tests/unit/test_agent_upgrade_store.py` (database, in CI) | `test_an_acceptance_and_a_decline_pressed_reach_their_rows_and_one_ledger_entry_each` in `tests/unit/test_agent_upgrade_store.py` (database, in CI) | `test_a_decline_is_recorded_for_the_version_and_a_second_press_is_the_same_answer` in `tests/unit/test_agent_upgrade_routes.py` |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_an_approved_suspension_is_what_resume_reads_and_a_rejected_one_is_not_run` in `tests/unit/test_suspension_store.py` (database, in CI) |
 | `PUT /api/v1/agents/{agent_id}/budget` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_setting_a_budget_twice_writes_two_versions_and_two_ledger_entries` in `tests/unit/test_agent_workspace_routes.py` (database, in CI) | `test_setting_a_budget_twice_writes_two_versions_and_two_ledger_entries` in `tests/unit/test_agent_workspace_routes.py` (database, in CI) | `test_a_caller_without_the_budget_role_over_the_agents_department_is_told_which_role` in `tests/unit/test_agent_workspace_routes.py` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent` in `tests/unit/test_agent_model_routes.py` | **None.** An agent's pin is logged and not written to the audit ledger in this release. Leaf `M5.7.3`. | `test_a_pinned_model_is_tried_first_even_from_another_tier` in `tests/unit/test_model_calls.py` |

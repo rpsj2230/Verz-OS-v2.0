@@ -19,6 +19,7 @@ import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/age
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
+import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
 import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
 
@@ -26,6 +27,13 @@ import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../
 const LIFECYCLE_PRESSED = t(
   "test_agent_lifecycle_store",
   "test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person",
+  true,
+);
+
+/** An acceptance and a decline pressed over HTTP against PostgreSQL: the rows, and the entry naming who. */
+const UPGRADE_PRESSED = t(
+  "test_agent_upgrade_store",
+  "test_an_acceptance_and_a_decline_pressed_reach_their_rows_and_one_ledger_entry_each",
   true,
 );
 
@@ -92,6 +100,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       "automationStopApiPath",
       automationStopApiPath("quote-helper", "auto_one"),
     ),
+  ],
+  "src/pages/agents/AgentUpgrade.tsx agentUpgradeAcceptApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/upgrade/accept", "agentUpgradeAcceptApiPath", agentUpgradeAcceptApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentUpgrade.tsx agentUpgradeDeclineApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/upgrade/decline", "agentUpgradeDeclineApiPath", agentUpgradeDeclineApiPath("quote-helper")),
   ],
   "src/pages/agents/DraftStart.tsx DRAFTS_API_PATH": [at("POST /api/v1/agent-drafts", "DRAFTS_API_PATH", DRAFTS_API_PATH)],
   "src/pages/agents/DraftStart.tsx editAsDraftApiPath(from.agentId)": [
@@ -222,6 +236,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PRESSED,
     audit: LIFECYCLE_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_a_transfer_hands_the_agent_to_somebody_here_and_names_who_handed_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/upgrade/accept": {
+    row: UPGRADE_PRESSED,
+    audit: UPGRADE_PRESSED,
+    behaviour: t("test_agent_upgrade_routes", "test_accepting_takes_the_versions_value_and_hands_the_store_what_it_must_compare"),
+  },
+  "POST /api/v1/agents/{agent_id}/upgrade/decline": {
+    row: UPGRADE_PRESSED,
+    audit: UPGRADE_PRESSED,
+    behaviour: t("test_agent_upgrade_routes", "test_a_decline_is_recorded_for_the_version_and_a_second_press_is_the_same_answer"),
   },
   "POST /api/v1/agents/{agent_id}/duplicate": {
     row: LIFECYCLE_PRESSED,

@@ -208,6 +208,28 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         },
       },
       "/api/v1/routing/rungs": MATRIX,
+      // A newer version of the template, with a conflict and the widest values its columns draw
+      // (M13.4.3), so the card is held to a phone.
+      "/api/v1/agents/quote-helper/upgrade": {
+        agent_id: "quote-helper",
+        display_name: UNBROKEN,
+        badge: "available",
+        from_version: 1,
+        to_version: 2,
+        expected_hash: "a".repeat(64),
+        conflicts: [
+          {
+            path: "persona",
+            where: UNBROKEN,
+            was: UNBROKEN,
+            now: UNBROKEN,
+            local: UNBROKEN,
+            owner: { source: "instance", set_by: UNBROKEN, set_at: "2019-03-04T09:00:00Z" },
+          },
+        ],
+        updates: [{ path: "tier", where: UNBROKEN, was: UNBROKEN, now: UNBROKEN, sealed: true }],
+        accept_unavailable: UNBROKEN,
+      },
       // The capability detail, whose widest values are a source, a projected field, a skill and a
       // predicate value, each a token with nowhere to break.
       "/api/v1/agents/quote-helper/capabilities": {
