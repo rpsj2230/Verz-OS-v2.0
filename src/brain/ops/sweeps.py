@@ -40,6 +40,14 @@ TESTS = REPO / "tests"
 #: claim in the repository rather than Python claims being checkable and console claims
 #: resting on somebody's word.
 CONSOLE_TESTS = REPO / "console" / "tests"
+#: The browser harness: what runs the console in a real browser against a fresh install (CI's
+#: "Browser end to end" job). Its specs and the checklist they all run are the proof of the
+#: leaves that are about what a person sees, and they name those leaves on a `Task ids:` line
+#: like every other test, but they sit outside `tests/` and the console's own suite, so a leaf
+#: closed on the strength of them was reported as having no test at all. `pages/` is left
+#: out on purpose: it only says where each module lives and asserts nothing, so it must not be
+#: able to prove a leaf, and `node_modules` is never a test.
+E2E_PROOF_DIRECTORIES: tuple[Path, ...] = (REPO / "e2e" / "specs", REPO / "e2e" / "lib")
 
 
 def _test_sources() -> list[Path]:
@@ -48,6 +56,7 @@ def _test_sources() -> list[Path]:
         *TESTS.rglob("*.py"),
         *CONSOLE_TESTS.rglob("*.ts"),
         *CONSOLE_TESTS.rglob("*.tsx"),
+        *(path for directory in E2E_PROOF_DIRECTORIES for path in directory.rglob("*.ts")),
     ]
 
 

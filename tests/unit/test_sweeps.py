@@ -370,6 +370,33 @@ def test_a_leaf_proved_by_the_consoles_own_suite_counts_as_proved() -> None:
     assert claimed_there, "the console suite names no leaf, so scanning it proves nothing"
 
 
+def test_a_leaf_proved_by_the_browser_harness_counts_as_proved_and_its_page_stubs_do_not() -> None:
+    """The browser harness's specs and checklist are read as proof, and `e2e/pages` is not.
+
+    Four leaves about what a person sees (two tabs refresh, no page leaks an internal name or
+    another host, a drawer works under the style policy) are proved by `e2e/specs` and
+    `e2e/lib/checklist.ts`, which run in CI against a fresh install. They name those leaves on a
+    `Task ids:` line, but the sweep read `tests/` and the console's suite only, so each was
+    reported closed with no test. `e2e/pages` only says where a module lives and asserts nothing,
+    so a leaf it names must stay unproved; `node_modules` is never a test.
+
+    Delete this and either the harness stops counting, which looks like four leaves regressing,
+    or its page stubs start counting, which is a leaf closed by a file that asserts nothing."""
+    sources = sweeps._test_sources()
+    specs = [p for p in sources if sweeps.REPO / "e2e" / "specs" in p.parents]
+    assert specs, "no browser spec is read at all"
+    assert sweeps.REPO / "e2e" / "lib" / "checklist.ts" in sources
+    harness = sweeps.REPO / "e2e"
+    assert not [p for p in sources if harness / "pages" in p.parents], (
+        "page stubs would prove leaves"
+    )
+    assert not [p for p in sources if "node_modules" in p.parts]
+    named: set[str] = set()
+    for path in specs:
+        named.update(sweeps.TASK_ID_RE.findall(path.read_text(encoding="utf-8")))
+    assert named, "the browser specs name no leaf, so scanning them proves nothing"
+
+
 # ------------------------------------------------------------- dispatcher
 def test_main_rejects_an_unknown_sweep() -> None:
     assert sweeps.main(["not_a_sweep"]) == 2

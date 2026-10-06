@@ -232,3 +232,29 @@ def test_every_step_of_the_harness_workflow_either_runs_or_uses_and_never_both()
     for step in steps:
         assert ("run" in step) != ("uses" in step), step
         assert "with" not in step or "uses" in step, step
+
+
+def _operator_settings() -> list[str]:
+    """The names `e2e/lib/checklist.ts` lets a page show, read from its one declaration."""
+    import re
+
+    source = (REPO / "e2e" / "lib" / "checklist.ts").read_text(encoding="utf-8")
+    [declared] = re.findall(
+        r"export const OPERATOR_SETTINGS: readonly string\[\] = \[([^\]]*)\];", source
+    )
+    return re.findall(r'"([^"]+)"', declared)
+
+
+def test_every_setting_a_page_may_name_is_one_the_install_guide_tells_an_operator_to_set() -> None:
+    """The checklist lets a page name a setting only when the install guide's table of values
+    defines it, by its exact name. Delete this and the allowance can grow to cover an internal
+    constant, which every page would then be free to show; the browser half cannot tell the two
+    apart, because the only difference is whether a person is meant to type the name."""
+    from brain.ops.install_docs import VALUES_MARKER
+
+    guide = (REPO / "docs" / "install" / "configuration.md").read_text(encoding="utf-8")
+    table = guide.split(VALUES_MARKER, 1)[1].split("<!--", 1)[0]
+    defined = {line.split("`")[1] for line in table.splitlines() if line.startswith("| `")}
+    allowed = _operator_settings()
+    assert allowed, "the checklist declares no setting a page may name"
+    assert set(allowed) <= defined
