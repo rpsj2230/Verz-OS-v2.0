@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-05T23:30:39.330357+00:00",
-  "commit": "c9bcbdc3",
-  "commit_subject": "A skill keeps every script's bytes inside its approval digest, checked before the sandbox is asked (0178) (#357)",
+  "generated_at": "2026-10-06T00:07:59.595654+00:00",
+  "commit": "8226efdc",
+  "commit_subject": "A fresh install's console tokens carry their audience again: the payload role maps to the client, not to the scope everybody needs (#407)",
   "total": 1592,
   "done": 603,
   "percent": 37.9,
@@ -1307,7 +1307,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 132,
+  "closed_today": 0,
   "next_up": [
     "M1.6.13",
     "M1.6.16",
