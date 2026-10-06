@@ -17,7 +17,7 @@
  * what it names or the first view, a probe for a tab lands where no tab does, a view change asks
  * nothing again, and another agent never inherits the last one's state.
  *
- * Task ids: M39.1.2.1, M39.1.2.4, M39.1.2.5, M39.1.1.5, M27.10.2
+ * Task ids: M39.1.2.1, M39.1.2.4, M39.1.2.5, M39.1.1.5, M27.10.2, M27.15.32
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -29,7 +29,7 @@ import { FIGURES_FAILED } from "../src/components/kit/KpiStrip";
 import { readAgentWorkspace, type AgentWorkspaceAnswer } from "../src/pages/agentQuery";
 import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { leashRowId, readHeaderFacts, readProfile } from "../src/pages/agents/agentDetailQuery";
-import { takenOverWords } from "../src/pages/agents/AgentProfile";
+import { COMPUTER_HEADING, takenOverWords } from "../src/pages/agents/AgentProfile";
 import { ANSWERS_NOWHERE, CHANGE_CHANNELS, CHANNELS_DONE, CHANNELS_QUESTION, SAVE_CHANNELS } from "../src/pages/agents/AgentChannels";
 import { WHERE_IT_ANSWERS } from "../src/pages/agents/ChannelChoices";
 import { rungWords } from "../src/pages/agents/agentActions";
@@ -561,6 +561,22 @@ describe("the Profile", () => {
     const admin = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
     expect(admin.container.textContent).toContain("tickets in the Support department");
     expect(admin.container.querySelector(`#${leashRowId("ticket.draft_reply")}`)?.textContent).toContain("Draft a reply");
+  });
+
+  test("computer use is a sentence saying it is not offered, with no control, to every reader", async () => {
+    // What breaks if this is deleted: M27.15.32. A switch for computer use drawn before any isolated
+    // desktop runner exists, or the card dropped so nobody is told why it is missing. The card is
+    // the same for a reader sent no profile, because it describes the product and not the agent.
+    for (const answer of [body(), without(body(), "profile")]) {
+      const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", answer));
+      const cards = [...mounted.container.querySelectorAll<HTMLElement>('[data-slot="section-card"]')].filter((card) =>
+        [...card.querySelectorAll("h1, h2, h3, h4")].some((heading) => heading.textContent === COMPUTER_HEADING),
+      );
+      expect(cards).toHaveLength(1);
+      const [card] = cards;
+      expect(card?.querySelector('[data-slot="not-offered"]')?.textContent).toMatch(/^Not offered\./);
+      expect(card?.querySelectorAll("button, input, select, a, [role='switch']")).toHaveLength(0);
+    }
   });
 
   test("a profile sent malformed is read as no profile, and a sound one is carried whole", () => {
