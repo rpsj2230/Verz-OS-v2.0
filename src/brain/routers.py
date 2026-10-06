@@ -54,6 +54,9 @@ from brain.agent_capability_routes import router as agent_capability_router
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
+# One agent's Conversations section: the reader's own threads it answered in, with who answered
+# and how each run ended, a failed one included.
+from brain.agent_conversation_routes import router as agent_conversation_router
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 from brain.agent_memory_routes import router as agent_memory_router
 

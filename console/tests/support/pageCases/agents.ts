@@ -188,6 +188,22 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: {
+      // The Conversations section, drawn at this pattern's /conversations address rather than the
+      // profile one mounted here: answered so the audit names the screen that reads it. Its rows
+      // are held by tests/agent-conversations.test.tsx.
+      "/api/v1/agents/quote-helper/conversations": {
+        agent_id: "quote-helper",
+        items: [
+          {
+            thread_id: "t1",
+            title: UNBROKEN,
+            last_at: "2019-03-06T09:00:00Z",
+            last_channel: "console",
+            agents: [{ agent_id: "quote-helper", display_name: UNBROKEN }],
+            state: "failed",
+          },
+        ],
+      },
       "/api/v1/agents/quote-helper/workspace": {
         ...WORKSPACE,
         profile: {

@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol, runtime_checkable
@@ -91,7 +91,7 @@ from brain.core.redaction import ChannelPayload
 from brain.gate.admission import Assurance, admit
 from brain.gate.answer import Answered
 from brain.gate.caches import MAX_QUESTION_CHARS
-from brain.gate.context import Channel, open_trace
+from brain.gate.context import Channel, Recorder, open_trace
 from brain.gate.ingress import Binding, ChannelEvent, Unrecognised, identity_hash
 from brain.gate.model_lane import PASSAGE_POLICY
 from brain.gate.resolve import resolve
@@ -384,11 +384,13 @@ class ChatAnswerer:
         except ValidationError:
             return ChatReply(TOO_LONG_TOLD, ChannelPayload(), Classification.INTERNAL, False)
         trace = trace_of_request() or f"chat-{uuid.uuid4().hex[:16]}"
+        recorder = open_trace(trace, now, channel)
         outcome = await answered_for(
             self._request,
-            open_trace(trace, now, channel),
+            recorder,
             Answering(principal=person, reach=reach, channel=channel, now=now),
             asked,
+            failed=self._failure_kept(person, inbound, asked, recorder, now) if keep else None,
         )
         if isinstance(outcome, StoreVerdict):
             decision = outcome.decision
@@ -407,20 +409,11 @@ class ChatAnswerer:
             **tables.policies,
         }
         if keep:
-            await self._kept(person, inbound, asked, outcome, policies, now)
+            await self._kept(person, inbound, asked, outcome, policies, recorder, now)
         return ChatReply(text, payload, highest_in(payload, policies), outcome.composed is not None)
 
-    async def _kept(
-        self,
-        person: Principal,
-        inbound: Inbound,
-        asked: Question,
-        outcome: Answered,
-        policies: Mapping[str, FieldPolicy],
-        now: datetime,
-    ) -> None:
-        """This exchange, in the person's thread for this chat. See `THIS_CHAT_IS_ONE_THREAD`."""
-        from brain.chat.remember import remember, threads_of
+    def _chat_thread(self, person: Principal, inbound: Inbound) -> str:
+        """The person's thread for this chat. See `THIS_CHAT_IS_ONE_THREAD`."""
         from brain.chat.thread_store import chat_thread_id
 
         channel = inbound.event.channel
@@ -429,20 +422,66 @@ class ChatAnswerer:
             if inbound.conversation is not None
             else identity_hash(channel, inbound.event.channel_identity)
         )
+        return chat_thread_id(channel, person.id, where)
+
+    async def _kept(
+        self,
+        person: Principal,
+        inbound: Inbound,
+        asked: Question,
+        outcome: Answered,
+        policies: Mapping[str, FieldPolicy],
+        recorder: Recorder,
+        now: datetime,
+    ) -> None:
+        """This exchange, in the person's thread for this chat, naming the run behind it."""
+        from brain.chat.remember import remember, threads_of
+
         try:
             await remember(
                 threads_of(self._request.app.state),
                 principal_id=person.id,
-                thread_id=chat_thread_id(channel, person.id, where),
-                channel=channel,
+                thread_id=self._chat_thread(person, inbound),
+                channel=inbound.event.channel,
                 question=asked.question,
                 answered=outcome,
                 policies=policies,
+                agent_id=recorder.agent_id or "",
+                trace_id=recorder.trace_id,
                 now=now,
             )
         except Exception as exc:
             # The reply still goes out: losing its transcript is no reason to withhold it.
             log.warning("thread.not_kept", error=type(exc).__name__)
+
+    def _failure_kept(
+        self,
+        person: Principal,
+        inbound: Inbound,
+        asked: Question,
+        recorder: Recorder,
+        now: datetime,
+    ) -> Callable[[], Awaitable[None]]:
+        """What `answered_for` calls when this chat's run fails: the question, marked failed."""
+
+        async def keep() -> None:
+            from brain.chat.remember import remember_failure, threads_of
+
+            try:
+                await remember_failure(
+                    threads_of(self._request.app.state),
+                    principal_id=person.id,
+                    thread_id=self._chat_thread(person, inbound),
+                    channel=inbound.event.channel,
+                    question=asked.question,
+                    agent_id=recorder.agent_id or "",
+                    trace_id=recorder.trace_id,
+                    now=now,
+                )
+            except Exception as exc:
+                log.warning("thread.failure_not_kept", error=type(exc).__name__)
+
+        return keep
 
     # ------------------------------------------------------------------ the plan
 
