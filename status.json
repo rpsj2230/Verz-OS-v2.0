@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T03:08:39.332247+00:00",
-  "commit": "fd26e000",
-  "commit_subject": "A live connector answer is checked to cite what it read and when, and the owner's recorded check is named as its live half (#392)",
+  "generated_at": "2026-10-06T03:37:58.707179+00:00",
+  "commit": "afca52f1",
+  "commit_subject": "A Lark Wiki page has a read of its own, so an agent reaches the wiki only by naming it (#396)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
