@@ -2171,6 +2171,9 @@ def read_back_reading(reply: LarkReply) -> Reading:
 CONNECTOR: Final = ConnectorDeclaration(
     name=LARK_WIKI,
     label="Lark Wiki",
+    # Its pages are read by `brain.ops.lark_wiki_live` under `read:wiki_page`, and nothing above
+    # names that entity, so it is declared here for `brain.agents.binding`.
+    provides=(WIKI_PAGE,),
     not_from_the_console=(
         "It is connected through Connect Lark on this screen, which creates the Lark app, "
         "tests it and switches knowledge from the shared wiki spaces on. It is not listed "

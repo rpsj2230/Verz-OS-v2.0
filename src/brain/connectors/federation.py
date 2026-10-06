@@ -484,6 +484,9 @@ class FailureReason(enum.StrEnum):
     TRANSPORT = "transport"
     TRUNCATED = "truncated"
     NOT_SERVING = "not_serving"
+    #: The source's newest scheduled read found a field its records carried no longer in any of
+    #: them, so a record read from it now would answer without that field (M11.8.7).
+    SHAPE_CHANGED = "shape_changed"
 
 
 @dataclass(frozen=True)

@@ -108,7 +108,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.background import BackgroundTask, BackgroundTasks
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
-from brain.api_routes import Asked, wiring_of
+from brain.api_routes import Asked, marks_of, wiring_of
 from brain.approval_cards import (
     PRESS_NOT_TAKEN_TOLD,
     ApprovalCards,
@@ -1164,6 +1164,8 @@ async def answer_receipt(
             binder=binder_of(request),
             offerer=approval_cards_of(request),
             addresses=addresses_of(request),
+            # Where a mark a person types on their answer is written (M16.6.4).
+            marks=marks_of(request.app.state),
             now=now,
         )
     except Exception as exc:
