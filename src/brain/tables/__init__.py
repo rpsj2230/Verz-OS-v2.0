@@ -131,6 +131,7 @@ from brain.tables.resolution import (
 from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
 from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
+from brain.tables.retrieval import RetrievalEventRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
@@ -454,6 +455,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0191_skill_export_and_rehearsal. An export points at the version it carried.
     "agent.skill_export",
     "agent.skill_rehearsal",
+    # 0193_retrieval_event. Points at nothing: it names no document, question or person.
+    "ops.retrieval_event",
 )
 
 __all__ = [
@@ -550,6 +553,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "RetiredRecordRow",
+    "RetrievalEventRow",
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",

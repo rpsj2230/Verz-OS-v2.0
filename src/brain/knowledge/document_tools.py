@@ -100,7 +100,7 @@ is. See `A_PASSAGE_CARRIES_THE_PLACE_ITS_SCOPES_TEST`.
 narrowing sees exactly the items the reach admits. It narrows what the caller asked about and
 decides nothing about what they may see. See `A_KIND_NARROWS_THE_QUESTION_AND_NEVER_THE_REACH`.
 
-Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1, M10.7.2
+Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1, M10.7.2, M15.3.4
 """
 
 from __future__ import annotations
@@ -142,14 +142,17 @@ from brain.knowledge.embed_queue import EmbeddingService
 from brain.knowledge.embedding import EmbeddedVector, EmbeddingError
 from brain.knowledge.item import ITEM_ID_PATTERN
 from brain.knowledge.kinds import KnowledgeKind
+from brain.knowledge.retrieval_log import Searched, elapsed_ms, note, started
 from brain.knowledge.rows import RowQuery, RowSource
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
     CHUNK,
     EXACT_RESCAN_CEILING,
     KNOWLEDGE_READ,
+    LEXICAL_RETRIEVER,
     PUBLIC,
     RETRIEVABLE_STATE_VALUES,
+    VECTOR_RETRIEVER,
     PublicReach,
     Reach,
     SearchError,
@@ -180,6 +183,16 @@ A_CACHED_RETRIEVAL_IS_RE_READ_UNDER_THE_CALLERS_REACH: Final = (
     "miss, by passages_query under the caller's reach now, so a reference the caller can no "
     "longer read returns nothing. The key decides how fast an answer is; only the re-read "
     "decides what the caller is told."
+)
+
+#: Why a cached ranking leaves nothing for the learning signal (M15.3.4).
+A_CACHED_RANKING_IS_NOT_A_SECOND_RETRIEVAL: Final = (
+    "The retrieval log measures our ranking, and a cached retrieval is a ranking already made, "
+    "served again inside its five minutes with no retriever run. Noting it would need a "
+    "retrieval with no retrievers, which RetrievalEvent refuses, or the first ranking's "
+    "retrievers and timing presented as this request's, which would be a record of something "
+    "that did not happen. So a hit notes nothing and its answer carries no retrieval id, and "
+    "the signal is read over the rankings that ran."
 )
 
 #: What the embedding cache holds and why nothing about the caller is in its key (M6.2.4).
@@ -841,19 +854,39 @@ async def ranked(
     reach: Reach | PublicReach,
 ) -> list[str]:
     """The references a question ranks within one reach: the lexical legs, the vector leg when
-    the install embeds questions, fused and cut to the number asked for. No body is read."""
+    the install embeds questions, fused and cut to the number asked for. No body is read.
+
+    Every ranking that runs is noted for the learning signal (M15.3.4), and only a request that
+    collects one keeps it: see `brain.knowledge.retrieval_log`. Noted here, where the retrievers
+    run, and not in the searcher, because a cached ranking runs none of them; see
+    `A_CACHED_RANKING_IS_NOT_A_SECOND_RETRIEVAL`.
+    """
+    since = started()
     vector = None if embedder is None else await embedder.vector(request.question)
-    legs = [
-        await records.rows(query)
-        for query in search_queries(request.question, reach=reach, kinds=request.kinds)
-    ]
+    queries = search_queries(request.question, reach=reach, kinds=request.kinds)
+    legs = [await records.rows(query) for query in queries]
     # One ranking from the legs in the order they arrived, each passage once: a chunk that
     # matches in two scripts is one passage, and `Ranking` refuses it listed twice.
     lexical = tuple(dict.fromkeys(str(row["chunk_id"]) for rows in legs for row in rows))
     nearest: tuple[str, ...] = ()
     if vector is not None:
         nearest = await nearest_passages(records, vector, reach=reach, kinds=request.kinds)
-    return [one.ref for one in hybrid(lexical=lexical, vector=nearest, limit=request.limit)]
+    fused = hybrid(lexical=lexical, vector=nearest, limit=request.limit)
+    ran = (
+        *((LEXICAL_RETRIEVER,) if queries else ()),
+        *(() if vector is None else (VECTOR_RETRIEVER,)),
+    )
+    if ran:
+        # For the learning signal, and only where a request collects it (M15.3.4). The chunk
+        # ids stay in memory for the request; see `brain.knowledge.retrieval_log`.
+        note(
+            Searched(
+                retrievers=ran,
+                corroborated=frozenset(one.ref for one in fused if one.corroborated),
+                latency_ms=elapsed_ms(since),
+            )
+        )
+    return [one.ref for one in fused]
 
 
 async def bodies_of(

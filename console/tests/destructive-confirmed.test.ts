@@ -107,6 +107,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
+  "src/pages/CitedDocument.tsx retrievalUsesPath(followed.retrievalId)":
+    "Opening a cited document sends the place of the passage followed for the learning signal; it " +
+    "adds one position to a retrieval that names no document or person, so nothing is ended.",
   "src/pages/Ask.tsx correctionPath(thread)":
     "Marking an answer wrong adds a note to the person's own conversation naming the kind; the " +
     "answer, its records and everything else in the thread stay as they were, so nothing is ended.",

@@ -166,6 +166,7 @@ from brain.core.errors import Absent, BrainError, Degraded, Failed
 from brain.core.field_policy import FieldPolicy
 from brain.core.principal import Principal, PrincipalKind
 from brain.core.redaction import (
+    ID_KEYS,
     ChannelPayload,
     LockedField,
     require_typed_result,
@@ -211,6 +212,7 @@ from brain.knowledge.connector_rows import connected_questions
 from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, SEARCH_DOCUMENTS, KnowledgePassage
 from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.lark_base_rows import BaseLane, lane_for_base
+from brain.knowledge.retrieval_log import Searched, collected, event_for
 from brain.knowledge.row_store import SessionRowSource
 from brain.knowledge.rows import (
     DEFAULT_ROW_LIMIT,
@@ -249,6 +251,7 @@ from brain.ops.live_read_run import (
 )
 from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
+from brain.ops.retrieval_store import StoredRetrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
@@ -863,6 +866,10 @@ THREAD_HEADER: Final = "x-thread-id"
 
 #: The longest thread id a question may name: a UUID's text.
 THREAD_ID_CHARS: Final = 36
+
+#: The response header naming the retrieval an answer was drawn from, which the page sends a
+#: followed citation's position back against (M15.3.4). See `brain.knowledge.retrieval_log`.
+RETRIEVAL_HEADER: Final = "x-retrieval-id"
 
 
 class Question(BaseModel):
@@ -2262,6 +2269,42 @@ async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> Marked
     return MarkedView(counted=True, told=MARK_COUNTED)
 
 
+# ------------------------------------------------------- the retrieval log (M15.3.4)
+def retrievals_of(state: Any) -> StoredRetrievals | None:
+    """The retrieval log over this process's database, or None on a process with none."""
+    found = getattr(state, "retrievals", None)
+    if isinstance(found, StoredRetrievals):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredRetrievals(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+async def logged_retrieval(
+    state: Any, searched: Sequence[Searched], answered: Answered
+) -> str | None:
+    """Keep the retrieval an answer on Ask was drawn from, and say which (M15.3.4).
+
+    The record is `brain.knowledge.retrieval_log.event_for` over the passages the person was
+    shown, which is the composed answer's payload and nothing for an abstention; None when no
+    passage search ran or there is nowhere to keep it. A retrieval that cannot be kept costs the
+    answer nothing: the learning signal is evidence, and an answer is never failed for it.
+    """
+    shown = () if answered.composed is None else answered.composed.payload.records
+    event = event_for(searched, (str(_first_id(record)) for record in shown))
+    store = retrievals_of(state)
+    if event is None or store is None:
+        return None
+    try:
+        return await store.record(event)
+    except Exception:
+        log.warning("retrieval.not_logged", exc_info=True)
+        return None
+
+
+def _first_id(record: Mapping[str, Any]) -> object:
+    return next((record[key] for key in ID_KEYS if key in record), "")
+
+
 async def remembered(
     request: Request, asking: Answering, ask: Question, answered: Answered, recorder: Recorder
 ) -> str | None:
@@ -2353,14 +2396,16 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     `A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED`.
     """
     asking = Answering.of(asked)
-    outcome = await answered_for(
-        request, recorder, asking, ask, failed=failure_kept(request, asking, ask, recorder)
-    )
+    with collected() as searched:
+        outcome = await answered_for(
+            request, recorder, asking, ask, failed=failure_kept(request, asking, ask, recorder)
+        )
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
     if isinstance(outcome, Halted):
         return halted_reply(request, outcome)
     thread = await remembered(request, asking, ask, outcome, recorder)
+    retrieval = await logged_retrieval(request.app.state, searched, outcome)
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
@@ -2368,6 +2413,9 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
             # The thread the exchange was kept in, which the page continues by (M9.1.1). Empty
             # when nothing was kept: a referred question, or a process with no database.
             THREAD_HEADER: thread or "",
+            # The retrieval this answer was drawn from, for the learning signal (M15.3.4). Empty
+            # when no passage search ran, or on a process with no database.
+            RETRIEVAL_HEADER: retrieval or "",
             # A permission requirement rather than a performance note. See the constant above.
             "Cache-Control": "no-store",
             # nginx buffers a proxied response by default, which turns a stream into one
