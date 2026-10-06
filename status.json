@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-06T08:27:10.785971+00:00",
-  "commit": "cd771361",
-  "commit_subject": "Every money figure the API returns now says which currency it is in (#452)",
+  "generated_at": "2026-10-06T08:32:53.771486+00:00",
+  "commit": "a42d686a",
+  "commit_subject": "Item 170: which parts of an agent the builder lists as sections (#462)",
   "total": 1596,
-  "done": 679,
-  "percent": 42.5,
+  "done": 680,
+  "percent": 42.6,
   "acts": 47,
   "decided": 131,
   "current_wave": 1,
@@ -52,12 +52,12 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 578,
-      "done": 188,
-      "percent": 32.5,
+      "done": 189,
+      "percent": 32.7,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 389,
+      "open": 388,
       "acts": 1,
       "decided": 56
     },
@@ -359,7 +359,7 @@
       "name": "Evaluation, canaries, regression",
       "wave": 3,
       "total": 14,
-      "done": 2,
+      "done": 3,
       "acts": 0,
       "decided": 1
     },
@@ -846,6 +846,7 @@
     "M27.9.7",
     "M28.1.1",
     "M28.1.3",
+    "M28.1.4",
     "M3.1.1",
     "M3.1.2",
     "M3.1.3",
@@ -1388,7 +1389,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 76,
+  "closed_today": 77,
   "next_up": [
     "M1.6.13",
     "M1.6.16",
@@ -1397,6 +1398,12 @@
     "M1.6.19"
   ],
   "recent": [
+    {
+      "sha": "4647570",
+      "at": "2026-10-06T08:11:27+00:00",
+      "subject": "A regression in the golden corpus blocks the merge, and a test keeps the three parts of that together (#454)",
+      "closed": "M28.1.4"
+    },
     {
       "sha": "eea29de",
       "at": "2026-10-06T02:26:38+00:00",
@@ -1510,12 +1517,6 @@
       "at": "2026-09-29T02:57:30+00:00",
       "subject": "Three tasks close: the route is on the request row, a console question stays in its department, and Models shows provider health beside the matrix (#192)",
       "closed": "M27.2.3,M3.6.3,M38.2.2.2"
-    },
-    {
-      "sha": "4a5a0ba",
-      "at": "2026-09-28T21:00:26+00:00",
-      "subject": "Eight tasks close on the install's own acceptance run after the Lark binding reader went live",
-      "closed": "M10.2.2,M10.2.5,M10.2.6,M10.4.1,M10.4.2,M10.4.3,M10.4.4,M12.2.4"
     }
   ]
 }
