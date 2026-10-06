@@ -329,6 +329,11 @@ from brain.report_routes import router as report_router
 # this install, recorded. See `brain.requirement_check_routes`.
 from brain.requirement_check_routes import router as requirement_check_router
 
+# The Resolution review screen: the pairs entity resolution could not settle, and a reviewer's
+# merge or rejection, behind `admin:entity_merge` over everything and the reach of both records.
+# See `brain.resolution_routes` and `brain.resolution.review_store`.
+from brain.resolution_routes import router as resolution_router
+
 # The retention report and the four writes that decide whether the sweep acts. A router of
 # its own because two of its writes are the only way a deletion is approved or suspended:
 # every write needs its authority over everything, and the report is shown whole to a

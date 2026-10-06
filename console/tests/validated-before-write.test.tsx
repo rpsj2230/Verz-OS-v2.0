@@ -217,6 +217,9 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
   "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/people/MoveDrawer.tsx": "Its one form opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. It is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says which department to choose.",
   "src/pages/people/PersonPlacements.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",

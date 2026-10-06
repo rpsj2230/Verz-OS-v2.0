@@ -186,6 +186,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_STAFF_SOURCE_LOCATION",
       "INSTALL_BROKERED_CLIENT_ID",
       "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
+      "INSTALL_DEPARTMENTS_FROM",
     ],
     gaps: [
       {
@@ -383,6 +384,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_category",
       "agent.skill_invocation",
       "agent.skill_retirement",
+      "agent.skill_script",
       "agent.skill_detachment",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
@@ -472,6 +474,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.connector_connection",
       "ops.connector_sync",
       "proj.record",
+      "proj.record_retired",
+      "proj.source_epoch",
       "er.alias",
       "er.canonical",
       "er.identifier",
@@ -531,6 +535,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/classification",
       "/classification/:entity",
       "/classification/:entity/:column",
+      "/duplicates",
       "/artifacts",
     ],
     routes: [
@@ -551,6 +556,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",
       "/api/v1/records/{entity}/access",
+      "/api/v1/resolution/review*",
     ],
     tables: [
       "know.item",
@@ -566,6 +572,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.artifact",
       "know.classified_table",
       "know.classified_row",
+      "er.review_item",
+      "er.merge",
+      "er.unmerge",
+      "er.observation",
+      "er.blocked_value",
     ],
     installation: [
       "INSTALL_VECTOR_STORE",
@@ -810,6 +821,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage.",
   "GET /api/v1/threads/{thread_id}":
     "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
+  "POST /api/v1/threads/attachments":
+    "A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":
