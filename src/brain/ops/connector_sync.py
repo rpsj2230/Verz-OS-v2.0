@@ -93,8 +93,14 @@ every run. It would quarantine a connection in memory that the next run rebuilds
 so the quarantine would last one run, and it would add a second in-memory opinion about whether a
 source is connected beside the table that already says so.
 
+**A source consented to by OAuth fails in three more sentences of its own (M11.8.6).** A vendor that
+refused the renewal has withdrawn the consent (`CONSENT_WITHDRAWN`, from `brain.connectors.oauth`),
+which is down at once like any refused key; a source nobody has consented to yet has no refresh
+token to renew with (`NOT_CONSENTED`); and a token the vendor rotated that the vault would not keep
+is a consent the next read cannot use (`ROTATED_REFRESH_NOT_KEPT`).
+
 Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8, M11.4.6, M11.4.8, M11.8.4, M11.8.11, M11.9.15
-Task ids: M11.1.2, M11.1.5
+Task ids: M11.1.2, M11.1.5, M11.8.6
 """
 
 from __future__ import annotations
@@ -121,6 +127,7 @@ from brain.connectors.declaration import SourceReading as SourceReading
 from brain.connectors.declaration import ViewReading as ViewReading
 from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.connectors.minimal_index import MinimalIndexError, StoredRow, assert_minimal_index
+from brain.connectors.oauth import CONSENT_WITHDRAWN as CONSENT_WITHDRAWN
 from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, ProjectedRecord
 from brain.connectors.throttle import CallOutcome, UnmeasuredSourceError, limits_for, retry_delay
 from brain.core.scope import Op, Scope
@@ -425,6 +432,19 @@ TOOL_SAID_IT_FAILED: Final = (
 #: Custom code that did not complete in its sandbox (M11.1.5).
 CODE_DID_NOT_COMPLETE: Final = (
     "The connector's code did not complete in its sandbox, so nothing from that read was kept."
+)
+#: A source consented to by OAuth that nobody has consented to yet, or whose consent's refresh token
+#: is not in the vault (M11.8.6).
+NOT_CONSENTED: Final = (
+    "Nobody has consented to this connection at the vendor yet, so there is nothing to renew its "
+    "access with. Connect it with the vendor from this source's page."
+)
+#: A refresh token the vendor rotated during a read, which the vault would not keep. The vendor
+#: voided the old one when it issued the new, so the next read cannot renew with it (M11.8.6).
+ROTATED_REFRESH_NOT_KEPT: Final = (
+    "The vendor issued a new refresh token with this read and the vault would not keep it, so the "
+    "next read has nothing to renew with. Check the connector-rotate role and policy are loaded "
+    "(ops/openbao/apply-release.sh), then connect it with the vendor again."
 )
 NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
 

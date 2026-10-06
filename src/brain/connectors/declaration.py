@@ -112,8 +112,22 @@ a sandbox that is never handed the key (`brain.connectors.custom_code`).
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
+**And a source that authorises by OAuth says so in its declaration (M11.8.6).** `oauth` is its
+`brain.connectors.oauth.OAuthConsent`: the vendor's consent page and token endpoint, the scopes,
+and the console setting the application's client id is typed into. The client secret is the
+connection's credential, pasted and kept in the source's own slot like any key, so the form asks
+for exactly one key-shaped credential. The refresh token the consent buys is not that credential:
+it is kept in a slot of its own (`brain.ops.credentials.connector_oauth_slot`), for the reason
+`brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`
+gives. Its reading names `KeyScheme.OAUTH_REFRESH` and is a `ConsentedReading` presenting the same
+consent, so the worker's run, which is shared by every source, renews access with the source's own
+consent and nobody else's. See `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`. A
+source each person consents to for themselves (`ConsentKind.PERSON`) also asks for the department
+its readers are held to (`PERSONAL_DEPARTMENT_SETTING`), which is where a person must hold the
+consent's reader capability to connect their own account.
+
 Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4, M11.6.1
-Task ids: M11.7.3, M11.7.1, M11.4.6, M11.9.15, M11.1.2, M11.1.5
+Task ids: M11.7.3, M11.7.1, M11.4.6, M11.9.15, M11.1.2, M11.1.5, M11.8.6
 """
 
 from __future__ import annotations
@@ -136,6 +150,7 @@ from brain.connectors.change_signal import ChangeSubscription
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
+from brain.connectors.oauth import ConsentKind, OAuthConsent
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import RestOperation
@@ -222,6 +237,19 @@ A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR: Final = (
     "is read."
 )
 
+#: The setting naming the department a source each person consents to answers to: a person may
+#: consent for themselves only while holding its declared reader capability there (M11.8.6).
+PERSONAL_DEPARTMENT_SETTING: Final = "department"
+
+#: Why an OAuth source's reading presents the consent its declaration asks for, and nothing else.
+A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR: Final = (
+    "A source that authorises by OAuth renews access by posting its refresh token to its vendor's "
+    "token endpoint. The run that posts it is shared by every source, so where it posts comes "
+    "from the source's own reading, and the declaration holds the reading to the consent the "
+    "console asked the person for: a reading that presented another vendor's endpoint would send "
+    "this source's refresh token and client secret there."
+)
+
 #: Why the lists that named every connector are read off the declarations.
 A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS_OWN_FIXTURES: Final = (
     "Every list that names each connector is a place two connector changes edit at once, and on "
@@ -275,6 +303,11 @@ class KeyScheme(enum.StrEnum):
     #: (https://developers.google.com/identity/protocols/oauth2/service-account). The key file is
     #: never sent: see `brain.connectors.google_token.A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER`.
     GOOGLE_SERVICE_ACCOUNT = "google_service_account"
+    #: A refresh token a person's consent bought (M11.8.6), exchanged by the run for an access
+    #: token at the vendor's token endpoint with the application's client id and secret, and sent
+    #: as `Authorization: Bearer <token>` (RFC 6749 section 6, RFC 6750). Neither the refresh
+    #: token nor the client secret is ever sent to the source: see `brain.connectors.oauth`.
+    OAUTH_REFRESH = "oauth_refresh"
 
 
 #: The schemes a key is sent in as it is, with no exchange first. An MCP or custom-code reading
@@ -745,6 +778,19 @@ class BoundedWalk(Protocol):
     def left_out(self, entity: str, asked: Mapping[str, str], body: Any) -> bool:
         """Whether the walk, up to and including the page `asked` answered with `body`, has left
         part of the source out."""
+
+
+@runtime_checkable
+class ConsentedReading(Protocol):
+    """A reading whose access is renewed from a refresh token a person's consent bought (M11.8.6).
+
+    Asked for only when `SourceReading.key_scheme` is `KeyScheme.OAUTH_REFRESH`, for
+    `ScopedReading`'s reason: a source whose key is sent as it is owes nothing here. See
+    `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`.
+    """
+
+    def consent(self) -> OAuthConsent:
+        """The consent this source's access is renewed under: its vendor's token endpoint."""
         ...
 
 
@@ -1185,6 +1231,8 @@ class ConnectorDeclaration:
     ask: AskRows | None = None
     #: What its key must be allowed to do and never be given, which its vault slot is defined with.
     scopes: KeyScopes | None = None
+    #: How a person consents to it at its vendor, when it authorises by OAuth (M11.8.6).
+    oauth: OAuthConsent | None = None
     #: Its verified rate ceiling, or None when nobody has measured one. Named for this source, so
     #: `brain.ops.limits.connector_ceiling` finds it. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
     ceiling: ConnectorLimit | None = None
@@ -1281,6 +1329,7 @@ class ConnectorDeclaration:
                 "no record of them, so nothing would ever be resolved"
             )
             raise DeclarationError(msg)
+        self._consent_is_whole()
         if self.report is not None and self.reading is None:
             msg = (
                 f"connector {self.name!r} declares a report and no reading; a report is read with "
@@ -1295,6 +1344,64 @@ class ConnectorDeclaration:
             msg = (
                 f"connector {self.name!r} reads {both} live both as a record and as a report. "
                 f"{A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT}"
+            )
+            raise DeclarationError(msg)
+
+    def _consent_is_whole(self) -> None:
+        """An OAuth source asks for its client id and secret, and its reading renews by its consent.
+
+        See `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`.
+        """
+        renews = (
+            self.reading is not None
+            and not isinstance(self.reading, ViewReading)
+            and self.reading.key_scheme() is KeyScheme.OAUTH_REFRESH
+        )
+        if self.oauth is None:
+            if renews:
+                msg = (
+                    f"connector {self.name!r} renews access by OAuth and declares no consent. "
+                    f"{A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR}"
+                )
+                raise DeclarationError(msg)
+            return
+        form = self.console
+        if form is None or form.credential_shape is not CredentialShape.KEY:
+            msg = (
+                f"connector {self.name!r} is consented to by OAuth, so its console form asks for "
+                "the application's client secret as one pasted key"
+            )
+            raise DeclarationError(msg)
+        asked = {one.name for one in form.settings}
+        if self.oauth.kind is ConsentKind.PERSON and PERSONAL_DEPARTMENT_SETTING not in asked:
+            msg = (
+                f"connector {self.name!r} is consented to by each person for themselves, so its "
+                f"form asks for the {PERSONAL_DEPARTMENT_SETTING!r} its readers are held to"
+            )
+            raise DeclarationError(msg)
+        if self.oauth.client_id_setting not in asked:
+            msg = (
+                f"connector {self.name!r} reads its client id from the "
+                f"{self.oauth.client_id_setting!r} setting, which its form does not ask for"
+            )
+            raise DeclarationError(msg)
+        if self.oauth.kind is ConsentKind.PERSON:
+            if renews:
+                msg = (
+                    f"connector {self.name!r} is consented to by each person for themselves, so no "
+                    "read made with nobody present can renew by a consent; its scheduled reading, "
+                    "if any, is keyed some other way"
+                )
+                raise DeclarationError(msg)
+            return
+        # Asked of the reading as an object: a protocol check over the union of the two reading
+        # shapes is one mypy reads as never true, and at run time it is the question asked.
+        reading: object = self.reading
+        consented = isinstance(reading, ConsentedReading) and reading.consent() == self.oauth
+        if not (renews and consented):
+            msg = (
+                f"connector {self.name!r} is consented to by OAuth and its reading does not renew "
+                f"access by that consent. {A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR}"
             )
             raise DeclarationError(msg)
 

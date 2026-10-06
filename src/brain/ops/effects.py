@@ -729,6 +729,24 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # until its hour ends and is never read. The stronger of the two is what is recorded.
         "brain.ops.connector_sync_run:SourcePoster.post": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.connectors.declaration:ScopedReading.token_scopes": Repeat.READS,
+        # M11.8.6: an OAuth source's consent is a declaration read; a rotated refresh token is
+        # patched over its own slot, so a second write leaves the slot as the first did; a consent
+        # is held and taken in this system's own table, and a refused one appends an attempt row.
+        "brain.connectors.declaration:ConsentedReading.consent": Repeat.READS,
+        "brain.ops.connector_sync_run:RotatesRefreshTokens.rotate": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.connector_sync_run:PatchesSlots.patch_static_kv": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.connector_sync_run:PatchesSlots.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.connector_consent:ConsentStates.issue": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_consent:ConsentStates.take": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_consent:ConsentHealth.latest": Repeat.READS,
+        "brain.ops.connector_consent:ConsentHealth.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # M11.8.6: removing a person's own refresh token slot on erasure leaves it removed however
+        # often it is asked; a slot already gone is removed as nothing.
+        "brain.ops.erasure_store:RemovesSlots.remove_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.connectors.declaration:LiveReport.entities": Repeat.READS,
         "brain.connectors.declaration:LiveReport.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveReport.request_for": Repeat.READS,

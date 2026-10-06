@@ -59,7 +59,7 @@ it (M11.1.5).** Its form and its reading are not enough: the code runs only thro
 runner `brain.ops.custom_code_run.installed_runner` names, which no install has until the sandbox
 service runs, and with none the source is listed as not connectable yet and never offered.
 
-Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7, M11.1.5
+Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7, M11.1.5, M11.8.6
 """
 
 from __future__ import annotations
@@ -81,9 +81,14 @@ from brain.connectors.declaration import (
     shipped,
 )
 from brain.connectors.manifest import ConnectorManifest
+from brain.connectors.oauth import OAuthConsent
 from brain.knowledge.connector_rows import ANSWERED_BY_PASSAGES, CONNECTOR_ROW_ENTITIES
 from brain.ops.connect_steps import GuideStep
-from brain.ops.credentials import connector_key_slot
+from brain.ops.credentials import (
+    connector_key_slot,
+    connector_oauth_slot,
+    connector_person_oauth_slot,
+)
 from brain.ops.custom_code_run import installed_runner
 from brain.ops.limits import connector_ceiling
 from brain.ops.secrets import SecretRef, VaultRole
@@ -153,6 +158,8 @@ class Connectable:
     credential_shape: CredentialShape = CredentialShape.KEY
     #: The writes it can be allowed to make, each with a key of its own (M11.7.3).
     writes: tuple[WriteGrant, ...] = ()
+    #: How a person consents to it at its vendor, when it authorises by OAuth (M11.8.6).
+    oauth: OAuthConsent | None = None
 
 
 @dataclass(frozen=True)
@@ -246,6 +253,7 @@ def declared_forms(declarations: Mapping[str, ConnectorDeclaration]) -> dict[str
             guide=one.guide,
             credential_shape=one.console.credential_shape,
             writes=one.writes,
+            oauth=one.oauth,
         )
         for name, one in declarations.items()
         if one.console is not None
@@ -279,6 +287,21 @@ def connectable(name: str) -> Connectable:
 def key_reference(name: str) -> SecretRef:
     """Where a connected source's key is kept, and the role that will read it."""
     return SecretRef(path=connector_key_slot(name).path, role=READING_ROLE)
+
+
+def refresh_reference(name: str) -> SecretRef:
+    """Where the refresh token a person's consent to a source bought is kept, read by the worker's
+    role like the source's key (M11.8.6). See `brain.ops.credentials.connector_oauth_slot`."""
+    return SecretRef(path=connector_oauth_slot(name).path, role=READING_ROLE)
+
+
+def person_refresh_reference(name: str, principal_id: str) -> SecretRef:
+    """Where the refresh token one person's own consent to a source bought is kept (M11.8.6).
+
+    Read only by `brain.ops.connector_sync_run.PersonalKeys`, for that person's own question. See
+    `brain.ops.credentials.connector_person_oauth_slot`.
+    """
+    return SecretRef(path=connector_person_oauth_slot(name, principal_id).path, role=READING_ROLE)
 
 
 def blank_sentence(setting: Setting) -> str:

@@ -8,6 +8,7 @@
  */
 
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../../src/pages/connectorsQuery";
+import { callbackPath, consentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { probeApiPath } from "../../../src/pages/connectors/connectorProbe";
 import { acceptApiPath } from "../../../src/pages/connectors/DeclarationDrift";
 import { editApiPath, exportApiPath, keyApiPath, stewardApiPath } from "../../../src/pages/connectors/connectorSources";
@@ -45,6 +46,12 @@ const A_CONNECTED_SOURCE_IS_READ_AND_A_DISCONNECTED_ONE_IS_NOT = t(
 );
 
 export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
+  // A vendor's answer is handed over when the vendor sends the person back to the consent page.
+  "GET /api/v1/connectors/consent/callback": {
+    screen: "/connector-consent",
+    spelled: "handOver",
+    built: callbackPath({ state: "S", code: "C", error: "" }).split("?")[0] ?? "",
+  },
   // A source's record is read when a person presses Export record on its page.
   "GET /api/v1/console/connectors/{connector}/export": {
     screen: "/connectors/:connector",
@@ -73,6 +80,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/connectors/{connector}/probe", "probeApiPath", probeApiPath("xero")),
   ],
   "src/components/ConnectSource.tsx CONNECTORS_API_PATH": [at("POST /api/v1/connectors", "CONNECTORS_API_PATH", CONNECTORS_API_PATH)],
+  "src/components/ConnectSource.tsx consentPath(source.name)": [
+    at("POST /api/v1/connectors/{connector}/consent", "consentPath", consentPath("xero")),
+  ],
   "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH": [
     at("POST /api/v1/connectors/lark-app/test", "LARK_TEST_API_PATH", LARK_TEST_API_PATH),
   ],
@@ -86,6 +96,19 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/connectors/{connector}/consent": {
+    row: t("test_connector_consent", "test_a_consent_is_taken_once_by_its_own_person_before_it_expires", true),
+    audit: {
+      notApplicable:
+        "Starting a consent keeps no credential and changes no connection: it holds one ops.oauth_consent row " +
+        "for the person who pressed, which only they can take, once. The ledger entry is the refresh token's " +
+        "credential write when the vendor answers, which test_connector_consent_routes holds.",
+    },
+    behaviour: t(
+      "test_connector_consent_routes",
+      "test_the_vendor_s_code_is_exchanged_and_its_refresh_token_kept_in_its_slot_once",
+    ),
+  },
   "POST /api/v1/connectors": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
