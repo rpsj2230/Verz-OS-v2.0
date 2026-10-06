@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-06T07:54:16.341784+00:00",
-  "commit": "0cc10d5f",
-  "commit_subject": "Item 168: what a brand-new install ships with (#455)",
+  "generated_at": "2026-10-06T08:05:08.806547+00:00",
+  "commit": "88266091",
+  "commit_subject": "A publish is held to the publish gate: system checks that block, the decided rung, and the permission canaries (#449)",
   "total": 1596,
   "done": 679,
   "percent": 42.5,
