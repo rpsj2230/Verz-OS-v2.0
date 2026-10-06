@@ -181,6 +181,11 @@ export type StreamResult =
        * page sends it back with a follow-up to continue the same conversation (M9.1.1).
        */
       readonly threadId: string;
+      /**
+       * The retrieval the answer was drawn from (`x-retrieval-id`), or empty when no passage search
+       * ran. A followed citation sends its passage's place back against it (M15.3.4).
+       */
+      readonly retrievalId: string;
     }
   | { readonly ok: false; readonly failure: ApiFailure; readonly body: unknown };
 
@@ -246,5 +251,6 @@ export async function openStream(
     events: eventsOf(response),
     traceId: response.headers.get("x-trace-id") ?? "",
     threadId: response.headers.get("x-thread-id") ?? "",
+    retrievalId: response.headers.get("x-retrieval-id") ?? "",
   };
 }

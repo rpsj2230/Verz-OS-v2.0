@@ -443,6 +443,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A source's steward names the person who answers for it, an actor and not an owner, and
         # the source itself is nobody's (`0167`), as `ops.connector_connection`'s actors are.
         "ops.connector_steward",
+        # A retrieval keeps which retrievers ran, three counts, the places followed and a duration:
+        # `0193` keeps no document, no question and no principal, so nothing in it is anybody's.
+        "ops.retrieval_event",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

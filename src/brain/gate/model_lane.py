@@ -974,7 +974,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
     for this reader and refused for any other.
     """
     cited: list[DocumentCitation] = []
-    for record in payload.records:
+    for position, record in enumerate(payload.records, start=1):
         document_id = record.get("document_id")
         if not isinstance(document_id, str) or not document_id:
             continue
@@ -989,6 +989,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
                     ),
                     source=payload.source,
                     fetched_at=str(record.get("updated_at") or ""),
+                    position=position,
                 )
             )
         except ValueError:
