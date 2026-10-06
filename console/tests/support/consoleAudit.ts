@@ -449,6 +449,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/channels",
       "/channels/:name",
       "/channels/:name/:view",
+      "/incidents",
     ],
     routes: [
       "/api/v1/connectors",
@@ -459,6 +460,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/accept",
       "/api/v1/connectors/{connector}/steward",
       "/api/v1/console/connectors",
+      "/api/v1/console/incidents",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
       "/api/v1/console/connectors/{connector}/probe",

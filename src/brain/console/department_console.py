@@ -404,6 +404,7 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                 label="Logs and errors",
                 pages=(Page(label="Logs", to="/logs"), Page(label="Errors", to="/errors")),
             ),
+            _one("Incidents", "/incidents", "incidents"),
         ),
     ),
     Section(
