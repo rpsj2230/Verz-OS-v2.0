@@ -214,6 +214,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # A second detachment finds the install changed and writes nothing.
         "brain.skill_routes:SkillLibrary.detach": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:SkillLibrary.assignment_history": Repeat.READS,
+        "brain.skill_routes:SkillLibrary.script_bytes": Repeat.READS,
+        # A second export of one version is a second row and a second ledger entry, which is what
+        # happened: somebody took the package twice.
+        "brain.skill_routes:SkillLibrary.export": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # A second rehearsal of one version is a second row: rehearsing again is an act.
+        "brain.skill_routes:SkillLibrary.rehearse": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:SkillLibrary.rehearsals": Repeat.READS,
         "brain.skill_routes:AgentInstalls.agent": Repeat.READS,
         # An agent's lifecycle (0137): reads, a move written by compare-and-set against the state
         # the page drew, so a second press finds the row already moved and writes nothing, and an
@@ -223,7 +230,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.agent_lifecycle_routes:AgentLifecycles.version": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.live_principal": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.change": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.agent_lifecycle_routes:AgentLifecycles.change_channels": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         "brain.agent_lifecycle_routes:AgentLifecycles.create": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # An agent's upgrade: a read; an acceptance written by compare-and-set against the hash and
+        # version the page drew, so a second press finds the pin moved and writes nothing; and a
+        # decline, one insert that a second press finds already there.
+        "brain.agent_upgrade_routes:AgentUpgrades.read": Repeat.READS,
+        "brain.agent_upgrade_routes:AgentUpgrades.accept": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.agent_upgrade_routes:AgentUpgrades.decline": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # An agent's drafts (0149): reads, and appends. A second save of the same body returns the
         # revision already kept, a second act on one revision is refused by its key, and a second
         # publish finds the instance written or moved and writes nothing.
@@ -262,6 +278,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # own row with a conflict clause; ending and unlinking are guarded writes to its own
         # tables, where a second call finds the row already ended or already gone.
         "brain.audit_routes:LedgerWindows.window": Repeat.READS,
+        "brain.audit_routes:PersonGrants.person": Repeat.READS,
+        "brain.audit_routes:PersonGrants.grant_ids": Repeat.READS,
+        # The window's runs of refusals for the Audit screen's statistics: the digest's grouped
+        # read of the ledger, which writes nothing.
+        "brain.audit_statistics_routes:DenialPatterns.between": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.after": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.at_seq": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.newest": Repeat.READS,
@@ -291,6 +312,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.SAME_RESULT_WHEN_REPEATED
         ),
         "brain.ops.template_key:TemplateKeyVault.read_static_kv": Repeat.READS,
+        # The join-key pepper's slot, created once for the template key's reason: a repeat of the
+        # create is refused and leaves the first pepper in place, and the read reads.
+        "brain.ops.join_key_pepper:PepperKeeper.create_static_kv_once": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.join_key_pepper:PepperReader.read_static_kv": Repeat.READS,
         # The record of a kept key (0054): a row in this system's own table, whose trigger appends
         # the ledger entry. A repeat is a second row and a second entry, which is right, because a
         # repeated call follows a second write to the vault.
@@ -350,16 +377,44 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.SAME_RESULT_WHEN_REPEATED
         ),
         "brain.deployment.database:Executor.execute": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # An erased person's session memory, by the keys their conversations name (M16.1.1).
+        "brain.ops.erasure_store:SessionKeys.exists": Repeat.READS,
+        "brain.ops.erasure_store:SessionKeys.delete": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The gate.
         "brain.gate.answer_cache:AnswerStore.get": Repeat.READS,
         "brain.gate.answer_cache:AnswerStore.set": Repeat.DERIVED_STATE,
+        "brain.knowledge.document_tools:RecordStore.get": Repeat.READS,
+        "brain.knowledge.document_tools:RecordStore.set": Repeat.DERIVED_STATE,
         "brain.gate.compose:TraceSink.emit": Repeat.DERIVED_STATE,
+        # Where a turn's remembered statements are read, for its context (M16.6.1).
+        "brain.gate.turn_context:Recollection.hints": Repeat.READS,
+        # Which client each record a name matched is, read from the registry (M14.6.5).
+        "brain.gate.fast_lane:AmbiguityReader.current_entities": Repeat.READS,
+        "brain.gate.fast_lane:AmbiguityReader.open_review": Repeat.READS,
+        # A mark typed in a chat, written by the console's own store (M16.6.4).
+        "brain.channels.marks:AnswerMarks.mark": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.gate.finish:RequestRecorder.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The answer lane's model step: passages found at a reach, and a model that answers and
         # forgets, whose attempt rows are written through `AttemptLog`'s own doors.
         "brain.gate.model_lane:PassageSearch.passages": Repeat.READS,
         "brain.gate.model_lane:AskerHints.hints": Repeat.READS,
         "brain.gate.model_lane:AnswerModel.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.gate.model_lane:ToolLoop.drafted": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.gate.runtime:ToolCaller.call": Repeat.ISSUES,
+        "brain.gate.runtime:RunLog.record": Repeat.DERIVED_STATE,
+        # What lets a run hold a write for a person (M13.7.6): everything but `hold` is computed
+        # from what it is handed, and `hold` writes one row in this system's own table, in the
+        # asker's name, where a second write of the same suspension is refused by its key. Nothing
+        # a run is handed can send: see
+        # `brain.gate.runtime.RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON`.
+        "brain.gate.runtime:SideEffects.offers": Repeat.READS,
+        "brain.gate.runtime:SideEffects.target_of": Repeat.READS,
+        "brain.gate.runtime:SideEffects.propose": Repeat.READS,
+        "brain.gate.runtime:SideEffects.simulate": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.gate.runtime:SideEffects.policy_for": Repeat.READS,
+        "brain.gate.runtime:SideEffects.assessment_for": Repeat.READS,
+        "brain.gate.runtime:SideEffects.describe": Repeat.READS,
+        "brain.gate.runtime:SideEffects.hold": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The items behind cited documents, read for their badges at the reader's reach.
         "brain.gate.model_lane:ItemLookup.items": Repeat.READS,
         "brain.gate.provenance:Cited.describe": Repeat.READS,
@@ -483,6 +538,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
         "brain.ops.webhook_store:WebhookRecords.switch_off": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.webhook_store:WebhookRecords.switch_on": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.webhook_store:WebhookRecords.replay": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.webhook_store:WebhookRecords.dispatcher": Repeat.READS,
         # The Connectors screen. A connection is this system's own row in one transaction, with the
         # key written inside it through `CredentialVault.write_static_kv`, classified above; a
@@ -650,10 +707,34 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:ViewReading.refresh_interval": Repeat.READS,
         "brain.connectors.declaration:ViewReading.read": Repeat.READS,
         "brain.connectors.declaration:ViewReading.projected": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.entities": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.refresh_interval": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.key_scheme": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.endpoint": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.pinned": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.tool_call": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.interpret_tool": Repeat.READS,
+        "brain.connectors.declaration:ToolReading.projected": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.entities": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.refresh_interval": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.key_scheme": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.plan_spec": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.planned": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.interpret_spec": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.from_answers": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.from_output": Repeat.READS,
+        "brain.connectors.declaration:CodeReading.projected": Repeat.READS,
         "brain.ops.laravel_reader:Cursor.execute": Repeat.READS,
         "brain.ops.laravel_reader:Cursor.fetchall": Repeat.READS,
         "brain.ops.laravel_reader:Session.cursor": Repeat.READS,
         "brain.ops.laravel_reader:Session.close": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # A reading asked for only what changed (M11.4.6) computes a first page's arguments and its
+        # subscription from what it is handed, so a repeat is the same page and the same promise.
+        "brain.connectors.declaration:ChangedSince.changed_since": Repeat.READS,
+        "brain.connectors.declaration:ChangedSince.subscription": Repeat.READS,
+        # Whether a walk left part of its source out (M11.9.15) is read off the page arguments and
+        # the answer it is handed, so a repeat is the same verdict.
+        "brain.connectors.declaration:BoundedWalk.left_out": Repeat.READS,
         # A run's vault lease (0093): a child token minted per attempt that expires at its own
         # TTL, read through once and revoked at the attempt's end, where a second revoke finds it
         # gone. See `brain.ops.connector_lease`.
@@ -673,12 +754,47 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # through `run_real`. See `AN_EXECUTION_HANDED_TO_THE_LEASH_IS_HANDED_TO_THE_DOOR`.
         "brain.connectors.declaration:PreparesWrite.call_for": Repeat.READS,
         "brain.connectors.declaration:PreparesWrite.differs": Repeat.READS,
+        # Preparing a write a model asked for (M13.7.6): the connector builds the action a person
+        # approves from the model's arguments and the record the run read, and sends nothing. A
+        # preparer that can show what a simulated action would have returned does so from the action
+        # alone.
+        "brain.connectors.declaration:ProposesAction.target_of": Repeat.READS,
+        "brain.connectors.declaration:ProposesAction.action_for": Repeat.READS,
+        "brain.connectors.declaration:ProposesAction.described": Repeat.READS,
+        "brain.connectors.declaration:SimulatesAction.simulate": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.ops.connector_write_run:SourceSender.send": Repeat.ISSUES,
+        # Running an approved action with nobody present (M13.7.6). Every executor runs one
+        # approval through `brain.gate.leash.resume`, whose `run_real` keys it in the operation
+        # ledger by the approval's id, so a second run of the same approval is answered by the
+        # ledger and the far end is left as the first left it. The tools, the agent's standing and
+        # the requester's reach are reads.
+        "brain.ops.approved_runs:Executor.tools": Repeat.READS,
+        "brain.ops.approved_runs:Executor.run": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.approved_runs:Standings.standing": Repeat.READS,
+        "brain.ops.approved_runs:Reaches.load": Repeat.READS,
         # A POST to a source is one of two things (M11.7.1): a report asked for with a body, which
         # changes nothing, or a Google key file exchanged for a token, of which a second exists
         # until its hour ends and is never read. The stronger of the two is what is recorded.
         "brain.ops.connector_sync_run:SourcePoster.post": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.connectors.declaration:ScopedReading.token_scopes": Repeat.READS,
+        # M11.8.6: an OAuth source's consent is a declaration read; a rotated refresh token is
+        # patched over its own slot, so a second write leaves the slot as the first did; a consent
+        # is held and taken in this system's own table, and a refused one appends an attempt row.
+        "brain.connectors.declaration:ConsentedReading.consent": Repeat.READS,
+        "brain.ops.connector_sync_run:RotatesRefreshTokens.rotate": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.connector_sync_run:PatchesSlots.patch_static_kv": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.connector_sync_run:PatchesSlots.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.connector_consent:ConsentStates.issue": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_consent:ConsentStates.take": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_consent:ConsentHealth.latest": Repeat.READS,
+        "brain.ops.connector_consent:ConsentHealth.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # M11.8.6: removing a person's own refresh token slot on erasure leaves it removed however
+        # often it is asked; a slot already gone is removed as nothing.
+        "brain.ops.erasure_store:RemovesSlots.remove_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.connectors.declaration:LiveReport.entities": Repeat.READS,
         "brain.connectors.declaration:LiveReport.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveReport.request_for": Repeat.READS,
@@ -713,6 +829,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.live_records:PartialRead.notice": Repeat.READS,
         "brain.gate.live_records:PartialRead.trace_lines": Repeat.READS,
         "brain.ops.connector_sync_store:ConnectorSyncRecords.states": Repeat.READS,
+        # Each source's epoch, read into the answer cache's key (M11.8.4). The advance is a
+        # statement the worker runs in its own transaction, not a door.
+        "brain.ops.connector_sync_store:SourceEpochs.epochs": Repeat.READS,
+        # The source epochs reading's store (M6.2.5): a read, and a write of a value the counter
+        # can always produce again, kept for its own lifetime.
+        "brain.ops.connector_sync_store:EpochsCache.get": Repeat.READS,
+        "brain.ops.connector_sync_store:EpochsCache.set": Repeat.DERIVED_STATE,
         # Asking for a test of a connection is one row in `ops.setting` a second press moves to a
         # later instant; the worker makes one test for however many presses it finds.
         "brain.ops.connector_sync_store:ConnectorProbes.ask": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

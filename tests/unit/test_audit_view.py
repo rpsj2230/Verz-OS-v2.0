@@ -366,6 +366,12 @@ CALLS: dict[str, dict[str, object]] = {
         "to_rung": AutonomyTier.ASSISTED,
     },
     "entity_merge": {"kept_entity_id": "c_0447", "merged_entity_id": "c_0331"},
+    "entity_unmerge": {
+        "kept_entity_id": "c_0447",
+        "restored_entity_id": "c_0331",
+        "merge_id": "0" * 31 + "a",
+        "unmerge_id": "0" * 31 + "b",
+    },
     "publish": {"artifact_id": "rep_2026_08"},
     "break_glass": {
         "session_id": "bg_1",
@@ -1188,3 +1194,46 @@ def test_every_action_value_fits_the_column_the_ledger_is_written_to() -> None:
     assert width == 16
     for action in AuditAction:
         assert len(action.value) <= width, action
+
+
+def test_may_audit_is_the_views_own_rule_asked_of_an_entry_the_person_made() -> None:
+    """`may_audit` admits the person themself, a company-wide audit grant, and a department
+    head's grant over the actors the roster places (the staff sync's `actor_id IN ...`) for each
+    of those people and nobody else; a reader with no audit grant is admitted to nobody but
+    themself. Delete this and the History route's second way in admits a head to people outside
+    their department, or an auditor to nobody."""
+    from datetime import UTC
+
+    from brain.audit.view import CAPABILITY_BY_KIND, may_audit
+
+    now = datetime(2019, 3, 4, 9, 0, tzinfo=UTC)
+    principal = CAPABILITY_BY_KIND["principal"]
+    head = EntitlementSet(
+        principal_id="u_head",
+        grants=(
+            Grant(
+                capability=principal,
+                scope=Scope(clauses=(Clause(field="actor_id", op=Op.IN, value=("u_mine",)),)),
+            ),
+        ),
+    )
+    company = EntitlementSet(
+        principal_id="u_auditor", grants=(Grant(capability=principal, scope=Scope()),)
+    )
+    nobody = EntitlementSet(principal_id="u_nobody")
+
+    def asked(reader: EntitlementSet, who: str) -> bool:
+        return may_audit(
+            reader,
+            subject_kind="principal",
+            subject_id=who,
+            actions=(AuditAction.GRANT, AuditAction.REVOKE),
+            now=now,
+        )
+
+    assert asked(head, "u_mine") and not asked(head, "u_theirs")
+    assert asked(company, "u_mine") and asked(company, "u_theirs")
+    assert asked(nobody, "u_nobody") and not asked(nobody, "u_mine")
+    assert not may_audit(
+        company, subject_kind="nothing", subject_id="x", actions=(AuditAction.GRANT,), now=now
+    )

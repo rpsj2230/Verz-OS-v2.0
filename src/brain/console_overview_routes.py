@@ -55,8 +55,6 @@ from typing import Final
 import structlog
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Select, select
-from sqlalchemy.exc import SQLAlchemyError
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
@@ -74,7 +72,6 @@ from brain.console.needs_you import (
     UNRECORDED_HEALTH,
     Queue,
     Waiting,
-    halt_state,
     needs_you,
     waiting,
     worker_last_seen,
@@ -97,11 +94,11 @@ from brain.jobs_routes import last_run_of_each_control, may_see_job
 from brain.knowledge.lifecycle_store import MAX_ITEMS, live_items
 from brain.knowledge_lifecycle_routes import authority_of, in_transaction
 from brain.ops.halt import HaltState
+from brain.ops.halt_store import read_state
 from brain.ops.skill_store import MAX_LIBRARY
 from brain.readiness import ReadinessPart, parts_of
 from brain.routing_routes import sessions_of
 from brain.skill_routes import library_of, submitted
-from brain.tables.halt import HaltRow
 
 log = structlog.get_logger()
 
@@ -220,38 +217,9 @@ async def readiness(request: Request) -> tuple[str, list[ReadinessPart]]:
     return ("ok" if ok else "degraded"), parts_of(checks, reported)
 
 
-def latest_halt_acts() -> Select[tuple[str, str, str, str, str, datetime]]:
-    """The latest act per scope and target in `ops.halt`, which is what is in force.
-
-    `DISTINCT ON (scope, target)` over `ix_ops_halt_scope_target_at`, one row per thing ever
-    stopped, so the read is the size of the stop history's distinct targets, not of its rows.
-    """
-    return (
-        select(
-            HaltRow.scope,
-            HaltRow.target,
-            HaltRow.act,
-            HaltRow.actor_id,
-            HaltRow.reason,
-            HaltRow.at,
-        )
-        .order_by(HaltRow.scope, HaltRow.target, HaltRow.at.desc())
-        .distinct(HaltRow.scope, HaltRow.target)
-    )
-
-
 async def halts_read(request: Request) -> HaltState:
-    """The halts in force, or unknown when there is no database or it could not be read."""
-    factory = sessions_of(request)
-    if factory is None:
-        return HaltState.unknown()
-    try:
-        async with factory() as session:
-            rows = (await session.execute(latest_halt_acts())).all()
-    except SQLAlchemyError as failed:
-        log.warning("overview halts unreadable", error=type(failed).__name__)
-        return HaltState.unknown()
-    return halt_state(tuple(row) for row in rows)
+    """The halts in force, through the one reader. See `brain.ops.halt_store`."""
+    return await read_state(sessions_of(request))
 
 
 async def worker_seen(request: Request, asked: Asking) -> datetime | None:

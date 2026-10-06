@@ -1019,6 +1019,7 @@ def materialise(
             allowed_tools=frozenset(effective.authority.allowed_tools),
             required_tools=frozenset(effective.authority.required_tools),
             max_side_effect=effective.guardrails.max_side_effect,
+            connectors=effective.connectors,
         ),
         created_by=instance.created_by,
     )

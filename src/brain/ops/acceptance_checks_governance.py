@@ -267,6 +267,7 @@ async def _grant(h: Harness, request: Any, by: str, to: str, capability: str, sl
     ),
 )
 async def a_department_admin_grants_within_their_department_only(h: Harness) -> None:
+    from brain.connectors.xero import ENTITY_INVOICE
     from brain.core.entitlement import Capability
 
     _traced(h)
@@ -275,7 +276,7 @@ async def a_department_admin_grants_within_their_department_only(h: Harness) -> 
     await h.person(admin, department=A, grants=_in(A, GRANT_DECISION, GRANTED))
     await h.person(member, department=A)
     request = _request(_app(h))
-    title, unheld = Capability(value=GRANTED), Capability(value="read:invoice.total")
+    title, unheld = Capability(value=GRANTED), Capability(value=f"read:{ENTITY_INVOICE}.total")
 
     if await _grant(h, request, admin, member, GRANTED, _slug(B)):
         raise CheckFailedError("a department admin granted a capability over another department")

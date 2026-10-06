@@ -39,7 +39,7 @@ digits, spaces and `._:*,-`, and no quote, so the installer can single-quote a v
 escaping anything. A scope that needs another character is a reason to change this constant and
 the installer's quoting together, deliberately.
 
-Task ids: M38.4.1.3, M1.6.6, M11.7.3, M11.1.6
+Task ids: M38.4.1.3, M1.6.6, M11.7.3, M11.1.6, M11.7.8
 """
 
 from __future__ import annotations
@@ -148,16 +148,21 @@ def slot_gaps() -> tuple[str, ...]:
     A source with no slot, a slot for no source, and a connectable source whose hint does not name
     a scope its slot asks for, each as a sentence. Empty is the only acceptable answer.
     """
+    # The shipped sources only: a connector reviewed on this install (M11.7.8) has its key slot
+    # by its name like any other, and no scopes a release could define the slot with.
+    ours = shipped()
+    forms = {name: kind for name, kind in CONNECTABLE.items() if name in ours}
+    listed = {name for name in NOT_FROM_THE_CONSOLE if name in ours}
     # A source that takes no key has no slot to define (M11.7.4): its records are published.
     keyless = {
-        name for name, kind in CONNECTABLE.items() if kind.credential_shape is CredentialShape.NONE
+        name for name, kind in forms.items() if kind.credential_shape is CredentialShape.NONE
     }
     writes = {
         write_slot_name(name, grant.name): grant
-        for name, kind in CONNECTABLE.items()
+        for name, kind in forms.items()
         for grant in kind.writes
     }
-    known = (set(CONNECTABLE) - keyless) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST} | set(writes)
+    known = (set(forms) - keyless) | listed | {STAFF_LIST} | set(writes)
     found = [
         f"{name} has a connector and no credential slot"
         for name in sorted(known - set(SLOT_SCOPES))
@@ -166,7 +171,7 @@ def slot_gaps() -> tuple[str, ...]:
         f"{name} has a credential slot and no connector"
         for name in sorted(set(SLOT_SCOPES) - known)
     ]
-    for name, kind in sorted(CONNECTABLE.items()):
+    for name, kind in sorted(forms.items()):
         slot = SLOT_SCOPES.get(name)
         if slot is None:
             continue

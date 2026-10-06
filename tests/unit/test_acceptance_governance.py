@@ -81,7 +81,8 @@ def configured(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(name, value)
 
 
-def run_named(url: str, *names: str) -> dict[str, tuple[str, str]]:
+def run_named(url: str, *names: str, module: str = MODULE) -> dict[str, tuple[str, str]]:
+    """The named checks of `module`, or all of them, run as the worker runs them."""
     from brain.db import normalise_database_url
 
     settings = settings_from({"BRAIN_DATABASE_URL": url})
@@ -90,7 +91,7 @@ def run_named(url: str, *names: str) -> dict[str, tuple[str, str]]:
             normalise_database_url(url),
             settings=settings,
             commit="abc1234",
-            checks=[one for one in registered((MODULE,)) if not names or one.name in names],
+            checks=[one for one in registered((module,)) if not names or one.name in names],
             force=True,
         )
     )

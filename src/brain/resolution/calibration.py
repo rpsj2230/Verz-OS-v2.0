@@ -434,6 +434,10 @@ class WeightExport:
     pairs: int
     iterations: int
     reviewed_by: str = ""
+    #: The features the fit measured, when it measured fewer than it carries. Empty means every
+    #: weight here was fitted. A weight carried over from the table in force is still a number in
+    #: the export, so the export says which ones nothing measured. See `carried`.
+    fitted: frozenset[Feature] = frozenset()
 
     def __post_init__(self) -> None:
         if not _REF_RE.match(self.ref) or len(self.ref) < MIN_REF_CHARS:
@@ -450,6 +454,15 @@ class WeightExport:
         if self.pairs <= 0:
             msg = "an export measured on no pairs is a declaration wearing a reference"
             raise ResolutionError(msg)
+        stray = sorted(one.value for one in self.fitted if one not in self.weights)
+        if stray:
+            msg = f"the export says it fitted {stray} and carries no weight for them"
+            raise ResolutionError(msg)
+
+    @property
+    def carried(self) -> frozenset[Feature]:
+        """The weights this export carries that its fit did not measure."""
+        return frozenset() if not self.fitted else frozenset(self.weights) - self.fitted
 
     def to_weight_table(self) -> WeightTable:
         """This export as the table the online scorer sums (M14.3.5, M14.4.3).
@@ -475,6 +488,7 @@ class WeightExport:
             "iterations": self.iterations,
             "reviewed_by": self.reviewed_by,
             "weights": {one.value: self.weights[one] for one in sorted(self.weights, key=str)},
+            "fitted": sorted(one.value for one in self.fitted),
         }
 
 
@@ -509,6 +523,7 @@ def from_document(document: Mapping[str, Any]) -> WeightExport:
         pairs=int(document.get("pairs", 0)),
         iterations=int(document.get("iterations", 0)),
         reviewed_by=str(document.get("reviewed_by", "")),
+        fitted=frozenset(Feature(str(one)) for one in document.get("fitted", ())),
     )
 
 

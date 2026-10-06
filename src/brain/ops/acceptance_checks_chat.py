@@ -349,7 +349,6 @@ async def channel_app(h: Harness, *, channel_secrets: object, channel_transport:
     from brain.cache import NoEntitlementCache, PostgresVersionSource
     from brain.channel_routes import router
     from brain.gate.entitlement_store import StoredEntitlements
-    from brain.gate.rule_store import load_rules
     from brain.identity.keycloak_tokens import keycloak_authority
     from brain.identity.principal_directory import StoredDirectory
     from brain.identity.roles import IdentityError
@@ -374,11 +373,6 @@ async def channel_app(h: Harness, *, channel_secrets: object, channel_transport:
         store=StoredEntitlements(h.sessions),
         cache=NoEntitlementCache(),
     )
-    try:
-        rules = await load_rules(h.sessions)
-    except Exception:
-        # The lifespan's choice for a rule table that cannot be read: an empty rule set.
-        rules = ()
     app = FastAPI()
     state = app.state
     app.include_router(router)
@@ -388,7 +382,9 @@ async def channel_app(h: Harness, *, channel_secrets: object, channel_transport:
     state.tools = build_registry(
         source=h.settings.tool_source, records=SessionRowSource(h.sessions)
     )
-    state.fast_path_rules = rules
+    # The answer route reads the rule table itself on every question (M6.5.1), so nothing is
+    # handed to it here: a preloaded copy would be matched beside the live one, twice.
+    state.fast_path_rules = ()
     state.trace_sink = CountingTraceSink()
     state.channel_secrets = channel_secrets
     state.channel_transport = channel_transport

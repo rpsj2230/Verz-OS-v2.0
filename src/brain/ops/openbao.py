@@ -89,7 +89,14 @@ has never held a version. The policy grants create and read there and no update,
 refuses an overwrite even from a caller that left the check-and-set out. See
 `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
 
-Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M27.15.50, M13.8.10
+**A fifth prefix, `resolution/`, holds the join-key pepper, and it is written once for the same
+reason.** Entity resolution stores every join key as an HMAC under the pepper
+(`brain.resolution.canonical.identifier_hash`), so a pepper replaced under stored digests unjoins
+every one of them without an error anywhere. `write_static_kv` refuses this prefix as it refuses the
+template key's, and `brain.ops.join_key_pepper` creates the one slot with the check-and-set at
+version 0. See `WRITE_ONCE_PREFIXES`.
+
+Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M27.15.50, M13.8.10, M14.7.3
 """
 
 from __future__ import annotations
@@ -100,7 +107,7 @@ import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 from brain.ops.leases import SealedSecret
 from brain.ops.secrets import Lease, SecretRef, SecretsUnavailableError, VaultRole
@@ -129,8 +136,23 @@ CONNECTOR_KEY_PREFIX = "connector_keys/"
 #: `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
 TEMPLATE_KEY_PREFIX = "template_signing/"
 
+#: The join-key pepper entity resolution hashes every identifier with, created once and never
+#: written over. See `brain.ops.join_key_pepper`.
+RESOLUTION_PREFIX = "resolution/"
+
 #: Every prefix the kv methods admit, and nothing else in the vault is stored rather than leased.
-STATIC_PREFIXES = (STATIC_PREFIX, SIGNING_PREFIX, CONNECTOR_KEY_PREFIX, TEMPLATE_KEY_PREFIX)
+STATIC_PREFIXES = (
+    STATIC_PREFIX,
+    SIGNING_PREFIX,
+    CONNECTOR_KEY_PREFIX,
+    TEMPLATE_KEY_PREFIX,
+    RESOLUTION_PREFIX,
+)
+
+#: The prefixes whose one slot is created once and never written over, so the ordinary write
+#: refuses them and only `create_static_kv_once` reaches them. See
+#: `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
+WRITE_ONCE_PREFIXES = (TEMPLATE_KEY_PREFIX, RESOLUTION_PREFIX)
 
 #: The check-and-set version that makes a kv version 2 write a create: the vault accepts it only
 #: while the slot has never held a version, and answers 400 otherwise.
@@ -273,22 +295,26 @@ def assert_static_path(path: str) -> None:
     Public and separate so the refusal can be tested directly rather than only through a
     call that needs a server. `providers/anthropic` is a key nobody can lease;
     `connectors/creds/xero` is one somebody should, and reading the second one this way
-    would work perfectly and be invisible. `webhooks/`, `connector_keys/` and `template_signing/`
-    are the three other prefixes admitted; see
+    would work perfectly and be invisible. `webhooks/`, `connector_keys/`, `template_signing/`
+    and `resolution/` are the four other prefixes admitted; see
     `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`,
     `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT` and
     `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
     """
     if not any(path.startswith(prefix) for prefix in STATIC_PREFIXES):
         msg = (
-            f"{path!r} is not a provider key, a signing secret, a connected source's key or the "
-            "template signing key. "
+            f"{path!r} is not a provider key, a signing secret, a connected source's key, the "
+            "template signing key or the join-key pepper. "
             "Everything outside "
             f"{list(STATIC_PREFIXES)!r} is leased "
             "through brain.ops.secrets.borrow, which revokes it when the run ends; reading "
             "it here would hand back a standing credential nobody gives back."
         )
         raise SecretsUnavailableError(msg)
+
+
+#: The media type kv version 2 takes a patch in (RFC 7396).
+MERGE_PATCH: Final = "application/merge-patch+json"
 
 
 class OpenBaoVault:
@@ -320,12 +346,23 @@ class OpenBaoVault:
     __str__ = __repr__
 
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._request(method, path, body)
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        *,
+        content_type: str = "application/json",
+    ) -> dict[str, Any]:
+        """`_call` with the body's media type named, which only a kv patch needs to change."""
         url = f"{self._address}/v1/{path.lstrip('/')}"
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(url, data=data, method=method)  # noqa: S310  scheme checked in __init__
         request.add_header("X-Vault-Token", self._token)
         if data is not None:
-            request.add_header("Content-Type", "application/json")
+            request.add_header("Content-Type", content_type)
         try:
             with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
                 raw = response.read()
@@ -458,11 +495,12 @@ class OpenBaoVault:
         The prefix refusal is `assert_static_path`, the read's own, because a writer that could
         reach `connectors/creds/xero` would be storing a value over a path the leasing design
         says the vault mints. kv version 2 takes writes on `<mount>/data/<rest>` and wraps the
-        fields in `data`, which is the shape `read_static_kv` unwraps. The template key's prefix is
-        refused: see `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
+        fields in `data`, which is the shape `read_static_kv` unwraps. The template key's and the
+        join-key pepper's prefixes are refused: see
+        `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
         """
         assert_static_path(path)
-        if path.startswith(TEMPLATE_KEY_PREFIX):
+        if path.startswith(WRITE_ONCE_PREFIXES):
             msg = (
                 f"{path!r} is written once, by create_static_kv_once, and never written over. "
                 f"{A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT}"
@@ -472,6 +510,28 @@ class OpenBaoVault:
         payload = self._call("POST", f"{mount}/data/{rest}", {"data": dict(fields)})
         data = payload.get("data")
         return _instant(data.get("created_time")) if isinstance(data, dict) else None
+
+    def patch_static_kv(self, path: str, fields: Mapping[str, str]) -> None:
+        """Merge these fields into a slot that already holds a version, under `STATIC_PREFIX` only.
+
+        kv version 2's PATCH, sent as a JSON merge patch, which the vault admits on the `patch`
+        capability alone: no `read` is needed and none is granted to the one role that calls this,
+        so a token that writes a rotated refresh token back cannot read the token it replaces. See
+        `brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`.
+        A slot that holds nothing answers 404, which is raised: a patch never creates a slot. Not
+        retried, for `write_static_kv`'s reason. Returns nothing it was handed.
+        """
+        assert_static_path(path)
+        if path.startswith(TEMPLATE_KEY_PREFIX):
+            msg = f"{path!r} is written once and never written over"
+            raise SecretsUnavailableError(msg)
+        mount, _, rest = path.partition("/")
+        self._request(
+            "PATCH",
+            f"{mount}/data/{rest}",
+            {"data": dict(fields)},
+            content_type=MERGE_PATCH,
+        )
 
     def create_static_kv_once(self, path: str, fields: Mapping[str, str]) -> bool:
         """Put one slot's fields in only if the slot has never held a version: True when this call
@@ -493,6 +553,27 @@ class OpenBaoVault:
                 return False
             raise
         return True
+
+    def remove_static_kv(self, path: str) -> None:
+        """Remove one slot and every version it ever held, under `STATIC_PREFIX` only.
+
+        kv version 2's DELETE on `<mount>/metadata/<rest>`, which destroys every version and the
+        slot's record, so nothing an `undelete` could bring back is left: what erasing a person
+        asks of the refresh tokens their own consents bought
+        (`brain.ops.erasure_store.ERASING_A_PERSON_REMOVES_THEIR_OWN_REFRESH_TOKENS`). A slot that
+        holds nothing is already removed, so a 404 is not an error and a second call changes
+        nothing. Refuses the template key, which is never written over and never removed here.
+        """
+        assert_static_path(path)
+        if path.startswith(TEMPLATE_KEY_PREFIX):
+            msg = f"{path!r} is written once and never removed"
+            raise SecretsUnavailableError(msg)
+        mount, _, rest = path.partition("/")
+        try:
+            self._call("DELETE", f"{mount}/metadata/{rest}")
+        except VaultRefusedError as refused:
+            if refused.status != 404:
+                raise
 
     def static_kv_version(self, path: str) -> StaticVersion | None:
         """The slot's current version, or None when it holds nothing.

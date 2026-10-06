@@ -4,13 +4,13 @@ An envelope is a `brain.gate.leash.SuspendedAction`: an action an agent was abou
 stopped, with everything a resume will need to re-check. This module is the member's side of
 that queue, and it adds three things the gate deliberately does not have.
 
-**What will happen, stated before the fact, and never re-rendered.** `SuspendedAction.artefact`
-is what the person was shown, kept verbatim, and `brain.gate.leash` says why: an approval of a
-re-rendered artefact is an approval of something nobody read. So `Envelope` carries the stored
-artefact and refuses at construction to carry anything else, rather than calling
-`render_artefact` again for the member surface. Calling it again would agree with itself on
-every test and disagree with the approval the moment a stored action was edited, which is the
-one case `action_digest` exists to catch.
+**What will happen, stated before the fact, at the approver's own reach (M33.8.1).** The
+envelope shows `brain.console.approvals.request_for` of the stored action at the entitlements of
+the person it waits on, the same function the Approvals screen and the Lark card use, so an
+argument they could not look up is locked. Until 2026-10-06 it carried `SuspendedAction.artefact`
+and refused anything else, which is the requester's rendering with every value in it, and
+needs-rupash item 14 forbids exactly that. The stored action is what is rendered, so an edited
+action renders as edited and its digest no longer matches the approval.
 
 **A plain sentence for what the effect is.** `SideEffect` has five members and the difference
 between `write` and `send` is the difference between a record changing and a message leaving
@@ -76,22 +76,22 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
+from brain.console.approvals import request_for
 from brain.console.role_surfaces import pending_for
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import SideEffect
 from brain.gate.admission import verbs_for_channel
+from brain.gate.approval_request import RenderedRequest
 from brain.gate.context import Channel
 from brain.gate.leash import ApprovalState, SuspendedAction
 
 # ------------------------------------------------------------------ written-down reasons
-#: Why the artefact is carried and not rebuilt.
-AN_ARTEFACT_RENDERED_AGAIN_IS_NOT_THE_ONE_ANYBODY_READ: Final = (
-    "brain.gate.leash keeps the artefact verbatim on the suspension because an approval of a "
-    "re-rendered artefact is an approval of something nobody read. A member surface that "
-    "called render_artefact again would agree with itself in every test and disagree with "
-    "the approval the moment a stored action had been edited, which is the exact case "
-    "action_digest exists to detect. So the envelope carries the stored string and refuses "
-    "to carry any other."
+#: Why the envelope shows the action at its reader's reach and never the stored artefact.
+AN_ENVELOPE_SHOWS_WHAT_ITS_READER_MAY_SEE: Final = (
+    "The person an approval waits on was chosen for their authority over the action, not for "
+    "their reach over the data it carries. The stored artefact is the requester's rendering, with "
+    "every value the requester could see, so the envelope renders the stored action at the "
+    "reader's own reach and locks what they could not look up."
 )
 
 #: Why nothing happening is the default and why it still has to be said.
@@ -178,20 +178,14 @@ class Envelope:
     """
 
     suspension: SuspendedAction
-    #: The artefact as it was shown when the action was stopped. Never re-rendered.
-    what_will_happen: str
+    #: The stored action at the reader's reach. See `AN_ENVELOPE_SHOWS_WHAT_ITS_READER_MAY_SEE`.
+    what_will_happen: RenderedRequest
     #: What the effect means, in words.
     effect: str
     #: The stated consequence of not answering, which is nothing.
     if_nothing_happens: str = DEFAULT_ON_EXPIRY
 
     def __post_init__(self) -> None:
-        if self.what_will_happen != self.suspension.artefact:
-            msg = (
-                "this envelope shows something other than the artefact stored on the "
-                f"suspension. {AN_ARTEFACT_RENDERED_AGAIN_IS_NOT_THE_ONE_ANYBODY_READ}"
-            )
-            raise ValueError(msg)
         if self.effect != effect_sentence(self.suspension.action.tool.side_effect):
             msg = (
                 f"this envelope describes the effect as {self.effect!r} and the action's "
@@ -213,16 +207,16 @@ class Envelope:
         return self.suspension.expires_at
 
 
-def envelope_for(suspension: SuspendedAction) -> Envelope:
-    """One suspension as a member sees it (M40.6.1.1).
+def envelope_for(suspension: SuspendedAction, reader: EntitlementSet, now: datetime) -> Envelope:
+    """One suspension as `reader` sees it (M40.6.1.1, M33.8.1).
 
     The only constructor anything should use. Building an `Envelope` by hand is possible and
-    is checked by its own validators; this is the path that cannot get the two derived
-    strings wrong in the first place.
+    is checked by its own validators; this is the path that cannot get the derived values
+    wrong in the first place. See `AN_ENVELOPE_SHOWS_WHAT_ITS_READER_MAY_SEE`.
     """
     return Envelope(
         suspension=suspension,
-        what_will_happen=suspension.artefact,
+        what_will_happen=request_for(suspension, reader, now),
         effect=effect_sentence(suspension.action.tool.side_effect),
     )
 
@@ -246,7 +240,9 @@ def awaiting(
 
     Order follows `suspensions`, which is `pending_for`'s own decision.
     """
-    return tuple(envelope_for(one) for one in pending_for(entitlement, suspensions, now))
+    return tuple(
+        envelope_for(one, entitlement, now) for one in pending_for(entitlement, suspensions, now)
+    )
 
 
 # ------------------------------------------------------------------- nobody answered
@@ -408,11 +404,6 @@ def approvals_gaps(
     )
 
     for one in envelopes:
-        if one.what_will_happen != one.suspension.artefact:
-            gaps.append(
-                f"envelope {one.suspension.id} shows something other than the stored "
-                f"artefact. {AN_ARTEFACT_RENDERED_AGAIN_IS_NOT_THE_ONE_ANYBODY_READ}"
-            )
         if not one.if_nothing_happens.strip():
             gaps.append(
                 f"envelope {one.suspension.id} states no consequence for not answering. "

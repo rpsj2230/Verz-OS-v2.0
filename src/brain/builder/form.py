@@ -154,6 +154,7 @@ SECTION_TITLES: Final[Mapping[Section, str]] = MappingProxyType(
         Section.KNOWLEDGE: "Knowledge",
         Section.SKILLS: "Skills",
         Section.TOOLS: "Tools and permissions",
+        Section.CONNECTORS: "Connected sources",
         Section.LEASH: "Supervision",
         Section.TESTS: "Test questions",
     }

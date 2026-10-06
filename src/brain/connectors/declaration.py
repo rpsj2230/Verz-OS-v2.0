@@ -102,11 +102,32 @@ and the settings a test or an acceptance check connects it with (`ConsoleForm.ex
 literal in a module or a test that every connector PR appended to, so every connector that landed
 put every other open one in conflict. See `A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS_OWN_FIXTURES`.
 
+**A source that is an MCP server's tools, or that only custom code can read, is a reading of its
+own shape (M11.1.2, M11.1.5).** `ToolReading` and `CodeReading` are the other two transports of
+`brain.connectors.transports`, read by one more typed branch of the same worker loop and the same
+live read; `Reading` is the four together. Neither reading holds a key or a socket: an MCP session
+and a custom connector's planned calls are made by the run, and a custom connector's code runs in
+a sandbox that is never handed the key (`brain.connectors.custom_code`).
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
+**And a source that authorises by OAuth says so in its declaration (M11.8.6).** `oauth` is its
+`brain.connectors.oauth.OAuthConsent`: the vendor's consent page and token endpoint, the scopes,
+and the console setting the application's client id is typed into. The client secret is the
+connection's credential, pasted and kept in the source's own slot like any key, so the form asks
+for exactly one key-shaped credential. The refresh token the consent buys is not that credential:
+it is kept in a slot of its own (`brain.ops.credentials.connector_oauth_slot`), for the reason
+`brain.ops.connector_lease.A_ROTATED_GRANT_IS_WRITTEN_BACK_BY_A_ROLE_THAT_CANNOT_READ_IT`
+gives. Its reading names `KeyScheme.OAUTH_REFRESH` and is a `ConsentedReading` presenting the same
+consent, so the worker's run, which is shared by every source, renews access with the source's own
+consent and nobody else's. See `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`. A
+source each person consents to for themselves (`ConsentKind.PERSON`) also asks for the department
+its readers are held to (`PERSONAL_DEPARTMENT_SETTING`), which is where a person must hold the
+consent's reader capability to connect their own account.
+
 Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.4, M11.6.1
-Task ids: M11.7.3, M11.7.1
+Task ids: M11.7.3, M11.7.1, M11.4.6, M11.9.15, M11.1.2, M11.1.5, M11.8.6
 """
 
 from __future__ import annotations
@@ -125,15 +146,19 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.ask import AskRows
+from brain.connectors.change_signal import ChangeSubscription
 from brain.connectors.contract import ConnectorContractError, FetchRequest
 from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
+from brain.connectors.oauth import ConsentKind, OAuthConsent
 from brain.connectors.projection import ProjectedRecord
+from brain.connectors.resolves import ResolvesAs
 from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
 from brain.connectors.write_verification import ReadBack, builds_a_manifest
-from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
+from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, ToolDefinition, TypedResult
+from brain.core.field_policy import FieldRule
 from brain.ops.connect_steps import GuideStep
 from brain.ops.leases import SealedSecret
 from brain.ops.limits import ConnectorLimit
@@ -141,7 +166,9 @@ from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
 if TYPE_CHECKING:
+    from brain.connectors.custom_code import PlannedCall
     from brain.gate.leash import Action
+    from brain.tools.run_skill import SandboxSpec
 
 # ------------------------------------------------------------------ written-down reasons
 #: The owner's rule, stated on 18 and 21 September and restated in every connector brief since.
@@ -210,6 +237,19 @@ A_READING_NAMES_THE_SCOPE_ITS_KEY_FILE_IS_EXCHANGED_FOR: Final = (
     "is read."
 )
 
+#: The setting naming the department a source each person consents to answers to: a person may
+#: consent for themselves only while holding its declared reader capability there (M11.8.6).
+PERSONAL_DEPARTMENT_SETTING: Final = "department"
+
+#: Why an OAuth source's reading presents the consent its declaration asks for, and nothing else.
+A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR: Final = (
+    "A source that authorises by OAuth renews access by posting its refresh token to its vendor's "
+    "token endpoint. The run that posts it is shared by every source, so where it posts comes "
+    "from the source's own reading, and the declaration holds the reading to the consent the "
+    "console asked the person for: a reading that presented another vendor's endpoint would send "
+    "this source's refresh token and client secret there."
+)
+
 #: Why the lists that named every connector are read off the declarations.
 A_CONNECTOR_IS_ITS_OWN_MODULE_AND_ITS_OWN_FIXTURES: Final = (
     "Every list that names each connector is a place two connector changes edit at once, and on "
@@ -263,6 +303,18 @@ class KeyScheme(enum.StrEnum):
     #: (https://developers.google.com/identity/protocols/oauth2/service-account). The key file is
     #: never sent: see `brain.connectors.google_token.A_KEY_FILE_IS_NEVER_SENT_IN_A_HEADER`.
     GOOGLE_SERVICE_ACCOUNT = "google_service_account"
+    #: A refresh token a person's consent bought (M11.8.6), exchanged by the run for an access
+    #: token at the vendor's token endpoint with the application's client id and secret, and sent
+    #: as `Authorization: Bearer <token>` (RFC 6749 section 6, RFC 6750). Neither the refresh
+    #: token nor the client secret is ever sent to the source: see `brain.connectors.oauth`.
+    OAUTH_REFRESH = "oauth_refresh"
+
+
+#: The schemes a key is sent in as it is, with no exchange first. An MCP or custom-code reading
+#: names one of these: only a REST reading says which scope a key file's token carries.
+SCHEMES_SENT_AS_THEY_ARE: Final = frozenset(
+    {KeyScheme.BEARER, KeyScheme.BASIC_KEY_AS_USER, KeyScheme.NONE}
+)
 
 
 # ---------------------------------------------------------------- connecting from the console
@@ -682,6 +734,66 @@ class ScopedReading(Protocol):
         ...
 
 
+# ------------------------------------------------------------- reading only what changed
+@runtime_checkable
+class ChangedSince(Protocol):
+    """A reading whose source can be asked for only what changed since an instant (M11.4.6).
+
+    Its own protocol beside `SourceReading` rather than two more methods on it, because most
+    sources this release reads cannot be asked that through the arguments of a page: Xero's is a
+    header, `If-Modified-Since`, and a reading passes arguments and never headers per call. A
+    reading that cannot is read to the end every time, which is a read of everything and the one
+    kind that may retire what it did not return
+    (`brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`).
+
+    The subscription travels with it because a cursor cannot see a deletion
+    (`brain.connectors.change_signal.A_CURSOR_CANNOT_SEE_A_DELETION`): a source asked only for
+    changes is still read whole once its subscription's reconciliation falls due, and that read
+    is where a removal is noticed.
+    """
+
+    def changed_since(self, entity: str, since: datetime) -> Mapping[str, str]:
+        """The arguments of the first page of what changed in one entity kind since `since`."""
+        ...
+
+    def subscription(self, entity: str) -> ChangeSubscription:
+        """How this source tells us one entity kind moved, with the reconciliation it owes."""
+        ...
+
+
+@runtime_checkable
+class BoundedWalk(Protocol):
+    """A reading whose walk may leave part of its source out at a bound of its own (M11.9.15).
+
+    Google Drive does not walk into a folder nested deeper than its depth bound, so a tree deeper
+    than that is walked to an end that is not the tree's. The worker asks a reading that is one of
+    these after each page, and a pass that left something out is reported as part of the source
+    left out (`brain.ops.connector_sync.READ_BUT_PART_LEFT_OUT`) and retires nothing
+    (`brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`):
+    a file in a folder the walk did not reach was not asked for, and is not therefore gone.
+    Optional, and asked with `isinstance`, so a reading whose walk has no bound of its own owes
+    nothing here.
+    """
+
+    def left_out(self, entity: str, asked: Mapping[str, str], body: Any) -> bool:
+        """Whether the walk, up to and including the page `asked` answered with `body`, has left
+        part of the source out."""
+
+
+@runtime_checkable
+class ConsentedReading(Protocol):
+    """A reading whose access is renewed from a refresh token a person's consent bought (M11.8.6).
+
+    Asked for only when `SourceReading.key_scheme` is `KeyScheme.OAUTH_REFRESH`, for
+    `ScopedReading`'s reason: a source whose key is sent as it is owes nothing here. See
+    `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`.
+    """
+
+    def consent(self) -> OAuthConsent:
+        """The consent this source's access is renewed under: its vendor's token endpoint."""
+        ...
+
+
 # ------------------------------------------------------------------ reading one record live
 #: Why a live lookup may name an operation of its own.
 A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
@@ -804,6 +916,117 @@ class ViewReading(Protocol):
         ...
 
 
+# ------------------------------------------------------------ an MCP server's tools, read
+@runtime_checkable
+class ToolReading(Protocol):
+    """How the worker and a question read a source that is an MCP server's tools (M11.1.2).
+
+    The worker's run opens one MCP session per attempt over the leased key, checks every tool
+    the reading calls is listed as it was pinned, and calls one declared tool per entity; the
+    reading only says which tool, with which arguments, and what its answer means. It holds no
+    key, no session and no socket, so it is tested with no server at all. See
+    `brain.connectors.mcp`, which argues the shape, and `brain.ops.mcp_session`, which talks.
+
+    **There is no method returning a document**, for `SourceReading`'s reason.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind the source projects, in the order a run reads them."""
+        ...
+
+    def refresh_interval(self) -> timedelta:
+        """How often a healthy source is read, which is the interval its freshness is judged by."""
+        ...
+
+    def key_scheme(self) -> KeyScheme:
+        """How the run sends this source's key. The reading never sees the key."""
+        ...
+
+    def endpoint(self, settings: Mapping[str, str]) -> str:
+        """The address of the MCP server this connection reads."""
+        ...
+
+    def pinned(self) -> Mapping[str, str]:
+        """Every remote tool this reading calls, with the digest of its definition as reviewed."""
+        ...
+
+    def tool_call(self, entity: str, source_id: str | None) -> tuple[str, Mapping[str, Any]]:
+        """The remote tool and arguments that list `entity`, or read the one record `source_id`."""
+        ...
+
+    def interpret_tool(
+        self, entity: str, result: Mapping[str, Any], *, fetched_at: str
+    ) -> PageReply:
+        """One `tools/call` result, as the declared field mapping reads it."""
+        ...
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """The index entry kept for one row, or None for a row with nothing to keep."""
+        ...
+
+
+# ------------------------------------------------------- custom code, run in a sandbox
+@runtime_checkable
+class CodeReading(Protocol):
+    """How the worker and a question read a source through custom code in a sandbox (M11.1.5).
+
+    The code plans calls and, where the connector needs it, interprets their answers; the host
+    makes every call with the leased key. Both runs go through `brain.tools.run_skill.ScriptRunner`
+    and neither is handed the key. See `brain.connectors.custom_code`, which argues the shape, and
+    `brain.ops.custom_code_run`, which runs it.
+
+    **There is no method returning a document**, for `SourceReading`'s reason.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind the source projects, in the order a run reads them."""
+        ...
+
+    def refresh_interval(self) -> timedelta:
+        """How often a healthy source is read, which is the interval its freshness is judged by."""
+        ...
+
+    def key_scheme(self) -> KeyScheme:
+        """How the host sends this source's key on a planned call. The code never sees the key."""
+        ...
+
+    def plan_spec(
+        self, entity: str, *, settings: Mapping[str, str], source_id: str | None
+    ) -> SandboxSpec:
+        """The sandboxed run that plans the calls listing `entity`, or reading one record."""
+        ...
+
+    def planned(self, output: str) -> tuple[PlannedCall, ...]:
+        """The calls a planning run printed, each on the declared egress allowlist, or a refusal."""
+        ...
+
+    def interpret_spec(self, entity: str, answers: tuple[bytes, ...]) -> SandboxSpec | None:
+        """The sandboxed run interpreting the answers, or None when the field mapping reads them."""
+        ...
+
+    def from_answers(self, entity: str, answers: tuple[Any, ...], *, fetched_at: str) -> PageReply:
+        """The decoded answers, read by the declared field mapping."""
+        ...
+
+    def from_output(self, entity: str, output: str, *, fetched_at: str) -> PageReply:
+        """An interpreting run's output, read by the declared field mapping."""
+        ...
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """The index entry kept for one row, or None for a row with nothing to keep."""
+        ...
+
+
+#: Every shape a connector's scheduled reading may take: a REST source's pages, a database's
+#: views, an MCP server's tools, or custom code in a sandbox. The four transports of
+#: `brain.connectors.transports`, each read by one typed branch of the one worker loop.
+Reading = SourceReading | ViewReading | ToolReading | CodeReading
+
+
 # ------------------------------------------------------------------ a write, granted apart
 #: Why a connector's write is a grant of its own, with a key of its own.
 A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN: Final = (
@@ -846,17 +1069,81 @@ class WriteCall:
 class PreparesWrite(Protocol):
     """How a connector turns an approved action into its call, and judges the record read back."""
 
-    def call_for(self, action: Action) -> WriteCall:
+    def call_for(self, action: Action, *, settings: Mapping[str, str]) -> WriteCall:
         """The call that sends this approved action. Raises for an action it cannot send.
 
         Builds the call and sends nothing, which is why it is not named `call`: `brain.ops.effects`
-        presumes a method of that name issues, and this one only reads the action.
+        presumes a method of that name issues, and this one only reads the action. `settings` are
+        the connection's, so a source reached at an address of its own (a helpdesk, say) is sent
+        the change there and never at an address the action carries.
         """
         ...
 
     def differs(self, action: Action, found: Mapping[str, Any]) -> tuple[str, ...]:
         """The names of the fields the record read back holds other than the action set them."""
         ...
+
+
+#: Why a write a model may ask for is declared by the connector, argument by argument.
+A_WRITE_A_MODEL_MAY_ASK_FOR_IS_PREPARED_BY_THE_CONNECTOR_AND_BY_NOBODY_ELSE: Final = (
+    "A tool in an agent's catalogue is only a name and a schema, and what an approver is shown "
+    "and a worker sends is an action. The step between a model's arguments and that action is "
+    "the connector's: which record it is about, what the connection's own settings add (the "
+    "department a grant is matched against comes from the connection and never from the model), "
+    "and what the record read at the run's reach says before anything changes. A write with no "
+    "such declaration is never offered to a model, because the runtime would have nothing to "
+    "build the held action from but the model's own words."
+)
+
+
+class ProposesAction(Protocol):
+    """How a model's arguments for one write tool become the action a person is asked to approve.
+
+    `tool` is the tool as the catalogue describes it, whose `args_schema` the arguments are
+    checked against before anything here is called. `target_of` names the one record the action
+    is about, by the id its source gave it, so the runtime can read that record at the run's reach
+    first. `action_for` builds the action from the arguments, the agent, that record as the
+    reader may see it (redacted) and the connection's settings, and refuses what it cannot build
+    with `ConnectorContractError`. See
+    `A_WRITE_A_MODEL_MAY_ASK_FOR_IS_PREPARED_BY_THE_CONNECTOR_AND_BY_NOBODY_ELSE`.
+    """
+
+    @property
+    def tool(self) -> ToolDefinition:
+        """The write tool this prepares, with the schema its arguments are checked against."""
+        ...
+
+    def target_of(self, arguments: Mapping[str, str]) -> str:
+        """The source id of the record the arguments are about. Raises for a malformed one."""
+        ...
+
+    def action_for(
+        self,
+        arguments: Mapping[str, str],
+        *,
+        agent_id: str,
+        record: Mapping[str, Any],
+        settings: Mapping[str, str],
+    ) -> Action:
+        """The action to hold for a person. Reads nothing and sends nothing."""
+        ...
+
+    def described(self, action: Action) -> str:
+        """What the action is, in a phrase the person who asked for it may be told, such as "a
+        reply to ticket 4242": only what they named or may read, never the approver, a reason or
+        the arguments beyond the reference they already gave."""
+        ...
+
+
+@runtime_checkable
+class SimulatesAction(Protocol):
+    """A preparer that can say what its action would have returned, for a run that only simulates.
+
+    Optional and asked with `isinstance`, so a preparer without one is answered in plain words
+    that nothing was sent, and the runtime never invents a result for a tool that cannot show one.
+    """
+
+    def simulate(self, action: Action) -> TypedResult[Any]: ...
 
 
 @dataclass(frozen=True)
@@ -879,6 +1166,15 @@ class WriteGrant:
     credential_shape: CredentialShape = CredentialShape.KEY
     #: What its own key must be allowed to do and never be given, which its slot is defined with.
     scopes: KeyScopes | None = None
+    #: The fields its tools write that no read classifies, each behind its own capability. See
+    #: `A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT`.
+    fields: tuple[FieldRule, ...] = ()
+    #: The tools a model may ask for in an agent run, each with how its arguments become the
+    #: action held for a person. A tool of `tools` with no entry is never offered to a model. See
+    #: `A_WRITE_A_MODEL_MAY_ASK_FOR_IS_PREPARED_BY_THE_CONNECTOR_AND_BY_NOBODY_ELSE`.
+    proposes: Mapping[str, ProposesAction] = field(
+        default_factory=lambda: MappingProxyType({}), compare=False
+    )
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -887,6 +1183,14 @@ class WriteGrant:
         if not self.tools:
             msg = f"write grant {self.name!r} sends no tool, so the key it asks for sends nothing"
             raise DeclarationError(msg)
+        for prepared, proposer in self.proposes.items():
+            if prepared not in self.tools or proposer.tool.name != prepared:
+                msg = (
+                    f"write grant {self.name!r} prepares {prepared!r} for a model and the grant "
+                    "does not send that tool, or its preparer is for another one; a preparer for "
+                    "a tool nothing sends would be held for a person and never carried out"
+                )
+                raise DeclarationError(msg)
         for one in (self.label, self.credential_label, self.credential_hint, self.not_allowed):
             if not one.strip():
                 msg = (
@@ -894,6 +1198,10 @@ class WriteGrant:
                     "and what an approver is told without it"
                 )
                 raise DeclarationError(msg)
+        named = [(one.entity, one.field) for one in self.fields]
+        if len(set(named)) != len(named):
+            msg = f"write grant {self.name!r} classifies one field twice"
+            raise DeclarationError(msg)
 
 
 @dataclass(frozen=True)
@@ -983,9 +1291,10 @@ class ConnectorDeclaration:
     console: ConsoleForm | None = None
     #: Why the console cannot connect this source yet. Empty exactly when `console` is set.
     not_from_the_console: str = ""
-    #: How the worker reads it on a schedule, or None when nothing does. A REST source's reading
-    #: or a database's views (`ViewReading`); see `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`.
-    reading: SourceReading | ViewReading | None = None
+    #: How the worker reads it on a schedule, or None when nothing does. A REST source's reading,
+    #: a database's views (`ViewReading`; see `A_DATABASE_IS_READ_BY_THE_SAME_LOOP`), an MCP
+    #: server's tools (`ToolReading`) or custom code in a sandbox (`CodeReading`).
+    reading: Reading | None = None
     #: How one of its records is read live at question time, or None when none is.
     live: LiveLookup | None = None
     #: How the figures one of its records names are read live, or None when it has none (M11.7.1).
@@ -998,9 +1307,23 @@ class ConnectorDeclaration:
     ask: AskRows | None = None
     #: What its key must be allowed to do and never be given, which its vault slot is defined with.
     scopes: KeyScopes | None = None
+    #: How a person consents to it at its vendor, when it authorises by OAuth (M11.8.6).
+    oauth: OAuthConsent | None = None
     #: Its verified rate ceiling, or None when nobody has measured one. Named for this source, so
     #: `brain.ops.limits.connector_ceiling` finds it. See `A_CEILING_LIVES_WITH_ITS_CONNECTOR`.
     ceiling: ConnectorLimit | None = None
+    #: The prefix of every entity it names at connect time, for a source whose entities are not
+    #: known until an install connects it, so an agent's connector list can narrow them. See
+    #: `brain.agents.binding.discovered_prefixes`.
+    discovers: str = ""
+    #: Entities it provides that no reading, live lookup or manifest tool names, for a source read
+    #: by a module of its own, so an agent's connector list can narrow them. See
+    #: `brain.agents.binding.entities_of`.
+    provides: tuple[str, ...] = ()
+    #: Which of its records entity resolution reads, as what type, by which field, and whether
+    #: they carry money. Empty when none of its records is a company, a person or a project.
+    #: See `brain.connectors.resolves`.
+    resolves: tuple[ResolvesAs, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -1067,6 +1390,22 @@ class ConnectorDeclaration:
                         f"under. {A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
                     )
                     raise DeclarationError(msg)
+        resolved = [one.entity for one in self.resolves]
+        if len(resolved) != len(set(resolved)):
+            msg = f"connector {self.name!r} declares one entity for resolution twice"
+            raise DeclarationError(msg)
+        unread = (
+            ()
+            if self.reading is None
+            else tuple(sorted(set(resolved) - set(self.reading.entities())))
+        )
+        if unread:
+            msg = (
+                f"connector {self.name!r} declares {unread} for resolution and its reading keeps "
+                "no record of them, so nothing would ever be resolved"
+            )
+            raise DeclarationError(msg)
+        self._consent_is_whole()
         if self.report is not None and self.reading is None:
             msg = (
                 f"connector {self.name!r} declares a report and no reading; a report is read with "
@@ -1081,6 +1420,64 @@ class ConnectorDeclaration:
             msg = (
                 f"connector {self.name!r} reads {both} live both as a record and as a report. "
                 f"{A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT}"
+            )
+            raise DeclarationError(msg)
+
+    def _consent_is_whole(self) -> None:
+        """An OAuth source asks for its client id and secret, and its reading renews by its consent.
+
+        See `A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR`.
+        """
+        renews = (
+            self.reading is not None
+            and not isinstance(self.reading, ViewReading)
+            and self.reading.key_scheme() is KeyScheme.OAUTH_REFRESH
+        )
+        if self.oauth is None:
+            if renews:
+                msg = (
+                    f"connector {self.name!r} renews access by OAuth and declares no consent. "
+                    f"{A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR}"
+                )
+                raise DeclarationError(msg)
+            return
+        form = self.console
+        if form is None or form.credential_shape is not CredentialShape.KEY:
+            msg = (
+                f"connector {self.name!r} is consented to by OAuth, so its console form asks for "
+                "the application's client secret as one pasted key"
+            )
+            raise DeclarationError(msg)
+        asked = {one.name for one in form.settings}
+        if self.oauth.kind is ConsentKind.PERSON and PERSONAL_DEPARTMENT_SETTING not in asked:
+            msg = (
+                f"connector {self.name!r} is consented to by each person for themselves, so its "
+                f"form asks for the {PERSONAL_DEPARTMENT_SETTING!r} its readers are held to"
+            )
+            raise DeclarationError(msg)
+        if self.oauth.client_id_setting not in asked:
+            msg = (
+                f"connector {self.name!r} reads its client id from the "
+                f"{self.oauth.client_id_setting!r} setting, which its form does not ask for"
+            )
+            raise DeclarationError(msg)
+        if self.oauth.kind is ConsentKind.PERSON:
+            if renews:
+                msg = (
+                    f"connector {self.name!r} is consented to by each person for themselves, so no "
+                    "read made with nobody present can renew by a consent; its scheduled reading, "
+                    "if any, is keyed some other way"
+                )
+                raise DeclarationError(msg)
+            return
+        # Asked of the reading as an object: a protocol check over the union of the two reading
+        # shapes is one mypy reads as never true, and at run time it is the question asked.
+        reading: object = self.reading
+        consented = isinstance(reading, ConsentedReading) and reading.consent() == self.oauth
+        if not (renews and consented):
+            msg = (
+                f"connector {self.name!r} is consented to by OAuth and its reading does not renew "
+                f"access by that consent. {A_READING_PRESENTS_THE_CONSENT_ITS_DECLARATION_ASKS_FOR}"
             )
             raise DeclarationError(msg)
 
@@ -1119,6 +1516,49 @@ def discover(package: ModuleType) -> Mapping[str, ConnectorDeclaration]:
 def shipped() -> Mapping[str, ConnectorDeclaration]:
     """Every connector this release ships. Found once per process, at start-up."""
     return discover(brain.connectors)
+
+
+#: Why a write grant classifies the fields its tools write.
+A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT: Final = (
+    "The gate's mask check withholds every field no rule classifies, and every argument of an "
+    "action is a field it touches, so a write is held only when each field it writes is "
+    "classified. A read classifies the fields a record holds. A write that creates something, a "
+    "reply to a ticket, writes a field no record holds, and putting it among the read's fields "
+    "would offer it on Ask as something a ticket has. So the grant that writes it classifies it, "
+    "and the policy an action is decided under is the read's rules and the grant's together."
+)
+
+
+def written_fields(source: str, entity: str) -> tuple[FieldRule, ...]:
+    """The fields `source`'s write grants declare their tools write on `entity`.
+
+    See `A_FIELD_A_WRITE_CREATES_IS_CLASSIFIED_BY_THE_GRANT_THAT_WRITES_IT`.
+    """
+    declared = shipped().get(source)
+    if declared is None:
+        return ()
+    return tuple(
+        rule for grant in declared.writes for rule in grant.fields if rule.entity == entity
+    )
+
+
+def proposers(
+    declarations: Mapping[str, ConnectorDeclaration] | None = None,
+) -> Mapping[str, tuple[str, WriteGrant, ProposesAction]]:
+    """Every write tool a model may ask for, by tool name: the connector, its grant, its preparer.
+
+    Over `declarations` when given (the catalogue's, reviewed connectors included) and over the
+    shipped ones otherwise. A tool with no preparer is not here, and so is never offered.
+    """
+    found = shipped() if declarations is None else declarations
+    return MappingProxyType(
+        {
+            tool: (name, grant, proposer)
+            for name, declared in found.items()
+            for grant in declared.writes
+            for tool, proposer in grant.proposes.items()
+        }
+    )
 
 
 def write_grant_for(tool: str) -> tuple[str, WriteGrant] | None:

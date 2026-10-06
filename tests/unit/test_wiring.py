@@ -242,17 +242,21 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
     6,200. Standard still names the inference server, and 648 is less than that one container,
     which is the arithmetic behind item 120 leaving the model server waiting.
 
+    **And a fifth time on 2026-10-06, by a component, from 648 to 904.** The identity provider
+    went from 768 to 1024 MiB, measured: the browser harness found the kernel killing its first
+    start at 768 on every fresh install (`docker-compose.keycloak.yml` says how).
+
     Delete this and the overrun stops being visible anywhere, which means it is discovered by
     deploying it."""
     breaches = budget_breaches("standard")
 
     assert len(breaches) == 1, breaches
     assert "inference-server" in breaches[0]
-    assert "over by 648 MiB" in breaches[0], (
+    assert "over by 904 MiB" in breaches[0], (
         "the standard overrun has moved; something has grown or shrunk and this test is the "
         "only place that would have said so"
     )
-    assert wave_two_mib("standard") - spendable_mib() == 648
+    assert wave_two_mib("standard") - spendable_mib() == 904
 
 
 def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -> None:
@@ -703,7 +707,8 @@ def test_rows_one_and_three_of_item_120_fit_beside_what_the_install_already_runs
     and whose limit is read from its own compose file. Beside them, row 1 (the personal data
     detector) and row 3 (the trace ledger's five services) fit inside the 6,200 MiB wave 2 may
     spend, and row 2 (the model server and the document worker) does not fit beside row 1,
-    which is why it waits.
+    which is why it waits. The spare was 632 MiB until 2026-10-06 and is 376 since the identity
+    provider's limit went from 768 to 1024 MiB, measured; rows 1 and 3 still fit.
 
     Exact on purpose, for the reason the standard overrun is: a figure that moves is the
     finding. Delete this and the room item 120 hands out is a paragraph in a document that
@@ -718,8 +723,8 @@ def test_rows_one_and_three_of_item_120_fit_beside_what_the_install_already_runs
     row_two = set_cost_mib(("inference-server", "brain-parse-worker"))
 
     assert spendable_mib() == 6200
-    assert running + vault_mib == 1728
-    assert spendable_mib() - running - vault_mib - row_one - row_three == 632
+    assert running + vault_mib == 1984
+    assert spendable_mib() - running - vault_mib - row_one - row_three == 376
     assert row_two > spendable_mib() - running - vault_mib - row_one
 
 
@@ -940,3 +945,57 @@ def test_the_trace_stack_and_the_trace_ledger_differ_by_exactly_the_object_store
     assert set(TRACE_STACK_ROLES.values()) - TRACE_LEDGER == {"seaweedfs"}
     assert TRACE_LEDGER - set(TRACE_STACK_ROLES.values()) == set()
     assert "seaweedfs" in AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT
+
+
+#: Measured on 2026-10-06 with native memory tracking in Keycloak 26.0.8 on the browser harness's
+#: runner (run 37413871825): everything the JVM had committed outside its heap, which is an upper
+#: bound for a smaller heap, because the collector's structures shrink with the heap they describe.
+KEYCLOAK_OUTSIDE_HEAP_KIB = 3_772_662 - 3_371_008
+
+#: The share of a container's limit its JVM may plan to fill, leaving the rest for what nothing
+#: here measures: glibc's own bookkeeping, a burst of threads, the page cache it reclaims last.
+KEYCLOAK_PLANNED_SHARE = 0.85
+
+#: Why the heap is a figure. See `docker-compose.keycloak.yml`.
+KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE = (
+    "Keycloak's JVM reads whether a memory limit exists from /proc/cgroups, which newer kernels "
+    "leave without a memory line, and then sizes its heap from the host: a percentage became an "
+    "8 GiB heap in a 1024M cgroup. A fixed -Xmx does not depend on what the "
+    "JVM believes about the machine, and the figure can be held against the limit."
+)
+
+
+def _heap_mib(options: str) -> int:
+    found = re.search(r"-Xmx(\d+)m\b", options)
+    assert found is not None, f"no fixed heap in {options!r}"
+    assert "RAMPercentage" not in options, KEYCLOAK_HEAP_IS_A_FIGURE_NOT_A_SHARE
+    return int(found.group(1))
+
+
+def test_keycloak_s_fixed_heap_and_what_lives_beside_it_fit_inside_its_limit() -> None:
+    """The server's and the build's fixed heaps, plus the measured overhead, fit their limits.
+
+    A heap given as a share of memory is refused, because Keycloak's JVM read the host's memory
+    and a share became 8 GiB. A fixed heap is added to what native memory tracking measured
+    outside it, about 392 MiB, and has to sit inside 85 per cent of the limit `brain.ops.wiring`
+    budgets for the server, and of the one-shot's own limit for the build. Delete this and the
+    heap can go back to a share, or up to 512 MiB, with every unit test green, and the kernel
+    kills the identity provider on its first sign-ins.
+    """
+    compose = yaml.safe_load((REPO / "docker-compose.keycloak.yml").read_text(encoding="utf-8"))
+    outside_mib = KEYCLOAK_OUTSIDE_HEAP_KIB / 1024
+    assert outside_mib > 350
+    server = compose["services"]["keycloak"]
+    limit_mib = component("keycloak").memory_mib
+    assert server["deploy"]["resources"]["limits"]["memory"] == f"{limit_mib}M"
+    assert _heap_mib(server["environment"]["JAVA_OPTS_APPEND"]) + outside_mib <= (
+        limit_mib * KEYCLOAK_PLANNED_SHARE
+    )
+    build = compose["services"]["keycloak-build"]
+    build_limit = int(str(build["deploy"]["resources"]["limits"]["memory"]).rstrip("M"))
+    assert _heap_mib(build["environment"]["JAVA_OPTS_APPEND"]) + outside_mib <= (
+        # A tenth spare for the one-shot, which serves nobody and exits.
+        build_limit * 0.9
+    )
+    for one in (server, build):
+        assert one["environment"]["MALLOC_ARENA_MAX"] == "2"

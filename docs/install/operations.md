@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Two of the twenty-two mechanisms are started by nothing
+## Two of the twenty-four mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -314,7 +314,8 @@ it every hour. Two became true on 2026-09-30, when the worker's schedule began r
 dead worker or a transient failure left behind, and reading back side effects a dead worker left
 unconfirmed, and listing for a person each one its connector cannot answer for. The twenty-second,
 the evening digest, arrived on 2026-09-30 already started by the schedule, once a day at the
-install's own hour.
+install's own hour, and the twenty-fourth, the run of approved actions, on 2026-10-06, every five
+minutes.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -327,11 +328,13 @@ install's own hour.
 | `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `in_process` |
 | `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
 | `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `in_process` |
-| `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |
+| `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `in_process` |
 | `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `in_process` |
 | `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `in_process` |
 | `evening_digest` | that whoever the install chose hears each evening what the build closed, reopened and left overdue, in the one conversation they chose | `in_process` |
+| `approved_actions` | that an action a person approved is carried out once, at the requester's reach as it is then, without anybody coming back to send it | `in_process` |
 | `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
+| `elevation_anchor` | that an approved elevation cannot be removed from the end of the elevation chain without it being detectable, whatever the main ledger's anchor says | `on_a_route` |
 | `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `in_process` |
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |
 | `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `in_process` |
@@ -343,14 +346,16 @@ install's own hour.
 | `vault_audit_ship` | that every call the secrets vault answered about a credential slot reaches the tamper-evident audit ledger within minutes | `in_process` |
 | `acceptance_run` | that every task proved on this install goes on being proved after each deploy, by checks whose test data is rolled back | `in_process` |
 | `escalation_expiry` | that a question handed to a person does not stay open for ever once nobody picked it up, and that the person who asked is told so | `in_process` |
+| `entity_resolution` | that every record a connector declares for resolution is registered, so a merge, a review and an answer that names one have something to point at | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
 `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue`,
 `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`,
-`model_health_probes`, `acceptance_run` and `escalation_expiry` it is: the general worker ticks the
-control schedule and starts all thirteen.
+`model_health_probes`, `acceptance_run`, `escalation_expiry`, `entity_resolution` and
+`resolution_calibration` it is: the general worker ticks the control schedule and starts all
+fifteen.
 The token renewal renews the worker's own vault token twice a day once less than half its period
 is left, and the application renews its own from inside its own process on the same rule, because
 a vault token is renewed only by whoever holds it; a `lite` install has no worker and no worker
@@ -476,6 +481,27 @@ before PostgreSQL notices. Lower that setting on the replica if sixty seconds is
 The replica's database role only needs to read. The application runs every console read with
 `SET TRANSACTION READ ONLY` on both databases, so a read-only role is enough.
 
+## A known limit on an install set up before 2026-10-06: the application's pooler
+
+PgBouncer counts its pool per login and database, not per database. The application reaches the
+pooler as two logins, `brain_app` for requests and the owner for migrations and the worker's jobs,
+so a pooler given `DEFAULT_POOL_SIZE` 20 and nothing else can hold 40 server connections, while
+the database's connection budget (`brain.ops.connections`) counts 20. On a busy day that is the
+difference between a queue at the pooler and the database refusing a connection somebody needed.
+
+The product's compose files now cap the database across logins with `MAX_DB_CONNECTIONS`, set to
+the same figure as the pool, so an install set up from them is bounded. **An install set up before
+then is not, and a release cannot change it:** Coolify keeps its own copy of the compose file, and
+a release never edits that copy. Add one line to the `pgbouncer` service's `environment` in that
+copy, beside `DEFAULT_POOL_SIZE`, with the same number:
+
+```yaml
+      MAX_DB_CONNECTIONS: "20"
+```
+
+Then redeploy the application in Coolify once. Nothing else changes: requests queue at the pooler
+for a moment under load, which is what the pool was always meant to do.
+
 ## What is checked and what is not
 
 | Claim | Held by |
@@ -486,6 +512,7 @@ The replica's database role only needs to read. The application runs every conso
 | That a service level statement is refused when the arithmetic does not support it | `test_launch.py` |
 | The thirteen mechanisms, and which have a caller | `test_controls.py`, read out of the source in both directions |
 | That every component declares what ready means | `test_wiring.py` |
+| That the application's pooler is capped across logins at the figure the connection budget counts, and that this page gives the line an older install adds | `test_install_docs.py`, against every compose file's `pgbouncer` |
 | That the database command table names every command, no other, and how to run it | `test_install_docs.py`, against `brain.deployment.database` |
 | That the commands refuse in order, run twice safely, and name a full disk | `test_deployment_database.py`, against a real server where `DATABASE_URL` is set |
 | **That `migrate` reaches the newest schema on a server without pgvector** | **nobody, and it cannot: the first migration installs `vector`** |

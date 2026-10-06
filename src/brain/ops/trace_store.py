@@ -47,13 +47,17 @@ token claim the application reads today, so `realm_roles` is handed in by the ca
 caller is the install check. A retention sweep over the thirty days `tracing.RETENTION` names is
 M25.1.4's.
 
-Task ids: M27.1.3, M24.3.4
+**The same graph goes to the trace ledger where the install runs one**, through `ship`, after it
+is stored and beside the request (`brain.ops.ledger_export`). The store is written first because
+it is the record; the ledger is a screen over a copy of it.
+
+Task ids: M27.1.3, M24.3.4, M32.1.2.6
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
@@ -63,6 +67,7 @@ from sqlalchemy import insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.gate.finish import Finished
+from brain.gate.turn_context import ContextNote
 from brain.ops.sensitive_read_store import disclosed_payload
 from brain.ops.telemetry import status_of_finished
 from brain.ops.tracing import (
@@ -187,6 +192,11 @@ def steps_of(
     if usage is not None:
         root["model"] = usage.model or UNNAMED
         root["token_count"] = usage.tokens_in + usage.tokens_out
+    context = getattr(request.outcome, "context", None)
+    if isinstance(context, ContextNote):
+        # Part names and reasons only (M16.6.1). See
+        # `brain.gate.turn_context.A_PART_LEFT_OUT_IS_NAMED_WITH_ITS_REASON_AND_NEVER_ITS_CONTENTS`.
+        root.update(context.attributes())
     steps = [
         Step(
             step=0,
@@ -265,9 +275,18 @@ def rows_of(trace_id: str, steps: Iterable[Step]) -> list[dict[str, object]]:
 class TraceRecorder:
     """The `brain.gate.finish.RequestRecorder` that writes a run's trace graph, masked."""
 
-    def __init__(self, sessions: async_sessionmaker[AsyncSession], *, environment: str) -> None:
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        *,
+        environment: str,
+        ship: Callable[[str, Sequence[Step]], None] | None = None,
+    ) -> None:
         self.sessions = sessions
         self.environment = environment
+        #: Hands the same graph to the trace ledger (`brain.ops.ledger_export.LedgerShipper`),
+        #: after it is stored, and returns at once. None on a process that sends nowhere.
+        self.ship = ship
 
     async def finished(self, request: Finished) -> None:
         """Write this run's graph in one transaction, or log why not, and never raise.
@@ -289,6 +308,12 @@ class TraceRecorder:
                 await session.execute(insert(TraceStepRow), rows_of(trace_id, steps))
         except Exception as exc:
             log.warning("trace.unrecorded", trace_id=trace_id, error=type(exc).__name__)
+            return
+        if self.ship is not None:
+            try:
+                self.ship(trace_id, steps)
+            except Exception as exc:
+                log.warning("trace.unshipped", trace_id=trace_id, error=type(exc).__name__)
 
 
 class StoredTraces:

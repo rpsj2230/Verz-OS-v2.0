@@ -50,7 +50,7 @@ to review. Every constraint `0121` adds binds only a column it added, for
 that declares none, so every row written before them reads back as the skill it was. Nullable rather
 than defaulted, because a default of an empty queue would be a declaration nobody wrote.
 
-Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M8.3.1
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M8.3.1, M12.4.11, M12.3.1, M12.3.4
 """
 
 from __future__ import annotations
@@ -67,6 +67,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Identity,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
@@ -418,5 +419,113 @@ class SkillDetachmentRow(Base):
         CheckConstraint(f"digest ~ '{DIGEST}'", name="digest_shape"),
         CheckConstraint(f"detached_by ~ '{IDENTIFIER}'", name="detached_by_is_an_identifier"),
         UniqueConstraint("assignment_id", name="uq_skill_detachment_assignment_id"),
+        {"schema": "agent"},
+    )
+
+
+#: `brain.tools.skills.MAX_SCRIPT_BYTES`, restated for the reason `SKILL_NAME_PATTERN` gives.
+MAX_SCRIPT_BYTES: Final = 64 * 1024
+
+#: A sha256 in lowercase hex.
+SHA256_PATTERN: Final = r"^[0-9a-f]{64}$"
+
+
+class SkillScriptRow(Base):
+    """`agent.skill_script`. One script a stored skill carries: its path, bytes and their sha256.
+
+    Keyed by the skill's digest and the path, so the bytes belong to exactly the version a reviewer
+    approved, and **the database refuses a row whose sha256 is not the sha256 of its bytes**: the
+    check computes it. A hash written beside bytes it does not describe would be an approval of
+    something else, and the one place that cannot be written by mistake is the table. `0178`,
+    M12.4.11.
+    """
+
+    __tablename__ = "skill_script"
+
+    digest: Mapped[str] = mapped_column(
+        String(DIGEST_CHARS), ForeignKey("agent.skill.digest"), primary_key=True
+    )
+    path: Mapped[str] = mapped_column(String(PATH_CHARS), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(DIGEST_CHARS), nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"path ~ '{PATH_PATTERN}'", name="path_shape"),
+        CheckConstraint(f"sha256 ~ '{SHA256_PATTERN}'", name="sha256_shape"),
+        CheckConstraint("encode(sha256(content), 'hex') = sha256", name="sha256_is_the_contents"),
+        CheckConstraint(
+            f"octet_length(content) BETWEEN 1 AND {MAX_SCRIPT_BYTES}", name="content_bounded"
+        ),
+        {"schema": "agent"},
+    )
+
+
+class SkillExportRow(Base):
+    """`agent.skill_export`. One approved version exported as a package, by one person. `0191`.
+
+    Written when the package is built, so the ledger records who took which version off the
+    install and when (M12.3.1); its insert trigger appends a `skill` entry with the change
+    `exported`. Keyed to `agent.skill` by the digest, because an export of bytes nobody added would
+    be a record of nothing. Insert-only: nothing un-exports a package somebody already holds.
+    """
+
+    __tablename__ = "skill_export"
+
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    digest: Mapped[str] = mapped_column(
+        String(DIGEST_CHARS), ForeignKey("agent.skill.digest"), nullable=False
+    )
+    #: Who exported it. The ledger entry's actor, read off this column by the trigger.
+    exported_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"exported_by ~ '{IDENTIFIER}'", name="exported_by_is_an_identifier"),
+        {"schema": "agent"},
+    )
+
+
+#: A rehearsal's kind: one lowercase word, so a new kind needs no migration.
+#: See `brain.tools.skill_examples.RehearsalKind`.
+REHEARSAL_KIND_PATTERN: Final = r"^[a-z]{1,16}$"
+REHEARSAL_KIND_CHARS: Final = 16
+
+
+class SkillRehearsalRow(Base):
+    """`agent.skill_rehearsal`. One rehearsal of one version's examples, by one person. `0191`.
+
+    `kind` says what was run, `passed` whether every example's outcome passed, and `outcomes` each
+    example's task, whether it passed and what it lacked. Approval reads these rows for the exact
+    digest it is asked about (M12.3.4); its insert trigger appends a `skill` entry with the change
+    `rehearsed`. Insert-only: a later rehearsal is a new row, never a rewrite of an earlier one.
+    """
+
+    __tablename__ = "skill_rehearsal"
+
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    digest: Mapped[str] = mapped_column(
+        String(DIGEST_CHARS), ForeignKey("agent.skill.digest"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(REHEARSAL_KIND_CHARS), nullable=False)
+    #: The agent it was rehearsed through, at the rehearser's reach.
+    agent_id: Mapped[str] = mapped_column(String(AGENT_ID_CHARS), nullable=False)
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    outcomes: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    #: Who rehearsed it. The ledger entry's actor, read off this column by the trigger.
+    rehearsed_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"kind ~ '{REHEARSAL_KIND_PATTERN}'", name="kind_shape"),
+        CheckConstraint(f"agent_id ~ '{IDENTIFIER}'", name="agent_id_is_an_identifier"),
+        CheckConstraint(f"rehearsed_by ~ '{IDENTIFIER}'", name="rehearsed_by_is_an_identifier"),
+        CheckConstraint("jsonb_typeof(outcomes) = 'array'", name="outcomes_are_a_list"),
         {"schema": "agent"},
     )

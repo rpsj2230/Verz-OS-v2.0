@@ -35,19 +35,28 @@ cannot produce, and `detail` is one of the constant sentences `brain.ops.connect
 Nothing from a response body, a setting or a key can reach this table, because nothing that builds
 a row reads one: see `brain.ops.connector_sync.A_RUN_RECORD_CARRIES_NO_VALUE_FROM_THE_SOURCE`.
 
+**Where a read stands is kept on the attempt that left it there** (`0179`). The instant the last
+complete read began, and the page each entity would be read from next when a read stopped
+part-way, so the worker asks a source only for what changed since it last read everything to the
+end (M11.4.6) and a read cut short carries on where it stopped (M11.4.8). A page is named by the
+arguments its request carries, which are the worker's own (a page number, a size, the instant it
+asks for changes since) or, for a source that pages by token, the token the source handed out: a
+pointer to a position in a listing, never a value a record holds. It is read by the worker and by
+nothing on the Connectors screen.
+
 **No count of what was withheld, and no count per entity.** `records` and `documents` are what the
 run wrote, which is a count of what this install now holds a copy of and never of what a reader
 may not see, the argument `brain.console.connector_trust.
 A_COUNT_OF_WHAT_IS_COPIED_IS_NOT_A_COUNT_OF_WHAT_IS_HIDDEN` makes about projected fields.
 
-Task ids: M42.6.5, M27.15.8
+Task ids: M42.6.5, M27.15.8, M11.4.6, M11.4.8
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Final
+from typing import Any, Final
 
 from sqlalchemy import (
     CheckConstraint,
@@ -59,6 +68,7 @@ from sqlalchemy import (
     Uuid,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base
@@ -112,6 +122,15 @@ class ConnectorSyncRow(Base):
     detail: Mapped[str] = mapped_column(Text, nullable=False)
     #: One of `LEASE_OUTCOMES`. `none` for an attempt that held no lease, and all before `0093`.
     lease: Mapped[str] = mapped_column(String(16), nullable=False, server_default="none")
+    #: Where reading the source stood when this attempt ended: the instant the last complete read
+    #: began, which the next read asks for changes since, and the page each entity would be read
+    #: from next when a read stopped part-way. `brain.ops.connector_sync.ReadState` writes and
+    #: reads it. Null on a test of the connection and on every row before `0179`, and the worker
+    #: reads the newest row that holds one. See the module docstring on what it may hold.
+    #: `none_as_null`, so a state of None is SQL's null and not JSON's `null`, which `IS NOT NULL`
+    #: admits: without it a test of the connection would be the newest state, and the next read
+    #: would start again from the beginning.
+    read_state: Mapped[Any] = mapped_column(JSONB(none_as_null=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"connector ~ '{CONNECTOR_NAME_PATTERN}'", name="connector_shape"),

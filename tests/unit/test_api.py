@@ -269,13 +269,22 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     answers a key it could not keep with the credential write's own `CredentialNotKeptView`, for
     that route's reason.
 
-    **An agent's lifecycle moves are the eighth to thirteenth, for their 409s.**
-    `brain.agent_lifecycle_routes` answers enable, disable, archive, transfer, duplicate and a
-    template install with the automations' own `NotChangedView` when the page's confirmation no
-    longer matches the row, or the move is refused in the domain's sentence (an archived agent
-    cannot be enabled), so the confirmation dialog can say why nothing changed.
+    **An agent's lifecycle moves are the eighth to fourteenth, for their 409s.**
+    `brain.agent_lifecycle_routes` answers enable, disable, archive, transfer, duplicate, a channel
+    switch and a template install with the automations' own `NotChangedView` when the page's
+    confirmation no longer matches the row, or the move is refused in the domain's sentence (an
+    archived agent cannot be enabled), so the confirmation dialog can say why nothing changed.
     `brain.agent_builder_routes` answers every write on a draft with the same body, for the same
     reason: a draft saved since, a publish that is not checked, an agent that moved.
+
+    **Installing an agent into a group chat is another, for its 409** (`brain.agent_group_routes`):
+    a chat that already has an agent, that the bot has left, or a channel the agent does not answer
+    on is the same `NotChangedView`, so the confirmation can say why nothing was installed.
+
+    **A decision on the Resolution review screen and promoting its weights are the last, for
+    their 409s.** `brain.resolution_routes` answers a pair somebody else decided first, and a fit
+    that is no longer the one waiting, with the same `NotChangedView`, so the confirmation can
+    say why nothing was changed.
 
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
     from brain.agent_builder_routes import (
@@ -289,15 +298,20 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         REHEARSE_PATH,
         SAVE_PATH,
     )
+    from brain.agent_group_routes import GROUPS_PATH
     from brain.agent_lifecycle_routes import (
         ARCHIVE_PATH,
+        CHANNELS_PATH,
         DISABLE_PATH,
         DUPLICATE_PATH,
         ENABLE_PATH,
         INSTALL_PATH,
         TRANSFER_PATH,
     )
+    from brain.agent_upgrade_routes import ACCEPT_PATH as UPGRADE_ACCEPT_PATH
+    from brain.agent_upgrade_routes import DECLINE_PATH as UPGRADE_DECLINE_PATH
     from brain.credential_routes import CREDENTIALS_PATH
+    from brain.resolution_routes import DECISION_PATH, PROMOTE_PATH
     from brain.sign_in_routes import SIGN_INS_PATH
 
     app: FastAPI = create_app(Settings(env="development"))
@@ -331,6 +345,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
                 DISABLE_PATH,
                 ARCHIVE_PATH,
                 TRANSFER_PATH,
+                CHANNELS_PATH,
                 DUPLICATE_PATH,
                 INSTALL_PATH,
                 DRAFTS_PATH,
@@ -350,6 +365,11 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
             )
             for act in ("pause", "resume", "reschedule", "remove", "adopt")
         },
+        (f"{API_PREFIX}{DECISION_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{PROMOTE_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{GROUPS_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{UPGRADE_ACCEPT_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{UPGRADE_DECLINE_PATH}", "409"): "#/components/schemas/NotChangedView",
     }
 
     checked = 0

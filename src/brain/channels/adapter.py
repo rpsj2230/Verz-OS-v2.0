@@ -122,10 +122,10 @@ class Feature(enum.StrEnum):
     #: one-to-one one. Added for M39.2.4.4 and honoured by
     #: `brain.console.agent_tabs.install_to_group`, which refuses an install on a surface
     #: that does not declare it, so this is a member with a code path behind it rather than
-    #: a label an adapter can wear. **No adapter in this repository declares it yet**, and
-    #: that is the honest state: a group install needs a path for the conversation reference
-    #: the vendor hands back, and none of the six adapters has one. Declaring it is a
-    #: decision per surface, made where the surface's other capabilities are argued.
+    #: a label an adapter can wear. A surface declares it once its wire reads the vendor's
+    #: own event for the bot joining and leaving a conversation (`Received.room`), which is
+    #: where the conversation reference a group install names comes from. Lark does since
+    #: `0205`; declaring it is a decision per surface, made where its other capabilities are.
     GROUP_INSTALL = "group_install"
 
 
@@ -540,6 +540,20 @@ class CardPress:
 
 
 @dataclass(frozen=True)
+class RoomChange:
+    """The bot added to a shared conversation, or removed from it (M39.2.4.4).
+
+    The vendor's own event, read: the conversation's id and the name the vendor gave it, and
+    which way it went. Nothing in it is a person or a reach. A room is where a group install can
+    be made, and what may be said there is still `brain.channels.room.floor`'s alone.
+    """
+
+    conversation_id: str
+    name: str
+    joined: bool
+
+
+@dataclass(frozen=True)
 class Received:
     """A verified request, read: the event the gate reads and where a reply to it goes."""
 
@@ -552,6 +566,9 @@ class Received:
     #: Present when this was a press on a card rather than a message; the event is then the
     #: press's own, carrying no text, so it is claimed exactly as a message is.
     press: CardPress | None = None
+    #: Present when the bot joined or left a shared conversation rather than being asked
+    #: anything; the event is then the change's own, carrying no text, claimed as a message is.
+    room: RoomChange | None = None
 
 
 @dataclass(frozen=True)

@@ -21,7 +21,7 @@ module.exports = [
 {id:"M32",name:"Component deployment and wiring",wave:2,tasks:[
  {n:"Langfuse",s:[
    {n:"Deployment",k:["Compose service set: web, worker, ClickHouse, Redis, S3-compatible store","Resource limits per service so it cannot starve the application","Retention configuration on traces and observations","Profile flag so the lite install runs the ledger only"]},
-   {n:"Safe integration",k:["Client-side masking before any span leaves the process","Assertion test that no canary string reaches the payload store","Environment vocabulary fixed at first ingest and asserted against the database enum","Separate Keycloak role for payload access","Audit row written before every payload read"]}
+   {n:"Safe integration",k:["Client-side masking before any span leaves the process","Assertion test that no canary string reaches the payload store","Environment vocabulary fixed at first ingest and asserted against the database enum","Separate Keycloak role for payload access","Audit row written before every payload read","Every run's masked trace, model calls as generations, reaches the trace ledger the install switched on in INSTALL_SERVICES, and none is sent when it is off"]}
  ]},
  {n:"Presidio and PII detection",s:[
    {n:"Wiring",k:["Presidio analyzer configured with the recognisers we need","GLiNER for entities the default recognisers miss","Singapore recognisers: NRIC, FIN, UEN, local phone formats","Chinese, Malay and Tamil name handling"]},
