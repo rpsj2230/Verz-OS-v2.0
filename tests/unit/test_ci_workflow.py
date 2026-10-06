@@ -464,6 +464,7 @@ def test_every_shard_keeps_its_coverage_data_under_a_name_of_its_own() -> None:
         (position, one)
         for position, one in enumerate(job["steps"])
         if str(one.get("uses", "")).startswith("actions/upload-artifact")
+        and "coverage" in str(one.get("with", {}).get("name", ""))
     ]
 
     assert "${{ matrix.shard }}" in str(job["env"]["COVERAGE_FILE"])
