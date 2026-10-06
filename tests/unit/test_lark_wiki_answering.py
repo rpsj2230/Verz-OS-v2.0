@@ -63,6 +63,12 @@ def reader(*grants: tuple[str, Scope]) -> EntitlementSet:
     )
 
 
+def wiki_reader(scope: Scope) -> EntitlementSet:
+    """A reader holding the library's read and the wiki's own in `scope`, as a reader of a wiki
+    page does. See `brain.agents.binding.A_WIKI_PAGE_HAS_A_READ_OF_ITS_OWN`."""
+    return reader(("read:knowledge", scope), ("read:wiki_page", scope))
+
+
 def test_the_wiki_is_read_only_with_knowledge_from_wiki_chosen_on_a_known_platform() -> None:
     """Delete this and a Wiki switched off in Connect Lark can still be walked on every question."""
     on = {
@@ -155,11 +161,11 @@ def test_a_page_is_told_to_a_reader_its_reach_admits_and_a_locked_one_is_never_r
     and a page can be told outside its department, or a page restricted in Lark read at all."""
     wiki = recorded()
     search = WithWiki(_NoLibrary(), search_over(wiki, (department_space(),)))
-    web = reader(("read:knowledge", Scope.department("web")))
+    web = wiki_reader(Scope.department("web"))
     told = asyncio.run(search.passages("the renewal handbook", entitlement=web, now=LONG_AGO))
     assert [one.document for one in told.records] == ["renewal text"]
     assert not any("doccnLock0001" in url for url in wiki.asked)
-    ops = reader(("read:knowledge", Scope.department("ops")))
+    ops = wiki_reader(Scope.department("ops"))
     assert (
         asyncio.run(search.passages("the renewal handbook", entitlement=ops, now=LONG_AGO)).records
         == ()
@@ -175,7 +181,7 @@ def test_a_reader_with_no_knowledge_read_or_no_declared_space_costs_no_call() ->
             "renewal handbook", entitlement=nobody, now=LONG_AGO
         )
     )
-    web = reader(("read:knowledge", Scope.department("web")))
+    web = wiki_reader(Scope.department("web"))
     asyncio.run(search_over(wiki, ()).passages("renewal handbook", entitlement=web, now=LONG_AGO))
     assert wiki.asked == []
 
@@ -186,11 +192,43 @@ def test_a_company_page_is_told_to_every_reader_of_the_knowledge_plane() -> None
     wiki = recorded()
     company = declaration_of(state(space_value(SPACE, COMPANY)))
     assert company is not None
-    ops = reader(("read:knowledge", Scope.department("ops")))
+    ops = wiki_reader(Scope.department("ops"))
     told = asyncio.run(
         search_over(wiki, (company,)).passages("renewal handbook", entitlement=ops, now=LONG_AGO)
     )
     assert [one.document for one in told.records] == ["renewal text"]
+
+
+def test_a_reader_holding_only_the_library_read_is_told_no_wiki_page_and_costs_no_call() -> None:
+    """**The read that binds the wiki to an agent's connector list.** The library's read alone is
+    the company's documents; a wiki page needs `read:wiki_page` too, so an agent whose ceiling
+    drops it for not naming Lark Wiki reaches no page. Delete this and the wiki is told to anybody
+    who reads the library, through any agent at all."""
+    wiki = recorded()
+    library_only = reader(("read:knowledge", Scope.department("web")))
+    told = asyncio.run(
+        search_over(wiki, (department_space(),)).passages(
+            "the renewal handbook", entitlement=library_only, now=LONG_AGO
+        )
+    )
+    assert told.records == ()
+    assert wiki.asked == []
+
+
+def test_a_page_is_told_only_where_both_reads_admit_it() -> None:
+    """Both reaches are asked, not either: a reader whose library read is in the page's department
+    and whose wiki read is in another is told nothing. Delete this and the wiki's read becomes a
+    switch rather than a reach, and a narrow wiki grant is widened by a wide library grant."""
+    wiki = recorded()
+    crossed = reader(
+        ("read:knowledge", Scope.department("web")), ("read:wiki_page", Scope.department("ops"))
+    )
+    told = asyncio.run(
+        search_over(wiki, (department_space(),)).passages(
+            "the renewal handbook", entitlement=crossed, now=LONG_AGO
+        )
+    )
+    assert told.records == ()
 
 
 def test_the_reach_evaluator_is_the_library_search_s_own() -> None:
@@ -247,7 +285,7 @@ def test_a_skipped_page_is_counted_for_the_operator_and_the_asker_is_told_nothin
         issuer=_Issuer(),
         withheld=tally,
     )
-    web = reader(("read:knowledge", Scope.department("web")))
+    web = wiki_reader(Scope.department("web"))
     told = asyncio.run(search.passages("renewal salaries", entitlement=web, now=LONG_AGO))
     assert all("locked" not in one.document for one in told.records)
     assert tally.total == 1

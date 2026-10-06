@@ -44,6 +44,7 @@ from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.fast_lane import FastPathRule, RowReader
 from brain.gate.finish import Origin
 from brain.gate.model_lane import ModelLane, PassageSearch
+from brain.gate.rule_store import rules_for_asker
 from brain.models.calls import ModelCalls
 from brain.models.disclosure import DataCategory
 from brain.ops.canary_run import (
@@ -259,7 +260,13 @@ class InstallMatrixGate:
             or not isinstance(registry, ToolRegistry)
         ):
             raise GateUnavailableError
-        rules = tuple(getattr(state, "fast_path_rules", ()))
+        # The rules the whole install asks with, read now as the answer route reads them (M6.5.1),
+        # beside any handed to the lane directly. A department's rule is its own askers' and a
+        # golden question is judged against the lane everybody meets.
+        rules = (
+            *getattr(state, "fast_path_rules", ()),
+            *await rules_for_asker(state, None),
+        )
         inputs = LaneInputs(
             rules=rules,
             readers=row_readers(registry),

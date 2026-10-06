@@ -150,6 +150,15 @@ THE_COLUMN_LIST_IS_DECIDED_BEFORE_THE_QUERY = (
     "it, so today's code is safe only until somebody adds a column tomorrow."
 )
 
+#: Why a request may name one record and why that cannot reach a row the scope refuses.
+A_RECORD_ID_ONLY_NARROWS = (
+    "A request may name one record by its source id, which an agent run does to read what an "
+    "action is about before it is held. The id is one more AND on the statement, bound as a "
+    "parameter beside the tool's pin and the reader's scope, so it can remove rows from what "
+    "that scope admits and can never add one, and a record the reader may not reach is as "
+    "absent for an id as it is for a list."
+)
+
 #: Why a record carries fields beyond the projection, and what keeps them from being shown.
 A_RECORD_CARRIES_WHAT_ITS_READERS_SCOPES_TEST = (
     "The redactor evaluates every field grant's scope against the record, and a scope testing a "
@@ -343,6 +352,10 @@ class RowRequest(BaseModel):
     #: Bounded on both ends. Zero would be a query that cannot answer anything, and an
     #: unbounded limit is how one question becomes a table scan on a shared database.
     limit: int = Field(default=DEFAULT_ROW_LIMIT, ge=1, le=MAX_ROW_LIMIT)
+    #: One record, by the id its source gave it. Only ever one more `AND` on the statement, bound
+    #: as a parameter like every other value, so it can narrow what the reader's scope admits and
+    #: never widen it. See `A_RECORD_ID_ONLY_NARROWS`.
+    record_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 @dataclass(frozen=True)
@@ -674,6 +687,8 @@ def compile_row_query(
         .order_by(RECORD.c.source_id)
         .limit(request.limit)
     )
+    if request.record_id is not None:
+        statement = statement.where(RECORD.c.source_id == request.record_id)
     return RowQuery(
         entity=tool.entity,
         source=tool.source,

@@ -12,7 +12,9 @@ import {
   DEPUTY_API_PATH,
   GROUP_RULE_RETIREMENT_API_PATH,
   GROUP_RULES_API_PATH,
+  NOMINATIONS_API_PATH,
   ROLE_REMOVAL_API_PATH,
+  nominationDecisionApiPath,
 } from "../../../src/pages/governQuery";
 import {
   PACK_COPY_API_PATH,
@@ -34,6 +36,17 @@ const ROLES_PRESSED = t(
   true,
 );
 
+/** A nomination made, offered to its decider, confirmed into a role grant on the ledger (M33.1.2.3). */
+const NOMINATION_CONFIRMED = t(
+  "test_role_nominations",
+  "test_a_third_person_confirms_a_nomination_into_a_role_grant_on_the_ledger",
+  true,
+);
+
+/** Why making or declining a nomination writes no ledger entry: the row is the record. */
+const A_NOMINATION_IS_ITS_OWN_RECORD =
+  "A nomination grants nothing and a decline appoints nobody, so neither changes anybody's access, which is what the ledger records; each is a row of gate.role_nomination naming who proposed whom, why, and who decided. A confirmation writes its role grant, and that grant is on the ledger.";
+
 const PACK_WRITE_REACHES_EVERYTHING = t(
   "test_govern_pack_routes",
   "test_each_pack_write_reaches_its_row_one_ledger_entry_and_every_holder",
@@ -47,8 +60,16 @@ const PACK_WRITTEN: Proofs = {
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/roles/RoleDrawers.tsx APPOINTMENT_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx nominating ? NOMINATIONS_API_PATH : APPOINTMENT_API_PATH": [
+    at("POST /api/v1/govern/roles/nominations", "NOMINATIONS_API_PATH", NOMINATIONS_API_PATH),
     at("POST /api/v1/govern/roles/appointment", "APPOINTMENT_API_PATH", APPOINTMENT_API_PATH),
+  ],
+  "src/pages/roles/RoleDrawers.tsx nominationDecisionApiPath(nomination.id)": [
+    at(
+      "POST /api/v1/govern/roles/nominations/{nomination_id}/decision",
+      "nominationDecisionApiPath",
+      nominationDecisionApiPath("11111111-1111-4111-8111-000000000001"),
+    ),
   ],
   "src/pages/roles/RoleDrawers.tsx DEPUTY_API_PATH": [at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH)],
   "src/pages/roles/RoleDrawers.tsx GROUP_RULES_API_PATH": [
@@ -103,5 +124,15 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: GROUP_RULES_PRESSED,
     audit: GROUP_RULES_PRESSED,
     behaviour: GROUP_RULES_PRESSED,
+  },
+  "POST /api/v1/govern/roles/nominations": {
+    row: NOMINATION_CONFIRMED,
+    audit: { notApplicable: A_NOMINATION_IS_ITS_OWN_RECORD },
+    behaviour: t("test_role_nominations", "test_nobody_nominates_themselves_and_nobody_off_the_roles_screen_nominates_at_all", true),
+  },
+  "POST /api/v1/govern/roles/nominations/{nomination_id}/decision": {
+    row: NOMINATION_CONFIRMED,
+    audit: NOMINATION_CONFIRMED,
+    behaviour: t("test_role_nominations", "test_a_confirmation_crossing_the_separation_of_duties_needs_its_acknowledgement", true),
   },
 };

@@ -44,7 +44,11 @@ job is expressed instead.
 `created_by` beside the column already declared below, and two names for one fact is how
 they come to disagree. The entitlement a change was made under belongs in `obs.audit_entry`.
 
-Task ids: M13.1.1, M13.1.2, M13.1.4
+**`channels` and the two run bounds arrived in `0189`.** Where an agent answers (M13.7.4) and how
+long one run may go on (M13.7.2), neither of them audience and neither authority, which is why
+they sit apart from both groups of columns above.
+
+Task ids: M13.1.1, M13.1.2, M13.1.4, M13.7.4, M13.7.2
 """
 
 from __future__ import annotations
@@ -56,6 +60,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Index,
+    Integer,
     String,
     text,
 )
@@ -66,6 +71,8 @@ from brain.agents.model import (
     AGENT_ID_CHARS,
     DEPARTMENT_CHARS,
     DISPLAY_NAME_CHARS,
+    MAX_TOOL_CALLS_CAP,
+    MAX_TURNS_CAP,
     OWNER_ID_CHARS,
     PERSONA_CHARS,
 )
@@ -74,6 +81,7 @@ from brain.core.envelope import SideEffect
 from brain.db import Base, TimestampMixin
 from brain.knowledge.visibility import Visibility
 from brain.models.routing import TIER_LADDER
+from brain.tables.connector_connection import CONNECTOR_CHARS
 from brain.tables.gate import CAPABILITY_CHARS, SCOPE_SHAPE, TOOL_NAME_CHARS
 from brain.tables.identity import one_of
 
@@ -89,6 +97,19 @@ TIER_IN = one_of("tier", TIER_LADDER)
 
 #: `0097`. A pin is a provider and a model together, or no pin at all.
 MODEL_PIN_BOTH_OR_NEITHER = "(model_pin_provider IS NULL) = (model_pin_model IS NULL)"
+
+#: The widest channel name `brain.gate.context.Channel` holds is eight characters; this leaves room.
+CHANNEL_CHARS = 32
+
+
+def _null_or_between(column: str, cap: int) -> str:
+    return f"{column} IS NULL OR ({column} >= 1 AND {column} <= {cap})"
+
+
+#: `0189`. A run bound is the product's default (NULL) or a number of at least one and at most the
+#: cap `AgentRecord` admits; zero would be a run that stops before it starts.
+MAX_TURNS_IN_RANGE = _null_or_between("max_turns", MAX_TURNS_CAP)
+MAX_TOOL_CALLS_IN_RANGE = _null_or_between("max_tool_calls", MAX_TOOL_CALLS_CAP)
 
 #: The largest side effect a run through this agent may have, from the envelope's own enum.
 SIDE_EFFECT_IN = one_of("max_side_effect", SideEffect)
@@ -196,6 +217,12 @@ class AgentRow(TimestampMixin, Base):
         ARRAY(String(TOOL_NAME_CHARS)), nullable=False, server_default=text("'{}'")
     )
 
+    #: The connectors the agent's template names, which `brain.agents.model.entitlement_ceiling`
+    #: compiles into its ceiling (M13.8.1). Empty reaches no connected source.
+    connectors: Mapped[list[str]] = mapped_column(
+        ARRAY(String(CONNECTOR_CHARS)), nullable=False, server_default=text("'{}'")
+    )
+
     max_side_effect: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=SideEffect.NONE.value
     )
@@ -215,6 +242,21 @@ class AgentRow(TimestampMixin, Base):
     model_pin_provider: Mapped[str | None] = mapped_column(String(60), nullable=True)
     model_pin_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    # ------------------------------------------------------------ where, and how long
+    #: The channels this agent answers on (M13.7.4), since `0189`. Empty answers nowhere. Not
+    #: constrained per element here: `AgentRecord` refuses a channel nothing can be asked on, and a
+    #: list of channels written into a constraint would need a migration on the day a channel is
+    #: added, for a value the roster would ignore anyway.
+    channels: Mapped[list[str]] = mapped_column(
+        ARRAY(String(CHANNEL_CHARS)), nullable=False, server_default=text("'{}'")
+    )
+
+    #: The most turns one run may take, or NULL for the product's default (M13.7.2), since `0189`.
+    max_turns: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    #: The most tool calls one run may make, or NULL for the product's default, since `0189`.
+    max_tool_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     __table_args__ = (
         CheckConstraint(SLUG_GRAMMAR, name="slug_grammar"),
         CheckConstraint(_present("display_name"), name="display_name_present"),
@@ -228,6 +270,8 @@ class AgentRow(TimestampMixin, Base):
         CheckConstraint(SIDE_EFFECT_IN, name="max_side_effect"),
         CheckConstraint(_present("created_by"), name="created_by_present"),
         CheckConstraint(MODEL_PIN_BOTH_OR_NEITHER, name="model_pin_both_or_neither"),
+        CheckConstraint(MAX_TURNS_IN_RANGE, name="max_turns_in_range"),
+        CheckConstraint(MAX_TOOL_CALLS_IN_RANGE, name="max_tool_calls_in_range"),
         # The selection path's index: everything an audience test needs, over the rows that
         # can actually be chosen. Partial, because a disabled or archived agent is never in
         # a selection set and indexing it would make the common query read rows it discards.

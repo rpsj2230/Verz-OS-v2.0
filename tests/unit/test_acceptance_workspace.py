@@ -13,6 +13,10 @@ Task ids: M39.2.1.4, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
 Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.4
 Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.6.2.2, M39.6.2.4
+Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4
+Task ids: M39.5.2.5, M39.8.4, M39.8.5
+Task ids: M39.3.2.1, M39.3.2.2, M39.3.2.3, M39.3.2.4, M39.3.2.5, M39.8.2, M39.8.3
+Task ids: M39.8.6, M39.2.1.2, M39.1.1.3
 """
 
 from __future__ import annotations
@@ -29,6 +33,10 @@ import pytest
 
 from brain.ops import acceptance_workspace as workspace_checks
 from brain.ops.acceptance import FAILED, PASSED, REASON_CHARS, Check, check_modules, registered
+from brain.ops.artifact_store import ARTIFACT_BUCKET
+from brain.ops.object_store import S3Backend, StoreCredential
+from brain.ops.storage import Backend, config_for
+from tests.fixtures.fake_s3 import FakeS3
 from tests.unit.test_acceptance import at_head, checks_in
 from tests.unit.test_acceptance_lifecycle import every_count
 
@@ -90,7 +98,38 @@ LEAVES = {
         "M39.6.2.2",
         "M39.6.2.4",
     ),
+    "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked": (
+        "M39.5.1.1",
+        "M39.5.1.2",
+        "M39.5.1.4",
+        "M39.5.1.5",
+        "M39.5.2.1",
+        "M39.5.2.2",
+        "M39.5.2.3",
+        "M39.5.2.4",
+        "M39.5.2.5",
+        "M39.8.4",
+        "M39.8.5",
+    ),
+    "an_agents_leash_moves_on_evidence_and_its_pin_extends": (
+        "M39.3.2.1",
+        "M39.3.2.2",
+        "M39.3.2.3",
+        "M39.3.2.4",
+        "M39.3.2.5",
+        "M39.8.2",
+        "M39.8.3",
+    ),
+    "an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them": (
+        "M39.8.6",
+        "M39.2.1.2",
+        "M39.1.1.3",
+    ),
 }
+
+#: The artifact check's object store in the database half: the real S3 client over a fake bucket,
+#: because these tests run with no vault and the product builds its store from the vault.
+ARTIFACT_KEY = StoreCredential(access_key_id="brain-test-access", secret_access_key="brain-test")
 
 
 def mine() -> tuple[Check, ...]:
@@ -172,6 +211,19 @@ def head() -> Iterator[str]:
         yield url
 
 
+@pytest.fixture
+def bucket(monkeypatch: pytest.MonkeyPatch) -> FakeS3:
+    """The artifact check's store, over a fake bucket the test can look into afterwards."""
+    fake = FakeS3(credential=ARTIFACT_KEY).holding(ARTIFACT_BUCKET, {})
+    backend = S3Backend(
+        config_for(Backend.SEAWEEDFS, endpoint_url="http://objects.example.test:8333"),
+        ARTIFACT_KEY,
+        transport=fake.transport(),
+    )
+    monkeypatch.setattr(workspace_checks, "artifact_backend", lambda h: (backend, "brain"))
+    return fake
+
+
 def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:
     from brain.db import normalise_database_url
     from brain.ops.acceptance_run import run_suite
@@ -195,7 +247,7 @@ def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_every_workspace_check_passes_and_leaves_nothing_behind(
-    head: str,
+    head: str, bucket: FakeS3
 ) -> None:
     """**The checks as the worker runs them, against PostgreSQL at head.** Each passes with no
     reason, and every table in the database, the agent's rows, its requests, its costs, its budget
@@ -208,6 +260,7 @@ def test_on_a_real_database_every_workspace_check_passes_and_leaves_nothing_behi
 
     assert outcomes == dict.fromkeys(LEAVES, (PASSED, ""))
     assert after == before
+    assert bucket.buckets[ARTIFACT_BUCKET] == {}
 
 
 # ------------------------------------------------------------------ each check can fail
@@ -382,4 +435,164 @@ def test_an_automation_its_owner_may_start_fails_the_automation_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "an automation's owner could start it without a second person",
+    )
+
+
+@pytest.mark.needs_db
+def test_an_install_with_no_object_store_fails_the_artifact_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no object store connected, the check says the install cannot keep an artifact rather
+    than keeping one somewhere the product never looks. Delete this and the check could pass on an
+    install whose Artifacts section can never hold anything."""
+    monkeypatch.setattr(workspace_checks, "artifact_backend", lambda h: (None, ""))
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "this install is not connected to its object store",
+    )
+
+
+TOOLS_CHECK = "an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them"
+
+
+@pytest.mark.needs_db
+def test_a_tool_above_the_ceiling_attached_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the ceiling's half of the attach check gone, a write above the agent's largest effect
+    is attached, and the check says so. Delete this and the check could pass over an install where
+    a tool no run could call is attached and shown as the agent's."""
+    monkeypatch.setattr("brain.agents.attachments.within_ceiling", lambda tool, record: True)
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "a tool outside the agent's ceiling was attached",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_report_built_at_the_callers_own_reach_fails_the_artifact_check(
+    head: str, bucket: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the report's fields decided at a reach holding every column, the person without the
+    cost is sent it, and the check says so. Delete this and the check could pass over a producer
+    that writes the rows as read."""
+    import brain.ops.artifact_report as report
+
+    monkeypatch.setattr(
+        report, "producible_fields", lambda entity, present, **kwargs: tuple(present)
+    )
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a report for a person without the cost held the cost or margin",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_download_that_trusts_its_own_person_fails_the_artifact_check(
+    head: str, bucket: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a re-download no longer checked against what the content drew on, the steward can
+    fetch a report whose cost they may not read, and the check says so. Delete this and the check
+    could pass over an install where holding the Artifacts screen is holding every file on it."""
+    monkeypatch.setattr(
+        "brain.console.agent_output.still_holds", lambda drew_on, requester, now: True
+    )
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "the steward could fetch a report whose cost they may not read",
+    )
+
+
+LEASH_CHECK = "an_agents_leash_moves_on_evidence_and_its_pin_extends"
+
+
+@pytest.mark.needs_db
+def test_a_money_rise_one_person_can_make_fails_the_leash_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no effect counted as irreversible and the second signature not asked for, one
+    person's press raises a money rung, and the check says so. Both, because `may_raise` asks for
+    the second signature again on its own and refuses the press when only the first is gone.
+    Delete this and the check could pass over an install where a single leash holder moves an
+    agent that spends money onto its own."""
+    monkeypatch.setattr("brain.agents.leash_moves.IRREVERSIBLE", frozenset())
+    monkeypatch.setattr("brain.agents.leash_moves.may_raise", lambda **kwargs: True)
+
+    assert run_checks(head, (by_name(LEASH_CHECK),))[LEASH_CHECK] == (
+        FAILED,
+        "a money rise moved on one person's press",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_breaker_that_never_trips_fails_the_leash_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the breaker answering that nothing trips, a rejected action leaves the rung where it
+    was, and the check says so. Delete this and the check could pass over a breaker that is
+    inert, which looks exactly like an estate behaving well."""
+    import brain.agents.leash_moves as moves
+
+    monkeypatch.setattr(moves, "breaker_trips", lambda **kwargs: None)
+
+    assert run_checks(head, (by_name(LEASH_CHECK),))[LEASH_CHECK] == (
+        FAILED,
+        "a rejected action did not trip the rung it ran at",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_pin_that_holds_nothing_fails_the_leash_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With supervision holding no rung down, the pinned agent's Assisted rung suspends its
+    action rather than simulating it, and the check says so. Delete this and the check could pass
+    over an install where a pin is a row nothing reads."""
+    import brain.agents.leash_moves as moves
+    from brain.gate.injection import AutonomyTier
+
+    monkeypatch.setattr(moves, "HELD_AT_WHILE_SUPERVISED", AutonomyTier.AUTONOMOUS)
+
+    assert run_checks(head, (by_name(LEASH_CHECK),))[LEASH_CHECK] == (
+        FAILED,
+        "a pinned agent was not held at Shadow",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_roster_that_ignores_attachments_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the answer route's roster reading records as the manifest wrote them, an attached tool
+    never reaches a run, and the check says so. Delete this and the check could pass over an
+    install whose Profile shows a tool no run is ever handed."""
+    monkeypatch.setattr("brain.agent_roster.narrowed", lambda record, changes: record)
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "a run was not handed a tool attached a moment before",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_ceiling_that_ignores_the_connector_list_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the binding keeping every capability whatever the agent names, an agent naming no
+    connector reads the connected source, and the check says so. Delete this and the check could
+    pass over an install where binding and unbinding a connector changes no run at all."""
+    monkeypatch.setattr(
+        "brain.agents.binding.bound_capabilities", lambda capabilities, connectors: capabilities
+    )
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "an agent naming no connector read a connected source",
     )

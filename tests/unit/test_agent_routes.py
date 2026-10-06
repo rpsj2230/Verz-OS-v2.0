@@ -55,6 +55,7 @@ from brain.agent_routes import (
     record_of,
     roster,
 )
+from brain.agents.binding import provider_of
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.model import AgentAudience, AgentViewer
 from brain.agents.template import (
@@ -89,10 +90,13 @@ from brain.gate.injection import AutonomyTier
 from brain.gate.takeover_store import standing_from
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
+from brain.locale import currency_or_unset
 from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, hidden_count_fields
 from brain.tables.agent import AgentRow
+from brain.tables.attachment import ToolAttachmentRow
 from brain.tables.identity import PrincipalRow
+from brain.tables.leash import LeashChangeRow, SupervisionPinRow
 from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.registry import ToolRegistry
@@ -215,6 +219,7 @@ def agent_row(
     persona: str = "Answer briefly.",
     allowed_tools: tuple[str, ...] = (),
     capabilities: tuple[Capability, ...] = (),
+    connectors: tuple[str, ...] = (),
 ) -> AgentRow:
     return AgentRow(
         id=agent_id,
@@ -229,6 +234,7 @@ def agent_row(
         allowed_tools=list(allowed_tools),
         required_tools=[],
         max_side_effect=SideEffect.NONE.value,
+        connectors=list(connectors),
         created_by="u_builder",
         disabled_at=None,
         archived_at=None,
@@ -412,6 +418,12 @@ class StubSession(AsyncSession):
             return StubResult(list(_STORED.spend))
         if entity is TemplateVersionRow:
             return StubResult(list(_STORED.versions))
+        if entity in (LeashChangeRow, SupervisionPinRow):
+            # Nothing moved and nobody pinned: the install's own leash, as the tests above expect.
+            return StubResult([])
+        if entity is ToolAttachmentRow:
+            # Nothing attached or detached: the manifest's own tools, as the tests above expect.
+            return StubResult([])
         if statement.whereclause is None:
             return StubResult([_STORED.agents[key] for key in sorted(_STORED.agents)])
         row = _STORED.agents.get(_asked_for(statement))
@@ -840,7 +852,15 @@ def test_the_install_of_an_agent_the_caller_may_not_see_is_never_read(
 
     stored.statements.clear()
     assert workspace_of(client, "u_wide", "their_notes").status_code == 200
-    assert tables() == ["AgentRow", "TemplateVersionRow", "SpendActualRow", "PrincipalRow"]
+    assert tables() == [
+        "AgentRow",
+        "TemplateVersionRow",
+        "SpendActualRow",
+        "PrincipalRow",
+        "LeashChangeRow",
+        "SupervisionPinRow",
+        "ToolAttachmentRow",
+    ]
 
 
 def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it(
@@ -919,9 +939,10 @@ def test_a_reader_holding_every_tabs_grant_is_shown_only_the_tab_this_route_fill
     client: TestClient, stored: Stored
 ) -> None:
     """`u_elsewhere` holds every tab's capability and every plane, so every tab is permitted to
-    them, and their strip is still Automations, Memory and Settings alone because those are the
-    only tabs populated: the gallery, the learning tiers and the agent's own record. The strip
-    test above is the sibling for the readers who may not read even that.
+    them, and their strip is still Automations, Memory, Artifacts and Settings alone because those
+    are the only tabs populated: the gallery, the learning tiers, the artifact filters and rule,
+    and the agent's own record. The strip test above is the sibling for the readers who may not
+    read even that.
 
     Delete this and the route can mark a tab populated that it holds nothing for, which draws a
     heading over an empty panel for exactly the readers trusted with the most."""
@@ -929,7 +950,7 @@ def test_a_reader_holding_every_tabs_grant_is_shown_only_the_tab_this_route_fill
 
     tabs = workspace_of(client, "u_elsewhere", "quote_helper").json()["tabs"]
 
-    assert [one["tab"] for one in tabs] == ["automations", "memory", "settings"]
+    assert [one["tab"] for one in tabs] == ["automations", "memory", "artifacts", "settings"]
 
 
 def test_a_blank_summary_is_sent_as_no_summary_and_the_lineage_still_arrives(
@@ -973,11 +994,13 @@ def test_the_roster_is_ordered_by_name_and_then_by_id_whatever_order_the_table_h
 
 
 def test_a_tab_is_populated_here_only_when_this_route_holds_what_it_reads() -> None:
-    """Settings, Automations and Memory and nothing else, held against the strip itself: every
-    tab is permitted for a reader holding every tab's grant, and still only those three are
-    drawn. The Automations tab is filled by the product's gallery, which is held non-empty in
-    `tests/unit/test_automation_gallery.py`, and the Memory tab by the learning tiers, which
-    `tests/unit/test_agent_memory_routes.py` holds are sent for an agent with no memory at all.
+    """Settings, Automations, Memory and Artifacts and nothing else, held against the strip
+    itself: every tab is permitted for a reader holding every tab's grant, and still only those
+    four are drawn. The Automations tab is filled by the product's gallery, which is held
+    non-empty in `tests/unit/test_automation_gallery.py`; the Memory tab by the learning tiers,
+    which `tests/unit/test_agent_memory_routes.py` holds are sent for an agent with no memory at
+    all; and the Artifacts tab by its filters and retention rule, which
+    `tests/unit/test_agent_artifact_routes.py` holds are sent with no store at all.
 
     Delete this and `POPULATED_HERE` can grow a tab no route fills, which is a heading over an
     empty panel and a count of hidden things in words."""
@@ -994,10 +1017,11 @@ def test_a_tab_is_populated_here_only_when_this_route_holds_what_it_reads() -> N
     from brain.console.workspace import tab_strip
 
     assert len(tab_strip(everything, populated=tuple(Tab))) == len(TABS)
-    assert frozenset({Tab.SETTINGS, Tab.AUTOMATIONS, Tab.MEMORY}) == POPULATED_HERE
+    assert frozenset({Tab.SETTINGS, Tab.AUTOMATIONS, Tab.MEMORY, Tab.ARTIFACTS}) == POPULATED_HERE
     assert [one.tab for one in tab_strip(everything, populated=POPULATED_HERE)] == [
         Tab.AUTOMATIONS,
         Tab.MEMORY,
+        Tab.ARTIFACTS,
         Tab.SETTINGS,
     ]
 
@@ -1413,8 +1437,12 @@ def test_a_run_that_could_return_the_most_sensitive_field_is_offered_fewer_surfa
     all, and a narrow caller is offered a surface their own run would be refused on."""
     policy = agent_routes.product_field_policy()
     sensitive = max(policy.rules, key=lambda rule: rule.classification.rank)
+    # Bound to the source that provides the field, which an agent must be to reach it at all.
+    source = provider_of(sensitive.entity)
     stored.agents["quote_helper"] = agent_row(
-        "quote_helper", capabilities=(sensitive.required_capability,)
+        "quote_helper",
+        capabilities=(sensitive.required_capability,),
+        connectors=() if source is None else (source,),
     )
     GRANTS["u_wide"] = (
         Grant(capability=sensitive.required_capability, scope=Scope.unrestricted()),
@@ -1499,6 +1527,7 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
         "basis": "everyone",
         "range": "30d",
         "spend_minor": 1000,
+        "currency": currency_or_unset(),
         "runs": 2,
         "recorded": True,
     }
@@ -1506,6 +1535,7 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
         "basis": "own",
         "range": "30d",
         "spend_minor": 0,
+        "currency": currency_or_unset(),
         "runs": 0,
         "recorded": True,
     }
@@ -1513,6 +1543,7 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
         "basis",
         "range",
         "spend_minor",
+        "currency",
         "runs",
         "recorded",
     }
@@ -1542,6 +1573,7 @@ def test_a_cost_outside_the_window_or_without_a_trace_is_absent_from_the_figure(
         "basis": "everyone",
         "range": "30d",
         "spend_minor": 400,
+        "currency": currency_or_unset(),
         "runs": 1,
         "recorded": True,
     }

@@ -123,17 +123,21 @@ inventing them, and an agent reported complete on invented answers is worse than
 nothing, so `accept` passes `settle` no unanswered keys and says so here. This is a gap, not a
 decision to leave it open for ever.
 
-**What consults this, and what does not.** No HTTP route calls any of it, and there is no
-route behind the gate in this repository at all: `brain.agents.model`, `brain.agents.template`
-and `brain.agents.install` each refused to invent one, and a second request pipeline
-invented here would be a second thing for the real one to be reconciled with. The console's
-agent page renders a header and tabs and not this badge, so nothing renders it today. What
-is wired is real:
-`publish_version` is a caller of `brain.agents.install.TemplateCatalogue.offer`, `accept`
-is a caller of `brain.agents.template.verify`, `check_overlay` and
-`brain.agents.install.settle`, and
-`review` is a caller of `ownership`. Nothing in `src` writes `agent.upgrade_decline`, which
-is the state `agent.template_version` and `agent.template_instance` are both already in.
+**What consults this.** `brain.agent_upgrade_routes` (2026-10-06): the review, accepting and
+declining over HTTP, with the console's control on the agent's page. It reads the shelf from
+`agent.template_version` and the declines from `agent.upgrade_decline`, writes the install and the
+agent row in one transaction on acceptance, and inserts the decline row on a decline, which is the
+only writer that table has. `publish_version` is a caller of
+`brain.agents.install.TemplateCatalogue.offer`, `accept` is a caller of
+`brain.agents.template.verify`, `check_overlay` and `brain.agents.install.settle`, and `review` is
+a caller of `ownership`.
+
+**An accepted upgrade never raises a rung** (2026-10-06). The leash is sealed and lands as
+published, so a version naming a target at a higher rung than the agent is on would have raised
+the agent's autonomy by being accepted. `accept` refuses it with the rule's words
+(`AN_UPGRADE_NEVER_RAISES_A_RUNG`), and `rungs_an_upgrade_would_raise` says which targets, so a
+review can show why before anybody presses. Declining is still possible, and so is reading. A rung
+is raised from evidence of the agent's own runs, which no version carries.
 
 Task ids: M13.4.1, M13.4.2, M13.4.3, M13.4.4, M13.4.5
 """
@@ -173,7 +177,8 @@ from brain.agents.template import (
 from brain.audit.ledger import DIGEST
 from brain.connectors.registry import ConnectorRegistry
 from brain.core.department import SLUG_PATTERN
-from brain.gate.leash import Leash
+from brain.gate.injection import AutonomyTier
+from brain.gate.leash import MISSING_ENTRY_RUNG, Leash
 from brain.tools.registry import ToolRegistry
 
 # ------------------------------------------------------------------ written-down reasons
@@ -210,6 +215,17 @@ AN_UPGRADE_IS_NOT_A_ROUTE_AROUND_THE_SEAL: Final = (
     "comparing them against SEALED_PATHS, so this module holds no second opinion about "
     "which paths are sealed, and a changed sealed path is marked in the report rather than "
     "hidden, because it is the one change an accepter cannot resolve and must read."
+)
+
+#: Why an upgrade never raises a rung, though it takes the template's leash as published.
+AN_UPGRADE_NEVER_RAISES_A_RUNG: Final = (
+    "The leash is sealed, so an accepted upgrade lands the new version's rungs exactly as "
+    "published, which means a version naming a higher rung than the agent has would hand the "
+    "agent autonomy that nobody has seen it earn: lowering a rung is immediate, and raising "
+    "one needs evidence from the agent's own runs. So accept refuses a version that names any "
+    "target at a higher rung than the version the agent is on, and says so. The refusal is "
+    "about accepting and not about looking: the review still shows what the version changes, "
+    "and declining is still possible."
 )
 
 #: Why the resolution map has to cover the conflicts exactly.
@@ -687,6 +703,29 @@ class Upgraded:
     accepted_at: datetime
 
 
+def rungs_an_upgrade_would_raise(reviewed: UpgradeReview) -> tuple[str, ...]:
+    """The targets the offered version holds at a higher rung than the agent is on, sorted.
+
+    Compared target by target at the highest rung each version names for it, a target no entry
+    names being `brain.gate.leash.MISSING_ENTRY_RUNG`, which is Shadow. A lower or equal rung is
+    not here: lowering is immediate. See `AN_UPGRADE_NEVER_RAISES_A_RUNG`.
+    """
+    candidate = reviewed.candidate
+    if candidate is None:
+        return ()
+
+    def highest(manifest: SignedManifest) -> dict[str, AutonomyTier]:
+        rungs: dict[str, AutonomyTier] = {}
+        for one in manifest.manifest.guardrails.leash:
+            rungs[one.target] = max(one.rung, rungs.get(one.target, AutonomyTier.SHADOW))
+        return rungs
+
+    was, now = highest(reviewed.pinned), highest(candidate)
+    return tuple(
+        sorted(target for target, rung in now.items() if rung > was.get(target, MISSING_ENTRY_RUNG))
+    )
+
+
 def accept(
     reviewed: UpgradeReview,
     *,
@@ -740,6 +779,14 @@ def accept(
         )
         raise TemplateError(msg)
     verify(candidate, key=key)
+    raised = rungs_an_upgrade_would_raise(reviewed)
+    if raised:
+        msg = (
+            f"version {reviewed.to_version} of {reviewed.instance.template_id!r} holds {raised} "
+            f"at a higher rung than {reviewed.instance.instance_id!r} is on, and an upgrade "
+            f"never raises a rung. {AN_UPGRADE_NEVER_RAISES_A_RUNG}"
+        )
+        raise TemplateError(msg)
 
     # Values are irrelevant; `check_overlay` reads keys. Annotated rather than inlined so the
     # type handed over is the union the domain's validator takes, which is what makes this a

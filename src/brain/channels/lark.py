@@ -114,6 +114,7 @@ from brain.channels.adapter import (
     DeliveryRefusedError,
     Feature,
     Received,
+    RoomChange,
     TokenExchange,
     VendorAnswer,
     VendorRequest,
@@ -169,7 +170,15 @@ _DIGEST_RE: Final = re.compile(r"^[0-9a-f]{64}$")
 #: feature before that budget has been sized for it would spend the close reserve on
 #: cosmetics.
 LARK_FEATURES: Final[frozenset[Feature]] = frozenset(
-    {Feature.EPHEMERAL, Feature.CARDS, Feature.EDIT_IN_PLACE, Feature.ATTACHMENTS}
+    {
+        Feature.EPHEMERAL,
+        Feature.CARDS,
+        Feature.EDIT_IN_PLACE,
+        Feature.ATTACHMENTS,
+        # Since `0205`: the bot's own joining and leaving events are read (`read_room`), which is
+        # where the conversation a group install names comes from (M39.2.4.4).
+        Feature.GROUP_INSTALL,
+    }
 )
 
 #: The one message type this normaliser reads. Others are refused rather than guessed at:
@@ -820,6 +829,12 @@ SIGNATURE_HEADER: Final = "x-lark-signature"
 MESSAGE_RECEIVED: Final = "im.message.receive_v1"
 URL_VERIFICATION: Final = "url_verification"
 
+#: The events Lark sends when the bot is added to a group chat and removed from one (M39.2.4.4),
+#: and what their claims' keys begin with, so a room change never shares a key with a message.
+BOT_ADDED: Final = "im.chat.member.bot.added_v1"
+BOT_REMOVED: Final = "im.chat.member.bot.deleted_v1"
+ROOM_PREFIX: Final = "room."
+
 #: The callback a press on a card arrives as, and what its claim's key begins with, so a press and
 #: a message can never share a dedupe key.
 CARD_PRESSED: Final = "card.action.trigger"
@@ -871,6 +886,49 @@ def _refused() -> WebhookRefusedError:
     # One sentence for every reason, for `WebhookRefusedError`'s own: which check failed is
     # what somebody probing would fix next.
     return WebhookRefusedError("this request was not accepted")
+
+
+#: The longest name a room is kept with, `brain.tables.group_install.ROOM_NAME_CHARS`.
+ROOM_NAME_KEPT: Final = 200
+
+
+def read_room(event: Mapping[str, Any], *, joined: bool) -> Received:
+    """The bot added to or removed from a group chat, as a room change (M39.2.4.4).
+
+    Lark's `im.chat.member.bot.added_v1` and `im.chat.member.bot.deleted_v1`: the chat's id, the
+    name the chat had, and who added or removed the bot, whose open id is the event's sender and
+    is never kept. The event's id behind `ROOM_PREFIX` is its claim, so a replay is refused as a
+    replayed message is. Nothing is replied to it. `ValueError` for an event missing its id, its
+    chat or a readable time.
+    """
+    header = event.get("header")
+    body = event.get("event")
+    if not isinstance(header, Mapping) or not isinstance(body, Mapping):
+        raise ValueError("a room change has a header and an event")
+    event_id = header.get("event_id")
+    chat_id = body.get("chat_id")
+    if not isinstance(event_id, str) or not event_id:
+        raise ValueError("a room change names its event")
+    if not isinstance(chat_id, str) or not chat_id:
+        raise ValueError("a room change names its chat")
+    operator = body.get("operator_id")
+    open_id = operator.get("open_id") if isinstance(operator, Mapping) else None
+    name = body.get("name")
+    return Received(
+        event=ChannelEvent(
+            channel=Channel.LARK,
+            external_id=f"{ROOM_PREFIX}{event_id}",
+            channel_identity=open_id if isinstance(open_id, str) and open_id else chat_id,
+            text="",
+            received_at=_pressed_at(header.get("create_time")),
+        ),
+        reply_to=_address(ROOM_ADDRESS, chat_id),
+        room=RoomChange(
+            conversation_id=chat_id,
+            name=(name if isinstance(name, str) else "")[:ROOM_NAME_KEPT],
+            joined=joined,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -1197,9 +1255,10 @@ class LarkWire:
     def read(self, arrived: Arrived) -> Received:
         """A received message as the gate's event, and the three places a reply may go.
 
-        Anything but `im.message.receive_v1` from a person, or a press on a card, is `ValueError`:
-        no other event is subscribed to, and a message another app sent is not a question anybody
-        asked. A press is `read_press`'s.
+        Anything but `im.message.receive_v1` from a person, a press on a card, or the bot joining
+        or leaving a group chat is `ValueError`: no other event is subscribed to, and a message
+        another app sent is not a question anybody asked. A press is `read_press`'s and a room
+        change `read_room`'s.
         """
         try:
             event = _json_object(arrived.body)
@@ -1209,6 +1268,8 @@ class LarkWire:
         kind = header.get("event_type") if isinstance(header, Mapping) else None
         if kind == CARD_PRESSED:
             return read_press(event)
+        if kind in (BOT_ADDED, BOT_REMOVED):
+            return read_room(event, joined=kind == BOT_ADDED)
         if kind != MESSAGE_RECEIVED:
             raise ValueError(f"this channel reads {MESSAGE_RECEIVED} and nothing else")
         body = event.get("event")

@@ -47,6 +47,7 @@ not asked here: it needs a grant of `admin:connector` over a channel, which is n
 reserved department (`brain.ops.acceptance.TEST_DATA_LIVES_ONLY_IN_RESERVED_DEPARTMENTS`).
 
 Task ids: M10.1.2, M10.1.3, M10.1.4, M10.3.1, M10.3.2, M10.3.4, M10.5.7, M10.6.2
+Task ids: M27.13.1
 """
 
 from __future__ import annotations
@@ -504,7 +505,7 @@ async def each_adapter_is_listed_and_its_health_follows_its_deliveries(h: Harnes
 
 # ------------------------------------------------------------------------ 4. codes
 @check(
-    leaves=("M10.3.1", "M10.3.2"),
+    leaves=("M10.3.1", "M10.3.2", "M27.13.1"),
     sentence=(
         "A code minted in a reserved person's open sign-in and sent alone in a signed Lark direct "
         "message binds that account to them and is kept only as a digest; sent again it binds "

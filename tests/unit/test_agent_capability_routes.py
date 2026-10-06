@@ -31,6 +31,7 @@ from brain.core.entitlement import Grant
 from brain.core.scope import Scope
 from brain.knowledge.visibility import Visibility
 from brain.tables.agent import AgentRow
+from brain.tables.attachment import ToolAttachmentRow
 from tests.fixtures.console_http import Stub, console_client, get, headers
 from tests.fixtures.setting_rows import Result, Row
 from tests.unit.test_agent_routes import agent_row, install_rows
@@ -82,6 +83,9 @@ def answer(statement: Any) -> Result | None:
         wanted = "" if where is None else str(getattr(getattr(where, "right", None), "value", ""))
         return Result([Row(INSTALL[:2])] if wanted == COMPANY_AGENT else [])
     if columns == ["principal_id", "skill_name", "used_at"]:
+        return Result([])
+    if described[0].get("entity") is ToolAttachmentRow:
+        # Nothing attached or detached: the manifest's tools, as these tests expect.
         return Result([])
     return None
 

@@ -82,7 +82,7 @@ from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, cast
 
-from sqlalchemy import CursorResult, func, select, update
+from sqlalchemy import CursorResult, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.connectors.throttle import CallOutcome, classify
@@ -96,6 +96,7 @@ from brain.ops.idempotency import (
     operation_for,
 )
 from brain.ops.outbox import (
+    MAX_DELIVERY_ATTEMPTS,
     Attempt,
     Delivery,
     DeliveryState,
@@ -130,6 +131,14 @@ TWO_WORKERS_NEVER_CLAIM_ONE_DELIVERY: Final = (
 )
 
 #: Why a delivery refused before sending is exhausted without counting an attempt.
+#: Why a replay gives a delivery one more attempt rather than a fresh schedule.
+A_REPLAY_SENDS_ONCE_MORE: Final = (
+    "A delivery a person replays is sent once more, and given up again if that fails: its count "
+    "goes back to one under the cap. A fresh schedule would retry for another half hour on one "
+    "click, which is a second automatic retry nobody asked for. A delivery that was never sent "
+    "keeps its count of nought and the ordinary schedule, because it has no attempt to give back."
+)
+
 A_REFUSAL_ON_THIS_SIDE_IS_NOT_AN_ATTEMPT: Final = (
     "A subscriber deactivated after the delivery was written, and an address that resolves "
     "somewhere internal, are both stopped before a request leaves. Neither is the subscriber "
@@ -683,6 +692,63 @@ async def deactivate_subscriber(session: AsyncSession, subscriber_id: str, *, at
     )
     if changed.rowcount != 1:
         msg = f"subscriber {subscriber_id!r} is not an active subscriber"
+        raise OutboxStoreError(msg)
+
+
+async def reactivate_subscriber(session: AsyncSession, subscriber_id: str) -> None:
+    """Switch a switched-off subscriber back on, once. One that is on is refused, not repeated.
+
+    The instant it stopped is cleared rather than kept, because the subscriber row says whether it
+    is on now; when it stopped and who switched it back on are the change log's, which keeps both.
+    """
+    changed = cast(
+        "CursorResult[Any]",
+        await session.execute(
+            update(WebhookSubscriberRow)
+            .where(
+                WebhookSubscriberRow.subscriber_id == subscriber_id,
+                WebhookSubscriberRow.deactivated_at.is_not(None),
+            )
+            .values(deactivated_at=None)
+        ),
+    )
+    if changed.rowcount != 1:
+        msg = f"subscriber {subscriber_id!r} is not a switched-off subscriber"
+        raise OutboxStoreError(msg)
+
+
+async def replay_delivery(
+    session: AsyncSession, event_id: str, subscriber_id: str, *, at: datetime
+) -> None:
+    """Put one delivery that was given up back to pending, due now, with one attempt left.
+
+    One attempt left for a delivery that was sent: its count goes back to one under the cap, so
+    the worker sends it once more and gives it up again if that fails. A delivery that was never
+    sent (parked because its subscriber was off, or its address resolved somewhere internal) has
+    no attempt to give back and no instant to keep an attempt against, so it keeps its count of
+    nought and the worker's ordinary schedule. See `A_REPLAY_SENDS_ONCE_MORE`.
+    """
+    changed = cast(
+        "CursorResult[Any]",
+        await session.execute(
+            update(OutboxDeliveryRow)
+            .where(
+                OutboxDeliveryRow.event_id == event_id,
+                OutboxDeliveryRow.subscriber_id == subscriber_id,
+                OutboxDeliveryRow.state == DeliveryState.EXHAUSTED.value,
+            )
+            .values(
+                state=DeliveryState.PENDING.value,
+                due_at=at,
+                attempts=case(
+                    (OutboxDeliveryRow.attempts > 0, MAX_DELIVERY_ATTEMPTS - 1),
+                    else_=0,
+                ),
+            )
+        ),
+    )
+    if changed.rowcount != 1:
+        msg = f"no delivery of {event_id!r} to {subscriber_id!r} was given up"
         raise OutboxStoreError(msg)
 
 

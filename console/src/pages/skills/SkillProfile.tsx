@@ -9,6 +9,13 @@
  * saves a new version beside this one and changes nothing, so it is a form. Trying a skill out has
  * no route and is drawn inert with its sentence (`skillActions.ts`).
  *
+ * **A version's example tasks are shown with the newest rehearsal of exactly that version**
+ * (M12.3.4), each example's outcome and what the rehearsal could not judge; a reviewer rehearses a
+ * waiting version through any agent they can see, and approving waits until one passes.
+ *
+ * **Exporting takes an approved version away as a file** (M12.3.1): one press, recorded in the ledger,
+ * and the package waits for review on whichever install adds it.
+ *
  * **Retiring lists and never removes.** The answer to a retirement names the agents still running
  * the version among those this reader may see, and each keeps it until somebody detaches it here
  * (M27.15.56). **Detaching ends an assignment by adding a record**, and the agents list is read
@@ -21,10 +28,10 @@
  * the version it was edited from and the people's identifiers are in each version's Advanced
  * section; the page names people and agents.
  *
- * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.2.10
+ * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.2.10, M12.3.1, M12.3.4
  */
 
-import { FlaskConical, Pencil } from "lucide-react";
+import { Download, FlaskConical, Pencil } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
@@ -42,6 +49,18 @@ import {
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import {
+  EXAMPLES_HEADING,
+  NO_EXAMPLES,
+  NOT_YET_REHEARSED,
+  outcomeWords,
+  REHEARSAL_FAILED,
+  REHEARSAL_PASSED,
+  EXPORT,
+  EXPORT_NOT_SAVED,
+  exportedSentence,
+  exportPath,
+  readExported,
+  savePackage,
   decidedSentence,
   decisionConsequence,
   decisionQuestion,
@@ -59,7 +78,7 @@ import {
   type SkillDiff,
   type SkillPin,
 } from "../skillsQuery";
-import { AssignForm, CategoriesForm, EditVersionForm, type Tell } from "./SkillForms";
+import { AssignForm, CategoriesForm, EditVersionForm, RehearseForm, type Tell } from "./SkillForms";
 import { ReviewPill, RetiredPill } from "./pills";
 import { UNAVAILABLE } from "./skillActions";
 import { dayWords, named, type SkillDetail } from "./skillDetailQuery";
@@ -294,22 +313,110 @@ function Retirement({ one, onTold }: { readonly one: LibrarySkill; readonly onTo
   );
 }
 
+/**
+ * Export one approved version as a package another install adds (M12.3.1). Not confirmed: it ends,
+ * removes and changes nothing here, and the export is recorded in the ledger as it is taken.
+ */
+function Export({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: Tell }) {
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  async function takeIt() {
+    setBusy(true);
+    setFailure(null);
+    const result = await request<unknown>(exportPath(one.digest), { method: "POST" });
+    setBusy(false);
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
+    }
+    const exported = readExported(result.data);
+    if (exported === null || !savePackage(exported, globalThis.document)) {
+      onTold({ ok: false, sentence: EXPORT_NOT_SAVED });
+      return;
+    }
+    onTold({ ok: true, sentence: exportedSentence(exported) });
+  }
+
+  return (
+    <>
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      <Button
+        size="sm"
+        variant="outline"
+        className="min-h-11 sm:min-h-8"
+        disabled={busy}
+        aria-label={`${EXPORT} ${one.name} ${one.version}`}
+        onClick={() => void takeIt()}
+      >
+        <Download aria-hidden /> {EXPORT}
+      </Button>
+    </>
+  );
+}
+
+/**
+ * A version's example tasks, and the newest rehearsal of exactly this version with each example's
+ * outcome and what the rehearsal could not judge (M12.3.4). Shown only where the body is.
+ */
+function Examples({ one }: { readonly one: LibrarySkill }) {
+  const examples = one.examples ?? [];
+  const rehearsal = one.rehearsal ?? null;
+  if (one.body === null) {
+    return null;
+  }
+  if (examples.length === 0) {
+    return <p className="m-0 text-[12.5px] text-dim">{NO_EXAMPLES}</p>;
+  }
+  const outcome = new Map((rehearsal?.outcomes ?? []).map((row) => [row.task, row]));
+  return (
+    <section aria-label={`${EXAMPLES_HEADING}: ${one.name} ${one.version}`} className="flex min-w-0 flex-col gap-2 rounded-md border border-line p-3">
+      <h4 className="m-0 text-[13px] font-semibold text-ink">{EXAMPLES_HEADING}</h4>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {examples.map((example) => {
+          const found = outcome.get(example.task);
+          return (
+            <li key={example.task} className="text-[12.5px] text-body [overflow-wrap:anywhere]">
+              <span className="text-ink">{example.task}</span>
+              <span className="text-dim"> uses {example.expects.length === 0 ? "no tool" : example.expects.join(", ")}</span>
+              {found === undefined ? null : <span className={found.passed ? " text-ok" : " text-crit"}> · {outcomeWords(found)}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      {rehearsal === null ? (
+        <p className="m-0 text-[12px] text-dim">{NOT_YET_REHEARSED}</p>
+      ) : (
+        <>
+          <p className="m-0 text-[12.5px] font-medium text-ink">
+            {rehearsal.passed ? REHEARSAL_PASSED : REHEARSAL_FAILED}, rehearsed by {rehearsal.rehearsed_by}
+            {rehearsal.at ? `, ${dayWords(rehearsal.at)}` : ""}.
+          </p>
+          <p className="m-0 text-[12px] text-dim">{rehearsal.limit}</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Version({
   one,
   newest,
   agents,
+  rehearsalAgents,
   registryIsAbsent,
   onTold,
 }: {
   readonly one: LibrarySkill;
   readonly newest: boolean;
   readonly agents: readonly AgentChoice[];
+  readonly rehearsalAgents: readonly AgentChoice[];
   readonly registryIsAbsent: boolean;
   readonly onTold: Tell;
 }) {
   const [editing, setEditing] = useState(false);
   const assignable = one.assignable && agents.length > 0;
-  const acts = one.reviewable || one.editable || one.retirable === true || assignable;
+  const acts = one.reviewable || one.editable || one.retirable === true || one.exportable === true || assignable;
   return (
     <section
       data-slot="skill-version"
@@ -354,6 +461,10 @@ function Version({
         </details>
       )}
       <Findings one={one} />
+      <Examples one={one} />
+      {one.rehearsable === true && rehearsalAgents.length > 0 && !editing ? (
+        <RehearseForm one={one} agents={rehearsalAgents} onTold={onTold} />
+      ) : null}
       {one.diff === null || one.diff === undefined ? null : <Changed diff={one.diff} />}
       {editing ? (
         <EditVersionForm
@@ -381,6 +492,7 @@ function Version({
             </Button>
           ) : null}
           {one.retirable === true ? <Retirement one={one} onTold={onTold} /> : null}
+          {one.exportable === true ? <Export one={one} onTold={onTold} /> : null}
           {one.review === "approved" && one.retired !== true ? (
             <UnavailableAction label={TRY_OUT} text={TRY_OUT} icon={<FlaskConical aria-hidden />} reason={UNAVAILABLE.tryOut.reason} />
           ) : null}
@@ -548,6 +660,7 @@ export function SkillProfile({ detail, onTold }: { readonly detail: SkillDetail;
                 one={one}
                 newest={index === 0}
                 agents={detail.agents}
+                rehearsalAgents={detail.rehearsalAgents}
                 registryIsAbsent={detail.registryIsAbsent}
                 onTold={onTold}
               />

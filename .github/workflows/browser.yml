@@ -32,6 +32,8 @@ on:
       - "src/brain/setup_routes.py"
       - "src/brain/sign_in_routes.py"
       - "src/brain/navigation_routes.py"
+      - "src/brain/serve.py"
+      - "src/brain/runtime.py"
       - "src/brain/identity/**"
       - "tests/fixtures/tls.py"
       - ".github/workflows/browser.yml"
@@ -119,6 +121,8 @@ jobs:
           # does not.
           docker network create coolify
           docker compose up -d
+          # The identity provider's memory from its first second, so its peak is the whole run's.
+          SERVICE=keycloak INTERVAL=1 sh e2e/app-memory.sh start
           ready() {
             for i in $(seq 1 90); do
               if curl -skf "$1" > /dev/null; then echo "ready: $1"; return 0; fi
@@ -236,6 +240,7 @@ jobs:
           sleep 60
           sh e2e/app-memory.sh snapshot "after a minute idle"
           sh e2e/app-memory.sh report
+          SERVICE=keycloak sh e2e/app-memory.sh report | tail -1
 
       - name: Nothing restarted while the browser used the install
         # A container killed under load comes back by its restart policy, and a spec that
