@@ -35,12 +35,25 @@ export const API_ROUTE = /\/api\/v1\//;
  * An internal constant written out where a person can read it: three or more upper-case words
  * joined by underscores, the way this repository names its reason constants and settings.
  *
- * Except a setting the server's environment file holds (`BRAIN_...`). Where a page names one, it
- * is telling the person who runs the server what to type, and the name is the instruction: the
- * first run of this check found exactly that on the Staff sources page, which says which two
- * settings to set when the install runs no vault.
+ * Except the settings in `OPERATOR_SETTINGS`, by their exact names.
  */
-export const INTERNAL_CONSTANT = /\b(?!BRAIN_)[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/;
+export const INTERNAL_CONSTANT = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/g;
+
+/**
+ * Settings the server's environment file holds that a page may name, because naming one is telling
+ * the person who runs the server what to type. The first run of the constant check found exactly
+ * this on the Staff sources page, which says which two to set when the install runs no vault.
+ *
+ * Exact names rather than a prefix, so a leaked constant that happens to start the same way still
+ * fails, and each is one the install guide's table of values defines
+ * (`docs/install/configuration.md`), which a unit test holds it to.
+ */
+export const OPERATOR_SETTINGS: readonly string[] = ["BRAIN_VAULT_ADDRESS", "BRAIN_VAULT_TOKEN"];
+
+/** The internal constants in a text, leaving out the settings an operator is told to type. */
+export function internalConstants(text: string): string[] {
+  return [...text.matchAll(INTERNAL_CONSTANT)].map((one) => one[0]).filter((one) => !OPERATOR_SETTINGS.includes(one));
+}
 
 /** The browser's own words when the page's content security policy refuses something. */
 export const POLICY_REFUSAL = /Content Security Policy/i;
@@ -176,7 +189,7 @@ export function isPlainReason(reason: string): boolean {
     reason.split(/\s+/).length >= 4 &&
     !TASK_ID.test(reason) &&
     !API_ROUTE.test(reason) &&
-    !INTERNAL_CONSTANT.test(reason)
+    internalConstants(reason).length === 0
   );
 }
 
@@ -191,7 +204,7 @@ export async function checkPage(page: Page, seen: Watch, label: string, info: Te
   const text = await page.locator("body").innerText();
   expect(text, `${label}: no task id is shown`).not.toMatch(TASK_ID);
   expect(text, `${label}: no API route is shown`).not.toMatch(API_ROUTE);
-  expect(text, `${label}: no internal constant is shown`).not.toMatch(INTERNAL_CONSTANT);
+  expect(internalConstants(text), `${label}: no internal constant is shown`).toEqual([]);
   const unexplained = (await unavailableReasons(page)).filter((one) => !isPlainReason(one.reason));
   expect(unexplained, `${label}: every control not available yet says why in plain words`).toEqual([]);
   expect([...new Set(seen.elsewhere)], `${label}: no request leaves the install`).toEqual([]);
