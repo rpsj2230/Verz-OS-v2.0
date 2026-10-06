@@ -54,6 +54,7 @@ from brain.agent_builder_routes import (
 )
 from brain.agent_lifecycle_routes import NO_CHANNEL_ANSWERS_NOWHERE, NO_SIGNING_KEY_HERE, FoundAgent
 from brain.agent_routes import TEMPLATE_SCREEN, record_of
+from brain.agents.attachments import with_connectors
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.creation import AGENT_INSTALL_CAPABILITY
 from brain.agents.install import Installation
@@ -719,6 +720,55 @@ def test_an_edit_starts_from_the_agent_as_it_is_and_an_instruction_change_publis
     assert after.install is not None
     assert after.install[0].manifest.identity.template_id == COMPANY
     assert after.install[0].manifest.identity.version == 1
+
+
+def bind_on_the_page(console: Console, *connectors: str) -> None:
+    """The company agent with these connectors on its own list, as a press on its page leaves it."""
+    held = console.memory.agents[COMPANY]
+    console.memory.agents[COMPANY] = replace(
+        held, record=with_connectors(held.record, tuple(connectors))
+    )
+
+
+def published(console: Console, draft_id: str, revision: int) -> tuple[str, ...]:
+    response = console.post("u_admin", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+    assert response.status_code == 201, response.text
+    return console.memory.agents[COMPANY].record.authority.connectors
+
+
+def test_an_untouched_draft_keeps_a_connector_bound_on_the_agents_page(console: Console) -> None:
+    """**`A_PUBLISH_CHANGES_ONLY_THE_CONNECTORS_ITS_DRAFT_CHANGED`.** An edit draft starts from the
+    connectors the agent names now, not the manifest's, so a publish of a draft whose author only
+    changed the persona keeps a connector bound on the page.
+
+    Delete this and every publish silently unbinds every source a steward bound on the agent's
+    page, and the author never saw the list it overwrote."""
+    bind_on_the_page(console, "freshdesk")
+    response = console.post("u_admin", at(EDIT_PATH, agent_id=COMPANY))
+    assert response.json()["document"]["connectors"] == ["freshdesk"]
+    draft = response.json()
+    revision = saved(console, draft, {**draft["document"], "persona": PERSONA})
+    assert checked(console, draft["draft_id"], revision).json()["passed"]
+
+    assert published(console, draft["draft_id"], revision) == ("freshdesk",)
+
+
+def test_a_publish_unbinds_only_what_its_draft_removed_and_keeps_one_bound_while_it_was_open(
+    console: Console,
+) -> None:
+    """A connector bound on the page while a draft was open is kept by its publish, because the
+    draft never named it either way; a connector the author took out of the draft is unbound. The
+    first half is the reason the rule is a change applied rather than a list written, and the
+    second is its positive sibling: without it a publish that never unbinds anything passes.
+
+    Delete this and a publish undoes a bind made a minute before it, or cannot unbind at all."""
+    bind_on_the_page(console, "freshdesk")
+    draft_id, revision = edited(console, {"persona": PERSONA})
+    bind_on_the_page(console, "freshdesk", "hubspot")
+    assert published(console, draft_id, revision) == ("freshdesk", "hubspot")
+
+    removed_id, removed_revision = edited(console, {"connectors": ["hubspot"]})
+    assert published(console, removed_id, removed_revision) == ("hubspot",)
 
 
 def test_an_edit_that_widens_the_ceiling_waits_and_one_that_changed_underneath_is_refused(

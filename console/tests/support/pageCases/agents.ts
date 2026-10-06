@@ -251,6 +251,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         may_move: true,
         may_judge: true,
       },
+      // The tools block: what it carries and what may be attached, each value a token.
+      "/api/v1/agents/quote-helper/attachments": {
+        agent_id: "quote-helper",
+        carried: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        carried_connectors: [UNBROKEN],
+        tools: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        connectors: [UNBROKEN],
+        may_change_tools: true,
+        may_change_connectors: true,
+      },
       // Where it answers, for its steward: `LifecycleView`, whose widest value is a channel's name.
       "/api/v1/agents/quote-helper/lifecycle": {
         agent_id: "quote-helper",

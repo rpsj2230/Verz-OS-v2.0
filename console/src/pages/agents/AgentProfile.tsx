@@ -52,6 +52,7 @@ import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
 import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
 import { AgentLeash } from "./AgentLeash";
+import { AgentTools } from "./AgentTools";
 import { AgentChannels } from "./AgentChannels";
 import { WHERE_IT_ANSWERS } from "./ChannelChoices";
 import { LeashPill } from "./pills";
@@ -292,6 +293,10 @@ function Permissions({
         <Fact label="Actions">{ceiling.tools}</Fact>
         <Fact label="At most">{ceiling.largestEffect}</Fact>
       </FactList>
+      <div className="mt-3">
+        <h3 className="m-0 mb-1 text-[13px] font-medium text-ink">Tools it carries</h3>
+        <AgentTools agentId={agentId} />
+      </div>
     </SectionCard>
   );
 }

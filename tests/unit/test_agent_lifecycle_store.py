@@ -90,9 +90,9 @@ def recorder() -> AuditRecorder:
 
 def function() -> str:
     """The trigger function as it stands at head, whitespace collapsed: `0137`'s, as `0190`
-    replaces it with the channels branch."""
-    channels = migration_module(MIGRATION.with_name("0190_agent_channels_audited.py"))
-    return " ".join(channels.replaced(migration_module(MIGRATION).AGENT_TRIGGER_FUNCTION).split())
+    replaces it with the channels branch and `0196` with the connectors branch after that."""
+    attachments = migration_module(MIGRATION.with_name("0196_tool_attachments.py"))
+    return " ".join(attachments.AGENT_TRIGGER_FUNCTION.split())
 
 
 # ------------------------------------------------------------------ the trigger's shape
@@ -111,13 +111,12 @@ def test_the_agent_trigger_writes_the_recorders_words_in_the_recorders_order() -
     ]
 
 
-def test_0190_replaces_the_last_definition_of_the_agent_trigger_and_nothing_replaces_it_since() -> (
-    None
-):
+def test_0190_replaces_the_last_definition_and_what_replaces_it_since_starts_from_it() -> None:
     """`0190` rebuilds the function from `0137`'s text, so it is right only while `0137` is the
     last migration before it to define `agent.record_agent_change`, and it stays right only while
     nothing after it does so without starting from `0190`'s result. Checked on main and on every
-    open migration branch the day `0190` was written: `0137` was the only definition.
+    open migration branch the day `0190` was written: `0137` was the only definition. `0196`
+    defines it since, and is held here to start from `0190`'s result.
 
     Delete this and a later migration that adds a branch to the trigger can be undone silently by
     `0190` on an install that applies them in revision order, or can undo `0190`'s branch, and the
@@ -129,7 +128,13 @@ def test_0190_replaces_the_last_definition_of_the_agent_trigger_and_nothing_repl
         or "AGENT_TRIGGER_FUNCTION" in path.read_text(encoding="utf-8")
     )
 
-    assert defining == ["0137", "0190"]
+    assert defining == ["0137", "0190", "0196"]
+    # `0196` is the one later definition, and it starts from `0190`'s result rather than `0137`'s.
+    channels = migration_module(MIGRATION.with_name("0190_agent_channels_audited.py"))
+    attachments = migration_module(MIGRATION.with_name("0196_tool_attachments.py"))
+    as_0190 = channels.replaced(migration_module(MIGRATION).AGENT_TRIGGER_FUNCTION)
+    assert as_0190 == attachments.AS_SHIPPED_BEFORE
+    assert attachments.with_connectors(as_0190) == attachments.AGENT_TRIGGER_FUNCTION
 
 
 def test_an_insert_is_attributed_to_its_builder_and_an_update_to_the_person_the_route_named() -> (
