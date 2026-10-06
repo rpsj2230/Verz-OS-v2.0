@@ -24,7 +24,13 @@ refuses, so the question stays in the thread and the answer is never shown again
 `brain.chat.thread_store.AN_ANSWER_WHOSE_SOURCES_ARE_UNKNOWN_IS_NEVER_SHOWN_AGAIN`. An abstention
 drew on nothing and is recorded with no references.
 
-Task ids: M9.1.1, M9.1.2, M9.2.3
+**Every answer names its run (`0192`): the stored agent that gave it, the request's trace and how
+it ended.** So an agent's page can list the threads it answered in and say which run failed, and a
+correction names the agent it is against. **A run that failed is recorded too**, as the question and
+an answer turn marked failed with nothing in it, because a thread that silently dropped a question
+the person asked would read as if they never asked it.
+
+Task ids: M9.1.1, M9.1.2, M9.2.3, M39.8.9
 """
 
 from __future__ import annotations
@@ -33,7 +39,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Final
 
-from brain.chat.thread_store import Exchange, StoredThreads
+from brain.chat.thread_store import Exchange, StoredThreads, failed_exchange
 from brain.chat.turns import RecordRef
 from brain.core.entitlement import Capability
 from brain.core.field_policy import FieldPolicy
@@ -42,6 +48,7 @@ from brain.gate.context import Channel
 from brain.gate.model_lane import PASSAGE_POLICY
 from brain.gate.provenance import DOCUMENT_KIND, RECORD_KIND
 from brain.knowledge.document_tools import KNOWLEDGE_ENTITY
+from brain.tables.chat import RunState
 
 #: The passage policy, keyed as the answer route keys an entity's.
 PASSAGES: Final[Mapping[str, FieldPolicy]] = {KNOWLEDGE_ENTITY: PASSAGE_POLICY}
@@ -99,8 +106,27 @@ def _field_capability(entity: str, field: str, policies: Mapping[str, FieldPolic
     return Capability(value=f"read:{entity}.{field}")
 
 
+def run_state_of(answered: Answered) -> RunState:
+    """How the run behind this outcome ended, as its thread records it.
+
+    A decline is abstained; an outcome with nothing composed because a source did not answer in
+    time is degraded; everything else was shown as an answer. A run that raised never reaches
+    here: `remember_failure` records it.
+    """
+    if answered.abstention is not None:
+        return RunState.ABSTAINED
+    if answered.composed is None and answered.partial is not None and not answered.from_cache:
+        return RunState.DEGRADED
+    return RunState.ANSWERED
+
+
 def exchange_of(
-    question: str, answered: Answered, policies: Mapping[str, FieldPolicy]
+    question: str,
+    answered: Answered,
+    policies: Mapping[str, FieldPolicy],
+    *,
+    agent_id: str = "",
+    trace_id: str = "",
 ) -> Exchange | None:
     """The exchange an answered question leaves in its thread, or None when it leaves none."""
     if answered.referred:
@@ -113,6 +139,9 @@ def exchange_of(
         answer=chat_text(answered),
         refs=refs_of(answered, policies),
         escalated=answered.escalated,
+        agent_id=agent_id,
+        trace_id=trace_id,
+        state=run_state_of(answered),
     )
 
 
@@ -125,17 +154,20 @@ async def remember(
     question: str,
     answered: Answered,
     policies: Mapping[str, FieldPolicy],
+    agent_id: str,
+    trace_id: str,
     now: datetime,
-    trace_id: str | None = None,
 ) -> str | None:
     """Write this exchange to the person's thread, and say which thread; None when none was.
 
-    `trace_id` is the request it was answered on, which the learning signals the exchange is
-    evidence of name (M16.2.8).
+    `agent_id` is the stored agent the request was routed to, empty for the asker's own reach,
+    and `trace_id` the request's, so the thread says who answered and which run it was. The
+    same `trace_id` names the request on the learning signals the exchange is evidence of
+    (M16.2.8): the exchange carries it, and the store takes no second one.
     """
     if threads is None:
         return None
-    exchange = exchange_of(question, answered, policies)
+    exchange = exchange_of(question, answered, policies, agent_id=agent_id, trace_id=trace_id)
     if exchange is None:
         return None
     return await threads.record(
@@ -144,7 +176,33 @@ async def remember(
         channel=channel,
         exchange=exchange,
         now=now,
-        trace_id=trace_id,
+    )
+
+
+async def remember_failure(
+    threads: StoredThreads | None,
+    *,
+    principal_id: str,
+    thread_id: str | None,
+    channel: Channel,
+    question: str,
+    agent_id: str,
+    trace_id: str,
+    now: datetime,
+) -> str | None:
+    """Write a run that failed to the person's thread: the question, and a failed empty turn.
+
+    See `brain.chat.thread_store.FAILED_RUN_SHOWS_NOTHING`. Never called for a referred question,
+    which `brain.api_routes.answered_for` decides, for the reason the module docstring gives.
+    """
+    if threads is None:
+        return None
+    return await threads.record(
+        principal_id,
+        thread_id=thread_id,
+        channel=channel,
+        exchange=failed_exchange(question, agent_id=agent_id, trace_id=trace_id),
+        now=now,
     )
 
 

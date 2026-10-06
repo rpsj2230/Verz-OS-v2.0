@@ -79,10 +79,24 @@ async def _nothing(harness: Harness) -> None:
 def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every run of the suite here imports from a GitHub that does not answer, so no test in this
     file reaches the network; `tests/unit/test_acceptance_skills.py` fakes one that does."""
-    from brain.ops import acceptance_checks_skills
+    from brain.ops import acceptance_checks_skills, acceptance_workspace
+    from brain.ops.artifact_store import ARTIFACT_BUCKET
+    from brain.ops.object_store import S3Backend, StoreCredential
+    from brain.ops.storage import Backend, config_for
+    from tests.fixtures.fake_s3 import FakeS3
     from tests.unit.test_acceptance_skills import unreachable
 
     monkeypatch.setattr(acceptance_checks_skills, "_transport", unreachable)
+    # The artifact check's object store: the real client over a fake bucket, because this file
+    # runs with no vault and the product builds its store from the vault.
+    key = StoreCredential(access_key_id="brain-test-access", secret_access_key="brain-test")
+    fake = FakeS3(credential=key).holding(ARTIFACT_BUCKET, {})
+    backend = S3Backend(
+        config_for(Backend.SEAWEEDFS, endpoint_url="http://objects.example.test:8333"),
+        key,
+        transport=fake.transport(),
+    )
+    monkeypatch.setattr(acceptance_workspace, "artifact_backend", lambda h: (backend, "brain"))
 
 
 # ------------------------------------------------------------------------ the registry
@@ -158,7 +172,10 @@ def test_the_first_two_modules_hold_their_checks_in_order() -> None:
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
     assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
-    assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == ("M1.8.3",)
+    assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == (
+        "M1.8.3",
+        "M33.2.1.2",
+    )
 
 
 def test_a_module_that_registers_checks_is_placed_or_refused_and_never_skipped() -> None:
@@ -614,6 +631,17 @@ WRITTEN_BY_CHECKS = (
     "gate.capability_pack",
     "gate.capability_pack_assignment",
     "gate.role_grant",
+    "ops.control_run",
+    "ops.question_asked",
+    "ops.question_gap",
+    "ops.erasure_request",
+    "agent.artifact",
+    "agent.artifact_change",
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
+    "agent.tool_attachment",
 )
 
 

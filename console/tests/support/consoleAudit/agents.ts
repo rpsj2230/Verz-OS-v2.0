@@ -16,11 +16,21 @@ import {
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
 import { memoryDeletionApiPath, memoryEditApiPath, promotionApiPath } from "../../../src/pages/agents/agentMemoryQuery";
+import { artifactArchiveApiPath, artifactSupersedeApiPath } from "../../../src/pages/agents/agentArtifactsQuery";
+import { leashMoveApiPath, supervisionApiPath } from "../../../src/pages/agents/agentLeashQuery";
+import { agentAttachmentsApiPath } from "../../../src/pages/agents/AgentTools";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
-import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
+import { agentChannelsApiPath, agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
 import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
+
+/** A channel switch pressed over HTTP against PostgreSQL: the row, and one ledger entry naming who. */
+const CHANNELS_PRESSED = t(
+  "test_agent_lifecycle_store",
+  "test_a_channel_switch_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person",
+  true,
+);
 
 /** Each lifecycle move pressed over HTTP against PostgreSQL: the row, and the ledger entry naming who. */
 const LIFECYCLE_PRESSED = t(
@@ -71,6 +81,33 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentLeash.tsx leashMoveApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/leash/moves", "leashMoveApiPath", leashMoveApiPath("quote-helper")),
+  ],
+  'src/pages/agents/AgentLeash.tsx supervisionApiPath(agentId, "verdicts")': [
+    at("POST /api/v1/agents/{agent_id}/supervision/verdicts", "supervisionApiPath", supervisionApiPath("quote-helper", "verdicts")),
+  ],
+  "src/pages/agents/AgentLeash.tsx supervisionApiPath(agentId, one.kind)": [
+    at("POST /api/v1/agents/{agent_id}/supervision/pin", "supervisionApiPath", supervisionApiPath("quote-helper", "pin")),
+    at("POST /api/v1/agents/{agent_id}/supervision/review", "supervisionApiPath", supervisionApiPath("quote-helper", "review")),
+  ],
+  "src/pages/agents/AgentArtifacts.tsx artifactArchiveApiPath(agentId, one.item.artifactId)": [
+    at(
+      "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive",
+      "artifactArchiveApiPath",
+      artifactArchiveApiPath("quote-helper", "a".repeat(32)),
+    ),
+  ],
+  "src/pages/agents/AgentArtifacts.tsx artifactSupersedeApiPath(agentId, one.item.artifactId)": [
+    at(
+      "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/supersede",
+      "artifactSupersedeApiPath",
+      artifactSupersedeApiPath("quote-helper", "a".repeat(32)),
+    ),
+  ],
+  "src/pages/agents/AgentTools.tsx agentAttachmentsApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/attachments", "agentAttachmentsApiPath", agentAttachmentsApiPath("quote-helper")),
   ],
   "src/pages/agents/AgentMemory.tsx memoryDeletionApiPath(agentId, one.item.memoryId)": [
     at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion", "memoryDeletionApiPath", memoryDeletionApiPath("quote-helper", "m1")),
@@ -123,6 +160,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
     at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
   ],
+  "src/pages/agents/AgentChannels.tsx agentChannelsApiPath(drawn.agentId)": [
+    at("POST /api/v1/agents/{agent_id}/channels", "agentChannelsApiPath", agentChannelsApiPath("quote-helper")),
+  ],
 };
 
 /** An agent's monthly budget set twice over HTTP against PostgreSQL: two versions, two entries naming who. */
@@ -139,11 +179,82 @@ const MEMORY_CHANGED = t(
   true,
 );
 
+/** A supersession and an archive pressed over HTTP against PostgreSQL: a change row each, in the changer's name. */
+const ARTIFACT_CHANGED = t(
+  "test_agent_artifact_routes",
+  "test_the_steward_supersedes_the_person_archives_and_a_colleague_is_told_who_may",
+  true,
+);
+
+/** Why an artifact's change writes no ledger entry: the change row is the record. */
+const AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD =
+  "Superseding or archiving an artifact changes nobody's access, which is what the ledger records; the change is a row of agent.artifact_change naming who, at what reach, in which request and when (0194).";
+
+/** Rungs moved, proposed, raised by a second person and tripped by a verdict, over HTTP against PostgreSQL. */
+const LEASH_MOVED = t(
+  "test_agent_leash_routes",
+  "test_a_rung_rises_on_counted_evidence_by_two_people_falls_at_once_and_trips_on_a_verdict",
+  true,
+);
+
+/** A pin written, a review refused early, and one extended, over HTTP against PostgreSQL. */
+const SUPERVISION_REVIEWED = t(
+  "test_agent_leash_routes",
+  "test_a_pin_holds_the_agent_down_is_not_reviewed_early_and_extends_when_nobody_judged",
+  true,
+);
+
+/** Why a verdict, a pin and a review write no ledger entry. */
+const A_SUPERVISION_ROW_IS_ITS_OWN_RECORD =
+  "A verdict, a pin and a review change nobody's access, which is what the ledger records; each is a row of 0195's naming who and when, and a rung that moves because of one is a leash move, which is on the ledger.";
+
+/** Tools and a connector attached and detached over HTTP against PostgreSQL, each on the ledger. */
+const TOOLS_PRESSED = t(
+  "test_agent_attachment_routes",
+  "test_tools_and_connectors_are_attached_within_the_ceiling_and_a_run_carries_only_those",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/learning/{memory_id}/promote": {
     row: A_RULE_IS_PROMOTED,
     audit: A_RULE_IS_PROMOTED,
     behaviour: A_RULE_IS_PROMOTED,
+  },
+  "POST /api/v1/agents/{agent_id}/leash/moves": {
+    row: LEASH_MOVED,
+    audit: LEASH_MOVED,
+    behaviour: LEASH_MOVED,
+  },
+  "POST /api/v1/agents/{agent_id}/supervision/verdicts": {
+    row: LEASH_MOVED,
+    audit: { notApplicable: A_SUPERVISION_ROW_IS_ITS_OWN_RECORD },
+    behaviour: LEASH_MOVED,
+  },
+  "POST /api/v1/agents/{agent_id}/supervision/pin": {
+    row: SUPERVISION_REVIEWED,
+    audit: { notApplicable: A_SUPERVISION_ROW_IS_ITS_OWN_RECORD },
+    behaviour: SUPERVISION_REVIEWED,
+  },
+  "POST /api/v1/agents/{agent_id}/supervision/review": {
+    row: SUPERVISION_REVIEWED,
+    audit: { notApplicable: A_SUPERVISION_ROW_IS_ITS_OWN_RECORD },
+    behaviour: SUPERVISION_REVIEWED,
+  },
+  "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive": {
+    row: ARTIFACT_CHANGED,
+    audit: { notApplicable: AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD },
+    behaviour: ARTIFACT_CHANGED,
+  },
+  "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/supersede": {
+    row: ARTIFACT_CHANGED,
+    audit: { notApplicable: AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD },
+    behaviour: ARTIFACT_CHANGED,
+  },
+  "POST /api/v1/agents/{agent_id}/attachments": {
+    row: TOOLS_PRESSED,
+    audit: TOOLS_PRESSED,
+    behaviour: TOOLS_PRESSED,
   },
   "POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion": {
     row: MEMORY_CHANGED,
@@ -237,6 +348,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PRESSED,
     audit: LIFECYCLE_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_a_transfer_hands_the_agent_to_somebody_here_and_names_who_handed_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/channels": {
+    row: CHANNELS_PRESSED,
+    audit: CHANNELS_PRESSED,
+    behaviour: t("test_agent_lifecycle_routes", "test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_it"),
   },
   "POST /api/v1/agents/{agent_id}/duplicate": {
     row: LIFECYCLE_PRESSED,

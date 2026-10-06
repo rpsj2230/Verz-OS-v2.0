@@ -176,6 +176,8 @@ export interface CitationView {
   readonly documentId: string;
   /** Where in the document the passage is, as `Anchor.fragment` built it. */
   readonly anchor: string;
+  /** The passage's place in the list this reader was shown, for a document citation (M15.3.4). */
+  readonly position: string;
 }
 
 function field(fields: Record<string, unknown>, name: string): string {
@@ -209,6 +211,7 @@ export function readCitation(data: string): CitationView {
     entity: field(fields, "entity"),
     documentId: field(fields, "document_id"),
     anchor: field(fields, "anchor"),
+    position: field(fields, "position"),
   };
 }
 
@@ -221,12 +224,12 @@ export function recordsAddressOf(entity: string): string {
  * Where a citation leads: a record to its entity's rows, a document to the passage it cited.
  * Null for a citation that names neither, which is drawn as text.
  */
-export function citationAddress(citation: CitationView): string | null {
+export function citationAddress(citation: CitationView, retrievalId = ""): string | null {
   if (citation.kind === "record" && citation.entity !== "") {
     return recordsAddressOf(citation.entity);
   }
   if (citation.kind === "document" && citation.documentId !== "") {
-    return citedDocumentAddress(citation.documentId, citation.anchor);
+    return citedDocumentAddress(citation.documentId, citation.anchor, retrievalId, citation.position);
   }
   return null;
 }

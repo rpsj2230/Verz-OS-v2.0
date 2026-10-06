@@ -201,7 +201,8 @@ def test_a_trace_outside_the_ledgers_grammar_is_kept_as_no_trace_and_one_inside_
 
 # ------------------------------------------------------------------- the handoff's flag
 def _answered(*, escalated: bool = False) -> Answered:
-    # A cast at the boundary: `exchange_of` reads these five attributes and nothing else.
+    # A cast at the boundary: `exchange_of` reads these attributes and nothing else, the last
+    # three being the ones `run_state_of` reads, as an answer read live.
     return cast(
         Answered,
         SimpleNamespace(
@@ -210,6 +211,9 @@ def _answered(*, escalated: bool = False) -> Answered:
             provenance=None,
             referred=False,
             escalated=escalated,
+            abstention=None,
+            composed=None,
+            partial=None,
         ),
     )
 
@@ -310,8 +314,11 @@ def with_sessions[T](url: str, work: Callable[[Any], Awaitable[T]]) -> T:
     return run(go)
 
 
-def _exchange(question: str, *, escalated: bool = False) -> Exchange:
-    return Exchange(question=question, answer="An answer.", refs=(), escalated=escalated)
+def _exchange(question: str, *, escalated: bool = False, trace_id: str = "") -> Exchange:
+    """An exchange carrying the request it was answered on: the one trace id its signals name."""
+    return Exchange(
+        question=question, answer="An answer.", refs=(), escalated=escalated, trace_id=trace_id
+    )
 
 
 def _answers(url: str, thread: str) -> list[str]:
@@ -347,9 +354,8 @@ def _asked(
                 principal,
                 thread_id=thread,
                 channel=Channel.CONSOLE,
-                exchange=_exchange(question),
+                exchange=_exchange(question, trace_id=f"{trace}-{n}"),
                 now=at,
-                trace_id=f"{trace}-{n}",
             )
         assert thread is not None
         return thread
@@ -413,17 +419,15 @@ def test_an_exchange_handed_to_a_person_is_a_signal_naming_its_own_answer(databa
             person,
             thread_id=None,
             channel=Channel.CONSOLE,
-            exchange=_exchange("What is the parking policy"),
+            exchange=_exchange("What is the parking policy", trace_id="t-plain"),
             now=LONG_AGO,
-            trace_id="t-plain",
         )
         return await store.record(
             person,
             thread_id=thread,
             channel=Channel.CONSOLE,
-            exchange=_exchange("Who signs the lease renewal", escalated=True),
+            exchange=_exchange("Who signs the lease renewal", escalated=True, trace_id="t-handed"),
             now=LONG_AGO + timedelta(minutes=1),
-            trace_id="t-handed",
         )
 
     thread = with_sessions(database, work)
@@ -576,9 +580,10 @@ def test_a_question_in_a_thread_that_holds_no_answer_yet_reasks_nothing(database
             person,
             thread_id=thread,
             channel=Channel.CONSOLE,
-            exchange=_exchange("What does the attached handbook say about leave"),
+            exchange=_exchange(
+                "What does the attached handbook say about leave", trace_id="t-after-attach"
+            ),
             now=LONG_AGO + timedelta(minutes=1),
-            trace_id="t-after-attach",
         )
 
     thread = with_sessions(database, work)

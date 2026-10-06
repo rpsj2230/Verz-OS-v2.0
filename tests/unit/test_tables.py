@@ -153,6 +153,14 @@ MIGRATION_SKILL_SCRIPTS = VERSIONS / "0178_skill_scripts.py"
 MIGRATION_REGISTRY_OBSERVATIONS = VERSIONS / "0182_entity_registry_observations.py"
 MIGRATION_ENTITY_MERGES = VERSIONS / "0183_entity_merges.py"
 MIGRATION_REVIEW_ITEMS = VERSIONS / "0184_entity_review_items.py"
+MIGRATION_AGENT_RUN = VERSIONS / "0188_agent_run.py"
+MIGRATION_OAUTH_CONSENT = VERSIONS / "0202_oauth_consent.py"
+MIGRATION_CUSTOM_CONNECTOR = VERSIONS / "0203_custom_connector.py"
+MIGRATION_SKILL_EXPORT = VERSIONS / "0191_skill_export_and_rehearsal.py"
+MIGRATION_RETRIEVAL_EVENT = VERSIONS / "0193_retrieval_event.py"
+MIGRATION_ARTIFACT_CHANGE = VERSIONS / "0194_artifact_change_and_client.py"
+MIGRATION_LEASH = VERSIONS / "0195_leash_changes_and_supervision.py"
+MIGRATION_TOOL_ATTACHMENT = VERSIONS / "0196_tool_attachments.py"
 MIGRATION_SIGNAL_LOG = VERSIONS / "0197_signal_log.py"
 MIGRATION_LEARNING_CANDIDATES = VERSIONS / "0198_learning_candidates.py"
 MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
@@ -441,6 +449,29 @@ REGISTRY_OBSERVATION_TABLES: tuple[str, ...] = (
 ENTITY_MERGE_TABLES: tuple[str, ...] = ("er.merge", "er.unmerge")
 #: And the one 0184 adds: a pair of records waiting for a person.
 REVIEW_ITEM_TABLES: tuple[str, ...] = ("er.review_item",)
+#: And the one 0188 adds: every finished agent run, as counts and names.
+AGENT_RUN_TABLES: tuple[str, ...] = ("ops.agent_run",)
+#: And the one 0202 adds: a consent started at a vendor, held until it is answered once.
+OAUTH_CONSENT_TABLES: tuple[str, ...] = ("ops.oauth_consent",)
+#: And the one 0203 adds: a connector for a new API, as submitted, and who reviewed it.
+CUSTOM_CONNECTOR_TABLES: tuple[str, ...] = ("ops.custom_connector",)
+#: And the two 0191 adds: each export of an approved version, and each rehearsal of one's
+#: examples (M12.3.1, M12.3.4).
+SKILL_EXPORT_TABLES: tuple[str, ...] = ("agent.skill_export", "agent.skill_rehearsal")
+#: And the one 0193 adds: a retrieval a person was answered from, for the learning signal.
+RETRIEVAL_EVENT_TABLES: tuple[str, ...] = ("ops.retrieval_event",)
+#: And the one 0194 adds: an artifact superseded or archived.
+ARTIFACT_CHANGE_TABLES: tuple[str, ...] = ("agent.artifact_change",)
+#: And the four 0195 adds: a rung's moves, the actions an agent took under supervision, a person's
+#: verdict on each, and the supervision pin with its reviews.
+LEASH_TABLES: tuple[str, ...] = (
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
+)
+#: And the one 0196 adds: a tool attached to an agent, or detached.
+TOOL_ATTACHMENT_TABLES: tuple[str, ...] = ("agent.tool_attachment",)
 #: And the one 0197 adds: what was noticed about each answer, by id and never in words.
 SIGNAL_LOG_TABLES: tuple[str, ...] = ("mem.signal",)
 #: And the two 0198 adds: a proposed fix to a document, and every correction that proposed it.
@@ -525,6 +556,14 @@ ALL_TABLES = (
     + REGISTRY_OBSERVATION_TABLES
     + ENTITY_MERGE_TABLES
     + REVIEW_ITEM_TABLES
+    + AGENT_RUN_TABLES
+    + OAUTH_CONSENT_TABLES
+    + CUSTOM_CONNECTOR_TABLES
+    + SKILL_EXPORT_TABLES
+    + RETRIEVAL_EVENT_TABLES
+    + ARTIFACT_CHANGE_TABLES
+    + LEASH_TABLES
+    + TOOL_ATTACHMENT_TABLES
     + SIGNAL_LOG_TABLES
     + LEARNING_CANDIDATE_TABLES
     + LEARNED_RULE_TABLES
@@ -1368,6 +1407,22 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert entity_merges.TABLES == ENTITY_MERGE_TABLES
     review_items = migration_module(MIGRATION_REVIEW_ITEMS)
     assert review_items.TABLES == REVIEW_ITEM_TABLES
+    agent_run = migration_module(MIGRATION_AGENT_RUN)
+    assert agent_run.TABLES == AGENT_RUN_TABLES
+    oauth_consent = migration_module(MIGRATION_OAUTH_CONSENT)
+    assert oauth_consent.TABLES == OAUTH_CONSENT_TABLES
+    custom_connector = migration_module(MIGRATION_CUSTOM_CONNECTOR)
+    assert custom_connector.TABLES == CUSTOM_CONNECTOR_TABLES
+    skill_export = migration_module(MIGRATION_SKILL_EXPORT)
+    assert skill_export.TABLES == SKILL_EXPORT_TABLES
+    retrieval_event = migration_module(MIGRATION_RETRIEVAL_EVENT)
+    assert retrieval_event.TABLES == RETRIEVAL_EVENT_TABLES
+    artifact_change = migration_module(MIGRATION_ARTIFACT_CHANGE)
+    assert artifact_change.TABLES == ARTIFACT_CHANGE_TABLES
+    leash = migration_module(MIGRATION_LEASH)
+    assert leash.TABLES == LEASH_TABLES
+    tool_attachment = migration_module(MIGRATION_TOOL_ATTACHMENT)
+    assert tool_attachment.TABLES == TOOL_ATTACHMENT_TABLES
     signal_log = migration_module(MIGRATION_SIGNAL_LOG)
     assert signal_log.TABLES == SIGNAL_LOG_TABLES
     learning_candidates = migration_module(MIGRATION_LEARNING_CANDIDATES)
@@ -1474,6 +1529,14 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(registry_observations.TABLES)
         + tuple(entity_merges.TABLES)
         + tuple(review_items.TABLES)
+        + tuple(agent_run.TABLES)
+        + tuple(oauth_consent.TABLES)
+        + tuple(custom_connector.TABLES)
+        + tuple(skill_export.TABLES)
+        + tuple(retrieval_event.TABLES)
+        + tuple(artifact_change.TABLES)
+        + tuple(leash.TABLES)
+        + tuple(tool_attachment.TABLES)
         + tuple(signal_log.TABLES)
         + tuple(learning_candidates.TABLES)
         + tuple(learned_rules.TABLES)
@@ -1558,6 +1621,14 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(registry_observations.TABLES),
         set(entity_merges.TABLES),
         set(review_items.TABLES),
+        set(agent_run.TABLES),
+        set(oauth_consent.TABLES),
+        set(custom_connector.TABLES),
+        set(skill_export.TABLES),
+        set(retrieval_event.TABLES),
+        set(artifact_change.TABLES),
+        set(leash.TABLES),
+        set(tool_attachment.TABLES),
         set(signal_log.TABLES),
         set(learning_candidates.TABLES),
         set(learned_rules.TABLES),

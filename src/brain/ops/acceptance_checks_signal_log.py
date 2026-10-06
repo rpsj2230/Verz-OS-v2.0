@@ -102,12 +102,11 @@ async def _asked(
     ask = Question(question=question, thread=thread)
     request = _request(app)
     trace = f"{h.trace_id}-{n}"
-    outcome = await answered_for(
-        request, open_trace(trace, answering.now, Channel.CONSOLE), answering, ask
-    )
+    recorder = open_trace(trace, answering.now, Channel.CONSOLE)
+    outcome = await answered_for(request, recorder, answering, ask)
     if not isinstance(outcome, Answered):
         raise CheckFailedError("a question was refused by a window the check never installs")
-    kept = await remembered(request, answering, ask, outcome, trace_id=trace)
+    kept = await remembered(request, answering, ask, outcome, recorder)
     return outcome, kept, trace
 
 

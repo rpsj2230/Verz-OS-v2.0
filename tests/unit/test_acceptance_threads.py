@@ -13,7 +13,7 @@ reading answers.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.3, M9.2.4
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.3, M9.2.4, M39.8.9
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ KEPT = "a_question_is_kept_in_its_askers_thread_and_searched_by_them"
 LARK = "a_thread_begun_in_lark_is_listed_and_continued_on_the_web"
 FOLLOW = "a_follow_up_is_answered_from_what_its_thread_cited"
 CORRECT = "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it"
+CONVERSATIONS = "an_agents_conversations_are_its_readers_own_and_say_what_failed"
 
 DONE = "event: done\ndata: \n\n"
 
@@ -57,6 +58,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
         (LARK, ("M9.1.2",)),
         (FOLLOW, ("M9.2.3",)),
         (CORRECT, ("M9.2.4",)),
+        (CONVERSATIONS, ("M39.8.9",)),
     ]
 
 
@@ -74,6 +76,10 @@ def _answered(*evidence: Any, cached: bool = False, referred: bool = False) -> A
             provenance=provenance,
             referred=referred,
             escalated=False,
+            # The three fields `brain.chat.remember.run_state_of` reads, as an answer read live.
+            abstention=None,
+            composed=None,
+            partial=None,
         ),
     )
 
@@ -206,14 +212,14 @@ def _counts(url: str) -> dict[str, int]:
 def test_every_thread_check_passes_on_an_install_and_leaves_nothing(
     install: str, issuer: None, vaulted: Providers
 ) -> None:
-    """**The module as the worker runs it.** All four pass and nothing a check wrote is left, the
+    """**The module as the worker runs it.** All five pass and nothing a check wrote is left, the
     threads and messages included, and no provider of the product is asked: the follow-up's model
     is the stand-in. Delete this and a check that can never pass on a real schema,
     or one that commits a person's transcript, reaches the owner's server first."""
     before = _counts(install)
     outcomes = run_threads(install)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, "")), outcomes
-    assert len(outcomes) == 4
+    assert len(outcomes) == 5
     assert _counts(install) == before
     assert vaulted.sent == []
 
@@ -308,6 +314,46 @@ def test_a_chat_thread_named_by_the_message_fails_the_lark_check(
     assert "Lark chat" in _failed(install, LARK)
 
 
+@pytest.mark.needs_db
+def test_a_section_opened_on_any_agent_fails_the_conversations_check(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The section answering for an agent whatever its audience, the agent's own read skipped.
+    Delete this and M39.8.9 closes on a check that passes over a section that says an agent the
+    reader may not see exists."""
+    from brain import agent_routes
+
+    async def anybodys(session: Any, agent_id: str, asked: Any) -> Any:
+        row = (await session.execute(agent_routes.one_agent(agent_id))).scalar_one_or_none()
+        return agent_routes.record_of(row), None
+
+    monkeypatch.setattr("brain.agent_conversation_routes._visible_record", anybodys)
+    assert "may not see" in _failed(install, CONVERSATIONS)
+
+
+@pytest.mark.needs_db
+def test_a_failed_run_kept_as_answered_fails_the_conversations_check(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed run's turn written as an answer. Delete this and a failed run can reach the section
+    as answered, with M39.8.9 green."""
+    from brain.chat import thread_store
+    from brain.tables.chat import RunState
+
+    def as_answered(question: str, *, agent_id: str, trace_id: str) -> Any:
+        return thread_store.Exchange(
+            question=question,
+            answer="",
+            refs=None,
+            agent_id=agent_id,
+            trace_id=trace_id,
+            state=RunState.ANSWERED,
+        )
+
+    monkeypatch.setattr(remember_module, "failed_exchange", as_answered)
+    assert "failed run as failed" in _failed(install, CONVERSATIONS)
+
+
 def test_the_threads_checks_are_listed_in_their_page_order() -> None:
     """Every check this module registers, in the order the Install page lists them. Held here,
     beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
@@ -318,4 +364,5 @@ def test_the_threads_checks_are_listed_in_their_page_order() -> None:
         "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
         "a_follow_up_is_answered_from_what_its_thread_cited",
         "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it",
+        "an_agents_conversations_are_its_readers_own_and_say_what_failed",
     ]

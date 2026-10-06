@@ -24,6 +24,9 @@ and types are unchanged, so no caller moved. The declarations are stated in `bra
 rather than `brain.knowledge` ones because `brain.connectors.declaration` is on the scheduled sync's
 path and imports nothing from `brain.knowledge` (`tests/invariants/test_minimal_index.py`); the
 compiling happens here, on this side of that line. See `THE_ROWS_ARE_READ_OFF_THE_DECLARATIONS`.
+Since M11.7.8 the declarations are `brain.ops.connector_catalogue.declarations`, so a connector a
+second person reviewed on this install is compiled here from its own field classifications, and
+each map is recomputed when the reviewed set changes.
 
 **The Laravel database's clients and staff records are classified by `laravel.LARAVEL_FIELD_RULES`,
 and their department is read by whoever reaches the row (M11.6.1).** Its visibility rule is written
@@ -66,6 +69,7 @@ Connectors screen and read into its index, and no question on Ask could reach it
 `brain.ops.connectable.answers` now refuses to offer a source Ask cannot answer from.
 
 Task ids: M11.6.5, M11.6.2, M11.4.9, M11.7.4, M11.7.3, M11.7.1, M11.7.2, M11.6.1, M11.6.7, M11.1.6
+Task ids: M11.7.8
 """
 
 from __future__ import annotations
@@ -81,6 +85,7 @@ from brain.core.field_policy import Classification
 from brain.gate.fast_lane import FastPathRule
 from brain.knowledge.classified_rows import questions_over
 from brain.knowledge.columns import ColumnRule, TableClassification
+from brain.ops.connector_catalogue import Derived
 
 #: Why a source's classification is compiled from its own rules.
 A_SOURCE_S_FIELDS_ARE_CLASSIFIED_BY_THE_SOURCE_S_OWN_RULES: Final = (
@@ -120,15 +125,17 @@ def _classified(
     }
 
 
-_CLASSIFIED: Final = _classified(shipped())
+#: Read off `brain.ops.connector_catalogue.declarations`, so a connector reviewed on this install
+#: (M11.7.8) is classified here from the moment it is approved, with nothing restarted.
+_CLASSIFIED: Final = Derived(_classified)
 
 
 # ---------------------------------------------------------------- the classifications
 
 
 #: The field each source's visibility predicate tests on every row it keeps.
-SCOPED_BY: Final[Mapping[str, str]] = MappingProxyType(
-    {name: rows.scoped_by for name, (rows, _) in _CLASSIFIED.items()}
+SCOPED_BY: Final[Mapping[str, str]] = Derived(
+    lambda _: {name: rows.scoped_by for name, (rows, _) in _CLASSIFIED.items()}
 )
 
 
@@ -175,8 +182,8 @@ def compiled(source: str, entity: AskEntity) -> TableClassification:
 
 
 #: Every connected source's classifications, by the source's name.
-CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
-    {
+CONNECTOR_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = Derived(
+    lambda _: {
         name: tuple(compiled(name, one) for one in entities)
         for name, (_, entities) in _CLASSIFIED.items()
     }
@@ -193,8 +200,8 @@ ANSWERED_BY_PASSAGES: Final[frozenset[str]] = frozenset(
 
 #: The field a person names a record by, per source and entity: the question's slot. An entity a
 #: connector reaches through another (HubSpot's contacts, kept with no name) names none.
-NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
-    {
+NAMED_BY: Final[Mapping[tuple[str, str], str]] = Derived(
+    lambda _: {
         (name, one.entity): one.named_by
         for name, (_, entities) in _CLASSIFIED.items()
         for one in entities
@@ -203,8 +210,8 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
 )
 
 #: What each source's row tools are described as in the catalogue.
-CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
-    {
+CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = Derived(
+    lambda _: {
         name: MappingProxyType({one.entity: one.description for one in entities})
         for name, (_, entities) in _CLASSIFIED.items()
     }
@@ -215,8 +222,8 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
 #: Fields a record carries only when read live, by entity: its figures, which no index row holds,
 #: so a filter on one matches nothing whatever it names. The records route's bound on how many
 #: columns a filter may name is a bound on the columns a row carries, and these are not among them.
-LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
-    {
+LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = Derived(
+    lambda _: {
         one.entity: one.live_only
         for _, entities in _CLASSIFIED.values()
         for one in entities
@@ -226,8 +233,8 @@ LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
 
 #: Fields a figure tool answers for a range it was asked for, and no question on Ask can name,
 #: because a question's range is in its words: see `A_TOOL_S_RANGE_IS_NOT_A_QUESTION_S`.
-UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = MappingProxyType(
-    {
+UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = Derived(
+    lambda _: {
         (name, one.entity): one.unasked
         for name, (_, entities) in _CLASSIFIED.items()
         for one in entities

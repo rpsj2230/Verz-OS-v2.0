@@ -44,6 +44,14 @@ from brain.access_request_routes import router as access_request_router
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
 
+# One agent's Artifacts section: its list, a download re-checked at the requester's reach, a
+# supersession or an archive as a row, and the latest of a kind for a client.
+from brain.agent_artifact_routes import router as agent_artifact_router
+
+# Attaching a tool or a connector to an agent from its page, and detaching one, each checked when
+# it is pressed and written to the ledger with who, when and why.
+from brain.agent_attachment_routes import router as agent_attachment_router
+
 # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
@@ -54,6 +62,13 @@ from brain.agent_capability_routes import router as agent_capability_router
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its
 # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
+# One agent's Conversations section: the reader's own threads it answered in, with who answered
+# and how each run ended, a failed one included.
+from brain.agent_conversation_routes import router as agent_conversation_router
+
+# One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
+# breaker reads, and the supervision pin and its reviews.
+from brain.agent_leash_routes import router as agent_leash_router
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 from brain.agent_memory_routes import router as agent_memory_router
 
@@ -161,6 +176,11 @@ from brain.console_stats_routes import router as console_stats_router
 # held and when, and is built on `brain.api.NoEchoRoute` so not even a refused body is
 # repeated. See `brain.credential_routes`.
 from brain.credential_routes import router as credential_router
+
+# A connector for a new API, submitted with its specification and mapping and reviewed by a second
+# person who may connect it; approved, it joins the Connectors screen with no release (M11.7.8).
+# See `brain.custom_connector_routes`.
+from brain.custom_connector_routes import router as custom_connector_router
 
 # The data steward: who every read of the company's data begins with, and naming one on an
 # install whose setup named nobody, behind `admin:data_steward` over everything. See
@@ -347,6 +367,10 @@ from brain.resolution_routes import router as resolution_router
 # every write needs its authority over everything, and the report is shown whole to a
 # company-wide reader and to nobody else. See `brain.retention_routes`.
 from brain.retention_routes import router as retention_router
+
+# A followed citation's place, kept for the learning signal, and the signal read by a knowledge
+# administrator. Never a document, a question or a person. See `brain.retrieval_routes`.
+from brain.retrieval_routes import router as retrieval_router
 
 # The routing matrix. A second router rather than more routes on the first, because the
 # rules differ: `api_routes` answers about entities, where the name itself is enumerable,

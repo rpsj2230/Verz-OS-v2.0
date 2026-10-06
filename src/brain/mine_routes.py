@@ -178,8 +178,9 @@ A_PERSON_FORGETS_AND_EDITS_WHAT_WAS_FORMED_FROM_THEIR_OWN_WORDS: Final = (
 
 #: What the connected accounts card says.
 ACCOUNTS_ARE_NOT_READ_HERE: Final = (
-    "Which of your own accounts are connected is not read by this page. Connecting one never "
-    "widens what you can see: it adds a source that is already yours, on your own access."
+    "Below are the sources you may connect your own account with, and whether you have. "
+    "Connecting one never widens what you can see: it adds a source that is already yours, read "
+    "only for your own questions."
 )
 
 #: What the knowledge card does not show.

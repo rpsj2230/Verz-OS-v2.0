@@ -1,7 +1,7 @@
 ### Knowledge bases, documents and data sources
 
 - **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/corrections`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/duplicates`, `/rules`, `/artifacts`
-- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `know.learning_candidate`, `know.candidate_evidence`, `mem.learned_rule`, `mem.rule_occurrence`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
+- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `know.learning_candidate`, `know.candidate_evidence`, `mem.learned_rule`, `mem.rule_occurrence`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `agent.artifact_change`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
 - **Measured here:** 51 routes, 7 called by no screen; 27 write routes, 27 with all three proofs; 7 gaps.
 

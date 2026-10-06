@@ -506,6 +506,28 @@ def _joined(
 # ------------------------------------------------------------------------------ the ports
 
 
+class ToolLoop(Protocol):
+    """An agent run that hands a model tools: `brain.gate.runtime.AgentRuntime`, and nothing else.
+
+    A protocol here rather than an import, because the runtime builds on this module's `Drafted`
+    and `evidence_of`, and the lane only needs to know there is a loop to hand the question to.
+    """
+
+    async def drafted(
+        self,
+        question: str,
+        *,
+        lane: ModelLane,
+        scope: SearchScope,
+        sink: TraceSink,
+        now: datetime,
+        meter: Meter,
+        trace_id: str,
+        started: Callable[[], None],
+        horizons: Horizons = SEED_HORIZONS,
+    ) -> Drafted: ...
+
+
 class PassageSearch(Protocol):
     """Where the passages a question may be answered from are found, at one reach."""
 
@@ -705,6 +727,9 @@ class ModelLane:
     hints: AskerHints | None = None
     #: What a question continuing a thread brings with it, or None for a question on its own.
     follow_up: FollowUp | None = None
+    #: The selected agent's tool loop, when its catalogue offers a tool beyond the passage search
+    #: (M13.7.1). The answer lane runs it in place of `draft`; see `brain.gate.runtime`.
+    runtime: ToolLoop | None = None
 
 
 #: Why a follow-up carries the person's earlier questions and the passages cited, and no answer.
@@ -974,7 +999,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
     for this reader and refused for any other.
     """
     cited: list[DocumentCitation] = []
-    for record in payload.records:
+    for position, record in enumerate(payload.records, start=1):
         document_id = record.get("document_id")
         if not isinstance(document_id, str) or not document_id:
             continue
@@ -989,6 +1014,7 @@ def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrac
                     ),
                     source=payload.source,
                     fetched_at=str(record.get("updated_at") or ""),
+                    position=position,
                 )
             )
         except ValueError:

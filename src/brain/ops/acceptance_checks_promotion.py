@@ -71,6 +71,7 @@ ONE_PERSON_FOR_MONEY: Final = (
 
 
 async def _asked(h: Harness, principal_id: str, *, reach: Any) -> Any:
+    from brain.gate.admission import Assurance
     from brain.gate.context import Channel
     from brain.identity.principal_store import StoredPrincipals
 
@@ -81,7 +82,7 @@ async def _asked(h: Harness, principal_id: str, *, reach: Any) -> Any:
     return cast(
         Any,
         SimpleNamespace(
-            caller=SimpleNamespace(principal=person),
+            caller=SimpleNamespace(principal=person, assurance=Assurance.AUTHENTICATED),
             reach=reach,
             now=h.now,
             channel=Channel.CONSOLE,

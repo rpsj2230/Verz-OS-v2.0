@@ -51,8 +51,10 @@ from brain.tables.access_request import AccessRequestHandledRow, AccessRequestRo
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
+from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
-from brain.tables.artifact import ArtifactRow
+from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
+from brain.tables.attachment import ToolAttachmentRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -70,6 +72,7 @@ from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.credential import CredentialWriteRow
+from brain.tables.custom_connector import CustomConnectorRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
@@ -104,6 +107,12 @@ from brain.tables.learned_rule import LearnedRuleRow, RuleOccurrenceRow
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.learning_candidate import CandidateEvidenceRow, LearningCandidateRow
 from brain.tables.learning_signal import LearningPauseRow, MarkRow
+from brain.tables.leash import (
+    ActionVerdictRow,
+    LeashChangeRow,
+    SupervisedActionRow,
+    SupervisionPinRow,
+)
 from brain.tables.manifest_draft import (
     ManifestActRow,
     ManifestDraftRow,
@@ -116,6 +125,7 @@ from brain.tables.model_health import (
     ResidencyConstraintRow,
 )
 from brain.tables.model_registry import GoldenQuestionRow, ModelProviderRow, RoutingChangeRow
+from brain.tables.oauth_consent import OAuthConsentRow
 from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
@@ -132,6 +142,7 @@ from brain.tables.resolution import (
 from brain.tables.resolution_registry import BlockedValueRow, ObservationRow
 from brain.tables.resolution_review import ReviewItemRow
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
+from brain.tables.retrieval import RetrievalEventRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
@@ -142,6 +153,8 @@ from brain.tables.signal_log import SignalRow
 from brain.tables.skill import (
     SkillAssignmentRow,
     SkillDetachmentRow,
+    SkillExportRow,
+    SkillRehearsalRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
@@ -448,6 +461,29 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0184_entity_review_items. Points at nothing: the records and entities are values, so an item
     # outlives a merge or an unmerge of what it names.
     "er.review_item",
+    # 0188_agent_run. Points at nothing: the principal and the agent are values, so a run's row
+    # outlives both.
+    "ops.agent_run",
+    # 0202_oauth_consent. Points at nothing: the source and the person are values.
+    "ops.oauth_consent",
+    # 0203_custom_connector. Points at nothing: the submitter and the reviewer are values.
+    "ops.custom_connector",
+    # 0191_skill_export_and_rehearsal. An export points at the version it carried.
+    "agent.skill_export",
+    "agent.skill_rehearsal",
+    # 0193_retrieval_event. Points at nothing: it names no document, question or person.
+    "ops.retrieval_event",
+    # 0194_artifact_change_and_client. A change points at the artifact it changed and at the one
+    # that superseded it, which are never deleted; the person is a value.
+    "agent.artifact_change",
+    # 0195_leash_changes_and_supervision. A move, an action, a verdict and a pin point at
+    # nothing: the agent, the action and the people are values, so the record outlives them.
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
+    # 0196_tool_attachments. Points at nothing: the agent, the tools and the person are values.
+    "agent.tool_attachment",
     # 0197_signal_log. Points at nothing: a conversation, a message and a trace are values, so a
     # signal outlives what it names.
     "mem.signal",
@@ -466,11 +502,14 @@ __all__ = [
     "AcceptanceResultRow",
     "AccessRequestHandledRow",
     "AccessRequestRow",
+    "ActionVerdictRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentRow",
+    "AgentRunRow",
     "ApiKeyRow",
     "ApplicationLogRow",
+    "ArtifactChangeRow",
     "ArtifactRow",
     "AuditEntryRow",
     "AutomationChangeRow",
@@ -502,6 +541,7 @@ __all__ = [
     "ConversationRow",
     "CorrectionRow",
     "CredentialWriteRow",
+    "CustomConnectorRow",
     "DataExportRow",
     "DepartmentLeadRow",
     "DepartmentRow",
@@ -527,6 +567,7 @@ __all__ = [
     "LearningCandidateRow",
     "LearningPauseRow",
     "LearningRow",
+    "LeashChangeRow",
     "LegalHoldRow",
     "ManifestActRow",
     "ManifestDraftRow",
@@ -536,6 +577,7 @@ __all__ = [
     "MessageRow",
     "ModelAttemptRow",
     "ModelProviderRow",
+    "OAuthConsentRow",
     "ObservationRow",
     "OperationRow",
     "OutboxDeliveryRow",
@@ -557,6 +599,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "RetiredRecordRow",
+    "RetrievalEventRow",
     "ReviewDecisionRow",
     "ReviewItemRow",
     "RoleGrantRow",
@@ -575,7 +618,9 @@ __all__ = [
     "SignalRow",
     "SkillAssignmentRow",
     "SkillDetachmentRow",
+    "SkillExportRow",
     "SkillInvocationRow",
+    "SkillRehearsalRow",
     "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
@@ -586,11 +631,14 @@ __all__ = [
     "StaffMemberRow",
     "StaffSyncRunRow",
     "StewardTaskRow",
+    "SupervisedActionRow",
+    "SupervisionPinRow",
     "SuspensionRow",
     "TeamMembershipRow",
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
+    "ToolAttachmentRow",
     "ToolDefinitionRow",
     "ToolSwitchRow",
     "UpgradeDeclineRow",

@@ -305,6 +305,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
       "/api/v1/agents/{agent_id}/about",
+      "/api/v1/agents/{agent_id}/conversations",
       "/api/v1/agents/{agent_id}/model-pin",
       "/api/v1/agents/{agent_id}/lifecycle",
       "/api/v1/agents/{agent_id}/enable",
@@ -312,6 +313,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/archive",
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
+      "/api/v1/agents/{agent_id}/channels",
       "/api/v1/agents/{agent_id}/learning",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agents/{agent_id}/budget",
@@ -320,6 +322,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/memory",
       "/api/v1/agents/{agent_id}/memory/{memory_id}/deletion",
       "/api/v1/agents/{agent_id}/memory/{memory_id}/edit",
+      "/api/v1/agents/{agent_id}/artifacts",
+      "/api/v1/agents/{agent_id}/artifacts/latest",
+      "/api/v1/agents/{agent_id}/artifacts/{artifact_id}/download",
+      "/api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive",
+      "/api/v1/agents/{agent_id}/artifacts/{artifact_id}/supersede",
+      "/api/v1/agents/{agent_id}/leash",
+      "/api/v1/agents/{agent_id}/leash/moves",
+      "/api/v1/agents/{agent_id}/supervision/pin",
+      "/api/v1/agents/{agent_id}/supervision/review",
+      "/api/v1/agents/{agent_id}/supervision/verdicts",
+      "/api/v1/agents/{agent_id}/attachments",
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
@@ -334,15 +347,26 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.template_instance",
       "agent.template_version",
       "agent.upgrade_decline",
+      "agent.leash_change",
+      "agent.supervised_action",
+      "agent.action_verdict",
+      "agent.supervision_pin",
+      "agent.tool_attachment",
       "agent.browser_envelope",
       "gate.suspension",
       "agent.manifest_draft",
       "agent.manifest_revision",
       "agent.manifest_act",
       "agent.learning_pause",
+      "ops.agent_run",
     ],
     installation: [],
     gaps: [
+      {
+        what: "An agent's finished runs are recorded, how each ended and what it spent, and no screen lists them.",
+        because:
+          "ops.agent_run is written by brain.gate.runtime for operating the runtime and is not the record of what an agent did (brain.ops.agent_run_store.AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD); the agent's Dashboard draws spend from the usage routes, and a list of runs is a screen nobody has drawn yet.",
+      },
       {
         what: "A draft is written, checked and rehearsed on every install, and published only where the install holds a template signing key.",
         because: "brain.agent_builder_routes signs a published draft with the key brain.agent_lifecycle_routes installs with, and no setting holds one yet (brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN); publishing says so rather than signing with a weaker key.",
@@ -371,6 +395,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/{digest}/retirement",
       "/api/v1/skills/{digest}/reinstatement",
       "/api/v1/skills/{digest}/detachments",
+      "/api/v1/skills/{digest}/export",
+      "/api/v1/skills/{digest}/rehearsals",
       "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
@@ -386,12 +412,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_retirement",
       "agent.skill_script",
       "agent.skill_detachment",
+      "agent.skill_export",
+      "agent.skill_rehearsal",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
       {
-        what: "A skill cannot be tried out through an agent in practice mode before it is assigned.",
-        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW, and no route runs a rehearsal; the Profile draws it inert with pages/skills/skillActions.ts' sentence.",
+        what: "A skill cannot be tried out through an agent in practice mode, with a model answering, before it is assigned.",
+        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW. POST /api/v1/skills/{digest}/rehearsals rehearses a version's examples for reach only and runs no model (needs-rupash 161); the Profile draws the practice run inert with pages/skills/skillActions.ts' sentence.",
       },
       {
         what: "A skill that declares scripts cannot be added.",
@@ -442,9 +470,18 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/channels",
       "/channels/:name",
       "/channels/:name/:view",
+      // Where a vendor sends the person back after consenting to a source (M11.8.6).
+      "/connector-consent",
+      // An API's connector added from its specification, and reviewed by a second person (M11.7.8).
+      "/connectors/new-api",
     ],
     routes: [
       "/api/v1/connectors",
+      "/api/v1/connectors/{connector}/consent",
+      "/api/v1/connectors/consent/callback",
+      // A person's own accounts, listed and consented to from My workspace (M11.8.6).
+      "/api/v1/me/accounts",
+      "/api/v1/me/accounts/{connector}/consent",
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",
@@ -466,6 +503,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/console/channels",
       "/api/v1/console/channels/{name}",
       "/api/v1/console/channels/{name}/stats",
+      // An API's connector: submitted, changed and reviewed (M11.7.8).
+      "/api/v1/custom-connectors*",
     ],
     tables: [
       "auth.binding_code",
@@ -473,6 +512,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.channel_delivery",
       "ops.connector_connection",
       "ops.connector_sync",
+      // A consent started at a vendor, held until it is answered once (M11.8.6).
+      "ops.oauth_consent",
+      // A connector for a new API, as submitted, and who reviewed it (M11.7.8).
+      "ops.custom_connector",
       "proj.record",
       "proj.record_retired",
       "proj.source_epoch",
@@ -580,6 +623,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.fast_path_rule",
       "gate.field_policy",
       "agent.artifact",
+      "agent.artifact_change",
       "know.classified_table",
       "know.classified_row",
       "er.review_item",
@@ -840,6 +884,12 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
   "POST /api/v1/threads/attachments":
     "A person naming a document of their own on their own conversation, from Ask; a note in their thread that lets an answer read it at their reach, and nothing in it for an administrator to manage.",
+  "ops.retrieval_event":
+    "What a person was answered from, as the learning signal reads it: which retrievers ran, how many passages were shown and where a citation was followed, with no document, question or person; written by the answer route and the cited page, and nothing in it for an administrator to manage.",
+  "GET /api/v1/retrievals/signal":
+    "The ranking's learning signal, rates over recent retrievals for a knowledge administrator tuning search; it manages nothing, and no screen draws it yet.",
+  "POST /api/v1/retrievals/{event_id}/uses":
+    "The place of a passage a person followed from an answer, sent by the cited document page for the learning signal; a person's own act, not something an administrator manages.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":

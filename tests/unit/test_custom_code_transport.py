@@ -402,19 +402,23 @@ def test_the_install_s_own_list_is_built_with_the_installed_runner() -> None:
     import inspect
 
     tree = ast.parse(inspect.getsource(connectable))
+    # Since M11.7.8 the lists are `Derived` over the reviewed catalogue, so each is a lambda over
+    # the declarations it is handed; both ask `offered` with the installed runner.
     built = [
-        node.value
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Name)
-        and node.value.func.id == "offered"
+        node
+        for statement in tree.body
+        if isinstance(statement, ast.AnnAssign)
+        for node in ast.walk(statement)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "offered"
     ]
-    assert len(built) == 1
-    assert [ast.unparse(one) for one in built[0].args] == ["shipped()"]
-    assert {one.arg: ast.unparse(one.value) for one in built[0].keywords} == {
-        "runner": "installed_runner()"
-    }
+    assert len(built) == 2
+    for one in built:
+        assert [ast.unparse(arg) for arg in one.args] == ["found"]
+        assert {kw.arg: ast.unparse(kw.value) for kw in one.keywords} == {
+            "runner": "installed_runner()"
+        }
 
 
 def test_the_worker_does_not_plan_a_custom_code_source_with_no_runner() -> None:
