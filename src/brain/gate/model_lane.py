@@ -1034,8 +1034,10 @@ def tool_loop_turn(parts: ContextParts) -> str:
     """The user turn a tool loop is shown for one turn's assembled context (M13.7.1, M16.6.1).
 
     The blocks `prompt_for` shows, in its order and built by the same block functions, with no
-    passages and no skill cards: the loop reads knowledge through its tools, and its system turn
-    lists what it may call. So the same assembled parts reach a model on both answer paths. See
+    passages: the loop reads knowledge through its tools, and its system turn lists what it may
+    call. The skill cards are in it, which they were not until 2026-10-07: a model offered
+    `skill.read_instructions` has to be told which skills there are to ask for by name, and a card
+    carries no body (M12.2.8). So the same assembled parts reach a model on both answer paths. See
     `brain.gate.turn_context.ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`.
     """
     blocks = [
@@ -1046,6 +1048,8 @@ def tool_loop_turn(parts: ContextParts) -> str:
         blocks.append(hints_block(parts.asker_memory))
     if parts.session:
         blocks.append(session_block(parts.session))
+    if parts.task:
+        blocks.append(cards_block(parts.task))
     return "\n\n".join(one for one in blocks if one)
 
 

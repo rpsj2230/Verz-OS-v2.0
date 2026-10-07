@@ -751,6 +751,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # runs them with the hosted profile and a vault the test answers for.
     for escalation_check in registered(("brain.ops.acceptance_escalation",)):
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
+    # The skill tools are read by an agent's run through the stand-in too, and a website by a run
+    # whose model is one; `tests/unit/test_acceptance_skill_tools.py` runs them.
+    for tool_check in registered(("brain.ops.acceptance_checks_skill_tools",)):
+        assert outcomes.pop(tool_check.name)[0] == NOT_RUN, tool_check.name
     # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
     # The co-author asks a model too, with no tools;

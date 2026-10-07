@@ -176,8 +176,14 @@ class RegistryToolCaller:
     goes to the log by type.
     """
 
-    def __init__(self, registry: ToolRegistry) -> None:
+    def __init__(
+        self, registry: ToolRegistry, *, bound: Mapping[str, object] | None = None
+    ) -> None:
         self.registry = registry
+        #: What the caller of this call supplies and a model never names, handed to a handler
+        #: that declares a parameter of that name and to no other: a run's agent and the skills
+        #: it was offered, for `brain.tools.skill_tools`. An automation binds none.
+        self.bound = dict(bound or {})
 
     def call(
         self,
@@ -197,7 +203,9 @@ class RegistryToolCaller:
         except ValidationError as exc:
             log.info("automation.arguments_refused", tool=tool.name, error=type(exc).__name__)
             raise PieceRefusedError(TOOL_NOT_AVAILABLE) from exc
-        return handler(built, entitlement=entitlement, now=now)
+        declared = inspect.signature(handler).parameters
+        extra = {name: value for name, value in self.bound.items() if name in declared}
+        return handler(built, entitlement=entitlement, now=now, **extra)
 
 
 def _request_type(handler: typing.Callable[..., object]) -> type[BaseModel] | None:
