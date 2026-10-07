@@ -42,6 +42,7 @@
     "M38.3.3.1": "needs a real send or a real question on the install, which the check does not make",
     "M38.3.3.2": "needs a real send or a real question on the install, which the check does not make",
     "M38.3.3.3": "needs a real send or a real question on the install, which the check does not make",
-    "M38.3.3.4": "needs a real send or a real question on the install, which the check does not make"
+    "M38.3.3.4": "needs a real send or a real question on the install, which the check does not make",
+    "M11.6.6": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)"
   }
 }
