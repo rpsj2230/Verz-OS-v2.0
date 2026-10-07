@@ -1,9 +1,10 @@
 """The Requirement checks screen over HTTP: every requirement in the register, and what was seen.
 
-Seven leaves ask each area's requirements to be "demonstrated on an install by a person, and each
+Twelve leaves ask each area's requirements to be "demonstrated on an install by a person, and each
 check is recorded against the requirement it proves": permissions (M1.8.8), departments
-(M2.3.2), models (M5.6.5), observability (M24.3.6), connectors (M11.8.13), tools (M12.4.15)
-and knowledge (M7.7.7). The register is
+(M2.3.2), models (M5.6.5), observability (M24.3.6), connectors (M11.8.13), tools (M12.4.15),
+knowledge (M7.7.7), agents (M13.8.12), the harness (M13.8.14), entity resolution (M14.8.2), memory
+(M16.7.11) and learning (M16.7.9). The register is
 `docs/requirements/register.json`, shipped in the image, and a check is a row in
 `ops.requirement_check`. This screen puts the two side by side: pick an area, read each
 requirement in the owner's words, and record passed or failed with a sentence about what was done.
@@ -15,7 +16,7 @@ weak. So the screen is not a read every administrator's screen list carries; it 
 other administration capabilities, and `brain.identity.administration_reconciliation` grants it to
 an administrator appointed before it existed.
 
-**Every area can be checked, and seven are named.** `CHECKED_BY` maps an area to the leaf that asks
+**Every area can be checked, and twelve are named.** `CHECKED_BY` maps an area to the leaf that asks
 for its checks, so the screen can say which task a row's check proves; an area with no leaf is
 still checkable, because M24.3.4 asks for its audit and tracing checks to be "recorded" in the same
 sense and a mechanism that refused an area would be a narrowing nobody asked for.
@@ -38,6 +39,7 @@ records a check: only a person's sentence does that. Rejected: the console fetch
 itself and matching leaves, which would be a second place deciding which check proves which row.
 
 Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M11.8.13, M12.4.15, M7.7.7, M11.8.8
+Task ids: M13.8.12, M13.8.14, M14.8.2, M16.7.11, M16.7.9
 """
 
 from __future__ import annotations
@@ -91,6 +93,11 @@ CHECKED_BY: Final[Mapping[str, str]] = {
     "Connectors": "M11.8.13",
     "Tools": "M12.4.15",
     "Knowledge": "M7.7.7",
+    "Agents": "M13.8.12",
+    "Harness": "M13.8.14",
+    "Entity resolution": "M14.8.2",
+    "Memory": "M16.7.11",
+    "Learning": "M16.7.9",
 }
 
 #: Why an area's recorded checks also prove leaves beside the one that asks for them.
