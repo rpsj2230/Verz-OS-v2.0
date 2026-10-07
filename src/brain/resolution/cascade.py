@@ -135,7 +135,7 @@ from brain.resolution.guardrails import (
     blocked,
     priority_of,
 )
-from brain.resolution.normalise import NormalisedName, accent_fold
+from brain.resolution.normalise import NormalisedName, accent_fold, check_uen
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why stage one returns before anything is scored.
@@ -648,6 +648,13 @@ FREE_MAIL_REASON: Final = (
     "down, because a small weight repeated enough times reaches any threshold"
 )
 
+#: What a UEN that is not one is dropped for (M14.2.6). No value in it, for the same reason.
+NOT_A_UEN_REASON: Final = (
+    "this is not in the shape of a Singapore registration number, so it would merge two "
+    "companies on a typing mistake at the stage that merges on a hard identifier alone; it is "
+    "dropped rather than compared"
+)
+
 
 @dataclass(frozen=True)
 class Dropped:
@@ -662,15 +669,21 @@ class Dropped:
     """
 
     kind: IdentifierKind
-    #: The guardrail that refused it, or None when the free-mail domain list did.
+    #: The guardrail that refused it, or None when the free-mail domain list or the UEN's own
+    #: structure did.
     rule: BlockRule | None
+    #: Whether it was refused for not being a UEN at all (M14.2.6). Two-valued for the reason
+    #: `rule` is: a third enumeration of "why not" would be a second place to disagree.
+    not_a_uen: bool = False
 
     @property
     def is_free_mail(self) -> bool:
-        return self.rule is None
+        return self.rule is None and not self.not_a_uen
 
     @property
     def reason(self) -> str:
+        if self.not_a_uen:
+            return NOT_A_UEN_REASON
         return FREE_MAIL_REASON if self.rule is None else BLOCK_REASONS[self.rule]
 
 
@@ -703,6 +716,12 @@ def usable_identifiers(
     shared-mailbox one and the operator seeing the weaker explanation. The free-mail domain
     list runs second and applies to `DOMAIN` only.
 
+    **A UEN is checked and spelled once before it is hashed (M14.2.6).** `normalise.check_uen`
+    is the structural check, and it is called here because this is the one place a value becomes a
+    digest. Before it was called, a mistyped registration number joined at the stage that merges
+    on a hard identifier alone, and two spellings of a valid one never joined at all. The block
+    list stays a list and not a validator, which is why this is not a `BlockRule`.
+
     **An email at a free-mail domain is kept, and that is deliberate.** The whole address
     identifies one person, which is a legitimate join key for a person entity; the domain part
     of it identifies a mail provider, which is not a join key for anything. Dropping the
@@ -719,6 +738,15 @@ def usable_identifiers(
         if kind is IdentifierKind.DOMAIN and domain_key(value) in FREE_MAIL_DOMAINS:
             dropped.append(Dropped(kind=kind, rule=None))
             continue
+        if kind is IdentifierKind.UEN:
+            # A UEN has one spelling and a stage that merges on it alone, so a value that is not
+            # one is dropped rather than joined (M14.2.6), and a valid one is hashed in its
+            # canonical spelling so "201912345k" and "201912345K" are one key.
+            verdict = check_uen(value)
+            if not verdict.valid:
+                dropped.append(Dropped(kind=kind, rule=None, not_a_uen=True))
+                continue
+            value = verdict.canonical
         kept[kind] = identifier_hash(kind, value, pepper=pepper)
     return MappingProxyType(kept), tuple(dropped)
 
