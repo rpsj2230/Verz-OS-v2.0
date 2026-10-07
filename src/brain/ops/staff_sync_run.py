@@ -121,6 +121,7 @@ from brain.identity.departments_from import (
     DepartmentsFrom,
     as_the_console_places_them,
     departments_from,
+    the_list_places_people,
 )
 from brain.identity.organisation_sync import sync_trace
 from brain.identity.staff_accounts import allowed_types
@@ -607,9 +608,7 @@ async def sync_staff_on(
     # service; see `ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`. A trial plans, makes nothing.
     allowed = allowed_types(value_of(ACCOUNT_TYPES_SETTING, env))
     console = departments_from(env)
-    said_people = await _people(
-        sessions, roster, now, trial, place=console is DepartmentsFrom.STAFF_SOURCE
-    )
+    said_people = await _people(sessions, roster, now, trial, place=the_list_places_people(env))
     where = standings(members=members, writes=application.writes, people=roster.people)
     first = await _standing(sessions, chosen.name, where, allowed, now)
     accounts = await provide_accounts(
@@ -623,7 +622,7 @@ async def sync_staff_on(
         absent_is_gone=roster.may_remove() and last_applied is not None,
         trial=trial,
         keep_open=frozenset(first.kept_in) if first is not None else frozenset(),
-        place=console is DepartmentsFrom.STAFF_SOURCE,
+        place=the_list_places_people(env),
     )
     # Planned again once the accounts step has joined its new people to their rows.
     kept = first if trial else await _standing(sessions, chosen.name, where, allowed, now)

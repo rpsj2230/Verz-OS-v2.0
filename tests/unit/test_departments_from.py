@@ -24,6 +24,7 @@ from brain.identity.departments_from import (
     DepartmentsFrom,
     as_the_console_places_them,
     departments_from,
+    the_list_places_people,
 )
 from brain.identity.organisation_store import moving_people
 from brain.identity.staff_source import DEFAULT_TRUST, Roster, StaffRecord
@@ -49,6 +50,22 @@ def test_the_setting_reads_its_two_words_and_anything_else_as_the_staff_list(
     """Delete this and a slip in an environment file can switch a company to managing departments
     by hand, or `console` can stop meaning it."""
     assert departments_from({DEPARTMENTS_FROM_SETTING: given}, saved={}) is read
+
+
+@pytest.mark.parametrize(
+    ("given", "places"),
+    [("console", False), ("staff_source", True), ("", True), ("consle", True)],
+)
+def test_the_sync_places_the_people_it_makes_only_where_departments_come_from_the_list(
+    given: str, places: bool
+) -> None:
+    """The one question the people step and the accounts step both ask, and the one the install
+    check asks of the product: false only for the console, true for the list and for any word
+    that is neither. Delete this and the sync can place people on an install managing departments
+    on People, or stop placing them on every other.
+
+    Task ids: M1.6.19"""
+    assert the_list_places_people({DEPARTMENTS_FROM_SETTING: given}, saved={}) is places
 
 
 def test_the_setting_defaults_to_the_staff_list_and_settings_refuses_a_third_word() -> None:
