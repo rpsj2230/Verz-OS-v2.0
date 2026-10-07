@@ -31,7 +31,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, text
+from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.pool import NullPool
 
 from brain.db import normalise_database_url
@@ -48,6 +48,38 @@ THE_ADDRESS_HANDED_TO_ALEMBIC_IS_THE_ONE_MIGRATED: Final = (
     "The address a caller hands over is the one migrated, and the setting is only the fallback "
     "for the bare alembic command, which hands over nothing."
 )
+
+
+#: How long a migration waits for any table lock before giving up, in milliseconds.
+MIGRATION_LOCK_WAIT_MS: Final = 15_000
+
+#: Why a migration that cannot get a table lock gives up instead of waiting for it.
+A_MIGRATION_GIVES_UP_ON_A_LOCK_IT_CANNOT_GET: Final = (
+    "A statement that needs a table lock waits behind every transaction already holding one, and "
+    "while it waits it makes every later query on that table wait behind IT. On 2026-10-07 a "
+    "migration that replaces a constraint on `ops.control_run` queued behind the worker's "
+    "acceptance run (a long transaction that touches that table), three candidate containers in a "
+    "row sat at 120 seconds and were held back, and for those six minutes the running release's "
+    "own queries on that table queued behind the waiting statement. With a bound the migration "
+    "fails after a few seconds, rolls back and leaves nothing queued; the candidate is held back "
+    "as it was, and the next attempt, which the deploy makes every few minutes, finds the table "
+    "free. The advisory lock replicas queue on is taken BEFORE the bound is set, because a "
+    "replica that loses that race is meant to wait for the winner."
+)
+
+
+def bound_the_wait_for_table_locks(
+    conn: Connection, milliseconds: int = MIGRATION_LOCK_WAIT_MS
+) -> None:
+    """Make every table lock this transaction asks for give up after `milliseconds`.
+
+    Transaction-local (`set_config(..., true)`), so it ends with the migration's transaction and
+    leaves the pooled server connection as it found it, which matters behind a transaction
+    pooler. See `A_MIGRATION_GIVES_UP_ON_A_LOCK_IT_CANNOT_GET`.
+    """
+    conn.execute(
+        text("SELECT set_config('lock_timeout', :bound, true)"), {"bound": f"{milliseconds}ms"}
+    )
 
 
 def alembic_url(configured: str | None) -> str:
@@ -139,6 +171,9 @@ def run_migrations(database_url: str) -> list[str]:
             # Blocking, not try-lock: a replica that loses the race must wait for the
             # winner rather than start serving against an unmigrated schema.
             conn.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": MIGRATION_LOCK_ID})
+            # After the advisory lock and not before: a replica that lost the race waits for the
+            # winner as long as it takes, and only the migration's own table locks are bounded.
+            bound_the_wait_for_table_locks(conn)
 
             # Re-check inside the lock. The replica that waited will usually find the work
             # already done, and running `upgrade` regardless would be harmless but would
