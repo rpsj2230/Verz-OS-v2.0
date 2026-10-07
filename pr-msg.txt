@@ -1,0 +1,11 @@
+Install checks for the retrieval and embedding caches in the install's own cache, and the agent memory tab's confidence
+
+- M6.2.3: over the install's own cache and the real document search, a search asked twice is served the second time from the cache (the cache's own health counters say one hit and no second write), a reader of another department asking the same words is served nothing of it, and a document uploaded afterwards is found by the same words, because the corpus epoch is in the key. Not run where the process has no cache address, and every key the check wrote is deleted by name.
+- M6.2.4: a vector round-trips through the real store under a key that is the same for the same content however it is held, differs for other content or another model, and carries neither in the clear.
+- M16.5.2: the existing agent memory check now also holds each listed memory to a confidence in (0, 1], a source and a date, and that what a person stated and what was inferred read as different; a break that lists every memory at nought fails it.
+
+Not claimed: M6.2.5 (a reading of every source's counter kept for a short while: the claim that a change is seen within that while is about time and the check cannot make it without waiting it out), M6.2.2 (the plan cache has no caller; it waits for the runtime to plan, see the module docstring of brain.gate.caches).
+
+The generic run test expects the two new cache checks to be not run where there is no cache, as it does for the answer cache's.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
