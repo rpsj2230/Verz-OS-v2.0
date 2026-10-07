@@ -907,13 +907,14 @@ async def an_agent_is_found_by_its_audience_and_previewed_as_a_person(
         "M39.4.2.1",
         "M39.4.2.2",
         "M39.4.2.4",
+        "M16.5.2",
     ),
     sentence=(
         "Memories formed from a person's turn with an agent read as text, stated apart from "
-        "inferred, to its steward, and to the person as what it keeps about them; the steward's "
-        "edit shows in the history with its diff and the person's delete takes theirs out of "
-        "recall; a colleague sees neither; the tiers say which learn and route a gated change "
-        "to its department."
+        "inferred, each with when it was formed, how it came and how sure it is, to its steward, "
+        "and to the person as what it keeps about them; the steward's edit shows in the history "
+        "with its diff and the person's delete takes theirs out; a colleague sees neither; the "
+        "tiers route a gated change to its department."
     ),
 )
 async def an_agents_memory_is_text_its_owner_corrects_and_its_tiers_route(
@@ -1015,6 +1016,16 @@ async def an_agents_memory_is_text_its_owner_corrects_and_its_tiers_route(
         raise CheckFailedError("the agent's memory did not read as stated apart from inferred")
     if not all(one.changeable for one in (*by_steward.curated, *by_steward.extracted)):
         raise CheckFailedError("the agent's steward was not offered its memory to change")
+    # M16.5.2: what was learned, with the evidence of it and how sure the agent is.
+    listed = (*by_steward.curated, *by_steward.extracted)
+    if not all(
+        0.0 < one.confidence <= 1.0 and one.provenance and one.formed_at <= h.now for one in listed
+    ):
+        raise CheckFailedError("a memory was listed without its confidence, its source or its date")
+    if {one.provenance for one in by_steward.curated} == {
+        one.provenance for one in by_steward.extracted
+    }:
+        raise CheckFailedError("what a person stated and what was inferred were not told apart")
     _, by_person = await seen(person)
     if sorted(one.statement for one in by_person.about_you) != sorted((stated, inferred)):
         raise CheckFailedError("a person was not shown what the agent keeps about them")
