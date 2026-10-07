@@ -1,0 +1,7 @@
+Install acceptance checks (CHECK_ORDER 800) naming six M33 leaves that were built and wired but proved nowhere: M33.1.1.1, M33.1.1.2, M33.2.1.3, M33.2.1.4, M33.1.2.3, M33.3.1.3.
+
+Each check asks the leaf's own route as reserved people in acceptance_a/acceptance_b inside a rolled-back transaction, and each is shown failing with the product broken. No migration, no route change, no flag. M33.1.1.3 is deliberately not named: no company ceiling has a writer.
+
+The department head's pace check says NOT_RUN on an install with no currency set (the product withholds a pace over no recorded cost), which `test_acceptance.py`'s generic run test now expects.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
