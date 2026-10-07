@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-07T02:37:46.993420+00:00",
-  "commit": "f69a124b",
-  "commit_subject": "Install checks for rehearsed examples, exported packages and changed scripts, and a hint on the skill forms for where examples go (#476)",
+  "generated_at": "2026-10-07T03:41:01.214335+00:00",
+  "commit": "9ce942bc",
+  "commit_subject": "Install checks for Sync now, what People says about the staff list, adding a work email and departments managed on People (#477)",
   "total": 1596,
   "done": 833,
   "percent": 52.2,
