@@ -118,6 +118,12 @@ export const PROCEDURE_FORMAT =
   "draft skill that waits for review; anything in it a reviewer should read first is listed.";
 export const EDIT_FORMAT =
   "The whole SKILL.md. Keep the name, and give a later version number than this one; the edit waits for review.";
+/**
+ * Where example tasks go. Without this an author cannot find out: the examples are lines of the body, so they
+ * travel in the digest, and a version carrying some is approved only once a rehearsal has passed every one.
+ */
+export const EXAMPLES_HINT =
+  "Example tasks go under a ## Examples heading, one line each as - task => tool, tool (or - task => none).";
 
 const PACKAGE_FORM = "skills-add";
 const PACKAGE_FIELDS: readonly string[] = ["content", "file_name", "encoding", "categories"];
@@ -142,11 +148,14 @@ function Field({
   id,
   label,
   hint,
+  below,
   children,
 }: {
   readonly id: string;
   readonly label: string;
   readonly hint?: string | undefined;
+  /** A sentence under the control, for what is easier to find after writing than before. */
+  readonly below?: string | undefined;
   readonly children: ReactNode;
 }) {
   return (
@@ -154,6 +163,7 @@ function Field({
       <Label htmlFor={id}>{label}</Label>
       {hint === undefined ? null : <p className="m-0 text-[12px] leading-snug text-dim">{hint}</p>}
       {children}
+      {below === undefined ? null : <p className="m-0 text-[12px] leading-snug text-dim">{below}</p>}
     </div>
   );
 }
@@ -215,7 +225,7 @@ export function AddSkillForm({ onTold }: { readonly onTold: Tell }) {
     <form className="flex min-w-0 flex-col gap-3" aria-label="Add a skill" onSubmit={(event) => void add(event)}>
       <Note>{PACKAGE_FORMAT}</Note>
       {failure === null ? null : <FailureNotice failure={failure} fields={PACKAGE_FIELDS} />}
-      <Field id="skills-paste" label={PASTE_LABEL}>
+      <Field id="skills-paste" label={PASTE_LABEL} below={EXAMPLES_HINT}>
         <Textarea
           id="skills-paste"
           name="content"
@@ -452,7 +462,7 @@ export function EditVersionForm({
   return (
     <form className="flex min-w-0 flex-col gap-3" aria-label={`Edit ${one.name} ${one.version}`} onSubmit={(event) => void save(event)}>
       {failure === null ? null : <FailureNotice failure={failure} fields={["content"]} />}
-      <Field id={fieldId} label={EDIT_LABEL} hint={EDIT_FORMAT}>
+      <Field id={fieldId} label={EDIT_LABEL} hint={EDIT_FORMAT} below={EXAMPLES_HINT}>
         <Textarea
           id={fieldId}
           name="content"

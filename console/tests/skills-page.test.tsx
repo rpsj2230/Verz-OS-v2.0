@@ -15,7 +15,7 @@
  * sends it, and every path it sends to with the API document.
  *
  * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M42.6.4, M12.2.2, M12.3.2, M12.4.13
- * Task ids: M12.2.10, M27.15.57
+ * Task ids: M12.2.10, M27.15.57, M12.3.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -27,7 +27,7 @@ import { SKILLS_HEADING } from "../src/pages/Skills";
 import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
 import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
-import { FROM_ADDRESS, FROM_REPOSITORY, IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
+import { EXAMPLES_HINT, FROM_ADDRESS, FROM_REPOSITORY, IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, FINDINGS_HEADING } from "../src/pages/skills/SkillProfile";
 import { EXPORT, exportedSentence, NOT_YET_REHEARSED, REHEARSAL_FAILED, REHEARSAL_PASSED, REHEARSE } from "../src/pages/skillsQuery";
 import { PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
@@ -546,6 +546,39 @@ describe("one skill's page", () => {
     await waitFor(() => {
       expect(card(unused.container, LAST_USED_LABEL)?.textContent).toContain(NOT_USED);
     });
+  });
+
+  test("the Add and Edit forms say, under the SKILL.md field, where example tasks go", async () => {
+    // What breaks if this is deleted: M12.3.4. A version's examples are lines of its SKILL.md body
+    // under an Examples heading, and nothing else on the page says so, so an author who never
+    // read the source could never write one and the rehearsal gate would have nothing to rehearse.
+    const hinted = (field: HTMLElement | null): string | null => {
+      const below = field?.nextElementSibling;
+      return below instanceof HTMLParagraphElement ? below.textContent : null;
+    };
+
+    const add = await consoleAt("/skills", { [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) } });
+    pressed("Add a skill", add.container);
+    await waitFor(() => {
+      expect(document.getElementById("skills-paste")).not.toBeNull();
+    });
+    expect(hinted(document.getElementById("skills-paste"))).toBe(EXAMPLES_HINT);
+    // The hint is the format a line is written in, and it names the heading the parser looks for.
+    expect(EXAMPLES_HINT).toContain("## Examples");
+    expect(EXAMPLES_HINT).toContain("- task => tool, tool");
+    expect(EXAMPLES_HINT).toContain("- task => none");
+    add.container.remove();
+
+    const { container } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version()], [PIN]));
+    pressed(`Edit ${NAME}`, container);
+    const editor = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>(`textarea[id="edit-${DIGEST}"]`);
+      if (found === null) {
+        throw new Error("the edit form has not opened");
+      }
+      return found;
+    });
+    expect(hinted(editor)).toBe(EXAMPLES_HINT);
   });
 
   test("the Profile names people and agents, and keeps identifiers in Advanced", async () => {
