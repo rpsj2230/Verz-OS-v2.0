@@ -1,0 +1,103 @@
+newest run d3e722f at 2026-10-06 18:20 UTC: 330 checks, 309 passed, 19 not run, 2 failed
+run before 73027b1 at 17:48 UTC: 329 checks, 308 passed, 19 not run, 2 failed
+
+closes 149:
+Closes: M5.7.3
+Closes: M6.5.1
+Closes: M11.7.8, M11.8.6, M11.8.7, M11.8.8, M11.8.10, M11.8.12
+Closes: M12.2.7
+Closes: M13.1.2, M13.1.3, M13.2.2, M13.2.5, M13.4.2, M13.4.3, M13.4.4, M13.4.5, M13.7.3, M13.7.5, M13.7.6, M13.7.8, M13.8.1
+Closes: M14.3.5, M14.4.2, M14.4.4, M14.6.5, M14.8.3
+Closes: M15.3.4
+Closes: M16.2.8, M16.5.1, M16.6.5, M16.6.6, M16.7.6
+Closes: M20.1.3, M20.2.1, M20.4.1, M20.4.4
+Closes: M27.1.3, M27.1.4, M27.1.6, M27.2.1, M27.2.2, M27.2.4, M27.3.2, M27.3.7, M27.5.6, M27.5.8, M27.5.10, M27.6.1, M27.7.3, M27.7.5, M27.7.7, M27.7.8, M27.7.9, M27.7.10, M27.7.11, M27.7.12, M27.7.13, M27.7.14, M27.7.18, M27.7.19, M27.7.24, M27.7.27, M27.7.28, M27.7.29, M27.8.6, M27.8.9, M27.8.11, M27.8.15, M27.8.16, M27.9.1, M27.9.2, M27.9.3, M27.9.4, M27.9.5, M27.9.9, M27.11.1, M27.11.3, M27.11.5, M27.11.8, M27.11.11, M27.11.16, M27.12.1, M27.12.2, M27.12.7, M27.13.1, M27.15.5, M27.15.7, M27.15.8, M27.15.9, M27.15.20, M27.15.21, M27.15.22, M27.15.24, M27.15.31, M27.15.36, M27.15.38, M27.15.39, M27.15.43, M27.15.48, M27.15.51, M27.15.55, M27.15.56, M27.15.58, M27.15.60, M27.15.63, M27.15.66
+Closes: M28.2.1, M28.2.3
+Closes: M33.1.2.2, M33.1.2.4, M33.2.1.1, M33.2.1.2, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.5, M33.3.1.1, M33.3.1.2, M33.3.1.5, M33.4.1.1, M33.4.1.2, M33.5.1.1, M33.5.1.2, M33.6.1.2, M33.6.1.4, M33.7.1.2, M33.7.1.4, M33.7.1.5, M33.8.1
+Closes: M39.1.1.3, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.2.1.1, M39.2.1.2, M39.2.1.3, M39.2.1.5, M39.2.4.3, M39.3.2.1, M39.3.2.2, M39.3.2.3, M39.3.2.4, M39.3.2.5, M39.4.2.3, M39.8.2, M39.8.3, M39.8.6, M39.8.9
+Proved-on-install: acceptance runs at d3e722f (2026-10-06 18:20 UTC) and 73027b1 (17:48 UTC) passed every install check naming each of these tasks; evidence rows in docs/tracker-audit-2026-09-28.md
+Proved-in-ci: "Unit tests" runs tests/unit/test_acceptance*.py, which run each of these checks against PostgreSQL at head and the breaks that fail them
+
+blocked by a check that did not pass (33):
+  M5.6.1: a_question_is_answered_end_to_end_via_deepseek not run: an administrator has switched this provider off, so it is not asked
+  M5.6.1: a_question_is_answered_end_to_end_via_openai not run: an administrator has switched this provider off, so it is not asked
+  M5.7.1: the_deepseek_provider_answers_the_models_screen_test not run: an administrator has switched this provider off, so it is not asked
+  M5.7.1: the_openai_provider_answers_the_models_screen_test not run: an administrator has switched this provider off, so it is not asked
+  M7.1.3: the_antivirus_test_file_is_refused_as_malware not run: this install checks uploads with the structural check alone and runs no antivirus yet, so the antivirus half was not asked
+  M7.1.4: a_queued_file_is_kept_in_the_store_and_read_by_the_worker not run: this install has no object store connected, so a queued file has nowhere to wait
+  M7.1.5: a_queued_file_is_kept_in_the_store_and_read_by_the_worker not run: this install has no object store connected, so a queued file has nowhere to wait
+  M10.5.6: an_email_is_taken_signed_and_answered_by_the_install_s_relay not run: signed mail was accepted and forged mail refused, but no mail relay is saved on Notifications, so a reply had nowhere to leave from and its relay was not asked
+  M10.5.6: mail_in_the_mailbox_is_read_answered_and_marked not run: mail was read from the stand-in mailbox and marked, but no mail relay is saved on Notifications, so its answer had nowhere to leave from and its relay was not asked
+  M12.2.2: a_skill_is_imported_from_a_github_commit_and_from_an_address not run: this install names no public skill to import, so no import from GitHub was asked
+  M12.2.3: a_skill_is_imported_from_a_github_commit_and_from_an_address not run: this install names no public skill to import, so no import from GitHub was asked
+  M12.4.5: the_sandbox_finds_no_network_and_stops_scripts_at_their_limits not run: this install has not switched the script sandbox on: INSTALL_SERVICES does not name sandbox
+  M22.2.2: a_batch_job_holding_its_share_cannot_take_a_persons_connection not run: the connection pools per workload class are not reported running on this release, so every process is on the pooler it already had; the deploy step reports them after every deploy that starts them
+  M27.7.26: the_recovery_screen_reads_this_installs_backups not run: the process running this check builds no connection to the object store, so the Recovery screen has nothing to read the backups from; the run inside the application's container, which connects to the store, can
+  M27.8.13: a_job_is_paused_run_and_resumed_and_lists_its_runs failed: a change to a job from the console is not in the audit trail
+  M27.11.10: every_slot_is_listed_and_written_from_the_screen_never_read_back not run: the Credentials screen offers no slot a value on this install, which it does while the vault is absent, sealed or unread, and says so on every slot; once the vault answers, it can run
+  M27.15.19: a_person_added_by_hand_signs_in_and_holds_their_grant not run: this install reads its people from a staff list, so nobody is added by hand here; the console refused the addition in words, and the rest needs an install that reads none
+  M27.15.47: a_job_is_paused_run_and_resumed_and_lists_its_runs failed: a change to a job from the console is not in the audit trail
+  M27.15.50: every_slot_is_listed_and_written_from_the_screen_never_read_back not run: the Credentials screen offers no slot a value on this install, which it does while the vault is absent, sealed or unread, and says so on every slot; once the vault answers, it can run
+  M27.15.57: a_skill_is_imported_from_a_github_commit_and_from_an_address not run: this install names no public skill to import, so no import from GitHub was asked
+  M32.1.1.1: the_trace_ledger_runs_as_its_five_services not run: this install has not switched the trace ledger on: INSTALL_SERVICES does not name langfuse
+  M32.1.1.2: every_trace_ledger_service_runs_under_its_budgeted_limit not run: this install has not switched the trace ledger on: INSTALL_SERVICES does not name langfuse
+  M32.1.2.6: a_run_sent_to_the_ledger_is_found_there_with_its_model_call not run: this install has not switched the trace ledger on: INSTALL_SERVICES does not name langfuse
+  M32.2.1.1: the_detector_finds_every_entity_the_scrub_relies_on_it_for not run: this install runs no personal data detector: INSTALL_SERVICES does not name presidio and its profile does not deploy one
+  M39.5.1.1: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.1.2: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.1.4: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.1.5: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.2.1: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.2.2: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.2.3: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.2.4: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.5.2.5: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.8.4: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M39.8.5: an_agents_report_holds_what_its_reader_may_see_and_is_rechecked failed: this install is not connected to its object store
+  M40.7.1: forgot_password_is_sent_through_the_relay_on_notifications not run: no mail relay is saved on Notifications, so the sign-in service is given none and its own email settings are left as they are
+seen on the newest run only (1):
+  M33.1.2.1: a_second_person_publishes_an_agent_company_wide_and_retires_it
+held (42):
+  M1.6.16: passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own
+  M1.6.17: passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own
+  M1.10.1: passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own
+  M1.10.3: passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own
+  M10.5.1: passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)
+  M10.5.2: passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)
+  M10.5.3: passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)
+  M10.5.4: passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)
+  M11.1.2: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.1.5: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.4.6: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.4.8: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.6.1: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.6.2: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.6.3: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.6.4: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.6.5: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.6.7: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.7.1: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.7.2: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.7.3: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.7.4: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.7.5: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.8.4: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.8.11: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.3: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.4: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.5: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.6: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.7: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.8: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.10: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.11: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.13: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.14: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M11.9.15: passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)
+  M32.1.2.4: passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own
+  M38.2.2.3: needs a real send or a real question on the install, which the check does not make
+  M38.3.3.1: needs a real send or a real question on the install, which the check does not make
+  M38.3.3.2: needs a real send or a real question on the install, which the check does not make
+  M38.3.3.3: needs a real send or a real question on the install, which the check does not make
+  M38.3.3.4: needs a real send or a real question on the install, which the check does not make
+proved and already closed: 307
