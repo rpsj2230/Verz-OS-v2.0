@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-07T04:28:41.545615+00:00",
-  "commit": "b32f4b92",
-  "commit_subject": "Install checks for the company estate and activity, a department head's pace and coverage, role nominations and a member's own export (#478)",
+  "generated_at": "2026-10-07T04:48:41.581123+00:00",
+  "commit": "3b151f40",
+  "commit_subject": "Install checks for Chinese, Malay and Tamil names, the environment a trace is filed under, and the HubSpot connector (#483)",
   "total": 1596,
   "done": 833,
   "percent": 52.2,
