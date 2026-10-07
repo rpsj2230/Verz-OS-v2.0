@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-07T03:41:01.214335+00:00",
-  "commit": "9ce942bc",
-  "commit_subject": "Install checks for Sync now, what People says about the staff list, adding a work email and departments managed on People (#477)",
+  "generated_at": "2026-10-07T04:28:41.545615+00:00",
+  "commit": "b32f4b92",
+  "commit_subject": "Install checks for the company estate and activity, a department head's pace and coverage, role nominations and a member's own export (#478)",
   "total": 1596,
   "done": 833,
   "percent": 52.2,
