@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-07T02:22:55.584674+00:00",
-  "commit": "b13d50a0",
-  "commit_subject": "Two install checks stop reporting the install's state as the product's failure (#474)",
+  "generated_at": "2026-10-07T02:29:59.516575+00:00",
+  "commit": "fd0ec0a4",
+  "commit_subject": "A supervised agent's pin is reviewed at thirty days by a daily worker control, behind a switch that ships off, and a date alone never releases it (#475)",
   "total": 1596,
   "done": 833,
   "percent": 52.2,
