@@ -21,7 +21,7 @@ run; and the notice check against a notice that names every source it failed.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1, M11.3.4
-Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.5.2
+Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.5.2, M11.8.9
 """
 
 from __future__ import annotations
@@ -50,15 +50,23 @@ LEAVES = {
     "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table": ("M11.1.1", "M11.2.1"),
     "a_rest_read_is_built_from_a_spec_and_refused_before_a_call": ("M11.1.3",),
     "a_source_is_connected_to_one_named_thing_and_never_to_everything": ("M11.2.3",),
-    "a_run_leases_its_key_and_the_next_run_reads_a_replaced_one": ("M11.2.2", "M11.2.6"),
+    "a_run_leases_its_key_and_the_next_run_reads_a_replaced_one": (
+        "M11.2.2",
+        "M11.2.6",
+        "M11.8.9",
+    ),
     "a_live_read_uses_the_service_key_ends_on_time_and_is_made_once": (
         "M11.2.5",
         "M11.5.1",
         "M11.5.4",
         "M11.5.2",
     ),
-    "a_burst_is_paced_by_the_source_s_documented_ceiling": ("M11.3.1", "M11.3.5"),
-    "failures_open_the_breaker_and_a_refusal_is_retried_in_budget": ("M11.3.2", "M11.3.3"),
+    "a_burst_is_paced_by_the_source_s_documented_ceiling": ("M11.3.1", "M11.3.5", "M11.8.9"),
+    "failures_open_the_breaker_and_a_refusal_is_retried_in_budget": (
+        "M11.3.2",
+        "M11.3.3",
+        "M11.8.9",
+    ),
     "an_unreached_source_is_named_only_to_an_asker_who_could_see_it": ("M11.5.5",),
     "a_source_s_live_calls_are_measured_on_its_page": ("M11.3.4",),
 }

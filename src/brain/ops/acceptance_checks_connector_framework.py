@@ -47,7 +47,7 @@ already unit tested that way; what an install has to show is that the executor i
 front of a real read, which only a read shows.
 
 Task ids: M38.5.1, M11.1.1, M11.1.3, M11.2.1, M11.2.2, M11.2.3, M11.2.5, M11.2.6, M11.3.1
-Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.3.4, M11.5.2
+Task ids: M11.3.2, M11.3.3, M11.3.5, M11.5.1, M11.5.4, M11.5.5, M11.3.4, M11.5.2, M11.8.9
 """
 
 from __future__ import annotations
@@ -781,7 +781,7 @@ async def a_source_is_connected_to_one_named_thing_and_never_to_everything(h: Ha
 
 # ---------------------------------------------------- 4. a lease per run, and rotation
 @check(
-    leaves=("M11.2.2", "M11.2.6"),
+    leaves=("M11.2.2", "M11.2.6", "M11.8.9"),
     sentence=(
         "Each worker read of a Xero tenant made up for the check mints its own run token with the "
         "run TTL, reads the key through it and revokes it when the read ends; a token the vault "
@@ -978,7 +978,7 @@ async def _fan_out_takes_its_critical_path(rig: _Rig, number: str) -> None:
 
 # ------------------------------------------------------ 6. the bucket and the ceiling
 @check(
-    leaves=("M11.3.1", "M11.3.5"),
+    leaves=("M11.3.1", "M11.3.5", "M11.8.9"),
     sentence=(
         "Every connectable source's plan and live-read bucket follow its documented row in "
         "brain.ops.limits, and Xero's row states its daily figure in its own note; live reads past "
@@ -1051,7 +1051,7 @@ async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> Non
 
 # ------------------------------------------------------ 7. the breaker and the retry
 @check(
-    leaves=("M11.3.2", "M11.3.3"),
+    leaves=("M11.3.2", "M11.3.3", "M11.8.9"),
     sentence=(
         "Recorded 503s open Xero's breaker and the next live read is refused as circuit open with "
         "no call, while as many 429s leave it closed. A 429 stating a one-second wait is retried "
