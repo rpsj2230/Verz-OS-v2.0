@@ -42,6 +42,7 @@ from brain.resolution.cascade import (
     MIN_REVIEW_BAND,
     NAME_EQUALITY_FEATURES,
     NAME_FEATURES,
+    NOT_A_UEN_REASON,
     PHONETIC_WEIGHT,
     SQL_PREDICATES,
     CascadeResult,
@@ -937,7 +938,11 @@ def test_the_shared_mailbox_rule_is_the_one_guardrails_holds_and_not_a_second_co
     assert dropped[0].is_free_mail is False
     assert SECRET not in dropped[0].reason
     assert SECRET not in repr(dropped[0])
-    assert {one.name for one in dataclass_fields(dropped[0].__class__)} == {"kind", "rule"}
+    assert {one.name for one in dataclass_fields(dropped[0].__class__)} == {
+        "kind",
+        "rule",
+        "not_a_uen",
+    }
 
 
 def test_the_free_mail_list_is_generic_providers_and_never_a_client_domain() -> None:
@@ -1349,3 +1354,40 @@ def test_the_cascade_is_reached_by_the_worker_run_and_by_nothing_on_the_request_
         "ops/acceptance_checks_calibration.py",
         "ops/acceptance_checks_matching.py",
     ]
+
+
+# ------------------------------------------------ a UEN is checked and spelled once (M14.2.6)
+def test_a_uen_is_hashed_in_its_one_spelling_and_a_mistyped_one_is_dropped() -> None:
+    """**The stage that merges on a hard identifier alone is only as good as the key it is given.**
+    Two spellings of one valid UEN are one digest; one with a separator in it and two of the wrong
+    length are dropped with a reason that carries no value, and what is dropped is
+    not free mail. The positive half is the first assertion: a valid UEN is still kept.
+
+    Delete this and a mistyped registration number joins at stage one, or a valid one written in
+    lower case never joins at all, with nothing reporting either."""
+    upper, _ = usable_identifiers({IdentifierKind.UEN: "201912345K"}, pepper=PEPPER)
+    lower, _ = usable_identifiers({IdentifierKind.UEN: " 201912345k "}, pepper=PEPPER)
+    assert upper == lower
+    assert set(upper) == {IdentifierKind.UEN}
+    for mistyped in ("2019 12345K", "20191234567K", "2019123456789K"):
+        kept, dropped = usable_identifiers({IdentifierKind.UEN: mistyped}, pepper=PEPPER)
+        assert kept == {}
+        assert [(one.kind, one.not_a_uen, one.is_free_mail) for one in dropped] == [
+            (IdentifierKind.UEN, True, False)
+        ]
+        assert dropped[0].reason is NOT_A_UEN_REASON
+        assert mistyped not in dropped[0].reason
+        assert mistyped not in repr(dropped[0])
+
+
+def test_a_uen_that_is_not_one_is_not_a_hard_match() -> None:
+    """Two records carrying the same mistyped number are not joined by it, where two carrying the
+    same valid number are. Delete this and the check is satisfied by a function that drops every
+    UEN, which a test of the refusal alone would pass."""
+    valid = {IdentifierKind.UEN: "201912345K"}
+    mistyped = {IdentifierKind.UEN: "2019-12345K"}
+    for values, joined in ((valid, True), (mistyped, False)):
+        kept, _ = usable_identifiers(values, pepper=PEPPER)
+        left = observation("Acme Trading", identifiers=dict(kept))
+        right = observation("Something Else Entirely", record="2", identifiers=dict(kept))
+        assert (compare(left, right).hard_kind is IdentifierKind.UEN) is joined
