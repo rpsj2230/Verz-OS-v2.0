@@ -9,6 +9,7 @@
     "M10.5.2": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
     "M10.5.3": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
     "M10.5.4": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
+    "M10.6.1": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)",
     "M11.1.2": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)",
     "M11.1.5": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)",
     "M11.4.6": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)",
