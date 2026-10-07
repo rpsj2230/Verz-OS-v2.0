@@ -1,0 +1,356 @@
+...................................................F.................... [ 27%]
+........................................................................ [ 54%]
+........................................................................ [ 81%]
+................................................                         [100%]
+=================================== FAILURES ===================================
+_ test_every_registered_sweep_runs_and_passes_on_this_tree[write_attribution] __
+
+name = 'write_attribution'
+
+    @pytest.mark.parametrize("name", sorted(sweeps.SWEEPS))
+    def test_every_registered_sweep_runs_and_passes_on_this_tree(name: str) -> None:
+        """The repository must satisfy its own sweeps at all times, not just in CI.
+    
+        Parametrising over the registry rather than listing names means adding a sweep
+        without wiring it into this test is impossible.
+        """
+>       assert sweeps.main([name]) == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <function main at 0x111119f80>(['write_attribution'])
+E        +    where <function main at 0x111119f80> = sweeps.main
+
+tests/unit/test_sweeps.py:416: AssertionError
+----------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Generating static SQL
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Extensions, schema namespaces, and the application role.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, The core tables: principals, channel identities, grants, packs, field policy, ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, The entitlement resolver, and the tables the rest of the model was waiting on.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, The capability registry, and the settings an operator tunes without a deploy.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Conversations and the messages in them, restricted to the person who asked.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Role grants a directory asserted, in a table the directory sync owns outright.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Widen the channel check constraints so `Channel.WIDGET` is a value the database accepts.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, The Projected tier gets somewhere to live, with the twelve-field cap written into it.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, The document plane gets somewhere to live, and two indexes that answer different questions.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Record which model produced each vector, so a query cannot reach across a model change.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Widen the channel check constraints so `Channel.SLACK` is a value the database accepts.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Widen the channel check constraints once more, for `Channel.TELEGRAM`.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Widen the channel check constraints once more, for `Channel.TEAMS`.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, The agent table: one row per configured agent, with audience and authority kept apart.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, The slug grammar reaches PostgreSQL as the pattern Python enforces.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, The template pair: a manifest nobody may amend, and the install that pins one.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, The row that makes a declined upgrade stay declined.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, The two memory tables, and the schema they live in.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, A fast-lane question shape becomes a row, and the fast lane is handed nothing new.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, The `er` schema stops being empty: four tables and the view that forwards a merge.
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, The accent fold becomes something an index can be built on, which needs one function.
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Widen the audit action check constraint for `AuditAction.COMPOSE_CHANGE`.
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Widen the audit action check constraint for `AuditAction.APPROVAL`.
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, The Han bigram column, its generated tsvector and its index, plus the language column.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, One row per attempt to run a scheduled control, with row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Widen the audit action check constraint for `AuditAction.RECORD_READ`.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, The corpus column is set to the vector width this install declared, and refuses to move.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, The child grant computed in SQL, and a trigger refusing any row that is not a subset.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, The SQL twin of the run reach narrows a parent's wildcard instead of dropping it.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, The webhook outbox: subscribers, events and deliveries, with row-level security on all three.
+INFO  [alembic.runtime.migration] Running upgrade 0030 -> 0031, Budget ceilings at every level, as versions nobody may edit, with row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0031 -> 0032, The plugin registry tables, with row-level security on both.
+INFO  [alembic.runtime.migration] Running upgrade 0032 -> 0033, The database copy of the delegation containment rule asks both sides, as the Python does.
+INFO  [alembic.runtime.migration] Running upgrade 0033 -> 0034, What runs actually cost gets a table, with row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0034 -> 0035, The spend report is materialised per day, keyed by department, with its age on record.
+INFO  [alembic.runtime.migration] Running upgrade 0035 -> 0036, The function that rebuilds the materialised spend report and records when it did.
+INFO  [alembic.runtime.migration] Running upgrade 0036 -> 0037, The control-run name constraint admits the spend report refresh.
+INFO  [alembic.runtime.migration] Running upgrade 0037 -> 0038, Who asked a question gets a table, one row per trace, with row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0038 -> 0039, The metadata ledger gets a table, partitioned by arrival, with row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0039 -> 0040, Knowledge items get a table, with the corpus's reach as its policy and one named read past it.
+INFO  [alembic.runtime.migration] Running upgrade 0040 -> 0041, A sealed browser envelope gets a table the approval queue reads and only its asker writes.
+INFO  [alembic.runtime.migration] Running upgrade 0041 -> 0042, A suspended action gets a table an approver reads through row-level security and decides once.
+INFO  [alembic.runtime.migration] Running upgrade 0042 -> 0043, A recorded cost can name the request it paid for, by trace id, with row-level security unchanged.
+INFO  [alembic.runtime.migration] Running upgrade 0043 -> 0044, An automation gets a table naming its owner, read through row-level security by id or by owner.
+INFO  [alembic.runtime.migration] Running upgrade 0044 -> 0045, The application role can retire a soft-deleted row, and a retired row stays hidden and retired.
+INFO  [alembic.runtime.migration] Running upgrade 0045 -> 0046, A chunk can be retired by the application role, and a retired chunk stays hidden and retired.
+INFO  [alembic.runtime.migration] Running upgrade 0046 -> 0047, Record every sign-in binding and every retirement of one in the audit ledger, from the database.
+INFO  [alembic.runtime.migration] Running upgrade 0047 -> 0048, The resolver says when the reach it returned stops being true, so a cache cannot outlive a grant.
+INFO  [alembic.runtime.migration] Running upgrade 0048 -> 0049, Legal holds, retention reports and the sweep's release get tables, with row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0049 -> 0050, Record every session ended before it lapsed in the audit ledger, from the database.
+INFO  [alembic.runtime.migration] Running upgrade 0050 -> 0051, Every side-effecting operation gets a row, unique on its key, with row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0051 -> 0052, An access review's decisions get a table, and each decision reaches the ledger from the database.
+INFO  [alembic.runtime.migration] Running upgrade 0052 -> 0053, Two console writes get the record they need: who changed a webhook subscriber, and every export.
+INFO  [alembic.runtime.migration] Running upgrade 0053 -> 0054, Credential writes, retention releases and legal holds reach the ledger from the database.
+INFO  [alembic.runtime.migration] Running upgrade 0054 -> 0055, An automation installed onto an agent gets a row, and the row reaches the ledger from the
+database.
+INFO  [alembic.runtime.migration] Running upgrade 0055 -> 0056, The skill library gets its tables, and every import, decision and assignment reaches the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0056 -> 0057, A source connected from the console gets a row, and connecting or disconnecting one is audited.
+INFO  [alembic.runtime.migration] Running upgrade 0057 -> 0058, What an agent produced gets a table: one row per artifact, pointing at bytes in the object store.
+INFO  [alembic.runtime.migration] Running upgrade 0058 -> 0059, Feature switches, job controls, instructions, rung saves and webhook changes reach the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0059 -> 0060, A request to erase somebody's data gets a table, its ledger entries, and a place on the schedule.
+INFO  [alembic.runtime.migration] Running upgrade 0060 -> 0061, What a learning proposed and replaced gets a row, and so does every correction, which is audited.
+INFO  [alembic.runtime.migration] Running upgrade 0061 -> 0062, Who is in each team, who leads each department, and elevation requests, each audited.
+INFO  [alembic.runtime.migration] Running upgrade 0062 -> 0063, The application's warnings and errors get a table the Logs screen reads, row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0063 -> 0064, A question no connected source covers gets a table, one row per trace, row-level security on.
+INFO  [alembic.runtime.migration] Running upgrade 0064 -> 0066, The vault token renewal joins the control-run names, so the worker's schedule can record it.
+INFO  [alembic.runtime.migration] Running upgrade 0066 -> 0067, An installed automation runs: its runs, its schedule changes and their ledger entries, and a
+place on the worker's schedule.
+INFO  [alembic.runtime.migration] Running upgrade 0067 -> 0068, The worker's reads of a connected source get a table, and the schedule a control to run them.
+INFO  [alembic.runtime.migration] Running upgrade 0068 -> 0069, The application role is granted the run record it reads, and two item reads its policy withheld.
+INFO  [alembic.runtime.migration] Running upgrade 0069 -> 0082, An export of the audit entries a reader may read can be recorded, without a window or a verdict.
+INFO  [alembic.runtime.migration] Running upgrade 0082 -> 0083, A decided suspension carries its verdict and reason, and the database writes its approval entry.
+INFO  [alembic.runtime.migration] Running upgrade 0083 -> 0086, Departments, teams and scopes are audited: created, renamed, changed by hand and retired.
+INFO  [alembic.runtime.migration] Running upgrade 0086 -> 0091, The deployment history: one row per deploy, chained, readable by the Version and updates screen.
+INFO  [alembic.runtime.migration] Running upgrade 0091 -> 0093, A connector run's lease is kept with its attempt, and the vault's audit log reaches the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0093 -> 0096, The staff roster the scheduled sync applies, and one row for each of its runs.
+INFO  [alembic.runtime.migration] Running upgrade 0096 -> 0095, Service accounts and their keys get tables, and a partner's standing grants stop counting.
+INFO  [alembic.runtime.migration] Running upgrade 0095 -> 0095b, Disabling somebody and enabling them again each leave one entry in the audit ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0095b -> 0097, The provider registry, the matrix gate's two tables, an agent's model pin, and a derived role.
+INFO  [alembic.runtime.migration] Running upgrade 0097 -> 0100, The request row records what the gate's front half decided, and a redelivered message is refused.
+INFO  [alembic.runtime.migration] Running upgrade 0100 -> 0101, A request for access is stored and addressed to the person who can decide it.
+INFO  [alembic.runtime.migration] Running upgrade 0101 -> 0098, A sensitive read reaches the ledger, and so does every budget version.
+INFO  [alembic.runtime.migration] Running upgrade 0098 -> 0099, A person's check of a requirement on this install is kept, one row per check.
+INFO  [alembic.runtime.migration] Running upgrade 0099 -> 0102, Who holds a platform role, and a team as the subject of a capability grant.
+INFO  [alembic.runtime.migration] Running upgrade 0102 -> 0104, Five decisions nothing recorded now write their ledger entries, and compliance gets two tables.
+INFO  [alembic.runtime.migration] Running upgrade 0104 -> 0105, An agent changing owner leaves one entry in the audit ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0105 -> 0109, Which directory group confers which role, the sync's ledger entries, and break-glass notices.
+INFO  [alembic.runtime.migration] Running upgrade 0109 -> 0108, Provider health rings, chain-depth alerts, and residency constraints attached to a scope.
+INFO  [alembic.runtime.migration] Running upgrade 0108 -> 0113, The request row records the whole routing decision: why the lane, and where the model call went.
+INFO  [alembic.runtime.migration] Running upgrade 0113 -> 0114, Each channel is its own record on the install, and every delivery in or out is recorded.
+INFO  [alembic.runtime.migration] Running upgrade 0114 -> 0115, Every knowledge item records its kind, from a closed list, and the library can say which.
+INFO  [alembic.runtime.migration] Running upgrade 0115 -> 0116, A price list held as classified rows: the table, its classification, and its rows.
+INFO  [alembic.runtime.migration] Running upgrade 0116 -> 0117, The tool catalogue as the database holds it, and the switch that stops a tool.
+INFO  [alembic.runtime.migration] Running upgrade 0117 -> 0121, A skill comes from a commit or an address, an edit is a version, a self-approval says so, and
+categories are kept.
+INFO  [alembic.runtime.migration] Running upgrade 0121 -> 0120, A stored document is verified, handed over, replaced and published, and each act tells somebody.
+INFO  [alembic.runtime.migration] Running upgrade 0120 -> 0133, Install acceptance results get a table, and the acceptance run joins the control-run names.
+INFO  [alembic.runtime.migration] Running upgrade 0133 -> 0136, A halt and its resume are rows, so a stop survives the restart that usually follows it.
+INFO  [alembic.runtime.migration] Running upgrade 0136 -> 0137, An agent created, enabled, disabled, archived or published reaches the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0137 -> 0118, A person binds a chat account with a one-time code, and every bind and unbind is audited.
+INFO  [alembic.runtime.migration] Running upgrade 0118 -> 0138, Each skill a run used is recorded, by digest, with the request, the person, the agent and when.
+INFO  [alembic.runtime.migration] Running upgrade 0138 -> 0139, A skill version can be retired and reinstated, and a skill detached from an agent, each as a row.
+INFO  [alembic.runtime.migration] Running upgrade 0139 -> 0140, A provider's registry row reaches the ledger, and a routing change may retire or move a step.
+INFO  [alembic.runtime.migration] Running upgrade 0140 -> 0141, A pack is versioned and audited, a person's creation is audited, and a scope's label is a rename.
+INFO  [alembic.runtime.migration] Running upgrade 0141 -> 0142, A test of one connection is an attempt of its own: `ops.connector_sync.outcome` gains `probed`.
+INFO  [alembic.runtime.migration] Running upgrade 0142 -> 0145, An installed automation is paused, resumed, rescheduled, removed and adopted as change rows, each
+reaching the ledger from the database.
+INFO  [alembic.runtime.migration] Running upgrade 0145 -> 0148, A service account's key revoked, or the account retired, reaches the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0148 -> 0149, An agent's drafts, their revisions and what was done to each, every one of them on the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0149 -> 0146, An access request is marked handled by its owner, and a certification report is an export.
+INFO  [alembic.runtime.migration] Running upgrade 0146 -> 0150, A run's trace graph is stored masked behind a role of its own, and a browser session is audited.
+INFO  [alembic.runtime.migration] Running upgrade 0150 -> 0157, A connection keeps the declaration it agreed to, and its ledger entries name the digest.
+INFO  [alembic.runtime.migration] Running upgrade 0157 -> 0155, A staff sync says what it read, and a trial read is a run of its own.
+INFO  [alembic.runtime.migration] Running upgrade 0155 -> 0156, A roster row says where somebody stands and what kind of employment they have.
+INFO  [alembic.runtime.migration] Running upgrade 0156 -> 0168, A skill says where an unanswered question goes, and the handoff is kept until it expires.
+INFO  [alembic.runtime.migration] Running upgrade 0168 -> 0169, The evening digest joins the control-run names, so the worker can record its scheduled run.
+INFO  [alembic.runtime.migration] Running upgrade 0169 -> 0166, A chat binding can keep the person's Lark address beside its fingerprint, as personal data.
+INFO  [alembic.runtime.migration] Running upgrade 0166 -> 0172, The autonomy breaker reads when an agent's work was taken over, and nothing else about it.
+INFO  [alembic.runtime.migration] Running upgrade 0172 -> 0177, The web process reads which handed-on questions expired, so each asker is told in their own chat.
+INFO  [alembic.runtime.migration] Running upgrade 0177 -> 0171, Knowledge can be marked public, and a stranger's read runs as a role that reaches nothing else.
+INFO  [alembic.runtime.migration] Running upgrade 0171 -> 0167, A connected source names its steward, and every grant somebody makes to themselves is recorded.
+INFO  [alembic.runtime.migration] Running upgrade 0167 -> 0154, A helpful or unhelpful mark on an answer, and a switch that pauses what an agent's runs teach.
+INFO  [alembic.runtime.migration] Running upgrade 0154 -> 0179, A retired record is remembered, a returned one serves again, a source has an epoch, a read keeps its place.
+INFO  [alembic.runtime.migration] Running upgrade 0179 -> 0178, A stored skill keeps the bytes of every script it carries, and the database checks their sha256.
+INFO  [alembic.runtime.migration] Running upgrade 0178 -> 0163, An inference a person says again is confirmed on its own row, and the ledger says when.
+INFO  [alembic.runtime.migration] Running upgrade 0163 -> 0162, The fast lane reads an uploaded table's rows as its own role, and that role reads nothing else.
+INFO  [alembic.runtime.migration] Running upgrade 0162 -> 0182, Each source record's comparison keys, and the join keys this install blocks.
+INFO  [alembic.runtime.migration] Running upgrade 0182 -> 0183, A merge is recorded with who, when, its evidence and its pre-image, and an unmerge is audited.
+INFO  [alembic.runtime.migration] Running upgrade 0183 -> 0184, A pair of records the cascade could not settle, kept until a person decides it.
+INFO  [alembic.runtime.migration] Running upgrade 0184 -> 0170, A person moved to another department is on the ledger, under whoever moved them.
+INFO  [alembic.runtime.migration] Running upgrade 0170 -> 0186, An agent keeps the connectors it is bound to, and three shared entity names become one source's.
+INFO  [alembic.runtime.migration] Running upgrade 0186 -> 0187, A Lark Wiki page has a read of its own, and everybody who reads the library is given it.
+INFO  [alembic.runtime.migration] Running upgrade 0187 -> 0188, Every agent run is recorded when it ends: who it was for, which agent, why it stopped, its counts.
+INFO  [alembic.runtime.migration] Running upgrade 0188 -> 0189, An agent answers only on the channels enabled for it, and a run's two bounds have a column each.
+INFO  [alembic.runtime.migration] Running upgrade 0189 -> 0190, An agent's channels switched by its steward or an administrator reach the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0190 -> 0201, The worker finds approved actions that have not run, and nothing else about them.
+INFO  [alembic.runtime.migration] Running upgrade 0201 -> 0202, A consent a person starts at a vendor is held here until the vendor answers, once, for them alone.
+INFO  [alembic.runtime.migration] Running upgrade 0202 -> 0203, A connector for a new API is a reviewed row, and every submission and decision is on the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0203 -> 0191, A skill version's export and a rehearsal of its examples are each a row, with a ledger entry.
+INFO  [alembic.runtime.migration] Running upgrade 0191 -> 0192, An answer in a thread names the agent that gave it, the request it answered and how it ended.
+INFO  [alembic.runtime.migration] Running upgrade 0192 -> 0193, A retrieval a person was answered from is logged for the learning signal, and nothing else of it.
+INFO  [alembic.runtime.migration] Running upgrade 0193 -> 0194, An artifact names the client it was produced for and the grants it drew on, and is superseded
+or archived as a row of its own.
+INFO  [alembic.runtime.migration] Running upgrade 0194 -> 0195, An agent's rungs move on the install, with their evidence, and its supervision is reviewed.
+INFO  [alembic.runtime.migration] Running upgrade 0195 -> 0196, A tool or a connector is attached to an agent, or detached, and each reaches the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0196 -> 0197, The learning signal's log: what was noticed about each answer, by id and never in words.
+INFO  [alembic.runtime.migration] Running upgrade 0197 -> 0198, A correction carrying the right answer is held as a candidate, and decided as a new version is.
+INFO  [alembic.runtime.migration] Running upgrade 0198 -> 0199, A fast-lane rule may belong to a department, and a rule is written in its writer's name.
+INFO  [alembic.runtime.migration] Running upgrade 0199 -> 0206, A learned fast-lane rule is held until people promote it, and every question it would have
+answered is counted (M39.4.2.3).
+INFO  [alembic.runtime.migration] Running upgrade 0206 -> 0200, A person's History reads which grants were theirs, removed ones included, through one function.
+INFO  [alembic.runtime.migration] Running upgrade 0200 -> 0207, A person's export of their own conversation is recorded as an export, as every other one is.
+INFO  [alembic.runtime.migration] Running upgrade 0207 -> 0204, An agent moved to a newer template version, and a version somebody turned away, reach the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0204 -> 0205, The conversations the bot is in, and an agent installed into one of them, on the ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0205 -> 0208, A person proposed for a role, kept until somebody else decides it.
+INFO  [alembic.runtime.migration] Running upgrade 0208 -> 0209, An approved elevation is also an entry in a second chain of its own, anchored on its own.
+INFO  [alembic.runtime.migration] Running upgrade 0209 -> 0210, A webhook subscriber can be switched back on and an exhausted delivery replayed once, recorded.
+INFO  [alembic.runtime.migration] Running upgrade 0210 -> 0211, Every budget that was used up, and whether the install stopped it or only said it would have.
+INFO  [alembic.runtime.migration] Running upgrade 0211 -> 0212, The worker may record a run of the thirty-day supervision review.
+FAIL write_attribution:
+  UPDATE ops.setting via brain.ops.setting_store:put_statement <- brain.ops.setting_store:put <- brain.ops.features:switch <- brain.ops.acceptance_checks_supervision:the_chasers_pin_is_reviewed_at_thirty_days_and_never_lapses: nothing calls it, so whoever does first will write the placeholder
+  UPDATE ops.setting via brain.ops.setting_store:put_statement <- brain.ops.setting_store:put <- brain.ops.features:switch <- brain.ops.acceptance_checks_supervision:the_leash_screen_shows_when_a_pin_ends_and_that_it_is_due: nothing calls it, so whoever does first will write the placeholder
+  INSERT ops.setting via brain.ops.setting_store:put_statement <- brain.ops.setting_store:put <- brain.ops.features:switch <- brain.ops.acceptance_checks_supervision:the_chasers_pin_is_reviewed_at_thirty_days_and_never_lapses: nothing calls it, so whoever does first will write the placeholder
+  INSERT ops.setting via brain.ops.setting_store:put_statement <- brain.ops.setting_store:put <- brain.ops.features:switch <- brain.ops.acceptance_checks_supervision:the_leash_screen_shows_when_a_pin_ends_and_that_it_is_due: nothing calls it, so whoever does first will write the placeholder
+------------------------------ Captured log call -------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl PostgresqlImpl.
+INFO     alembic.runtime.migration:migration.py:207 Generating static SQL
+INFO     alembic.runtime.migration:migration.py:208 Will assume transactional DDL.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade  -> 0001, Extensions, schema namespaces, and the application role.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0001 -> 0002, The core tables: principals, channel identities, grants, packs, field policy, ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0002 -> 0003, The entitlement resolver, and the tables the rest of the model was waiting on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0003 -> 0004, The capability registry, and the settings an operator tunes without a deploy.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0004 -> 0005, Conversations and the messages in them, restricted to the person who asked.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0005 -> 0006, Role grants a directory asserted, in a table the directory sync owns outright.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0006 -> 0007, Widen the channel check constraints so `Channel.WIDGET` is a value the database accepts.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0007 -> 0008, The Projected tier gets somewhere to live, with the twelve-field cap written into it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0008 -> 0009, The document plane gets somewhere to live, and two indexes that answer different questions.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0009 -> 0010, Record which model produced each vector, so a query cannot reach across a model change.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0010 -> 0011, Widen the channel check constraints so `Channel.SLACK` is a value the database accepts.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0011 -> 0012, Widen the channel check constraints once more, for `Channel.TELEGRAM`.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0012 -> 0013, Widen the channel check constraints once more, for `Channel.TEAMS`.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0013 -> 0014, The agent table: one row per configured agent, with audience and authority kept apart.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0014 -> 0015, The slug grammar reaches PostgreSQL as the pattern Python enforces.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0015 -> 0016, The template pair: a manifest nobody may amend, and the install that pins one.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0016 -> 0017, The row that makes a declined upgrade stay declined.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0017 -> 0018, The two memory tables, and the schema they live in.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0018 -> 0019, A fast-lane question shape becomes a row, and the fast lane is handed nothing new.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0019 -> 0020, The `er` schema stops being empty: four tables and the view that forwards a merge.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0020 -> 0021, The accent fold becomes something an index can be built on, which needs one function.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0021 -> 0022, Widen the audit action check constraint for `AuditAction.COMPOSE_CHANGE`.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0022 -> 0023, Widen the audit action check constraint for `AuditAction.APPROVAL`.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0023 -> 0024, The Han bigram column, its generated tsvector and its index, plus the language column.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0024 -> 0025, One row per attempt to run a scheduled control, with row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0025 -> 0026, Widen the audit action check constraint for `AuditAction.RECORD_READ`.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0026 -> 0027, The corpus column is set to the vector width this install declared, and refuses to move.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0027 -> 0028, The child grant computed in SQL, and a trigger refusing any row that is not a subset.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0028 -> 0029, The SQL twin of the run reach narrows a parent's wildcard instead of dropping it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0029 -> 0030, The webhook outbox: subscribers, events and deliveries, with row-level security on all three.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0030 -> 0031, Budget ceilings at every level, as versions nobody may edit, with row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0031 -> 0032, The plugin registry tables, with row-level security on both.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0032 -> 0033, The database copy of the delegation containment rule asks both sides, as the Python does.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0033 -> 0034, What runs actually cost gets a table, with row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0034 -> 0035, The spend report is materialised per day, keyed by department, with its age on record.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0035 -> 0036, The function that rebuilds the materialised spend report and records when it did.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0036 -> 0037, The control-run name constraint admits the spend report refresh.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0037 -> 0038, Who asked a question gets a table, one row per trace, with row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0038 -> 0039, The metadata ledger gets a table, partitioned by arrival, with row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0039 -> 0040, Knowledge items get a table, with the corpus's reach as its policy and one named read past it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0040 -> 0041, A sealed browser envelope gets a table the approval queue reads and only its asker writes.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0041 -> 0042, A suspended action gets a table an approver reads through row-level security and decides once.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0042 -> 0043, A recorded cost can name the request it paid for, by trace id, with row-level security unchanged.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0043 -> 0044, An automation gets a table naming its owner, read through row-level security by id or by owner.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0044 -> 0045, The application role can retire a soft-deleted row, and a retired row stays hidden and retired.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0045 -> 0046, A chunk can be retired by the application role, and a retired chunk stays hidden and retired.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0046 -> 0047, Record every sign-in binding and every retirement of one in the audit ledger, from the database.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0047 -> 0048, The resolver says when the reach it returned stops being true, so a cache cannot outlive a grant.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0048 -> 0049, Legal holds, retention reports and the sweep's release get tables, with row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0049 -> 0050, Record every session ended before it lapsed in the audit ledger, from the database.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0050 -> 0051, Every side-effecting operation gets a row, unique on its key, with row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0051 -> 0052, An access review's decisions get a table, and each decision reaches the ledger from the database.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0052 -> 0053, Two console writes get the record they need: who changed a webhook subscriber, and every export.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0053 -> 0054, Credential writes, retention releases and legal holds reach the ledger from the database.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0054 -> 0055, An automation installed onto an agent gets a row, and the row reaches the ledger from the
+database.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0055 -> 0056, The skill library gets its tables, and every import, decision and assignment reaches the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0056 -> 0057, A source connected from the console gets a row, and connecting or disconnecting one is audited.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0057 -> 0058, What an agent produced gets a table: one row per artifact, pointing at bytes in the object store.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0058 -> 0059, Feature switches, job controls, instructions, rung saves and webhook changes reach the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0059 -> 0060, A request to erase somebody's data gets a table, its ledger entries, and a place on the schedule.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0060 -> 0061, What a learning proposed and replaced gets a row, and so does every correction, which is audited.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0061 -> 0062, Who is in each team, who leads each department, and elevation requests, each audited.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0062 -> 0063, The application's warnings and errors get a table the Logs screen reads, row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0063 -> 0064, A question no connected source covers gets a table, one row per trace, row-level security on.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0064 -> 0066, The vault token renewal joins the control-run names, so the worker's schedule can record it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0066 -> 0067, An installed automation runs: its runs, its schedule changes and their ledger entries, and a
+place on the worker's schedule.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0067 -> 0068, The worker's reads of a connected source get a table, and the schedule a control to run them.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0068 -> 0069, The application role is granted the run record it reads, and two item reads its policy withheld.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0069 -> 0082, An export of the audit entries a reader may read can be recorded, without a window or a verdict.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0082 -> 0083, A decided suspension carries its verdict and reason, and the database writes its approval entry.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0083 -> 0086, Departments, teams and scopes are audited: created, renamed, changed by hand and retired.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0086 -> 0091, The deployment history: one row per deploy, chained, readable by the Version and updates screen.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0091 -> 0093, A connector run's lease is kept with its attempt, and the vault's audit log reaches the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0093 -> 0096, The staff roster the scheduled sync applies, and one row for each of its runs.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0096 -> 0095, Service accounts and their keys get tables, and a partner's standing grants stop counting.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0095 -> 0095b, Disabling somebody and enabling them again each leave one entry in the audit ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0095b -> 0097, The provider registry, the matrix gate's two tables, an agent's model pin, and a derived role.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0097 -> 0100, The request row records what the gate's front half decided, and a redelivered message is refused.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0100 -> 0101, A request for access is stored and addressed to the person who can decide it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0101 -> 0098, A sensitive read reaches the ledger, and so does every budget version.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0098 -> 0099, A person's check of a requirement on this install is kept, one row per check.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0099 -> 0102, Who holds a platform role, and a team as the subject of a capability grant.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0102 -> 0104, Five decisions nothing recorded now write their ledger entries, and compliance gets two tables.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0104 -> 0105, An agent changing owner leaves one entry in the audit ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0105 -> 0109, Which directory group confers which role, the sync's ledger entries, and break-glass notices.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0109 -> 0108, Provider health rings, chain-depth alerts, and residency constraints attached to a scope.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0108 -> 0113, The request row records the whole routing decision: why the lane, and where the model call went.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0113 -> 0114, Each channel is its own record on the install, and every delivery in or out is recorded.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0114 -> 0115, Every knowledge item records its kind, from a closed list, and the library can say which.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0115 -> 0116, A price list held as classified rows: the table, its classification, and its rows.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0116 -> 0117, The tool catalogue as the database holds it, and the switch that stops a tool.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0117 -> 0121, A skill comes from a commit or an address, an edit is a version, a self-approval says so, and
+categories are kept.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0121 -> 0120, A stored document is verified, handed over, replaced and published, and each act tells somebody.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0120 -> 0133, Install acceptance results get a table, and the acceptance run joins the control-run names.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0133 -> 0136, A halt and its resume are rows, so a stop survives the restart that usually follows it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0136 -> 0137, An agent created, enabled, disabled, archived or published reaches the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0137 -> 0118, A person binds a chat account with a one-time code, and every bind and unbind is audited.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0118 -> 0138, Each skill a run used is recorded, by digest, with the request, the person, the agent and when.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0138 -> 0139, A skill version can be retired and reinstated, and a skill detached from an agent, each as a row.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0139 -> 0140, A provider's registry row reaches the ledger, and a routing change may retire or move a step.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0140 -> 0141, A pack is versioned and audited, a person's creation is audited, and a scope's label is a rename.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0141 -> 0142, A test of one connection is an attempt of its own: `ops.connector_sync.outcome` gains `probed`.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0142 -> 0145, An installed automation is paused, resumed, rescheduled, removed and adopted as change rows, each
+reaching the ledger from the database.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0145 -> 0148, A service account's key revoked, or the account retired, reaches the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0148 -> 0149, An agent's drafts, their revisions and what was done to each, every one of them on the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0149 -> 0146, An access request is marked handled by its owner, and a certification report is an export.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0146 -> 0150, A run's trace graph is stored masked behind a role of its own, and a browser session is audited.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0150 -> 0157, A connection keeps the declaration it agreed to, and its ledger entries name the digest.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0157 -> 0155, A staff sync says what it read, and a trial read is a run of its own.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0155 -> 0156, A roster row says where somebody stands and what kind of employment they have.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0156 -> 0168, A skill says where an unanswered question goes, and the handoff is kept until it expires.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0168 -> 0169, The evening digest joins the control-run names, so the worker can record its scheduled run.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0169 -> 0166, A chat binding can keep the person's Lark address beside its fingerprint, as personal data.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0166 -> 0172, The autonomy breaker reads when an agent's work was taken over, and nothing else about it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0172 -> 0177, The web process reads which handed-on questions expired, so each asker is told in their own chat.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0177 -> 0171, Knowledge can be marked public, and a stranger's read runs as a role that reaches nothing else.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0171 -> 0167, A connected source names its steward, and every grant somebody makes to themselves is recorded.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0167 -> 0154, A helpful or unhelpful mark on an answer, and a switch that pauses what an agent's runs teach.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0154 -> 0179, A retired record is remembered, a returned one serves again, a source has an epoch, a read keeps its place.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0179 -> 0178, A stored skill keeps the bytes of every script it carries, and the database checks their sha256.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0178 -> 0163, An inference a person says again is confirmed on its own row, and the ledger says when.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0163 -> 0162, The fast lane reads an uploaded table's rows as its own role, and that role reads nothing else.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0162 -> 0182, Each source record's comparison keys, and the join keys this install blocks.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0182 -> 0183, A merge is recorded with who, when, its evidence and its pre-image, and an unmerge is audited.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0183 -> 0184, A pair of records the cascade could not settle, kept until a person decides it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0184 -> 0170, A person moved to another department is on the ledger, under whoever moved them.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0170 -> 0186, An agent keeps the connectors it is bound to, and three shared entity names become one source's.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0186 -> 0187, A Lark Wiki page has a read of its own, and everybody who reads the library is given it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0187 -> 0188, Every agent run is recorded when it ends: who it was for, which agent, why it stopped, its counts.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0188 -> 0189, An agent answers only on the channels enabled for it, and a run's two bounds have a column each.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0189 -> 0190, An agent's channels switched by its steward or an administrator reach the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0190 -> 0201, The worker finds approved actions that have not run, and nothing else about them.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0201 -> 0202, A consent a person starts at a vendor is held here until the vendor answers, once, for them alone.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0202 -> 0203, A connector for a new API is a reviewed row, and every submission and decision is on the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0203 -> 0191, A skill version's export and a rehearsal of its examples are each a row, with a ledger entry.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0191 -> 0192, An answer in a thread names the agent that gave it, the request it answered and how it ended.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0192 -> 0193, A retrieval a person was answered from is logged for the learning signal, and nothing else of it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0193 -> 0194, An artifact names the client it was produced for and the grants it drew on, and is superseded
+or archived as a row of its own.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0194 -> 0195, An agent's rungs move on the install, with their evidence, and its supervision is reviewed.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0195 -> 0196, A tool or a connector is attached to an agent, or detached, and each reaches the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0196 -> 0197, The learning signal's log: what was noticed about each answer, by id and never in words.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0197 -> 0198, A correction carrying the right answer is held as a candidate, and decided as a new version is.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0198 -> 0199, A fast-lane rule may belong to a department, and a rule is written in its writer's name.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0199 -> 0206, A learned fast-lane rule is held until people promote it, and every question it would have
+answered is counted (M39.4.2.3).
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0206 -> 0200, A person's History reads which grants were theirs, removed ones included, through one function.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0200 -> 0207, A person's export of their own conversation is recorded as an export, as every other one is.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0207 -> 0204, An agent moved to a newer template version, and a version somebody turned away, reach the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0204 -> 0205, The conversations the bot is in, and an agent installed into one of them, on the ledger.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0205 -> 0208, A person proposed for a role, kept until somebody else decides it.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0208 -> 0209, An approved elevation is also an entry in a second chain of its own, anchored on its own.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0209 -> 0210, A webhook subscriber can be switched back on and an exhausted delivery replayed once, recorded.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0210 -> 0211, Every budget that was used up, and whether the install stopped it or only said it would have.
+INFO     alembic.runtime.migration:migration.py:616 Running upgrade 0211 -> 0212, The worker may record a run of the thirty-day supervision review.
+=========================== short test summary info ============================
+FAILED tests/unit/test_sweeps.py::test_every_registered_sweep_runs_and_passes_on_this_tree[write_attribution]
+1 failed, 263 passed, 49 warnings in 213.22s (0:03:33)
