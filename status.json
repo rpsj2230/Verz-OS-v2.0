@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-07T01:18:51.389132+00:00",
-  "commit": "6422135a",
-  "commit_subject": "The per-task notes are re-measured against the main the two trains landed in (#472)",
+  "generated_at": "2026-10-07T01:23:10.390791+00:00",
+  "commit": "d1a51163",
+  "commit_subject": "One hundred and forty-nine tasks close on the install's own acceptance runs since the deploys of 6 October (#473)",
   "total": 1596,
-  "done": 684,
-  "percent": 42.9,
+  "done": 833,
+  "percent": 52.2,
   "acts": 47,
   "decided": 131,
   "current_wave": 1,
@@ -39,12 +39,12 @@
       "wave": 2,
       "name": "Data, channels, retrieval",
       "total": 269,
-      "done": 176,
-      "percent": 65.4,
+      "done": 181,
+      "percent": 67.3,
       "in_progress": 1,
       "ready_for_testing": 8,
       "blocked": 16,
-      "open": 68,
+      "open": 63,
       "acts": 0,
       "decided": 20
     },
@@ -52,12 +52,12 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 578,
-      "done": 193,
-      "percent": 33.4,
+      "done": 337,
+      "percent": 58.3,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 384,
+      "open": 240,
       "acts": 1,
       "decided": 56
     },
@@ -152,7 +152,7 @@
       "name": "Models, routing, fallback matrix",
       "wave": 1,
       "total": 30,
-      "done": 27,
+      "done": 28,
       "acts": 0,
       "decided": 1
     },
@@ -161,7 +161,7 @@
       "name": "Speed: fast lane, cache, streaming",
       "wave": 3,
       "total": 21,
-      "done": 16,
+      "done": 17,
       "acts": 0,
       "decided": 3
     },
@@ -206,7 +206,7 @@
       "name": "Connectors, federation, projection",
       "wave": 2,
       "total": 72,
-      "done": 31,
+      "done": 37,
       "acts": 0,
       "decided": 3
     },
@@ -215,7 +215,7 @@
       "name": "Tools, skills, capability registry",
       "wave": 2,
       "total": 36,
-      "done": 16,
+      "done": 17,
       "acts": 0,
       "decided": 4
     },
@@ -224,7 +224,7 @@
       "name": "Agents and templates",
       "wave": 3,
       "total": 69,
-      "done": 32,
+      "done": 45,
       "acts": 0,
       "decided": 16
     },
@@ -233,7 +233,7 @@
       "name": "Entity resolution",
       "wave": 3,
       "total": 43,
-      "done": 30,
+      "done": 35,
       "acts": 0,
       "decided": 1
     },
@@ -242,7 +242,7 @@
       "name": "Knowledge retrieval and RAG",
       "wave": 2,
       "total": 18,
-      "done": 15,
+      "done": 16,
       "acts": 0,
       "decided": 0
     },
@@ -251,7 +251,7 @@
       "name": "Memory and learning",
       "wave": 3,
       "total": 48,
-      "done": 20,
+      "done": 25,
       "acts": 0,
       "decided": 1
     },
@@ -287,7 +287,7 @@
       "name": "Verz Studio, the builder",
       "wave": 3,
       "total": 16,
-      "done": 6,
+      "done": 10,
       "acts": 0,
       "decided": 6
     },
@@ -350,7 +350,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 44,
+      "done": 114,
       "acts": 0,
       "decided": 22
     },
@@ -359,7 +359,7 @@
       "name": "Evaluation, canaries, regression",
       "wave": 3,
       "total": 14,
-      "done": 3,
+      "done": 5,
       "acts": 0,
       "decided": 1
     },
@@ -404,7 +404,7 @@
       "name": "Role-specific surfaces",
       "wave": 3,
       "total": 39,
-      "done": 4,
+      "done": 25,
       "acts": 0,
       "decided": 4
     },
@@ -458,7 +458,7 @@
       "name": "Agent workspace, the inside-an-agent surface",
       "wave": 3,
       "total": 81,
-      "done": 37,
+      "done": 56,
       "acts": 0,
       "decided": 2
     },
@@ -640,9 +640,15 @@
     "M11.5.4",
     "M11.5.5",
     "M11.7.7",
+    "M11.7.8",
     "M11.8.1",
+    "M11.8.10",
+    "M11.8.12",
     "M11.8.2",
     "M11.8.5",
+    "M11.8.6",
+    "M11.8.7",
+    "M11.8.8",
     "M12.1.1",
     "M12.1.3",
     "M12.1.4",
@@ -653,6 +659,7 @@
     "M12.2.4",
     "M12.2.5",
     "M12.2.6",
+    "M12.2.7",
     "M12.3.2",
     "M12.3.6",
     "M12.3.8",
@@ -661,12 +668,20 @@
     "M12.4.3",
     "M12.4.6",
     "M13.1.1",
+    "M13.1.2",
+    "M13.1.3",
     "M13.2.1",
+    "M13.2.2",
     "M13.2.3",
     "M13.2.4",
+    "M13.2.5",
     "M13.2.6",
     "M13.2.7",
     "M13.4.1",
+    "M13.4.2",
+    "M13.4.3",
+    "M13.4.4",
+    "M13.4.5",
     "M13.5.1",
     "M13.5.10",
     "M13.5.11",
@@ -689,6 +704,11 @@
     "M13.5.7",
     "M13.5.8",
     "M13.5.9",
+    "M13.7.3",
+    "M13.7.5",
+    "M13.7.6",
+    "M13.7.8",
+    "M13.8.1",
     "M13.8.10",
     "M13.8.18",
     "M13.9.4",
@@ -706,9 +726,12 @@
     "M14.3.2",
     "M14.3.3",
     "M14.3.4",
+    "M14.3.5",
     "M14.3.6",
     "M14.3.7",
     "M14.3.8",
+    "M14.4.2",
+    "M14.4.4",
     "M14.4.5",
     "M14.5.1",
     "M14.5.2",
@@ -720,7 +743,9 @@
     "M14.6.2",
     "M14.6.3",
     "M14.6.4",
+    "M14.6.5",
     "M14.7.3",
+    "M14.8.3",
     "M14.8.5",
     "M15.1.1",
     "M15.1.2",
@@ -734,6 +759,7 @@
     "M15.2.6",
     "M15.2.7",
     "M15.3.2",
+    "M15.3.4",
     "M15.4.1",
     "M15.4.2",
     "M15.4.3",
@@ -741,15 +767,19 @@
     "M16.1.3",
     "M16.1.4",
     "M16.1.5",
+    "M16.2.8",
     "M16.3.4",
     "M16.3.5",
     "M16.3.6",
     "M16.4.1",
     "M16.4.2",
     "M16.4.4",
+    "M16.5.1",
     "M16.5.3",
     "M16.5.4",
     "M16.6.3",
+    "M16.6.5",
+    "M16.6.6",
     "M16.6.8",
     "M16.7.10",
     "M16.7.12",
@@ -757,6 +787,7 @@
     "M16.7.2",
     "M16.7.4",
     "M16.7.5",
+    "M16.7.6",
     "M2.1.1",
     "M2.1.5",
     "M2.2.1",
@@ -764,10 +795,14 @@
     "M2.2.4",
     "M2.3.1",
     "M20.1.2",
+    "M20.1.3",
     "M20.1.5",
+    "M20.2.1",
     "M20.2.2",
     "M20.2.3",
     "M20.2.4",
+    "M20.4.1",
+    "M20.4.4",
     "M20.4.6",
     "M22.1.1",
     "M22.1.2",
@@ -805,52 +840,124 @@
     "M26.3.5",
     "M27.1.1",
     "M27.1.2",
+    "M27.1.3",
+    "M27.1.4",
+    "M27.1.6",
     "M27.10.1",
     "M27.10.3",
     "M27.10.4",
     "M27.10.6",
+    "M27.11.1",
+    "M27.11.11",
+    "M27.11.16",
+    "M27.11.3",
+    "M27.11.5",
+    "M27.11.8",
+    "M27.12.1",
+    "M27.12.2",
+    "M27.12.7",
+    "M27.13.1",
     "M27.15.10",
     "M27.15.13",
     "M27.15.15",
     "M27.15.16",
     "M27.15.2",
+    "M27.15.20",
+    "M27.15.21",
+    "M27.15.22",
+    "M27.15.24",
+    "M27.15.31",
+    "M27.15.36",
+    "M27.15.38",
+    "M27.15.39",
+    "M27.15.43",
+    "M27.15.48",
+    "M27.15.5",
+    "M27.15.51",
     "M27.15.53",
+    "M27.15.55",
+    "M27.15.56",
+    "M27.15.58",
+    "M27.15.60",
+    "M27.15.63",
     "M27.15.64",
     "M27.15.65",
+    "M27.15.66",
     "M27.15.67",
+    "M27.15.7",
     "M27.15.73",
     "M27.15.74",
     "M27.15.76",
     "M27.15.77",
     "M27.15.78",
+    "M27.15.8",
     "M27.15.80",
     "M27.15.81",
     "M27.15.82",
+    "M27.15.9",
+    "M27.2.1",
+    "M27.2.2",
     "M27.2.3",
+    "M27.2.4",
     "M27.3.13",
     "M27.3.18",
+    "M27.3.2",
     "M27.3.4",
+    "M27.3.7",
     "M27.5.1",
+    "M27.5.10",
     "M27.5.4",
+    "M27.5.6",
     "M27.5.7",
+    "M27.5.8",
+    "M27.6.1",
     "M27.7.1",
+    "M27.7.10",
+    "M27.7.11",
+    "M27.7.12",
+    "M27.7.13",
+    "M27.7.14",
     "M27.7.16",
+    "M27.7.18",
+    "M27.7.19",
     "M27.7.21",
+    "M27.7.24",
+    "M27.7.27",
+    "M27.7.28",
+    "M27.7.29",
+    "M27.7.3",
     "M27.7.4",
+    "M27.7.5",
     "M27.7.6",
+    "M27.7.7",
+    "M27.7.8",
+    "M27.7.9",
     "M27.8.1",
+    "M27.8.11",
     "M27.8.14",
+    "M27.8.15",
+    "M27.8.16",
     "M27.8.2",
     "M27.8.3",
     "M27.8.4",
     "M27.8.5",
+    "M27.8.6",
     "M27.8.7",
     "M27.8.8",
+    "M27.8.9",
+    "M27.9.1",
+    "M27.9.2",
+    "M27.9.3",
+    "M27.9.4",
+    "M27.9.5",
     "M27.9.6",
     "M27.9.7",
+    "M27.9.9",
     "M28.1.1",
     "M28.1.3",
     "M28.1.4",
+    "M28.2.1",
+    "M28.2.3",
     "M3.1.1",
     "M3.1.2",
     "M3.1.3",
@@ -965,10 +1072,31 @@
     "M32.6.2.2",
     "M32.7.1",
     "M32.7.3",
+    "M33.1.2.2",
+    "M33.1.2.4",
+    "M33.2.1.1",
+    "M33.2.1.2",
+    "M33.2.2.1",
+    "M33.2.2.2",
+    "M33.2.2.3",
+    "M33.2.2.5",
+    "M33.3.1.1",
+    "M33.3.1.2",
     "M33.3.1.4",
+    "M33.3.1.5",
+    "M33.4.1.1",
+    "M33.4.1.2",
     "M33.4.1.4",
+    "M33.5.1.1",
+    "M33.5.1.2",
     "M33.5.1.4",
+    "M33.6.1.2",
     "M33.6.1.3",
+    "M33.6.1.4",
+    "M33.7.1.2",
+    "M33.7.1.4",
+    "M33.7.1.5",
+    "M33.8.1",
     "M34.3.2.2",
     "M34.3.3.1",
     "M34.3.3.2",
@@ -1014,13 +1142,21 @@
     "M38.5.1",
     "M38.5.2",
     "M39.1.1.2",
+    "M39.1.1.3",
     "M39.1.1.4",
     "M39.1.1.5",
+    "M39.1.2.1",
+    "M39.1.2.2",
+    "M39.1.2.3",
     "M39.1.3.1",
     "M39.1.3.2",
     "M39.1.3.3",
     "M39.1.3.4",
+    "M39.2.1.1",
+    "M39.2.1.2",
+    "M39.2.1.3",
     "M39.2.1.4",
+    "M39.2.1.5",
     "M39.2.2.1",
     "M39.2.2.2",
     "M39.2.2.3",
@@ -1030,10 +1166,16 @@
     "M39.2.3.2",
     "M39.2.3.3",
     "M39.2.3.4",
+    "M39.2.4.3",
     "M39.3.1.1",
     "M39.3.1.2",
     "M39.3.1.3",
     "M39.3.1.4",
+    "M39.3.2.1",
+    "M39.3.2.2",
+    "M39.3.2.3",
+    "M39.3.2.4",
+    "M39.3.2.5",
     "M39.4.1.1",
     "M39.4.1.2",
     "M39.4.1.3",
@@ -1041,6 +1183,7 @@
     "M39.4.1.5",
     "M39.4.2.1",
     "M39.4.2.2",
+    "M39.4.2.3",
     "M39.4.2.4",
     "M39.6.1.1",
     "M39.6.1.2",
@@ -1050,6 +1193,10 @@
     "M39.6.2.1",
     "M39.6.2.2",
     "M39.6.2.4",
+    "M39.8.2",
+    "M39.8.3",
+    "M39.8.6",
+    "M39.8.9",
     "M4.1.1",
     "M4.1.2",
     "M4.1.3",
@@ -1127,6 +1274,7 @@
     "M5.6.3",
     "M5.6.4",
     "M5.7.2",
+    "M5.7.3",
     "M6.1.1",
     "M6.1.2",
     "M6.1.3",
@@ -1142,6 +1290,7 @@
     "M6.4.2",
     "M6.4.3",
     "M6.4.4",
+    "M6.5.1",
     "M6.5.2",
     "M7.1.1",
     "M7.1.2",
@@ -1255,11 +1404,6 @@
       "why": "moved to Wave 5 (needs-rupash 113): Anthropic and Moonshot answer on the install; OpenAI and DeepSeek are turned off until their accounts are funded. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (models.default_ladder, models.wire, ops.acceptance_models +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #163's branch M27/console-models-routing (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); +3 more",
       "updated": "2026-09-29"
     },
-    "M5.7.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_model_routes, agent_routes, agents.model +10 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M13/wire-agent-upgrade, no PR; +24 more",
-      "updated": "2026-10-06"
-    },
     "M6.2.2": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (cache, gate.caches); open for proof on the install or a decision, not for code",
@@ -1278,11 +1422,6 @@
     "M6.2.5": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in app, cache, gate.caches +2 more; NOT wired: ops.effects",
-      "updated": "2026-10-06"
-    },
-    "M6.5.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, app, gate.fast_lane +14 more; NOT wired: pages/Rules.route.tsx. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +6 more",
       "updated": "2026-10-06"
     },
     "M7.1.3": {
@@ -1480,11 +1619,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_oauth); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: PR #387 (M11/w2-google-workspace); branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +5 more",
       "updated": "2026-10-06"
     },
-    "M11.7.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, app, connector_routes +19 more; NOT wired: pages/CustomConnectors.route.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +4 more",
-      "updated": "2026-10-06"
-    },
     "M11.8.3": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_sources); open for proof on the install or a decision, not for code",
@@ -1495,34 +1629,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, ops.acceptance_checks_change_signals, ops.connector_sync +3 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +4 more",
       "updated": "2026-10-06"
     },
-    "M11.8.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connector_routes, connectors.declaration, connectors.oauth +17 more; NOT wired: ops.effects, pages/ConnectorConsent.route.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +4 more",
-      "updated": "2026-10-06"
-    },
-    "M11.8.7": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.federation, ops.acceptance_schema_drift, ops.connector_sync +3 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M11.8.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_live_answers, requirement_check_routes); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M11.8.10": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_freshdesk_reply); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +4 more",
-      "updated": "2026-10-06"
-    },
     "M11.8.11": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_change_signals, ops.connector_sync, ops.connector_sync_run +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +4 more",
-      "updated": "2026-10-06"
-    },
-    "M11.8.12": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.freshdesk, ops.acceptance_freshdesk_reply, ops.connector_write_run); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +5 more",
       "updated": "2026-10-06"
     },
     "M11.8.13": {
@@ -1600,11 +1709,6 @@
       "why": "built in skill import, review and versions (T2, merged d654f1f4); proved when an import from an allowlisted address lands and a non-allowlisted one is refused. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.skill_library, ops.acceptance_checks_skills, ops.skill_fetch +7 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +12 more",
       "updated": "2026-09-28"
     },
-    "M12.2.7": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skill_pins, tools.skills); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +1 more",
-      "updated": "2026-10-06"
-    },
     "M12.2.8": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skill_pins, ops.acceptance_checks_skill_runs, tools.skills); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +1 more",
@@ -1645,46 +1749,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M13.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.model, ops.acceptance_checks_agents, tables.agent); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M13.1.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.model, ops.acceptance_checks_agent_reach); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M13.2.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.template, ops.acceptance_checks_agents); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M13.2.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_routes, agents.template, gate.roster +2 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M13.4.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_upgrade_routes, agents.upgrade, ops.acceptance_checks_upgrade +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR",
-      "updated": "2026-10-06"
-    },
-    "M13.4.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_upgrade_routes, agents.upgrade, ops.acceptance_checks_upgrade +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR",
-      "updated": "2026-10-06"
-    },
-    "M13.4.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_upgrade_routes, agents.upgrade, ops.acceptance_checks_upgrade +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR",
-      "updated": "2026-10-06"
-    },
-    "M13.4.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_upgrade_routes, agents.upgrade, ops.acceptance_checks_upgrade +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR",
-      "updated": "2026-10-06"
-    },
     "M13.5.18": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.catalogue, ops.acceptance_checks_templates); open for proof on the install or a decision, not for code",
@@ -1700,39 +1764,14 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.model, gate.runtime, gate.stop +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-runtime-side-effects, no PR",
       "updated": "2026-10-06"
     },
-    "M13.7.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, console.agent_automations, ops.acceptance_halt +3 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M13.7.4": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_builder_routes, agent_lifecycle_routes, agents.install_store +17 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +7 more",
       "updated": "2026-10-06"
     },
-    "M13.7.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_agent_reach); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M13.7.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connectors.freshdesk, gate.runtime, ops.acceptance_approved_runs +7 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +6 more",
-      "updated": "2026-10-06"
-    },
     "M13.7.7": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.runtime, ops.runtime_effects, tools.proposed_writes); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-runtime-side-effects, no PR",
-      "updated": "2026-10-06"
-    },
-    "M13.7.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.binding, ops.acceptance_checks_binding); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M13.8.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.binding, agents.model, gate.runtime +2 more); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M13.8.2": {
@@ -1750,29 +1789,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (resolution.cascade, resolution.guardrails); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M14.3.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_calibration, resolution.calibration, resolution.calibration_store +2 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M14.4.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.sweeps, resolution.calibration, resolution.matcher +1 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M14.4.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_calibration, resolution.calibration, resolution.calibration_store +1 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M14.4.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_calibration, ops.controls, ops.schedule_runner +8 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M14.6.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, gate.answer, gate.fast_lane +4 more; NOT wired: ops.effects",
       "updated": "2026-10-06"
     },
     "M14.7.1": {
@@ -1785,11 +1804,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (resolution.entities); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M14.8.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_calibration, resolution.calibration_store, resolution_routes +3 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M15.3.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.quality, ops.acceptance_retrieval); open for proof on the install or a decision, not for code",
@@ -1798,11 +1812,6 @@
     "M15.3.3": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.assembly, ops.acceptance_retrieval); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M15.3.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, gate.caches, gate.provenance +14 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +7 more",
       "updated": "2026-10-06"
     },
     "M16.1.1": {
@@ -1845,11 +1854,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (memory.signals); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M16.2.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (chat.remember, chat.thread_store, gate.answer +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +2 more",
-      "updated": "2026-10-06"
-    },
     "M16.3.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, memory.tiers, ops.session_memory_store); open for proof on the install or a decision, not for code",
@@ -1863,11 +1867,6 @@
     "M16.4.3": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (memory.correction); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M16.5.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in learning_told, memory.digest, mine_routes +3 more; NOT wired: pages/LearningUndo.route.tsx",
       "updated": "2026-10-06"
     },
     "M16.5.2": {
@@ -1888,21 +1887,6 @@
     "M16.6.4": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, channel_routes, channels.inbound +6 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); closed PR #299's branch M8/w2-escalation (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M16.6.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in candidate_routes, chat.turns, knowledge.candidate_store +9 more; NOT wired: pages/Corrections.route.tsx. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +2 more",
-      "updated": "2026-10-06"
-    },
-    "M16.6.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in candidate_routes, knowledge.candidate_store, knowledge.candidates +5 more; NOT wired: pages/Corrections.route.tsx. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +2 more",
-      "updated": "2026-10-06"
-    },
-    "M16.7.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in candidate_routes, knowledge.candidate_store, knowledge.candidates +4 more; NOT wired: pages/Corrections.route.tsx. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +2 more",
       "updated": "2026-10-06"
     },
     "M17.1.1": {
@@ -2280,29 +2264,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (builder.compose); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M20.1.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_coauthor_routes, builder.coauthor, builder.compose +4 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M20.2.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.acceptance_checks_agents, components/GraphCanvas.tsx, components/TraceGraph.tsx +2 more; NOT wired: pages/audit/TracePage.tsx",
-      "updated": "2026-10-06"
-    },
-    "M20.4.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_builder_routes, builder.agent_drafts, builder.publication_store +2 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M20.4.2": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (builder.agent_drafts, builder.publish); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M20.4.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_builder_routes, builder.agent_drafts, builder.publish +1 more); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M20.4.5": {
@@ -2540,39 +2504,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M27.1.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_deployment, ops.telemetry, ops.trace_store +1 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.1.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_deployment, ops.telemetry); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M27.1.5": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.answer, gate.finish, models.metering +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w1-5b; +1 more",
-      "updated": "2026-10-06"
-    },
-    "M27.1.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console, ops.telemetry); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.2.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.needs_you, console.operate, console_overview_figures_routes +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #144's branch M27/console-stats-overview (may be replayed already); closed PR #148's branch M27/console-stats-overview-r2 (may be replayed already); closed PR #157's branch M27/console-stats-overview-r3 (may be replayed already); +2 more",
-      "updated": "2026-10-06"
-    },
-    "M27.2.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.operate, operate_routes, ops.acceptance_operations_console_2 +3 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.2.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.operate, ops.acceptance_operations_console_2); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M27.2.5": {
@@ -2593,16 +2527,6 @@
     "M27.2.8": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.operate, pages/operations/StopPage.tsx, pages/stopQuery.ts; NOT wired: pages/Stop.route.tsx",
-      "updated": "2026-10-06"
-    },
-    "M27.3.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.govern_surfaces, govern_routes, ops.acceptance_people_console); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.3.7": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.govern_surfaces, ops.acceptance_people_console_3); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M27.3.11": {
@@ -2630,84 +2554,14 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M27.5.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.screens, ops.acceptance_people_console_3); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
-      "updated": "2026-10-06"
-    },
-    "M27.5.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.screens, ops.acceptance_people_console_3); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
-      "updated": "2026-10-06"
-    },
     "M27.5.9": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.screens); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
       "updated": "2026-10-06"
     },
-    "M27.5.10": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.installation, console.screens, ops.acceptance_people_console_3); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
-      "updated": "2026-10-06"
-    },
-    "M27.6.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.installation, ops.acceptance_operations_console); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M27.7.2": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.staff_source_guide, ops.staff_connect, ops.staff_trial +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already); closed PR #75's branch M1/staff-source-connect-leaver-stop (may be replayed already); +1 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (govern_routes, ops.acceptance_people_console); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); old backup branch recovery/from-windows-20260928-wt-integrate2; +3 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (govern_routes, ops.acceptance_people_console, pages/governQuery.ts); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #59's branch M1/role-grants-deputies-floor (may be replayed already); +6 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.7": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (govern_routes, ops.acceptance_people_console); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); old backup branch recovery/from-windows-20260928-wt-integrate2; +3 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record, console.elevation +11 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #126's branch M27/departments-page-writes (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #180's branch M27/console-platform (may be replayed already); +6 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.9": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record, console.organisation +11 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #126's branch M27/departments-page-writes (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #80's branch M1/group-sync-break-glass-notice (may be replayed already); +2 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.10": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, identity.bearer, identity.session_store +7 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.7.11": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.sign_in_links, identity.sign_in_binding, ops.acceptance_people_console_2 +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-w03",
-      "updated": "2026-10-06"
-    },
-    "M27.7.12": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (govern_people_routes, notification_routes, ops.acceptance_operations_console_5 +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #126's branch M27/departments-page-writes (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #252's branch M6/w3-fastlane-role (may be replayed already); +5 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.13": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.view, audit_routes, ops.acceptance_people_console_2 +7 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/train-0200, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +3 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.14": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.usage_screen, gate.finish, models.calls +7 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w1-7; +1 more",
       "updated": "2026-10-06"
     },
     "M27.7.15": {
@@ -2718,16 +2572,6 @@
     "M27.7.17": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (report_routes, pages/adoptionQuery.ts, pages/reports/AdoptionPage.tsx); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.7.18": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.questions_view, gate.abstain, gate.answer +7 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928",
-      "updated": "2026-10-06"
-    },
-    "M27.7.19": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.quality_view, ops.acceptance_operations_console_3, ops.canary_run +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #84's branch M5/model-health-routing-residency (may be replayed already); old backup branch recovery/from-windows-20260928; old backup branch recovery/from-windows-20260928-wt-automation-memory; +2 more",
       "updated": "2026-10-06"
     },
     "M27.7.20": {
@@ -2745,11 +2589,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (artifact_routes, pages/Artifacts.tsx, pages/operations/ArtifactsPage.tsx); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M27.7.24": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, erasure_routes, ops.acceptance_operations_console_3 +10 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +6 more",
-      "updated": "2026-10-06"
-    },
     "M27.7.25": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (install_routes, pages/Install.tsx, pages/Updates.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w0b",
@@ -2760,39 +2599,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console_5, pages/Recovery.tsx); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M27.7.27": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (install_routes, ops.acceptance_operations_console, pages/Capacity.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w0b",
-      "updated": "2026-10-06"
-    },
-    "M27.7.28": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (mine_routes, ops.acceptance_people_console_3, pages/MyWorkspace.tsx +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M27.7.29": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.department_console, console.installation, console.screens +9 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
-      "updated": "2026-10-06"
-    },
-    "M27.8.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_routes, approval_routes, audit_routes +31 more; NOT wired: pages/Approvals.tsx. MORE ELSEWHERE, read before building: branch M33/train-0200, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +18 more",
-      "updated": "2026-10-06"
-    },
-    "M27.8.9": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, ops.acceptance_agent_console, prompt_routes +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already)",
-      "updated": "2026-10-06"
-    },
     "M27.8.10": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (feature_routes); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.8.11": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (notification_routes, ops.acceptance_operations_console_5, ops.mail +7 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); closed PR #299's branch M8/w2-escalation (may be replayed already)",
       "updated": "2026-10-06"
     },
     "M27.8.13": {
@@ -2800,49 +2609,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (jobs_routes, operate_routes, ops.acceptance_operations_console_2 +7 more); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M27.8.15": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console_5, storage_routes, pages/Storage.tsx +2 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.8.16": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (data_transfer_routes, ops.acceptance_operations_console_5, ops.data_export_store +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-w04b",
-      "updated": "2026-10-06"
-    },
     "M27.8.17": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #163's branch M27/console-models-routing (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.9.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_people_console_2, ops.acceptance_people_signed_in); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.9.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.admission, ops.acceptance_people_console_2, ops.acceptance_people_signed_in +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-w03",
-      "updated": "2026-10-06"
-    },
-    "M27.9.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (approval_routes, gate.suspension_store, ops.acceptance_people_console_3 +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-w03",
-      "updated": "2026-10-06"
-    },
-    "M27.9.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.readable_export, data_transfer_routes, ops.acceptance_people_console_2 +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-w04b",
-      "updated": "2026-10-06"
-    },
-    "M27.9.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.9.9": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connector_routes, data_steward_routes, identity.data_steward +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #173's branch M27/connector-test-probe (may be replayed already); old backup branch recovery/from-windows-20260928-wt-integrate2; +4 more",
       "updated": "2026-10-06"
     },
     "M27.10.2": {
@@ -2850,24 +2619,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_routes, components/kit/ConfirmDialog.tsx, components/kit/DetailPage.tsx +50 more; NOT wired: components/kit/index.ts, components/ui/badge.tsx, components/ui/card.tsx +8 more. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M13/wire-agent-upgrade, no PR; +23 more",
       "updated": "2026-10-06"
     },
-    "M27.11.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record, console.organisation +13 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #126's branch M27/departments-page-writes (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #180's branch M27/console-platform (may be replayed already); +5 more",
-      "updated": "2026-10-06"
-    },
     "M27.11.2": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.govern, directory_routes, govern_routes +10 more; NOT wired: pages/People.tsx. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #295's branch M1/departments-from (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.11.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (directory_routes, ops.acceptance_people_console, pages/Roles.tsx +12 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/role-nominations, no PR; closed PR #169's branch M27/console-people-org (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.11.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in audit.record, channels.api_keys, identity.service_account_store +8 more; NOT wired: pages/ServiceAccount.route.tsx, pages/ServiceAccount.tsx. MORE ELSEWHERE, read before building: closed PR #124's branch M27/service-accounts-page (may be replayed already); closed PR #180's branch M27/console-platform (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w1-1",
       "updated": "2026-10-06"
     },
     "M27.11.6": {
@@ -2880,11 +2634,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_lifecycle_routes, agent_routes, agents.creation +8 more; NOT wired: pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +9 more",
       "updated": "2026-10-06"
     },
-    "M27.11.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_skill_console, skill_routes, pages/Skills.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +9 more",
-      "updated": "2026-10-06"
-    },
     "M27.11.9": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connector_routes, connectors.declaration, console.connector_detail +28 more; NOT wired: pages/Connector.route.tsx, pages/Connector.tsx, pages/Connectors.route.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +7 more",
@@ -2895,29 +2644,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +9 more; NOT wired: pages/Credentials.route.tsx. MORE ELSEWHERE, read before building: closed PR #171's branch M27/console-credentials (may be replayed already)",
       "updated": "2026-10-06"
     },
-    "M27.11.11": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_agent_console); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M27.11.15": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_routes, console.agent_profile); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-agent-api",
-      "updated": "2026-10-06"
-    },
-    "M27.11.16": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_about_routes, console.agent_about, ops.acceptance_agent_console +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-agent-api; old backup branch recovery/from-windows-20260928-wt-overview",
-      "updated": "2026-10-06"
-    },
-    "M27.12.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, ops.acceptance_checks_skill_runs); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.12.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console_2); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M27.12.3": {
@@ -2933,36 +2662,6 @@
     "M27.12.5": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.agent_profile, models.calls +11 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #459's branch M21/budget-stops (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.12.7": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.configuration, ops.acceptance_operations_console, ops.install_settings +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.13.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in binding_routes, ops.acceptance_checks_channel_framework, pages/Channels.tsx +12 more; NOT wired: pages/Channel.tsx, pages/Channels.route.tsx",
-      "updated": "2026-10-06"
-    },
-    "M27.15.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_agent_console, pages/people/PersonOverview.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.15.7": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.15.8": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connector_routes, console.connector_detail, console.entity_stats +13 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +12 more",
-      "updated": "2026-10-06"
-    },
-    "M27.15.9": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.entity_stats, console_stats_routes +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #209's branch M39/w3-agent-workspace (may be replayed already); +5 more",
       "updated": "2026-10-06"
     },
     "M27.15.14": {
@@ -2985,26 +2684,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, console.organisation, directory_routes +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
       "updated": "2026-10-06"
     },
-    "M27.15.20": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (govern_routes, ops.acceptance_people_console, pages/people/PersonGrants.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.15.21": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (certification_export_routes, ops.acceptance_people_console_2, ops.data_export_store +2 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.15.22": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.organisation, govern_people_routes, identity.organisation_store +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #126's branch M27/departments-page-writes (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.15.24": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in audit.ledger, audit.record, console.scoped_authority +6 more; NOT wired: pages/Packs.route.tsx. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
-      "updated": "2026-10-06"
-    },
     "M27.15.25": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/people/PersonSessions.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
@@ -3020,34 +2699,14 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.entity_stats, console_stats_routes, models.pricing +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #144's branch M27/console-stats-overview (may be replayed already); closed PR #148's branch M27/console-stats-overview-r2 (may be replayed already); closed PR #154's branch M21/record-usage-for-stats (may be replayed already); +9 more",
       "updated": "2026-10-06"
     },
-    "M27.15.31": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_builder_routes, builder.agent_drafts, ops.acceptance_skill_console +5 more; NOT wired: pages/Approvals.tsx",
-      "updated": "2026-10-06"
-    },
     "M27.15.33": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.entity_stats, console_stats_routes, models.pricing); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #144's branch M27/console-stats-overview (may be replayed already); closed PR #148's branch M27/console-stats-overview-r2 (may be replayed already); closed PR #154's branch M21/record-usage-for-stats (may be replayed already); +9 more",
       "updated": "2026-10-06"
     },
-    "M27.15.36": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M27.15.37": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (automations_routes, console.automations, ops.automation_change_store +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #174's branch M27/console-automations (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.15.38": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.acceptance_operations_console_4, provider_routes, routing_routes +6 more; NOT wired: pages/Matrix.tsx. MORE ELSEWHERE, read before building: closed PR #163's branch M27/console-models-routing (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.15.39": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connector_routes, console.connector_detail, ops.acceptance_operations_console_2 +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +5 more",
       "updated": "2026-10-06"
     },
     "M27.15.40": {
@@ -3060,11 +2719,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/classification/ClassificationPage.tsx); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M27.15.43": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (binding_routes, ops.acceptance_operations_console_4, pages/channels/ChannelAbout.tsx +1 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M27.15.44": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, webhook_routes, pages/webhooks/WebhookActs.tsx +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M27/webhook-switch-on-and-replay, no PR",
@@ -3075,29 +2729,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in jobs_routes, ops.acceptance_operations_console_2, pages/jobsQuery.ts +3 more; NOT wired: pages/Job.tsx, pages/Jobs.route.tsx",
       "updated": "2026-10-06"
     },
-    "M27.15.48": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (log_routes, ops.acceptance_operations_console_5, pages/logsQuery.ts +1 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M27.15.50": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +6 more",
-      "updated": "2026-10-06"
-    },
-    "M27.15.51": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (install_routes, ops.acceptance_operations_console, ops.features +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.15.55": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.skill_library, ops.acceptance_skill_console, ops.skill_store +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M27.15.56": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.skill_library, ops.acceptance_skill_console, ops.skill_store +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +8 more",
       "updated": "2026-10-06"
     },
     "M27.15.57": {
@@ -3105,44 +2739,14 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skills); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M27.15.58": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connector_routes, console.connector_detail, ops.acceptance_agent_console +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +5 more",
-      "updated": "2026-10-06"
-    },
-    "M27.15.60": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_people_console_2, pages/people/PersonAccess.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M27.15.63": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_people_console_3); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M27.15.66": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_people_console_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M27.16.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in access_request_routes, audit_routes, automations_routes +255 more; NOT wired: pages/AccessReview.route.tsx, pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx +36 more. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M27/webhook-switch-on-and-replay, no PR; +28 more",
       "updated": "2026-10-06"
     },
-    "M28.2.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skill_pins, ops.canaries); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M28.2.2": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.canaries); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M28.2.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skill_pins, ops.canaries); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M28.2.4": {
@@ -3425,29 +3029,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_lifecycle_routes, agents.lifecycle, console.global_surfaces +1 more); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M33.1.2.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.global_surfaces, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M33.1.2.3": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.global_surfaces, identity.nomination_store, nomination_routes +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/role-nominations, no PR",
-      "updated": "2026-10-06"
-    },
-    "M33.1.2.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.global_surfaces, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.2.1.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.role_surfaces, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.2.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (chat.turns, console.scoped_authority, identity.staff_sync +1 more); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M33.2.1.3": {
@@ -3460,39 +3044,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.scoped_authority, department_view_routes, pages/department/DepartmentHomePage.tsx +1 more); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M33.2.2.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.scoped_authority, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.2.2.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.scoped_authority, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.2.2.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.scoped_authority, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M33.2.2.4": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.scoped_authority); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.2.2.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.scoped_authority, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M33.3.1.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.own_things, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.3.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.own_things, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M33.3.1.3": {
@@ -3500,34 +3054,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.own_things, thread_routes, pages/Ask.tsx +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/my-conversation-export, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +1 more",
       "updated": "2026-10-06"
     },
-    "M33.3.1.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.own_things, ops.acceptance_checks_role_surfaces); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.4.1.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.govern_surfaces, ops.acceptance_checks_governance); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.4.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit_routes, console.auditor, ops.acceptance_checks_role_surfaces); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/train-0200, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +2 more",
-      "updated": "2026-10-06"
-    },
     "M33.4.1.3": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit_statistics_routes, console.auditor, pages/audit/AuditPage.tsx +1 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.5.1.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.registry, console.declaration_drift, ops.acceptance_checks_governance_2 +1 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.5.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.registry, ops.acceptance_checks_governance_2); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
     "M33.5.1.3": {
@@ -3535,39 +3064,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.manifest, console.role_surfaces, identity.staff_source); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M33.6.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.approvals, ops.acceptance_checks_governance_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.6.1.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.role_surfaces, ops.acceptance_checks_governance_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.7.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.elevation, ops.acceptance_checks_governance_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
     "M33.7.1.3": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.chain_check, console.elevation, docs_routes +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/elevation-chain, no PR",
-      "updated": "2026-10-06"
-    },
-    "M33.7.1.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.elevation, ops.acceptance_checks_governance_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.7.1.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.elevation, ops.acceptance_checks_governance_2); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M33.8.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in approval_cards, approval_routes, console.approvals +4 more; NOT wired: member.approvals",
       "updated": "2026-10-06"
     },
     "M34.1.1.1": {
@@ -4035,26 +3534,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.workspace, ops.acceptance_checks_agent_page); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M39.1.1.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_attachment_routes, agents.attachments, audit.ledger +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +6 more",
-      "updated": "2026-10-06"
-    },
-    "M39.1.2.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_routes, ops.acceptance_checks_agent_page, components/agentWorkspaceState.ts +3 more; NOT wired: pages/Agent.tsx. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +13 more",
-      "updated": "2026-10-06"
-    },
-    "M39.1.2.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.workspace, ops.acceptance_checks_agent_page, pages/agents/AgentDetailPage.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +12 more",
-      "updated": "2026-10-06"
-    },
-    "M39.1.2.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_agent_console, components/AgentAssembly.tsx, components/agentWorkspaceState.ts +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +13 more",
-      "updated": "2026-10-06"
-    },
     "M39.1.2.4": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_link_routes, automation_paused_told, console.workspace +2 more; NOT wired: pages/Agent.tsx. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +12 more",
@@ -4063,26 +3542,6 @@
     "M39.1.2.5": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_routes, ops.acceptance_checks_agent_page, components/agentWorkspaceState.ts +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +14 more",
-      "updated": "2026-10-06"
-    },
-    "M39.2.1.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_capability_routes, agent_routes, console.workspace_capabilities +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #235's branch M39/w3-agent-workspace-5 (may be replayed already); closed PR #254's branch M39/w3-agent-workspace-6 (may be replayed already); closed PR #257's branch M39/w3-agent-workspace-7 (may be replayed already); +1 more",
-      "updated": "2026-10-06"
-    },
-    "M39.2.1.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_attachment_routes, agents.attachments, console.agent_tabs +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +6 more",
-      "updated": "2026-10-06"
-    },
-    "M39.2.1.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_capability_routes, console.workspace_capabilities, ops.acceptance_agent_console +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #235's branch M39/w3-agent-workspace-5 (may be replayed already); closed PR #254's branch M39/w3-agent-workspace-6 (may be replayed already); closed PR #257's branch M39/w3-agent-workspace-7 (may be replayed already); +1 more",
-      "updated": "2026-10-06"
-    },
-    "M39.2.1.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_capability_routes, console.workspace_capabilities, ops.acceptance_agent_console +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #235's branch M39/w3-agent-workspace-5 (may be replayed already); closed PR #254's branch M39/w3-agent-workspace-6 (may be replayed already); closed PR #257's branch M39/w3-agent-workspace-7 (may be replayed already); +1 more",
       "updated": "2026-10-06"
     },
     "M39.2.3.5": {
@@ -4100,44 +3559,9 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_lifecycle_routes, agent_routes, console.agent_tabs +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +8 more",
       "updated": "2026-10-06"
     },
-    "M39.2.4.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.agent_tabs, ops.acceptance_agent_console); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #263's branch M39/w3-agent-workspace-8 (may be replayed already)",
-      "updated": "2026-10-06"
-    },
     "M39.2.4.4": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_group_routes, channel_routes, channels.adapter +9 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M39/group-install, no PR; closed PR #263's branch M39/w3-agent-workspace-8 (may be replayed already)",
-      "updated": "2026-10-06"
-    },
-    "M39.3.2.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_leash_routes, agents.leash_moves, console.reach_view +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M39.3.2.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_leash_routes, agents.leash_moves, console.reach_view +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M39.3.2.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_leash_routes, agents.leash_moves, console.reach_view +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M39.3.2.4": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_leash_routes, agents.leash_moves, console.reach_view +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M39.3.2.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_leash_routes, agents.leash_moves, console.reach_view +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M39.4.2.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_memory_routes, api_routes, console.govern_estate +9 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +5 more",
       "updated": "2026-10-06"
     },
     "M39.5.1.1": {
@@ -4195,16 +3619,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (automation_paused_told, console.agent_automations, ops.automation_run +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-automation-memory",
       "updated": "2026-10-06"
     },
-    "M39.8.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_leash_routes, agents.leash_moves, ops.acceptance_workspace +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
-    "M39.8.3": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_workspace); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +8 more",
-      "updated": "2026-10-06"
-    },
     "M39.8.4": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_workspace); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
@@ -4213,16 +3627,6 @@
     "M39.8.5": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
-      "updated": "2026-10-06"
-    },
-    "M39.8.6": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_attachment_routes, agent_roster, agents.attachments +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +6 more",
-      "updated": "2026-10-06"
-    },
-    "M39.8.9": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_conversation_routes, chat.remember, chat.thread_store +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +6 more",
       "updated": "2026-10-06"
     },
     "M40.1.1.1": {
@@ -4633,7 +4037,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 0,
+  "closed_today": 149,
   "next_up": [
     "M1.6.13",
     "M1.6.16",
@@ -4642,6 +4046,12 @@
     "M1.6.19"
   ],
   "recent": [
+    {
+      "sha": "d1a5116",
+      "at": "2026-10-07T01:21:58+00:00",
+      "subject": "One hundred and forty-nine tasks close on the install's own acceptance runs since the deploys of 6 October (#473)",
+      "closed": "M11.7.8,M11.8.10,M11.8.12,M11.8.6,M11.8.7,M11.8.8,M12.2.7,M13.1.2,M13.1.3,M13.2.2,M13.2.5,M13.4.2,M13.4.3,M13.4.4,M13.4.5,M13.7.3,M13.7.5,M13.7.6,M13.7.8,M13.8.1,M14.3.5,M14.4.2,M14.4.4,M14.6.5,M14.8.3,M15.3.4,M16.2.8,M16.5.1,M16.6.5,M16.6.6,M16.7.6,M20.1.3,M20.2.1,M20.4.1,M20.4.4,M27.1.3,M27.1.4,M27.1.6,M27.11.1,M27.11.11,M27.11.16,M27.11.3,M27.11.5,M27.11.8,M27.12.1,M27.12.2,M27.12.7,M27.13.1,M27.15.20,M27.15.21,M27.15.22,M27.15.24,M27.15.31,M27.15.36,M27.15.38,M27.15.39,M27.15.43,M27.15.48,M27.15.5,M27.15.51,M27.15.55,M27.15.56,M27.15.58,M27.15.60,M27.15.63,M27.15.66,M27.15.7,M27.15.8,M27.15.9,M27.2.1,M27.2.2,M27.2.4,M27.3.2,M27.3.7,M27.5.10,M27.5.6,M27.5.8,M27.6.1,M27.7.10,M27.7.11,M27.7.12,M27.7.13,M27.7.14,M27.7.18,M27.7.19,M27.7.24,M27.7.27,M27.7.28,M27.7.29,M27.7.3,M27.7.5,M27.7.7,M27.7.8,M27.7.9,M27.8.11,M27.8.15,M27.8.16,M27.8.6,M27.8.9,M27.9.1,M27.9.2,M27.9.3,M27.9.4,M27.9.5,M27.9.9,M28.2.1,M28.2.3,M33.1.2.2,M33.1.2.4,M33.2.1.1,M33.2.1.2,M33.2.2.1,M33.2.2.2,M33.2.2.3,M33.2.2.5,M33.3.1.1,M33.3.1.2,M33.3.1.5,M33.4.1.1,M33.4.1.2,M33.5.1.1,M33.5.1.2,M33.6.1.2,M33.6.1.4,M33.7.1.2,M33.7.1.4,M33.7.1.5,M33.8.1,M39.1.1.3,M39.1.2.1,M39.1.2.2,M39.1.2.3,M39.2.1.1,M39.2.1.2,M39.2.1.3,M39.2.1.5,M39.2.4.3,M39.3.2.1,M39.3.2.2,M39.3.2.3,M39.3.2.4,M39.3.2.5,M39.4.2.3,M39.8.2,M39.8.3,M39.8.6,M39.8.9,M5.7.3,M6.5.1"
+    },
     {
       "sha": "1c9a550",
       "at": "2026-10-06T17:14:23+00:00",
@@ -4755,12 +4165,6 @@
       "at": "2026-09-29T04:29:49+00:00",
       "subject": "Twelve console tasks close on a walk of the owner's install, each named by the test that holds it (#199)",
       "closed": "M27.10.1,M27.10.3,M27.15.64,M27.15.65,M27.15.67,M27.15.78,M27.3.13,M27.7.16,M27.8.14,M27.8.4,M27.8.5,M27.8.7"
-    },
-    {
-      "sha": "b061bec",
-      "at": "2026-09-29T03:16:19+00:00",
-      "subject": "Seven tasks close: a replaced key is used without a restart, and six console build guarantees are held by CI (#195)",
-      "closed": "M27.15.73,M27.15.74,M27.15.76,M27.15.77,M27.15.80,M27.7.1,M31.3.2.5"
     }
   ]
 }
