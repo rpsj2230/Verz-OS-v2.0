@@ -70,11 +70,18 @@ CHAT_DIFFERS: Final = "a question through an agent in Lark was not answered as o
 AUDIENCE_IS_AUTHORITY: Final = "a person outside an agent's audience was answered through it"
 
 
-async def _agent(h: Harness, owner: str, name: str, capabilities: Sequence[str]) -> str:
+async def _agent(
+    h: Harness,
+    owner: str,
+    name: str,
+    capabilities: Sequence[str],
+    channels: Sequence[str] | None = None,
+) -> str:
     """An agent of acceptance_a, enabled, whose ceiling holds exactly `capabilities` there.
 
     The three rows `brain.agents.install_store.finish` writes, as the skills check writes them,
-    with a template signed by a key made for the check.
+    with a template signed by a key made for the check. It answers on the web and in Lark unless
+    `channels` says where else, which is how M13.7.4 is asked.
     """
     from brain.agents.install_store import agent_values, version_values
     from brain.agents.model import AgentAudience, answering_on
@@ -135,7 +142,12 @@ async def _agent(h: Harness, owner: str, name: str, capabilities: Sequence[str])
         # (M13.7.4), and would be asked about as an agent nobody made.
         insert(AgentRow).values(
             **agent_values(
-                answering_on(effective.record, (Channel.CONSOLE.value, Channel.LARK.value))
+                answering_on(
+                    effective.record,
+                    tuple(channels)
+                    if channels is not None
+                    else (Channel.CONSOLE.value, Channel.LARK.value),
+                )
             )
         ),
     )
