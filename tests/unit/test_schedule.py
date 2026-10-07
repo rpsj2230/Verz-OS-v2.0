@@ -176,7 +176,7 @@ def test_a_control_another_module_calls_is_still_this_schedulers_to_start() -> N
     assert [one.name for one in schedulable([in_process])] == ["correction"]
 
 
-def test_the_real_registry_gives_this_scheduler_twenty_four_of_the_twenty_six_controls() -> None:
+def test_the_real_registry_gives_this_scheduler_twenty_five_of_the_twenty_seven_controls() -> None:
     """The state of the estate today, asserted so that wiring a control to a timer outside the
     process shows up here rather than in nothing.
 
@@ -188,16 +188,17 @@ def test_the_real_registry_gives_this_scheduler_twenty_four_of_the_twenty_six_co
     Twenty-one on 2026-09-28, with `acceptance_run`, which the worker starts too, twenty-two on
     2026-09-30 with `escalation_expiry` (M8.3.4), twenty-three with `evening_digest`, and
     twenty-four on 2026-10-06 with `entity_resolution` (M14.1), twenty-five with
-    `approved_actions` (M13.7.6), and twenty-six with `elevation_anchor` (M33.7.1.3), which
+    `approved_actions` (M13.7.6), twenty-six with `elevation_anchor` (M33.7.1.3), which
     the anchor workflow reads beside `audit_anchor`, so the scheduler's share stays at
-    twenty-four.
+    twenty-four, and twenty-seven with `supervision_review` (M13.5.18), which the worker
+    starts, so the share is twenty-five.
 
     Delete this and a control moved onto an external schedule silently keeps a second caller
     inside the process."""
     mine = schedulable()
 
-    assert len(CONTROLS) == 26
-    assert len(mine) == 24
+    assert len(CONTROLS) == 27
+    assert len(mine) == 25
     assert not {"audit_anchor", "elevation_anchor"} & {one.name for one in mine}
 
 

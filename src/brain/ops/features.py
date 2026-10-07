@@ -261,6 +261,28 @@ BUDGET_ENFORCEMENT: Final = Feature(
     read_by=("brain.ops.budget_stop_store:budget_refusal_for",),
 )
 
+#: Reviewing a supervised agent's pin on a schedule. Off until the owner decides needs-rupash 174:
+#: the review itself is the person-pressed one's, and what is new is that the worker asks it daily
+#: and writes the answer as the system. While off the run still decides each due pin and reports
+#: how many it would have extended or marked eligible, and writes nothing.
+SUPERVISION_REVIEW: Final = Feature(
+    name="supervision_review",
+    title="Review supervised agents at thirty days on a schedule",
+    what=(
+        "Each day the product reviews every supervised agent whose thirty days have passed and "
+        "records the answer under the name of the system. An agent whose measured confidence is "
+        "short, or who has not been reviewed enough, is held for another thirty days; one at or "
+        "over the bar is marked as eligible for a person to raise. Nothing is ever released "
+        "because a date passed, and raising a rung is still two people's decision."
+    ),
+    while_off=(
+        "No pin is reviewed unless a person presses Review. Each day the product still works out "
+        "what it would have decided and records only how many pins that is, writing nothing "
+        "about any agent."
+    ),
+    read_by=("brain.ops.supervision_review:review_switch_is_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -268,6 +290,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     RELEASE_CHECK,
     UNATTENDED_ENTITY_MERGE,
     BUDGET_ENFORCEMENT,
+    SUPERVISION_REVIEW,
 )
 
 

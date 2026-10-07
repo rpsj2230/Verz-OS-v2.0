@@ -1082,6 +1082,31 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
+    Control(
+        name="supervision_review",
+        # Since 2026-10-07 (`0212`, M13.5.18). The worker's schedule starts
+        # `run_supervision_review_now`, which finds each supervised agent whose pin is due and
+        # asks `answer_review`, the one function the person-pressed Review also asks. Behind the
+        # `supervision_review` feature, switched off for everyone until needs-rupash 174.
+        symbols=("brain.ops.supervision_review:run_supervision_review_now",),
+        guards=(
+            "that a supervised agent's pin is reviewed against its measured confidence when its "
+            "thirty days are up, whether or not anybody presses Review, and that it is held for "
+            "another period rather than released when the measure is short or missing"
+        ),
+        lost_silently=(
+            "A pin whose thirty days passed stays held and nothing says it is waiting: the agent "
+            "goes on simulating, which is the safe direction, so nobody notices that the "
+            "review the item promises never happens until somebody asks why an agent that has "
+            "done well for three months is still on the bottom rung."
+        ),
+        # One day, restated rather than imported: `brain.ops.supervision_review` reaches the
+        # tables, which import this registry for the control-run name constraint.
+        every=_DAILY,
+        cadence_from="brain.ops.supervision_review:REVIEW_EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
 )
 
 

@@ -155,6 +155,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: `brain.resolution.registry_store.run_registry_now`.
 #: `approved_actions` joined on 2026-10-06 the day it was registered (`0201`, M13.7.6), running
 #: each approved action once through `brain.ops.approved_runs.run_approved_now`.
+#: `supervision_review` joined on 2026-10-07 the day it was registered (`0212`, M13.5.18), asking
+#: each due supervision pin its thirty-day question through
+#: `brain.ops.supervision_review.run_supervision_review_now`, behind a feature that ships off.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -178,6 +181,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "evening_digest",
         "resolution_calibration",
         "approved_actions",
+        "supervision_review",
     }
 )
 

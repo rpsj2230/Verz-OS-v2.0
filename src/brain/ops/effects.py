@@ -777,6 +777,14 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.approved_runs:Executor.run": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.approved_runs:Standings.standing": Repeat.READS,
         "brain.ops.approved_runs:Reaches.load": Repeat.READS,
+        # The scheduled thirty-day review (M13.5.18). Three reads, and one write of a row of this
+        # system's own `agent.supervision_pin`. Asked twice in one instant it writes two rows, both
+        # extended with review dates seconds apart or one eligible beneath a newer extended one,
+        # and the newest row is what holds the agent, so a repeat can only keep it held.
+        "brain.ops.supervision_review:ReviewStore.switched_on": Repeat.READS,
+        "brain.ops.supervision_review:ReviewStore.due_agents": Repeat.READS,
+        "brain.ops.supervision_review:ReviewStore.state": Repeat.READS,
+        "brain.ops.supervision_review:ReviewStore.write_pin": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # A POST to a source is one of two things (M11.7.1): a report asked for with a body, which
         # changes nothing, or a Google key file exchanged for a token, of which a second exists
         # until its hour ends and is never read. The stronger of the two is what is recorded.

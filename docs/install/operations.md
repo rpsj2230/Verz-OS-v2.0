@@ -333,6 +333,7 @@ minutes.
 | `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `in_process` |
 | `evening_digest` | that whoever the install chose hears each evening what the build closed, reopened and left overdue, in the one conversation they chose | `in_process` |
 | `approved_actions` | that an action a person approved is carried out once, at the requester's reach as it is then, without anybody coming back to send it | `in_process` |
+| `supervision_review` | that a supervised agent's pin is reviewed against its measured confidence at thirty days and held for another period, never released, when the measure is short or missing | `in_process` |
 | `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
 | `elevation_anchor` | that an approved elevation cannot be removed from the end of the elevation chain without it being detectable, whatever the main ledger's anchor says | `on_a_route` |
 | `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `in_process` |
